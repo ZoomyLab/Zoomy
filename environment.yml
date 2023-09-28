@@ -1,0 +1,16 @@
+name: sms
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - attrs
+  - numpy
+  - jupyterlab
+  - matplotlib
+  - pytest
+  - pyyaml
+  - meshio
+  - COMPAS
+  - scipy
+  - tqdm
