@@ -307,6 +307,13 @@ class Mesh:
             )
         return mesh
 
+    @classmethod
+    def extrude_2d_mesh(
+        cls: Type[MeshType], mesh: MeshType, N_z=int, height: Union[FArray, None] = None
+    ) -> MeshType:
+        if height is None:
+            height = np.ones(mesh.n_vertices)
+
     def write_to_file_vtk(
         self: Type[MeshType],
         filepath: str,
@@ -411,11 +418,24 @@ def edge_lengths(mesh: Type[MeshType], face: int) -> FArray:
     return edge_length_
 
 
-def get_n_nodes_per_element(mesh_type: "str") -> int:
+def get_extrudes_mesh_type(mesh_type: str) -> int:
+    if (mesh_type) == "quad":
+        return "hex"
+    elif (mesh_type) == "tri":
+        return "wface"
+    else:
+        assert False
+
+
+def get_n_nodes_per_element(mesh_type: str) -> int:
     if (mesh_type) == "quad":
         return 4
     elif (mesh_type) == "tri":
         return 3
+    elif (mesh_type) == "wface":
+        return 6
+    elif (mesh_type) == "hex":
+        return 8
     else:
         assert False
 
@@ -423,47 +443,89 @@ def get_n_nodes_per_element(mesh_type: "str") -> int:
 def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
     if mesh_type == "tri":
         return "triangle"
+    elif mesh_type == "hex":
+        return "hexahedron"
     else:
         return mesh_type
 
-    # TODO: this should not be needed. However, I need to take care to change the mesh type
-    # at the place where I extend the data to 3d!!
-    # def write_to_file_3d(
-    #     self,
-    #     filename,
-    #     vertex_coordinates,
-    #     element_vertices,
-    #     fields=None,
-    #     field_names=None,
-    #     point_fields=None,
-    #     point_field_names=None,
-    # ):
-    #     if self.type == "tri":
-    #         new_type = "wedge"
-    #     elif self.type == "quad":
-    #         new_type = "hex"
-    #     else:
-    #         assert False
-    #     d_fields = {}
-    #     if fields is not None:
-    #         if field_names is None:
-    #             field_names = [str(i) for i in range(fields.shape[0])]
-    #         for i_fields, _ in enumerate(fields):
-    #             d_fields[field_names[i_fields]] = [fields[i_fields]]
-    #     point_d_fields = {}
-    #     if point_fields is not None:
-    #         if point_field_names is None:
-    #             point_field_names = [str(i) for i in range(point_fields.shape[0])]
-    #         for i_fields, _ in enumerate(point_fields):
-    #             point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
-    #     meshout = meshio.Mesh(
-    #         vertex_coordinates,
-    #         [(new_type, element_vertices)],
-    #         cell_data=d_fields,
-    #         point_data=point_d_fields,
-    #     )
-    #     path, _ = os.path.split(filename)
-    #     filename, file_ext = os.path.splitext(filename)
-    #     if not os.path.exists(path) and path != "":
-    #         os.mkdir(path)
-    #     meshout.write(filename + ".vtk")
+
+def extrude_2d_element_vertices_mesh(
+    mesh_type: str,
+    vertex_coordinates: FArray,
+    element_vertices: IArray,
+    height: FArray,
+    n_layers: int,
+) -> (FArray, IArray):
+    n_vertices = vertex_coordinates.shape[0]
+    n_elements = element_vertices.shape[0]
+    num_nodes_per_element_2d = get_n_nodes_per_element(mesh_type)
+    mesh_type = get_extrudes_mesh_type(mesh_type)
+    num_nodes_per_element = get_n_nodes_per_element(mesh_type)
+    Z = np.linspace(0, 1, n_layers)
+    points_3d = np.zeros(
+        (
+            vertex_coordinates.shape[0] * n_layers,
+            3,
+        )
+    )
+    element_vertices_3d = np.zeros((n_elements * (n_layers - 1), num_nodes_per_element))
+    for i in range(n_vertices):
+        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[i]
+        points_3d[i * n_layers : (i + 1) * n_layers, 2] = height[i] * Z
+
+    # compute connectivity for mesh (element_vertices)
+    element_vertices_3d = np.zeros((n_elements * (n_layers - 1), num_nodes_per_element))
+    for i_layer in range(n_layers - 1):
+        element_vertices_3d[
+            i_layer * n_elements : (i_layer + 1) * n_elements,
+            :num_nodes_per_element_2d,
+        ] = (
+            i_layer + element_vertices * n_layers
+        )
+        element_vertices_3d[
+            i_layer * n_elements : (i_layer + 1) * n_elements,
+            num_nodes_per_element_2d:,
+        ] = (
+            i_layer + 1 + element_vertices * n_layers
+        )
+    return (points_3d, element_vertices_3d, mesh_type)
+
+
+def write_to_file_vtk_from_vertices_edges(
+    filepath,
+    mesh_type,
+    vertex_coordinates,
+    element_vertices,
+    fields=None,
+    field_names=None,
+    point_fields=None,
+    point_field_names=None,
+):
+    assert (
+        mesh_type == "tri"
+        or mesh_type == "quad"
+        or mesh_type == "wface"
+        or mesh_type == "hex"
+    )
+    d_fields = {}
+    if fields is not None:
+        if field_names is None:
+            field_names = [str(i) for i in range(fields.shape[0])]
+        for i_fields, _ in enumerate(fields.T):
+            d_fields[field_names[i_fields]] = [fields[:, i_fields]]
+    point_d_fields = {}
+    if point_fields is not None:
+        if point_field_names is None:
+            point_field_names = [str(i) for i in range(point_fields.shape[0])]
+        for i_fields, _ in enumerate(point_fields):
+            point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
+    meshout = meshio.Mesh(
+        vertex_coordinates,
+        [(convert_mesh_type_to_meshio_mesh_type(mesh_type), element_vertices)],
+        cell_data=d_fields,
+        point_data=point_d_fields,
+    )
+    path, filename = os.path.split(filepath)
+    filename_base, filename_ext = os.path.splitext(filename)
+    os.makedirs(path, exist_ok=True)
+    meshout.write(filepath + ".vtk")
