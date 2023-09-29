@@ -82,7 +82,7 @@ class Mesh:
         boundary_edge_length = np.ones(n_of_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_of_boundary_edges, 3), dtype=float)
         # Implicit ordering: 0: left, 1: right
-        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype="|S5")
+        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype="|S8")
         boundary_edge_tag[0] = "left"
         boundary_edge_tag[1] = "right"
 
@@ -229,7 +229,7 @@ class Mesh:
         boundary_edge_vertices = edges_on_boundaries
         n_boundary_edges = boundary_edge_vertices.shape[0]
         boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S5")
+        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
         boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
 
