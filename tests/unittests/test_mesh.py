@@ -141,11 +141,11 @@ def test_extrude_and_write_3d_mesh():
 
 
 if __name__ == "__main__":
-    # test_create_1d_mesh()
-    # test_load_2d_mesh("quad")
-    # test_load_2d_mesh("tri")
-    # test_write_to_hdf5()
-    # test_from_hdf5()
-    # test_write_to_file_vtk()
-    # test_read_vtk_cell_fields()
+    test_create_1d_mesh()
+    test_load_2d_mesh("quad")
+    test_load_2d_mesh("tri")
+    test_write_to_hdf5()
+    test_from_hdf5()
+    test_write_to_file_vtk()
+    test_read_vtk_cell_fields()
     test_extrude_and_write_3d_mesh()
