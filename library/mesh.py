@@ -7,11 +7,7 @@ import h5py
 
 from attr import define
 
-from typing import Union
-from typing import TypeVar, Type, Any
-
-# Create a generic variable that can be 'Mesh', or any subclass.
-MeshType = TypeVar("MeshType", bound="Mesh")
+from typing import Union, Tuple
 
 from library.custom_types import IArray, FArray, CArray
 
@@ -39,9 +35,7 @@ class Mesh:
     boundary_edge_tag: CArray
 
     @classmethod
-    def create_1d(
-        cls: Type[MeshType], domain: tuple[float, float], n_elements: int
-    ) -> MeshType:
+    def create_1d(cls, domain: tuple[float, float], n_elements: int):
         xL = domain[0]
         xR = domain[1]
 
@@ -137,12 +131,12 @@ class Mesh:
 
     @classmethod
     def load_mesh(
-        cls: Type[MeshType],
+        cls,
         filepath: str,
         mesh_type: str,
         dimension: int,
         boundary_tags: list[str],
-    ) -> MeshType:
+    ):
         assert (mesh_type) == "quad" or (mesh_type) == "tri"
         mesh_type = mesh_type
 
@@ -168,9 +162,7 @@ class Mesh:
         return cls.from_compas_mesh(mesh, mesh_type, dimension)
 
     @classmethod
-    def from_compas_mesh(
-        cls: Type[MeshType], mesh: MeshCompas, mesh_type: str, mesh_dimension: int
-    ) -> MeshType:
+    def from_compas_mesh(cls, mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
         type = mesh_type
         dimension = mesh_dimension
         ez = np.array([0.0, 0.0, 1.0])
@@ -229,11 +221,11 @@ class Mesh:
                     ] = mesh.edge_length(*edge)
                     element_n_neighbors[face] += 1
 
-        edges_on_boundaries = []
+        edges_on_boundaries_list = []
         for edge in mesh.edges():
             if mesh.is_edge_on_boundary(*edge):
-                edges_on_boundaries.append(edge)
-        edges_on_boundaries = np.array(edges_on_boundaries)
+                edges_on_boundaries_list.append(edge)
+        edges_on_boundaries = np.array(edges_on_boundaries_list)
         boundary_edge_vertices = edges_on_boundaries
         n_boundary_edges = boundary_edge_vertices.shape[0]
         boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
@@ -281,7 +273,7 @@ class Mesh:
         )
 
     @classmethod
-    def from_hdf5(cls: Type[MeshType], filepath: str) -> MeshType:
+    def from_hdf5(cls, filepath: str):
         with h5py.File(filepath, "r") as file:
             file_mesh = file["mesh"]
             mesh = cls(
@@ -307,18 +299,11 @@ class Mesh:
             )
         return mesh
 
-    @classmethod
-    def extrude_2d_mesh(
-        cls: Type[MeshType], mesh: MeshType, N_z=int, height: Union[FArray, None] = None
-    ) -> MeshType:
-        if height is None:
-            height = np.ones(mesh.n_vertices)
-
     def write_to_file_vtk(
-        self: Type[MeshType],
+        self,
         filepath: str,
         fields: Union[FArray, None] = None,
-        field_names: Union[CArray, None] = None,
+        field_names: Union[list[str], None] = None,
         point_data: dict = {},
     ):
         d_fields = {}
@@ -339,7 +324,7 @@ class Mesh:
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
 
-    def write_to_hdf5(self: Type[MeshType], filepath: str):
+    def write_to_hdf5(self, filepath: str):
         with h5py.File(filepath, "w") as f:
             attrs = f.create_group("mesh")
             attrs.create_dataset("dimension", data=self.dimension)
@@ -378,7 +363,7 @@ def read_vtk_cell_fields(
     return output
 
 
-def incircle(mesh: Type[MeshType], face: int, mesh_type: str) -> FArray:
+def incircle(mesh: MeshCompas, face: int, mesh_type: str) -> float:
     if mesh_type == "tri":
         return 2 * incircle_triangle(mesh, face)
     elif mesh_type == "quad":
@@ -386,31 +371,30 @@ def incircle(mesh: Type[MeshType], face: int, mesh_type: str) -> FArray:
     assert False
 
 
-def incircle_triangle(mesh: Type[MeshType], face: int) -> FArray:
+def incircle_triangle(mesh: MeshCompas, face: int) -> float:
     area = mesh.face_area(face)
     edges = mesh.face_halfedges(face)
     perimeter = 0.0
     for edge in edges:
         perimeter += mesh.edge_length(*edge)
-    # return 2 * area / perimeter
     s = perimeter / 2
     result = 1.0
     for edge in edges:
         result *= s - mesh.edge_length(*edge)
-    return np.sqrt(result)
+    return float(np.sqrt(result))
 
 
-def incircle_quad(mesh: Type[MeshType], face: int) -> FArray:
+def incircle_quad(mesh: MeshCompas, face: int) -> float:
     area = mesh.face_area(face)
     edges = mesh.face_halfedges(face)
     perimeter = 0.0
     for edge in edges:
         perimeter += mesh.edge_length(*edge)
     s = perimeter / 2
-    return area / s
+    return float(area / s)
 
 
-def edge_lengths(mesh: Type[MeshType], face: int) -> FArray:
+def edge_lengths(mesh: MeshCompas, face: int) -> FArray:
     edges = mesh.face_halfedges(face)
     edge_length_ = np.zeros(len(edges))
     for i, edge in enumerate(edges):
@@ -418,7 +402,7 @@ def edge_lengths(mesh: Type[MeshType], face: int) -> FArray:
     return edge_length_
 
 
-def get_extrudes_mesh_type(mesh_type: str) -> int:
+def get_extruded_mesh_type(mesh_type: str) -> str:
     if (mesh_type) == "quad":
         return "hex"
     elif (mesh_type) == "tri":
@@ -455,26 +439,28 @@ def extrude_2d_element_vertices_mesh(
     element_vertices: IArray,
     height: FArray,
     n_layers: int,
-) -> (FArray, IArray):
+) -> Tuple[FArray, IArray, str]:
     n_vertices = vertex_coordinates.shape[0]
     n_elements = element_vertices.shape[0]
     num_nodes_per_element_2d = get_n_nodes_per_element(mesh_type)
-    mesh_type = get_extrudes_mesh_type(mesh_type)
+    mesh_type = get_extruded_mesh_type(mesh_type)
     num_nodes_per_element = get_n_nodes_per_element(mesh_type)
     Z = np.linspace(0, 1, n_layers)
     points_3d = np.zeros(
         (
             vertex_coordinates.shape[0] * n_layers,
             3,
-        )
+        ),
+        dtype=float,
     )
-    element_vertices_3d = np.zeros((n_elements * (n_layers - 1), num_nodes_per_element))
+    element_vertices_3d = np.zeros(
+        (n_elements * (n_layers - 1), num_nodes_per_element), dtype=int
+    )
     for i in range(n_vertices):
         points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[i]
         points_3d[i * n_layers : (i + 1) * n_layers, 2] = height[i] * Z
 
     # compute connectivity for mesh (element_vertices)
-    element_vertices_3d = np.zeros((n_elements * (n_layers - 1), num_nodes_per_element))
     for i_layer in range(n_layers - 1):
         element_vertices_3d[
             i_layer * n_elements : (i_layer + 1) * n_elements,
