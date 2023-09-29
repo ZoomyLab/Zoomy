@@ -7,7 +7,7 @@ import h5py
 
 from attr import define
 
-# from typing import Union
+from typing import Union
 from typing import TypeVar, Type, Any
 
 # Create a generic variable that can be 'Mesh', or any subclass.
@@ -19,7 +19,7 @@ from library.custom_types import IArray, FArray, CArray
 @define(slots=True, frozen=True)
 class Mesh:
     dimension: int
-    type: '|S5'
+    type: str
     n_elements: int
     n_vertices: int
     n_boundary_edges: int
@@ -88,7 +88,7 @@ class Mesh:
         boundary_edge_length = np.ones(n_of_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_of_boundary_edges, 3), dtype=float)
         # Implicit ordering: 0: left, 1: right
-        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype='|S5')
+        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype="|S5")
         boundary_edge_tag[0] = "left"
         boundary_edge_tag[1] = "right"
 
@@ -100,7 +100,6 @@ class Mesh:
         type = "line"
         n_vertices = n_elements + 1
         n_boundary_edges = n_of_boundary_edges
-        num_nodes_per_element = n_nodes_per_element
         vertex_coordinates = vertex_coordinates
         element_vertices = element_vertices
         element_edge_length = element_edge_length
@@ -137,13 +136,19 @@ class Mesh:
         )
 
     @classmethod
-    def load_mesh(cls, filepath, mesh_type, dimension, boundary_tags):
-        assert (mesh_type) == "quad" or (mesh_type) == "triangle"
+    def load_mesh(
+        cls: Type[MeshType],
+        filepath: str,
+        mesh_type: str,
+        dimension: int,
+        boundary_tags: list[str],
+    ) -> MeshType:
+        assert (mesh_type) == "quad" or (mesh_type) == "tri"
         mesh_type = mesh_type
 
         mesh_io = meshio.read(filepath)
         points = mesh_io.points
-        cells = mesh_io.cells_dict[mesh_type]
+        cells = mesh_io.cells_dict[convert_mesh_type_to_meshio_mesh_type(mesh_type)]
         # make cells '1' based for compas
         mesh = MeshCompas.from_vertices_and_faces(points, cells)
 
@@ -163,7 +168,9 @@ class Mesh:
         return cls.from_compas_mesh(mesh, mesh_type, dimension)
 
     @classmethod
-    def from_compas_mesh(cls, mesh, mesh_type, mesh_dimension):
+    def from_compas_mesh(
+        cls: Type[MeshType], mesh: MeshCompas, mesh_type: str, mesh_dimension: int
+    ) -> MeshType:
         type = mesh_type
         dimension = mesh_dimension
         ez = np.array([0.0, 0.0, 1.0])
@@ -230,7 +237,7 @@ class Mesh:
         boundary_edge_vertices = edges_on_boundaries
         n_boundary_edges = boundary_edge_vertices.shape[0]
         boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.zeros(n_boundary_edges, dtype='S5')
+        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S5")
         boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
 
@@ -272,280 +279,107 @@ class Mesh:
             boundary_edge_normal,
             boundary_edge_tag,
         )
-    
+
     @classmethod
-    def from_hdf5(cls, filepath):
-        with h5py.File(filepath, 'r') as file:
-            file_mesh = file['mesh']
+    def from_hdf5(cls: Type[MeshType], filepath: str) -> MeshType:
+        with h5py.File(filepath, "r") as file:
+            file_mesh = file["mesh"]
             mesh = cls(
-                file_mesh['dimension'][()],
-                (file_mesh['type'][()]).decode('utf-8'),
-                file_mesh['n_elements'][()],
-                file_mesh['n_vertices'][()],
-                file_mesh['n_boundary_edges'][()],
-                file_mesh['n_nodes_per_element'][()],
-                file_mesh['vertex_coordinates'][()],
-                file_mesh['element_vertices'][()],
-                file_mesh['element_edge_length'][()],
-                file_mesh['element_centers'][()],
-                file_mesh['element_volume'][()],
-                file_mesh['element_incircle'][()],
-                file_mesh['element_edge_normal'][()],
-                file_mesh['element_neighbors'][()],
-                file_mesh['boundary_edge_vertices'][()],
-                file_mesh['boundary_edge_elements'][()],
-                file_mesh['boundary_edge_length'][()],
-                file_mesh['boundary_edge_normal'][()],
-                file_mesh['boundary_edge_tag'][()]
+                file_mesh["dimension"][()],
+                (file_mesh["type"][()]).decode("utf-8"),
+                file_mesh["n_elements"][()],
+                file_mesh["n_vertices"][()],
+                file_mesh["n_boundary_edges"][()],
+                file_mesh["n_nodes_per_element"][()],
+                file_mesh["vertex_coordinates"][()],
+                file_mesh["element_vertices"][()],
+                file_mesh["element_edge_length"][()],
+                file_mesh["element_centers"][()],
+                file_mesh["element_volume"][()],
+                file_mesh["element_incircle"][()],
+                file_mesh["element_edge_normal"][()],
+                file_mesh["element_neighbors"][()],
+                file_mesh["boundary_edge_vertices"][()],
+                file_mesh["boundary_edge_elements"][()],
+                file_mesh["boundary_edge_length"][()],
+                file_mesh["boundary_edge_normal"][()],
+                file_mesh["boundary_edge_tag"][()],
             )
         return mesh
 
-
-    def write_to_file_3d(
-        self,
-        filename,
-        vertex_coordinates,
-        element_vertices,
-        fields=None,
-        field_names=None,
-        point_fields=None,
-        point_field_names=None,
+    def write_to_file_vtk(
+        self: Type[MeshType],
+        filepath: str,
+        fields: Union[FArray, None] = None,
+        field_names: Union[CArray, None] = None,
+        point_data: dict = {},
     ):
-        if self.type == "triangle":
-            new_type = "wedge"
-        elif self.type == "quad":
-            new_type = "hexahedron"
-        else:
-            assert False
         d_fields = {}
         if fields is not None:
             if field_names is None:
                 field_names = [str(i) for i in range(fields.shape[0])]
-            for i_fields, _ in enumerate(fields):
-                d_fields[field_names[i_fields]] = [fields[i_fields]]
-        point_d_fields = {}
-        if point_fields is not None:
-            if point_field_names is None:
-                point_field_names = [str(i) for i in range(point_fields.shape[0])]
-            for i_fields, _ in enumerate(point_fields):
-                point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
-        meshout = meshio.Mesh(
-            vertex_coordinates,
-            [(new_type, element_vertices)],
-            cell_data=d_fields,
-            point_data=point_d_fields,
-        )
-        path, _ = os.path.split(filename)
-        filename, file_ext = os.path.splitext(filename)
-        if not os.path.exists(path) and path != "":
-            os.mkdir(path)
-        meshout.write(filename + ".vtk")
-
-    def write_to_file(self, filename, fields=None, field_names=None, point_data={}):
-        d_fields = {}
-        if fields is not None:
-            if field_names is None:
-                field_names = [str(i) for i in range(fields.shape[0])]
-            for i_fields, field in enumerate(fields):
-                d_fields[field_names[i_fields]] = [fields[i_fields]]
+            for i_fields, field in enumerate(fields.T):
+                d_fields[field_names[i_fields]] = [fields[:, i_fields]]
         meshout = meshio.Mesh(
             self.vertex_coordinates,
             [(self.type, self.element_vertices)],
             cell_data=d_fields,
             point_data=point_data,
         )
-        path, _ = os.path.split(filename)
-        filename, file_ext = os.path.splitext(filename)
+        path, _ = os.path.split(filepath)
+        filepath, file_ext = os.path.splitext(filepath)
         if not os.path.exists(path) and path != "":
             os.mkdir(path)
-        meshout.write(filename + ".vtk")
-    
-    def write_to_hdf5(self, filepath):
-        with h5py.File(filepath, 'w') as f:
-            attrs = f.create_group('mesh')
-            attrs.create_dataset('dimension', data=self.dimension)
-            attrs.create_dataset('type', data=self.type)
-            attrs.create_dataset('n_elements', data=self.n_elements)
-            attrs.create_dataset('n_vertices', data=self.n_vertices)
-            attrs.create_dataset('n_boundary_edges', data=self.n_boundary_edges)
-            attrs.create_dataset('n_nodes_per_element', data=self.n_nodes_per_element)
-            attrs.create_dataset('vertex_coordinates', data=self.vertex_coordinates)
-            attrs.create_dataset('element_vertices', data=self.element_vertices)
-            attrs.create_dataset('element_edge_length', data=self.element_edge_length)
-            attrs.create_dataset('element_centers', data=self.element_centers)
-            attrs.create_dataset('element_volume', data=self.element_volume)
-            attrs.create_dataset('element_incircle', data=self.element_incircle)
-            attrs.create_dataset('element_edge_normal', data=self.element_edge_normal)
-            attrs.create_dataset('element_neighbors', data=self.element_neighbors)
-            attrs.create_dataset('boundary_edge_vertices', data=self.boundary_edge_vertices)
-            attrs.create_dataset('boundary_edge_elements', data=self.boundary_edge_elements)
-            attrs.create_dataset('boundary_edge_length', data=self.boundary_edge_length)
-            attrs.create_dataset('boundary_edge_normal', data=self.boundary_edge_normal)
-            attrs.create_dataset('boundary_edge_tag', data=self.boundary_edge_tag)
+        meshout.write(filepath + ".vtk")
+
+    def write_to_hdf5(self: Type[MeshType], filepath: str):
+        with h5py.File(filepath, "w") as f:
+            attrs = f.create_group("mesh")
+            attrs.create_dataset("dimension", data=self.dimension)
+            attrs.create_dataset("type", data=self.type)
+            attrs.create_dataset("n_elements", data=self.n_elements)
+            attrs.create_dataset("n_vertices", data=self.n_vertices)
+            attrs.create_dataset("n_boundary_edges", data=self.n_boundary_edges)
+            attrs.create_dataset("n_nodes_per_element", data=self.n_nodes_per_element)
+            attrs.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
+            attrs.create_dataset("element_vertices", data=self.element_vertices)
+            attrs.create_dataset("element_edge_length", data=self.element_edge_length)
+            attrs.create_dataset("element_centers", data=self.element_centers)
+            attrs.create_dataset("element_volume", data=self.element_volume)
+            attrs.create_dataset("element_incircle", data=self.element_incircle)
+            attrs.create_dataset("element_edge_normal", data=self.element_edge_normal)
+            attrs.create_dataset("element_neighbors", data=self.element_neighbors)
+            attrs.create_dataset(
+                "boundary_edge_vertices", data=self.boundary_edge_vertices
+            )
+            attrs.create_dataset(
+                "boundary_edge_elements", data=self.boundary_edge_elements
+            )
+            attrs.create_dataset("boundary_edge_length", data=self.boundary_edge_length)
+            attrs.create_dataset("boundary_edge_normal", data=self.boundary_edge_normal)
+            attrs.create_dataset("boundary_edge_tag", data=self.boundary_edge_tag)
 
 
-    def load_file(filename, n_fields, map_fields):
-        mesh = meshio.read(filename)
-        number_of_elements = mesh.cell_data["0"][0].shape[0]
-        output = np.zeros((n_fields, number_of_elements))
-        for k, v in mesh.cell_data.items():
-            output[map_fields[int(k)]] = v[0]
-        return output
-
-    def set_default_parameters(self):
-        return
-
-    def set_runtime_variables(self):
-        return
-
-    def write_to_file(self, filename, fields=None, field_names=None, point_data={}):
-        assert False
-
-    def load_file(filename, n_fields, map_fields):
-        assert False
+def read_vtk_cell_fields(
+    filename: str, n_fields: int, map_field_indices: list[int]
+) -> FArray:
+    mesh = meshio.read(filename)
+    number_of_elements = mesh.cell_data["0"][0].shape[0]
+    output = np.zeros((n_fields, number_of_elements))
+    for k, v in mesh.cell_data.items():
+        output[map_field_indices[int(k)]] = v[0]
+    return output
 
 
-class Mesh1D(Mesh):
-    yaml_tag = "!Mesh1D"
-    dimension = 1
-
-    def set_default_parameters(self):
-        self.number_of_elements = 20
-        self.domain = [-1, 1]
-
-    def set_runtime_variables(self):
-        self.mesh = self.create_mesh()
-
-    def create_mesh(self):
-        xL = self.domain[0]
-        xR = self.domain[1]
-        num_nodes_per_element = 2
-        dx = (xR - xL) / self.number_of_elements
-        vertex_coordinates = np.zeros((num_nodes_per_element + 1, 3))
-        vertex_coordinates[:, 0] = np.linspace(
-            xL, xR, num_nodes_per_element + 1, dtype=float
-        )
-        element_vertices = np.zeros((self.number_of_elements, num_nodes_per_element))
-        element_vertices[:, 0] = np.linspace(
-            0, self.number_of_elements - 1, self.number_of_elements, dtype=int
-        )
-        element_vertices[:, 1] = np.linspace(
-            1, self.number_of_elements, self.number_of_elements, dtype=int
-        )
-        # element_edge_length = np.ones(
-        #     (self.number_of_elements, num_nodes_per_element), dtype=float
-        # )
-        element_area = dx * np.ones(self.number_of_elements, dtype=float)
-        element_incircle = dx * np.ones(self.number_of_elements, dtype=float)
-        element_vertices[:, 0] = np.linspace(
-            0, self.number_of_elements - 1, self.number_of_elements, dtype=int
-        )
-        element_centers = np.zeros((self.number_of_elements, 3), dtype=float)
-        # element_edge_normal = np.zeros((self.number_of_elements, 2, 3), dtype=float)
-        # element_edge_normal[1:-1, 0, :] = -1.0
-        # element_edge_normal[1:-1, 1, :] = 1.0
-        # # boundaries: I willy traverse the first entry there, correpsonding to the neighboring element
-        # element_edge_normal[0, 0, :] = 1.0
-        # element_edge_normal[-1, 0, :] = -1.0
-
-        element_edge_normal = {}
-        element_edge_length = {}
-
-        element_centers[:, 0] = np.arange(xL + dx / 2, xR, dx)
-        element_neighbors = {}
-        element_neighbors[0] = [1]
-        element_edge_normal[0] = [np.array([1.0, 0.0, 0.0])]
-        element_edge_length[0] = [1.0]
-        for i_elem in range(1, self.number_of_elements - 1):
-            element_neighbors[i_elem] = [i_elem - 1, i_elem + 1]
-            element_edge_normal[i_elem] = [
-                np.array([-1.0, 0.0, 0.0]),
-                np.array([1.0, 0.0, 0.0]),
-            ]
-            element_edge_length[i_elem] = element_edge_length[i_elem] = [1.0, 1.0]
-        element_neighbors[self.number_of_elements - 1] = [self.number_of_elements - 2]
-        element_edge_normal[self.number_of_elements - 1] = [np.array([-1.0, 0.0, 0.0])]
-        element_edge_length[self.number_of_elements - 1] = [1.0]
-
-        number_of_boundary_edges = 2
-        boundary_edge_face = np.zeros(number_of_boundary_edges, dtype=int)
-        boundary_edge_length = np.ones(number_of_boundary_edges, dtype=float)
-        boundary_edge_normal = np.zeros((number_of_boundary_edges, 3), dtype=float)
-        # Implicit ordering: 0: left, 1: right
-        boundary_edge_tag = np.zeros(number_of_boundary_edges, dtype=object)
-        boundary_edge_tag[0] = "left"
-        boundary_edge_tag[1] = "right"
-
-        boundary_edge_vertices = np.array([0, self.number_of_elements], dtype=int)
-        boundary_edge_face = np.array([0, self.number_of_elements - 1], dtype=int)
-        boundary_edge_normal[0] = np.array([-1.0, 0.0, 0.0])
-        boundary_edge_normal[1] = np.array([1.0, 0.0, 0.0])
-
-        self.type = "line"
-        self.n_elements = self.number_of_elements
-        self.n_vertices = self.number_of_elements + 1
-        self.n_boundary_edges = number_of_boundary_edges
-        self.num_nodes_per_element = num_nodes_per_element
-        self.vertex_coordinates = vertex_coordinates
-        self.element_vertices = element_vertices
-        self.element_edge_length = element_edge_length
-        self.element_centers = element_centers
-        self.element_volume = element_area
-        self.element_incircle = element_incircle
-        self.element_edge_normal = element_edge_normal
-        self.element_neighbors = element_neighbors
-        self.boundary_edge_vertices = boundary_edge_vertices
-        self.boundary_edge_element = boundary_edge_face
-        self.boundary_edge_length = boundary_edge_length
-        self.boundary_edge_normal = boundary_edge_normal
-        self.boundary_edge_tag = boundary_edge_tag
-
-        def write_to_file(
-            self, filename, fields=None, field_names=None, point_data={}, data_3d={}
-        ):
-            X = self.element_centers[:, 0]
-            if fields is None:
-                fields = np.array([X])
-                field_names = ["X"]
-            else:
-                if field_names is None:
-                    field_names = []
-                    for i in range(fields.shape[0]):
-                        field_names.append(str(i))
-                else:
-                    field_names.insert(0, "X")
-            fields_out = np.zeros((fields.shape[0] + 1, fields.shape[1]))
-            fields_out[0] = X
-            fields_out[1:] = fields
-            path, _ = os.path.split(filename)
-            if not os.path.exists(path) and path != "":
-                os.mkdir(path)
-            np.savetxt(filename, np.array(fields_out), delimiter=",")
-
-
-class Mesh2D(Mesh):
-    yaml_tag = "!Mesh2D"
-    dimension = 2
-
-    def set_default_parameters(self):
-        self.type = "quad"
-        self.filename = "meshes/quad_2d/mesh_coarse.msh"
-        self.boundary_tags = ["left", "right", "bottom", "top"]
-        self.kwargs = {}
-
-    def set_runtime_variables(self):
-        self.mesh = self.load_mesh()
-
-
-def incircle(mesh, face, type):
-    if type == "triangle":
+def incircle(mesh: Type[MeshType], face: int, mesh_type: str) -> FArray:
+    if mesh_type == "tri":
         return 2 * incircle_triangle(mesh, face)
-    elif type == "quad":
+    elif mesh_type == "quad":
         return 2 * incircle_quad(mesh, face)
     assert False
 
 
-def incircle_triangle(mesh, face):
+def incircle_triangle(mesh: Type[MeshType], face: int) -> FArray:
     area = mesh.face_area(face)
     edges = mesh.face_halfedges(face)
     perimeter = 0.0
@@ -559,7 +393,7 @@ def incircle_triangle(mesh, face):
     return np.sqrt(result)
 
 
-def incircle_quad(mesh, face):
+def incircle_quad(mesh: Type[MeshType], face: int) -> FArray:
     area = mesh.face_area(face)
     edges = mesh.face_halfedges(face)
     perimeter = 0.0
@@ -569,7 +403,7 @@ def incircle_quad(mesh, face):
     return area / s
 
 
-def edge_lengths(mesh, face):
+def edge_lengths(mesh: Type[MeshType], face: int) -> FArray:
     edges = mesh.face_halfedges(face)
     edge_length_ = np.zeros(len(edges))
     for i, edge in enumerate(edges):
@@ -577,7 +411,7 @@ def edge_lengths(mesh, face):
     return edge_length_
 
 
-def get_n_nodes_per_element(mesh_type: 'S5') -> int:
+def get_n_nodes_per_element(mesh_type: "str") -> int:
     if (mesh_type) == "quad":
         return 4
     elif (mesh_type) == "tri":
@@ -586,3 +420,50 @@ def get_n_nodes_per_element(mesh_type: 'S5') -> int:
         assert False
 
 
+def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
+    if mesh_type == "tri":
+        return "triangle"
+    else:
+        return mesh_type
+
+    # TODO: this should not be needed. However, I need to take care to change the mesh type
+    # at the place where I extend the data to 3d!!
+    # def write_to_file_3d(
+    #     self,
+    #     filename,
+    #     vertex_coordinates,
+    #     element_vertices,
+    #     fields=None,
+    #     field_names=None,
+    #     point_fields=None,
+    #     point_field_names=None,
+    # ):
+    #     if self.type == "tri":
+    #         new_type = "wedge"
+    #     elif self.type == "quad":
+    #         new_type = "hex"
+    #     else:
+    #         assert False
+    #     d_fields = {}
+    #     if fields is not None:
+    #         if field_names is None:
+    #             field_names = [str(i) for i in range(fields.shape[0])]
+    #         for i_fields, _ in enumerate(fields):
+    #             d_fields[field_names[i_fields]] = [fields[i_fields]]
+    #     point_d_fields = {}
+    #     if point_fields is not None:
+    #         if point_field_names is None:
+    #             point_field_names = [str(i) for i in range(point_fields.shape[0])]
+    #         for i_fields, _ in enumerate(point_fields):
+    #             point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
+    #     meshout = meshio.Mesh(
+    #         vertex_coordinates,
+    #         [(new_type, element_vertices)],
+    #         cell_data=d_fields,
+    #         point_data=point_d_fields,
+    #     )
+    #     path, _ = os.path.split(filename)
+    #     filename, file_ext = os.path.splitext(filename)
+    #     if not os.path.exists(path) and path != "":
+    #         os.mkdir(path)
+    #     meshout.write(filename + ".vtk")

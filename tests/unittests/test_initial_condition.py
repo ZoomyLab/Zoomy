@@ -27,5 +27,6 @@ def test_RP():
     assert np.allclose(Q[5:, :], 2 * np.ones((5, 3)))
 
 
-test_default()
-test_RP()
+if __name__ == "__main__":
+    test_default()
+    test_RP()

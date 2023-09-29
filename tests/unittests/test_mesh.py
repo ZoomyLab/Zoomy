@@ -1,22 +1,30 @@
+import pytest
+
 from library.mesh import *
 from library.misc import all_class_members_identical
 
 
+
+@pytest.mark.critical
 def test_create_1d_mesh():
     mesh = Mesh.create_1d((-1, 1), 10)
     assert True
 
-
-def test_load_2d_mesh():
+@pytest.mark.critical
+@pytest.mark.parametrize(
+    "mesh_type", ["quad", "tri"]
+)
+def test_load_2d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_mesh(
-        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+        mesh_type,
         2,
         ["left", "right", "top", "bottom"],
     )
     assert True
 
+@pytest.mark.critical
 def test_write_to_hdf5():
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_mesh(
@@ -30,6 +38,24 @@ def test_write_to_hdf5():
     mesh.write_to_hdf5(filepath)
     assert True
 
+@pytest.mark.critical
+def test_write_to_file_vtk():
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_mesh(
+        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
+        "quad",
+        2,
+        ["left", "right", "top", "bottom"],
+    )
+    filepath = os.path.join(main_dir, 'output/test.vtk')
+    cell_data = np.linspace(1, 2*mesh.n_elements, 2*mesh.n_elements).reshape(mesh.n_elements, 2)
+    point_data = {"0": np.linspace(1, mesh.n_vertices, mesh.n_vertices), "1": np.linspace(1, mesh.n_vertices, mesh.n_vertices)}
+    field_names = ["field_1", "field_2"]
+    os.makedirs(os.path.split(filepath)[0], exist_ok=True)
+    mesh.write_to_file_vtk(filepath, fields=cell_data, field_names=field_names, point_data=point_data)
+    assert True
+
+@pytest.mark.critical
 def test_from_hdf5():
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_mesh(
@@ -58,8 +84,29 @@ def test_from_hdf5():
                 assert False
 
 
+@pytest.mark.critical
+def test_read_vtk_cell_fields():
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_mesh(
+        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
+        "quad",
+        2,
+        ["left", "right", "top", "bottom"],
+    )
+    cell_data = np.linspace(1, 2*mesh.n_elements, 2*mesh.n_elements).reshape(mesh.n_elements, 2)
+    filepath = os.path.join(main_dir, 'output/test.vtk')
+    os.makedirs(os.path.split(filepath)[0], exist_ok=True)
+    mesh.write_to_file_vtk(filepath, fields=cell_data)
+    fields = read_vtk_cell_fields(filepath, 4, [0, 2])
+    assert True
 
-test_create_1d_mesh()
-test_load_2d_mesh()
-test_write_to_hdf5()
-test_from_hdf5()
+
+
+if __name__ == "__main__":
+    test_create_1d_mesh()
+    test_load_2d_mesh('quad')
+    test_load_2d_mesh('tri')
+    test_write_to_hdf5()
+    test_from_hdf5()
+    test_write_to_file_vtk()
+    test_read_vtk_cell_fields()
