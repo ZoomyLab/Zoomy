@@ -34,6 +34,12 @@ class Mesh:
     boundary_edge_normal: FArray
     boundary_edge_tag: CArray
 
+    # TODO: extend all fields with number_of_cells=n_boundary_elements
+    # TODO: check that I do not use shape in the code but rather n_element, n_vertices
+    # TODO: write an extraction method for writing out?
+    # TODO: populate the indices in the segments in the boundary conditions:
+    # sanity check: concat all indices and check that they match range(n_elements, n_elements+n_boundary_elements)
+
     @classmethod
     def create_1d(cls, domain: tuple[float, float], n_elements: int):
         xL = domain[0]
