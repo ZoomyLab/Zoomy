@@ -3,6 +3,7 @@ import numpy as np
 import meshio
 from compas.datastructures import Mesh as MeshCompas
 from compas_gmsh.models import MeshModel
+import h5py
 
 from attr import define
 
@@ -17,8 +18,8 @@ from library.custom_types import IArray, FArray, CArray
 
 @define(slots=True, frozen=True)
 class Mesh:
-    dim: int
-    type: str
+    dimension: int
+    type: '|S5'
     n_elements: int
     n_vertices: int
     n_boundary_edges: int
@@ -87,7 +88,7 @@ class Mesh:
         boundary_edge_length = np.ones(n_of_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_of_boundary_edges, 3), dtype=float)
         # Implicit ordering: 0: left, 1: right
-        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype=str)
+        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype='|S5')
         boundary_edge_tag[0] = "left"
         boundary_edge_tag[1] = "right"
 
@@ -137,7 +138,8 @@ class Mesh:
 
     @classmethod
     def load_mesh(cls, filepath, mesh_type, dimension, boundary_tags):
-        assert mesh_type == "quad" or mesh_type == "triangle"
+        assert (mesh_type) == "quad" or (mesh_type) == "triangle"
+        mesh_type = mesh_type
 
         mesh_io = meshio.read(filepath)
         points = mesh_io.points
@@ -188,11 +190,11 @@ class Mesh:
         # element_neighbors = mesh.face_adjacency()
         # manual computation of neighbors
         element_n_neighbors = np.zeros(n_elements, dtype=int)
-        element_neighbors = np.empty((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_normal = np.empty(
+        element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+        element_edge_normal = np.zeros(
             (n_elements, n_nodes_per_element, dimension), dtype=float
         )
-        element_edge_length = np.empty((n_elements, n_nodes_per_element), dtype=float)
+        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
 
         for face in np.fromiter(mesh.faces(), int):
             element_vertices[face] = np.array(mesh.face_vertices(face))
@@ -228,7 +230,7 @@ class Mesh:
         boundary_edge_vertices = edges_on_boundaries
         n_boundary_edges = boundary_edge_vertices.shape[0]
         boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.empty(n_boundary_edges, dtype=object)
+        boundary_edge_tag = np.zeros(n_boundary_edges, dtype='S5')
         boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
 
@@ -270,6 +272,34 @@ class Mesh:
             boundary_edge_normal,
             boundary_edge_tag,
         )
+    
+    @classmethod
+    def from_hdf5(cls, filepath):
+        with h5py.File(filepath, 'r') as file:
+            file_mesh = file['mesh']
+            mesh = cls(
+                file_mesh['dimension'][()],
+                (file_mesh['type'][()]).decode('utf-8'),
+                file_mesh['n_elements'][()],
+                file_mesh['n_vertices'][()],
+                file_mesh['n_boundary_edges'][()],
+                file_mesh['n_nodes_per_element'][()],
+                file_mesh['vertex_coordinates'][()],
+                file_mesh['element_vertices'][()],
+                file_mesh['element_edge_length'][()],
+                file_mesh['element_centers'][()],
+                file_mesh['element_volume'][()],
+                file_mesh['element_incircle'][()],
+                file_mesh['element_edge_normal'][()],
+                file_mesh['element_neighbors'][()],
+                file_mesh['boundary_edge_vertices'][()],
+                file_mesh['boundary_edge_elements'][()],
+                file_mesh['boundary_edge_length'][()],
+                file_mesh['boundary_edge_normal'][()],
+                file_mesh['boundary_edge_tag'][()]
+            )
+        return mesh
+
 
     def write_to_file_3d(
         self,
@@ -329,6 +359,30 @@ class Mesh:
         if not os.path.exists(path) and path != "":
             os.mkdir(path)
         meshout.write(filename + ".vtk")
+    
+    def write_to_hdf5(self, filepath):
+        with h5py.File(filepath, 'w') as f:
+            attrs = f.create_group('mesh')
+            attrs.create_dataset('dimension', data=self.dimension)
+            attrs.create_dataset('type', data=self.type)
+            attrs.create_dataset('n_elements', data=self.n_elements)
+            attrs.create_dataset('n_vertices', data=self.n_vertices)
+            attrs.create_dataset('n_boundary_edges', data=self.n_boundary_edges)
+            attrs.create_dataset('n_nodes_per_element', data=self.n_nodes_per_element)
+            attrs.create_dataset('vertex_coordinates', data=self.vertex_coordinates)
+            attrs.create_dataset('element_vertices', data=self.element_vertices)
+            attrs.create_dataset('element_edge_length', data=self.element_edge_length)
+            attrs.create_dataset('element_centers', data=self.element_centers)
+            attrs.create_dataset('element_volume', data=self.element_volume)
+            attrs.create_dataset('element_incircle', data=self.element_incircle)
+            attrs.create_dataset('element_edge_normal', data=self.element_edge_normal)
+            attrs.create_dataset('element_neighbors', data=self.element_neighbors)
+            attrs.create_dataset('boundary_edge_vertices', data=self.boundary_edge_vertices)
+            attrs.create_dataset('boundary_edge_elements', data=self.boundary_edge_elements)
+            attrs.create_dataset('boundary_edge_length', data=self.boundary_edge_length)
+            attrs.create_dataset('boundary_edge_normal', data=self.boundary_edge_normal)
+            attrs.create_dataset('boundary_edge_tag', data=self.boundary_edge_tag)
+
 
     def load_file(filename, n_fields, map_fields):
         mesh = meshio.read(filename)
@@ -353,7 +407,7 @@ class Mesh:
 
 class Mesh1D(Mesh):
     yaml_tag = "!Mesh1D"
-    dim = 1
+    dimension = 1
 
     def set_default_parameters(self):
         self.number_of_elements = 20
@@ -471,7 +525,7 @@ class Mesh1D(Mesh):
 
 class Mesh2D(Mesh):
     yaml_tag = "!Mesh2D"
-    dim = 2
+    dimension = 2
 
     def set_default_parameters(self):
         self.type = "quad"
@@ -523,31 +577,12 @@ def edge_lengths(mesh, face):
     return edge_length_
 
 
-def get_n_nodes_per_element(mesh_type: str) -> int:
-    if mesh_type == "quad":
+def get_n_nodes_per_element(mesh_type: 'S5') -> int:
+    if (mesh_type) == "quad":
         return 4
-    elif mesh_type == "tri":
+    elif (mesh_type) == "tri":
         return 3
     else:
         assert False
 
 
-def test_create_1d_mesh():
-    mesh = Mesh.create_1d((-1, 1), 10)
-    assert True
-
-
-def test_load_2d_mesh():
-    main_dir = os.getenv("SMPYTHON")
-    mesh = Mesh.load_mesh(
-        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
-    )
-    print(mesh)
-    assert True
-
-
-test_create_1d_mesh()
-test_load_2d_mesh()

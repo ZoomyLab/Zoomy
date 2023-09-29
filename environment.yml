@@ -14,3 +14,4 @@ dependencies:
   - COMPAS
   - scipy
   - tqdm
+  - h5py
