@@ -13,34 +13,29 @@ import library.mesh as mesh
 
 @define(slots=True, frozen=False)
 class Segment:
-    be_index_to_local_index: IArray
-    be_elements: IArray
-    be_face_center: FArray
-    be_normals: FArray
+    element_indices: IArray
+    face_centers: FArray
+    face_normals: FArray
+    face_area: FArray
     tag: str
-    be_ghost_elements: Optional[IArray]
+    ghost_element_indices: Optional[IArray] = None
+    initialized: bool = False
 
     @classmethod
     def from_mesh(cls, mesh, be_tag, reverse_order=False):
         counter = 0
-        be_local_index_to_edge_index = []
-        be_index_to_local_index = -1 * np.ones(
-            mesh.boundary_edge_elements.shape[0], dtype=int
-        )
         be_elements = []
         be_face_centers = []
+        be_face_area = []
         be_normals = []
 
         # compute boundary edge elements and normals
         for i_edge, element in enumerate(mesh.boundary_edge_elements):
             if mesh.boundary_edge_tag[i_edge].decode("utf-8") == be_tag:
-                be_local_index_to_edge_index.append(i_edge)
-                be_elements.append(int(mesh.boundary_edge_elements[i_edge]))
+                be_elements.append(int(element))
                 be_normals.append(mesh.boundary_edge_normal[i_edge])
                 be_face_centers.append(mesh.element_centers[element])
-
-                be_index_to_local_index[i_edge] = counter
-                assert element == be_elements[be_index_to_local_index[i_edge]]
+                be_face_area.append(mesh.boundary_edge_length[i_edge])
                 counter += 1
 
         if len(be_elements) == 0:
@@ -70,59 +65,56 @@ class Segment:
             assert False
 
         be_elements = np.array(be_elements)[indices_sorted]
-        be_normals = np.array(be_normals)[indices_sorted]
         be_face_centers = np.array(be_face_centers)[indices_sorted]
+        be_face_area = np.array(be_face_area)[indices_sorted]
+        be_normals = np.array(be_normals)[indices_sorted]
         counter = 0
-        be_local_index_to_edge_index = np.array(be_local_index_to_edge_index)[
-            indices_sorted
-        ]
-        be_index_to_local_index[be_local_index_to_edge_index] = np.linspace(
-            0, len(indices_sorted) - 1, len(indices_sorted)
-        )
-
-        # sanity check
-        counter = 0
-        for i_edge, element in enumerate(mesh.boundary_edge_elements):
-            if mesh.boundary_edge_tag[i_edge] == be_tag:
-                local_index = be_index_to_local_index[i_edge]
-                assert local_index != -1
-                elem_local = be_elements[local_index]
-                assert elem_local == element
 
         if reverse_order:
             be_elements.reverse()
             be_normals.reverse()
             be_face_centers.reverse()
         return cls(
-            be_index_to_local_index,
-            be_elements,
-            be_face_centers,
-            be_normals,
-            be_tag,
-            None,
+            be_elements, be_face_centers, be_face_area, be_normals, be_tag, None, None
         )
 
+    # The solver needs to reserve space in the global array for the ghost elements
+    # Once it figured out where to store the ghost cells, we can generate them and
+    # store the corresponding global indices
     def set_ghost_cells(self, element_indices):
-        self.ghost_elements = element_indices
+        self.ghost_element_indices = element_indices
+        self.initialized = True
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class BoundaryCondition:
     physical_tag: str
+    initialized: bool = False
     segment: Optional[Segment] = None
 
     def initialize(self, mesh: mesh.Mesh):
         self.segment = Segment.from_mesh(mesh, self.physical_tag)
+        self.initialized = True
 
     def apply_boundary_condition(self, Q: FArray):
+        assert self.initialized
+        assert self.segment.initialized
         print("BoundaryCondition is a virtual class. Use one if its derived classed!")
         assert False
+
+    def get_length(self):
+        return self.segment.element_indices.shape[0]
+
+    def set_ghost_cells(self, element_indices):
+        self.segment.set_ghost_cells(element_indices)
 
 
 # @define(slots=True, frozen=False)
 class Extrapolation(BoundaryCondition):
     def apply_boundary_condition(self, Q: FArray):
-        Q[self.segment.ghost_elements] = Q[self.segment.be_elements]
+        assert self.initialized
+        assert self.segment.initialized
+        Q[self.segment.ghost_element_indices] = Q[self.segment.element_indices]
 
 
 @define(slots=True, frozen=False)
@@ -130,18 +122,54 @@ class Wall(BoundaryCondition):
     velocity_components: IArray
 
     def apply_boundary_condition(self, Q: FArray):
-        Q[self.segment.ghost_elements] = Q[self.segment.be_elements]
+        assert self.initialized
+        assert self.segment.initialized
+        Q[self.segment.ghost_elements] = Q[self.segment.element_indices]
         Q[:, self.velocity_components] *= -1.0
 
 
 @define(slots=True, frozen=False)
 class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
-    segment_periodic: Optional[Segment]
+    periodic_to_element_indices: Optional[IArray] = None
 
     def initialize(self, mesh: mesh.Mesh):
         self.segment = Segment.from_mesh(mesh, self.physical_tag)
-        self.segment_periodic = Segment.from_mesh(mesh, self.peridic_to_physical_tag)
+        self.periodic_to_element_indices = Segment.from_mesh(
+            mesh, self.periodic_to_physical_tag
+        ).element_indices
+        self.initialized = True
 
     def apply_boundary_condition(self, Q: FArray):
-        Q[self.segment.ghost_elements] = Q[self.segment_periodic.be_elements]
+        assert self.initialized
+        assert self.segment.initialized
+        Q[self.segment.ghost_element_indices] = Q[self.periodic_to_element_indices]
+
+
+def initialize(boundary_conditions, mesh):
+    n_inner_elements = mesh.n_elements
+    initialize_bc(boundary_conditions, mesh)
+    n_ghosts = initialize_ghost_cells(boundary_conditions, n_inner_elements)
+    return n_ghosts
+
+
+def initialize_bc(boundary_conditions, mesh):
+    for bc in boundary_conditions:
+        bc.initialize(mesh)
+
+
+def initialize_ghost_cells(boundary_conditions, n_inner_elements):
+    n_ghost_cells = 0
+    offset = n_inner_elements
+    for bc in boundary_conditions:
+        bc.set_ghost_cells(
+            offset + np.linspace(0, bc.get_length() - 1, bc.get_length(), dtype=int)
+        )
+        offset += bc.get_length()
+        n_ghost_cells += bc.get_length()
+    return n_ghost_cells
+
+
+def apply_boundary_conditions(boundary_conditions, Q):
+    for bc in boundary_conditions:
+        bc.apply_boundary_condition(Q)
