@@ -9,7 +9,7 @@ def test_default():
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = Default().apply(Q, X)
+    Q = Initial|Condition().apply(Q, X)
     assert np.allclose(Q, np.ones_like(Q))
 
 

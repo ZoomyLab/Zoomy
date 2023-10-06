@@ -11,17 +11,18 @@ from attr import define
 
 
 from library.baseclass import BaseYaml
-from library.boundary_conditions import *
-import library.initial_condition as initial_condition
+from library.boundary_conditions import BoundaryCondition, Periodic
+from library.initial_condition import InitialCondition, Default
 
 
-@define(slots=True, frozen=True)
+@define(slots=True, frozen=True, kw_only=True)
 class Model:
-    dimension = 1
-    boundary_conditions = [
+    dimension: int = 1
+    boundary_conditions: BoundaryCondition = [
         Periodic(physical_tag="left", periodic_to_physical_tag="right"),
         Periodic(physical_tag="right", periodic_to_physical_tag="left"),
     ]
+    initial_conditions: InitialCondition = InitialCondition()
 
 
 class Model(BaseYaml):

@@ -10,13 +10,19 @@ from library.custom_types import FArray
 
 
 @define(slots=True, frozen=True)
+class InitialCondition:
+    def apply(self, Q, X):
+        assert False
+
+
+@define(slots=True, frozen=True)
 class Default:
     def apply(self, Q, X):
         return np.ones_like(Q)
 
 
 @define(slots=True, frozen=False)
-class RP(Default):
+class RP(InitialCondition):
     left: Callable[[int], FArray] = lambda n_fields: np.ones(n_fields, dtype=float)
     right: Callable[[int], FArray] = lambda n_fields: 2.0 * np.ones(
         n_fields, dtype=float
@@ -34,7 +40,7 @@ class RP(Default):
 
 
 @define(slots=True, frozen=True)
-class UserFunction(Default):
+class UserFunction(InitialCondition):
     function: Optional[Callable[[FArray], FArray]] = None
 
     def apply(self, Q, X):

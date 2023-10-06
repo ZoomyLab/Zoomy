@@ -1,3 +1,3 @@
-from library.solver.models.base import *
-from library.solver.models.swe import *
-from library.solver.models.smm import *
+from library.models.base import *
+from library.models.swe import *
+from library.models.smm import *
