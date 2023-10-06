@@ -88,6 +88,46 @@ def test_boundary_condition_extrapolation_2d():
     assert True
 
 
+def test_boundary_condition_wall():
+    mesh = Mesh.create_1d((-1, 1), 10)
+    bcs = [
+        Wall(physical_tag="left", momentum_eqns=[1]),
+        Wall(physical_tag="right", momentum_eqns=[1]),
+    ]
+    n_ghosts = initialize(bcs, mesh)
+    n_all_elements = mesh.n_elements + n_ghosts
+    Q = np.linspace(1, 2 * n_all_elements, 2 * n_all_elements).reshape(
+        n_all_elements, 2
+    )
+    apply_boundary_conditions(bcs, Q)
+    assert np.allclose(Q[-2], np.array([1.0, -2.0], dtype=float))
+    assert np.allclose(Q[-1], np.array([19.0, -20.0], dtype=float))
+
+
+def test_boundary_condition_wall_2d():
+    main_dir = os.getenv("SMS")
+    bc_tags = ["left", "right", "top", "bottom"]
+    bcs = [Wall(physical_tag=tag, momentum_eqns=[1, 2]) for tag in bc_tags]
+    mesh = Mesh.load_mesh(
+        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
+        "quad",
+        2,
+        bc_tags,
+    )
+    n_ghosts = initialize(bcs, mesh)
+    n_all_elements = mesh.n_elements + n_ghosts
+    Q = np.linspace(1, 3 * n_all_elements, 3 * n_all_elements).reshape(
+        n_all_elements, 3
+    )
+    apply_boundary_conditions(bcs, Q)
+    for i, i_swapped_dim in enumerate([1, 1, 2, 2]):
+        assert np.allclose(
+            Q[bcs[i].segment.element_indices][:, i_swapped_dim],
+            -Q[bcs[i].segment.ghost_element_indices][:, i_swapped_dim],
+        )
+    assert True
+
+
 if __name__ == "__main__":
     test_segment_1d()
     test_segment_2d()
@@ -95,3 +135,5 @@ if __name__ == "__main__":
     test_boundary_condition_extrapolation()
     test_boundary_condition_periodic()
     test_boundary_condition_extrapolation_2d()
+    test_boundary_condition_wall()
+    test_boundary_condition_wall_2d()

@@ -1,11 +1,15 @@
 import numpy as np
 import os
 
-from attr import define
+from attr import define, field
 from typing import Union, Optional
 
 from library.custom_types import IArray, FArray
 import library.mesh as mesh
+from library.misc import (
+    project_in_x_y_and_recreate_Q,
+    projection_in_normal_and_transverse_direction,
+)
 
 # TODO ideally, I do not only want to map elements2elements, but interpolate a bounday function
 # (e.g. as a parametric function) in order to have triangular boudnary conditions as well
@@ -75,7 +79,7 @@ class Segment:
             be_normals.reverse()
             be_face_centers.reverse()
         return cls(
-            be_elements, be_face_centers, be_face_area, be_normals, be_tag, None, None
+            be_elements, be_face_centers, be_normals, be_face_area, be_tag, None, None
         )
 
     # The solver needs to reserve space in the global array for the ghost elements
@@ -118,13 +122,22 @@ class Extrapolation(BoundaryCondition):
 
 @define(slots=True, frozen=False)
 class Wall(BoundaryCondition):
-    velocity_components: IArray
+    # indices of which field indices of Q correspond to directed fields, e.g. x/y momentum
+    # momentum_eqns: IArray = field(converter=np.ndarray)
+    momentum_eqns: IArray = field(converter=lambda x: np.array(x, dtype=int))
 
     def apply_boundary_condition(self, Q: FArray):
         assert self.initialized
         assert self.segment.initialized
-        Q[self.segment.ghost_element_indices] = Q[self.segment.element_indices]
-        Q[:, self.velocity_components] *= -1.0
+        Qorig = Q[self.segment.element_indices]
+        normals = self.segment.face_normals
+        Qn, Qt = projection_in_normal_and_transverse_direction(
+            Qorig, self.momentum_eqns, normals
+        )
+        # flip the normal direcion for impermeable wall
+        Q[self.segment.ghost_element_indices] = project_in_x_y_and_recreate_Q(
+            -Qn, Qt, Qorig, self.momentum_eqns, normals
+        )
 
 
 @define(slots=True, frozen=False)

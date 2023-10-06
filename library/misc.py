@@ -58,7 +58,7 @@ def all_class_members_identical(a, b):
 def compute_transverse_direction(normals):
     dim = normals.shape[1]
     if dim == 1:
-        return normals
+        return np.zeros_like(normals)
     elif dim == 2:
         transverse = np.zeros((normals.shape[0], 2), dtype=float)
         transverse[:, 0] = -normals[:, 1]

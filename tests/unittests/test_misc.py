@@ -12,8 +12,6 @@ def test_projection_in_normal_transverse_direction_and_back():
     angles = [0.0, np.pi / 2.0, np.pi / 4.0]
     compute_normal = lambda angle: np.array([np.cos(angle), -np.sin(angle), 0.0])
     normals = [compute_normal(angle)[:dim] for angle in angles]
-    cartesian = compute_normal(0.0)[:dim]
-    cartesian = np.repeat(cartesian[np.newaxis, :], N, axis=0)
 
     for normal in normals:
         normal = np.repeat(normal[np.newaxis, :], N, axis=0)
@@ -24,4 +22,3 @@ def test_projection_in_normal_transverse_direction_and_back():
 
 if __name__ == "__main__":
     test_projection_in_normal_transverse_direction_and_back()
-
