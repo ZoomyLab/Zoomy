@@ -112,7 +112,7 @@ class BoundaryCondition:
         self.segment.set_ghost_cells(element_indices)
 
 
-# @define(slots=True, frozen=False)
+@define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
     def apply_boundary_condition(self, Q: FArray):
         assert self.initialized
@@ -120,7 +120,7 @@ class Extrapolation(BoundaryCondition):
         Q[self.segment.ghost_element_indices] = Q[self.segment.element_indices]
 
 
-@define(slots=True, frozen=False)
+@define(slots=True, frozen=False, kw_only=True)
 class Wall(BoundaryCondition):
     # indices of which field indices of Q correspond to directed fields, e.g. x/y momentum
     # momentum_eqns: IArray = field(converter=np.ndarray)
@@ -140,7 +140,7 @@ class Wall(BoundaryCondition):
         )
 
 
-@define(slots=True, frozen=False)
+@define(slots=True, frozen=False, kw_only=True)
 class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
     periodic_to_element_indices: Optional[IArray] = None

@@ -14,13 +14,6 @@ from library.baseclass import BaseYaml
 from library.boundary_conditions import *
 import library.initial_condition as initial_condition
 
-# import library.smm_model as smm
-# import library.smm_model_hyperbolic as smmh
-# import library.smm_model_exner as smm_exner
-# import library.smm_model_exner_hyperbolic as smm_exner_hyper
-
-main_dir = os.getenv("SMPYTHON")
-
 
 @define(slots=True, frozen=True)
 class Model:

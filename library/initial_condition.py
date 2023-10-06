@@ -2,21 +2,21 @@ import numpy as np
 import sys
 import attr
 from attr import define
-from typing import Callable
+from typing import Callable, Optional
 
 from library.custom_types import FArray
 
 # from library.mesh import Mesh2D
 
 
-@define
+@define(slots=True, frozen=True)
 class Default:
     def apply(self, Q, X):
         return np.ones_like(Q)
 
 
 @define(slots=True, frozen=False)
-class RP:
+class RP(Default):
     left: Callable[[int], FArray] = lambda n_fields: np.ones(n_fields, dtype=float)
     right: Callable[[int], FArray] = lambda n_fields: 2.0 * np.ones(
         n_fields, dtype=float
@@ -33,3 +33,13 @@ class RP:
         return Q
 
 
+@define(slots=True, frozen=True)
+class UserFunction(Default):
+    function: Optional[Callable[[FArray], FArray]] = None
+
+    def apply(self, Q, X):
+        if self.function is None:
+            self.function = lambda x: np.zeros(Q.shape[1])
+        for i, x in enumerate(X):
+            Q[i] = self.function(x)
+        return Q
