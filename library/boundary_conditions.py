@@ -97,8 +97,7 @@ class BoundaryCondition:
         self.initialized = True
 
     def apply_boundary_condition(self, Q: FArray):
-        assert self.initialized
-        assert self.segment.initialized
+        assert self.initialized and self.segment.initialized
         print("BoundaryCondition is a virtual class. Use one if its derived classed!")
         assert False
 
@@ -124,7 +123,7 @@ class Wall(BoundaryCondition):
     def apply_boundary_condition(self, Q: FArray):
         assert self.initialized
         assert self.segment.initialized
-        Q[self.segment.ghost_elements] = Q[self.segment.element_indices]
+        Q[self.segment.ghost_element_indices] = Q[self.segment.element_indices]
         Q[:, self.velocity_components] *= -1.0
 
 
