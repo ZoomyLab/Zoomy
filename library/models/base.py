@@ -13,19 +13,21 @@ from attr import define
 from typing import Optional
 from types import SimpleNamespace
 
-from library.boundary_conditions import BoundaryCondition, Periodic
+from library.boundary_conditions import BoundaryConditions, Periodic
 from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
-from library.misc import vectorize
+from library.misc import vectorize # type: ignore
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class Model:
     dimension: int = 1
-    boundary_conditions: BoundaryCondition = [
-        Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-        Periodic(physical_tag="right", periodic_to_physical_tag="left"),
-    ]
+    boundary_conditions: BoundaryConditions = BoundaryConditions(
+        [
+            Periodic(physical_tag="left", periodic_to_physical_tag="right"),
+            Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+        ]
+    )
     initial_conditions: InitialConditions = Constant()
     n_fields: int
     n_aux_fields: int
