@@ -17,9 +17,9 @@ def test_model_initialization():
     mesh = Mesh.create_1d((-1, 1), 10)
     model = Model(
         dimension=1,
-        n_fields=1,
+        n_fields=3,
         n_aux_fields=0,
-        n_parameters=1,
+        n_parameters=0,
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
@@ -30,8 +30,13 @@ def test_model_initialization():
     Q = np.linspace(1, 3 * n_all_elements, 3 * n_all_elements).reshape(
         n_all_elements, 3
     )
+    Qaux = np.zeros((Q.shape[0], 0))
+    parameters = np.array([], dtype=float)
     model.boundary_conditions.apply(Q)
     model.initial_conditions.apply(Q, mesh.element_centers)
+    functions = model.get_runtime_model()
+    flux = functions["flux"]
+    print(flux(Q, Qaux, parameters))
 
     assert True
 

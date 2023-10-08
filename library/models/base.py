@@ -3,9 +3,11 @@ import os
 import logging
 
 import sympy
-from sympy import Symbol, Matrix, lambdify
+from sympy import Symbol, Matrix, lambdify, transpose
 from sympy import *
 from sympy import zeros, ones
+
+from jax import vmap
 
 from attr import define
 from typing import Optional
@@ -17,6 +19,7 @@ from collections import UserDict
 from library.boundary_conditions import BoundaryCondition, Periodic
 from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
+from library.misc import vectorize
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -81,52 +84,63 @@ class Model:
         )
         # TODO case imaginary
         # TODO case not computable
-        # TODO nij dependence
         self.sympy_eigenvalues = list(self.sympy_quasilinear_matrix.eigenvals().keys())
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
-    # return a dataclass runtime_model
+    # TODO we currently need lambda to transpse the input. Otherwise sympy fails. better options? Maybe compile to c and load c instead?
     def get_runtime_model(self):
-        flux = lambda Q, Qaux, param: lambdify(
+        """Returns a runtime model for numpy arrays from the symbolic model."""
+        l_flux = lambdify(
             [self.variables, self.aux_variables, self.parameters],
-            self.sympy_flux(),
-            "numpy",
-        )(*Q, *Qaux, *param)
-        flux_jacobian = lambda Q, Qaux, param: lambdify(
+            self.sympy_flux,
+            modules="numpy",
+        )
+        flux = vectorize(l_flux)
+        l_flux_jacobian = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_flux_jacobian,
             "numpy",
-        )(*Q, *Qaux, *param)
-        nonconservative_matrix = lambda Q, Qaux, param: lambdify(
+        )
+        flux_jacobian = vectorize(l_flux_jacobian)
+
+        l_nonconservative_matrix = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_nonconservative_matrix,
             "numpy",
-        )(*Q, *Qaux, *param)
-        quasilinear_matrix = lambda Q, Qaux, param: lambdify(
+        )
+        nonconservative_matrix = vectorize(l_nonconservative_matrix)
+
+        l_quasilinear_matrix = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_quasilinear_matrix,
             "numpy",
-        )(*Q, *Qaux, *param)
-        eigenvalues = lambda Q, Qaux, param: lambdify(
+        )
+        quasilinear_matrix = vectorize(l_quasilinear_matrix)
+
+        l_eigenvalues = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_eigenvalues,
             "numpy",
-        )(*Q, *Qaux, *param)
-        source = lambda Q, Qaux, param: lambdify(
+        )
+        eigenvalues = vectorize(l_eigenvalues)
+
+        l_source = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_source,
             "numpy",
-        )(*Q, *Qaux, *param)
-        source_jacobian = lambda Q, Qaux, param: lambdify(
+        )
+        source = vectorize(l_eigenvalues)
+
+        l_source_jacobian = lambdify(
             [self.variables, self.aux_variables, self.parameters],
             self.sympy_source_jacobian,
             "numpy",
-        )(*Q, *Qaux, *param)
-        left_eigenvalues = None
-        right_eigenvalues = None
-        source = None
-        source_jacobian = None
+        )
+        source_jacobian = vectorize(l_source_jacobian)
+
+        left_eigenvectors = None
+        right_eigenvectors = None
         d = {
             "flux": flux,
             "flux_jacobian": flux_jacobian,
