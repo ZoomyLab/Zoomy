@@ -33,11 +33,11 @@ def test_model_initialization(
         )
     else:
         assert False
-    model = Model(
+    model = Advection(
         dimension=dimension,
         n_fields=3,
         n_aux_fields=0,
-        n_parameters=0,
+        n_parameters=3,
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
@@ -49,18 +49,21 @@ def test_model_initialization(
         n_all_elements, 3
     )
     Qaux = np.zeros((Q.shape[0], 0))
-    parameters = np.array([], dtype=float)
+    advection_speeds = np.array([1.0, 0.0, 2.0], dtype=float)
+    parameters = advection_speeds
     model.boundary_conditions.apply(Q)
     model.initial_conditions.apply(Q, mesh.element_centers)
 
     functions = model.get_runtime_model()
-    assert np.allclose(functions.flux(Q, Qaux, parameters), Q)
-    assert np.allclose(functions.flux_jacobian(Q, Qaux, parameters)[0], np.eye((3)))
+    assert np.allclose(functions.flux(Q, Qaux, parameters), advection_speeds * Q)
+    assert np.allclose(
+        functions.flux_jacobian(Q, Qaux, parameters)[0], np.diag(advection_speeds)
+    )
     assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(3))
     assert np.allclose(
         functions.source_jacobian(Q, Qaux, parameters)[0], np.zeros((3, 3))
     )
-    assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], np.ones(3))
+    assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], advection_speeds)
 
 
 if __name__ == "__main__":
