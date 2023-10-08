@@ -36,9 +36,13 @@ def test_model_initialization():
     model.initial_conditions.apply(Q, mesh.element_centers)
 
     functions = model.get_runtime_model()
-    flux = functions.flux
-
-    assert True
+    assert np.allclose(functions.flux(Q, Qaux, parameters), Q)
+    assert np.allclose(functions.flux_jacobian(Q, Qaux, parameters)[0], np.eye(3))
+    assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(3))
+    assert np.allclose(
+        functions.source_jacobian(Q, Qaux, parameters)[0], np.zeros((3, 3))
+    )
+    assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], np.ones((3, 3)))
 
 
 def test_model_initialization_2d():
@@ -58,9 +62,9 @@ def test_model_initialization_2d():
 
     model = Model(
         dimension=2,
-        n_fields=1,
+        n_fields=3,
         n_aux_fields=0,
-        n_parameters=1,
+        n_parameters=0,
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
@@ -71,10 +75,20 @@ def test_model_initialization_2d():
     Q = np.linspace(1, 3 * n_all_elements, 3 * n_all_elements).reshape(
         n_all_elements, 3
     )
+    Qaux = np.zeros((Q.shape[0], 0))
+    parameters = np.array([], dtype=float)
 
     model.initial_conditions.apply(Q, mesh.element_centers)
     model.boundary_conditions.apply(Q)
-    assert True
+
+    functions = model.get_runtime_model()
+    assert np.allclose(functions.flux(Q, Qaux, parameters), Q)
+    assert np.allclose(functions.flux_jacobian(Q, Qaux, parameters)[0], np.eye(3))
+    assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(3))
+    assert np.allclose(
+        functions.source_jacobian(Q, Qaux, parameters)[0], np.zeros((3, 3))
+    )
+    assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], np.ones((3, 3)))
 
 
 if __name__ == "__main__":

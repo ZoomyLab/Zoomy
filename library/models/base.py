@@ -129,7 +129,7 @@ class Model:
             self.sympy_source,
             "numpy",
         )
-        source = vectorize(l_eigenvalues)
+        source = vectorize(l_source)
 
         l_source_jacobian = lambdify(
             [self.variables, self.aux_variables, self.parameters],
