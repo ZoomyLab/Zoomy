@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 
 from library.misc import *
 
 
+@pytest.mark.critical
 def test_projection_in_normal_transverse_direction_and_back():
     dim = 2
     n_fields = 1 + 2 * dim

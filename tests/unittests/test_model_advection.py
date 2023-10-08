@@ -8,6 +8,7 @@ import library.initial_conditions as IC
 from library.mesh import *
 
 
+@pytest.mark.critical
 @pytest.mark.parametrize(
     "dimension",
     ([1, 2]),

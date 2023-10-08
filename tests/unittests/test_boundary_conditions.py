@@ -1,9 +1,11 @@
 import numpy as np
+import pytest
 
 from library.boundary_conditions import *
 from library.mesh import Mesh
 
 
+@pytest.mark.critical
 def test_segment_1d():
     mesh = Mesh.create_1d((-1, 1), 10)
     segment_left = Segment.from_mesh(mesh, "left")
@@ -12,6 +14,7 @@ def test_segment_1d():
     assert (segment_right.element_indices == [9]).all()
 
 
+@pytest.mark.critical
 def test_segment_2d():
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_mesh(
@@ -24,6 +27,7 @@ def test_segment_2d():
     assert segment.face_normals.shape[0] == 8
 
 
+@pytest.mark.critical
 def test_boundary_condition_initialization():
     mesh = Mesh.create_1d((-1, 1), 10)
     bc = BoundaryCondition(physical_tag="left")
@@ -31,6 +35,7 @@ def test_boundary_condition_initialization():
     assert bc.initialized
 
 
+@pytest.mark.critical
 def test_boundary_condition_extrapolation():
     mesh = Mesh.create_1d((-1, 1), 10)
     bcs = [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
@@ -49,6 +54,7 @@ def test_boundary_condition_extrapolation():
     assert bcs[1].segment.ghost_element_indices == [11]
 
 
+@pytest.mark.critical
 def test_boundary_condition_periodic():
     mesh = Mesh.create_1d((-1, 1), 10)
     bcs = [
@@ -69,6 +75,7 @@ def test_boundary_condition_periodic():
     assert bcs[1].segment.ghost_element_indices == [11]
 
 
+@pytest.mark.critical
 def test_boundary_condition_extrapolation_2d():
     main_dir = os.getenv("SMS")
     bc_tags = ["left", "right", "top", "bottom"]
@@ -88,6 +95,7 @@ def test_boundary_condition_extrapolation_2d():
     assert True
 
 
+@pytest.mark.critical
 def test_boundary_condition_wall():
     mesh = Mesh.create_1d((-1, 1), 10)
     bcs = [
@@ -104,6 +112,7 @@ def test_boundary_condition_wall():
     assert np.allclose(Q[-1], np.array([19.0, -20.0], dtype=float))
 
 
+@pytest.mark.critical
 def test_boundary_condition_wall_2d():
     main_dir = os.getenv("SMS")
     bc_tags = ["left", "right", "top", "bottom"]
@@ -128,6 +137,7 @@ def test_boundary_condition_wall_2d():
     assert True
 
 
+@pytest.mark.critical
 def test_boundary_conditions_collection_class():
     mesh = Mesh.create_1d((-1, 1), 10)
 

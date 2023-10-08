@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 
 from library.initial_conditions import *
 
 
+@pytest.mark.critical
 def test_default():
     Q = np.zeros((10, 3))
     x = np.linspace(0, 1, 10)
@@ -13,6 +15,7 @@ def test_default():
     assert np.allclose(Q, np.ones_like(Q))
 
 
+@pytest.mark.critical
 def test_RP():
     def f(n: int) -> FArray:
         return np.ones(n, dtype=float)
@@ -27,6 +30,7 @@ def test_RP():
     assert np.allclose(Q[5:, :], 2 * np.ones((5, 3)))
 
 
+@pytest.mark.critical
 def test_UserFunction():
     def f(x: FArray) -> FArray:
         if x[0] < 0:
