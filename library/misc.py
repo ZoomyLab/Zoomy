@@ -1,11 +1,12 @@
 import os
 import numpy as np
-import scipy.interpolate as interp
-from functools import wraps
 
-# from dotmap import DotMap
+# import scipy.interpolate as interp
+# from functools import wraps
 
-main_dir = os.getenv("SMPYTHON")
+from typing import Callable, Optional
+
+from library.custom_types import FArray
 
 
 def require(requirement):
@@ -125,7 +126,9 @@ def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
     return Qnew
 
 
-def vectorize(func):
+def vectorize(
+    func: Callable[[FArray, FArray, FArray], FArray]
+) -> Callable[[FArray, FArray, FArray], FArray]:
     def f(Q, Qaux, param):
         probe = np.array(func(Q[0], Qaux[0], param))
         Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
