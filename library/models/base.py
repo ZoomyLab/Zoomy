@@ -8,12 +8,14 @@ from sympy import *
 from sympy import zeros, ones
 
 from attr import define
+from typing import Optional
+
 
 from collections import UserDict
 
 
 from library.boundary_conditions import BoundaryCondition, Periodic
-from library.initial_condition import InitialCondition, Constant
+from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
 
 
@@ -24,71 +26,146 @@ class Model:
         Periodic(physical_tag="left", periodic_to_physical_tag="right"),
         Periodic(physical_tag="right", periodic_to_physical_tag="left"),
     ]
-    initial_condition: InitialCondition = Constant()
-    n_fields: int = 1
-    n_aux_fields: int = 0
-    n_parameters: int = 1
-    
-    def initialize(self):
-        self.variables = register_sympy_variables(self.n_fields)
-        self.aux_variables = register_sympy_auxilliary_variables(self.n_aux_fields)
-        self.parametes = register_sympy_parameters(self.n_parameters)
+    initial_conditions: InitialConditions = Constant()
+    n_fields: int
+    n_aux_fields: int
+    n_parameters: int
+
+    variables: list[Symbol]
+    aux_variables: list[Symbol]
+    parameters: list[Symbol]
+
+    sympy_flux: Matrix
+    sympy_flux_jacobian: Matrix
+    sympy_source: Matrix
+    sympy_source_jacobian: Matrix
+    sympy_nonconservative_matrix: Matrix
+    sympy_quasilinear_matrix: Matrix
+    sympy_eigenvalues: Matrix
+    sympy_left_eigenvectors: Optional[Matrix]
+    sympy_right_eigenvectors: Optional[Matrix]
+
+    def __init__(
+        self,
+        dimension,
+        n_fields,
+        n_aux_fields,
+        n_parameters,
+        boundary_conditions,
+        initial_conditions,
+    ):
+        self.dimension = dimension
+        self.n_fields = n_fields
+        self.n_aux_fields = n_aux_fields
+        self.n_parameters = n_parameters
+        self.boundary_conditions = boundary_conditions
+        self.initial_conditions = initial_conditions
+
+        self.variables = register_sympy_variables(n_fields)
+        self.aux_variables = register_sympy_auxilliary_variables(n_aux_fields)
+        self.parameters = register_sympy_parameters(n_parameters)
 
         self.sympy_flux = self.flux()
-        self.sympy_flux_jacobian = self.sympy_flux.jacobian(self.variables)
+        if self.flux_jacobian() is None:
+            self.sympy_flux_jacobian = self.sympy_flux.jacobian(self.variables)
+        else:
+            self.sympy_flux_jacobian = self.flux_jacobian()
         self.sympy_source = self.source()
-        self.sympy_source_jacobian = self.sympy_source.jacobian(self.variables)
+        if self.source_jacobian() is None:
+            self.sympy_source_jacobian = self.sympy_source.jacobian(self.variables)
+        else:
+            self.sympy_source_jacobian = self.source_jacobian()
         self.sympy_nonconservative_matrix = self.nonconservative_matrix()
-        self.sympy_quasilinar_matrix = (
-            self.sympy_jacobian - self.sympy_nonconservative_matrix
+        self.sympy_quasilinear_matrix = (
+            self.sympy_flux_jacobian - self.sympy_nonconservative_matrix
         )
         # TODO case imaginary
         # TODO case not computable
         # TODO nij dependence
-        self.sympy_eigenvalues = list(self.sympy_quasilinar_mastrix.eigenvals().keys())
+        self.sympy_eigenvalues = list(self.sympy_quasilinear_matrix.eigenvals().keys())
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
-    
+
     # return a dataclass runtime_model
     def get_runtime_model(self):
-        flux = lambda Q, Qaux, param: lambdify([self.variables, self.aux_variables, self.parameters], self.sympy_flux(), "numpy")(*Q, *Qaux, *param)
+        flux = lambda Q, Qaux, param: lambdify(
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_flux(),
+            "numpy",
+        )(*Q, *Qaux, *param)
         flux_jacobian = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_flux_jacobian, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_flux_jacobian,
+            "numpy",
         )(*Q, *Qaux, *param)
         nonconservative_matrix = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_nonconservative_matrix, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_nonconservative_matrix,
+            "numpy",
         )(*Q, *Qaux, *param)
         quasilinear_matrix = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_quasilinear_matrix, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_quasilinear_matrix,
+            "numpy",
         )(*Q, *Qaux, *param)
         eigenvalues = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_eigenvalues, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_eigenvalues,
+            "numpy",
         )(*Q, *Qaux, *param)
         source = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_source, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_source,
+            "numpy",
         )(*Q, *Qaux, *param)
         source_jacobian = lambda Q, Qaux, param: lambdify(
-            [self.variables, self.aux_variables, self.parameters], self.sympy_source_jacobian, "numpy"
+            [self.variables, self.aux_variables, self.parameters],
+            self.sympy_source_jacobian,
+            "numpy",
         )(*Q, *Qaux, *param)
         left_eigenvalues = None
         right_eigenvalues = None
         source = None
         source_jacobian = None
-        d = {'flux': flux, 'flux_jacobian': flux_jacobian, 'nonconservative_matrix': nonconservative_matrix, 'quasilinear_matrix': quasilinear_matrix, 'eigenvalues': eigenvalues, 'left_eigenvectors': left_eigenvectors, 'right_eigenvectors': right_eigenvectors, 'source': source, 'source_jacobian': source_jacobian}
+        d = {
+            "flux": flux,
+            "flux_jacobian": flux_jacobian,
+            "nonconservative_matrix": nonconservative_matrix,
+            "quasilinear_matrix": quasilinear_matrix,
+            "eigenvalues": eigenvalues,
+            "left_eigenvectors": left_eigenvectors,
+            "right_eigenvectors": right_eigenvectors,
+            "source": source,
+            "source_jacobian": source_jacobian,
+        }
         return UserDict(d)
 
     def flux(self):
-        q = self.variables[0]
-        a = self.parameters[0]
         flux = []
-        flux.append(a * q)
+        for q in self.variables:
+            flux.append(q)
         return Matrix(flux)
 
     def nonconservative_matrix(self):
-        return zeros(self.n_fields, n_fields)
+        return zeros(self.n_fields, self.n_fields)
 
-    def sympy_source(self):
-        return zeros(self.n_fields, n_fields)
+    def source(self):
+        return zeros(self.n_fields, 1)
+
+    def flux_jacobian(self):
+        return None
+
+    def source_jacobian(self):
+        return None
+
+
+class Advection(Model):
+    def flux(self):
+        assert len(self.parameters) >= len(self.variables)
+        flux = []
+        for q, p in zip(self.variables, self.parameters):
+            flux.append(p * q)
+        return Matrix(flux)
 
 
 # class Model(BaseYaml):
@@ -249,10 +326,12 @@ def register_sympy_variables(number_of_unknowns, string_identifier="q_"):
         sympy.symbols(string_identifier + str(v)) for v in range(number_of_unknowns)
     ]
 
+
 def register_sympy_auxilliary_variables(number_of_aux_unknowns, string_identifier="a_"):
     return [
         sympy.symbols(string_identifier + str(v)) for v in range(number_of_aux_unknowns)
     ]
+
 
 def register_sympy_parameters(number_of_parameters, string_identifier="p_"):
     return [
@@ -354,4 +433,3 @@ class ModelSympy(Model):
 
     def conservative_variables(self, U):
         return U
-

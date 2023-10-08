@@ -26,7 +26,7 @@ def test_segment_2d():
 
 def test_boundary_condition_initialization():
     mesh = Mesh.create_1d((-1, 1), 10)
-    bc = BoundaryCondition(physical_tag="left")
+    bc = BoundaryConditions(physical_tag="left")
     bc.initialize(mesh)
     assert bc.initialized
 
@@ -127,16 +127,19 @@ def test_boundary_condition_wall_2d():
         )
     assert True
 
+
 def test_boundary_conditions_collection_class():
     mesh = Mesh.create_1d((-1, 1), 10)
 
-    bcs = BoundaryConditions([Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")])
+    bcs = BoundaryConditions(
+        [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    )
     n_ghosts = bcs.initialize(mesh)
 
     bcs_list = [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
     initialize_bc(bcs_list, mesh)
     n_ghosts_list = initialize_ghost_cells(bcs_list, mesh.n_elements)
-    
+
     assert n_ghosts_list == n_ghosts
 
     n_all_elements = mesh.n_elements + n_ghosts

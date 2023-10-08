@@ -10,7 +10,7 @@ from library.custom_types import FArray
 
 
 @define(slots=True, frozen=True)
-class InitialCondition:
+class InitialConditions:
     def apply(self, Q, X):
         assert False
 
@@ -22,7 +22,7 @@ class Constant:
 
 
 @define(slots=True, frozen=False)
-class RP(InitialCondition):
+class RP(InitialConditions):
     left: Callable[[int], FArray] = lambda n_fields: np.ones(n_fields, dtype=float)
     right: Callable[[int], FArray] = lambda n_fields: 2.0 * np.ones(
         n_fields, dtype=float
@@ -40,7 +40,7 @@ class RP(InitialCondition):
 
 
 @define(slots=True, frozen=True)
-class UserFunction(InitialCondition):
+class UserFunction(InitialConditions):
     function: Optional[Callable[[FArray], FArray]] = None
 
     def apply(self, Q, X):

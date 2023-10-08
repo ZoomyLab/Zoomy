@@ -1,6 +1,6 @@
 import numpy as np
 
-from library.initial_condition import *
+from library.initial_conditions import *
 
 
 def test_default():
@@ -9,7 +9,7 @@ def test_default():
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = Initial|Condition().apply(Q, X)
+    Q = Constant().apply(Q, X)
     assert np.allclose(Q, np.ones_like(Q))
 
 
