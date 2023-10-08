@@ -1,7 +1,7 @@
 import yaml
 import os
 
-main_dir = os.getenv('SMPYTHON')
+main_dir = os.getenv('SMS')
 
 
 class BaseYaml(yaml.YAMLObject):

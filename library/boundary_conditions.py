@@ -185,3 +185,15 @@ def initialize_ghost_cells(boundary_conditions, n_inner_elements):
 def apply_boundary_conditions(boundary_conditions, Q):
     for bc in boundary_conditions:
         bc.apply_boundary_condition(Q)
+        
+
+@define(slots=True, frozen=False)
+class BoundaryConditions:
+    boundary_conditions: list[BoundaryCondition]
+
+    def initialize(self, mesh):
+        n_ghosts = initialize(self.boundary_conditions, mesh)
+        return n_ghosts
+
+    def apply(self, Q):
+        apply_boundary_conditions(self.boundary_conditions, Q)

@@ -1,7 +1,7 @@
 import numpy as np
 
 from library.misc import *
-from library.models.base import *
+from library.models.swe import *
 import library.boundary_conditions as BC
 import library.initial_condition as IC
 from library.mesh import *

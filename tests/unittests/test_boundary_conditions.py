@@ -127,6 +127,30 @@ def test_boundary_condition_wall_2d():
         )
     assert True
 
+def test_boundary_conditions_collection_class():
+    mesh = Mesh.create_1d((-1, 1), 10)
+
+    bcs = BoundaryConditions([Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")])
+    n_ghosts = bcs.initialize(mesh)
+
+    bcs_list = [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    initialize_bc(bcs_list, mesh)
+    n_ghosts_list = initialize_ghost_cells(bcs_list, mesh.n_elements)
+    
+    assert n_ghosts_list == n_ghosts
+
+    n_all_elements = mesh.n_elements + n_ghosts
+    Q = np.linspace(1, 2 * n_all_elements, 2 * n_all_elements).reshape(
+        n_all_elements, 2
+    )
+    Q_list = np.linspace(1, 2 * n_all_elements, 2 * n_all_elements).reshape(
+        n_all_elements, 2
+    )
+
+    apply_boundary_conditions(bcs_list, Q_list)
+    bcs.apply(Q)
+    assert np.allclose(Q, Q_list)
+
 
 if __name__ == "__main__":
     test_segment_1d()
@@ -137,3 +161,4 @@ if __name__ == "__main__":
     test_boundary_condition_extrapolation_2d()
     test_boundary_condition_wall()
     test_boundary_condition_wall_2d()
+    test_boundary_conditions_collection_class()
