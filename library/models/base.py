@@ -90,7 +90,6 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
-    # TODO we currently need lambda to transpse the input. Otherwise sympy fails. better options? Maybe compile to c and load c instead?
     def get_runtime_model(self):
         """Returns a runtime model for numpy arrays from the symbolic model."""
         l_flux = lambdify(
