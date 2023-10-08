@@ -26,7 +26,7 @@ def test_segment_2d():
 
 def test_boundary_condition_initialization():
     mesh = Mesh.create_1d((-1, 1), 10)
-    bc = BoundaryConditions(physical_tag="left")
+    bc = BoundaryCondition(physical_tag="left")
     bc.initialize(mesh)
     assert bc.initialized
 
