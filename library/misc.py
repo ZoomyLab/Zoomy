@@ -127,7 +127,7 @@ def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
 
 def vectorize(func):
     def f(Q, Qaux, param):
-        probe = func(Q[0], Qaux[0], param)
+        probe = np.array(func(Q[0], Qaux[0], param))
         Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=type(probe))
         for i, (q, qaux) in enumerate(zip(Q, Qaux)):
             Qout[i] = func(q, qaux, param)

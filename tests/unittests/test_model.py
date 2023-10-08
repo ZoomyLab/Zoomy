@@ -34,9 +34,9 @@ def test_model_initialization():
     parameters = np.array([], dtype=float)
     model.boundary_conditions.apply(Q)
     model.initial_conditions.apply(Q, mesh.element_centers)
+
     functions = model.get_runtime_model()
-    flux = functions["flux"]
-    print(flux(Q, Qaux, parameters))
+    flux = functions.flux
 
     assert True
 

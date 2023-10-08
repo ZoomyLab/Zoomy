@@ -11,10 +11,7 @@ from jax import vmap
 
 from attr import define
 from typing import Optional
-
-
-from collections import UserDict
-
+from types import SimpleNamespace
 
 from library.boundary_conditions import BoundaryCondition, Periodic
 from library.initial_conditions import InitialConditions, Constant
@@ -84,7 +81,9 @@ class Model:
         )
         # TODO case imaginary
         # TODO case not computable
-        self.sympy_eigenvalues = list(self.sympy_quasilinear_matrix.eigenvals().keys())
+        self.sympy_eigenvalues = np.array(
+            list((self.sympy_quasilinear_matrix.eigenvals().keys()))
+        )
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
@@ -152,7 +151,7 @@ class Model:
             "source": source,
             "source_jacobian": source_jacobian,
         }
-        return UserDict(d)
+        return SimpleNamespace(**d)
 
     def flux(self):
         flux = []
