@@ -82,9 +82,6 @@ class Model:
         # TODO case imaginary
         # TODO case not computable
         if self.eigenvalues() is None:
-            # self.sympy_eigenvalues = (
-            #     list((self.sympy_quasilinear_matrix.eigenvals().keys()))
-            # )
             self.sympy_eigenvalues = eigenvalue_dict_to_matrix(
                 self.sympy_quasilinear_matrix.eigenvals()
             )
