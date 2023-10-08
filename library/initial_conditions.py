@@ -16,7 +16,7 @@ class InitialConditions:
 
 
 @define(slots=True, frozen=True)
-class Constant:
+class Constant(InitialConditions):
     def apply(self, Q, X):
         return np.ones_like(Q)
 
