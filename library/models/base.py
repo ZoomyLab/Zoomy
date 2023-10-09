@@ -38,6 +38,8 @@ class Model:
     parameter_defaults: FArray
     sympy_normal: Matrix
 
+    settings: SimpleNamespace
+
     sympy_flux: list[Matrix]
     sympy_flux_jacobian: list[Matrix]
     sympy_source: Matrix
@@ -56,6 +58,7 @@ class Model:
         parameters,
         boundary_conditions,
         initial_conditions,
+        settings={},
     ):
         self.dimension = dimension
         self.boundary_conditions = boundary_conditions
@@ -68,6 +71,8 @@ class Model:
         self.sympy_normal = register_sympy_attribute(
             ["n" + str(i) for i in range(self.dimension)], "n"
         )
+
+        self.settings = SimpleNamespace(**settings)
 
         self.n_fields = self.variables.length()
         self.n_aux_fields = self.aux_variables.length()
