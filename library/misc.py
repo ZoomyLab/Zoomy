@@ -139,22 +139,35 @@ def projection_in_x_y_direction(Qn, Qt, normals):
 
 
 def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
-    Qnew = np.concatenate(
-        [Qorig[:, 0][:, np.newaxis], projection_in_x_y_direction(Qn, Qt, normal)],
-        axis=1,
-    )
+    Qnew = np.array(Qorig)
+    Qnew[:, momentum_eqns] = projection_in_x_y_direction(Qn, Qt, normal)
+    # Qnew = np.concatenate(
+    #     [Qorig[:, 0][:, np.newaxis], projection_in_x_y_direction(Qn, Qt, normal)],
+    #     axis=1,
+    # )
     return Qnew
 
 
 def vectorize(
-    func: Callable[[FArray, FArray, FArray], FArray]
-) -> Callable[[FArray, FArray, FArray], FArray]:
-    def f(Q, Qaux, param):
-        probe = np.array(func(Q[0], Qaux[0], param))
-        Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
-        for i, (q, qaux) in enumerate(zip(Q, Qaux)):
-            Qout[i] = func(q, qaux, param)
-        return np.squeeze(Qout)
+    func: Callable[[list[FArray]], FArray], n_arguments=3
+) -> Callable[[list[FArray]], FArray]:
+    if n_arguments == 3:
+
+        def f(Q, Qaux, param):
+            probe = np.array(func(Q[0], Qaux[0], param))
+            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
+            for i, (q, qaux) in enumerate(zip(Q, Qaux)):
+                Qout[i] = np.array(func(q, qaux, param))
+            return Qout
+
+    elif n_arguments == 4:
+
+        def f(Q, Qaux, normals, param):
+            probe = np.array(func(Q[0], Qaux[0], normals[0], param))
+            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
+            for i, (q, qaux, normals) in enumerate(zip(Q, Qaux, normals)):
+                Qout[i] = func(q, qaux, normals, param)
+            return np.squeeze(Qout)
 
     return f
 

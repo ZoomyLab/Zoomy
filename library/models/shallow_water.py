@@ -45,6 +45,39 @@ class ShallowWater(Model):
         p = self.parameters
         flux[0] = hu
         flux[1] = hu**2 / h + p.g * p.ez * h * h / 2
+        return [flux]
+
+    def source(self):
+        return zeros(self.n_fields, 1)
+
+class ShallowWater2d(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=2,
+        fields=3,
+        aux_fields=0,
+        parameters={"g": 1.0, "ez": 1.0},
+    ):
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+        )
+
+    def flux(self):
+        flux = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        p = self.parameters
+        flux[0] = hu
+        flux[1] = hu**2 / h + p.g * p.ez * h * h / 2
+        flux[2] = hu**2 / h + p.g * p.ez * h * h / 2
         return flux
 
     def source(self):

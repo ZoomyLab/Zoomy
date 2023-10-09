@@ -28,6 +28,7 @@ class Mesh:
     element_incircle: FArray
     element_edge_normal: FArray
     element_neighbors: IArray
+    element_n_neighbors: IArray
     boundary_edge_vertices: IArray
     boundary_edge_elements: IArray
     boundary_edge_length: FArray
@@ -108,6 +109,7 @@ class Mesh:
         element_incircle = element_incircle
         element_edge_normal = element_edge_normal
         element_neighbors = element_neighbors
+        element_n_neighbors = element_n_neighbors
         boundary_edge_vertices = boundary_edge_vertices
         boundary_edge_element = boundary_edge_elements
         boundary_edge_length = boundary_edge_length
@@ -128,6 +130,7 @@ class Mesh:
             element_incircle,
             element_edge_normal,
             element_neighbors,
+            element_n_neighbors,
             boundary_edge_vertices,
             boundary_edge_elements,
             boundary_edge_length,
@@ -271,6 +274,7 @@ class Mesh:
             element_incircle,
             element_edge_normal,
             element_neighbors,
+            element_n_neighbors,
             boundary_edge_vertices,
             boundary_edge_elements,
             boundary_edge_length,
@@ -297,6 +301,7 @@ class Mesh:
                 file_mesh["element_incircle"][()],
                 file_mesh["element_edge_normal"][()],
                 file_mesh["element_neighbors"][()],
+                file_mesh["element_n_neighbors"][()],
                 file_mesh["boundary_edge_vertices"][()],
                 file_mesh["boundary_edge_elements"][()],
                 file_mesh["boundary_edge_length"][()],
@@ -347,6 +352,7 @@ class Mesh:
             attrs.create_dataset("element_incircle", data=self.element_incircle)
             attrs.create_dataset("element_edge_normal", data=self.element_edge_normal)
             attrs.create_dataset("element_neighbors", data=self.element_neighbors)
+            attrs.create_dataset("element_n_neighbors", data=self.element_n_neighbors)
             attrs.create_dataset(
                 "boundary_edge_vertices", data=self.boundary_edge_vertices
             )

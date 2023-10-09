@@ -6,6 +6,7 @@ from library.models.base import *
 import library.boundary_conditions as BC
 import library.initial_conditions as IC
 from library.mesh import *
+from library.model import create_default_mesh_and_model
 
 
 @pytest.mark.critical
@@ -13,58 +14,79 @@ from library.mesh import *
     "dimension",
     ([1, 2]),
 )
-def test_model_initialization(
-    dimension,
-):
-    main_dir = os.getenv("SMS")
-    ic = IC.Constant()
-
-    bc_tags = ["left", "right"]
-    bcs = BC.BoundaryConditions(
-        [BC.Wall(physical_tag=tag, momentum_eqns=[1, 2]) for tag in bc_tags]
-    )
+def test_model_initialization(dimension):
     if dimension == 1:
-        mesh = Mesh.create_1d((-1, 1), 10)
+        parameters = {"p0": 2.0}
     elif dimension == 2:
-        mesh = Mesh.load_mesh(
-            os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-            "quad",
-            2,
-            bc_tags,
+        parameters = {"p0": 2.0, "p1": 1.5}
+    else:
+        assert False
+    advection_speed = np.array(list(parameters.values()))
+    (
+        mesh,
+        model,
+        Q,
+        Qaux,
+        parameters,
+        num_normals,
+        normals,
+    ) = create_default_mesh_and_model(dimension, Advection, dimension, 0, parameters)
+
+    functions = model.get_runtime_model()
+    for d in range(dimension):
+        assert np.allclose(
+            functions.flux(Q, Qaux, parameters)[:, d, :][0], advection_speed * Q[0]
+        )
+    assert np.allclose(
+        functions.flux_jacobian(Q, Qaux, parameters)[0],
+        np.stack([np.diag((advection_speed)) for d in range(dimension)]),
+    )
+    assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(dimension))
+    assert np.allclose(
+        functions.source_jacobian(Q, Qaux, parameters)[0],
+        np.zeros((dimension, dimension)),
+    )
+    n_inner_elements = mesh.n_elements
+    if dimension == 1:
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[0], parameters
+            )[2],
+            -np.diag(advection_speed),
+        )
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[1], parameters
+            )[2],
+            np.array(advection_speed),
+        )
+    elif dimension == 2:
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[0], parameters
+            )[2],
+            -np.array(advection_speed),
+        )
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[1], parameters
+            )[2],
+            np.array(advection_speed),
+        )
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[2], parameters
+            )[2],
+            np.array(advection_speed),
+        )
+        assert np.allclose(
+            functions.eigenvalues(
+                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[3], parameters
+            )[2],
+            -np.array(advection_speed),
         )
     else:
         assert False
-    model = Advection(
-        dimension=dimension,
-        fields=3,
-        aux_fields=0,
-        parameters=3,
-        boundary_conditions=bcs,
-        initial_conditions=ic,
-    )
-
-    n_ghosts = model.boundary_conditions.initialize(mesh)
-
-    n_all_elements = mesh.n_elements + n_ghosts
-    Q = np.linspace(1, 3 * n_all_elements, 3 * n_all_elements).reshape(
-        n_all_elements, 3
-    )
-    Qaux = np.zeros((Q.shape[0], 0))
-    advection_speeds = np.array([1.0, 0.0, 2.0], dtype=float)
-    parameters = advection_speeds
-    model.boundary_conditions.apply(Q)
-    model.initial_conditions.apply(Q, mesh.element_centers)
-
-    functions = model.get_runtime_model()
-    assert np.allclose(functions.flux(Q, Qaux, parameters), advection_speeds * Q)
-    assert np.allclose(
-        functions.flux_jacobian(Q, Qaux, parameters)[0], np.diag(advection_speeds)
-    )
-    assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(3))
-    assert np.allclose(
-        functions.source_jacobian(Q, Qaux, parameters)[0], np.zeros((3, 3))
-    )
-    assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], advection_speeds)
 
 
 if __name__ == "__main__":

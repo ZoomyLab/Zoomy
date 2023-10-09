@@ -35,14 +35,15 @@ class Model:
     variables: IterableNamespace
     aux_variables: IterableNamespace
     parameters: IterableNamespace
-    parameter_default_values: FArray
+    parameter_defaults: FArray
+    sympy_normal: Matrix
 
-    sympy_flux: Matrix
-    sympy_flux_jacobian: Matrix
+    sympy_flux: list[Matrix]
+    sympy_flux_jacobian: list[Matrix]
     sympy_source: Matrix
     sympy_source_jacobian: Matrix
-    sympy_nonconservative_matrix: Matrix
-    sympy_quasilinear_matrix: Matrix
+    sympy_nonconservative_matrix: list[Matrix]
+    sympy_quasilinear_matrix: list[Matrix]
     sympy_eigenvalues: Matrix
     sympy_left_eigenvectors: Optional[Matrix]
     sympy_right_eigenvectors: Optional[Matrix]
@@ -63,7 +64,10 @@ class Model:
         self.variables = register_sympy_attribute(fields, "q")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
         self.parameters = register_sympy_attribute(parameters, "p")
-        self.parameter_default_values = register_parameter_defaults(parameters)
+        self.parameter_defaults = register_parameter_defaults(parameters)
+        self.sympy_normal = register_sympy_attribute(
+            ["n" + str(i) for i in range(self.dimension)], "n"
+        )
 
         self.n_fields = self.variables.length()
         self.n_aux_fields = self.aux_variables.length()
@@ -71,7 +75,13 @@ class Model:
 
         self.sympy_flux = self.flux()
         if self.flux_jacobian() is None:
-            self.sympy_flux_jacobian = self.sympy_flux.jacobian(self.variables)
+            self.sympy_flux_jacobian = [
+                zeros(self.n_fields, self.n_fields) for i in range(self.dimension)
+            ]
+            for d in range(self.dimension):
+                self.sympy_flux_jacobian[d] = Matrix(self.sympy_flux[d]).jacobian(
+                    self.variables
+                )
         else:
             self.sympy_flux_jacobian = self.flux_jacobian()
         self.sympy_source = self.source()
@@ -80,15 +90,17 @@ class Model:
         else:
             self.sympy_source_jacobian = self.source_jacobian()
         self.sympy_nonconservative_matrix = self.nonconservative_matrix()
-        self.sympy_quasilinear_matrix = (
-            self.sympy_flux_jacobian - self.sympy_nonconservative_matrix
-        )
+        self.sympy_quasilinear_matrix = [
+            self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
+            for d in range(self.dimension)
+        ]
         # TODO case imaginary
         # TODO case not computable
         if self.eigenvalues() is None:
-            self.sympy_eigenvalues = eigenvalue_dict_to_matrix(
-                self.sympy_quasilinear_matrix.eigenvals()
-            )
+            A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+            for d in range(1, self.dimension):
+                A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+            self.sympy_eigenvalues = eigenvalue_dict_to_matrix(A.eigenvals())
         else:
             self.sympy_eigenvalues = self.eigenvalues()
         self.sympy_left_eigenvectors = None
@@ -143,12 +155,13 @@ class Model:
             [
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
+                self.sympy_normal.get_list(),
                 self.parameters.get_list(),
             ],
             self.sympy_eigenvalues,
             "numpy",
         )
-        eigenvalues = vectorize(l_eigenvalues)
+        eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
 
         l_source = lambdify(
             [
@@ -188,13 +201,10 @@ class Model:
         return SimpleNamespace(**d)
 
     def flux(self):
-        flux = []
-        for q in self.variables:
-            flux.append(q)
-        return Matrix(flux)
+        return [self.variables[:] for d in range(self.dimension)]
 
     def nonconservative_matrix(self):
-        return zeros(self.n_fields, self.n_fields)
+        return [zeros(self.n_fields, self.n_fields) for d in range(self.dimension)]
 
     def source(self):
         return zeros(self.n_fields, 1)
@@ -211,11 +221,16 @@ class Model:
 
 class Advection(Model):
     def flux(self):
+        # assume that the first variables.length() parameters are the corresponding advection speeds
         assert self.parameters.length() >= self.variables.length()
+        assert self.n_fields == self.dimension
         flux = []
-        for q, p in zip(self.variables, self.parameters):
-            flux.append(p * q)
-        return Matrix(flux)
+        for d in range(self.dimension):
+            f = []
+            for i in range(self.n_fields):
+                f.append(self.variables[i] * self.parameters[i])
+            flux.append(f)
+        return flux
 
 
 def register_sympy_attribute(argument, string_identifier="q_"):

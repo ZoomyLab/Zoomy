@@ -9,7 +9,7 @@ from library.mesh import *
 
 
 @pytest.mark.critical
-def test_model_initialization():
+def test_model_eigenvalues():
     main_dir = os.getenv("SMS")
     ic = IC.Constant()
 
@@ -36,17 +36,11 @@ def test_model_initialization():
 
     functions = model.get_runtime_model()
 
-    print(model.sympy_eigenvalues)
-    # assert np.allclose(functions.flux(Q, Qaux, parameters), advection_speeds * Q)
-    # assert np.allclose(
-    #     functions.flux_jacobian(Q, Qaux, parameters)[0], np.diag(advection_speeds)
-    # )
-    # assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(3))
-    # assert np.allclose(
-    #     functions.source_jacobian(Q, Qaux, parameters)[0], np.zeros((3, 3))
-    # )
-    # assert np.allclose(functions.eigenvalues(Q, Qaux, parameters)[0], advection_speeds)
+    assert (
+        str(model.sympy_eigenvalues)
+        == 'Matrix([[n0*q1/q0 - n0*sqrt(ez*g*q0**5)/q0**2], [n0*q1/q0 + n0*sqrt(ez*g*q0**5)/q0**2]])'
+    )
 
 
 if __name__ == "__main__":
-    test_model_initialization()
+    test_model_eigenvalues()
