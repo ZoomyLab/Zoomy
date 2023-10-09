@@ -6,41 +6,50 @@ from library.models.shallow_water import *
 import library.boundary_conditions as BC
 import library.initial_conditions as IC
 from library.mesh import *
+from library.model import create_default_mesh_and_model
 
 
 @pytest.mark.critical
-def test_model_eigenvalues():
-    main_dir = os.getenv("SMS")
-    ic = IC.Constant()
-
-    bc_tags = ["left", "right"]
-    bcs = BC.BoundaryConditions(
-        [BC.Wall(physical_tag=tag, momentum_eqns=[1]) for tag in bc_tags]
+@pytest.mark.parametrize(
+    "dimension",
+    ([1, 2]),
+)
+def test_model_initialization(dimension):
+    parameters = {"g": 1.0, "ez": 1.0}
+    class_list = ["ShallowWater", "ShallowWater2d"]
+    momentum_eqns = [[1], [1, 2]]
+    (
+        mesh,
+        model,
+        Q,
+        Qaux,
+        parameters,
+        num_normals,
+        normals,
+    ) = create_default_mesh_and_model(
+        dimension,
+        eval(class_list[dimension - 1]),
+        dimension + 1,
+        0,
+        parameters,
+        momentum_eqns[dimension - 1],
     )
-    mesh = Mesh.create_1d((-1, 1), 10)
-    model = ShallowWater(
-        boundary_conditions=bcs,
-        initial_conditions=ic,
-    )
-
-    n_ghosts = model.boundary_conditions.initialize(mesh)
-
-    n_all_elements = mesh.n_elements + n_ghosts
-    Q = np.linspace(1, 2 * n_all_elements, 2 * n_all_elements).reshape(
-        n_all_elements, 2
-    )
-    Qaux = np.zeros((Q.shape[0], 0))
-    parameters = np.array([], dtype=float)
-    model.boundary_conditions.apply(Q)
-    model.initial_conditions.apply(Q, mesh.element_centers)
 
     functions = model.get_runtime_model()
-
-    assert (
-        str(model.sympy_eigenvalues)
-        == 'Matrix([[n0*q1/q0 - n0*sqrt(ez*g*q0**5)/q0**2], [n0*q1/q0 + n0*sqrt(ez*g*q0**5)/q0**2]])'
-    )
+    if dimension == 1:
+        assert (
+            str(model.sympy_eigenvalues)
+            == "Matrix([[n0*q1/q0 - n0*sqrt(ez*g*q0**5)/q0**2], [n0*q1/q0 + n0*sqrt(ez*g*q0**5)/q0**2]])"
+        )
+    elif dimension == 2:
+        assert (
+            str(model.sympy_eigenvalues)
+            == "Matrix([[(n0*q1 + n1*q2)/q0], [(n0*q0*q1 + n1*q0*q2 + sqrt(ez*g*n0**2*q0**5 + ez*g*n1**2*q0**5))/q0**2], [(n0*q0*q1 + n1*q0*q2 - sqrt(ez*g*n0**2*q0**5 + ez*g*n1**2*q0**5))/q0**2]])"
+        )
+    else:
+        assert False
 
 
 if __name__ == "__main__":
-    test_model_eigenvalues()
+    test_model_initialization(1)
+    test_model_initialization(2)

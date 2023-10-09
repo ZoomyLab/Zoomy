@@ -15,13 +15,12 @@ from library.model import create_default_mesh_and_model
     ([1, 2]),
 )
 def test_model_initialization(dimension):
-    if dimension == 1:
-        parameters = {"p0": 2.0}
-    elif dimension == 2:
-        parameters = {"p0": 2.0, "p1": 1.5}
-    else:
-        assert False
-    advection_speed = np.array(list(parameters.values()))
+    parameters = [
+        {"p0": 2.0},
+        {"p0": 2.0, "p1": 1.5},
+    ]
+    momentum_eqns = [[0], [0, 1]]
+    advection_speed = np.array(list(parameters[dimension - 1].values()))
     (
         mesh,
         model,
@@ -30,7 +29,14 @@ def test_model_initialization(dimension):
         parameters,
         num_normals,
         normals,
-    ) = create_default_mesh_and_model(dimension, Advection, dimension, 0, parameters)
+    ) = create_default_mesh_and_model(
+        dimension,
+        Advection,
+        dimension,
+        0,
+        parameters[dimension - 1],
+        momentum_eqns[dimension - 1],
+    )
 
     functions = model.get_runtime_model()
     for d in range(dimension):

@@ -9,14 +9,14 @@ from library.mesh import Mesh
 
 
 def create_default_mesh_and_model(
-    dimension: int, cls: Model, fields, aux_fields, parameters
+    dimension: int, cls: Model, fields, aux_fields, parameters, momentum_eqns
 ):
     main_dir = os.getenv("SMS")
     ic = IC.Constant()
 
     bc_tags = ["left", "right", "top", "bottom"][: 2 * dimension]
     bcs = BC.BoundaryConditions(
-        [BC.Wall(physical_tag=tag, momentum_eqns=[0, 1][:dimension]) for tag in bc_tags]
+        [BC.Wall(physical_tag=tag, momentum_eqns=momentum_eqns) for tag in bc_tags]
     )
     if dimension == 1:
         mesh = Mesh.create_1d((-1, 1), 10)

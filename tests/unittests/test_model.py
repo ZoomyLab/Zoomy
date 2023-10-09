@@ -15,6 +15,7 @@ from library.model import create_default_mesh_and_model
     ([1, 2]),
 )
 def test_model_initialization(dimension):
+    momentum_eqns = [[0], [0, 1]]
     (
         mesh,
         model,
@@ -23,7 +24,7 @@ def test_model_initialization(dimension):
         parameters,
         num_normals,
         normals,
-    ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0)
+    ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
 
     functions = model.get_runtime_model()
     for d in range(dimension):
