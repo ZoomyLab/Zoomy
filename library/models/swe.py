@@ -14,7 +14,6 @@ import library.solver.smm_model_exner_hyperbolic as smm_exner_hyper
 
 import sympy
 from sympy import Symbol, Matrix, lambdify
-from sympy import *
 from sympy import zeros, ones
 
 main_dir = os.getenv("SMPYTHON")

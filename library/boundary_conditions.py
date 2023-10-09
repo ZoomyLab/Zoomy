@@ -26,6 +26,13 @@ class Segment:
     initialized: bool = False
 
     @classmethod
+    def placeholder(cls):
+        iarray = np.array([], dtype=int)
+        farray = np.array([], dtype=float)
+        tag = "empty"
+        return cls(iarray, farray, farray, farray, tag)
+
+    @classmethod
     def from_mesh(cls, mesh, be_tag, reverse_order=False):
         counter = 0
         be_elements = []
@@ -94,14 +101,16 @@ class Segment:
 class BoundaryCondition:
     physical_tag: str
     initialized: bool = False
-    segment: Optional[Segment] = None
+    segment: Segment = Segment.placeholder()
 
     def initialize(self, mesh: mesh.Mesh):
         self.segment = Segment.from_mesh(mesh, self.physical_tag)
         self.initialized = True
 
     def apply_boundary_condition(self, Q: FArray):
-        assert self.initialized and self.segment.initialized
+        assert self.initialized
+        assert self.segment is not None
+        assert self.segment.initialized == True
         print("BoundaryCondition is a virtual class. Use one if its derived classed!")
         assert False
 
@@ -185,7 +194,7 @@ def initialize_ghost_cells(boundary_conditions, n_inner_elements):
 def apply_boundary_conditions(boundary_conditions, Q):
     for bc in boundary_conditions:
         bc.apply_boundary_condition(Q)
-        
+
 
 @define(slots=True, frozen=False)
 class BoundaryConditions:

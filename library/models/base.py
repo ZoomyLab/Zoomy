@@ -4,10 +4,8 @@ import logging
 
 import sympy
 from sympy import Symbol, Matrix, lambdify, transpose
-from sympy import *
-from sympy import zeros, ones
 
-from jax import vmap
+from sympy import zeros, ones
 
 from attr import define
 from typing import Optional
@@ -16,7 +14,7 @@ from types import SimpleNamespace
 from library.boundary_conditions import BoundaryConditions, Periodic
 from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
-from library.misc import vectorize # type: ignore
+from library.misc import vectorize  # type: ignore
 
 
 @define(slots=True, frozen=False, kw_only=True)
