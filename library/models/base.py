@@ -8,13 +8,14 @@ from sympy import Symbol, Matrix, lambdify, transpose
 from sympy import zeros, ones
 
 from attr import define
-from typing import Optional
+from typing import Optional, Any
 from types import SimpleNamespace
 
 from library.boundary_conditions import BoundaryConditions, Periodic
 from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
 from library.misc import vectorize  # type: ignore
+from library.misc import IterableNamespace
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -27,13 +28,14 @@ class Model:
         ]
     )
     initial_conditions: InitialConditions = Constant()
+
     n_fields: int
     n_aux_fields: int
     n_parameters: int
-
-    variables: list[Symbol]
-    aux_variables: list[Symbol]
-    parameters: list[Symbol]
+    variables: IterableNamespace
+    aux_variables: IterableNamespace
+    parameters: IterableNamespace
+    parameter_default_values: FArray
 
     sympy_flux: Matrix
     sympy_flux_jacobian: Matrix
@@ -48,22 +50,24 @@ class Model:
     def __init__(
         self,
         dimension,
-        n_fields,
-        n_aux_fields,
-        n_parameters,
+        fields,
+        aux_fields,
+        parameters,
         boundary_conditions,
         initial_conditions,
     ):
         self.dimension = dimension
-        self.n_fields = n_fields
-        self.n_aux_fields = n_aux_fields
-        self.n_parameters = n_parameters
         self.boundary_conditions = boundary_conditions
         self.initial_conditions = initial_conditions
 
-        self.variables = register_sympy_variables(n_fields)
-        self.aux_variables = register_sympy_auxilliary_variables(n_aux_fields)
-        self.parameters = register_sympy_parameters(n_parameters)
+        self.variables = register_sympy_attribute(fields, "q")
+        self.aux_variables = register_sympy_attribute(aux_fields, "aux")
+        self.parameters = register_sympy_attribute(parameters, "p")
+        self.parameter_default_values = register_parameter_defaults(parameters)
+
+        self.n_fields = self.variables.length()
+        self.n_aux_fields = self.aux_variables.length()
+        self.n_parameters = self.parameters.length()
 
         self.sympy_flux = self.flux()
         if self.flux_jacobian() is None:
@@ -93,48 +97,76 @@ class Model:
     def get_runtime_model(self):
         """Returns a runtime model for numpy arrays from the symbolic model."""
         l_flux = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_flux,
             modules="numpy",
         )
         flux = vectorize(l_flux)
         l_flux_jacobian = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_flux_jacobian,
             "numpy",
         )
         flux_jacobian = vectorize(l_flux_jacobian)
 
         l_nonconservative_matrix = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_nonconservative_matrix,
             "numpy",
         )
         nonconservative_matrix = vectorize(l_nonconservative_matrix)
 
         l_quasilinear_matrix = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_quasilinear_matrix,
             "numpy",
         )
         quasilinear_matrix = vectorize(l_quasilinear_matrix)
 
         l_eigenvalues = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_eigenvalues,
             "numpy",
         )
         eigenvalues = vectorize(l_eigenvalues)
 
         l_source = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_source,
             "numpy",
         )
         source = vectorize(l_source)
 
         l_source_jacobian = lambdify(
-            [self.variables, self.aux_variables, self.parameters],
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
             self.sympy_source_jacobian,
             "numpy",
         )
@@ -179,29 +211,36 @@ class Model:
 
 class Advection(Model):
     def flux(self):
-        assert len(self.parameters) >= len(self.variables)
+        assert self.parameters.length() >= self.variables.length()
         flux = []
         for q, p in zip(self.variables, self.parameters):
             flux.append(p * q)
         return Matrix(flux)
 
 
-def register_sympy_variables(number_of_unknowns, string_identifier="q_"):
-    return [
-        sympy.symbols(string_identifier + str(v)) for v in range(number_of_unknowns)
-    ]
+def register_sympy_attribute(argument, string_identifier="q_"):
+    if type(argument) == int:
+        attributes = {
+            string_identifier + str(i): sympy.symbols(string_identifier + str(i))
+            for i in range(argument)
+        }
+    elif type(argument) == type({}):
+        attributes = {name: sympy.symbols(str(name)) for name in argument.keys()}
+    elif type(argument) == list:
+        attributes = {name: sympy.symbols(str(name)) for name in argument}
+    else:
+        assert False
+    return IterableNamespace(**attributes)
 
 
-def register_sympy_auxilliary_variables(number_of_aux_unknowns, string_identifier="a_"):
-    return [
-        sympy.symbols(string_identifier + str(v)) for v in range(number_of_aux_unknowns)
-    ]
-
-
-def register_sympy_parameters(number_of_parameters, string_identifier="p_"):
-    return [
-        sympy.symbols(string_identifier + str(v)) for v in range(number_of_parameters)
-    ]
+def register_parameter_defaults(parameters):
+    if type(parameters) == int:
+        default_values = np.zeros(parameters, dtype=float)
+    elif type(parameters) == type({}):
+        default_values = np.array([value for value in parameters.values()])
+    else:
+        assert False
+    return default_values
 
 
 def eigenvalue_dict_to_matrix(eigenvalues):

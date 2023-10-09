@@ -36,9 +36,9 @@ def test_model_initialization(
         assert False
     model = Advection(
         dimension=dimension,
-        n_fields=3,
-        n_aux_fields=0,
-        n_parameters=3,
+        fields=3,
+        aux_fields=0,
+        parameters=3,
         boundary_conditions=bcs,
         initial_conditions=ic,
     )

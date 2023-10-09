@@ -4,9 +4,29 @@ import numpy as np
 # import scipy.interpolate as interp
 # from functools import wraps
 
-from typing import Callable, Optional
+from attr import define
+from typing import Callable, Optional, Any
+from types import SimpleNamespace
 
 from library.custom_types import FArray
+
+
+@define(slots=True, frozen=False)
+class IterableNamespace(SimpleNamespace):
+    iterable_obj: list[Any]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.iterable_obj = list(self.__dict__.values())
+
+    def __getitem__(self, key):
+        return self.iterable_obj[key]
+
+    def length(self):
+        return len(self.iterable_obj)
+
+    def get_list(self):
+        return self.iterable_obj
 
 
 def require(requirement):

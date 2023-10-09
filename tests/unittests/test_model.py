@@ -36,9 +36,9 @@ def test_model_initialization(
         assert False
     model = Model(
         dimension=dimension,
-        n_fields=3,
-        n_aux_fields=0,
-        n_parameters=0,
+        fields=3,
+        aux_fields=0,
+        parameters=0,
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
