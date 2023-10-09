@@ -241,13 +241,13 @@ class Advection(Model):
 def register_sympy_attribute(argument, string_identifier="q_"):
     if type(argument) == int:
         attributes = {
-            string_identifier + str(i): sympy.symbols(string_identifier + str(i))
+            string_identifier + str(i): sympy.symbols(string_identifier + str(i), real=True)
             for i in range(argument)
         }
     elif type(argument) == type({}):
-        attributes = {name: sympy.symbols(str(name)) for name in argument.keys()}
+        attributes = {name: sympy.symbols(str(name), real=True) for name in argument.keys()}
     elif type(argument) == list:
-        attributes = {name: sympy.symbols(str(name)) for name in argument}
+        attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
     else:
         assert False
     return IterableNamespace(**attributes)

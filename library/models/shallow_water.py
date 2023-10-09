@@ -3,7 +3,7 @@ import os
 import logging
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose
+from sympy import Symbol, Matrix, lambdify, transpose, Abs
 
 from sympy import zeros, ones
 
@@ -28,7 +28,7 @@ class ShallowWater(Model):
         fields=2,
         aux_fields=0,
         parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
-        settings={"topography": False, "friction": []},
+        settings={"topography": True, "friction": ['manning']},
     ):
         super().__init__(
             dimension=dimension,
@@ -54,29 +54,37 @@ class ShallowWater(Model):
         if self.settings.topography:
             out += self.topography()
         if self.settings.friction:
-            for friction_model in settings.friction:
-                output += getattr(self, friction_model)()
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
         return out
 
     def topography(self):
         assert "dhdx" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(self.n_fiegglds)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        p = self.parameters
-        dhdx = self.aux_variables.dhdx
-        out[1] = hu**2 / h + p.g * p.ez * h * h / 2
-        out += h * p.g * (p.ex - p.ez * dHdx)
-        return out
-
-    def manning(self):
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
         dhdx = self.aux_variables.dhdx
-        out[1] = hu**2 / h + p.g * p.ez * h * h / 2
-        out += h * p.g * (p.ex - p.ez * dHdx)
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
+    
+    def newtonian(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        p = self.parameters
+        out[1] = -p.nu * hu/h
+        return out
+
+    def manning(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        p = self.parameters
+        out[1] = -p.g * (p.nu**2) * hu * Abs(u)**(7 / 3)
         return out
 
 

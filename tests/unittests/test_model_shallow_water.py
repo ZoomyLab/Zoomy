@@ -49,7 +49,33 @@ def test_model_initialization(dimension):
     else:
         assert False
 
+def test_topography_1d():
+    parameters = {"g": 1.0, "ex":0., "ez": 1.0, 'nu':1.0}
+    momentum_eqns = [1]
+    (
+        mesh,
+        model,
+        Q,
+        Qaux,
+        parameters,
+        num_normals,
+        normals,
+    ) = create_default_mesh_and_model(
+        1,
+        ShallowWater,
+        2,
+        ['dhdx'],
+        parameters,
+        momentum_eqns,
+    )
+    print(model.sympy_source)
+    print(model.sympy_source_jacobian)
+
+    functions = model.get_runtime_model()
+    print(functions.source(Q, Qaux, parameters)[0])
+    print(functions.source_jacobian(Q, Qaux, parameters)[0])
 
 if __name__ == "__main__":
-    test_model_initialization(1)
-    test_model_initialization(2)
+    # test_model_initialization(1)
+    # test_model_initialization(2)
+    test_topography_1d()

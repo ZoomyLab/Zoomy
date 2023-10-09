@@ -1,5 +1,4 @@
 from library.models.base import *
-
 # from library.models.swe import *
 # from library.models.smm import *
 
@@ -43,7 +42,7 @@ def create_default_mesh_and_model(
     Q = np.linspace(1, fields * n_all_elements, fields * n_all_elements).reshape(
         n_all_elements, fields
     )
-    Qaux = np.zeros((Q.shape[0], aux_fields))
+    Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
     parameters = model.parameter_defaults
     num_normals = mesh.element_n_neighbors
     normals = np.array(
