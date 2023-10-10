@@ -3,7 +3,7 @@ import os
 import logging
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose
+from sympy import Symbol, Matrix, lambdify, transpose, powsimp
 
 from sympy import zeros, ones
 
@@ -28,6 +28,7 @@ class Model:
         ]
     )
     initial_conditions: InitialConditions = Constant()
+    aux_initial_conditions: InitialConditions = Constant()
 
     n_fields: int
     n_aux_fields: int
@@ -59,12 +60,14 @@ class Model:
         parameters: Union[int, list, dict],
         boundary_conditions: BoundaryConditions,
         initial_conditions: InitialConditions,
+        aux_initial_conditions: InitialConditions = Constant(),
         settings: dict = {},
         settings_default: dict = {},
     ):
         self.dimension = dimension
         self.boundary_conditions = boundary_conditions
         self.initial_conditions = initial_conditions
+        self.aux_initial_conditions = aux_initial_conditions
 
         self.variables = register_sympy_attribute(fields, "q")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
@@ -89,14 +92,20 @@ class Model:
                 zeros(self.n_fields, self.n_fields) for i in range(self.dimension)
             ]
             for d in range(self.dimension):
-                self.sympy_flux_jacobian[d] = Matrix(self.sympy_flux[d]).jacobian(
-                    self.variables
+                self.sympy_flux_jacobian[d] = Matrix(
+                    powsimp(
+                        self.sympy_flux[d].jacobian(self.variables),
+                        combine="all",
+                        force=True,
+                    )
                 )
         else:
             self.sympy_flux_jacobian = self.flux_jacobian()
         self.sympy_source = self.source()
         if self.source_jacobian() is None:
-            self.sympy_source_jacobian = self.sympy_source.jacobian(self.variables)
+            self.sympy_source_jacobian = powsimp(
+                self.sympy_source.jacobian(self.variables), combine="all", force=True
+            )
         else:
             self.sympy_source_jacobian = self.source_jacobian()
         self.sympy_nonconservative_matrix = self.nonconservative_matrix()
@@ -211,7 +220,7 @@ class Model:
         return SimpleNamespace(**d)
 
     def flux(self):
-        return [self.variables[:] for d in range(self.dimension)]
+        return [Matrix(self.variables[:]) for d in range(self.dimension)]
 
     def nonconservative_matrix(self):
         return [zeros(self.n_fields, self.n_fields) for d in range(self.dimension)]
@@ -275,5 +284,5 @@ def eigenvalue_dict_to_matrix(eigenvalues):
     evs = []
     for ev, mult in eigenvalues.items():
         for i in range(mult):
-            evs.append(ev)
+            evs.append(powsimp(ev, combine="all", force=True))
     return Matrix(evs)

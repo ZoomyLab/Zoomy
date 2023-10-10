@@ -3,7 +3,7 @@ import os
 import logging
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose, Abs
+from sympy import Symbol, Matrix, lambdify, transpose, Abs, sqrt
 
 from sympy import zeros, ones
 
@@ -89,8 +89,18 @@ class ShallowWater(Model):
         out[1] = -p.g * (p.nu**2) * hu * Abs(u) ** (7 / 3)
         return out
 
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu / h
+        p = self.parameters
+        out[1] = -1.0 / p.C**2 * u * Abs(u)
+        return out
 
-class ShallowWater2d(Model):
+
+class ShallowWater2d(ShallowWater):
     def __init__(
         self,
         boundary_conditions,
@@ -128,5 +138,54 @@ class ShallowWater2d(Model):
         fy[2] = hv**2 / h + p.g * p.ez * h * h / 2
         return [fx, fy]
 
-    def source(self):
-        return zeros(self.n_fields, 1)
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        assert "dhdy" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        dhdy = self.aux_variables.dhdy
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        out[2] = h * p.g * (p.ey - p.ez * dhdy)
+        return out
+
+    def newtonian(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        p = self.parameters
+        out[1] = -p.nu * hu / h
+        out[2] = -p.nu * hv / h
+        return out
+
+    def manning(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        u = hu / h
+        v = hv / h
+        p = self.parameters
+        out[1] = -p.g * (p.nu**2) * hu * Abs(u) ** (7 / 3)
+        out[2] = -p.g * (p.nu**2) * hv * Abs(v) ** (7 / 3)
+        return out
+
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        u = hu / h
+        v = hv / h
+        p = self.parameters
+        u_sq = sqrt(u**2 + v**2)
+        out[1] = -1.0 / p.C**2 * u * u_sq
+        out[2] = -1.0 / p.C**2 * v * u_sq
+        return out
