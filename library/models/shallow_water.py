@@ -28,7 +28,8 @@ class ShallowWater(Model):
         fields=2,
         aux_fields=0,
         parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
-        settings={"topography": True, "friction": ['manning']},
+        settings={},
+        settings_default={"topography": False, "friction": []},
     ):
         super().__init__(
             dimension=dimension,
@@ -38,6 +39,7 @@ class ShallowWater(Model):
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings=settings,
+            settings_default=settings_default,
         )
 
     def flux(self):
@@ -67,14 +69,14 @@ class ShallowWater(Model):
         dhdx = self.aux_variables.dhdx
         out[1] = h * p.g * (p.ex - p.ez * dhdx)
         return out
-    
+
     def newtonian(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
-        out[1] = -p.nu * hu/h
+        out[1] = -p.nu * hu / h
         return out
 
     def manning(self):
@@ -82,15 +84,13 @@ class ShallowWater(Model):
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]
-        u = hu/h
+        u = hu / h
         p = self.parameters
-        out[1] = -p.g * (p.nu**2) * hu * Abs(u)**(7 / 3)
+        out[1] = -p.g * (p.nu**2) * hu * Abs(u) ** (7 / 3)
         return out
 
 
 class ShallowWater2d(Model):
-    settings = {"topography": False, "friction": []}
-
     def __init__(
         self,
         boundary_conditions,
@@ -99,7 +99,8 @@ class ShallowWater2d(Model):
         fields=3,
         aux_fields=0,
         parameters={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
-        settings={"topography": False, "friction": []},
+        settings={},
+        settings_default={"topography": False, "friction": []},
     ):
         super().__init__(
             dimension=dimension,
@@ -109,6 +110,7 @@ class ShallowWater2d(Model):
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings=settings,
+            settings_default=settings_default,
         )
 
     def flux(self):

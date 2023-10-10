@@ -1,16 +1,24 @@
-from library.models.base import *
-# from library.models.swe import *
-# from library.models.smm import *
+import os
+import numpy as np
+from typing import Union, Type
 
+from library.models.base import Advection, Model
 import library.initial_conditions as IC
 import library.boundary_conditions as BC
 from library.mesh import Mesh
 
 
 def create_default_mesh_and_model(
-    dimension: int, cls: Model, fields, aux_fields, parameters, momentum_eqns
+    dimension: int = 1,
+    cls: Type[Model] = Advection,
+    fields: Union[int, list] = 1,
+    aux_fields: Union[int, list] = 0,
+    parameters: Union[int, list, dict] = 0,
+    momentum_eqns: list = [-1],
+    settings: dict = {},
 ):
     main_dir = os.getenv("SMS")
+    assert main_dir != ""
     ic = IC.Constant()
 
     bc_tags = ["left", "right", "top", "bottom"][: 2 * dimension]
@@ -35,6 +43,7 @@ def create_default_mesh_and_model(
         parameters=parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
+        settings=settings,
     )
     n_ghosts = model.boundary_conditions.initialize(mesh)
 

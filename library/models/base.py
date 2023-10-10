@@ -8,7 +8,7 @@ from sympy import Symbol, Matrix, lambdify, transpose
 from sympy import zeros, ones
 
 from attr import define
-from typing import Optional, Any
+from typing import Optional, Any, Type, Union
 from types import SimpleNamespace
 
 from library.boundary_conditions import BoundaryConditions, Periodic
@@ -39,6 +39,7 @@ class Model:
     sympy_normal: Matrix
 
     settings: SimpleNamespace
+    settings_default_dict: dict
 
     sympy_flux: list[Matrix]
     sympy_flux_jacobian: list[Matrix]
@@ -52,13 +53,14 @@ class Model:
 
     def __init__(
         self,
-        dimension,
-        fields,
-        aux_fields,
-        parameters,
-        boundary_conditions,
-        initial_conditions,
-        settings={},
+        dimension: int,
+        fields: Union[int, list],
+        aux_fields: Union[int, list],
+        parameters: Union[int, list, dict],
+        boundary_conditions: BoundaryConditions,
+        initial_conditions: InitialConditions,
+        settings: dict = {},
+        settings_default: dict = {},
     ):
         self.dimension = dimension
         self.boundary_conditions = boundary_conditions
@@ -72,12 +74,15 @@ class Model:
             ["n" + str(i) for i in range(self.dimension)], "n"
         )
 
-        self.settings = SimpleNamespace(**settings)
+        self.settings = SimpleNamespace(**{**settings_default, **settings})
 
         self.n_fields = self.variables.length()
         self.n_aux_fields = self.aux_variables.length()
         self.n_parameters = self.parameters.length()
 
+        self.init_sympy_functions()
+
+    def init_sympy_functions(self):
         self.sympy_flux = self.flux()
         if self.flux_jacobian() is None:
             self.sympy_flux_jacobian = [
@@ -241,11 +246,14 @@ class Advection(Model):
 def register_sympy_attribute(argument, string_identifier="q_"):
     if type(argument) == int:
         attributes = {
-            string_identifier + str(i): sympy.symbols(string_identifier + str(i), real=True)
+            string_identifier
+            + str(i): sympy.symbols(string_identifier + str(i), real=True)
             for i in range(argument)
         }
     elif type(argument) == type({}):
-        attributes = {name: sympy.symbols(str(name), real=True) for name in argument.keys()}
+        attributes = {
+            name: sympy.symbols(str(name), real=True) for name in argument.keys()
+        }
     elif type(argument) == list:
         attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
     else:
