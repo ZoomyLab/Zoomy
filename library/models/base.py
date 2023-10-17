@@ -1,21 +1,25 @@
 import numpy as np
 import os
 import logging
+from copy import deepcopy
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose, powsimp
-
+from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol
 from sympy import zeros, ones
+from sympy.utilities.autowrap import autowrap, ufuncify, make_routine
+from sympy.abc import x, y 
 
 from attr import define
 from typing import Optional, Any, Type, Union
 from types import SimpleNamespace
+
 
 from library.boundary_conditions import BoundaryConditions, Periodic
 from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
 from library.misc import vectorize  # type: ignore
 from library.misc import IterableNamespace
+from library.python2c import create_module
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -125,18 +129,86 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
+    def create_cython_interface(self):
+        # works for scalar expressions
+        # flux = [autowrap(self.sympy_flux[d], backend='cython', tempdir='./autowraptmp') for d in range(self.dimension)]
+
+        # works
+        # flux =   ufuncify((x, y), y + x**2, backend='Cython')
+
+        # does not work for Matrix type
+        # flux = [ufuncify((
+        #         tuple(self.variables.get_list()),
+        #         tuple(self.aux_variables.get_list()),
+        #         tuple(self.parameters.get_list()),
+        # ), self.sympy_flux[d], backend='Cpython') for d in range(self.dimension)]
+
+        # breaks
+        # flux = [autowrap(self.sympy_flux[d], args = 
+        #         tuple(self.variables.get_list())+
+        #         tuple(self.aux_variables.get_list())+
+        #         tuple(self.parameters.get_list())
+        #     , backend='cython', tempdir='./autowraptmp') for d in range(self.dimension)]
+
+        #???
+        #flux = make_routine('flux', self.sympy_flux[0], language='C')
+
+        Q = MatrixSymbol('Q', self.n_fields, 1)
+        Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
+        parameters = MatrixSymbol('parameters', self.n_parameters, 1)
+
+        sympy_flux = deepcopy(self.sympy_flux)
+        for d in range(self.dimension):
+            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.variables, Q)
+            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.aux_variables, Qaux)
+            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.parameters, parameters)
+
+        if self.dimension == 1:
+            sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
+        elif self.dimension == 2:
+            sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
+        elif self.dimension == 3:
+            pass
+        else:
+            assert False
+
+
+        expression_name_tuples = [  ('flux_x', sympy_flux[0], [Q, Qaux, parameters]),
+                                    ('flux_y', sympy_flux[1], [Q, Qaux, parameters]),
+                                    ('flux_z', sympy_flux[2], [Q, Qaux, parameters])]
+        directory = "./temp/"
+        module_name = 'temp'
+
+        create_module(module_name, expression_name_tuples, directory)
+    
+    def load_cython_model(self):
+        from temp.temp import flux_x_c, flux_y_c, flux_z_c
+        if self.dimension == 1:
+            flux = [flux_x_c]
+        elif self.dimension == 2:
+            flux = [flux_x_c, flux_y_c]
+        elif self.dimension == 3:
+            flux = [flux_x_c, flux_y_c, flux_z_c]
+        else:
+            assert False
+
+        return flux
+
+
     def get_runtime_model(self):
         """Returns a runtime model for numpy arrays from the symbolic model."""
-        l_flux = lambdify(
-            [
+        l_flux = [lambdify(
+            (
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
-            ],
-            self.sympy_flux,
-            modules="numpy",
-        )
-        flux = vectorize(l_flux)
+            ),
+            self.sympy_flux[d],
+            "numpy",
+        ) for d in range(self.dimension)]
+        # l_flux = lambda Q, Qaux, param: np.array(_l_flux(Q, Qaux, param))[:,:,:,0]
+        # flux = vectorize(l_flux)
+        flux = l_flux
         l_flux_jacobian = lambdify(
             [
                 self.variables.get_list(),
@@ -146,7 +218,8 @@ class Model:
             self.sympy_flux_jacobian,
             "numpy",
         )
-        flux_jacobian = vectorize(l_flux_jacobian)
+        # flux_jacobian = vectorize(l_flux_jacobian)
+        flux_jacobian = l_flux_jacobian
 
         l_nonconservative_matrix = lambdify(
             [
@@ -279,6 +352,12 @@ def register_parameter_defaults(parameters):
         assert False
     return default_values
 
+def substitute_sympy_attributes_with_symbol_matrix(expr: Matrix, attr: IterableNamespace, attr_matrix: MatrixSymbol):
+    assert attr.length() == attr_matrix.shape[0]
+    for i, k in enumerate(attr.get_list()):
+        expr = expr.subs(k, attr_matrix[i])
+    return expr
+
 
 def eigenvalue_dict_to_matrix(eigenvalues):
     evs = []
@@ -286,3 +365,5 @@ def eigenvalue_dict_to_matrix(eigenvalues):
         for i in range(mult):
             evs.append(powsimp(ev, combine="all", force=True))
     return Matrix(evs)
+
+

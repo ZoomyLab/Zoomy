@@ -27,6 +27,8 @@ def test_model_initialization(dimension):
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
 
     functions = model.get_runtime_model()
+    c_functions = model.create_cython_interface()
+    flux = model.load_cython_model()
     for d in range(dimension):
         assert np.allclose(functions.flux(Q, Qaux, parameters)[:, d, :], Q)
     assert np.allclose(

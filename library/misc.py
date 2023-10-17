@@ -8,6 +8,8 @@ from attr import define
 from typing import Callable, Optional, Any
 from types import SimpleNamespace
 
+from sympy import MatrixSymbol
+
 from library.custom_types import FArray
 
 
@@ -151,8 +153,10 @@ def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
 def vectorize(
     func: Callable[[list[FArray]], FArray], n_arguments=3
 ) -> Callable[[list[FArray]], FArray]:
+    """ Note that besides vectorization, we also convert the output to a numpy array and erase the trailing 1 in the dimension for vectors (stored in sympy as matrices) """
     if n_arguments == 3:
-
+        
+        # probe has format [n_dim, [N, n_fields, 1 or n_fields (Vector or Matrix)]]
         def f(Q, Qaux, param):
             probe = np.array(func(Q[0], Qaux[0], param))
             Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
