@@ -89,6 +89,7 @@ class Model:
 
         self.init_sympy_functions()
 
+
     def init_sympy_functions(self):
         self.sympy_flux = self.flux()
         if self.flux_jacobian() is None:
@@ -158,10 +159,25 @@ class Model:
         parameters = MatrixSymbol('parameters', self.n_parameters, 1)
 
         sympy_flux = deepcopy(self.sympy_flux)
-        for d in range(self.dimension):
-            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.variables, Q)
-            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.aux_variables, Qaux)
-            sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.parameters, parameters)
+
+        list_matrix_symbols = [Q, Qaux, parameters]
+        list_attributes = [self.variables, self.aux_variables, self.parameters]
+        list_expressions = sympy_flux 
+        
+        for i in range(len(list_expressions)):
+            for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
+                list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
+                
+
+        # for d in range(self.dimension):
+        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.variables, Q)
+        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.aux_variables, Qaux)
+        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.parameters, parameters)
+        # sympy_flux = deepcopy(self.sympy_flux)
+        # sympy_flux_jacobian = deepcopy(self.sympy_flux_jacbian)
+        # for sf in sympy_flux:
+        #     self.substitute_sympy_attributes_with_list_of_symbol_matrices(sf, [Q, Qaux, parameters] )
+        
 
         if self.dimension == 1:
             sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
@@ -173,6 +189,9 @@ class Model:
             assert False
 
 
+        # Q = MatrixSymbol('Q', self.n_fields, 1)
+        # Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
+        # parameters = MatrixSymbol('parameters', self.n_parameters, 1)
         expression_name_tuples = [  ('flux_x', sympy_flux[0], [Q, Qaux, parameters]),
                                     ('flux_y', sympy_flux[1], [Q, Qaux, parameters]),
                                     ('flux_z', sympy_flux[2], [Q, Qaux, parameters])]
@@ -200,9 +219,9 @@ class Model:
         if self.dimension == 1:
             flux = [c_model.flux_x]
         elif self.dimension == 2:
-            c_model.flux = [c_model.flux_x, c_model.flux_y]
+            flux = [c_model.flux_x, c_model.flux_y]
         elif self.dimension == 3:
-            c_model.flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
+            flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
         else:
             assert False
 
@@ -379,5 +398,6 @@ def eigenvalue_dict_to_matrix(eigenvalues):
         for i in range(mult):
             evs.append(powsimp(ev, combine="all", force=True))
     return Matrix(evs)
+
 
 
