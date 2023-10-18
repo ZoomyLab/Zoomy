@@ -194,6 +194,20 @@ class Model:
 
         return flux
 
+    def load_c_model(self):
+        from ctypes import cdll
+        c_model = cdll.LoadLibrary('./temp/temp.cpython-39-x86_64-linux-gnu.so')
+        if self.dimension == 1:
+            flux = [c_model.flux_x]
+        elif self.dimension == 2:
+            c_model.flux = [c_model.flux_x, c_model.flux_y]
+        elif self.dimension == 3:
+            c_model.flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
+        else:
+            assert False
+
+        return flux   
+
 
     def get_runtime_model(self):
         """Returns a runtime model for numpy arrays from the symbolic model."""

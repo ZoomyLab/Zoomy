@@ -28,7 +28,30 @@ def test_model_initialization(dimension):
 
     functions = model.get_runtime_model()
     c_functions = model.create_cython_interface()
-    flux = model.load_cython_model()
+    # flux = model.load_cython_model()
+    flux = model.load_c_model()
+
+    import numpy.ctypeslib as npct
+
+    # define array prototypes
+    array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
+    array_1d_double = npct.ndpointer(dtype=np.double,ndim=1, flags='CONTIGUOUS')
+    
+    # define function prototype
+    flux[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+    flux[0].restype = None
+
+    A = np.array([[1.]], dtype=float)
+    B = np.array([[]], dtype=float)
+    C = np.array([[1.]], dtype=float)
+    a = np.array([1.], dtype=float)
+    b = np.array([], dtype=float)
+    c = np.array([0.], dtype=float)
+
+    flux[0](a, b, b, c)
+
+    print(c)
+    assert False
     for d in range(dimension):
         assert np.allclose(functions.flux(Q, Qaux, parameters)[:, d, :], Q)
     assert np.allclose(
