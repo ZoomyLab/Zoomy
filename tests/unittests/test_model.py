@@ -8,13 +8,6 @@ import library.initial_conditions as IC
 from library.mesh import *
 from library.model import create_default_mesh_and_model
 
-import jax.numpy as jnp
-from functools import partial
-
-
-@partial(jnp.vectorize, signature='(n,m),(n,k),(n,l),(n,m)->()')
-def vectorized_function(Q, Qaux, parameters, out):
-    out = Q
 
 
 
@@ -36,9 +29,9 @@ def test_model_initialization(dimension):
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
 
     functions = model.get_runtime_model()
-    c_functions = model.create_cython_interface()
+    c_functions = model.create_c_interface()
     # flux = model.load_cython_model()
-    flux = model.load_c_model()
+    (flux, flux_jacobian) = model.load_c_model()
 
     import numpy.ctypeslib as npct
 
@@ -49,28 +42,27 @@ def test_model_initialization(dimension):
     # define function prototype
     flux[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
     flux[0].restype = None
+    flux_jacobian[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+    flux_jacobian[0].restype = None
 
     A = np.linspace(1,10,10, dtype=float).reshape((5,2))
     B = np.array([[]], dtype=float)
     C = np.linspace(1,10,10, dtype=float).reshape((5,2))
+    D = np.linspace(1,20,20, dtype=float).reshape((5,2,2))
     a = np.array([1., 2.], dtype=float)
     b = np.array([], dtype=float)
     c = np.array([0., 0.], dtype=float)
+    d = np.array([[0., 0.], [0., 0.]], dtype=float)
 
     flux[0](a, b, b, c)
+    # flux[0](A, B, B, C)
+    flux_jacobian[0](a, b, b, d)
     
-    @partial(jnp.vectorize, signature='(n,m),(n,k),(n,l),(n,m)->()')
-    def vectorized_flux(Q, Qaux, parameters, out):
-        flux[0](Q, Qaux, parameters, out)
-    
-    # vectorized_function(A, A, A, C)
-    vectorized_flux(A, A, A, C)
-    # C = vflux(A, A, A, C)
 
 
 
     print(c)
-    print(C)
+    print(d)
     assert False
     for d in range(dimension):
         assert np.allclose(functions.flux(Q, Qaux, parameters)[:, d, :], Q)

@@ -131,70 +131,37 @@ class Model:
         self.sympy_right_eigenvectors = None
 
     def create_cython_interface(self):
-        # works for scalar expressions
-        # flux = [autowrap(self.sympy_flux[d], backend='cython', tempdir='./autowraptmp') for d in range(self.dimension)]
-
-        # works
-        # flux =   ufuncify((x, y), y + x**2, backend='Cython')
-
-        # does not work for Matrix type
-        # flux = [ufuncify((
-        #         tuple(self.variables.get_list()),
-        #         tuple(self.aux_variables.get_list()),
-        #         tuple(self.parameters.get_list()),
-        # ), self.sympy_flux[d], backend='Cpython') for d in range(self.dimension)]
-
-        # breaks
-        # flux = [autowrap(self.sympy_flux[d], args = 
-        #         tuple(self.variables.get_list())+
-        #         tuple(self.aux_variables.get_list())+
-        #         tuple(self.parameters.get_list())
-        #     , backend='cython', tempdir='./autowraptmp') for d in range(self.dimension)]
-
-        #???
-        #flux = make_routine('flux', self.sympy_flux[0], language='C')
-
         Q = MatrixSymbol('Q', self.n_fields, 1)
         Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
         parameters = MatrixSymbol('parameters', self.n_parameters, 1)
 
         sympy_flux = deepcopy(self.sympy_flux)
+        sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
+
+        if self.dimension == 1:
+            sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
+            sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[0], sympy_flux_jacobian[0]]
+        elif self.dimension == 2:
+            sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
+            sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[1], sympy_flux_jacobian[0]]
+        elif self.dimension == 3:
+            pass
+        else:
+            assert False
 
         list_matrix_symbols = [Q, Qaux, parameters]
         list_attributes = [self.variables, self.aux_variables, self.parameters]
-        list_expressions = sympy_flux 
+        list_expressions = sympy_flux + sympy_flux_jacobian
+        list_expression_names = ['flux_x', 'flux_y', 'flux_z', 
+                                 'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z']
         
         for i in range(len(list_expressions)):
             for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
                 list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
                 
 
-        # for d in range(self.dimension):
-        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.variables, Q)
-        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.aux_variables, Qaux)
-        #     sympy_flux[d] = substitute_sympy_attributes_with_symbol_matrix(sympy_flux[d], self.parameters, parameters)
-        # sympy_flux = deepcopy(self.sympy_flux)
-        # sympy_flux_jacobian = deepcopy(self.sympy_flux_jacbian)
-        # for sf in sympy_flux:
-        #     self.substitute_sympy_attributes_with_list_of_symbol_matrices(sf, [Q, Qaux, parameters] )
-        
+        expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
 
-        if self.dimension == 1:
-            sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
-        elif self.dimension == 2:
-            sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
-        elif self.dimension == 3:
-            pass
-        else:
-            assert False
-
-
-        # Q = MatrixSymbol('Q', self.n_fields, 1)
-        # Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
-        # parameters = MatrixSymbol('parameters', self.n_parameters, 1)
-        expression_name_tuples = [  ('flux_x', sympy_flux[0], [Q, Qaux, parameters]),
-                                    ('flux_y', sympy_flux[1], [Q, Qaux, parameters]),
-                                    ('flux_z', sympy_flux[2], [Q, Qaux, parameters])]
         directory = "./temp/"
         module_name = 'temp'
 
@@ -202,30 +169,37 @@ class Model:
     
     def load_cython_model(self):
         from temp.temp import flux_x_c, flux_y_c, flux_z_c
+        from temp.temp import flux_jacobian_x_c, flux_jacobian_y_c, flux_jacobian_z_c
         if self.dimension == 1:
             flux = [flux_x_c]
+            flux_jacobian = [flux_jacobian_x_c]
         elif self.dimension == 2:
             flux = [flux_x_c, flux_y_c]
+            flux_jacobian = [flux_jacobian_x_c, flux_jacobian_y_c]
         elif self.dimension == 3:
             flux = [flux_x_c, flux_y_c, flux_z_c]
+            flux_jacobian = [flux_jacobian_x_c, flux_jacobian_y_c, flux_jacobian_z_c]
         else:
             assert False
 
-        return flux
+        return (flux, flux_jacobian)
 
     def load_c_model(self):
         from ctypes import cdll
         c_model = cdll.LoadLibrary('./temp/temp.cpython-39-x86_64-linux-gnu.so')
         if self.dimension == 1:
             flux = [c_model.flux_x]
+            flux_jacobian = [c_model.flux_jacobian_x]
         elif self.dimension == 2:
             flux = [c_model.flux_x, c_model.flux_y]
+            flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y]
         elif self.dimension == 3:
             flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
+            flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y, c_model.flux_jacobian_z]
         else:
             assert False
 
-        return flux   
+        return (flux, flux_jacobian)
 
 
     def get_runtime_model(self):
