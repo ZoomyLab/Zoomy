@@ -38,6 +38,7 @@ def test_model_initialization(dimension):
     dS = np.zeros((Q.shape[0], Q.shape[1], Q.shape[1]))
     NC = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
     A = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
+    Evalues = np.zeros_like(Q)
 
     for i in range(Q.shape[0]):
         for d in range(model.dimension):
@@ -55,54 +56,48 @@ def test_model_initialization(dimension):
         assert np.allclose([A[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
         assert np.allclose(S, np.zeros_like(Q))
         assert np.allclose(dS, np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])))
-    assert False
 
-    assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(dimension))
-    assert np.allclose(
-        functions.source_jacobian(Q, Qaux, parameters)[0],
-        np.zeros((dimension, dimension)),
-    )
-    n_inner_elements = mesh.n_elements
     if dimension == 1:
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[0][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[0], parameters
-            )[2],
+            Evalues[2],
             -np.ones(dimension),
         )
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[1][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[1], parameters
-            )[2],
+            Evalues[2],
             np.ones(dimension),
         )
     elif dimension == 2:
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[0][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[0], parameters
-            )[2],
+            Evalues[2],
             -np.ones(dimension),
         )
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[1][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[1], parameters
-            )[2],
+            Evalues[2],
             np.ones(dimension),
         )
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[2][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[2], parameters
-            )[2],
+            Evalues[2],
             np.ones(dimension),
         )
+        for i in range(mesh.n_elements):
+            c_model.eigenvalues(Q[i], Qaux[i], parameters, normals[3][i], Evalues[i])
         assert np.allclose(
-            functions.eigenvalues(
-                Q[:n_inner_elements], Qaux[:n_inner_elements], normals[3], parameters
-            )[2],
+            Evalues[2],
             -np.ones(dimension),
         )
     else:
         assert False
+
 
 
 if __name__ == "__main__":

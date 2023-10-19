@@ -177,16 +177,23 @@ class Model:
                                  'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
                                  'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
                                  'source', 'source_jacobian']
+        list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
+        list_attributes_incl_normal = [self.variables, self.aux_variables, self.parameters, self.sympy_normal]
+        list_expressions_incl_normal = [sympy_eigenvalues]
+        list_expression_names_incl_normal = ['eigenvalues']
 
-        
         # convert symbols to matrix symbols
         for i in range(len(list_expressions)):
             for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
                 list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
+        for i in range(len(list_expressions_incl_normal)):
+            for attr, matrix_symbol in zip(list_attributes_incl_normal, list_matrix_symbols_incl_normal):
+                list_expressions_incl_normal[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_incl_normal[i], attr, matrix_symbol)
                 
 
         # aggregate data structure to be passed to the C converter module
         expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
+        expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names_incl_normal, list_expressions_incl_normal)]
 
         directory = "./temp/"
         module_name = 'temp'
@@ -219,6 +226,7 @@ class Model:
 
         source = c_model.source
         source_jacobian = c_model.source_jacobian
+        eigenvalues = c_model.eigenvalues
 
         # define array prototypes
         array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
@@ -238,9 +246,12 @@ class Model:
         source.restype = None
         source_jacobian.argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
         source_jacobian.restype = None
+        eigenvalues.argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+        eigenvalues.restype = None
+
         
 
-        out = {'flux': flux, 'flux_jacobian': flux_jacobian, 'nonconservative_matrix':nonconservative_matrix, 'quasilinear_matrix':quasilinear_matrix, 'source': source, 'source_jacobian': source_jacobian}
+        out = {'flux': flux, 'flux_jacobian': flux_jacobian, 'nonconservative_matrix':nonconservative_matrix, 'quasilinear_matrix':quasilinear_matrix, 'source': source, 'source_jacobian': source_jacobian, 'eigenvalues':eigenvalues}
         return SimpleNamespace(**out)
 
 
