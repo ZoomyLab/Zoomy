@@ -29,21 +29,10 @@ def test_model_initialization(dimension):
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
 
     functions = model.get_runtime_model()
-    c_functions = model.create_c_interface()
-    # flux = model.load_cython_model()
-    (flux, flux_jacobian) = model.load_c_model()
+    _ = model.create_c_interface()
+    c_model = model.load_c_model()
 
-    import numpy.ctypeslib as npct
 
-    # define array prototypes
-    array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
-    array_1d_double = npct.ndpointer(dtype=np.double,ndim=1, flags='CONTIGUOUS')
-    
-    # define function prototype
-    flux[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
-    flux[0].restype = None
-    flux_jacobian[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
-    flux_jacobian[0].restype = None
 
     A = np.linspace(1,10,10, dtype=float).reshape((5,2))
     B = np.array([[]], dtype=float)
@@ -54,13 +43,10 @@ def test_model_initialization(dimension):
     c = np.array([0., 0.], dtype=float)
     d = np.array([[0., 0.], [0., 0.]], dtype=float)
 
-    flux[0](a, b, b, c)
+    c_model.flux[0](a, b, b, c)
     # flux[0](A, B, B, C)
-    flux_jacobian[0](a, b, b, d)
+    c_model.flux_jacobian[0](a, b, b, d)
     
-
-
-
     print(c)
     print(d)
     assert False

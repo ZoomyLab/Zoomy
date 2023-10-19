@@ -1,7 +1,9 @@
 import numpy as np
+import numpy.ctypeslib as npct
 import os
 import logging
 from copy import deepcopy
+from ctypes import cdll
 
 import sympy
 from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol
@@ -130,14 +132,19 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
-    def create_cython_interface(self):
+    def create_c_interface(self):
+        # define matrix symbols that will be used as substitutions for the currelty used symbols in the
+        # expressions
         Q = MatrixSymbol('Q', self.n_fields, 1)
         Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
         parameters = MatrixSymbol('parameters', self.n_parameters, 1)
 
+        # copy in order to not mess up the sypy expressions of the class - in case I want to call the
+        # function a second time
         sympy_flux = deepcopy(self.sympy_flux)
         sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
 
+        # make all dimension dependent functions 3d to simplify the C part of the interface
         if self.dimension == 1:
             sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
             sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[0], sympy_flux_jacobian[0]]
@@ -149,44 +156,33 @@ class Model:
         else:
             assert False
 
+        # aggregate all expressions that are substituted and converted to C into the right data structure
         list_matrix_symbols = [Q, Qaux, parameters]
         list_attributes = [self.variables, self.aux_variables, self.parameters]
         list_expressions = sympy_flux + sympy_flux_jacobian
         list_expression_names = ['flux_x', 'flux_y', 'flux_z', 
                                  'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z']
         
+        # convert symbols to matrix symbols
         for i in range(len(list_expressions)):
             for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
                 list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
                 
 
+        # aggregate data structure to be passed to the C converter module
         expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
 
         directory = "./temp/"
         module_name = 'temp'
 
+        # create c module
         create_module(module_name, expression_name_tuples, directory)
     
-    def load_cython_model(self):
-        from temp.temp import flux_x_c, flux_y_c, flux_z_c
-        from temp.temp import flux_jacobian_x_c, flux_jacobian_y_c, flux_jacobian_z_c
-        if self.dimension == 1:
-            flux = [flux_x_c]
-            flux_jacobian = [flux_jacobian_x_c]
-        elif self.dimension == 2:
-            flux = [flux_x_c, flux_y_c]
-            flux_jacobian = [flux_jacobian_x_c, flux_jacobian_y_c]
-        elif self.dimension == 3:
-            flux = [flux_x_c, flux_y_c, flux_z_c]
-            flux_jacobian = [flux_jacobian_x_c, flux_jacobian_y_c, flux_jacobian_z_c]
-        else:
-            assert False
-
-        return (flux, flux_jacobian)
-
     def load_c_model(self):
-        from ctypes import cdll
         c_model = cdll.LoadLibrary('./temp/temp.cpython-39-x86_64-linux-gnu.so')
+
+        # the C module is constructed to use 3d functions, filled with dummies for dim<3. 
+        # therefore we extract the correct dimension dependent functions now
         if self.dimension == 1:
             flux = [c_model.flux_x]
             flux_jacobian = [c_model.flux_jacobian_x]
@@ -199,7 +195,18 @@ class Model:
         else:
             assert False
 
-        return (flux, flux_jacobian)
+        # define array prototypes
+        array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
+        array_1d_double = npct.ndpointer(dtype=np.double,ndim=1, flags='CONTIGUOUS')
+    
+        # define function prototype
+        flux[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+        flux[0].restype = None
+        flux_jacobian[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+        flux_jacobian[0].restype = None
+
+        out = {'flux': flux, 'flux_jacobian': flux_jacobian}
+        return SimpleNamespace(**out)
 
 
     def get_runtime_model(self):
