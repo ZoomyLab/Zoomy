@@ -21,11 +21,12 @@ from library.initial_conditions import InitialConditions, Constant
 from library.custom_types import FArray
 from library.misc import vectorize  # type: ignore
 from library.misc import IterableNamespace
-from library.python2c import create_module
+from library.sympy2c import create_module
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class Model:
+    name: str
     dimension: int = 1
     boundary_conditions: BoundaryConditions = BoundaryConditions(
         [
@@ -70,6 +71,7 @@ class Model:
         settings: dict = {},
         settings_default: dict = {},
     ):
+        self.name = 'Model' + '_{}'.format(dimension)
         self.dimension = dimension
         self.boundary_conditions = boundary_conditions
         self.initial_conditions = initial_conditions
@@ -132,7 +134,7 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
-    def create_c_interface(self):
+    def create_c_interface(self, path='./.tmp/'):
         # define matrix symbols that will be used as substitutions for the currelty used symbols in the
         # expressions
         Q = MatrixSymbol('Q', self.n_fields, 1)
@@ -195,14 +197,23 @@ class Model:
         expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
         expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names_incl_normal, list_expressions_incl_normal)]
 
-        directory = "./temp/"
-        module_name = 'temp'
+        directory = os.path.join(path, self.name)
+        module_name = 'model'
 
         # create c module
         create_module(module_name, expression_name_tuples, directory)
     
-    def load_c_model(self):
-        c_model = cdll.LoadLibrary('./temp/temp.cpython-39-x86_64-linux-gnu.so')
+    def load_c_model(self, path='./.tmp'):
+        folder = os.path.join(path, self.name)
+        files_found = []
+        for file in os.listdir(folder):
+            if file.endswith(".so"):
+                files_found.append(os.path.join(folder, file))
+
+        assert len(files_found) == 1
+        library_path = files_found[0]
+
+        c_model = cdll.LoadLibrary(library_path)
 
         # the C module is constructed to use 3d functions, filled with dummies for dim<3. 
         # therefore we extract the correct dimension dependent functions now

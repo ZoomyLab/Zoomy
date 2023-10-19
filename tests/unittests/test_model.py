@@ -50,12 +50,12 @@ def test_model_initialization(dimension):
         c_model.source_jacobian(Q[i], Qaux[i], parameters, dS[i])
 
     for d in range(dimension):
-        assert np.allclose(F, Q)
+        assert np.allclose(F[d], Q)
         assert np.allclose([dF[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
         assert np.allclose([NC[d][0] for d in range(dimension)], [np.zeros((dimension, dimension)) for d in range(dimension)])
         assert np.allclose([A[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
-        assert np.allclose(S, np.zeros_like(Q))
-        assert np.allclose(dS, np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])))
+    assert np.allclose(S, np.zeros_like(Q))
+    assert np.allclose(dS, np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])))
 
     if dimension == 1:
         for i in range(mesh.n_elements):
@@ -101,5 +101,5 @@ def test_model_initialization(dimension):
 
 
 if __name__ == "__main__":
-    # test_model_initialization(1)
+    test_model_initialization(1)
     test_model_initialization(2)
