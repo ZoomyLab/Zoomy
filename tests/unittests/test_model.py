@@ -32,30 +32,31 @@ def test_model_initialization(dimension):
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 
+    F = [np.zeros_like(Q) for i in range(model.dimension)]
+    dF = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
+    S = np.zeros_like(Q)
+    dS = np.zeros((Q.shape[0], Q.shape[1], Q.shape[1]))
+    NC = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
+    A = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
 
+    for i in range(Q.shape[0]):
+        for d in range(model.dimension):
+            c_model.flux[d](Q[i], Qaux[i], parameters, F[d][i])
+            c_model.flux_jacobian[d](Q[i], Qaux[i], parameters, dF[d][i])
+            c_model.nonconservative_matrix[d](Q[i], Qaux[i], parameters, NC[d][i])
+            c_model.quasilinear_matrix[d](Q[i], Qaux[i], parameters, A[d][i])
+        c_model.source(Q[i], Qaux[i], parameters, S[i])
+        c_model.source_jacobian(Q[i], Qaux[i], parameters, dS[i])
 
-    A = np.linspace(1,10,10, dtype=float).reshape((5,2))
-    B = np.array([[]], dtype=float)
-    C = np.linspace(1,10,10, dtype=float).reshape((5,2))
-    D = np.linspace(1,20,20, dtype=float).reshape((5,2,2))
-    a = np.array([1., 2.], dtype=float)
-    b = np.array([], dtype=float)
-    c = np.array([0., 0.], dtype=float)
-    d = np.array([[0., 0.], [0., 0.]], dtype=float)
-
-    c_model.flux[0](a, b, b, c)
-    # flux[0](A, B, B, C)
-    c_model.flux_jacobian[0](a, b, b, d)
-    
-    print(c)
-    print(d)
-    assert False
     for d in range(dimension):
-        assert np.allclose(functions.flux(Q, Qaux, parameters)[:, d, :], Q)
-    assert np.allclose(
-        functions.flux_jacobian(Q, Qaux, parameters)[0],
-        np.stack([np.eye((dimension)) for d in range(dimension)]),
-    )
+        assert np.allclose(F, Q)
+        assert np.allclose([dF[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
+        assert np.allclose([NC[d][0] for d in range(dimension)], [np.zeros((dimension, dimension)) for d in range(dimension)])
+        assert np.allclose([A[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
+        assert np.allclose(S, np.zeros_like(Q))
+        assert np.allclose(dS, np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])))
+    assert False
+
     assert np.allclose(functions.source(Q, Qaux, parameters)[0], np.zeros(dimension))
     assert np.allclose(
         functions.source_jacobian(Q, Qaux, parameters)[0],

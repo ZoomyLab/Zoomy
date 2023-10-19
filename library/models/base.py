@@ -138,19 +138,31 @@ class Model:
         Q = MatrixSymbol('Q', self.n_fields, 1)
         Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
         parameters = MatrixSymbol('parameters', self.n_parameters, 1)
+        normal = MatrixSymbol('normal', self.dimension, 1)
 
         # copy in order to not mess up the sypy expressions of the class - in case I want to call the
         # function a second time
         sympy_flux = deepcopy(self.sympy_flux)
         sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
+        sympy_source = deepcopy(self.sympy_source)
+        sympy_source_jacobian = deepcopy(self.sympy_source_jacobian)
+        sympy_nonconservative_matrix = deepcopy(self.sympy_nonconservative_matrix)
+        sympy_quasilinear_matrix = deepcopy(self.sympy_quasilinear_matrix)
+        sympy_eigenvalues = deepcopy(self.sympy_eigenvalues)
+        sympy_left_eigenvectors = deepcopy(self.sympy_left_eigenvectors)
+        sympy_right_eigenvectors = deepcopy(self.sympy_right_eigenvectors)
 
         # make all dimension dependent functions 3d to simplify the C part of the interface
         if self.dimension == 1:
             sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
             sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[0], sympy_flux_jacobian[0]]
+            sympy_nonconservative_matrix = [sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[0]]
+            sympy_quasilinear_matrix = [sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[0]]
         elif self.dimension == 2:
             sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
             sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[1], sympy_flux_jacobian[0]]
+            sympy_nonconservative_matrix = [sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[1], sympy_nonconservative_matrix[0]]
+            sympy_quasilinear_matrix = [sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[1], sympy_quasilinear_matrix[0]]
         elif self.dimension == 3:
             pass
         else:
@@ -159,9 +171,13 @@ class Model:
         # aggregate all expressions that are substituted and converted to C into the right data structure
         list_matrix_symbols = [Q, Qaux, parameters]
         list_attributes = [self.variables, self.aux_variables, self.parameters]
-        list_expressions = sympy_flux + sympy_flux_jacobian
+        list_expressions = sympy_flux + sympy_flux_jacobian + sympy_nonconservative_matrix + sympy_quasilinear_matrix + [sympy_source, sympy_source_jacobian]
         list_expression_names = ['flux_x', 'flux_y', 'flux_z', 
-                                 'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z']
+                                 'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z',
+                                 'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
+                                 'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
+                                 'source', 'source_jacobian']
+
         
         # convert symbols to matrix symbols
         for i in range(len(list_expressions)):
@@ -186,26 +202,45 @@ class Model:
         if self.dimension == 1:
             flux = [c_model.flux_x]
             flux_jacobian = [c_model.flux_jacobian_x]
+            nonconservative_matrix = [c_model.nonconservative_matrix_x]
+            quasilinear_matrix = [c_model.quasilinear_matrix_x]
         elif self.dimension == 2:
             flux = [c_model.flux_x, c_model.flux_y]
             flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y]
+            nonconservative_matrix = [c_model.nonconservative_matrix_x, c_model.nonconservative_matrix_y]
+            quasilinear_matrix = [c_model.quasilinear_matrix_x, c_model.quasilinear_matrix_y]
         elif self.dimension == 3:
             flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
             flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y, c_model.flux_jacobian_z]
+            nonconservative_matrix = [c_model.nonconservative_matrix_x, c_model.nonconservative_matrix_y, c_model.nonconservative_matrix_z]
+            quasilinear_matrix = [c_model.quasilinear_matrix_x, c_model.quasilinear_matrix_y, c_model.quasilinear_matrix_z]
         else:
             assert False
+
+        source = c_model.source
+        source_jacobian = c_model.source_jacobian
 
         # define array prototypes
         array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
         array_1d_double = npct.ndpointer(dtype=np.double,ndim=1, flags='CONTIGUOUS')
     
         # define function prototype
-        flux[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
-        flux[0].restype = None
-        flux_jacobian[0].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
-        flux_jacobian[0].restype = None
+        for d in range(self.dimension):
+            flux[d].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+            flux[d].restype = None
+            flux_jacobian[d].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+            flux_jacobian[d].restype = None
+            nonconservative_matrix[d].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+            nonconservative_matrix[d].restype = None
+            quasilinear_matrix[d].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+            quasilinear_matrix[d].restype = None
+        source.argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+        source.restype = None
+        source_jacobian.argtypes = [array_1d_double, array_1d_double, array_1d_double, array_2d_double]
+        source_jacobian.restype = None
+        
 
-        out = {'flux': flux, 'flux_jacobian': flux_jacobian}
+        out = {'flux': flux, 'flux_jacobian': flux_jacobian, 'nonconservative_matrix':nonconservative_matrix, 'quasilinear_matrix':quasilinear_matrix, 'source': source, 'source_jacobian': source_jacobian}
         return SimpleNamespace(**out)
 
 
