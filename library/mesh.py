@@ -18,6 +18,7 @@ class Mesh:
     type: str
     n_elements: int
     n_vertices: int
+    n_edges: int
     n_boundary_edges: int
     n_nodes_per_element: int
     vertex_coordinates: FArray
@@ -31,6 +32,7 @@ class Mesh:
     element_n_neighbors: IArray
     boundary_edge_vertices: IArray
     boundary_edge_elements: IArray
+    boundary_edge_neighbors: IArray
     boundary_edge_length: FArray
     boundary_edge_normal: FArray
     boundary_edge_tag: CArray
@@ -49,9 +51,9 @@ class Mesh:
         dimension = 1
         n_nodes_per_element = 2
         dx = (xR - xL) / n_elements
-        vertex_coordinates = np.zeros((n_nodes_per_element + 1, 3))
+        vertex_coordinates = np.zeros((n_elements + 1, 3))
         vertex_coordinates[:, 0] = np.linspace(
-            xL, xR, n_nodes_per_element + 1, dtype=float
+            xL, xR, n_elements + 1, dtype=float
         )
         element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
         element_vertices[:, 0] = np.linspace(0, n_elements - 1, n_elements, dtype=int)
@@ -70,7 +72,7 @@ class Mesh:
 
         element_centers[:, 0] = np.arange(xL + dx / 2, xR, dx)
         element_n_neighbors = np.zeros((n_elements), dtype=int)
-        element_neighbors = np.ones((n_elements, n_nodes_per_element), dtype=int)
+        element_neighbors = np.empty((n_elements, n_nodes_per_element), dtype=int)
         element_neighbors[0, 0] = 1
         element_n_neighbors[0] = 1
         element_edge_normal[0, 0] = np.array([1.0])
@@ -80,12 +82,14 @@ class Mesh:
                 np.array([-1.0], dtype=float),
                 np.array([1.0], dtype=float),
             ]
+            element_n_neighbors[i_elem] = 2
         element_n_neighbors[n_elements - 1] = 1
         element_neighbors[n_elements - 1, 0] = n_elements - 2
         element_edge_normal[n_elements - 1, 0] = np.array([-1.0])
 
         n_of_boundary_edges = 2
         boundary_edge_elements = np.zeros(n_of_boundary_edges, dtype=int)
+        boundary_edge_neighbors = np.zeros(n_of_boundary_edges, dtype=int)
         boundary_edge_length = np.ones(n_of_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_of_boundary_edges, dimension), dtype=float)
         # Implicit ordering: 0: left, 1: right
@@ -111,15 +115,17 @@ class Mesh:
         element_neighbors = element_neighbors
         element_n_neighbors = element_n_neighbors
         boundary_edge_vertices = boundary_edge_vertices
-        boundary_edge_element = boundary_edge_elements
         boundary_edge_length = boundary_edge_length
         boundary_edge_normal = boundary_edge_normal
         boundary_edge_tag = boundary_edge_tag
+        
+        n_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
         return cls(
             dimension,
             type,
             n_elements,
             n_vertices,
+            n_edges,
             n_boundary_edges,
             n_nodes_per_element,
             vertex_coordinates,
@@ -133,6 +139,7 @@ class Mesh:
             element_n_neighbors,
             boundary_edge_vertices,
             boundary_edge_elements,
+            boundary_edge_neighbors,
             boundary_edge_length,
             boundary_edge_normal,
             boundary_edge_tag,
@@ -238,6 +245,7 @@ class Mesh:
         boundary_edge_vertices = edges_on_boundaries
         n_boundary_edges = boundary_edge_vertices.shape[0]
         boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
+        boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
         boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
         boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
         boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
@@ -264,6 +272,7 @@ class Mesh:
             type,
             n_elements,
             n_vertices,
+            n_edges,
             n_boundary_edges,
             n_nodes_per_element,
             vertex_coordinates,
@@ -277,6 +286,7 @@ class Mesh:
             element_n_neighbors,
             boundary_edge_vertices,
             boundary_edge_elements,
+            boundary_edge_neighbors,
             boundary_edge_length,
             boundary_edge_normal,
             boundary_edge_tag,
@@ -291,6 +301,7 @@ class Mesh:
                 (file_mesh["type"][()]).decode("utf-8"),
                 file_mesh["n_elements"][()],
                 file_mesh["n_vertices"][()],
+                file_mesh["n_edges"][()],
                 file_mesh["n_boundary_edges"][()],
                 file_mesh["n_nodes_per_element"][()],
                 file_mesh["vertex_coordinates"][()],
@@ -304,6 +315,7 @@ class Mesh:
                 file_mesh["element_n_neighbors"][()],
                 file_mesh["boundary_edge_vertices"][()],
                 file_mesh["boundary_edge_elements"][()],
+                file_mesh["boundary_edge_neighbors"][()],
                 file_mesh["boundary_edge_length"][()],
                 file_mesh["boundary_edge_normal"][()],
                 file_mesh["boundary_edge_tag"][()],
@@ -342,6 +354,7 @@ class Mesh:
             attrs.create_dataset("type", data=self.type)
             attrs.create_dataset("n_elements", data=self.n_elements)
             attrs.create_dataset("n_vertices", data=self.n_vertices)
+            attrs.create_dataset("n_edges", data=self.n_edges)
             attrs.create_dataset("n_boundary_edges", data=self.n_boundary_edges)
             attrs.create_dataset("n_nodes_per_element", data=self.n_nodes_per_element)
             attrs.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
@@ -359,9 +372,23 @@ class Mesh:
             attrs.create_dataset(
                 "boundary_edge_elements", data=self.boundary_edge_elements
             )
+            attrs.create_dataset(
+                "boundary_edge_neighbors", data=self.boundary_edge_neighbors
+            )
             attrs.create_dataset("boundary_edge_length", data=self.boundary_edge_length)
             attrs.create_dataset("boundary_edge_normal", data=self.boundary_edge_normal)
             attrs.create_dataset("boundary_edge_tag", data=self.boundary_edge_tag)
+
+def _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element):
+    n_edges = 0
+    for elem in range(n_elements):
+        n_neighbors = element_n_neighbors[elem]
+        n_nodes = n_nodes_per_element
+        # edges without neigbors count as one (outer edges)
+        # edges with a neighbor get counted twice, therefore count as 0.5
+        n_edges += (n_nodes - n_neighbors) * 1.0 + n_neighbors * 0.5
+    return int(n_edges)
+
 
 
 def read_vtk_cell_fields(
