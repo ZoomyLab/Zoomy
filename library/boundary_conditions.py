@@ -167,10 +167,31 @@ class Periodic(BoundaryCondition):
         Q[self.segment.ghost_element_indices] = Q[self.periodic_to_element_indices]
 
 
+def update_boundary_edge_neighbors(boundary_conditions, mesh):
+    for bc in boundary_conditions:
+        elements = bc.segment.element_indices
+        neighbors = bc.segment.ghost_element_indices
+        bc_normals = bc.segment.face_normals
+        for elem, neighbor, normal in zip(elements, neighbors, bc_normals):
+            # find the boundary_edge_element indices (can be multiple in more dimensions, e.g. corners)
+            hits = np.where(mesh.boundary_edge_elements == elem)[0]
+            # now we need to ensure that we have the correct boudnary edge index in case of multiple hits (check the normal)
+            # since there needs to be exactly one match, we assert that with found_hit
+            found_hit = 0
+            for i_boundary_edge in hits:
+                if np.allclose(normal, mesh.boundary_edge_normal[i_boundary_edge]):
+                    mesh.boundary_edge_neighbors[i_boundary_edge] = neighbor
+                    found_hit +=1
+            assert found_hit == 1
+
+            
+
+# this function will alter the mesh in the boundary_edge_neighbors call 
 def initialize(boundary_conditions, mesh):
     n_inner_elements = mesh.n_elements
     initialize_bc(boundary_conditions, mesh)
     n_ghosts = initialize_ghost_cells(boundary_conditions, n_inner_elements)
+    update_boundary_edge_neighbors(boundary_conditions, mesh)
     return n_ghosts
 
 
