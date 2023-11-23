@@ -36,6 +36,7 @@ class Mesh:
     boundary_edge_length: FArray
     boundary_edge_normal: FArray
     boundary_edge_tag: CArray
+    inner_edge_list: IArray
 
     # TODO: extend all fields with number_of_cells=n_boundary_elements
     # TODO: check that I do not use shape in the code but rather n_element, n_vertices
@@ -118,6 +119,8 @@ class Mesh:
         boundary_edge_length = boundary_edge_length
         boundary_edge_normal = boundary_edge_normal
         boundary_edge_tag = boundary_edge_tag
+
+        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
         
         n_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
         return cls(
@@ -143,6 +146,7 @@ class Mesh:
             boundary_edge_length,
             boundary_edge_normal,
             boundary_edge_tag,
+            inner_edge_list,
         )
 
     @classmethod
@@ -267,6 +271,10 @@ class Mesh:
                 )[:dimension]
             else:
                 assert False
+
+        
+        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
+        
         return cls(
             dimension,
             type,
@@ -290,6 +298,7 @@ class Mesh:
             boundary_edge_length,
             boundary_edge_normal,
             boundary_edge_tag,
+            inner_edge_list,
         )
 
     @classmethod
@@ -319,6 +328,7 @@ class Mesh:
                 file_mesh["boundary_edge_length"][()],
                 file_mesh["boundary_edge_normal"][()],
                 file_mesh["boundary_edge_tag"][()],
+                file_mesh["inner_edge_list"][()],
             )
         return mesh
 
@@ -378,6 +388,7 @@ class Mesh:
             attrs.create_dataset("boundary_edge_length", data=self.boundary_edge_length)
             attrs.create_dataset("boundary_edge_normal", data=self.boundary_edge_normal)
             attrs.create_dataset("boundary_edge_tag", data=self.boundary_edge_tag)
+            attrs.create_dataset("inner_edge_list", data=self.inner_edge_list)
 
 def _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element):
     n_edges = 0
@@ -554,3 +565,24 @@ def write_to_file_vtk_from_vertices_edges(
     filename_base, filename_ext = os.path.splitext(filename)
     os.makedirs(path, exist_ok=True)
     meshout.write(filepath + ".vtk")
+
+def compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors):
+    # get the number of total edges
+    n_edges = 0
+    for i_elem in range(n_elements):
+        for i_edge in range(element_n_neighbors[i_elem]):
+            i_neighbor = element_neighbors[i_elem, i_edge]
+            if i_elem < i_neighbor:
+                n_edges += 1
+    
+    # traverse elements and edges and compile list
+    element_edge_list = np.empty((n_edges, 2), dtype=int)
+    index = 0
+    for i_elem in range(n_elements):
+        for i_edge in range(element_n_neighbors[i_elem]):
+            i_neighbor = element_neighbors[i_elem, i_edge]
+            if i_elem < i_neighbor:
+                element_edge_list[index][0] = i_elem
+                element_edge_list[index][1] = i_edge
+                index += 1
+    return element_edge_list

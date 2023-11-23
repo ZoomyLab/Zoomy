@@ -45,6 +45,7 @@ def initialize_problem(model, mesh):
     # return Q, Qaux, normals
     return Q, Qaux
 
+
 def get_semidiscrete_solution_operator_new(mesh, runtime_model, settings):
     num_flux = settings.num_flux
     reconstruction = settings.reconstruction
@@ -55,28 +56,26 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, settings):
 
 
         # Loop over the inner elements
-        for i_elem in range(mesh.n_elements):
-            for i_edge in range(mesh.element_n_neighbors[i_elem]):
-                # reconstruct 
-                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_edge)
+        # for i_elem in range(mesh.n_elements):
+        #     for i_edge in range(mesh.element_n_neighbors[i_elem]):
+        for i_elem, i_edge in mesh.inner_edge_list:
+            # reconstruct 
+            [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_edge)
 
-
-
-
-                # callout to a requirement of the flux
-                mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
-                flux, failed = num_flux(
-                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_edge_normal[i_elem, i_edge], runtime_model, mesh_props=mesh_props
-                )
-                assert not failed
-                
-                
-                # TODO index map (elem_edge_index) such that I do not need:
-                # and if statement to avoid double edge computation (as I do now)
-                # avoid double edge computation
-                dQ[i_elem] -= flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_elem]
-                i_neighbor = mesh.element_neighbors[i_elem, i_edge]
-                # dQ[i_neighbor] += flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_neighbor]
+            # callout to a requirement of the flux
+            mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
+            flux, failed = num_flux(
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_edge_normal[i_elem, i_edge], runtime_model, mesh_props=mesh_props
+            )
+            assert not failed
+            
+            
+            # TODO index map (elem_edge_index) such that I do not need:
+            # and if statement to avoid double edge computation (as I do now)
+            # avoid double edge computation
+            dQ[i_elem] -= flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_elem]
+            i_neighbor = mesh.element_neighbors[i_elem, i_edge]
+            dQ[i_neighbor] += flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_neighbor]
 
         # Loop over boundary elements
         for i, i_elem in enumerate(mesh.boundary_edge_elements):
@@ -181,7 +180,6 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     Q, Qaux = initialize_problem(model, mesh)
     parameters = register_parameter_defaults(settings.parameters)
     Qnew = deepcopy(Q)
-
 
     # dt = self.dtmin
     # kwargs = {
