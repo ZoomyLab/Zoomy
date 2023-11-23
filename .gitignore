@@ -5,3 +5,4 @@ output/
 *out*
 autowraptmp
 .tmp
+.~lock.architecture.odp#
