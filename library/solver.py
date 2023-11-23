@@ -1,479 +1,295 @@
-import os
-import sys
 import numpy as np
-from copy import deepcopy as deepcopy
-from multiprocessing import Pool
+from types import SimpleNamespace
+import pyprog
+from attr import define
+from typing import Callable, Optional, Type
+from copy import deepcopy
+from time import time as gettime
 
-from library.solver.baseclass import BaseYaml
-import library.solver.reconstruction as reconstruction
-import library.solver.flux as flux
-import library.solver.flux_direct as flux_direct
-import library.solver.quasilinear as quasilinear
-import library.solver.non_conservative as non_conservative
-import library.solver.ode as ode
-import library.solver.boundary_conditions as boundary_conditions
-
-main_dir = os.getenv("SMPYTHON")
-
-eps = 10 ** (-10)
+from library.model import *
+from library.models.base import register_parameter_defaults
+import library.reconstruction as recon
+import library.flux as flux
+import library.timestepping as timestepping
 
 
-class FiniteVolumeMethod(BaseYaml):
-    yaml_tag = "!FVM"
+@define(slots=True, frozen=False, kw_only=True)
+class Settings():
+    name : str = 'Simulation'
+    PDE : Type[Advection] = Advection
+    momentum_eqns: list[int] = [0]
+    parameters : SimpleNamespace = SimpleNamespace()
+    reconstruction : Callable = recon.constant
+    reconstruction_edge: Callable = recon.constant_edge
+    num_flux : Callable = flux.LF
+    compute_dt : Callable = timestepping.constant(dt=0.1)
+    time_end : float = 1.0
+    output_timesteps: int = 10
 
-    def set_default_parameters(self):
-        self.scheme = "explicit_split_source_vectorized"
-        self.reconstruction = reconstruction.Reconstruction()
-        self.flux = flux.Flux()
-        self.flux_direct = flux_direct.FluxDirect()
-        self.quasilinear = quasilinear.Quasilinear()
-        self.nc = non_conservative.NonConservativeTerms()
-        self.integrator = ode.ODE()
+def initialize_problem(model, mesh):
+    n_ghosts = model.boundary_conditions.initialize(mesh)
 
-    def initialize(self, **kwargs):
-        self.model = kwargs["model"]
-        self.dimension = self.model.dimension
-        self.flux_func = self.flux.evaluate(self.model.flux, **kwargs)
-        self.nc_func = self.nc.evaluate(self.model)
-        self.source_func = self.model.rhs
-        self.bc_func = lambda boundary_edge_index, Q, **kwargs: boundary_conditions.get_boundary_value(
-            self.model.boundary_conditions,
-            boundary_edge_index,
-            Q,
-            dim=self.dimension,
-            **kwargs,
-        )
-        self.bc_flux_func = lambda boundary_edge_index, Q, **kwargs: boundary_conditions.get_boundary_flux_value(
-            self.model.boundary_conditions_flux,
-            boundary_edge_index,
-            Q,
-            dim=self.dimension,
-            **kwargs,
-        )
-        self.mesh = kwargs["mesh"]
-        self.step = self.get_step_function()
+    n_all_elements = mesh.n_elements + n_ghosts
+    # n_all_elements = mesh.n_elements
+    n_fields = model.n_fields
 
-    def compute_max_eigenvalue(self, Q):
-        EVmax = -np.inf
-        imaginary = False
-        for d in range(self.dimension):
-            normal = np.repeat(
-                np.eye(self.dimension)[d][:, np.newaxis], Q.shape[1], axis=1
-            )
-            EVs, imag = self.model.eigenvalues(Q, normal)
-            imaginary = imaginary or imag
-            EVmax = max(EVmax, np.max(np.abs(EVs)))
-        assert np.isfinite(EVmax)
-        # assert imaginary is False
-        return EVmax
+    Q = np.empty((n_all_elements, n_fields), dtype=float)
+    Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
+    # num_normals = mesh.element_n_neighbors
+    # normals = np.array(
+    #     [mesh.element_edge_normal[:, i] for i in range(mesh.n_nodes_per_element)]
+    # )
 
-    def compute_eigenvalues(self, Q, normals):
-        # number_of_eigenvalues = self.model.eigenvalues(
-        #     Q[:, 0][:, np.newaxis], normals[0, :, 0][:, np.newaxis]
-        # )[0].shape[0]
-        number_of_eigenvalues = Q.shape[0]
-        EVs = np.zeros(
-            (Q.shape[1], normals.shape[0], number_of_eigenvalues), dtype=float
-        )
-        imaginary = False
+    model.initial_conditions.apply(mesh.element_centers, Q[:mesh.n_elements])
+    model.boundary_conditions.apply(Q)
+    # return Q, Qaux, normals
+    return Q, Qaux
 
-        for edge in range(normals.shape[0]):
-            ev, imag = self.model.eigenvalues(Q, normals[edge])
-            imaginary = imaginary or imag
-            # assert imaginary is False
-            assert np.isfinite(ev).all()
-            EVs[:, edge, :] = np.real(ev).T
-        return EVs, imaginary
+def get_semidiscrete_solution_operator_new(mesh, runtime_model, settings):
+    num_flux = settings.num_flux
+    reconstruction = settings.reconstruction
+    reconstruction_edge = settings.reconstruction_edge
+    # on_edge_incircle = recon.constant(mesh, [mesh.element_incircle])
+    def solution_operator(dt, Q, Qaux, parameters, dQ):
+        # Qi, Qj, Qauxi, Qauxj = reconstruction(mesh, Q, Qaux)
 
-    def compute_timestep_size(self, Q, cfl, EVmax):
-        return cfl * np.min(self.mesh.element_incircle / np.abs(EVmax))
 
-    def get_step_function(self):
-        return getattr(self, "step_" + self.scheme)
+        # Loop over the inner elements
+        for i_elem in range(mesh.n_elements):
+            for i_edge in range(mesh.element_n_neighbors[i_elem]):
+                # reconstruct 
+                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_edge)
 
-    def loop_inner_explicit(self, Q, **kwargs):
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        # loop over all inner elements
-        for i_elem in range(self.mesh.n_elements):
-            for i_edge, _ in enumerate(self.mesh.element_neighbors[i_elem]):
-                i_neighbor = (self.mesh.element_neighbors[i_elem])[i_edge]
-                n_ij = self.mesh.element_edge_normal[i_elem][i_edge][:, np.newaxis][
-                    : self.mesh.dim
-                ]
-                # if this assertion failes, the normal was not set correctly
-                assert np.linalg.norm(n_ij) < 1.0 + 10 ** (-6)
-                Qi = np.array(Q[:, i_elem])[:, np.newaxis]
-                Qj = np.array(Q[:, i_neighbor])[:, np.newaxis]
 
-                # TODO HACK
-                # Qi[:-1] = np.where(Qi[0] > 0, Qi[:-1], np.zeros_like(Qi[:-1]))
-                # Qj[:-1] = np.where(Qj[0] > 0, Qj[:-1], np.zeros_like(Qj[:-1]))
 
-                if Qi[0] > eps or Qj[0] > eps:
-                    Fn, step_failed = self.flux_func(Qi, Qj, n_ij, **kwargs)
-                    NCn = self.nc_func(Qi, Qj, n_ij, **kwargs)
-                    # if np.allclose(Fn, np.zeros_like(Fn)):
-                    #     NCn = np.zeros_like(Fn)
-                    dQelem = -(
-                        dt
-                        / self.mesh.element_volume[i_elem]
-                        * self.mesh.element_edge_length[i_elem][i_edge]
-                        * (Fn + NCn).flatten()
-                    )
-                    dQ[:, i_elem] += dQelem
-        return dQ
 
-    # TODO: currently, inner fluxes are computed twice
-    # TODO: some arrays can be precomputed
-    def loop_fluxes_vectorized(self, Q, **kwargs):
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        
-        n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element + self.mesh.n_boundary_edges)/2)
-        n_edges_inner = n_edges - self.mesh.n_boundary_edges
-        
-        # n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element))
-        Qi = np.zeros((Q.shape[0], n_edges))
-        Qj = np.zeros((Q.shape[0], n_edges))
-        n_ij = np.zeros((3, n_edges))
-        edge_length = np.zeros((n_edges))
-        element_index_inner = np.zeros((n_edges_inner), dtype=int)
-        element_index_inner_neighbor = np.zeros((n_edges_inner), dtype=int)
-        element_index_boundary = np.zeros((self.mesh.n_boundary_edges), dtype=int)
-        i = 0
-        # loop over all inner elements
-        for i_elem in range(self.mesh.n_elements):
-            for i_edge, _ in enumerate(self.mesh.element_neighbors[i_elem]):
-                i_neighbor = (self.mesh.element_neighbors[i_elem])[i_edge]
-                if i_neighbor > i_elem:
-                    continue
-                n_ij[:, i] = self.mesh.element_edge_normal[i_elem][i_edge]                # if this assertion failes, the normal was not set correctly
-                Qi[:, i] = np.array(Q[:, i_elem])
-                Qj[:, i] = np.array(Q[:, i_neighbor])
-                edge_length[i] = self.mesh.element_edge_length[i_elem][i_edge]
-                element_index_inner[i] = i_elem
-                element_index_inner_neighbor[i] = i_neighbor
-                i += 1
-            
-        i_boundary = 0
-        for i_bp, i_elem in enumerate(self.mesh.boundary_edge_element):
-            n_ij[:, i] = self.mesh.boundary_edge_normal[i_bp]
-            Qi[:,i] = np.array(Q[:, i_elem])
-            Qj[:,i] = self.bc_func(i_bp, Q, **kwargs)
-
-            edge_length[i] = self.mesh.boundary_edge_length[i_bp]
-
-            element_index_boundary[i_boundary] = i_elem
-            i += 1
-            i_boundary +=1
-
-        n_ij = n_ij[:self.mesh.dim, :]
-        Fn, step_failed = self.flux_func(Qi, Qj, n_ij, **kwargs)
-        NCn = self.nc_func(Qi, Qj, n_ij, **kwargs)
-        
-        # Reduce edges to cells
-        for i in range(n_edges_inner):
-            i_elem = element_index_inner[i]
-            i_neighbor = element_index_inner_neighbor[i]
-            dQ[:, i_elem] -= dt / self.mesh.element_volume[i_elem] * edge_length[i] * (Fn + NCn)[:,i]
-            dQ[:, i_neighbor] += dt / self.mesh.element_volume[i_neighbor] * edge_length[i] * (Fn - NCn)[:,i]
-        for j in range(self.mesh.n_boundary_edges):
-            i_elem = element_index_boundary[j]
-            dQ[:, i_elem] -= dt / self.mesh.element_volume[i_elem] * edge_length[j+n_edges_inner] * (Fn + NCn)[:,j+n_edges_inner]
-        return dQ
-
-    def loop_fluxes_vectorized_coordinate_transform(self, Q, **kwargs):
-        print(Q.shape)
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        
-        n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element + self.mesh.n_boundary_edges)/2)
-        n_edges_inner = n_edges - self.mesh.n_boundary_edges
-        
-        # n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element))
-        Qi = np.zeros((Q.shape[0], n_edges))
-        Qj = np.zeros((Q.shape[0], n_edges))
-        n_ij = np.zeros((3, n_edges))
-        edge_length = np.zeros((n_edges))
-        element_index_inner = np.zeros((n_edges_inner), dtype=int)
-        element_index_inner_neighbor = np.zeros((n_edges_inner), dtype=int)
-        element_index_boundary = np.zeros((self.mesh.n_boundary_edges), dtype=int)
-        i = 0
-        # loop over all inner elements
-        for i_elem in range(self.mesh.n_elements):
-            for i_edge, _ in enumerate(self.mesh.element_neighbors[i_elem]):
-                i_neighbor = (self.mesh.element_neighbors[i_elem])[i_edge]
-                if i_neighbor > i_elem:
-                    continue
-                n_ij[:, i] = self.mesh.element_edge_normal[i_elem][i_edge]                # if this assertion failes, the normal was not set correctly
-                Qi[:, i] = np.array(Q[:, i_elem])
-                Qj[:, i] = np.array(Q[:, i_neighbor])
-                Qi[:,i] = self.model.compute_Q_in_normal_transverse(Qi[:, i][:, np.newaxis], n_ij[:, i][:, np.newaxis])
-                Qj[:,i] = self.model.compute_Q_in_normal_transverse(Qj[:, i][:, np.newaxis], n_ij[:, i][:, np.newaxis])
-                edge_length[i] = self.mesh.element_edge_length[i_elem][i_edge]
-                element_index_inner[i] = i_elem
-                element_index_inner_neighbor[i] = i_neighbor
-                i += 1
-            
-        i_boundary = 0
-        for i_bp, i_elem in enumerate(self.mesh.boundary_edge_element):
-            n_ij[:, i] = self.mesh.boundary_edge_normal[i_bp]
-            Qi[:,i] = self.model.compute_Q_in_normal_transverse(np.array(Q[:,i_elem])[:, np.newaxis], n_ij[:, i][:, np.newaxis])
-            Qj[:,i] = self.model.compute_Q_in_normal_transverse(self.bc_func(i_bp, Q, **kwargs)[:, np.newaxis], n_ij[:, i][:, np.newaxis])
-
-            edge_length[i] = self.mesh.boundary_edge_length[i_bp]
-
-            element_index_boundary[i_boundary] = i_elem
-            i += 1
-            i_boundary +=1
-
-        n_ij = n_ij[:self.mesh.dim, :]
-        n_ij_transformed = np.zeros_like(n_ij)
-        n_ij_transformed[0, :] = 1.0
-        Fn, step_failed = self.flux_func(Qi, Qj, n_ij_transformed, **kwargs)
-        NCn = self.nc_func(Qi, Qj, n_ij_transformed, **kwargs)
-        
-        # Reduce edges to cells
-        for i in range(n_edges_inner):
-            i_elem = element_index_inner[i]
-            i_neighbor = element_index_inner_neighbor[i]
-            dQelem = -dt / self.mesh.element_volume[i_elem] * edge_length[i] * (Fn + NCn)[:,i]
-            dQ[:, i_elem] += self.model.compute_Q_in_x_y(dQelem[:, np.newaxis], n_ij[:,i][:, np.newaxis])
-            dQneighbor = dt / self.mesh.element_volume[i_neighbor] * edge_length[i] * (Fn - NCn)[:,i]
-            dQ[:, i_neighbor] += self.model.compute_Q_in_x_y(dQneighbor[:, np.newaxis], n_ij[:,i][:, np.newaxis])
-        for j in range(self.mesh.n_boundary_edges):
-            i_elem = element_index_boundary[j]
-            dQelem = -dt / self.mesh.element_volume[i_elem] * edge_length[j+n_edges_inner] * (Fn + NCn)[:,j+n_edges_inner]
-            dQ[:, i_elem] += self.model.compute_Q_in_x_y(dQelem[:, np.newaxis], n_ij[:,j + n_edges_inner][:, np.newaxis])
-        return dQ
-
-    def loop_inner_explicit_coordinate_transform(self, Q, **kwargs):
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        # loop over all inner elements
-        for i_elem in range(self.mesh.n_elements):
-            for i_edge, _ in enumerate(self.mesh.element_neighbors[i_elem]):
-                i_neighbor = (self.mesh.element_neighbors[i_elem])[i_edge]
-                n_ij = self.mesh.element_edge_normal[i_elem][i_edge][:, np.newaxis][
-                    : self.mesh.dim
-                ]
-                # if this assertion failes, the normal was not set correctly
-                assert np.linalg.norm(n_ij) < 1.0 + 10 ** (-6)
-                Qi = np.array(Q[:, i_elem])[:, np.newaxis]
-                Qj = np.array(Q[:, i_neighbor])[:, np.newaxis]
-                Qi = self.model.compute_Q_in_normal_transverse(Qi, n_ij)
-                Qj = self.model.compute_Q_in_normal_transverse(Qj, n_ij)
-                Qi = Qi[:, np.newaxis]
-                Qj = Qj[:, np.newaxis]
-                n_normal = np.zeros_like(n_ij)
-                n_normal[0] = 1.0
-
-                # TODO HACK
-                # Qi[:-1] = np.where(Qi[0] > 0, Qi[:-1], np.zeros_like(Qi[:-1]))
-                # Qj[:-1] = np.where(Qj[0] > 0, Qj[:-1], np.zeros_like(Qj[:-1]))
-
-                if Qi[0] > eps or Qj[0] > eps:
-                    Fn, step_failed = self.flux_func(Qi, Qj, n_normal, **kwargs)
-                    NCn = self.nc_func(Qi, Qj, n_normal, **kwargs)
-                    dQelem = (
-                        dt
-                        / self.mesh.element_volume[i_elem]
-                        * self.mesh.element_edge_length[i_elem][i_edge]
-                        * (Fn + NCn).flatten()
-                    )
-                    dQelem = dQelem[:, np.newaxis]
-                    dQelem = self.model.compute_Q_in_x_y(dQelem, n_ij)
-                    dQ[:, i_elem] -= dQelem
-        return dQ
-
-    def loop_boundary_explicit(self, Q, **kwargs):
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        for i_bp, elem in enumerate(self.mesh.boundary_edge_element):
-            kwargs["i_elem"] = elem
-            # TODO WRONG!!
-            kwargs["i_edge"] = i_bp
-            n_ij = self.mesh.boundary_edge_normal[i_bp][: self.mesh.dim][:, np.newaxis]
-            kwargs["i_neighbor"] = elem
-
-            edge_length = self.mesh.boundary_edge_length[i_bp]
-
-            Qi = np.array(Q[:, elem])[:, np.newaxis]
-            Qj = self.bc_func(i_bp, Q, **kwargs)[:, np.newaxis]
-            if Qi[0] > eps or Qj[0] > eps:
-                Fn, step_failed = self.flux_func(Qi, Qj, n_ij, **kwargs)
-                NCn = self.nc_func(Qi, Qj, n_ij, **kwargs)
-                dQelem = (
-                    dt
-                    / self.mesh.element_volume[elem]
-                    * edge_length
-                    * (Fn + NCn).flatten()
+                # callout to a requirement of the flux
+                mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
+                flux, failed = num_flux(
+                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_edge_normal[i_elem, i_edge], runtime_model, mesh_props=mesh_props
                 )
-                dQ[:, elem] -= dQelem
-        return dQ
+                assert not failed
+                
+                
+                # TODO index map (elem_edge_index) such that I do not need:
+                # and if statement to avoid double edge computation (as I do now)
+                # avoid double edge computation
+                dQ[i_elem] -= flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_elem]
+                i_neighbor = mesh.element_neighbors[i_elem, i_edge]
+                # dQ[i_neighbor] += flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_neighbor]
 
-    def loop_boundary_explicit_coordinate_transform(self, Q, **kwargs):
-        dQ = np.zeros_like(Q)
-        dt = kwargs["dt"]
-        for i_bp, elem in enumerate(self.mesh.boundary_edge_element):
-            kwargs["i_elem"] = elem
-            # TODO WRONG!!
-            kwargs["i_edge"] = i_bp
-            n_ij = self.mesh.boundary_edge_normal[i_bp][: self.mesh.dim][:, np.newaxis]
-            kwargs["i_neighbor"] = elem
+        # Loop over boundary elements
+        for i, i_elem in enumerate(mesh.boundary_edge_elements):
+            i_neighbor = mesh.boundary_edge_neighbors[i]
+            # reconstruct 
+            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], i_elem, i_neighbor)
 
-            edge_length = self.mesh.boundary_edge_length[i_bp]
-
-            Qi = np.array(Q[:, elem])[:, np.newaxis]
-            Qj = self.bc_func(i_bp, Q, **kwargs)[:, np.newaxis]
-            Qi = self.model.compute_Q_in_normal_transverse(Qi, n_ij)
-            Qj = self.model.compute_Q_in_normal_transverse(Qj, n_ij)
-            Qi = Qi[:, np.newaxis]
-            Qj = Qj[:, np.newaxis]
-            n_normal = np.zeros_like(n_ij)
-            n_normal[0] = 1.0
-            if Qi[0] > eps or Qj[0] > eps:
-                Fn, step_failed = self.flux_func(Qi, Qj, n_normal, **kwargs)
-                NCn = self.nc_func(Qi, Qj, n_normal, **kwargs)
-                dQelem = (
-                    dt
-                    / self.mesh.element_volume[elem]
-                    * edge_length
-                    * (Fn + NCn).flatten()
-                )
-                dQelem = dQelem[:, np.newaxis]
-                dQelem = self.model.compute_Q_in_x_y(dQelem, n_ij)
-                dQ[:, elem] -= dQelem
-        return dQ
-
-    def loop_source(self, Q, **kwargs):
-        Qnew = np.array(Q)
-        if self.integrator.order == -1:
-            kwargs_source = {
-                **kwargs,
-                "func_jac": lambda t, Q, **kwargs: self.model.rhs_jacobian(
-                    t, Q, **kwargs
-                ),
-            }
-        else:
-            kwargs_source = kwargs
-        for i_elem in range(self.mesh.n_elements):
-            kwargs_source_elem = kwargs_source.copy()
-            kwargs_source_elem["aux_fields"] = elementwise_aux_fields(
-                i_elem, kwargs_source["aux_fields"]
+            # callout to a requirement of the flux
+            mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
+            flux, failed = num_flux(
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.boundary_edge_normal[i], runtime_model, mesh_props=mesh_props
             )
-            if Qnew[0, i_elem] > 0:
-                Qnew[:, i_elem] = self.integrator.evaluate(
-                    self.source_func,
-                    kwargs["time"],
-                    Qnew[:, i_elem][:, np.newaxis],
-                    **kwargs_source_elem,
-                ).flatten()
-        return Qnew
+            assert not failed
 
-    def step_explicit_split_source_vectorized(self, Q, **kwargs):
-        Qnew = fix_negative_height(Q, self.model.yaml_tag)
+            dQ[i_elem] -= flux * mesh.boundary_edge_length[i] / mesh.element_volume[i_elem]
 
-        dQ = self.loop_fluxes_vectorized(np.array(Qnew), **kwargs)
-        Qnew = self.loop_source(Qnew, **kwargs)
-        Qnew += dQ
-
-        step_failed = False
-        return Qnew, step_failed
-
-    def step_explicit_split_source_vectorized_coordinate_transform(self, Q, **kwargs):
-        # def work_on_chunk(index_list):
-        #     Qchunk = Q[:, index_list]
-        #     dQ = self.loop_fluxes_vectorized_coordinate_transform(np.array(Qchunk), **kwargs)
-        #     Qnew[:, index_list] += dQ
-        def get_Q_chunk(Q, i, n_chunks):
-            index_list = list(range(Q.shape[1]))
-            chunksize = int(len(index_list)/n_chunks)+1
-            indices = index_list[i*chunksize: (i+1)*chunksize]
-            return indices, Q[:, indices]
+        # # Add flux (edges) to elements
+        # (
+        #     map_elements_to_edges_plus,
+        #     map_elements_to_edges_minus,
+        # ) = map_elements_to_edges
+        # for i, elem in enumerate(map_elements_to_edges_plus):
+        #     #TODO if hack: element_volume of of bounds error
+        #     if elem < mesh.n_elements:
+        #         dQ[elem] += flux[i] * on_edges_length[i] / mesh.element_volume[elem]
+        # for i, elem in enumerate(map_elements_to_edges_minus):
+        #     if elem < mesh.n_elements:
+        #         dQ[elem] -= flux[i] * on_edges_length[i] / mesh.element_volume[elem]
+        return dQ
+    return solution_operator
     
-        def write_result(result):
-            print(result)
-            dQ = result
-            Qnew[:, index_list] += dQ
-        
 
-        Qnew = fix_negative_height(Q, self.model.yaml_tag)
-        n_chunks = 2
-        pool = Pool(5)
-        # pool.map(task, list(range(10)))
-        for i_chunk in range(n_chunks):
-        #     index_list, Q_chunk = get_Q_chunk(Q, i_chunk, n_chunks)
-            # pool.apply_async(self.loop_fluxes_vectorized_coordinate_transform, args = (Q_chunk), kwds=kwargs, callback=write_result)
-            result = pool.apply_async(task)
-            r =  result.get()
-            print(r)
+def get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges):
+    num_flux = settings.num_flux
+    reconstruction = settings.reconstruction
+    # on_edge_incircle = recon.constant(mesh, [mesh.element_incircle])
+    def solution_operator(dt, Q, Qaux, parameters, dQ):
+        # Qi, Qj, Qauxi, Qauxj = reconstruction(mesh, Q, Qaux)
+        [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux])
 
-            # Qnew[:, index_list] += write_result()
-        
-        pool.close()
-        pool.join()
+        # callout to a requirement of the flux
+        mesh_props = SimpleNamespace(dt_dx= dt / (0.1*on_edges_length))
+        flux, failed = num_flux(
+            Qi, Qj, Qauxi, Qauxj, parameters, on_edges_normal, runtime_model, mesh_props=mesh_props
+        )
+        assert not failed
 
-            
-        
-        # with Pool(2) as p:
-        #     Qchunk = 
-        #     p.map(work_on_chunk,  index_list, chunksize = int(len(index_list)/2)+1 )
-        # dQ = self.loop_fluxes_vectorized_coordinate_transform(np.array(Qnew), **kwargs)
-        Qnew = self.loop_source(Qnew, **kwargs)
-        # Qnew += dQ
+        # Add flux (edges) to elements
+        (
+            map_elements_to_edges_plus,
+            map_elements_to_edges_minus,
+        ) = map_elements_to_edges
+        for i, elem in enumerate(map_elements_to_edges_plus):
+            #TODO if hack: element_volume of of bounds error
+            if elem < mesh.n_elements:
+                dQ[elem] += flux[i] * on_edges_length[i] / mesh.element_volume[elem]
+        for i, elem in enumerate(map_elements_to_edges_minus):
+            if elem < mesh.n_elements:
+                dQ[elem] -= flux[i] * on_edges_length[i] / mesh.element_volume[elem]
+        return dQ
+    return solution_operator
 
-        step_failed = False
-        return Qnew, step_failed
+def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
+    iteration = 0
+    time = 0.0
+
+    assert model.dimension == mesh.dimension
+    # self.reinitialize()
+    # self.solver.initialize(model=self.model, mesh=self.mesh)
+    progressbar = pyprog.ProgressBar(
+        "{}: ".format(settings.name),
+        "\r",
+        settings.time_end,
+        complete_symbol="█",
+        not_complete_symbol="-",
+    )
+    progressbar.progress_explain = ""
+    progressbar.update()
+    # force=True is needed in order to disable old logging root handlers (if multiple test cases are run by one file)
+    # otherwise only a logfile will be created for the first testcase but the log file gets deleted by rmtree
+    # logging.basicConfig(
+    #     filename=os.path.join(
+    #         os.path.join(main_dir, self.output_dir), "logfile.log"
+    #     ),
+    #     filemode="w",
+    #     level=self.logging_level,
+    #     force=True,
+    # )
+    # logger = logging.getLogger(__name__ + ":solve_steady")
+
+    # if model.dimension > 1 and self.cfl > 0.5:
+    #     logger.error(
+    #         "CFL = {} > 1/Dimension = 1/{}".format(self.cfl, self.model.dimension)
+    #     )
+
+    # Qnew = initial_condition.initialize(
+    #     self.model.initial_conditions,
+    #     self.model.n_fields,
+    #     self.mesh.element_centers,
+    # )
+    # Q, Qaux, normals = initialize_problem(model, mesh)
+    Q, Qaux = initialize_problem(model, mesh)
+    parameters = register_parameter_defaults(settings.parameters)
+    Qnew = deepcopy(Q)
 
 
-    def step_explicit_split_source(self, Q, **kwargs):
-        Qnew = fix_negative_height(Q, self.model.yaml_tag)
+    # dt = self.dtmin
+    # kwargs = {
+    #     "model": self.model,
+    #     "callback_parameters": self.callback_parameters,
+    #     "aux_fields": {},
+    #     "mesh": self.mesh,
+    #     "time": time,
+    #     "iteration": iteration,
+    # }
+    # self.init_output_timesteps()
+    # for callback in self.callback_function_list_init:
+    #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
-        dQinner = self.loop_inner_explicit(Qnew, **kwargs)
-        # dQboundary = self.loop_boundary_explicit(Qnew, **kwargs)
-        # TODO copying Qnew is a hack. There must be a problem in boundary_loop wher Qnew is overwritten
-        dQboundary = self.loop_boundary_explicit(np.array(Qnew), **kwargs)
-        Qnew = self.loop_source(Qnew, **kwargs)
-        Qnew += dQinner + dQboundary
+    # output preparation
+    # timeseries_output = np.zeros(
+    #     (self.output_timesteps.shape[0], Q.shape[0], Q.shape[1])
+    # )
+    # timeseries_Q = self.save_output(time, Q, timeseries_Q)
 
-        step_failed = False
-        return Qnew, step_failed
+    timeseries_output = []
+    timeseries_output.append(( Q, Qaux, parameters, time ))
 
-    def step_explicit_split_source_coordinate_transform(self, Q, **kwargs):
-        Qnew = fix_negative_height(Q, self.model.yaml_tag)
+    time_start = gettime()
 
-        dQinner = self.loop_inner_explicit_coordinate_transform(Qnew, **kwargs)
-        dQboundary = self.loop_boundary_explicit_coordinate_transform(Qnew, **kwargs)
-        Qnew = self.loop_source(Qnew, **kwargs)
-        Qnew += dQinner + dQboundary
+    # Qavg_5steps = [Q, Q, Q, Q, Q]
+    # error = np.inf
 
-        step_failed = False
-        return Qnew, step_failed
+    # convert element_edge_normals (dict of elements keys -> list of edge normals) to array
+    # in case there are less than 4 (quad), 3(tri) normals in list due to bounary elements, fill array with existing normal
+    # normals = np.zeros((self.mesh.num_nodes_per_element, 3, Qnew.shape[1]))
+    # for k, v in self.mesh.element_edge_normal.items():
+    #     for i in range(len(v)):
+    #         normals[i, :, k] = v[i]
+    #     # fill remaining with copy of last normal (since I do not want to have zero eigenvalues, rather copies of existing ones)
+    #     for i in range(len(v), self.mesh.num_nodes_per_element):
+    #         normals[i, :, k] = v[-1]
+
+    model_functions = model.get_runtime_model()
+    _ = model.create_c_interface()
+    runtime_model = model.load_c_model()
+
+    # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
+    # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
+    # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
+    space_solution_operator = get_semidiscrete_solution_operator_new(mesh, runtime_model, settings)
 
 
-def fix_negative_height(Q, model_tag):
-    Qnew = np.array(Q)
-    for i_elem in range(Q.shape[1]):
-        if Qnew[0, i_elem] < 0.0:
-            if "WithBottom" in model_tag:
-                Qnew[:-1, i_elem] = np.zeros_like(Qnew[:-1, i_elem])
-            else:
-                Qnew[:, i_elem] = np.zeros_like(Qnew[:, i_elem])
-    return Qnew
 
+    while (time < settings.time_end):
+        Q = deepcopy(Qnew)
+        # Time step estimation
+        #TODO Hack
+        ev_abs_max = 0.
+        min_incircle = 0.
+        dt = settings.compute_dt(ev_abs_max, min_incircle)
 
-def elementwise_aux_fields(elem, aux_field_dict):
-    aux_out = deepcopy(aux_field_dict)
-    for key, item in aux_out.items():
-        aux_out[key] = item[elem]
-    return aux_out
+        # Repeat timestep for imaginary numbers
+        # EVs, imaginary = self.solver.compute_eigenvalues(Qnew, normals)
 
-def task():
-    print('hi:')
-    return 1.
+        # TODO use this to avoid EV computation in flux. Problem
+        # finding the appropriate neigbor edge it to find EVj!
+        # kwargs["aux_fields"].update({"EVs": EVs})
+        # EVmax = np.abs(kwargs["aux_fields"]["EVs"]).max()
+        # dt = self.solver.compute_timestep_size(Qnew, self.cfl, EVmax)
+        assert not np.isnan(dt) and np.isfinite(dt)
 
-def callback_result(result):
-    print('callback')
-    print(result)
+        # if iteration < self.warmup_interations:
+        #     dt *= self.dt_relaxation_factor
+        # if dt < self.dtmin:
+        #     dt = self.dtmin
+
+        # add 0.001 safty measure to avoid very small time steps
+        if time + dt * 1.001 > settings.time_end:
+            dt = settings.time_end - time + 10 ** (-10)
+        # kwargs.update({"time": time, "dt": dt, "Qold": Q})
+        # Qnew, _ = self.solver.step(Qnew, **kwargs)
+
+        Qnew = time_ode_solver(space_solution_operator, Q, Qaux, parameters, dt)
+        model.boundary_conditions.apply(Qnew)
+
+        # Qavg = np.mean(Qavg_5steps, axis=0)
+        # error = (
+        #     self.compute_Lp_error(Qnew - Qavg, p=2, **kwargs)
+        #     / (self.compute_Lp_error(Qavg, p=2, **kwargs) + 10 ** (-10))
+        # ).max()
+        # Qavg_5steps.pop()
+        # Qavg_5steps.insert(0, Qnew)
+
+        # Update solution and time
+        time += dt
+        iteration += 1
+
+        # kwargs.update({"time": time, "iteration": iteration})
+        # for callback in self.callback_function_list_post_solvestep:
+        #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+
+        # timeseries_Q = self.save_output(time, Qnew, timeseries_Q)
+        timeseries_output.append(( Qnew, Qaux, parameters, dt ))
+
+        # logger.info(
+        #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
+        #         iteration, gettime() - time_start, time, dt, error
+        #     )
+        # )
+        progressbar.set_stat(min(time, settings.time_end))
+        progressbar.update()
+
+    # self.vtk_write_timestamp_file()
+    progressbar.end()
+    return timeseries_output, mesh 

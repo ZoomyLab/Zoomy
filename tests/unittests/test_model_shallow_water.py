@@ -120,6 +120,6 @@ def test_source_2d():
 
 if __name__ == "__main__":
     test_model_initialization(1)
-    test_model_initialization(2)
-    test_source_1d()
-    test_source_2d()
+    #test_model_initialization(2)
+    # test_source_1d()
+    # test_source_2d()

@@ -103,7 +103,7 @@ class Model:
             for d in range(self.dimension):
                 self.sympy_flux_jacobian[d] = Matrix(
                     powsimp(
-                        self.sympy_flux[d].jacobian(self.variables),
+                        Matrix(self.sympy_flux[d]).jacobian(self.variables),
                         combine="all",
                         force=True,
                     )
@@ -426,7 +426,7 @@ def register_parameter_defaults(parameters):
 def substitute_sympy_attributes_with_symbol_matrix(expr: Matrix, attr: IterableNamespace, attr_matrix: MatrixSymbol):
     assert attr.length() == attr_matrix.shape[0]
     for i, k in enumerate(attr.get_list()):
-        expr = expr.subs(k, attr_matrix[i])
+        expr = Matrix(expr).subs(k, attr_matrix[i])
     return expr
 
 

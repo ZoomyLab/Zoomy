@@ -3,21 +3,20 @@ import numpy as np
 """
 Lax-Friedrichs flux implementation
 """
-def LF(Qi, Qj, Qauxi, Qauxj, param, normals, model_functions, EVi=None, EVj=None, mesh_props = None):
+def LF(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, EVi=None, EVj=None, mesh_props = None):
     assert mesh_props is not None
     dt_dx = mesh_props.dt_dx
     Qout = np.zeros_like(Qi)
     flux = model_functions.flux
-    dim = normals.shape[1]
-    num_eq = Qi.shape[1]
+    dim = normal.shape[0]
+    num_eq = Qi.shape[0]
     Fi = np.zeros((num_eq))
     Fj = np.zeros((num_eq))
-    for i in range(Qi.shape[0]):
-        for n_i in range(dim):
-            flux[n_i](Qi[i], Qauxi[i], param, Fi)  
-            flux[n_i](Qj[i], Qauxj[i], param, Fj)  
-            Qout[i] += 0.5 * (Fi + Fj) * normals[i, n_i]
-        Qout[i] -= 0.5 * dt_dx * (Qj[i] - Qi[i])
+    for n_i in range(dim):
+        flux[n_i](Qi, Qauxi, param, Fi)  
+        flux[n_i](Qj, Qauxj, param, Fj)  
+        Qout += 0.5 * (Fi + Fj) * normal[n_i]
+    Qout -= 0.5 * dt_dx * (Qj - Qi)
     return Qout, False
 
 

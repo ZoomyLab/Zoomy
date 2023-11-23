@@ -15,13 +15,12 @@ def test_recon_const_1d():
         Q,
         Qaux,
         parameters,
-        num_normals,
-        normals,
+        num_normals, normals,
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns)
 
-    recon = reconstruction.constant()
+    recon = reconstruction.constant
     
-    Qi, Qj, Qauxi, Qauxj, normals_ij = recon(mesh, Q, Qaux)
+    Qi, Qj, Qauxi, Qauxj = recon(mesh, Q, Qaux)
     # test inner domain
     assert(np.allclose(Q[:9], Qi[:9]))
     assert(np.allclose(Q[1:10], Qj[:9]))
@@ -44,9 +43,9 @@ def test_recon_const_2d():
         normals,
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns)
 
-    recon = reconstruction.constant()
+    recon = reconstruction.constant
     
-    Qi, Qj, Qauxi, Qauxj, normals_ij = recon(mesh, Q, Qaux)
+    Qi, Qj, Qauxi, Qauxj = recon(mesh, Q, Qaux)
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -63,9 +62,9 @@ def test_edges_to_elements_1d():
         normals,
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns)
 
-    recon = reconstruction.constant()
+    recon = reconstruction.constant
     
-    Qi, Qj, Qauxi, Qauxj, normals_ij = recon(mesh, Q, Qaux)
+    Qi, Qj, Qauxi, Qauxj = recon(mesh, Q, Qaux)
 
     map_elements_to_edges_plus, map_elements_to_edges_minus = reconstruction.create_map_elements_to_edges(mesh)
 
@@ -87,8 +86,28 @@ def test_edges_to_elements_2d():
     pass
 
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_get_edge_geometry_data():
+    dimension =1
+    momentum_eqns = [0]
+    (
+        mesh,
+        model,
+        Q,
+        Qaux,
+        parameters,
+        num_normals,
+        normals,
+    ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns)
+
+    normals_ij, edge_length_ij = reconstruction.get_edge_geometry_data(mesh)
+    
+
+
 if __name__ == "__main__":
     test_recon_const_1d()
     test_recon_const_2d()
     test_edges_to_elements_1d()
     test_edges_to_elements_2d()
+    test_get_edge_geometry_data()
