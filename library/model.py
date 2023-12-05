@@ -2,7 +2,8 @@ import os
 import numpy as np
 from typing import Union, Type
 
-from library.models.base import Advection, Model
+from library.models.base import Model
+from library.models.advection import Advection
 import library.initial_conditions as IC
 import library.boundary_conditions as BC
 from library.mesh import Mesh

@@ -1,6 +1,6 @@
 import pytest
 
-from library.mesh import *
+from library.fvm_mesh import *
 from library.misc import all_class_members_identical
 
 
@@ -14,11 +14,33 @@ def test_create_1d_mesh():
 @pytest.mark.parametrize("mesh_type", ["quad", "tri"])
 def test_load_2d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    # mesh = Mesh.load_mesh(
+    #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+    #     mesh_type,
+    #     2,
+    #     ["left", "right", "top", "bottom"],
+    # )
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
-        2,
-        ["left", "right", "top", "bottom"],
+    )
+    assert True
+
+
+
+@pytest.mark.critical
+@pytest.mark.parametrize("mesh_type", ["tetra"])
+def test_load_3d_mesh(mesh_type: str):
+    main_dir = os.getenv("SMS")
+    # mesh = Mesh.load_mesh(
+    #     os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
+    #     mesh_type,
+    #     3,
+    #     ["left", "right", "top", "bottom", "front", "back"],
+    # )
+    mesh = Mesh.load_gmsh(
+        os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
+        mesh_type,
     )
     assert True
 
@@ -141,11 +163,12 @@ def test_extrude_and_write_3d_mesh():
 
 
 if __name__ == "__main__":
-    test_create_1d_mesh()
-    test_load_2d_mesh("quad")
-    test_load_2d_mesh("tri")
-    test_write_to_hdf5()
-    test_from_hdf5()
-    test_write_to_file_vtk()
-    test_read_vtk_cell_fields()
-    test_extrude_and_write_3d_mesh()
+    # test_create_1d_mesh()
+    # test_load_2d_mesh("quad")
+    test_load_2d_mesh("triangle")
+    # test_load_3d_mesh("tetra")
+    # test_write_to_hdf5()
+    # test_from_hdf5()
+    # test_write_to_file_vtk()
+    # test_read_vtk_cell_fields()
+    # test_extrude_and_write_3d_mesh()

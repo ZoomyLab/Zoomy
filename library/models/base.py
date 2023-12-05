@@ -382,18 +382,6 @@ class Model:
         return None
 
 
-class Advection(Model):
-    def flux(self):
-        # assume that the first variables.length() parameters are the corresponding advection speeds
-        assert self.parameters.length() >= self.variables.length()
-        assert self.n_fields == self.dimension
-        flux = []
-        for d in range(self.dimension):
-            f = []
-            for i in range(self.n_fields):
-                f.append(self.variables[i] * self.parameters[i])
-            flux.append(f)
-        return flux
 
 
 def register_sympy_attribute(argument, string_identifier="q_"):
