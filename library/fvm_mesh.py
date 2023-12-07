@@ -152,29 +152,6 @@ class Mesh:
 
     @classmethod 
     def from_domain_boundary_mesh(cls, domain, boundary):
-        # dimension: int
-        # type: str
-        # n_elements: int
-        # n_vertices: int
-        # n_boundary_faces: int
-        # n_nodes_per_element: int
-        # n_faces_per_element: int
-        # vertex_coordinate: FArray
-        # element_vertices: IArray
-        # element_face_area: IArray
-        # element_center: FArray
-        # element_volume: FArray
-        # element_insphere: FArray
-        # element_face_normals: FArray
-        # element_neighbors: IArray
-        # element_n_neighbors: IArray
-        # boundary_face_vertices: IArray
-        # boundary_face_element: IArray
-        # boundary_face_area: FArray
-        # boundary_face_normal: FArray
-        # boundary_face_tag: CArray = 0
-        # 2d: use compas? NO! Everything (besides neigbor search) should be trivial!!
-
         # only allow for one group of one domain type
         assert len(domain.cells) == 1
         assert len(boundary.cells) == 1
@@ -183,12 +160,14 @@ class Mesh:
         dimension = mesh_util._get_dimension(mesh_type)
         n_elements = domain.cells[0].data.shape[0]
         n_vertices = domain.points.shape[0]
+        boundary_element_type = mesh_util._get_boundary_element_type(mesh_type)
         n_boundary_faces = boundary.cells[0].data.shape[0]
-        n_nodes_per_element = domain.cells[0].data.shape[1]
+        n_vertices_per_element = domain.cells[0].data.shape[1]
         n_faces_per_element = mesh_util._get_faces_per_element(mesh_type)
         vertex_coordinates = domain.points
         element_vertices = domain.cells[0].data
 
+        # inner domain
         element_center = np.empty((n_elements, 3), dtype=float)
         element_volume = np.empty((n_elements), dtype=float)
         element_insphere = np.empty((n_elements), dtype=float)
@@ -196,20 +175,23 @@ class Mesh:
         element_face_normals = np.empty((n_elements, n_faces_per_element, 3), dtype=float)
         element_n_neighbors = np.empty((n_elements), dtype=int)
         element_neighbors = np.empty((n_elements, n_faces_per_element), dtype=int)
+        element_neighbors_face_index = np.empty((n_elements, n_faces_per_element), dtype=float)
         for i_elem, elem in enumerate(element_vertices):
             element_insphere[i_elem] = mesh_util.insphere(vertex_coordinates, elem, mesh_type)
             element_volume[i_elem] = mesh_util.volume(vertex_coordinates, elem, mesh_type)
             element_center[i_elem] = mesh_util.center(vertex_coordinates, elem)
             element_face_areas[i_elem, :] = mesh_util.face_areas(vertex_coordinates, elem, mesh_type)
             element_face_normals[i_elem, :] = mesh_util.face_normals(vertex_coordinates, elem, mesh_type)
-            element_n_neighbors[i_elem], element_neighbors[i_elem, :] = mesh_util.get_element_neighbors(element_vertices, elem, mesh_type)
+            element_n_neighbors[i_elem], element_neighbors[i_elem, :], element_neighbors_face_index[i_elem, :] = mesh_util.get_element_neighbors(element_vertices, elem, mesh_type)
 
         
-
-        # For domain
-        ##
-        # For boundary
-        ##
+        # boundaries
+        boundary_face_vertices = boundary.cells[0].data
+        boundary_face_corresponding_element = boundary.cell_data['corresponding_cell'][0]
+        boundary_face_element_face_index = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_tag = boundary.cell_data['boundary_tag'][0]
+        for i_face, face in enumerate(boundary_face_vertices):
+            boundary_face_element_face_index[i_face]  = mesh_util.find_edge_index(element_vertices[boundary_face_corresponding_element[i_face]], face, mesh_type)
 
     @classmethod
     def load_gmsh(cls, filepath, mesh_type):

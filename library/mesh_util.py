@@ -15,16 +15,22 @@ def get_element_neighbors(element_vertices, current_elem, mesh_type):
     num_vertices_per_face = _get_num_vertices_per_face(mesh_type)
     max_num_neighbors = _get_faces_per_element(mesh_type)
     element_neighbor_indices = np.zeros((max_num_neighbors), dtype=int)
+    element_neighbor_face_index = np.zeros((max_num_neighbors), dtype=int)
     n_found_neighbors = 0
     for i_elem, elem in enumerate(element_vertices):
-        n_found_overlapping_vertices = 0
-        n_found_overlapping_vertices = len(set(elem).intersection(set(current_elem)))
+        found_overlapping_vertices = set(elem).intersection(set(current_elem))
+        n_found_overlapping_vertices = len(found_overlapping_vertices)
+
         if n_found_overlapping_vertices == num_vertices_per_face:
+            for i_elem_face_index, edge in enumerate(_edge_order(current_elem, mesh_type)):
+                if set(edge).issubset(found_overlapping_vertices):
+                    element_neighbor_face_index[n_found_neighbors] = i_elem_face_index
+                    break
             element_neighbor_indices[n_found_neighbors] = i_elem
             n_found_neighbors += 1
             if n_found_neighbors == max_num_neighbors:
                 break
-    return n_found_neighbors, element_neighbor_indices
+    return n_found_neighbors, element_neighbor_indices, element_neighbor_face_index
     
 
 def face_normals(coordinates, element, mesh_type) -> float:
@@ -94,7 +100,7 @@ def _area_triangle_heron_formula(coordinates, edges):
     perimeter = 0.0
     for edge in edges:
         perimeter += edge_length(coordinates, edge)
-    s = perimeter / 2
+    s = perimeter / 2 
     a = edge_length(coordinates, edges[0])
     b = edge_length(coordinates, edges[1])
     c = edge_length(coordinates, edges[2])
@@ -194,7 +200,9 @@ def _get_dimension(mesh_type):
         assert False
 
 def _get_faces_per_element(mesh_type):
-    if mesh_type == 'triangle':
+    if mesh_type == 'line':
+        return 2
+    elif mesh_type == 'triangle':
         return 3
     elif mesh_type == 'quad':
         return 4
@@ -205,6 +213,20 @@ def _get_faces_per_element(mesh_type):
     else:
         assert False
 
+def _get_boundary_element_type(mesh_type):
+    if mesh_type == 'triangle':
+        return 'line'
+    elif mesh_type == 'quad':
+        return 'line'
+    else:
+        assert False
+
+def find_edge_index(element, edge_vertices, element_type):
+    edges = _edge_order(element, element_type)
+    for i_edge, edge in enumerate(edges):
+        if set(edge).issubset(edge_vertices):
+            return i_edge
+    assert False
 
 
     
