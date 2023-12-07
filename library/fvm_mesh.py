@@ -172,8 +172,7 @@ class Mesh:
         # boundary_face_element: IArray
         # boundary_face_area: FArray
         # boundary_face_normal: FArray
-        # boundary_face_tag: CArray
-        #TODO CONTINUE HERE
+        # boundary_face_tag: CArray = 0
         # 2d: use compas? NO! Everything (besides neigbor search) should be trivial!!
 
         # only allow for one group of one domain type
@@ -181,12 +180,12 @@ class Mesh:
         assert len(boundary.cells) == 1
 
         mesh_type = domain.cells[0].type
-        dimension = _get_dimension(mesh_type)
+        dimension = mesh_util._get_dimension(mesh_type)
         n_elements = domain.cells[0].data.shape[0]
         n_vertices = domain.points.shape[0]
         n_boundary_faces = boundary.cells[0].data.shape[0]
         n_nodes_per_element = domain.cells[0].data.shape[1]
-        n_faces_per_element = _get_faces_per_element(mesh_type)
+        n_faces_per_element = mesh_util._get_faces_per_element(mesh_type)
         vertex_coordinates = domain.points
         element_vertices = domain.cells[0].data
 
@@ -203,6 +202,7 @@ class Mesh:
             element_center[i_elem] = mesh_util.center(vertex_coordinates, elem)
             element_face_areas[i_elem, :] = mesh_util.face_areas(vertex_coordinates, elem, mesh_type)
             element_face_normals[i_elem, :] = mesh_util.face_normals(vertex_coordinates, elem, mesh_type)
+            element_n_neighbors[i_elem], element_neighbors[i_elem, :] = mesh_util.get_element_neighbors(element_vertices, elem, mesh_type)
 
         
 
@@ -259,7 +259,7 @@ class Mesh:
                         ## but function takes single index, in constrast to the 2d version, where it takes an edge
                         ## Question: How to get this index, if the mesh_io.cells[].data[] gives only local indices, but no global ones?
                         # manual search for all face_attributes (containing 4 indices (all 4 nodes)), check when I match 3 of them?
-                        face_index = _get_global_cell_index_from_vertices(cells, face)
+                        face_index = mesh_util._get_global_cell_index_from_vertices(cells, face)
                         mesh.face_attributes(face_index)["tag"] = boundary_tag
                     else:
                         assert False
@@ -307,7 +307,7 @@ class Mesh:
                         ## but function takes single index, in constrast to the 2d version, where it takes an edge
                         ## Question: How to get this index, if the mesh_io.cells[].data[] gives only local indices, but no global ones?
                         # manual search for all face_attributes (containing 4 indices (all 4 nodes)), check when I match 3 of them?
-                        face_index = _get_global_cell_index_from_vertices(cells, face)
+                        face_index = mesh_util._get_global_cell_index_from_vertices(cells, face)
                         mesh.face_attributes(face_index)["tag"] = boundary_tag
                     else:
                         assert False
@@ -1025,27 +1025,4 @@ def compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_
                 index += 1
     return element_edge_list
 
-def _get_dimension(mesh_type):
-    if mesh_type == 'triangle':
-        return 2
-    elif mesh_type == 'quad':
-        return 2
-    elif mesh_type == 'tetra':
-        return 3
-    elif mesh_type == 'hex':
-        return 3
-    else:
-        assert False
-
-def _get_faces_per_element(mesh_type):
-    if mesh_type == 'triangle':
-        return 3
-    elif mesh_type == 'quad':
-        return 4
-    elif mesh_type == 'tetra':
-        return 4
-    elif mesh_type == 'hex':
-        return 6
-    else:
-        assert False
 

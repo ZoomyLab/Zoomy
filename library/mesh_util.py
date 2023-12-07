@@ -11,6 +11,22 @@ def get_global_cell_index_from_vertices(cells, coordinates, return_first=True):
         assert False
     return hits
 
+def get_element_neighbors(element_vertices, current_elem, mesh_type):
+    num_vertices_per_face = _get_num_vertices_per_face(mesh_type)
+    max_num_neighbors = _get_faces_per_element(mesh_type)
+    element_neighbor_indices = np.zeros((max_num_neighbors), dtype=int)
+    n_found_neighbors = 0
+    for i_elem, elem in enumerate(element_vertices):
+        n_found_overlapping_vertices = 0
+        n_found_overlapping_vertices = len(set(elem).intersection(set(current_elem)))
+        if n_found_overlapping_vertices == num_vertices_per_face:
+            element_neighbor_indices[n_found_neighbors] = i_elem
+            n_found_neighbors += 1
+            if n_found_neighbors == max_num_neighbors:
+                break
+    return n_found_neighbors, element_neighbor_indices
+    
+
 def face_normals(coordinates, element, mesh_type) -> float:
     if mesh_type == "triangle":
         return face_normals_2d(coordinates, element, mesh_type)
@@ -123,4 +139,37 @@ def _edge_order(element, mesh_type):
 
 def _edge_order_triangle(element):
     return [(element[0], element[1]), (element[1], element[2]), (element[2], element[0])]
+
+def _get_num_vertices_per_face(mesh_type) -> float:
+    if mesh_type == "triangle":
+        return 2
+    assert False
+
+def _get_dimension(mesh_type):
+    if mesh_type == 'triangle':
+        return 2
+    elif mesh_type == 'quad':
+        return 2
+    elif mesh_type == 'tetra':
+        return 3
+    elif mesh_type == 'hex':
+        return 3
+    else:
+        assert False
+
+def _get_faces_per_element(mesh_type):
+    if mesh_type == 'triangle':
+        return 3
+    elif mesh_type == 'quad':
+        return 4
+    elif mesh_type == 'tetra':
+        return 4
+    elif mesh_type == 'hex':
+        return 6
+    else:
+        assert False
+
+
+
+    
     
