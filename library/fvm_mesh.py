@@ -170,14 +170,14 @@ class Mesh:
         # inner domain
         element_center = np.empty((n_elements, 3), dtype=float)
         element_volume = np.empty((n_elements), dtype=float)
-        element_insphere = np.empty((n_elements), dtype=float)
+        element_inradius = np.empty((n_elements), dtype=float)
         element_face_areas = np.empty((n_elements, n_faces_per_element), dtype=float)
         element_face_normals = np.empty((n_elements, n_faces_per_element, 3), dtype=float)
         element_n_neighbors = np.empty((n_elements), dtype=int)
         element_neighbors = np.empty((n_elements, n_faces_per_element), dtype=int)
         element_neighbors_face_index = np.empty((n_elements, n_faces_per_element), dtype=float)
         for i_elem, elem in enumerate(element_vertices):
-            element_insphere[i_elem] = mesh_util.insphere(vertex_coordinates, elem, mesh_type)
+            element_inradius[i_elem] = mesh_util.inradius(vertex_coordinates, elem, mesh_type)
             element_volume[i_elem] = mesh_util.volume(vertex_coordinates, elem, mesh_type)
             element_center[i_elem] = mesh_util.center(vertex_coordinates, elem)
             element_face_areas[i_elem, :] = mesh_util.face_areas(vertex_coordinates, elem, mesh_type)
