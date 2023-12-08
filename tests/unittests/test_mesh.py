@@ -50,13 +50,8 @@ def test_write_to_hdf5():
 def test_write_to_file_vtk():
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-
-    )
-    mesh = Mesh.load_mesh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
+        'quad',
     )
     filepath = os.path.join(main_dir, "output/test.vtk")
     cell_data = np.linspace(1, 2 * mesh.n_elements, 2 * mesh.n_elements).reshape(
@@ -108,11 +103,9 @@ def test_from_hdf5():
 @pytest.mark.critical
 def test_read_vtk_cell_fields():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
+        "quad"
     )
     cell_data = np.linspace(1, 2 * mesh.n_elements, 2 * mesh.n_elements).reshape(
         mesh.n_elements, 2
@@ -127,11 +120,9 @@ def test_read_vtk_cell_fields():
 @pytest.mark.critical
 def test_extrude_and_write_3d_mesh():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
+        "quad"
     )
     (vertices_3d, elements_3d, mesh_type) = extrude_2d_element_vertices_mesh(
         "quad",
@@ -140,7 +131,7 @@ def test_extrude_and_write_3d_mesh():
         np.ones(mesh.n_vertices),
         10,
     )
-    filepath = os.path.join(main_dir, "output/test.vtk")
+    filepath = os.path.join(main_dir, "output/test_extruded")
     write_to_file_vtk_from_vertices_edges(
         filepath,
         mesh_type,
@@ -150,12 +141,12 @@ def test_extrude_and_write_3d_mesh():
 
 
 if __name__ == "__main__":
-    # test_create_1d_mesh()
-    # test_load_2d_mesh("quad")
-    # test_load_2d_mesh("triangle")
-    # test_load_3d_mesh("tetra")
-    # test_write_to_hdf5()
-    # test_from_hdf5()
+    test_create_1d_mesh()
+    test_load_2d_mesh("quad")
+    test_load_2d_mesh("triangle")
+    test_load_3d_mesh("tetra")
+    test_write_to_hdf5()
+    test_from_hdf5()
     test_write_to_file_vtk()
-    # test_read_vtk_cell_fields()
-    # test_extrude_and_write_3d_mesh()
+    test_read_vtk_cell_fields()
+    test_extrude_and_write_3d_mesh()

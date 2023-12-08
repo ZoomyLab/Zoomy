@@ -876,7 +876,7 @@ def extrude_2d_element_vertices_mesh(
         (n_elements * (n_layers - 1), num_nodes_per_element), dtype=int
     )
     for i in range(n_vertices):
-        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[i]
+        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[i, :2]
         points_3d[i * n_layers : (i + 1) * n_layers, 2] = height[i] * Z
 
     # compute connectivity for mesh (element_vertices)
