@@ -163,9 +163,9 @@ def test_extrude_and_write_3d_mesh():
 
 
 if __name__ == "__main__":
-    # test_create_1d_mesh()
-    # test_load_2d_mesh("quad")
-    # test_load_2d_mesh("triangle")
+    test_create_1d_mesh()
+    test_load_2d_mesh("quad")
+    test_load_2d_mesh("triangle")
     test_load_3d_mesh("tetra")
     # test_write_to_hdf5()
     # test_from_hdf5()

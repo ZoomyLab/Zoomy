@@ -20,29 +20,22 @@ class Mesh:
     type: str
     n_elements: int
     n_vertices: int
-    n_boundary_faces: int
-    n_nodes_per_element: int
+    n_boundary_elements: int
     n_faces_per_element: int
-    vertex_coordinate: FArray
+    vertex_coordinates: FArray
     element_vertices: IArray
     element_face_areas: IArray
     element_center: FArray
     element_volume: FArray
-    element_insphere: FArray
+    element_inradius: FArray
     element_face_normals: FArray
-    element_neighbors: IArray
     element_n_neighbors: IArray
+    element_neighbors: IArray
+    element_neighbors_face_index: IArray
     boundary_face_vertices: IArray
-    boundary_face_element: IArray
-    boundary_face_area: FArray
-    boundary_face_normal: FArray
+    boundary_face_corresponding_element: IArray
+    boundary_face_element_face_index: IArray
     boundary_face_tag: CArray
-
-    # TODO: extend all fields with number_of_cells=n_boundary_elements
-    # TODO: check that I do not use shape in the code but rather n_element, n_vertices
-    # TODO: write an extraction method for writing out?
-    # TODO: populate the indices in the segments in the boundary conditions:
-    # sanity check: concat all indices and check that they match range(n_elements, n_elements+n_boundary_elements)
 
     @classmethod
     def create_1d(cls, domain: tuple[float, float], n_elements: int):
@@ -50,105 +43,59 @@ class Mesh:
         xR = domain[1]
 
         dimension = 1
-        n_nodes_per_element = 2
+        n_faces_per_element = 2
         dx = (xR - xL) / n_elements
         vertex_coordinates = np.zeros((n_elements + 1, 3))
         vertex_coordinates[:, 0] = np.linspace(
             xL, xR, n_elements + 1, dtype=float
         )
-        element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+        element_vertices = np.zeros((n_elements, n_faces_per_element), dtype=int)
         element_vertices[:, 0] = np.linspace(0, n_elements - 1, n_elements, dtype=int)
         element_vertices[:, 1] = np.linspace(1, n_elements, n_elements, dtype=int)
-        element_area = dx * np.ones(n_elements, dtype=float)
-        element_incircle = dx * np.ones(n_elements, dtype=float)
-        element_vertices[:, 0] = np.linspace(0, n_elements - 1, n_elements, dtype=int)
+        element_volume = dx * np.ones(n_elements, dtype=float)
+        element_inradius = dx/2 * np.ones(n_elements, dtype=float)
         element_centers = np.zeros((n_elements, dimension), dtype=float)
 
-        element_edge_normal = np.zeros(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
+        element_face_normals = np.zeros(
+            (n_elements, n_faces_per_element, dimension), dtype=float
         )
-        element_edge_length = np.ones(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
+        element_face_areas = np.ones(
+            (n_elements, n_faces_per_element, dimension), dtype=float
         )
 
         element_centers[:, 0] = np.arange(xL + dx / 2, xR, dx)
-        element_n_neighbors = np.zeros((n_elements), dtype=int)
-        element_neighbors = np.empty((n_elements, n_nodes_per_element), dtype=int)
-        element_neighbors[0, 0] = 1
-        element_n_neighbors[0] = 1
-        element_edge_normal[0, 0] = np.array([1.0])
-        for i_elem in range(1, n_elements - 1):
+        element_n_neighbors = 2*np.ones((n_elements), dtype=int)
+        element_neighbors = np.empty((n_elements, n_faces_per_element), dtype=int)
+        element_neighbors_face_index = np.empty((n_elements, n_faces_per_element), dtype=int)
+
+
+        #inner elements
+        for i_elem in range(0, n_elements):
             element_neighbors[i_elem, :] = np.array([i_elem - 1, i_elem + 1], dtype=int)
-            element_edge_normal[i_elem, :] = [
+            element_face_normals[i_elem, :] = [
                 np.array([-1.0], dtype=float),
                 np.array([1.0], dtype=float),
             ]
-            element_n_neighbors[i_elem] = 2
-        element_n_neighbors[n_elements - 1] = 1
-        element_neighbors[n_elements - 1, 0] = n_elements - 2
-        element_edge_normal[n_elements - 1, 0] = np.array([-1.0])
+            element_neighbors_face_index[i_elem, :] = np.array([0, 1], dtype=int)
 
-        n_of_boundary_edges = 2
-        boundary_edge_elements = np.zeros(n_of_boundary_edges, dtype=int)
-        boundary_edge_neighbors = np.zeros(n_of_boundary_edges, dtype=int)
-        boundary_edge_length = np.ones(n_of_boundary_edges, dtype=float)
-        boundary_edge_normal = np.zeros((n_of_boundary_edges, dimension), dtype=float)
-        # Implicit ordering: 0: left, 1: right
-        boundary_edge_tag = np.zeros(n_of_boundary_edges, dtype="|S8")
-        boundary_edge_tag[0] = "left"
-        boundary_edge_tag[1] = "right"
-
-        boundary_edge_vertices = np.array([0, n_elements], dtype=int)
-        boundary_edge_elements = np.array([0, n_elements - 1], dtype=int)
-        boundary_edge_normal[0] = np.array([-1.0])
-        boundary_edge_normal[1] = np.array([1.0])
-
-        type = "line"
-        n_vertices = n_elements + 1
-        n_boundary_edges = n_of_boundary_edges
-        vertex_coordinates = vertex_coordinates
-        element_vertices = element_vertices
-        element_edge_length = element_edge_length
-        element_centers = element_centers
-        element_volume = element_area
-        element_incircle = element_incircle
-        element_edge_normal = element_edge_normal
-        element_neighbors = element_neighbors
-        element_n_neighbors = element_n_neighbors
-        boundary_edge_vertices = boundary_edge_vertices
-        boundary_edge_length = boundary_edge_length
-        boundary_edge_normal = boundary_edge_normal
-        boundary_edge_tag = boundary_edge_tag
-
-        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
+        #first element
+        element_n_neighbors[0] = 1
+        element_neighbors_face_index[0, :] = np.array([1], dtype=int)
         
-        n_edges, n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
-        return cls(
-            dimension,
-            type,
-            n_elements,
-            n_vertices,
-            n_edges,
-            n_inner_edges,
-            n_boundary_edges,
-            n_nodes_per_element,
-            vertex_coordinates,
-            element_vertices,
-            element_edge_length,
-            element_centers,
-            element_volume,
-            element_incircle,
-            element_edge_normal,
-            element_neighbors,
-            element_n_neighbors,
-            boundary_edge_vertices,
-            boundary_edge_elements,
-            boundary_edge_neighbors,
-            boundary_edge_length,
-            boundary_edge_normal,
-            boundary_edge_tag,
-            inner_edge_list,
-        )
+        #last element
+        element_n_neighbors[n_elements -1] = 1
+        element_neighbors_face_index[n_elements - 1, :] = np.array([0], dtype=int)
+
+        n_boundary_elements = 2
+        boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
+        boundary_face_corresponding_element = np.array([0, n_elements-1], dtype=int)
+        boundary_face_element_face_index = np.array([[0], [1]], dtype=int)
+        boundary_face_tag = np.array(['left', 'right'])
+
+        boundary_face_vertices = np.array([0, n_elements - 1], dtype=int)
+
+        return cls(dimension, 'line', n_elements, n_elements + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag)
+
 
     @classmethod 
     def from_domain_boundary_mesh(cls, domain, boundary):
@@ -192,6 +139,9 @@ class Mesh:
         boundary_face_tag = boundary.cell_data['boundary_tag'][0]
         for i_face, face in enumerate(boundary_face_vertices):
             boundary_face_element_face_index[i_face]  = mesh_util.find_edge_index(element_vertices[boundary_face_corresponding_element[i_face]], face, mesh_type)
+
+
+        return cls(dimension, mesh_type, n_elements, n_vertices, n_boundary_faces, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_center, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag)
 
     @classmethod
     def load_gmsh(cls, filepath, mesh_type):
