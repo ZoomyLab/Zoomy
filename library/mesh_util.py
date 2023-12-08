@@ -168,7 +168,7 @@ def _inradius_triangle(coordinates, element) -> float:
     result = 1.0
     for edge in edges:
         result *= s - edge_length(coordinates, edge)
-    retult /= s
+    result /= s
     return float(np.sqrt(result))
 
 def _inradius_quad(coordinates, element) -> float:

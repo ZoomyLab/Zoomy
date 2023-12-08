@@ -14,12 +14,6 @@ def test_create_1d_mesh():
 @pytest.mark.parametrize("mesh_type", ["quad", "tri"])
 def test_load_2d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
-    # mesh = Mesh.load_mesh(
-    #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
-    #     mesh_type,
-    #     2,
-    #     ["left", "right", "top", "bottom"],
-    # )
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
@@ -32,12 +26,6 @@ def test_load_2d_mesh(mesh_type: str):
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_load_3d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
-    # mesh = Mesh.load_mesh(
-    #     os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
-    #     mesh_type,
-    #     3,
-    #     ["left", "right", "top", "bottom", "front", "back"],
-    # )
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
         mesh_type,
@@ -48,11 +36,9 @@ def test_load_3d_mesh(mesh_type: str):
 @pytest.mark.critical
 def test_write_to_hdf5():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
+        'quad',
     )
     filepath = os.path.join(main_dir, "output/test.hdf5")
     os.makedirs(os.path.split(filepath)[0], exist_ok=True)
@@ -63,6 +49,9 @@ def test_write_to_hdf5():
 @pytest.mark.critical
 def test_write_to_file_vtk():
     main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+
+    )
     mesh = Mesh.load_mesh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -88,11 +77,9 @@ def test_write_to_file_vtk():
 @pytest.mark.critical
 def test_from_hdf5():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
-        "quad",
-        2,
-        ["left", "right", "top", "bottom"],
+        'quad',
     )
     filepath = os.path.join(main_dir, "output/test.hdf5")
     os.makedirs(os.path.split(filepath)[0], exist_ok=True)
@@ -163,12 +150,12 @@ def test_extrude_and_write_3d_mesh():
 
 
 if __name__ == "__main__":
-    test_create_1d_mesh()
-    test_load_2d_mesh("quad")
-    test_load_2d_mesh("triangle")
-    test_load_3d_mesh("tetra")
+    # test_create_1d_mesh()
+    # test_load_2d_mesh("quad")
+    # test_load_2d_mesh("triangle")
+    # test_load_3d_mesh("tetra")
     # test_write_to_hdf5()
     # test_from_hdf5()
-    # test_write_to_file_vtk()
+    test_write_to_file_vtk()
     # test_read_vtk_cell_fields()
     # test_extrude_and_write_3d_mesh()

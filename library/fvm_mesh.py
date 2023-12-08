@@ -35,7 +35,8 @@ class Mesh:
     boundary_face_vertices: IArray
     boundary_face_corresponding_element: IArray
     boundary_face_element_face_index: IArray
-    boundary_face_tag: CArray
+    boundary_face_tag: IArray
+    boundary_tag_names: CArray
 
     @classmethod
     def create_1d(cls, domain: tuple[float, float], n_elements: int):
@@ -90,11 +91,12 @@ class Mesh:
         boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
         boundary_face_corresponding_element = np.array([0, n_elements-1], dtype=int)
         boundary_face_element_face_index = np.array([[0], [1]], dtype=int)
-        boundary_face_tag = np.array(['left', 'right'])
+        boundary_face_tag = np.array([0, 1])
+        boundary_tag_names = np.array(['left', 'right'], dtype='S10')
 
         boundary_face_vertices = np.array([0, n_elements - 1], dtype=int)
 
-        return cls(dimension, 'line', n_elements, n_elements + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag)
+        return cls(dimension, 'line', n_elements, n_elements + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
 
 
     @classmethod 
@@ -122,7 +124,7 @@ class Mesh:
         element_face_normals = np.empty((n_elements, n_faces_per_element, 3), dtype=float)
         element_n_neighbors = np.empty((n_elements), dtype=int)
         element_neighbors = np.empty((n_elements, n_faces_per_element), dtype=int)
-        element_neighbors_face_index = np.empty((n_elements, n_faces_per_element), dtype=float)
+        element_neighbors_face_index = np.empty((n_elements, n_faces_per_element), dtype=int)
         for i_elem, elem in enumerate(element_vertices):
             element_inradius[i_elem] = mesh_util.inradius(vertex_coordinates, elem, mesh_type)
             element_volume[i_elem] = mesh_util.volume(vertex_coordinates, elem, mesh_type)
@@ -136,12 +138,15 @@ class Mesh:
         boundary_face_vertices = boundary.cells[0].data
         boundary_face_corresponding_element = boundary.cell_data['corresponding_cell'][0]
         boundary_face_element_face_index = np.empty((n_boundary_faces), dtype=int)
-        boundary_face_tag = boundary.cell_data['boundary_tag'][0]
+        # get a unique list of tags
+        boundary_tag_names = list(set(boundary.cell_data['boundary_tag'][0]))
+        boundary_tags = list(boundary.cell_data['boundary_tag'][0])
+        boundary_face_tag = np.array([boundary_tags.index(tag) for tag in boundary_tag_names])
         for i_face, face in enumerate(boundary_face_vertices):
             boundary_face_element_face_index[i_face]  = mesh_util.find_edge_index(element_vertices[boundary_face_corresponding_element[i_face]], face, mesh_type)
 
 
-        return cls(dimension, mesh_type, n_elements, n_vertices, n_boundary_faces, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_center, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag)
+        return cls(dimension, mesh_type, n_elements, n_vertices, n_boundary_faces, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_center, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, np.array(boundary_tag_names, dtype='S'))
 
     @classmethod
     def load_gmsh(cls, filepath, mesh_type):
@@ -709,26 +714,23 @@ class Mesh:
                 (file_mesh["type"][()]).decode("utf-8"),
                 file_mesh["n_elements"][()],
                 file_mesh["n_vertices"][()],
-                file_mesh["n_edges"][()],
-                file_mesh["n_inner_edges"][()],
-                file_mesh["n_boundary_edges"][()],
-                file_mesh["n_nodes_per_element"][()],
+                file_mesh["n_boundary_elements"][()],
+                file_mesh["n_faces_per_element"][()],
                 file_mesh["vertex_coordinates"][()],
                 file_mesh["element_vertices"][()],
-                file_mesh["element_edge_length"][()],
-                file_mesh["element_centers"][()],
+                file_mesh["element_face_areas"][()],
+                file_mesh["element_center"][()],
                 file_mesh["element_volume"][()],
-                file_mesh["element_incircle"][()],
-                file_mesh["element_edge_normal"][()],
-                file_mesh["element_neighbors"][()],
+                file_mesh["element_inradius"][()],
+                file_mesh["element_face_normals"][()],
                 file_mesh["element_n_neighbors"][()],
-                file_mesh["boundary_edge_vertices"][()],
-                file_mesh["boundary_edge_elements"][()],
-                file_mesh["boundary_edge_neighbors"][()],
-                file_mesh["boundary_edge_length"][()],
-                file_mesh["boundary_edge_normal"][()],
-                file_mesh["boundary_edge_tag"][()],
-                file_mesh["inner_edge_list"][()],
+                file_mesh["element_neighbors"][()],
+                file_mesh["element_neighbors_face_index"][()],
+                file_mesh["boundary_face_vertices"][()],
+                file_mesh["boundary_face_corresponding_element"][()],
+                file_mesh["boundary_face_element_face_index"][()],
+                file_mesh["boundary_face_tag"][()],
+                file_mesh["boundary_tag_names"][()],
             )
         return mesh
 
@@ -764,32 +766,29 @@ class Mesh:
             attrs.create_dataset("type", data=self.type)
             attrs.create_dataset("n_elements", data=self.n_elements)
             attrs.create_dataset("n_vertices", data=self.n_vertices)
-            attrs.create_dataset("n_edges", data=self.n_edges)
-            attrs.create_dataset("n_inner_edges", data=self.n_inner_edges)
-            attrs.create_dataset("n_boundary_edges", data=self.n_boundary_edges)
-            attrs.create_dataset("n_nodes_per_element", data=self.n_nodes_per_element)
+            attrs.create_dataset("n_boundary_elements", data=self.n_boundary_elements)
+            attrs.create_dataset("n_faces_per_element", data=self.n_faces_per_element)
             attrs.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
-            attrs.create_dataset("element_vertices", data=self.element_vertices)
-            attrs.create_dataset("element_edge_length", data=self.element_edge_length)
-            attrs.create_dataset("element_centers", data=self.element_centers)
+            attrs.create_dataset("element_vertices", data=self.element_vertices, dtype=int)
+            attrs.create_dataset("element_face_areas", data=self.element_face_areas)
+            attrs.create_dataset("element_center", data=self.element_center)
             attrs.create_dataset("element_volume", data=self.element_volume)
-            attrs.create_dataset("element_incircle", data=self.element_incircle)
-            attrs.create_dataset("element_edge_normal", data=self.element_edge_normal)
-            attrs.create_dataset("element_neighbors", data=self.element_neighbors)
+            attrs.create_dataset("element_inradius", data=self.element_inradius)
+            attrs.create_dataset("element_face_normals", data=self.element_face_normals)
             attrs.create_dataset("element_n_neighbors", data=self.element_n_neighbors)
+            attrs.create_dataset("element_neighbors", data=self.element_neighbors)
+            attrs.create_dataset("element_neighbors_face_index", data=self.element_neighbors_face_index)
             attrs.create_dataset(
-                "boundary_edge_vertices", data=self.boundary_edge_vertices
+                "boundary_face_vertices", data=self.boundary_face_vertices
             )
             attrs.create_dataset(
-                "boundary_edge_elements", data=self.boundary_edge_elements
+                "boundary_face_corresponding_element", data=self.boundary_face_corresponding_element
             )
             attrs.create_dataset(
-                "boundary_edge_neighbors", data=self.boundary_edge_neighbors
+                "boundary_face_element_face_index", data=self.boundary_face_element_face_index
             )
-            attrs.create_dataset("boundary_edge_length", data=self.boundary_edge_length)
-            attrs.create_dataset("boundary_edge_normal", data=self.boundary_edge_normal)
-            attrs.create_dataset("boundary_edge_tag", data=self.boundary_edge_tag)
-            attrs.create_dataset("inner_edge_list", data=self.inner_edge_list)
+            attrs.create_dataset("boundary_face_tag", data=self.boundary_face_tag)
+            attrs.create_dataset("boundary_tag_names", data=self.boundary_tag_names)
 
 def _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element):
     n_edges = 0
