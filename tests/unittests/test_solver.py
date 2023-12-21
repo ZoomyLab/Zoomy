@@ -11,7 +11,7 @@ from library.ode import RK1
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", momentum_eqns = [0], parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = .1, output_timesteps = 10)
+    settings = Settings(name = "Advection", momentum_eqns = [0], parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = .1, output_timesteps = 10)
 
 
     bc_tags = ["left", "right"]
@@ -39,9 +39,9 @@ def test_advection_1d():
 
 @pytest.mark.critical
 @pytest.mark.unfinished
-@pytest.mark.parametrize("mesh_type", ["quad", "tri"])
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':1.0, 'py':2.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = .1, output_timesteps = 10)
+    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_timesteps = 10)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -61,11 +61,9 @@ def test_advection_2d(mesh_type):
         settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_mesh(
+    mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
-        mesh_type,
-        2,
-        ["left", "right", "top", "bottom"],
+        mesh_type
     )
 
 
@@ -73,7 +71,8 @@ def test_advection_2d(mesh_type):
     print(output[0][0])
     print(output[-1][0])
 
+
 if __name__ == "__main__":
-    # test_advection_1d()
+    test_advection_1d()
     # test_advection_2d("quad")
-    test_advection_2d("tri")
+    # test_advection_2d("triangle")

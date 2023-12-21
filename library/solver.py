@@ -29,8 +29,8 @@ class Settings():
 def initialize_problem(model, mesh):
     n_ghosts = model.boundary_conditions.initialize(mesh)
 
-    n_all_elements = mesh.n_elements + n_ghosts
-    # n_all_elements = mesh.n_elements
+    # n_all_elements = mesh.n_elements + n_ghosts
+    n_all_elements = mesh.n_elements
     n_fields = model.n_fields
 
     Q = np.empty((n_all_elements, n_fields), dtype=float)
@@ -40,17 +40,16 @@ def initialize_problem(model, mesh):
     #     [mesh.element_edge_normal[:, i] for i in range(mesh.n_nodes_per_element)]
     # )
 
-    model.initial_conditions.apply(mesh.element_centers, Q[:mesh.n_elements])
-    model.boundary_conditions.apply(Q)
+    model.initial_conditions.apply(mesh.element_center, Q[:mesh.n_elements])
+    # model.boundary_conditions.apply(Q)
     # return Q, Qaux, normals
     return Q, Qaux
 
 
-def get_semidiscrete_solution_operator_new(mesh, runtime_model, settings):
+def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditions, settings):
     num_flux = settings.num_flux
     reconstruction = settings.reconstruction
     reconstruction_edge = settings.reconstruction_edge
-    # on_edge_incircle = recon.constant(mesh, [mesh.element_incircle])
     def solution_operator(dt, Q, Qaux, parameters, dQ):
         # Qi, Qj, Qauxi, Qauxj = reconstruction(mesh, Q, Qaux)
 
@@ -58,39 +57,46 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, settings):
         # Loop over the inner elements
         # for i_elem in range(mesh.n_elements):
         #     for i_edge in range(mesh.element_n_neighbors[i_elem]):
-        for i_elem, i_edge in mesh.inner_edge_list:
-            # reconstruct 
-            [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_edge)
+        for i_elem in range(mesh.n_elements):
+            for i in range(mesh.element_n_neighbors[i_elem]):
+                i_neighbor = mesh.element_neighbors[i_elem, i]
+                if i_elem > i_neighbor:
+                    continue
+                i_face = mesh.element_neighbors_face_index[i_elem, i]
+                # reconstruct 
+                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_face)
 
-            # callout to a requirement of the flux
-            mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
-            flux, failed = num_flux(
-                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_edge_normal[i_elem, i_edge], runtime_model, mesh_props=mesh_props
-            )
-            assert not failed
+                #TODO callout to a requirement of the flux
+                mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_inradius[i_elem]))
+                flux, failed = num_flux(
+                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
+                )
+                assert not failed
             
             
-            # TODO index map (elem_edge_index) such that I do not need:
-            # and if statement to avoid double edge computation (as I do now)
-            # avoid double edge computation
-            dQ[i_elem] -= flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_elem]
-            i_neighbor = mesh.element_neighbors[i_elem, i_edge]
-            dQ[i_neighbor] += flux * mesh.element_edge_length[i_elem, i_edge] / mesh.element_volume[i_neighbor]
+                # TODO index map (elem_edge_index) such that I do not need:
+                # and if statement to avoid double edge computation (as I do now)
+                # avoid double edge computation
+                dQ[i_elem] -= flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
+                dQ[i_neighbor] += flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_neighbor]
 
-        # Loop over boundary elements
-        for i, i_elem in enumerate(mesh.boundary_edge_elements):
-            i_neighbor = mesh.boundary_edge_neighbors[i]
+        # Loop over boundary faces
+        for i in range(mesh.n_boundary_elements):
+            i_elem = mesh.boundary_face_corresponding_element[i]
+            i_face = mesh.boundary_face_element_face_index[i]
+            Q_ghost = boundary_conditions.apply(i, i_elem, Q, mesh.element_face_normals[i_elem, i_face], settings.momentum_eqns)
+            # i_neighbor = mesh.element_neighbors[i_elem, i_face]
             # reconstruct 
-            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], i_elem, i_neighbor)
+            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], Q_ghost, i_elem )
 
             # callout to a requirement of the flux
-            mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_incircle[i_elem]))
+            mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
             flux, failed = num_flux(
-                Qi, Qj, Qauxi, Qauxj, parameters, mesh.boundary_edge_normal[i], runtime_model, mesh_props=mesh_props
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
             )
             assert not failed
 
-            dQ[i_elem] -= flux * mesh.boundary_edge_length[i] / mesh.element_volume[i_elem]
+            dQ[i_elem] -= flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
 
         # # Add flux (edges) to elements
         # (
@@ -174,7 +180,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # Qnew = initial_condition.initialize(
     #     self.model.initial_conditions,
     #     self.model.n_fields,
-    #     self.mesh.element_centers,
+    #     self.mesh.element_center,
     # )
     # Q, Qaux, normals = initialize_problem(model, mesh)
     Q, Qaux = initialize_problem(model, mesh)
@@ -225,7 +231,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
-    space_solution_operator = get_semidiscrete_solution_operator_new(mesh, runtime_model, settings)
+    space_solution_operator = get_semidiscrete_solution_operator_new(mesh, runtime_model, model.boundary_conditions, settings)
 
 
 
@@ -259,7 +265,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         # Qnew, _ = self.solver.step(Qnew, **kwargs)
 
         Qnew = time_ode_solver(space_solution_operator, Q, Qaux, parameters, dt)
-        model.boundary_conditions.apply(Qnew)
+        # model.boundary_conditions.apply(Qnew)
 
         # Qavg = np.mean(Qavg_5steps, axis=0)
         # error = (

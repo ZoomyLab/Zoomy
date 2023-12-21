@@ -1,7 +1,7 @@
 import numpy as np
 
 
-from library.mesh import *
+from library.fvm_mesh import *
 
 # TODO get rid of the boundary_conditions requirement
 # HOW: rewrite mesh:segments. The mesh should already allocate indices for the ghost cells for each inner element (in particular element_neighbor ids)
@@ -68,15 +68,13 @@ def get_edge_geometry_data(mesh):
     return normals_ij, edge_length_ij
     
 def constant(mesh, fields, i_elem, i_edge):
+    """
+    fields: a list of fields (e.g. Q and Qaux)
+    """
     # n_edges = mesh.n_edges
     dim = mesh.dimension
     n_fields = len(fields)
     n_dim_fields = [field.shape[1] for field in fields]
-    # n_eq = Q.shape[1]
-    # n_aux_eq = Qaux.shape[1]
-
-    # field_i = [np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_fields)]
-    # field_j = [np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_fields)]
     field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
     field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
 
@@ -88,56 +86,27 @@ def constant(mesh, fields, i_elem, i_edge):
         field_i[i_field] = fields[i_field][i_elem]
         field_j[i_field] = fields[i_field][i_elem_neighbor]
 
-
-    # Qi = np.zeros((n_edges, n_eq), dtype=float)
-    # Qj = np.zeros((n_edges, n_eq), dtype=float)
-    # Qauxi = np.zeros((n_edges, n_aux_eq), dtype=float)
-    # Qauxj = np.zeros((n_edges, n_aux_eq), dtype=float)
-
-    # edge = 0
-    # # inner elements
-    # for elem in range(mesh.n_elements):
-    #     for i_neighbor in range(mesh.element_n_neighbors[elem]):
-    #         neighbor = mesh.element_neighbors[elem, i_neighbor]
-    #         # I can only count each edge once (otherwise I need double the memory) 
-    #         if elem < neighbor:
-    #             for i_field in range(n_fields):
-    #                 field_i[i_field][edge] = fields[i_field][elem]
-    #                 field_j[i_field][edge] = fields[i_field][neighbor]
-    #             # Qi[edge] = Q[elem] 
-    #             # Qj[edge] = Q[neighbor] 
-    #             # Qauxi[edge] = Qaux[elem]
-    #             # Qauxj[edge] = Qaux[neighbor]
-    #             edge+=1
-    # # boundary edges
-    # for elem, neighbor in zip(mesh.boundary_edge_elements, mesh.boundary_edge_neighbors):
-    #     for i_field in range(n_fields):
-    #         field_i[i_field][edge] = fields[i_field][elem]
-    #         field_j[i_field][edge] = fields[i_field][neighbor]
-    #     # Qi[edge] = Q[elem]
-    #     # Qj[edge] = Q[neighbor]
-    #     # Qauxi[edge] = Qaux[elem]
-    #     # Qauxj[edge] = Qaux[neighbor]
-    #     edge+=1
-    # return Qi, Qj, Qauxi, Qauxj
     return field_i, field_j
 
-def constant_edge(mesh, fields, i_elem, i_neighbor):
+def constant_edge(mesh, fields, field_ghost, i_elem):
     # n_edges = mesh.n_edges
     dim = mesh.dimension
     n_fields = len(fields)
     n_dim_fields = [field.shape[1] for field in fields]
-
     field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
     field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
 
     # get neighborhood
-    i_elem_neighbor = i_neighbor
 
     # reconstruct
     for i_field in range(n_fields):
         field_i[i_field] = fields[i_field][i_elem]
-        field_j[i_field] = fields[i_field][i_elem_neighbor]
+
+    # assumption, the first field is Q. Use the ghost cell for that.
+    # all further fields get a copy of the value of fields
+    field_j[0] = field_ghost
+    for i_field in range(1, n_fields):
+        field_j[i_field] = fields[i_field][i_elem]
 
     return field_i, field_j
     

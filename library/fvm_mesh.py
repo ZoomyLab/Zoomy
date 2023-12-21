@@ -61,7 +61,7 @@ class Mesh:
             (n_elements, n_faces_per_element, dimension), dtype=float
         )
         element_face_areas = np.ones(
-            (n_elements, n_faces_per_element, dimension), dtype=float
+            (n_elements, n_faces_per_element), dtype=float
         )
 
         element_centers[:, 0] = np.arange(xL + dx / 2, xR, dx)
@@ -71,7 +71,7 @@ class Mesh:
 
 
         #inner elements
-        for i_elem in range(0, n_elements):
+        for i_elem in range(1, n_elements-1):
             element_neighbors[i_elem, :] = np.array([i_elem - 1, i_elem + 1], dtype=int)
             element_face_normals[i_elem, :] = [
                 np.array([-1.0], dtype=float),
@@ -81,11 +81,21 @@ class Mesh:
 
         #first element
         element_n_neighbors[0] = 1
+        element_neighbors[0, :] = np.array([1], dtype=int)
         element_neighbors_face_index[0, :] = np.array([1], dtype=int)
+        element_face_normals[0, :] = [
+            np.array([-1.0], dtype=float),
+            np.array([1.0], dtype=float),
+        ]
         
         #last element
         element_n_neighbors[n_elements -1] = 1
+        element_neighbors[n_elements - 1, :] = np.array([n_elements - 2], dtype=int)
         element_neighbors_face_index[n_elements - 1, :] = np.array([0], dtype=int)
+        element_face_normals[n_elements - 1, :] = [
+            np.array([-1.0], dtype=float),
+            np.array([1.0], dtype=float),
+        ]
 
         n_boundary_elements = 2
         boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
@@ -138,12 +148,21 @@ class Mesh:
         boundary_face_vertices = boundary.cells[0].data
         boundary_face_corresponding_element = boundary.cell_data['corresponding_cell'][0]
         boundary_face_element_face_index = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_tag = np.empty((n_boundary_faces), dtype=int)
         # get a unique list of tags
         boundary_tag_names = list(set(boundary.cell_data['boundary_tag'][0]))
         boundary_tags = list(boundary.cell_data['boundary_tag'][0])
-        boundary_face_tag = np.array([boundary_tags.index(tag) for tag in boundary_tag_names])
+        for i_boundary_face, boundary_tag in enumerate(boundary_tags):
+            for i_tag, tag in enumerate(boundary_tag_names):
+                if tag == boundary_tag:
+                    boundary_face_tag[i_boundary_face] = i_tag
         for i_face, face in enumerate(boundary_face_vertices):
             boundary_face_element_face_index[i_face]  = mesh_util.find_edge_index(element_vertices[boundary_face_corresponding_element[i_face]], face, mesh_type)
+
+        # truncate normals and positions from 3d to dimendion-d
+        vertex_coordinates = vertex_coordinates[:, :dimension]
+        element_center = element_center[:, :dimension]
+        element_face_normals = element_face_normals[:, :, :dimension]
 
 
         return cls(dimension, mesh_type, n_elements, n_vertices, n_boundary_faces, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_center, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, np.array(boundary_tag_names, dtype='S'))
@@ -955,5 +974,8 @@ def compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_
                 element_edge_list[index][1] = i_edge
                 index += 1
     return element_edge_list
+
+def get_boundary_normal(mesh, i_boundary):
+    return mesh.element_face_normal[mesh.boundary_face_corresponding_element[i_boundary_edge], mesh.boundary_face_element_face_index[i_boundary_edge]]
 
 

@@ -6,7 +6,7 @@ from library.models.base import Model
 from library.models.advection import Advection
 import library.initial_conditions as IC
 import library.boundary_conditions as BC
-from library.mesh import Mesh
+from library.fvm_mesh import Mesh
 
 
 def create_default_mesh_and_model(
