@@ -11,6 +11,8 @@ from library.models.base import register_parameter_defaults
 import library.reconstruction as recon
 import library.flux as flux
 import library.timestepping as timestepping
+import library.io as io
+import library.fvm_mesh as fvm_mesh
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -24,7 +26,11 @@ class Settings():
     num_flux : Callable = flux.LF
     compute_dt : Callable = timestepping.constant(dt=0.1)
     time_end : float = 1.0
-    output_timesteps: int = 10
+    truncate_last_time_step: bool = True
+    output_snapshots: int = 10
+    output_write_all: bool = False
+    output_dir: str = 'output'
+    output_clean_dir: bool= True
 
 def initialize_problem(model, mesh):
     n_ghosts = model.boundary_conditions.initialize(mesh)
@@ -205,9 +211,14 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     #     (self.output_timesteps.shape[0], Q.shape[0], Q.shape[1])
     # )
     # timeseries_Q = self.save_output(time, Q, timeseries_Q)
+    i_snapshot = 0
+    dt_snapshot = time/(settings.output_snapshots-1)
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
+    mesh.write_to_hdf5(settings.output_dir)
 
-    timeseries_output = []
-    timeseries_output.append(( Q, Qaux, parameters, time ))
+    # timeseries_output = []
+    # timeseries_output.append(( Q, Qaux, parameters, time ))
 
     time_start = gettime()
 
@@ -259,8 +270,9 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         #     dt = self.dtmin
 
         # add 0.001 safty measure to avoid very small time steps
-        if time + dt * 1.001 > settings.time_end:
-            dt = settings.time_end - time + 10 ** (-10)
+        if settings.truncate_last_time_step:
+            if time + dt * 1.001 > settings.time_end:
+                dt = settings.time_end - time + 10 ** (-10)
         # kwargs.update({"time": time, "dt": dt, "Qold": Q})
         # Qnew, _ = self.solver.step(Qnew, **kwargs)
 
@@ -283,8 +295,10 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         # for callback in self.callback_function_list_post_solvestep:
         #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
+        i_snapshot = io.save_fields(settings.output_dir, time, (i_snapshot+1)*dt_snapshot, i_snapshot, Qnew, Qaux, settings.output_write_all)
+        
         # timeseries_Q = self.save_output(time, Qnew, timeseries_Q)
-        timeseries_output.append(( Qnew, Qaux, parameters, dt ))
+        # timeseries_output.append(( Qnew, Qaux, parameters, dt ))
 
         # logger.info(
         #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
@@ -296,4 +310,4 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
 
     # self.vtk_write_timestamp_file()
     progressbar.end()
-    return timeseries_output, mesh 
+    return settings

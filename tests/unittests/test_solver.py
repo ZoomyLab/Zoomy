@@ -7,11 +7,12 @@ from library.model import *
 import library.initial_conditions as IC
 import library.boundary_conditions as BC
 from library.ode import RK1
+import library.io as io
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", momentum_eqns = [0], parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = .1, output_timesteps = 10)
+    settings = Settings(name = "Advection", momentum_eqns = [0], parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = .1, output_snapshots = 10)
 
 
     bc_tags = ["left", "right"]
@@ -33,15 +34,14 @@ def test_advection_1d():
     mesh = Mesh.create_1d((-1, 1), 10)
 
 
-    output, mesh = fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    print(output[0][0])
-    print(output[-1][0])
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_timesteps = 10)
+    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_snapshots = 10)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -67,15 +67,14 @@ def test_advection_2d(mesh_type):
     )
 
 
-    output, mesh = fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    print(output[0][0])
-    print(output[-1][0])
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_advection_3d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_timesteps = 10)
+    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_snapshots = 10)
 
 
     bc_tags = ["left", "right", "top", "bottom", "front", "back"]
@@ -101,14 +100,13 @@ def test_advection_3d(mesh_type):
     )
 
 
-    output, mesh = fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    print(output[0][0])
-    print(output[-1][0])
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
 
 
 
 if __name__ == "__main__":
-    # test_advection_1d()
+    test_advection_1d()
     # test_advection_2d("quad")
     # test_advection_2d("triangle")
-    test_advection_3d("tetra")
+    # test_advection_3d("tetra")

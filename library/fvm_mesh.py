@@ -779,7 +779,7 @@ class Mesh:
         meshout.write(filepath + ".vtk")
 
     def write_to_hdf5(self, filepath: str):
-        with h5py.File(filepath, "w") as f:
+        with h5py.File(os.path.join(filepath, 'mesh.hdf5'), "w") as f:
             attrs = f.create_group("mesh")
             attrs.create_dataset("dimension", data=self.dimension)
             attrs.create_dataset("type", data=self.type)
@@ -915,44 +915,6 @@ def extrude_2d_element_vertices_mesh(
     return (points_3d, element_vertices_3d, mesh_type)
 
 
-def write_to_file_vtk_from_vertices_edges(
-    filepath,
-    mesh_type,
-    vertex_coordinates,
-    element_vertices,
-    fields=None,
-    field_names=None,
-    point_fields=None,
-    point_field_names=None,
-):
-    assert (
-        mesh_type == "tri"
-        or mesh_type == "quad"
-        or mesh_type == "wface"
-        or mesh_type == "hex"
-    )
-    d_fields = {}
-    if fields is not None:
-        if field_names is None:
-            field_names = [str(i) for i in range(fields.shape[0])]
-        for i_fields, _ in enumerate(fields.T):
-            d_fields[field_names[i_fields]] = [fields[:, i_fields]]
-    point_d_fields = {}
-    if point_fields is not None:
-        if point_field_names is None:
-            point_field_names = [str(i) for i in range(point_fields.shape[0])]
-        for i_fields, _ in enumerate(point_fields):
-            point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
-    meshout = meshio.Mesh(
-        vertex_coordinates,
-        [(convert_mesh_type_to_meshio_mesh_type(mesh_type), element_vertices)],
-        cell_data=d_fields,
-        point_data=point_d_fields,
-    )
-    path, filename = os.path.split(filepath)
-    filename_base, filename_ext = os.path.splitext(filename)
-    os.makedirs(path, exist_ok=True)
-    meshout.write(filepath + ".vtk")
 
 def compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors):
     # get the number of total edges
