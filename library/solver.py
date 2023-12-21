@@ -73,7 +73,7 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditi
                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_face)
 
                 #TODO callout to a requirement of the flux
-                mesh_props = SimpleNamespace(dt_dx= dt / (mesh.element_inradius[i_elem]))
+                mesh_props = SimpleNamespace(dt_dx= dt / 2*(mesh.element_inradius[i_elem]))
                 flux, failed = num_flux(
                     Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
                 )
@@ -103,19 +103,6 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditi
             assert not failed
 
             dQ[i_elem] -= flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
-
-        # # Add flux (edges) to elements
-        # (
-        #     map_elements_to_edges_plus,
-        #     map_elements_to_edges_minus,
-        # ) = map_elements_to_edges
-        # for i, elem in enumerate(map_elements_to_edges_plus):
-        #     #TODO if hack: element_volume of of bounds error
-        #     if elem < mesh.n_elements:
-        #         dQ[elem] += flux[i] * on_edges_length[i] / mesh.element_volume[elem]
-        # for i, elem in enumerate(map_elements_to_edges_minus):
-        #     if elem < mesh.n_elements:
-        #         dQ[elem] -= flux[i] * on_edges_length[i] / mesh.element_volume[elem]
         return dQ
     return solution_operator
     

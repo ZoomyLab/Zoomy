@@ -12,10 +12,10 @@ def LF(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, EVi=None, EVj=None,
     num_eq = Qi.shape[0]
     Fi = np.zeros((num_eq))
     Fj = np.zeros((num_eq))
-    for n_i in range(dim):
-        flux[n_i](Qi, Qauxi, param, Fi)  
-        flux[n_i](Qj, Qauxj, param, Fj)  
-        Qout += 0.5 * (Fi + Fj) * normal[n_i]
+    for d in range(dim):
+        flux[d](Qi, Qauxi, param, Fi)  
+        flux[d](Qj, Qauxj, param, Fj)  
+        Qout += 0.5 * (Fi + Fj) * normal[d]
     Qout -= 0.5 * dt_dx * (Qj - Qi)
     return Qout, False
 
