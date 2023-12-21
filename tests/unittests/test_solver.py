@@ -71,8 +71,44 @@ def test_advection_2d(mesh_type):
     print(output[0][0])
     print(output[-1][0])
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["tetra"])
+def test_advection_3d(mesh_type):
+    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_timesteps = 10)
+
+
+    bc_tags = ["left", "right", "top", "bottom", "front", "back"]
+    bc_tags_periodic_to = ["right", "left", "bottom", "top", "back", "front"]
+
+    bcs = BC.BoundaryConditions(
+        [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+    )
+    ic = IC.RP()
+    model = Advection(
+        dimension=3,
+        fields=2,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={},
+    )
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+        os.path.join(main_dir, "meshes/{}_3d/test.msh".format(mesh_type)),
+        mesh_type
+    )
+
+
+    output, mesh = fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    print(output[0][0])
+    print(output[-1][0])
+
+
 
 if __name__ == "__main__":
-    test_advection_1d()
+    # test_advection_1d()
     # test_advection_2d("quad")
     # test_advection_2d("triangle")
+    test_advection_3d("tetra")

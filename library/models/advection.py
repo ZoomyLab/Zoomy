@@ -21,16 +21,27 @@ class Advection(Model):
     def flux(self):
         # assume that the first variables.length() parameters are the corresponding advection speeds
         assert self.parameters.length() >= self.variables.length()
-        assert self.n_fields == self.dimension
+        # assert self.n_fields == self.dimension
         if self.dimension == 1:
             F = Matrix([0 for i in range(self.n_fields)])
-            F[0] = self.variables[0] * self.parameters[0]
+            for i_field in range(self.n_fields):
+                F[i_field] = self.variables[i_field] * self.parameters[0]
             return [F]
         elif self.dimension == 2:
             F = Matrix([0 for i in range(self.n_fields)])
             G = Matrix([0 for i in range(self.n_fields)])
-            F[0] = self.variables[0] * self.parameters[0]
-            G[1] = self.variables[1] * self.parameters[1]
+            for i_field in range(self.n_fields):
+                F[i_field] = self.variables[i_field] * self.parameters[0]
+                G[i_field] = self.variables[i_field] * self.parameters[1]
             return [F, G]
+        elif self.dimension == 3:
+            F = Matrix([0 for i in range(self.n_fields)])
+            G = Matrix([0 for i in range(self.n_fields)])
+            H = Matrix([0 for i in range(self.n_fields)])
+            for i_field in range(self.n_fields):
+                F[i_field] = self.variables[i_field] * self.parameters[0]
+                G[i_field] = self.variables[i_field] * self.parameters[1]
+                H[i_field] = self.variables[i_field] * self.parameters[2]
+            return [F, G, H]
         else:
             assert False
