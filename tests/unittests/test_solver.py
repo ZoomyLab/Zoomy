@@ -96,7 +96,7 @@ def test_advection_3d(mesh_type):
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_3d/test.msh".format(mesh_type)),
+        os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
         mesh_type
     )
 
