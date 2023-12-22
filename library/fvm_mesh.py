@@ -100,7 +100,7 @@ class Mesh:
         n_boundary_elements = 2
         boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
         boundary_face_corresponding_element = np.array([0, n_elements-1], dtype=int)
-        boundary_face_element_face_index = np.array([[0], [1]], dtype=int)
+        boundary_face_element_face_index = np.array([0, 1], dtype=int)
         boundary_face_tag = np.array([0, 1])
         boundary_tag_names = np.array(['left', 'right'], dtype='S10')
 

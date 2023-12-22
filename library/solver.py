@@ -18,7 +18,6 @@ import library.fvm_mesh as fvm_mesh
 @define(slots=True, frozen=False, kw_only=True)
 class Settings():
     name : str = 'Simulation'
-    PDE : Type[Advection] = Advection
     momentum_eqns: list[int] = [0]
     parameters : SimpleNamespace = SimpleNamespace()
     reconstruction : Callable = recon.constant
@@ -51,14 +50,61 @@ def initialize_problem(model, mesh):
     # return Q, Qaux, normals
     return Q, Qaux
 
+def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, settings):
+    reconstruction = settings.reconstruction
+    reconstruction_edge = settings.reconstruction_edge
+    def compute_max_abs_eigenvalue(Q, Qaux, parameters):
+
+        max_abs_eigenvalue = -np.inf
+        eigenvalues_i = np.empty(Q.shape[1], dtype=float)
+        eigenvalues_j = np.empty(Q.shape[1], dtype=float)
+        # Loop over the inner elements
+        for i_elem in range(mesh.n_elements):
+            for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
+                i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
+                if i_elem > i_neighbor:
+                    continue
+                i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
+                # reconstruct 
+                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_th_neighbor)
+
+                #TODO callout to a requirement of the flux
+                runtime_model.eigenvalues(
+                    Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
+                )
+                max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_i)))
+
+                runtime_model.eigenvalues(
+                    Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
+                )
+                max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
+
+        # Loop over boundary faces
+        for i in range(mesh.n_boundary_elements):
+            i_elem = mesh.boundary_face_corresponding_element[i]
+            i_face = mesh.boundary_face_element_face_index[i]
+            Q_ghost = boundary_conditions.apply(i, i_elem, Q, mesh.element_face_normals[i_elem, i_face], settings.momentum_eqns)
+            # reconstruct 
+            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], Q_ghost, i_elem )
+
+            runtime_model.eigenvalues(
+                Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
+            )
+            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
+            runtime_model.eigenvalues(
+                Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
+            )
+            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
+
+        return max_abs_eigenvalue
+    return compute_max_abs_eigenvalue
+
 
 def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditions, settings):
     num_flux = settings.num_flux
     reconstruction = settings.reconstruction
     reconstruction_edge = settings.reconstruction_edge
     def solution_operator(dt, Q, Qaux, parameters, dQ):
-        # Qi, Qj, Qauxi, Qauxj = reconstruction(mesh, Q, Qaux)
-
 
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
@@ -71,7 +117,7 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditi
                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_th_neighbor)
 
                 #TODO callout to a requirement of the flux
-                mesh_props = SimpleNamespace(dt_dx= dt / 2*(mesh.element_inradius[i_elem]))
+                mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
                 flux, failed = num_flux(
                     Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
                 )
@@ -228,6 +274,8 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
     space_solution_operator = get_semidiscrete_solution_operator_new(mesh, runtime_model, model.boundary_conditions, settings)
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
+    min_inradius = np.min(mesh.element_inradius)
 
 
 
@@ -237,7 +285,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         #TODO Hack
         ev_abs_max = 0.
         min_incircle = 0.
-        dt = settings.compute_dt(ev_abs_max, min_incircle)
+        dt = settings.compute_dt(Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue)
 
         # Repeat timestep for imaginary numbers
         # EVs, imaginary = self.solver.compute_eigenvalues(Qnew, normals)

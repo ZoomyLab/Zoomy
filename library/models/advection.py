@@ -19,9 +19,6 @@ from library.models.base import Model
 
 class Advection(Model):
     def flux(self):
-        # assume that the first variables.length() parameters are the corresponding advection speeds
-        assert self.parameters.length() >= self.variables.length()
-        # assert self.n_fields == self.dimension
         if self.dimension == 1:
             F = Matrix([0 for i in range(self.n_fields)])
             for i_field in range(self.n_fields):
@@ -45,3 +42,10 @@ class Advection(Model):
             return [F, G, H]
         else:
             assert False
+
+    # def eigenvalues(self):
+    #     assert self.sympy_normal.shape[0] == self.parameters.shape[0]
+    #     ev = self.sympy_normal[0] * self.parameters[0]
+    #     for d in range(1, self.dimension):
+    #         ev += self.sympy_normal[d] * self.parameters[d]
+    #     self.sympy_eigenvalues = Matrix[[ev for i in range(self.n_fields)]]
