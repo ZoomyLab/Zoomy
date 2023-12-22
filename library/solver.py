@@ -1,7 +1,7 @@
 import numpy as np
 from types import SimpleNamespace
 import pyprog
-from attr import define
+from attr import define, field
 from typing import Callable, Optional, Type
 from copy import deepcopy
 from time import time as gettime
@@ -19,7 +19,7 @@ import library.fvm_mesh as fvm_mesh
 class Settings():
     name : str = 'Simulation'
     momentum_eqns: list[int] = [0]
-    parameters : SimpleNamespace = SimpleNamespace()
+    parameters : dict = {}
     reconstruction : Callable = recon.constant
     reconstruction_edge: Callable = recon.constant_edge
     num_flux : Callable = flux.LF
@@ -221,7 +221,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # )
     # Q, Qaux, normals = initialize_problem(model, mesh)
     Q, Qaux = initialize_problem(model, mesh)
-    parameters = register_parameter_defaults(settings.parameters)
+    parameters = model.parameter_values
     Qnew = deepcopy(Q)
 
     # dt = self.dtmin

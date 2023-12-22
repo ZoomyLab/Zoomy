@@ -5,7 +5,7 @@ from library.misc import *
 from library.models.shallow_water import *
 import library.boundary_conditions as BC
 import library.initial_conditions as IC
-from library.mesh import *
+from library.fvm_mesh import *
 from library.model import create_default_mesh_and_model
 
 

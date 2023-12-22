@@ -43,10 +43,11 @@ class Model:
     variables: IterableNamespace
     aux_variables: IterableNamespace
     parameters: IterableNamespace
-    parameter_defaults: FArray
+    parameters_default: dict
+    parameter_values: FArray
     sympy_normal: Matrix
 
-    settings: SimpleNamespace
+    settings: IterableNamespace
     settings_default_dict: dict
 
     sympy_flux: list[Matrix]
@@ -64,10 +65,11 @@ class Model:
         dimension: int,
         fields: Union[int, list],
         aux_fields: Union[int, list],
-        parameters: Union[int, list, dict],
         boundary_conditions: BoundaryConditions,
         initial_conditions: InitialConditions,
         aux_initial_conditions: InitialConditions = Constant(),
+        parameters: dict = {},
+        parameters_default: dict = {},
         settings: dict = {},
         settings_default: dict = {},
     ):
@@ -79,8 +81,10 @@ class Model:
 
         self.variables = register_sympy_attribute(fields, "q")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
-        self.parameters = register_sympy_attribute(parameters, "p")
-        self.parameter_defaults = register_parameter_defaults(parameters)
+        updated_parameters = {**parameters_default, **parameters}
+        self.parameters = register_sympy_attribute(updated_parameters, "p")
+        self.parameters_default = parameters_default
+        self.parameter_values = register_parameter_defaults(updated_parameters)
         self.sympy_normal = register_sympy_attribute(
             ["n" + str(i) for i in range(self.dimension)], "n"
         )
