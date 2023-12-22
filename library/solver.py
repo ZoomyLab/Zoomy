@@ -33,7 +33,7 @@ class Settings():
     output_dir: str = 'output'
     output_clean_dir: bool= True
 
-def initialize_problem(model, mesh):
+def _initialize_problem(model, mesh):
     n_ghosts = model.boundary_conditions.initialize(mesh)
 
     # n_all_elements = mesh.n_elements + n_ghosts
@@ -94,7 +94,7 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
         return max_abs_eigenvalue
     return compute_max_abs_eigenvalue
 
-def get_source(mesh, runtime_model, settings):
+def _get_source(mesh, runtime_model, settings):
     def source(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
@@ -102,7 +102,7 @@ def get_source(mesh, runtime_model, settings):
     return source
 
 
-def get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions, settings):
+def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions, settings):
     compute_num_flux = settings.num_flux
     compute_nc_flux = settings.nc_flux
     reconstruction = settings.reconstruction
@@ -189,7 +189,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # )
     # logger = logging.getLogger(__name__ + ":solve_steady")
 
-    Q, Qaux = initialize_problem(model, mesh)
+    Q, Qaux = _initialize_problem(model, mesh)
     parameters = model.parameter_values
     Qnew = deepcopy(Q)
 
@@ -211,8 +211,8 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
-    space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
-    compute_source = get_source(mesh, runtime_model, settings)
+    space_solution_operator = _get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
+    compute_source = _get_source(mesh, runtime_model, settings)
     compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
     min_inradius = np.min(mesh.element_inradius)
 
