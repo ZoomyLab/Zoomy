@@ -61,16 +61,14 @@ def get_semidiscrete_solution_operator_new(mesh, runtime_model, boundary_conditi
 
 
         # Loop over the inner elements
-        # for i_elem in range(mesh.n_elements):
-        #     for i_edge in range(mesh.element_n_neighbors[i_elem]):
         for i_elem in range(mesh.n_elements):
-            for i in range(mesh.element_n_neighbors[i_elem]):
-                i_neighbor = mesh.element_neighbors[i_elem, i]
+            for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
+                i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
                 if i_elem > i_neighbor:
                     continue
-                i_face = mesh.element_neighbors_face_index[i_elem, i]
+                i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
                 # reconstruct 
-                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_face)
+                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_th_neighbor)
 
                 #TODO callout to a requirement of the flux
                 mesh_props = SimpleNamespace(dt_dx= dt / 2*(mesh.element_inradius[i_elem]))

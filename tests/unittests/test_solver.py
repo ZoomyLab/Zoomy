@@ -41,7 +41,7 @@ def test_advection_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':-0.0, 'py':-0.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.03), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.1), time_end = 1.0, output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -50,7 +50,7 @@ def test_advection_2d(mesh_type):
     bcs = BC.BoundaryConditions(
         [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
     )
-    ic = IC.RP()
+    ic = IC.RP2d()
     model = Advection(
         dimension=2,
         fields=2,
@@ -107,6 +107,6 @@ def test_advection_3d(mesh_type):
 
 if __name__ == "__main__":
     # test_advection_1d()
-    test_advection_2d("quad")
+    # test_advection_2d("quad")
     # test_advection_2d("triangle")
-    # test_advection_3d("tetra")
+    test_advection_3d("tetra")

@@ -44,6 +44,7 @@ def _write_to_vtk_from_vertices_edges(
         or mesh_type == "wface"
         or mesh_type == "hex"
         or mesh_type == "line"
+        or mesh_type == "tetra"
     )
     d_fields = {}
     if fields is not None:

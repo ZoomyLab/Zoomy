@@ -52,6 +52,14 @@ def _face_normals_2d(coordinates, element, mesh_type) -> float:
         edge_direction = coordinates[edge[1]] - coordinates[edge[0]]
         normals[i_edge, :]  = -np.cross(edge_direction, ez)
         normals[i_edge,:] /=  np.linalg.norm(normals[i_edge,:])
+    
+    #DEBUG: check that the normal goes into the right direction
+    # center_point = center(coordinates, element)
+    # ec = coordinates[edges]
+    # edge_centers = [np.mean(ec[i], axis=0) for i in range(4)]
+    # for i in range(4):
+    #     assert np.allclose(center_point + 0.125 * normals[i], edge_centers[i])
+
     return normals
 
 def _face_normals_3d(coordinates, element, mesh_type) -> float:

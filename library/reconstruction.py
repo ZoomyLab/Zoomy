@@ -67,7 +67,7 @@ def get_edge_geometry_data(mesh):
         edge+=1
     return normals_ij, edge_length_ij
     
-def constant(mesh, fields, i_elem, i_edge):
+def constant(mesh, fields, i_elem, i_th_neighbor):
     """
     fields: a list of fields (e.g. Q and Qaux)
     """
@@ -79,7 +79,7 @@ def constant(mesh, fields, i_elem, i_edge):
     field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
 
     # get neighborhood
-    i_elem_neighbor = mesh.element_neighbors[ i_elem, i_edge ]
+    i_elem_neighbor = mesh.element_neighbors[ i_elem, i_th_neighbor ]
 
     # reconstruct
     for i_field in range(n_fields):

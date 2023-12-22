@@ -78,71 +78,69 @@ def all_class_members_identical(a, b):
                 assert False
 
 
-def compute_transverse_direction(normals):
-    dim = normals.shape[1]
+def compute_transverse_direction(normal):
+    dim = normal.shape[0]
     if dim == 1:
-        return np.zeros_like(normals)
+        return np.zeros_like(normal)
     elif dim == 2:
-        transverse = np.zeros((normals.shape[0], 2), dtype=float)
-        transverse[:, 0] = -normals[:, 1]
-        transverse[:, 1] = normals[:, 0]
+        transverse = np.zeros((2), dtype=float)
+        transverse[0] = -normal[1]
+        transverse[1] = normal[0]
         return transverse
     elif dim == 3:
         cartesian_x = np.array([1, 0, 0], dtype=float)
-        transverse = np.cross(normals, cartesian_x)
+        transverse = np.cross(normal, cartesian_x)
         return transverse
     else:
         assert False
 
 
 def extract_momentum_fields_as_vectors(Q, momentum_fields, dim):
-    num_fields = momentum_fields.shape[0]
-    num_momentum_eqns = int(momentum_fields.shape[0] / dim)
-    Qnew = np.empty((Q.shape[0], num_momentum_eqns, dim))
+    num_fields = len(momentum_fields)
+    num_momentum_eqns = int(num_fields / dim)
+    Qnew = np.empty((num_momentum_eqns, dim))
     for i_eq in range(num_momentum_eqns):
         for i_dim in range(dim):
-            Qnew[:, i_eq, i_dim] = Q[
-                :, momentum_fields[i_dim * num_momentum_eqns + i_eq]
+            Qnew[ i_eq, i_dim] = Q[
+                momentum_fields[i_dim * num_momentum_eqns + i_eq]
             ]
     return Qnew
 
 
-def projection_in_normal_and_transverse_direction(Q, momentum_fields, normals):
-    dim = normals.shape[1]
-    transverse_directions = compute_transverse_direction(normals)
+def projection_in_normal_and_transverse_direction(Q, momentum_fields, normal):
+    dim = normal.shape[0]
+    transverse_directions = compute_transverse_direction(normal)
     Q_momentum_eqns = extract_momentum_fields_as_vectors(Q, momentum_fields, dim)
     Q_normal = np.empty(
-        (Q_momentum_eqns.shape[0], Q_momentum_eqns.shape[1]), dtype=float
+        (Q_momentum_eqns.shape[0]), dtype=float
     )
     Q_transverse = np.empty(
-        (Q_momentum_eqns.shape[0], Q_momentum_eqns.shape[1]), dtype=float
+        (Q_momentum_eqns.shape[0]), dtype=float
     )
     for i in range(Q_momentum_eqns.shape[0]):
-        for j in range(Q_momentum_eqns.shape[1]):
-            Q_normal[i, j] = np.dot(Q_momentum_eqns[i, j, :], normals[i, :])
-            Q_transverse[i, j] = np.dot(
-                Q_momentum_eqns[i, j, :], transverse_directions[i, :]
-            )
+        Q_normal[i] = np.dot(Q_momentum_eqns[i, :], normal[:])
+        Q_transverse[i] = np.dot(
+            Q_momentum_eqns[i :], transverse_directions[:]
+        )
     return Q_normal, Q_transverse
 
 
-def projection_in_x_y_direction(Qn, Qt, normals):
-    dim = normals.shape[1]
-    num_momentum_fields = Qn.shape[1]
-    transverse_directions = compute_transverse_direction(normals)
-    Q = np.empty((Qn.shape[0], num_momentum_fields * dim), dtype=float)
-    for i in range(Qn.shape[0]):
-        for j in range(num_momentum_fields):
-            for d in range(dim):
-                Q[i, j + d * num_momentum_fields] = (
-                    Qn[i, j] * normals[i, d] + Qt[i, j] * transverse_directions[i, d]
-                )
+def projection_in_x_y_direction(Qn, Qt, normal):
+    dim = normal.shape[0]
+    num_momentum_fields = Qn.shape[0]
+    transverse_directions = compute_transverse_direction(normal)
+    Q = np.empty((num_momentum_fields * dim), dtype=float)
+    for i in range(num_momentum_fields):
+        for d in range(dim):
+            Q[i + d * num_momentum_fields] = (
+                Qn[i] * normal[d] + Qt[i] * transverse_directions[d]
+            )
     return Q
 
 
 def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
     Qnew = np.array(Qorig)
-    Qnew[:, momentum_eqns] = projection_in_x_y_direction(Qn, Qt, normal)
+    Qnew[momentum_eqns] = projection_in_x_y_direction(Qn, Qt, normal)
     # Qnew = np.concatenate(
     #     [Qorig[:, 0][:, np.newaxis], projection_in_x_y_direction(Qn, Qt, normal)],
     #     axis=1,
