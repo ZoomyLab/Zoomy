@@ -12,7 +12,7 @@ import library.io as io
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_swe_1d():
-    settings = Settings(name = "ShallowWater", momentum_eqns = [1], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF, compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowWater", momentum_eqns = [1], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right"]
@@ -41,7 +41,7 @@ def test_swe_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_swe_2d(mesh_type):
-    settings = Settings(name = "ShallowWater2d", momentum_eqns = [1, 2], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF, compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowWater2d", momentum_eqns = [1, 2], parameters = {'g':1.0, 'C':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), nc_flux=nonconservative_flux.zero(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -58,7 +58,7 @@ def test_swe_2d(mesh_type):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={},
+        settings={'friction': ['chezy']},
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
@@ -75,5 +75,5 @@ def test_swe_2d(mesh_type):
 
 if __name__ == "__main__":
     # test_swe_1d()
-    # test_swe_2d("quad")
-    test_swe_2d("triangle")
+    test_swe_2d("quad")
+    # test_swe_2d("triangle")

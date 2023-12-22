@@ -10,6 +10,7 @@ from library.model import *
 from library.models.base import register_parameter_defaults
 import library.reconstruction as recon
 import library.flux as flux
+import library.nonconservative_flux as nonconservative_flux
 import library.timestepping as timestepping
 import library.io as io
 import library.fvm_mesh as fvm_mesh
@@ -22,7 +23,8 @@ class Settings():
     parameters : dict = {}
     reconstruction : Callable = recon.constant
     reconstruction_edge: Callable = recon.constant_edge
-    num_flux : Callable = flux.LF
+    num_flux : Callable = flux.LF()
+    nc_flux: Callable = nonconservative_flux.segmentpath()
     compute_dt : Callable = timestepping.constant(dt=0.1)
     time_end : float = 1.0
     truncate_last_time_step: bool = True
@@ -92,12 +94,20 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
         return max_abs_eigenvalue
     return compute_max_abs_eigenvalue
 
+def get_source(mesh, runtime_model, settings):
+    def source(dt, Q, Qaux, parameters, dQ):
+        # Loop over the inner elements
+        for i_elem in range(mesh.n_elements):
+            runtime_model.source(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+    return source
+
 
 def get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions, settings):
-    num_flux = settings.num_flux
+    compute_num_flux = settings.num_flux
+    compute_nc_flux = settings.nc_flux
     reconstruction = settings.reconstruction
     reconstruction_edge = settings.reconstruction_edge
-    def solution_operator(dt, Q, Qaux, parameters, dQ):
+    def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
 
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
@@ -111,8 +121,12 @@ def get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions,
 
                 #TODO callout to a requirement of the flux
                 mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
-                flux, failed = num_flux(
+                flux, failed = compute_num_flux(
                     Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
+                )
+                assert not failed
+                nc_flux, failed = compute_nc_flux(
+                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model
                 )
                 assert not failed
             
@@ -120,8 +134,8 @@ def get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions,
                 # TODO index map (elem_edge_index) such that I do not need:
                 # and if statement to avoid double edge computation (as I do now)
                 # avoid double edge computation
-                dQ[i_elem] -= flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
-                dQ[i_neighbor] += flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_neighbor]
+                dQ[i_elem] -= (flux+nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
+                dQ[i_neighbor] += (flux-nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_neighbor]
 
         # Loop over boundary faces
         for i in range(mesh.n_boundary_elements):
@@ -134,14 +148,18 @@ def get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions,
 
             # callout to a requirement of the flux
             mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
-            flux, failed = num_flux(
+            flux, failed = compute_num_flux(
                 Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
             )
             assert not failed
+            nc_flux, failed = compute_nc_flux(
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model
+            )
+            assert not failed
 
-            dQ[i_elem] -= flux * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
+            dQ[i_elem] -= (flux+nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
         return dQ
-    return solution_operator
+    return operator_rhs_split
     
 
 def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
@@ -194,6 +212,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
     space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
+    compute_source = get_source(mesh, runtime_model, settings)
     compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
     min_inradius = np.min(mesh.element_inradius)
 
@@ -215,6 +234,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
                 dt = settings.time_end - time + 10 ** (-10)
 
         Qnew = time_ode_solver(space_solution_operator, Q, Qaux, parameters, dt)
+        Qnew = time_ode_solver(compute_source, Qnew, Qaux, parameters, dt)
 
         # Qavg = np.mean(Qavg_5steps, axis=0)
         # error = (
