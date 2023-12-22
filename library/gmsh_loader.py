@@ -131,19 +131,25 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
         assert False
     # Generate the cell block for the boundaries cells
     # data_array = [arr for (t, arr) in msh.cells if t == cell_type]
+    offset = 0
     data_array = []
+    sort_order_list = []
     for obj in msh.cells:
         if obj.type == cell_type: 
             data_array.append(obj.data)
+            sort_order_list.append((offset)+_sort_order_for_periodic_boundary_conditions(dim, msh.points, obj.data))
+            offset += obj.data.shape[0]
+
     if len(data_array) == 0:
         print("WARNING: No boundary physical group found.")
         return
     else:
         data = np.concatenate(data_array)
+        sort_order = np.concatenate(sort_order_list)
     boundaries_cells = [
         meshio.CellBlock(
             cell_type=cell_type,
-            data=data,
+            data=data[sort_order],
         )
     ]
     # Generate the boundaries cells data
@@ -155,7 +161,7 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
                     for i, cellBlock in enumerate(msh.cells)
                     if cellBlock.type == cell_type
                 ]
-            )
+            )[sort_order]
         ],
         "corresponding_cell": [
             np.concatenate(
@@ -164,7 +170,7 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
                     for i, cellBlock in enumerate(msh.cells)
                     if cellBlock.type == cell_type
                 ]
-            )
+            )[sort_order]
         ]
     }
     # Generate the meshio Mesh for the boundaries physical groups
@@ -175,6 +181,31 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
     )
 
     return boundaries
+
+def _sort_order_for_periodic_boundary_conditions(dimension, points, data):
+    edge_coordinates = points[data]
+    center_coordinates = np.array([np.mean(edge_coordinates[i], axis=0) for i in range(edge_coordinates.shape[0])])
+    if dimension == 1:
+        indices_sorted = np.lexsort((center_coordinates[:, 0],))
+    elif dimension == 2:
+        indices_sorted = np.lexsort(
+            (
+            center_coordinates[:, 0],
+            center_coordinates[:, 1],
+            )
+            )
+    elif dimension == 3:
+        indices_sorted = np.lexsort(
+            (
+            center_coordinates[:, 0],
+            center_coordinates[:, 1],
+            center_coordinates[:, 2],
+            )
+            )
+    else:
+        assert False
+    return indices_sorted
+
 
 def _get_boundary_edges_cells(msh, list_of_edges):
     boundary_edges_cells = []
