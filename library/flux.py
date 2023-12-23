@@ -31,6 +31,8 @@ def LLF():
         EVj = np.zeros_like(Qj)
         model_functions.eigenvalues(Qi, Qauxi, param, normal, EVi )
         model_functions.eigenvalues(Qj, Qauxj, param, normal, EVj )
+        assert not np.isnan(EVi).any()
+        assert not np.isnan(EVj).any()
         smax = np.max(np.abs(np.vstack([EVi, EVj])))
         Qout = np.zeros_like(Qi)
         flux = model_functions.flux
@@ -43,6 +45,37 @@ def LLF():
             flux[d](Qj, Qauxj, param, Fj)  
             Qout += 0.5 * (Fi + Fj) * normal[d]
         Qout -= 0.5 * smax * (Qj - Qi)
+        return Qout, False
+    return flux
+
+"""
+Rusanov (local Lax-Friedrichs) flux implementation
+with topography fix (e.g. for model SWEtopo)
+with WB fix for lake at rest
+"""
+def LLF_wb():
+    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props = None):
+        IWB = np.eye(Qi.shape[0])
+        IWB[-1,:] = 0.
+        IWB[0, -1] = 1.
+        EVi = np.zeros_like(Qi)
+        EVj = np.zeros_like(Qj)
+        model_functions.eigenvalues(Qi, Qauxi, param, normal, EVi )
+        model_functions.eigenvalues(Qj, Qauxj, param, normal, EVj )
+        assert not np.isnan(EVi).any()
+        assert not np.isnan(EVj).any()
+        smax = np.max(np.abs(np.vstack([EVi, EVj])))
+        Qout = np.zeros_like(Qi)
+        flux = model_functions.flux
+        dim = normal.shape[0]
+        num_eq = Qi.shape[0]
+        Fi = np.zeros((num_eq))
+        Fj = np.zeros((num_eq))
+        for d in range(dim):
+            flux[d](Qi, Qauxi, param, Fi)  
+            flux[d](Qj, Qauxj, param, Fj)  
+            Qout += 0.5 * (Fi + Fj) * normal[d]
+        Qout -= 0.5 * smax * IWB@(Qj - Qi)
         return Qout, False
     return flux
 

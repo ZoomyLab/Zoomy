@@ -5,6 +5,7 @@ from typing import Union, Type
 from library.models.base import Model
 from library.models.advection import Advection
 from library.models.shallow_water import ShallowWater, ShallowWater2d
+from library.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d
 import library.initial_conditions as IC
 import library.boundary_conditions as BC
 from library.fvm_mesh import Mesh

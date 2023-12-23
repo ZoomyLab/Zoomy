@@ -128,13 +128,7 @@ class Model:
         ]
         # TODO case imaginary
         # TODO case not computable
-        if self.eigenvalues() is None:
-            A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
-            for d in range(1, self.dimension):
-                A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
-            self.sympy_eigenvalues = eigenvalue_dict_to_matrix(A.eigenvals())
-        else:
-            self.sympy_eigenvalues = self.eigenvalues()
+        self.sympy_eigenvalues = self.eigenvalues()
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
@@ -383,7 +377,10 @@ class Model:
         return None
 
     def eigenvalues(self):
-        return None
+        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        for d in range(1, self.dimension):
+            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+        return eigenvalue_dict_to_matrix(A.eigenvals())
 
 
 
