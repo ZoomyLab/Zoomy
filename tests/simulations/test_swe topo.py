@@ -46,7 +46,7 @@ def test_swetopo_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_swetopo_2d(mesh_type):
-    settings = Settings(name = "ShallowWater2d", momentum_eqns = [1, 2], parameters = {'g':1.0, 'C':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), nc_flux=nonconservative_flux.zero(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowWater2d", momentum_eqns = [1, 2], parameters = {'g':1.0, 'C':1.0}, reconstruction = recon.constant, num_flux = flux.LLF_wb(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -85,5 +85,5 @@ def test_swetopo_2d(mesh_type):
 
 if __name__ == "__main__":
     # test_swetopo_1d()
-    test_swetopo_2d("quad")
-    # test_swetopo_2d("triangle")
+    # test_swetopo_2d("quad")
+    test_swetopo_2d("triangle")
