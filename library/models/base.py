@@ -126,8 +126,8 @@ class Model:
             self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
             for d in range(self.dimension)
         ]
-        # TODO case imaginary
-        # TODO case not computable
+        # TODO check case imaginary
+        # TODO check case not computable
         self.sympy_eigenvalues = self.eigenvalues()
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
