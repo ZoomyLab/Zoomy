@@ -23,6 +23,29 @@ from library.misc import vectorize  # type: ignore
 from library.misc import IterableNamespace
 from library.sympy2c import create_module
 
+def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
+    def numerical_eigenvalues(Q, Qaux, parameters, normal, Qout):
+        A = np.empty((n_fields, n_fields), dtype=float)
+        An = np.zeros((n_fields, n_fields), dtype=float)
+        for d in range(dim):
+            quasilinear_matrix[d](Q, Qaux, parameters, A)
+            An += normal[d] * A
+        Qout = np.linalg.eigvals(An)
+        return Qout
+    return numerical_eigenvalues
+
+"""
+Warning: This is only needed because the C-function and the numerical_eigenvalues are not comparible (C-pointer vs return value)
+"""
+def get_sympy_eigenvalues(eigenvalue_func):
+    def numerical_eigenvalues(Q, Qaux, parameters, normal, Qout):
+        eigenvalue_func(Q, Qaux, parameters, normal, Qout)
+        return Qout
+    return numerical_eigenvalues
+    # return eigenvalue_func
+
+    
+
 
 @define(slots=True, frozen=False, kw_only=True)
 class Model:
@@ -71,7 +94,7 @@ class Model:
         parameters: dict = {},
         parameters_default: dict = {},
         settings: dict = {},
-        settings_default: dict = {},
+        settings_default: dict = {"eigenvalue_mode": "symbolic" },
     ):
         self.name = 'Model' + '_{}'.format(dimension)
         self.dimension = dimension
@@ -179,8 +202,12 @@ class Model:
                                  'source', 'source_jacobian']
         list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
         list_attributes_incl_normal = [self.variables, self.aux_variables, self.parameters, self.sympy_normal]
-        list_expressions_incl_normal = [sympy_eigenvalues]
-        list_expression_names_incl_normal = ['eigenvalues']
+        if sympy_eigenvalues is not None:
+            list_expressions_incl_normal = [sympy_eigenvalues]
+            list_expression_names_incl_normal = ['eigenvalues']
+        else:
+            list_expressions_incl_normal = []
+            list_expression_names_incl_normal = []
 
         # convert symbols to matrix symbols
         for i in range(len(list_expressions)):
@@ -227,7 +254,7 @@ class Model:
             quasilinear_matrix = [c_model.quasilinear_matrix_x, c_model.quasilinear_matrix_y]
         elif self.dimension == 3:
             flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
-            flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y, c_model.flux_jacobian_z]
+            flux_jacobian = [c_model.flux_jggacobian_x, c_model.flux_jacobian_y, c_model.flux_jacobian_z]
             nonconservative_matrix = [c_model.nonconservative_matrix_x, c_model.nonconservative_matrix_y, c_model.nonconservative_matrix_z]
             quasilinear_matrix = [c_model.quasilinear_matrix_x, c_model.quasilinear_matrix_y, c_model.quasilinear_matrix_z]
         else:
@@ -235,7 +262,13 @@ class Model:
 
         source = c_model.source
         source_jacobian = c_model.source_jacobian
-        eigenvalues = c_model.eigenvalues
+        if self.settings.eigenvalue_mode == 'symbolic':
+            # eigenvalues = c_model.eigenvalues
+            eigenvalues = get_sympy_eigenvalues( c_model.eigenvalues)
+        elif self.settings.eigenvalue_mode == 'numerical':
+            eigenvalues = get_numerical_eigenvalues(self.dimension, self.n_fields, quasilinear_matrix)
+        else:
+            assert False
 
         # define array prototypes
         array_2d_double = npct.ndpointer(dtype=np.double,ndim=2, flags='CONTIGUOUS')
@@ -312,17 +345,20 @@ class Model:
         )
         quasilinear_matrix = vectorize(l_quasilinear_matrix)
 
-        l_eigenvalues = lambdify(
-            [
-                self.variables.get_list(),
-                self.aux_variables.get_list(),
-                self.sympy_normal.get_list(),
-                self.parameters.get_list(),
-            ],
-            self.sympy_eigenvalues,
-            "numpy",
-        )
-        eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
+        if self.settings.eigenvalue_mode == 'symbolic':
+            l_eigenvalues = lambdify(
+                [
+                    self.variables.get_list(),
+                    self.aux_variables.get_list(),
+                    self.sympy_normal.get_list(),
+                    self.parameters.get_list(),
+                ],
+                self.sympy_eigenvalues,
+                "numpy",
+            )
+            eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
+        elif self.settings.eigenvalue_mode == 'numerical':
+            eigenvalues = None
 
         l_source = lambdify(
             [
@@ -413,6 +449,8 @@ def register_parameter_defaults(parameters):
     return default_values
 
 def substitute_sympy_attributes_with_symbol_matrix(expr: Matrix, attr: IterableNamespace, attr_matrix: MatrixSymbol):
+    if expr is None:
+        return None
     assert attr.length() == attr_matrix.shape[0]
     for i, k in enumerate(attr.get_list()):
         expr = Matrix(expr).subs(k, attr_matrix[i])

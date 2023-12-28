@@ -125,3 +125,6 @@ class ShallowMoments(Model):
                     nc[k+1, i+1] -= ha[j]/h*self.basis.B(k, i, j)/self.basis.M(k, k)
 
         return [nc]
+
+    # def eigenvalues(self):
+    #     return None

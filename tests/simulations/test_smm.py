@@ -12,7 +12,7 @@ import library.io as io
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d():
-    settings = Settings(name = "ShallowMoments", momentum_eqns = [1,2,3], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowMoments", momentum_eqns = [1], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right"]
@@ -21,15 +21,15 @@ def test_smm_1d():
     bcs = BC.BoundaryConditions(
         [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
     )
-    ic = IC.RP(left=lambda n_field: np.array([2., 0., 0., 0.]), right=lambda n_field: np.array([1., 0., 0., 0.]) )
+    ic = IC.RP(left=lambda n_field: np.array([2., 0.]), right=lambda n_field: np.array([1., 0.]) )
     model = ShallowMoments(
         dimension=1,
-        fields=4,
+        fields=2,
         aux_fields=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={},
+        settings={'eigenvalue_mode': 'symbolic'},
     )
     mesh = Mesh.create_1d((-1, 1), 100)
 

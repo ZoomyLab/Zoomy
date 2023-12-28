@@ -64,12 +64,14 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
                 # reconstruct 
                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(mesh, [Q, Qaux], i_elem, i_th_neighbor)
 
-                runtime_model.eigenvalues(
+                #TODO PROBLEM: the C interface has eigenvalues as reference, python interface
+                # needs to return a value, because it cant do by-reference
+                eigenvalues_i = runtime_model.eigenvalues(
                     Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
                 )
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_i)))
 
-                runtime_model.eigenvalues(
+                eienvalues_j = runtime_model.eigenvalues(
                     Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
                 )
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
