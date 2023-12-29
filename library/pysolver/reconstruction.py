@@ -1,7 +1,7 @@
 import numpy as np
 
 
-from library.fvm_mesh import *
+from library.mesh.fvm_mesh import *
 
 # TODO get rid of the boundary_conditions requirement
 # HOW: rewrite mesh:segments. The mesh should already allocate indices for the ghost cells for each inner element (in particular element_neighbor ids)

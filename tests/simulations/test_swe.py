@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.solver import *
-from library.model import *
-import library.initial_conditions as IC
-import library.boundary_conditions as BC
-from library.ode import RK1
-import library.io as io
+from library.pysolver.solver import *
+from library.model.model import *
+import library.model.initial_conditions as IC
+import library.model.boundary_conditions as BC
+from library.pysolver.ode import RK1
+import library.misc.io as io
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -58,7 +58,7 @@ def test_swe_2d(mesh_type):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={'friction': ['chezy']},
+        settings={'friction': ['chezy'], 'eigenvalue_mode': 'symbolic'},
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(

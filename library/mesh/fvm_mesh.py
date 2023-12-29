@@ -9,9 +9,9 @@ from attr import define
 
 from typing import Union, Tuple
 
-from library.custom_types import IArray, FArray, CArray
-from library.gmsh_loader import gmsh_to_domain_boundary_mesh
-import library.mesh_util as mesh_util
+from library.misc.custom_types import IArray, FArray, CArray
+from library.mesh.gmsh_loader import gmsh_to_domain_boundary_mesh
+import library.mesh.mesh_util as mesh_util
 
 
 @define(slots=True, frozen=True)

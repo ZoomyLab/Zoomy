@@ -13,7 +13,8 @@ from sympy import Symbol, Matrix, lambdify
 from sympy import *
 from sympy import zeros, ones
 
-from library.models.base import register_sympy_attribute
+from library.model.models.base import register_sympy_attribute
+from library.model.models.base import Model
 
 
 # from library.solver.baseclass import BaseYaml

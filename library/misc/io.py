@@ -4,7 +4,7 @@ import h5py
 import meshio
 import json
 
-import library.fvm_mesh as fvm_mesh
+import library.mesh.fvm_mesh as fvm_mesh
 
 
 def init_output_directory(path, clean):

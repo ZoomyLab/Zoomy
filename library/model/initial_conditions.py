@@ -4,7 +4,7 @@ import attr
 from attr import define
 from typing import Callable, Optional
 
-from library.custom_types import FArray
+from library.misc.custom_types import FArray
 
 # from library.mesh import Mesh2D
 

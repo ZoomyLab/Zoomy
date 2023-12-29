@@ -11,11 +11,11 @@ from attr import define
 from typing import Optional
 from types import SimpleNamespace
 
-from library.boundary_conditions import BoundaryConditions, Periodic
-from library.initial_conditions import InitialConditions, Constant
-from library.custom_types import FArray
+from library.model.boundary_conditions import BoundaryConditions, Periodic
+from library.model.initial_conditions import InitialConditions, Constant
+from library.misc.custom_types import FArray
 # from library.misc import vectorize  # type: ignore
-from library.models.base import Model
+from library.model.models.base import Model
 
 class Advection(Model):
     def flux(self):

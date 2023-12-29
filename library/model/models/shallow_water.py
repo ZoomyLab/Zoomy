@@ -11,11 +11,11 @@ from attr import define
 from typing import Optional
 from types import SimpleNamespace
 
-from library.boundary_conditions import BoundaryConditions, Periodic
-from library.initial_conditions import InitialConditions, Constant
-from library.custom_types import FArray
-from library.misc import vectorize  # type: ignore
-from library.models.base import Model
+from library.model.boundary_conditions import BoundaryConditions, Periodic
+from library.model.initial_conditions import InitialConditions, Constant
+from library.misc.custom_types import FArray
+from library.misc.misc import vectorize  # type: ignore
+from library.model.models.base import Model
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -40,8 +40,7 @@ class ShallowWater(Model):
             parameters_default = parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
-            settings=settings,
-            settings_default=settings_default,
+            settings={**settings_default, **settings},
         )
 
     def flux(self):
@@ -115,6 +114,7 @@ class ShallowWater2d(ShallowWater):
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
+        # combine settings_default of current class with settings such that the default settings of super() does not get overwritten.
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -123,8 +123,7 @@ class ShallowWater2d(ShallowWater):
             parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
-            settings=settings,
-            settings_default=settings_default,
+            settings={**settings_default, **settings},
         )
 
     def flux(self):

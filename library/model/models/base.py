@@ -16,12 +16,12 @@ from typing import Optional, Any, Type, Union
 from types import SimpleNamespace
 
 
-from library.boundary_conditions import BoundaryConditions, Periodic
-from library.initial_conditions import InitialConditions, Constant
-from library.custom_types import FArray
-from library.misc import vectorize  # type: ignore
-from library.misc import IterableNamespace
-from library.sympy2c import create_module
+from library.model.boundary_conditions import BoundaryConditions, Periodic
+from library.model.initial_conditions import InitialConditions, Constant
+from library.misc.custom_types import FArray
+from library.misc.misc import vectorize  # type: ignore
+from library.misc.misc import IterableNamespace
+from library.model.sympy2c import create_module
 
 def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
     def numerical_eigenvalues(Q, Qaux, parameters, normal, Qout):
@@ -38,7 +38,9 @@ def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
 Warning: This is only needed because the C-function and the numerical_eigenvalues are not comparible (C-pointer vs return value)
 """
 def get_sympy_eigenvalues(eigenvalue_func):
-    def numerical_eigenvalues(Q, Qaux, parameters, normal, Qout):
+    def numerical_eigenvalues(Q, Qaux, parameters, normal):
+        Qout = np.zeros((Q.shape[0], 1), dtype=float)
+        Qaux = np.zeros((Q.shape[0]), dtype=float)
         eigenvalue_func(Q, Qaux, parameters, normal, Qout)
         return Qout
     return numerical_eigenvalues
@@ -263,8 +265,8 @@ class Model:
         source = c_model.source
         source_jacobian = c_model.source_jacobian
         if self.settings.eigenvalue_mode == 'symbolic':
-            # eigenvalues = c_model.eigenvalues
-            eigenvalues = get_sympy_eigenvalues( c_model.eigenvalues)
+            eigenvalues = c_model.eigenvalues
+            # eigenvalues = get_sympy_eigenvalues( c_model.eigenvalues)
         elif self.settings.eigenvalue_mode == 'numerical':
             eigenvalues = get_numerical_eigenvalues(self.dimension, self.n_fields, quasilinear_matrix)
         else:

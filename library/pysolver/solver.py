@@ -6,14 +6,14 @@ from typing import Callable, Optional, Type
 from copy import deepcopy
 from time import time as gettime
 
-from library.model import *
-from library.models.base import register_parameter_defaults
-import library.reconstruction as recon
-import library.flux as flux
-import library.nonconservative_flux as nonconservative_flux
-import library.timestepping as timestepping
-import library.io as io
-import library.fvm_mesh as fvm_mesh
+from library.model.model import *
+from library.model.models.base import register_parameter_defaults
+import library.pysolver.reconstruction as recon
+import library.pysolver.flux as flux
+import library.pysolver.nonconservative_flux as nonconservative_flux
+import library.pysolver.timestepping as timestepping
+import library.misc.io as io
+import library.mesh.fvm_mesh as fvm_mesh
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -66,14 +66,18 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
 
                 #TODO PROBLEM: the C interface has eigenvalues as reference, python interface
                 # needs to return a value, because it cant do by-reference
-                eigenvalues_i = runtime_model.eigenvalues(
+                ev_i = runtime_model.eigenvalues(
                     Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
                 )
+                if ev_i is not None:
+                    eigenvalues_i = ev_i
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_i)))
 
-                eienvalues_j = runtime_model.eigenvalues(
+                ev_j = runtime_model.eigenvalues(
                     Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
                 )
+                if ev_j is not None:
+                    eigenvalues_j = ev_j
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
 
         # Loop over boundary faces

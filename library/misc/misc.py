@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from sympy import MatrixSymbol
 
-from library.custom_types import FArray
+from library.misc.custom_types import FArray
 
 
 @define(slots=True, frozen=False)

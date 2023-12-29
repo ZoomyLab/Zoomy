@@ -11,7 +11,7 @@ from configparser import ConfigParser
 from compas.datastructures import Mesh as MeshCompas
 import h5py 
 
-from library.mesh_util import get_global_cell_index_from_vertices
+from library.mesh.mesh_util import get_global_cell_index_from_vertices
 
 
 def gmsh_to_domain_boundary_mesh(mesh_name, mesh_type='triangle', directory="."):

@@ -4,10 +4,10 @@ import os
 from attr import define, field
 from typing import Union, Optional, Callable, List
 
-from library.custom_types import IArray, FArray
-import library.fvm_mesh as fvm_mesh
-from library.mesh_util import center
-from library.misc import (
+from library.misc.custom_types import IArray, FArray
+import library.mesh.fvm_mesh as fvm_mesh
+from library.mesh.mesh_util import center
+from library.misc.misc import (
     project_in_x_y_and_recreate_Q,
     projection_in_normal_and_transverse_direction,
 )

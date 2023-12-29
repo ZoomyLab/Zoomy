@@ -11,12 +11,12 @@ from attr import define
 from typing import Optional
 from types import SimpleNamespace
 
-from library.boundary_conditions import BoundaryConditions, Periodic
-from library.initial_conditions import InitialConditions, Constant
-from library.custom_types import FArray
-from library.misc import vectorize  # type: ignore
-from library.models.shallow_water import ShallowWater, ShallowWater2d
-from library.models.base import eigenvalue_dict_to_matrix
+from library.model.boundary_conditions import BoundaryConditions, Periodic
+from library.model.initial_conditions import InitialConditions, Constant
+from library.misc.custom_types import FArray
+from library.misc.misc import vectorize  # type: ignore
+from library.model.models.shallow_water import ShallowWater, ShallowWater2d
+from library.model.models.base import eigenvalue_dict_to_matrix
 
 
 @define(slots=True, frozen=False, kw_only=True)
