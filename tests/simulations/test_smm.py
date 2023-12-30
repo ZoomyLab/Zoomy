@@ -40,8 +40,9 @@ def test_smm_1d():
 @pytest.mark.critical
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
-def test_swe_2d(mesh_type):
-    settings = Settings(name = "ShallowWater2d", momentum_eqns = [1, 2], parameters = {'g':1.0, 'C':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), nc_flux=nonconservative_flux.zero(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
+def test_smm_2d(mesh_type):
+    level = 2
+    settings = Settings(name = "ShallowMoments2d", momentum_eqns = [1, 2] + [3+l  for l in range(2*level)], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -50,10 +51,10 @@ def test_swe_2d(mesh_type):
     bcs = BC.BoundaryConditions(
         [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
     )
-    ic = IC.RP(left=lambda n_field: np.array([2., 0., 0.]), right=lambda n_field: np.array([1., 0., 0.]) )
-    model = ShallowWater2d(
+    ic = IC.RP(left=lambda n_field: np.array([2., 0., 0.] + [0. for l in range(2*level)]), right=lambda n_field: np.array([1., 0., 0.]+ [0. for l in range(2*level)]) )
+    model = ShallowMoments2d(
         dimension=2,
-        fields=3,
+        fields=3+2*level,
         aux_fields=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
@@ -62,7 +63,7 @@ def test_swe_2d(mesh_type):
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type
     )
 
@@ -74,6 +75,6 @@ def test_swe_2d(mesh_type):
 
 
 if __name__ == "__main__":
-    test_smm_1d()
-    # test_smm_2d("quad")
+    # test_smm_1d()
+    test_smm_2d("quad")
     # test_smm_2d("triangle")

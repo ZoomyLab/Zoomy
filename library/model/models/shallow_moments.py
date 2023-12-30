@@ -109,8 +109,7 @@ class ShallowMoments(Model):
             parameters_default = parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
-            settings=settings,
-            settings_default=settings_default,
+            settings={**settings_default, **settings},
         )
 
     def flux(self):
@@ -123,14 +122,14 @@ class ShallowMoments(Model):
         for k in range(self.levels+1):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
-                    # avoid devision by zero 
+                    # TODO avoid devision by zero 
                     flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
         return [flux]
 
     def nonconservative_matrix(self):
         nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:]
+        ha = self.variables[1:1+self.levels+1]
         p = self.parameters
         um = ha[0]/h
         for k in range(1, self.levels+1):
@@ -139,7 +138,6 @@ class ShallowMoments(Model):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
                     nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
-
         return [nc]
 
     def eigenvalues(self):
@@ -149,4 +147,112 @@ class ShallowMoments(Model):
         alpha_erase = self.variables[2:]
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
+        return eigenvalue_dict_to_matrix(A.eigenvals())
+
+class ShallowMoments2d(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=1,
+        fields=3,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+        basis=Basis()
+    ):
+        self.basis = basis
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        self.levels = int((self.n_fields - 1)/2)-1
+        self.basis.compute_matrices(self.levels)
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+    def flux(self):
+        offset = self.levels+1
+        flux_x = Matrix([0 for i in range(self.n_fields)])
+        flux_y = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+self.levels+1:1+2*(self.levels+1)]
+        p = self.parameters
+        flux_x[0] = ha[0]
+        flux_x[1] = p.g * p.ez * h * h / 2
+        for k in range(self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    # TODO avoid devision by zero 
+                    flux_x[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+        for k in range(self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    # TODO avoid devision by zero 
+                    flux_x[k+1+offset] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+
+        flux_y[0] = hb[0]
+        flux_y[1+offset] = p.g * p.ez * h * h / 2
+        for k in range(self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    # TODO avoid devision by zero 
+                    flux_y[k+1] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+        for k in range(self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    # TODO avoid devision by zero 
+                    flux_y[k+1+offset] += hb[i] * hb[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+        return [flux_x, flux_y]
+
+    def nonconservative_matrix(self):
+        offset = self.levels+1
+        nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc_y = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+offset+self.levels+1]
+        p = self.parameters
+        um = ha[0]/h
+        vm = hb[0]/h
+        for k in range(1, self.levels+1):
+            nc_x[k+1, k+1] += um
+            nc_y[k+1, k+1+offset] += um
+        for k in range(self.levels+1):
+            for i in range(1, self.levels+1):
+                for j in range(1, self.levels+1):
+                    nc_x[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc_y[k+1, i+1+offset] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+
+        for k in range(1, self.levels+1):
+            nc_x[k+1+offset, k+1] += vm
+            nc_y[k+1+offset, k+1+offset] += vm
+        for k in range(self.levels+1):
+            for i in range(1, self.levels+1):
+                for j in range(1, self.levels+1):
+                    nc_x[k+1+offset, i+1] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc_y[k+1+offset, i+1+offset] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+        return [nc_x, nc_y]
+
+    def eigenvalues(self):
+        # compute eigenvalues for the level 0 system
+        offset = self.levels+1
+        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        for d in range(1, self.dimension):
+            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+        alpha_erase = self.variables[2:2+self.levels]
+        beta_erase = self.variables[2+offset : 2+offset+self.levels]
+        for alpha_i in alpha_erase:
+            A = A.subs(alpha_i, 0)
+        for beta_i in beta_erase:        alpha_erase = self.variables[2:2+self.levels]
+            A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
