@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ctypeslib as npct
+from scipy.linalg import eigvals
 import os
 import logging
 from copy import deepcopy
@@ -30,8 +31,14 @@ def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
         for d in range(dim):
             quasilinear_matrix[d](Q, Qaux, parameters, A)
             An += normal[d] * A
-        Qout = np.linalg.eigvals(An)
-        return Qout
+        # Qout = np.linalg.eigvals(An)
+        Qout = eigvals(An)
+        if np.iscomplex(Qout).any():
+            print(Qout)
+            print(Q)
+            print(An)
+            assert False
+        return np.array(Qout, dtype=float)
     return numerical_eigenvalues
 
 """
@@ -153,7 +160,10 @@ class Model:
         ]
         # TODO check case imaginary
         # TODO check case not computable
-        self.sympy_eigenvalues = self.eigenvalues()
+        if self.settings.eigenvalue_mode == 'symbolic':
+            self.sympy_eigenvalues = self.eigenvalues()
+        else:
+            self.sympy_eigenvalues = None
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 

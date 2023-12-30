@@ -80,6 +80,7 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
                     eigenvalues_j = ev_j
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
 
+        assert max_abs_eigenvalue > 10**(-6)
         # Loop over boundary faces
         for i in range(mesh.n_boundary_elements):
             i_elem = mesh.boundary_face_corresponding_element[i]
@@ -226,6 +227,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     while (time < settings.time_end):
         Q = deepcopy(Qnew)
         dt = settings.compute_dt(Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue)
+        assert dt > 10**(-6)
 
         assert not np.isnan(dt) and np.isfinite(dt)
 

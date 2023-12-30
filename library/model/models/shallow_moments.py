@@ -13,7 +13,7 @@ from sympy import Symbol, Matrix, lambdify
 from sympy import *
 from sympy import zeros, ones
 
-from library.model.models.base import register_sympy_attribute
+from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
 from library.model.models.base import Model
 
 
@@ -43,29 +43,43 @@ def legendre_shifted(order, x):
 class Basis():
     def __init__(self, basis=legendre_shifted):
         self.basis = basis
+    
+    def compute_matrices(self, level):
+        self.M = np.empty((level+1, level+1), dtype=float)
+        self.A = np.empty((level+1, level+1, level+1), dtype=float)
+        self.B = np.empty((level+1, level+1, level+1), dtype=float)
+        self.D = np.empty((level+1, level+1), dtype=float)
+
+        for k in range(level+1):
+            for i in range(level+1):
+                self.M[k, i] = self._M(k, i)
+                self.D[k, i] = self._D(k, i)
+                for j in range(level+1):
+                    self.A[k, i, j] = self._A(k, i, j)
+                    self.B[k, i, j] = self._B(k, i, j)
 
     """ 
     Compute <phi_k, phi_i>
     """
-    def M(self, k, i):
+    def _M(self, k, i):
         return integrate(self.basis(k, x) * self.basis(i, x), (x, 0, 1))
 
     """ 
     Compute <phi_k, phi_i, phi_j>
     """
-    def A(self, k, i, j):
+    def _A(self, k, i, j):
         return integrate(self.basis(k, x) * self.basis(i, x) * self.basis(j, x), (x, 0, 1))
 
     """ 
     Compute <(phi')_k, phi_j, int(phi)_j>
     """
-    def B(self, k, i, j):
+    def _B(self, k, i, j):
         return integrate(diff(self.basis(k, x), x) * integrate(self.basis(j, x), x) * self.basis(i, x), (x, 0, 1))
 
     """ 
     Compute <(phi')_k, (phi')_j>
     """
-    def D(self, k, i):
+    def _D(self, k, i):
         return integrate(diff(self.basis(k, x), x) * diff(self.basis(i, x), x), (x, 0, 1))
 
 class ShallowMoments(Model):
@@ -86,6 +100,7 @@ class ShallowMoments(Model):
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 2
+        self.basis.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -109,7 +124,7 @@ class ShallowMoments(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A(k, i, j) / self.basis.M(k, k)
+                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
         return [flux]
 
     def nonconservative_matrix(self):
@@ -123,9 +138,15 @@ class ShallowMoments(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basis.B(k, i, j)/self.basis.M(k, k)
+                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
 
         return [nc]
 
-    # def eigenvalues(self):
-    #     return None
+    def eigenvalues(self):
+        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        for d in range(1, self.dimension):
+            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+        alpha_erase = self.variables[2:]
+        for alpha_i in alpha_erase:
+            A = A.subs(alpha_i, 0)
+        return eigenvalue_dict_to_matrix(A.eigenvals())
