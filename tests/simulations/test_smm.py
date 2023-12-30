@@ -13,7 +13,7 @@ import library.misc.io as io
 @pytest.mark.unfinished
 def test_smm_1d():
     level = 4
-    settings = Settings(name = "ShallowMoments", momentum_eqns = [1] + [2+l for l in range(level)], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowMoments", momentum_eqns = [1] + [2+l for l in range(level)], parameters = {'g':1.0, 'C':1.0, 'nu':0.1}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right"]
@@ -30,7 +30,7 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={'eigenvalue_mode': 'symbolic'},
+        settings={'eigenvalue_mode': 'symbolic', 'friction': ['chezy', 'newtonian']},
     )
     mesh = Mesh.create_1d((-1, 1), 100)
 
@@ -42,7 +42,7 @@ def test_smm_1d():
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_smm_2d(mesh_type):
     level = 2
-    settings = Settings(name = "ShallowMoments2d", momentum_eqns = [1, 2] + [3+l  for l in range(2*level)], parameters = {'g':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "ShallowMoments2d", momentum_eqns = [1, 2] + [3+l  for l in range(2*level)], parameters = {'g':1.0, 'C': 1., 'nu': 0.1}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -59,11 +59,11 @@ def test_smm_2d(mesh_type):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={'friction': ['chezy']},
+        settings={'friction': ['chezy', 'newtonian']},
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+        os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type
     )
 

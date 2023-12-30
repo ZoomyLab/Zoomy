@@ -149,6 +149,64 @@ class ShallowMoments(Model):
             A = A.subs(alpha_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
+
+    def newtonian(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+        return out
+
+    def slip(self):
+        assert "lamda" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
+        return out
+
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        for i in range(1+self.levels):
+            for j in range(1+self.levels):
+                tmp += ha[i] * ha[j] / h / h
+        sqrt = sympy.sqrt(tmp)
+        for k in range(1+self.levels):
+            for l in range(1+self.levels):
+                out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+        return out
+
+
 class ShallowMoments2d(Model):
     def __init__(
         self,
@@ -253,6 +311,78 @@ class ShallowMoments2d(Model):
         beta_erase = self.variables[2+offset : 2+offset+self.levels]
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
-        for beta_i in beta_erase:        alpha_erase = self.variables[2:2+self.levels]
+        for beta_i in beta_erase:        
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
+
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        assert "dhdy" in vars(self.aux_variables)
+        offset = self.levels+1
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        dhdy = self.aux_variables.dhdy
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        out[1+offset] = h * p.g * (p.ey - p.ez * dhdy)
+        return out
+
+
+    def newtonian(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+self.levels+1+offset]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+        return out
+
+    def slip(self):
+        assert "lamda" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+self.levels+1+offset]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
+                out[1+k+offset] += -1./p.lamda/p.rho * hb[i]  / h / self.basis.M[k, k]
+        return out
+
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+self.levels+1+offset]
+        p = self.parameters
+        tmp = 0
+        for i in range(1+self.levels):
+            for j in range(1+self.levels):
+                tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
+        sqrt = sympy.sqrt(tmp)
+        for k in range(1+self.levels):
+            for l in range(1+self.levels):
+                out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+                out[1+k+offset] += -1./(p.C**2 * self.basis.M[k,k]) * hb[l] * sqrt / h 
+        return out
