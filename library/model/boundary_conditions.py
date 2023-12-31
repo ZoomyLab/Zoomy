@@ -2,7 +2,7 @@ import numpy as np
 import os
 
 from attr import define, field
-from typing import Union, Optional, Callable, List
+from typing import Union, Optional, Callable, List, Dict
 
 from library.misc.custom_types import IArray, FArray
 import library.mesh.fvm_mesh as fvm_mesh
@@ -39,15 +39,23 @@ class Extrapolation(BoundaryCondition):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             return Q
         return f
-            
 
 
 @define(slots=True, frozen=False, kw_only=True)
-class Wall(BoundaryCondition):
-    # indices of which field indices of Q correspond to directed fields, e.g. x/y momentum
-    # momentum_eqns: IArray = field(converter=np.ndarray)
-    momentum_eqns: IArray = field(converter=lambda x: np.array(x, dtype=int))
+class InflowOutflow(BoundaryCondition):
+    prescribe_fields: dict[int, float]
 
+    def get_boundary_condition_function(self):
+        def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
+            Qout = np.array(Q)
+            for k, v in self.prescribe_fields.items():
+                Qout[k] = v
+            return Qout
+        return f
+            
+
+@define(slots=True, frozen=False, kw_only=True)
+class Wall(BoundaryCondition):
     def get_boundary_condition_function(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             Qn, Qt = projection_in_normal_and_transverse_direction(

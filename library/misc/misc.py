@@ -111,17 +111,15 @@ def projection_in_normal_and_transverse_direction(Q, momentum_fields, normal):
     dim = normal.shape[0]
     transverse_directions = compute_transverse_direction(normal)
     Q_momentum_eqns = extract_momentum_fields_as_vectors(Q, momentum_fields, dim)
-    Q_normal = np.empty(
+    Q_normal = np.zeros(
         (Q_momentum_eqns.shape[0]), dtype=float
     )
-    Q_transverse = np.empty(
+    Q_transverse = np.zeros(
         (Q_momentum_eqns.shape[0]), dtype=float
     )
-    for i in range(Q_momentum_eqns.shape[0]):
-        Q_normal[i] = np.dot(Q_momentum_eqns[i, :], normal[:])
-        Q_transverse[i] = np.dot(
-            Q_momentum_eqns[i :], transverse_directions[:]
-        )
+    for d in range(dim):
+        Q_normal += Q_momentum_eqns[:, d] * normal[d]
+        Q_transverse += Q_momentum_eqns[:, d] * transverse_directions[d]
     return Q_normal, Q_transverse
 
 

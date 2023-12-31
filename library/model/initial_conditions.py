@@ -17,8 +17,11 @@ class InitialConditions:
 
 @define(slots=True, frozen=True)
 class Constant(InitialConditions):
+    constants: Callable[[int], FArray] = lambda n_fields: np.array([1.] + [0. for i in range(n_fields-1)])
     def apply(self, X, Q):
-        Q = np.ones_like(Q)
+        n_fields = Q.shape[1]
+        for i, q in enumerate(Q):
+            Q[i] = self.constants(n_fields)
 
 
 @define(slots=True, frozen=False)
