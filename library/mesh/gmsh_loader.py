@@ -132,19 +132,26 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
     # Generate the cell block for the boundaries cells
     # data_array = [arr for (t, arr) in msh.cells if t == cell_type]
     offset = 0
-    data_array = []
+    data = []
+    tags = []
+    corresponding_cells = []
+    
     sort_order_list = []
-    for obj in msh.cells:
-        if obj.type == cell_type: 
-            data_array.append(obj.data)
-            sort_order_list.append((offset)+_sort_order_for_periodic_boundary_conditions(dim, msh.points, obj.data))
-            offset += obj.data.shape[0]
+    for i, (cellBlock, physical_tag_ids) in enumerate(zip(msh.cells, msh.cell_data['gmsh:physical'])):
+        if cellBlock.type == cell_type: 
+            data.append(cellBlock.data)
+            tags.append([ gmsh_association_table[tag_id] for tag_id in physical_tag_ids])
+            corresponding_cells.append(_get_boundary_edges_cells(msh, cellBlock.data, mesh_type))
+            sort_order_list.append((offset)+_sort_order_for_periodic_boundary_conditions(dim, msh.points, cellBlock.data))
+            offset += cellBlock.data.shape[0]
 
-    if len(data_array) == 0:
+    if len(data) == 0:
         print("WARNING: No boundary physical group found.")
         return
     else:
-        data = np.concatenate(data_array)
+        data = np.concatenate(data)
+        tags = np.concatenate(tags)
+        corresponding_cells = np.concatenate(corresponding_cells)
         sort_order = np.concatenate(sort_order_list)
     boundaries_cells = [
         meshio.CellBlock(
@@ -152,27 +159,37 @@ def export_boundaries(msh, mesh_type, directory, prefix, gmsh_association_table)
             data=data[sort_order],
         )
     ]
-    # Generate the boundaries cells data
+
     cell_data = {
         "boundary_tag": [
-            np.concatenate(
-                [
-                    [ gmsh_association_table[tag_id] for tag_id in msh.cell_data["gmsh:physical"][i] ]
-                    for i, cellBlock in enumerate(msh.cells)
-                    if cellBlock.type == cell_type
-                ]
-            )[sort_order]
+            tags[sort_order]
         ],
         "corresponding_cell": [
-            np.concatenate(
-                [
-                    _get_boundary_edges_cells(msh, cellBlock.data)
-                    for i, cellBlock in enumerate(msh.cells)
-                    if cellBlock.type == cell_type
-                ]
-            )[sort_order]
+            corresponding_cells[sort_order]
         ]
+        
     }
+    # Generate the boundaries cells data
+    # cell_data = {
+    #     "boundary_tag": [
+    #         np.concatenate(
+    #             [
+    #                 [ gmsh_association_table[tag_id] for tag_id in msh.cell_data["gmsh:physical"][i] ]
+    #                 for i, cellBlock in enumerate(msh.cells)
+    #                 if cellBlock.type == cell_type
+    #             ]
+    #         )[sort_order]
+    #     ],
+    #     "corresponding_cell": [
+    #         np.concatenate(
+    #             [
+    #                 _get_boundary_edges_cells(msh, cellBlock.data)
+    #                 for i, cellBlock in enumerate(msh.cells)
+    #                 if cellBlock.type == cell_type
+    #             ]
+    #         )[sort_order]
+    #     ]
+    # }
     # Generate the meshio Mesh for the boundaries physical groups
     boundaries = meshio.Mesh(
         points=msh.points[:, :],
@@ -207,14 +224,20 @@ def _sort_order_for_periodic_boundary_conditions(dimension, points, data):
     return indices_sorted
 
 
-def _get_boundary_edges_cells(msh, list_of_edges):
-    boundary_edges_cells = []
-    for edge in list_of_edges:
-        # find index of cell
-        # TODO cells[-1] is not save
-        hit = get_global_cell_index_from_vertices(msh.cells[-1].data, edge)
-        boundary_edges_cells.append(hit)
-    return boundary_edges_cells
+def _get_boundary_edges_cells(msh, list_of_edges, element_type):
+    results = np.empty(len(list_of_edges), dtype=int)
+    for i_edge, edge in enumerate(list_of_edges):
+        # hit = get_global_cell_index_from_vertices(msh.cells[-1].data, edge)
+        offset = 0
+        for cell in msh.cells:
+            if cell.type == element_type:
+                hit = get_global_cell_index_from_vertices(cell.data, edge, return_first=True, offset = offset)
+                if hit != []:
+                    break
+                offset += cell.data.shape[0]
+        assert hit is not False
+        results[i_edge] = hit
+    return list(results)
 
 
 

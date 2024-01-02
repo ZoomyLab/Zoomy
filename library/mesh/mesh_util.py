@@ -1,14 +1,14 @@
 import numpy as np
 
-def get_global_cell_index_from_vertices(cells, coordinates, return_first=True):
+def get_global_cell_index_from_vertices(cells, coordinates, return_first=True, offset = 0):
     hits = []
     for index, cell in enumerate(cells):
         if set(coordinates).issubset(set(cell)):
-            hits.append(index)
+            hits.append(offset + index)
             if return_first:
-                return index
-    if hits == []:
-        assert False
+                return offset + index
+    # if hits == []:
+    #     assert False
     return hits
 
 def get_element_neighbors(element_vertices, current_elem, mesh_type):
