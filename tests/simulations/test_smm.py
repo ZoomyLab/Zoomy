@@ -78,9 +78,6 @@ def test_inflowoutflow_2d():
     settings = Settings(name = "ShallowMoments2d", momentum_eqns = [1, 2] + [3+l  for l in range(2*level)], parameters = {'g':1.0, 'C': 1., 'nu': 0.1}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1., output_snapshots = 100)
 
 
-    bc_tags = ["left", "right", "top", "bottom"]
-    bc_tags_periodic_to = ["right", "left", "bottom", "top"]
-
     inflow_dict = {i: 0. for i in range(1, 2*(1+level)+1)}
     inflow_dict[1] = 0.36
     outflow_dict = {0: 1.0}
@@ -108,10 +105,44 @@ def test_inflowoutflow_2d():
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_steffler():
+    level = 0
+    settings = Settings(name = "ShallowMoments2d", momentum_eqns = [1, 2] + [3+l  for l in range(2*level)], parameters = {'g':1.0, 'C': 1., 'nu': 0.1}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 30., output_snapshots = 100)
+
+
+    inflow_dict = {i: 0. for i in range(1, 2*(1+level)+1)}
+    inflow_dict[1] = 0.36
+    outflow_dict = {0: 1.0}
+
+    bcs = BC.BoundaryConditions(
+        [BC.Wall(physical_tag='wall'), BC.InflowOutflow(physical_tag='inflow', prescribe_fields=inflow_dict), BC.InflowOutflow(physical_tag='outflow', prescribe_fields=outflow_dict)]
+    )
+    ic = IC.Constant(constants=lambda n_fields:np.array([1.0, 0.0] + [0. for i in range(n_fields-2)]))
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3+2*level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={'friction': []},
+    )
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+        os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh"),
+        'quad'
+    )
+
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
 
 
 if __name__ == "__main__":
     # test_smm_1d()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
-    test_inflowoutflow_2d()
+    # test_inflowoutflow_2d()
+    test_steffler()
