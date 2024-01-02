@@ -28,6 +28,19 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux):
         attrs.create_dataset("Q", data=Q)
         attrs.create_dataset("Qaux", data=Qaux)
 
+def load_fields_from_hdf5(filepath, i_snapshot = -1):
+    with h5py.File(filepath, "r") as f:
+        if i_snapshot == -1:
+            i_snapshot = len(f.keys())-1
+        else:
+            i_snapshot = i_snapshot
+        group = f[str(i_snapshot)]
+        time = group['time'][()]
+        Q = group['Q'][()]
+        Qaux = group['Qaux'][()]
+    return Q, Qaux, time
+
+
 def _write_to_vtk_from_vertices_edges(
     filepath,
     mesh_type,

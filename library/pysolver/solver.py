@@ -36,14 +36,13 @@ class Settings():
 def _initialize_problem(model, mesh):
     n_ghosts = model.boundary_conditions.initialize(mesh)
 
-    # n_all_elements = mesh.n_elements + n_ghosts
-    n_all_elements = mesh.n_elements
     n_fields = model.n_fields
+    n_elements = mesh.n_elements
 
-    Q = np.empty((n_all_elements, n_fields), dtype=float)
+    Q = np.empty((n_elements, n_fields), dtype=float)
     Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
 
-    model.initial_conditions.apply(mesh.element_center, Q[:mesh.n_elements])
+    Q = model.initial_conditions.apply(mesh.element_center, Q)
     return Q, Qaux
 
 def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, settings):

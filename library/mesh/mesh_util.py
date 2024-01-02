@@ -92,10 +92,11 @@ def face_areas(coordinates, element, mesh_type) -> float:
 
 def center(coordinates, element) -> float:
     center = np.zeros(3, dtype=float)
+    dim = coordinates.shape[1]
     for vertex_coord in coordinates[element]:
-        center += vertex_coord
+        center[:dim] += vertex_coord
     center /= element.shape[0]
-    return center
+    return center[:dim]
 
 def volume(coordinates, element, mesh_type) -> float:
     if mesh_type == "line":
