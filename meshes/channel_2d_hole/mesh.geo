@@ -1,6 +1,6 @@
-length = 5.;
-width =  1.;
-x_hole = length/2;
+length = 8.;
+width =  2.;
+x_hole = length/4;
 y_hole = width/2;
 r_hole = 0.2;
 d_hole = r_hole / Sqrt(2);
@@ -47,10 +47,10 @@ Surface(1) = {5,6};
 /* Transfinite Surface {1,2,3,4}; */
 
 
-Physical Curve("right", 1000) = {2};
-Physical Curve("left", 1001) = {4};
-Physical Curve("top", 1002) = {3};
-Physical Curve("bottom", 1003) = {1};
+Physical Curve("bottom", 1000) = {2};
+Physical Curve("top", 1001) = {4};
+Physical Curve("right", 1002) = {3};
+Physical Curve("left", 1003) = {1};
 Physical Curve("hole", 1004) = {5,6,7,8};
 Physical Surface("surface", 2000) = {1, 2, 3, 4};
 
