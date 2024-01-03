@@ -8,6 +8,7 @@ from time import time as gettime
 
 from library.model.model import *
 from library.model.models.base import register_parameter_defaults
+from library.model.models.shallow_moments import reconstruct_uvw
 import library.pysolver.reconstruction as recon
 import library.pysolver.flux as flux
 import library.pysolver.nonconservative_flux as nonconservative_flux
@@ -203,7 +204,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
     i_snapshot = 0
-    dt_snapshot = time/(settings.output_snapshots-1)
+    dt_snapshot = settings.time_end/(settings.output_snapshots-1)
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
     i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
     mesh.write_to_hdf5(settings.output_dir)
@@ -243,6 +244,11 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         Qnew = time_ode_solver(space_solution_operator, Q, Qaux, parameters, dt)
         Qnew = time_ode_solver(compute_source, Qnew, Qaux, parameters, dt)
 
+        # if time > 0.8:
+        #     gradQ = mesh.gradQ(Q)
+        #     for q, gradq in zip(Q, gradQ):
+        #         u, v, w = reconstruct_uvw(q, gradq, model.levels, model.basis)
+        # time, Qnew, Qaux, parameters, settings = callback_post_solve(time, Qnew, Qaux, parameters, settings)
         # Qavg = np.mean(Qavg_5steps, axis=0)
         # error = (
         #     self.compute_Lp_error(Qnew - Qavg, p=2, **kwargs)

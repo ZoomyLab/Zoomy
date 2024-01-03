@@ -38,7 +38,7 @@ from sympy.abc import x
 from sympy import legendre
 
 def legendre_shifted(order, x):
-    return legendre(order, 2*x-1)
+    return legendre(order, 2*x-1) * (-1)**(order)
 
 class Basis():
     def __init__(self, basis=legendre_shifted):
@@ -386,3 +386,49 @@ class ShallowMoments2d(Model):
                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
                 out[1+k+offset] += -1./(p.C**2 * self.basis.M[k,k]) * hb[l] * sqrt / h 
         return out
+
+
+def reconstruct_uvw(Q, grad, lvl, phi, psi):
+    """
+    returns functions u(z), v(z), w(z)
+    """
+    offset = lvl + 1
+    h = Q[0]
+    alpha = Q[1 : 1 + offset] / h
+    beta = Q[1 + offset : 1 + 2 * offset] / h
+    dhalpha_dx = grad[1 : 1 + offset, 0]
+    dhbeta_dy = grad[1 + offset : 1 + 2 * offset, 1]
+
+    def u(z):
+        u_z = 0
+        for i in range(lvl + 1):
+            u_z += alpha[i] * phi(z)[i]
+        return u_z
+
+    def v(z):
+        v_z = 0
+        for i in range(lvl + 1):
+            v_z += beta[i] * phi(z)[i]
+        return v_z
+
+    def w(z):
+        basis_0 = psi(0)
+        basis_z = psi(z)
+        u_z = 0
+        v_z = 0
+        grad_h = grad[0, :]
+        # grad_hb = grad[-1, :]
+        grad_hb = np.zeros(grad[0,:].shape)
+        result = 0
+        for i in range(lvl + 1):
+            u_z += alpha[i] * basis_z[i]
+            v_z += beta[i] * basis_z[i]
+        for i in range(lvl + 1):
+            result -= dhalpha_dx[i] * (basis_z[i] - basis_0[i])
+            result -= dhbeta_dy[i] * (basis_z[i] - basis_0[i])
+
+        result += u_z * (z * grad_h[0] + grad_hb[0])
+        result += v_z * (z * grad_h[1] + grad_hb[1])
+        return result
+
+    return u, v, w

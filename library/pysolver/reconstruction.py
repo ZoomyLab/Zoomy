@@ -1,6 +1,8 @@
 import numpy as np
+from attrs import define
 
 
+from library.misc.custom_types import IArray, FArray, CArray
 from library.mesh.fvm_mesh import *
 
 # TODO get rid of the boundary_conditions requirement
@@ -154,3 +156,39 @@ def constant_old(mesh, fields):
         edge+=1
     # return Qi, Qj, Qauxi, Qauxj
         return field_i, field_j
+
+
+@define(slots=True, frozen=True)
+class GradientMesh(Mesh):
+    #TODO Problem: currently I use nx = [1, 0], ny = [0,1] - however, I think I need to do minmod(nx, -nx) or something similar in nd?
+    element_face_coefficients: IArray
+
+    @classmethod 
+    def fromMesh(cls, msh):
+        dim = msh.dimension
+        element_face_coefficients = np.zeros((msh.n_elements, msh.n_faces_per_element, dim ), dtype=float)
+        normals = [np.eye(dim)[d, :] for d in range(dim)]
+
+        for i_elem in range(msh.n_elements):
+            x_self = msh.element_center[i_elem]
+            for i_face in range(msh.element_n_neighbors[i_elem]):
+                x_neighbor = msh.element_center[msh.element_neighbors[i_elem][i_face]]
+                for d in range(dim):
+                    element_face_coefficients[i_elem][i_face][d] = max(np.dot(normals[d], msh.element_face_normals[i_elem, i_face]), 0.)
+                    element_face_coefficients[i_elem][i_face][d] /= np.linalg.norm(x_neighbor-x_self)
+        return cls(msh.dimension, msh.type, msh.n_elements, msh.n_vertices, msh.n_boundary_elements, msh.n_faces_per_element, msh.vertex_coordinates, msh.element_vertices, msh.element_face_areas, msh.element_center, msh.element_volume, msh.element_inradius, msh.element_face_normals, msh.element_n_neighbors, msh.element_neighbors, msh.element_neighbors_face_index, msh.boundary_face_vertices, msh.boundary_face_corresponding_element, msh.boundary_face_element_face_index, msh.boundary_face_tag, msh.boundary_tag_names, element_face_coefficients)
+
+    def gradQ(self, Q):
+        dim = self.dimension
+        n_fields = Q.shape[1]
+        gradQ = np.zeros((self.n_elements, n_fields, dim), dtype=float)
+        for i_elem in range(self.n_elements):
+            q_self = Q[i_elem]
+            for i_face in range(self.element_n_neighbors[i_elem]):
+                i_neighbor = self.element_neighbors[i_elem, i_face]
+                q_neighbor = Q[i_neighbor]
+                for d in range(dim):
+                    gradQ[i_elem, :, d] += self.element_face_coefficients[i_elem, i_face, d] * (q_neighbor - q_self)
+        return gradQ
+
+

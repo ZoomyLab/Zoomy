@@ -778,8 +778,8 @@ class Mesh:
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
 
-    def write_to_hdf5(self, filepath: str):
-        with h5py.File(os.path.join(filepath, 'mesh.hdf5'), "w") as f:
+    def write_to_hdf5(self, filepath: str, filename='mesh.hdf5'):
+        with h5py.File(os.path.join(filepath, filename), "w") as f:
             attrs = f.create_group("mesh")
             attrs.create_dataset("dimension", data=self.dimension)
             attrs.create_dataset("type", data=self.type)
@@ -837,11 +837,10 @@ def read_vtk_cell_fields(
 
 
 
-
 def get_extruded_mesh_type(mesh_type: str) -> str:
     if (mesh_type) == "quad":
         return "hex"
-    elif (mesh_type) == "tri":
+    elif (mesh_type) == "triangle":
         return "wface"
     else:
         assert False
@@ -850,7 +849,7 @@ def get_extruded_mesh_type(mesh_type: str) -> str:
 def get_n_nodes_per_element(mesh_type: str) -> int:
     if (mesh_type) == "quad":
         return 4
-    elif (mesh_type) == "tri":
+    elif (mesh_type) == "triangle":
         return 3
     elif (mesh_type) == "wface":
         return 6
@@ -863,12 +862,20 @@ def get_n_nodes_per_element(mesh_type: str) -> int:
 
 
 def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
-    if mesh_type == "tri":
+    if mesh_type == "triangle":
         return "triangle"
     elif mesh_type == "hex":
         return "hexahedron"
+    elif mesh_type == "line":
+        return "line"
+    elif mesh_type == "quad":
+        return "quad"
+    elif mesh_type == "wface":
+        return "wedge"
+    elif mesh_type == "tetra":
+        return "tetra"
     else:
-        return mesh_type
+        assert False
 
 
 def extrude_2d_element_vertices_mesh(
@@ -939,5 +946,3 @@ def compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_
 
 def get_boundary_normal(mesh, i_boundary):
     return mesh.element_face_normal[mesh.boundary_face_corresponding_element[i_boundary_edge], mesh.boundary_face_element_face_index[i_boundary_edge]]
-
-

@@ -21,12 +21,13 @@ def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all):
     _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux)
     return i_snapshot +1
 
-def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux):
-    with h5py.File(os.path.join(filepath, 'fields.hdf5'), "a") as f:
+def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fields.hdf5'):
+    with h5py.File(os.path.join(filepath, filename), "a") as f:
         attrs = f.create_group(str(i_snapshot))
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
-        attrs.create_dataset("Qaux", data=Qaux)
+        if Qaux is not None:
+            attrs.create_dataset("Qaux", data=Qaux)
 
 def load_fields_from_hdf5(filepath, i_snapshot = -1):
     with h5py.File(filepath, "r") as f:
