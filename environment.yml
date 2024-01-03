@@ -16,3 +16,4 @@ dependencies:
   - tqdm
   - h5py
   - cython
+  - pyprog
