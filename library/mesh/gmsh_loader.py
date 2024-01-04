@@ -3,12 +3,12 @@
 ## - should carry the boundary condition name as a tag, to be identifyable by name
 ## - allow for more element types
 
-import argparse
+# import argparse
 import meshio
 import os
 import numpy as np
-from configparser import ConfigParser
-from compas.datastructures import Mesh as MeshCompas
+# from configparser import ConfigParser
+# from compas.datastructures import Mesh as MeshCompas
 import h5py 
 
 from library.mesh.mesh_util import get_global_cell_index_from_vertices

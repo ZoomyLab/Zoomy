@@ -1,12 +1,10 @@
 import os
 import numpy as np
 import meshio
-from compas.datastructures import Mesh as MeshCompas
-from compas_gmsh.models import MeshModel
+# from compas.datastructures import Mesh as MeshCompas
+# from compas_gmsh.models import MeshModel
 import h5py
-
 from attr import define
-
 from typing import Union, Tuple
 
 from library.misc.custom_types import IArray, FArray, CArray
@@ -329,458 +327,458 @@ class Mesh:
 
         return cls.from_compas_mesh(mesh, mesh_type, dimension)
 
-    def from_comas_mesh_volume(mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
-        type = mesh_type
-        dimension = mesh_dimension
-        if mesh_dimension == 2:
-            ez = np.array([0.0, 0.0, 1.0])
-        n_nodes_per_element = get_n_nodes_per_element(mesh_type)
+    # def from_comas_mesh_volume(mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
+    #     type = mesh_type
+    #     dimension = mesh_dimension
+    #     if mesh_dimension == 2:
+    #         ez = np.array([0.0, 0.0, 1.0])
+    #     n_nodes_per_element = get_n_nodes_per_element(mesh_type)
 
-        n_vertices = mesh.number_of_vertices()
-        n_edges = mesh.number_of_edges()
-        n_elements = mesh.number_of_faces()
-        vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
-        for i_vertex in range(n_vertices):
-            vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
-                :dimension
-            ]
-        element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
-        element_centers = np.zeros((n_elements, dimension), dtype=float)
-        element_volume = np.zeros((n_elements), dtype=float)
-        element_incircle = np.zeros((n_elements), dtype=float)
-        element_edge_normal = -np.ones(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
+    #     n_vertices = mesh.number_of_vertices()
+    #     n_edges = mesh.number_of_edges()
+    #     n_elements = mesh.number_of_faces()
+    #     vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
+    #     for i_vertex in range(n_vertices):
+    #         vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
+    #             :dimension
+    #         ]
+    #     element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+    #     element_centers = np.zeros((n_elements, dimension), dtype=float)
+    #     element_volume = np.zeros((n_elements), dtype=float)
+    #     element_incircle = np.zeros((n_elements), dtype=float)
+    #     element_edge_normal = -np.ones(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
 
-        # element_neighbors = mesh.face_adjacency()
-        # manual computation of neighbors
-        element_n_neighbors = np.zeros(n_elements, dtype=int)
-        element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_normal = np.zeros(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+    #     # element_neighbors = mesh.face_adjacency()
+    #     # manual computation of neighbors
+    #     element_n_neighbors = np.zeros(n_elements, dtype=int)
+    #     element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_normal = np.zeros(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
 
-        for face in np.fromiter(mesh.faces(), int):
-            element_vertices[face] = np.array(mesh.face_vertices(face))
-            element_volume[face] = mesh.face_area(face)
-            element_incircle[face] = incircle(mesh, face, type)
-            element_centers[face] = mesh.face_center(face)[:dimension]
-            for i_edge, edge in enumerate(mesh.face_halfedges(face)):
-                edge_faces = mesh.edge_faces(*edge)
-                if edge_faces[0] != face and edge_faces[0] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
-                elif edge_faces[1] != face and edge_faces[1] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
-        return ( 
-                dimension,
-                type,
-                n_elements,
-                n_vertices,
-                n_edges,
-                n_nodes_per_element,
-                vertex_coordinates,
-                element_vertices,
-                element_edge_length,
-                element_centers,
-                element_volume,
-                element_incircle,
-                element_edge_normal,
-                element_neighbors,
-                element_n_neighbors,
-        )
+    #     for face in np.fromiter(mesh.faces(), int):
+    #         element_vertices[face] = np.array(mesh.face_vertices(face))
+    #         element_volume[face] = mesh.face_area(face)
+    #         element_incircle[face] = incircle(mesh, face, type)
+    #         element_centers[face] = mesh.face_center(face)[:dimension]
+    #         for i_edge, edge in enumerate(mesh.face_halfedges(face)):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             if edge_faces[0] != face and edge_faces[0] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
+    #             elif edge_faces[1] != face and edge_faces[1] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
+    #     return ( 
+    #             dimension,
+    #             type,
+    #             n_elements,
+    #             n_vertices,
+    #             n_edges,
+    #             n_nodes_per_element,
+    #             vertex_coordinates,
+    #             element_vertices,
+    #             element_edge_length,
+    #             element_centers,
+    #             element_volume,
+    #             element_incircle,
+    #             element_edge_normal,
+    #             element_neighbors,
+    #             element_n_neighbors,
+    #     )
 
-    def from_comas_mesh_boundaries(mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
-        dimension = mesh_dimension
+    # def from_comas_mesh_boundaries(mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
+    #     dimension = mesh_dimension
 
-        edges_on_boundaries_list = []
-        if dimension == 2:
-            for edge in mesh.edges():
-                if mesh.is_edge_on_boundary(*edge):
-                    edges_on_boundaries_list.append(edge)
-        elif dimension == 3:
-            for edge in mesh.faces():
-                if mesh.is_face_on_boundary(edge):
-                    edges_on_boundaries_list.append(edge)
-        edges_on_boundaries = np.array(edges_on_boundaries_list)
-        boundary_edge_vertices = edges_on_boundaries
-        n_boundary_edges = boundary_edge_vertices.shape[0]
-        boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
-        boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
-        boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
+    #     edges_on_boundaries_list = []
+    #     if dimension == 2:
+    #         for edge in mesh.edges():
+    #             if mesh.is_edge_on_boundary(*edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     elif dimension == 3:
+    #         for edge in mesh.faces():
+    #             if mesh.is_face_on_boundary(edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     edges_on_boundaries = np.array(edges_on_boundaries_list)
+    #     boundary_edge_vertices = edges_on_boundaries
+    #     n_boundary_edges = boundary_edge_vertices.shape[0]
+    #     boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
+    #     boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
+    #     boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
 
-        if dimension == 2:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                edge_faces = mesh.edge_faces(*edge)
-                boundary_edge_length[i_edge] = mesh.edge_length(*edge)
-                boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
+    #     if dimension == 2:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             boundary_edge_length[i_edge] = mesh.edge_length(*edge)
+    #             boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
 
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
-        elif dimension == 3:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                # mesh.face[4] -> seems to be the cells
-                # mesh.edge_faces(27,34) seems to return the cells conected to one face.
-                # edge_faces = mesh.edge_faces(edge)
-                boundary_edge_length[i_edge] = mesh.face_area(edge)
-                boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
+    #     elif dimension == 3:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             # mesh.face[4] -> seems to be the cells
+    #             # mesh.edge_faces(27,34) seems to return the cells conected to one face.
+    #             # edge_faces = mesh.edge_faces(edge)
+    #             boundary_edge_length[i_edge] = mesh.face_area(edge)
+    #             boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
 
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
-
-        
-        n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
-        assert(n_edges == n_edges_check)
-        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
-        
-        return (
-            n_inner_edges,
-            n_boundary_edges,
-            boundary_edge_vertices,
-            boundary_edge_elements,
-            boundary_edge_neighbors,
-            boundary_edge_length,
-            boundary_edge_normal,
-            boundary_edge_tag,
-        )
-
-
-    @classmethod
-    def from_compas_mesh(cls, mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
-        type = mesh_type
-        dimension = mesh_dimension
-        ez = np.array([0.0, 0.0, 1.0])
-        n_nodes_per_element = get_n_nodes_per_element(mesh_type)
-
-        n_vertices = mesh.number_of_vertices()
-        n_edges = mesh.number_of_edges()
-        n_elements = mesh.number_of_faces()
-        vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
-        for i_vertex in range(n_vertices):
-            vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
-                :dimension
-            ]
-        element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
-        element_centers = np.zeros((n_elements, dimension), dtype=float)
-        element_volume = np.zeros((n_elements), dtype=float)
-        element_incircle = np.zeros((n_elements), dtype=float)
-        element_edge_normal = -np.ones(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
-
-        # element_neighbors = mesh.face_adjacency()
-        # manual computation of neighbors
-        element_n_neighbors = np.zeros(n_elements, dtype=int)
-        element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_normal = np.zeros(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
-
-        for face in np.fromiter(mesh.faces(), int):
-            element_vertices[face] = np.array(mesh.face_vertices(face))
-            element_volume[face] = mesh.face_area(face)
-            element_incircle[face] = incircle(mesh, face, type)
-            element_centers[face] = mesh.face_center(face)[:dimension]
-            for i_edge, edge in enumerate(mesh.face_halfedges(face)):
-                edge_faces = mesh.edge_faces(*edge)
-                if edge_faces[0] != face and edge_faces[0] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
-                elif edge_faces[1] != face and edge_faces[1] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
-
-        edges_on_boundaries_list = []
-        if dimension == 2:
-            for edge in mesh.edges():
-                if mesh.is_edge_on_boundary(*edge):
-                    edges_on_boundaries_list.append(edge)
-        elif dimension == 3:
-            for edge in mesh.faces():
-                if mesh.is_face_on_boundary(edge):
-                    edges_on_boundaries_list.append(edge)
-        edges_on_boundaries = np.array(edges_on_boundaries_list)
-        boundary_edge_vertices = edges_on_boundaries
-        n_boundary_edges = boundary_edge_vertices.shape[0]
-        boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
-        boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
-        boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
-
-        if dimension == 2:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                edge_faces = mesh.edge_faces(*edge)
-                boundary_edge_length[i_edge] = mesh.edge_length(*edge)
-                boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
-
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
-        elif dimension == 3:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                # mesh.face[4] -> seems to be the cells
-                # mesh.edge_faces(27,34) seems to return the cells conected to one face.
-                # edge_faces = mesh.edge_faces(edge)
-                boundary_edge_length[i_edge] = mesh.face_area(edge)
-                boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
-
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
 
         
-        n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
-        assert(n_edges == n_edges_check)
-        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
+    #     n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
+    #     assert(n_edges == n_edges_check)
+    #     inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
         
-        return cls(
-            dimension,
-            type,
-            n_elements,
-            n_vertices,
-            n_edges,
-            n_inner_edges,
-            n_boundary_edges,
-            n_nodes_per_element,
-            vertex_coordinates,
-            element_vertices,
-            element_edge_length,
-            element_centers,
-            element_volume,
-            element_incircle,
-            element_edge_normal,
-            element_neighbors,
-            element_n_neighbors,
-            boundary_edge_vertices,
-            boundary_edge_elements,
-            boundary_edge_neighbors,
-            boundary_edge_length,
-            boundary_edge_normal,
-            boundary_edge_tag,
-            inner_edge_list,
-        )
-        
+    #     return (
+    #         n_inner_edges,
+    #         n_boundary_edges,
+    #         boundary_edge_vertices,
+    #         boundary_edge_elements,
+    #         boundary_edge_neighbors,
+    #         boundary_edge_length,
+    #         boundary_edge_normal,
+    #         boundary_edge_tag,
+    #     )
 
-    @classmethod
-    def from_compas_mesh_old(cls, mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
-        type = mesh_type
-        dimension = mesh_dimension
-        ez = np.array([0.0, 0.0, 1.0])
-        n_nodes_per_element = get_n_nodes_per_element(mesh_type)
 
-        n_vertices = mesh.number_of_vertices()
-        n_edges = mesh.number_of_edges()
-        n_elements = mesh.number_of_faces()
-        vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
-        for i_vertex in range(n_vertices):
-            vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
-                :dimension
-            ]
-        element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
-        element_centers = np.zeros((n_elements, dimension), dtype=float)
-        element_volume = np.zeros((n_elements), dtype=float)
-        element_incircle = np.zeros((n_elements), dtype=float)
-        element_edge_normal = -np.ones(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
+    # @classmethod
+    # def from_compas_mesh(cls, mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
+    #     type = mesh_type
+    #     dimension = mesh_dimension
+    #     ez = np.array([0.0, 0.0, 1.0])
+    #     n_nodes_per_element = get_n_nodes_per_element(mesh_type)
 
-        # element_neighbors = mesh.face_adjacency()
-        # manual computation of neighbors
-        element_n_neighbors = np.zeros(n_elements, dtype=int)
-        element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
-        element_edge_normal = np.zeros(
-            (n_elements, n_nodes_per_element, dimension), dtype=float
-        )
-        element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+    #     n_vertices = mesh.number_of_vertices()
+    #     n_edges = mesh.number_of_edges()
+    #     n_elements = mesh.number_of_faces()
+    #     vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
+    #     for i_vertex in range(n_vertices):
+    #         vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
+    #             :dimension
+    #         ]
+    #     element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+    #     element_centers = np.zeros((n_elements, dimension), dtype=float)
+    #     element_volume = np.zeros((n_elements), dtype=float)
+    #     element_incircle = np.zeros((n_elements), dtype=float)
+    #     element_edge_normal = -np.ones(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
 
-        for face in np.fromiter(mesh.faces(), int):
-            element_vertices[face] = np.array(mesh.face_vertices(face))
-            element_volume[face] = mesh.face_area(face)
-            element_incircle[face] = incircle(mesh, face, type)
-            element_centers[face] = mesh.face_center(face)[:dimension]
-            for i_edge, edge in enumerate(mesh.face_halfedges(face)):
-                edge_faces = mesh.edge_faces(*edge)
-                if edge_faces[0] != face and edge_faces[0] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
-                elif edge_faces[1] != face and edge_faces[1] is not None:
-                    element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
-                    element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                    element_edge_length[
-                        face, element_n_neighbors[face]
-                    ] = mesh.edge_length(*edge)
-                    element_n_neighbors[face] += 1
+    #     # element_neighbors = mesh.face_adjacency()
+    #     # manual computation of neighbors
+    #     element_n_neighbors = np.zeros(n_elements, dtype=int)
+    #     element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_normal = np.zeros(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
 
-        edges_on_boundaries_list = []
-        if dimension == 2:
-            for edge in mesh.edges():
-                if mesh.is_edge_on_boundary(*edge):
-                    edges_on_boundaries_list.append(edge)
-        elif dimension == 3:
-            for edge in mesh.faces():
-                if mesh.is_face_on_boundary(edge):
-                    edges_on_boundaries_list.append(edge)
-        edges_on_boundaries = np.array(edges_on_boundaries_list)
-        boundary_edge_vertices = edges_on_boundaries
-        n_boundary_edges = boundary_edge_vertices.shape[0]
-        boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
-        boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
-        boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
-        boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
+    #     for face in np.fromiter(mesh.faces(), int):
+    #         element_vertices[face] = np.array(mesh.face_vertices(face))
+    #         element_volume[face] = mesh.face_area(face)
+    #         element_incircle[face] = incircle(mesh, face, type)
+    #         element_centers[face] = mesh.face_center(face)[:dimension]
+    #         for i_edge, edge in enumerate(mesh.face_halfedges(face)):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             if edge_faces[0] != face and edge_faces[0] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
+    #             elif edge_faces[1] != face and edge_faces[1] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
 
-        if dimension == 2:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                edge_faces = mesh.edge_faces(*edge)
-                boundary_edge_length[i_edge] = mesh.edge_length(*edge)
-                boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
+    #     edges_on_boundaries_list = []
+    #     if dimension == 2:
+    #         for edge in mesh.edges():
+    #             if mesh.is_edge_on_boundary(*edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     elif dimension == 3:
+    #         for edge in mesh.faces():
+    #             if mesh.is_face_on_boundary(edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     edges_on_boundaries = np.array(edges_on_boundaries_list)
+    #     boundary_edge_vertices = edges_on_boundaries
+    #     n_boundary_edges = boundary_edge_vertices.shape[0]
+    #     boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
+    #     boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
+    #     boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
 
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
-        elif dimension == 3:
-            for i_edge, edge in enumerate(edges_on_boundaries):
-                # mesh.face[4] -> seems to be the cells
-                # mesh.edge_faces(27,34) seems to return the cells conected to one face.
-                # edge_faces = mesh.edge_faces(edge)
-                boundary_edge_length[i_edge] = mesh.face_area(edge)
-                boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
+    #     if dimension == 2:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             boundary_edge_length[i_edge] = mesh.edge_length(*edge)
+    #             boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
 
-                if edge_faces[0] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[1]
-                    boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
-                        :dimension
-                    ]
-                elif edge_faces[1] == None:
-                    boundary_edge_elements[i_edge] = edge_faces[0]
-                    boundary_edge_normal[i_edge] = -np.cross(
-                        mesh.edge_direction(*edge), ez
-                    )[:dimension]
-                else:
-                    assert False
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
+    #     elif dimension == 3:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             # mesh.face[4] -> seems to be the cells
+    #             # mesh.edge_faces(27,34) seems to return the cells conected to one face.
+    #             # edge_faces = mesh.edge_faces(edge)
+    #             boundary_edge_length[i_edge] = mesh.face_area(edge)
+    #             boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
+
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
 
         
-        n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
-        assert(n_edges == n_edges_check)
-        inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
+    #     n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
+    #     assert(n_edges == n_edges_check)
+    #     inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
         
-        return cls(
-            dimension,
-            type,
-            n_elements,
-            n_vertices,
-            n_edges,
-            n_inner_edges,
-            n_boundary_edges,
-            n_nodes_per_element,
-            vertex_coordinates,
-            element_vertices,
-            element_edge_length,
-            element_centers,
-            element_volume,
-            element_incircle,
-            element_edge_normal,
-            element_neighbors,
-            element_n_neighbors,
-            boundary_edge_vertices,
-            boundary_edge_elements,
-            boundary_edge_neighbors,
-            boundary_edge_length,
-            boundary_edge_normal,
-            boundary_edge_tag,
-            inner_edge_list,
-        )
+    #     return cls(
+    #         dimension,
+    #         type,
+    #         n_elements,
+    #         n_vertices,
+    #         n_edges,
+    #         n_inner_edges,
+    #         n_boundary_edges,
+    #         n_nodes_per_element,
+    #         vertex_coordinates,
+    #         element_vertices,
+    #         element_edge_length,
+    #         element_centers,
+    #         element_volume,
+    #         element_incircle,
+    #         element_edge_normal,
+    #         element_neighbors,
+    #         element_n_neighbors,
+    #         boundary_edge_vertices,
+    #         boundary_edge_elements,
+    #         boundary_edge_neighbors,
+    #         boundary_edge_length,
+    #         boundary_edge_normal,
+    #         boundary_edge_tag,
+    #         inner_edge_list,
+    #     )
+        
+
+    # @classmethod
+    # def from_compas_mesh_old(cls, mesh: MeshCompas, mesh_type: str, mesh_dimension: int):
+    #     type = mesh_type
+    #     dimension = mesh_dimension
+    #     ez = np.array([0.0, 0.0, 1.0])
+    #     n_nodes_per_element = get_n_nodes_per_element(mesh_type)
+
+    #     n_vertices = mesh.number_of_vertices()
+    #     n_edges = mesh.number_of_edges()
+    #     n_elements = mesh.number_of_faces()
+    #     vertex_coordinates = np.zeros((n_vertices, dimension), dtype=float)
+    #     for i_vertex in range(n_vertices):
+    #         vertex_coordinates[i_vertex, :] = mesh.vertex_coordinates(i_vertex)[
+    #             :dimension
+    #         ]
+    #     element_vertices = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+    #     element_centers = np.zeros((n_elements, dimension), dtype=float)
+    #     element_volume = np.zeros((n_elements), dtype=float)
+    #     element_incircle = np.zeros((n_elements), dtype=float)
+    #     element_edge_normal = -np.ones(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_id = -np.ones((n_elements, n_nodes_per_element), dtype=float)
+
+    #     # element_neighbors = mesh.face_adjacency()
+    #     # manual computation of neighbors
+    #     element_n_neighbors = np.zeros(n_elements, dtype=int)
+    #     element_neighbors = np.zeros((n_elements, n_nodes_per_element), dtype=int)
+    #     element_edge_normal = np.zeros(
+    #         (n_elements, n_nodes_per_element, dimension), dtype=float
+    #     )
+    #     element_edge_length = np.zeros((n_elements, n_nodes_per_element), dtype=float)
+
+    #     for face in np.fromiter(mesh.faces(), int):
+    #         element_vertices[face] = np.array(mesh.face_vertices(face))
+    #         element_volume[face] = mesh.face_area(face)
+    #         element_incircle[face] = incircle(mesh, face, type)
+    #         element_centers[face] = mesh.face_center(face)[:dimension]
+    #         for i_edge, edge in enumerate(mesh.face_halfedges(face)):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             if edge_faces[0] != face and edge_faces[0] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[0]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
+    #             elif edge_faces[1] != face and edge_faces[1] is not None:
+    #                 element_neighbors[face, element_n_neighbors[face]] = edge_faces[1]
+    #                 element_edge_normal[face, element_n_neighbors[face]] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #                 element_edge_length[
+    #                     face, element_n_neighbors[face]
+    #                 ] = mesh.edge_length(*edge)
+    #                 element_n_neighbors[face] += 1
+
+    #     edges_on_boundaries_list = []
+    #     if dimension == 2:
+    #         for edge in mesh.edges():
+    #             if mesh.is_edge_on_boundary(*edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     elif dimension == 3:
+    #         for edge in mesh.faces():
+    #             if mesh.is_face_on_boundary(edge):
+    #                 edges_on_boundaries_list.append(edge)
+    #     edges_on_boundaries = np.array(edges_on_boundaries_list)
+    #     boundary_edge_vertices = edges_on_boundaries
+    #     n_boundary_edges = boundary_edge_vertices.shape[0]
+    #     boundary_edge_elements = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_neighbors = np.zeros(n_boundary_edges, dtype=int)
+    #     boundary_edge_tag = np.zeros(n_boundary_edges, dtype="S8")
+    #     boundary_edge_length = np.zeros(n_boundary_edges, dtype=float)
+    #     boundary_edge_normal = np.zeros((n_boundary_edges, dimension), dtype=float)
+
+    #     if dimension == 2:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             edge_faces = mesh.edge_faces(*edge)
+    #             boundary_edge_length[i_edge] = mesh.edge_length(*edge)
+    #             boundary_edge_tag[i_edge] = mesh.edge_attributes(edge)["tag"]
+
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
+    #     elif dimension == 3:
+    #         for i_edge, edge in enumerate(edges_on_boundaries):
+    #             # mesh.face[4] -> seems to be the cells
+    #             # mesh.edge_faces(27,34) seems to return the cells conected to one face.
+    #             # edge_faces = mesh.edge_faces(edge)
+    #             boundary_edge_length[i_edge] = mesh.face_area(edge)
+    #             boundary_edge_tag[i_edge] = mesh.face_attributes(edge)["tag"]
+
+    #             if edge_faces[0] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[1]
+    #                 boundary_edge_normal[i_edge] = np.cross(mesh.edge_direction(*edge), ez)[
+    #                     :dimension
+    #                 ]
+    #             elif edge_faces[1] == None:
+    #                 boundary_edge_elements[i_edge] = edge_faces[0]
+    #                 boundary_edge_normal[i_edge] = -np.cross(
+    #                     mesh.edge_direction(*edge), ez
+    #                 )[:dimension]
+    #             else:
+    #                 assert False
+
+        
+    #     n_edges_check , n_inner_edges = _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element)
+    #     assert(n_edges == n_edges_check)
+    #     inner_edge_list = compute_edge_list_for_inner_domain(n_elements, element_n_neighbors, element_neighbors)
+        
+    #     return cls(
+    #         dimension,
+    #         type,
+    #         n_elements,
+    #         n_vertices,
+    #         n_edges,
+    #         n_inner_edges,
+    #         n_boundary_edges,
+    #         n_nodes_per_element,
+    #         vertex_coordinates,
+    #         element_vertices,
+    #         element_edge_length,
+    #         element_centers,
+    #         element_volume,
+    #         element_incircle,
+    #         element_edge_normal,
+    #         element_neighbors,
+    #         element_n_neighbors,
+    #         boundary_edge_vertices,
+    #         boundary_edge_elements,
+    #         boundary_edge_neighbors,
+    #         boundary_edge_length,
+    #         boundary_edge_normal,
+    #         boundary_edge_tag,
+    #         inner_edge_list,
+        # )
 
     @classmethod
     def from_hdf5(cls, filepath: str):

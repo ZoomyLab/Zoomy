@@ -27,7 +27,7 @@ def create_default_mesh_and_model(
 
     bc_tags = ["left", "right", "top", "bottom"][: 2 * dimension]
     bcs = BC.BoundaryConditions(
-        [BC.Wall(physical_tag=tag, momentum_eqns=momentum_eqns) for tag in bc_tags]
+        [BC.Wall(physical_tag=tag) for tag in bc_tags]
     )
     if dimension == 1:
         mesh = Mesh.create_1d((-1, 1), 10)
@@ -49,19 +49,18 @@ def create_default_mesh_and_model(
         initial_conditions=ic,
         settings=settings,
     )
-    n_ghosts = model.boundary_conditions.initialize(mesh)
+    n_elements = mesh.n_elements
 
-    n_all_elements = mesh.n_elements + n_ghosts
-    Q = np.linspace(1, fields * n_all_elements, fields * n_all_elements).reshape(
-        n_all_elements, fields
+    Q = np.linspace(1, fields * n_elements, fields * n_elements).reshape(
+        n_elements, fields
     )
     Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
-    parameters = model.parameter_defaults
+    parameters = model.parameter_values
     num_normals = mesh.element_n_neighbors
     normals = np.array(
-        [mesh.element_edge_normal[:, i] for i in range(mesh.n_nodes_per_element)]
+        [mesh.element_face_normals[:, i] for i in range(mesh.n_faces_per_element)]
     )
 
-    model.initial_conditions.apply(Q, mesh.element_centers)
-    model.boundary_conditions.apply(Q)
+    model.initial_conditions.apply(Q, mesh.element_center)
+    # model.boundary_conditions.apply()
     return mesh, model, Q, Qaux, parameters, num_normals, normals
