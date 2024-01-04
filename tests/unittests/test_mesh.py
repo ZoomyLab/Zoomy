@@ -1,7 +1,7 @@
 import pytest
 
-from library.fvm_mesh import *
-from library.misc import all_class_members_identical
+from library.mesh.fvm_mesh import *
+from library.misc.misc import all_class_members_identical
 
 
 @pytest.mark.critical
@@ -139,14 +139,34 @@ def test_extrude_and_write_3d_mesh():
         elements_3d,
     )
 
+@pytest.mark.critical
+@pytest.mark.parametrize("mesh_type", ["quad", "tri"])
+def test_extrude_2d_as_fvm_mesh(mesh_type:str):
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+        os.path.join(main_dir, f"meshes/{mesh_type}_2d/mesh_coarse.msh"),
+        f"{mesh_type}"
+    )
+
+    mesh_ext = Mesh.extrude_fvm_mesh(mesh, 3)
+
+    filepath = os.path.join(main_dir, "output/test.vtk")
+    os.makedirs(os.path.split(filepath)[0], exist_ok=True)
+    mesh_ext.write_to_file_vtk(
+        filepath
+    )
+
+
 
 if __name__ == "__main__":
-    test_create_1d_mesh()
-    test_load_2d_mesh("quad")
-    test_load_2d_mesh("triangle")
-    test_load_3d_mesh("tetra")
-    test_write_to_hdf5()
-    test_from_hdf5()
-    test_write_to_file_vtk()
-    test_read_vtk_cell_fields()
-    test_extrude_and_write_3d_mesh()
+    # test_create_1d_mesh()
+    # test_load_2d_mesh("quad")
+    # test_load_2d_mesh("triangle")
+    # test_load_3d_mesh("tetra")
+    # test_write_to_hdf5()
+    # test_from_hdf5()
+    # test_write_to_file_vtk()
+    # test_read_vtk_cell_fields()
+    # test_extrude_and_write_3d_mesh()
+    test_extrude_2d_as_fvm_mesh('quad')
+    # test_extrude_2d_as_fvm_mesh('triangle')

@@ -21,7 +21,7 @@ def get_element_neighbors(element_vertices, current_elem, mesh_type):
         found_overlapping_vertices = set(elem).intersection(set(current_elem))
         n_found_overlapping_vertices = len(found_overlapping_vertices)
 
-        if n_found_overlapping_vertices == num_vertices_per_face:
+        if n_found_overlapping_vertices == np.min(num_vertices_per_face):
             for i_elem_face_index, edge in enumerate(_face_order(current_elem, mesh_type)):
                 if set(edge).issubset(found_overlapping_vertices):
                     element_neighbor_face_index[n_found_neighbors] = i_elem_face_index
@@ -41,6 +41,8 @@ def face_normals(coordinates, element, mesh_type) -> float:
     elif mesh_type == "tetra":
         return _face_normals_3d(coordinates, element, mesh_type)
     elif mesh_type == "hex":
+        return _face_normals_3d(coordinates, element, mesh_type)
+    elif mesh_type == "wface":
         return _face_normals_3d(coordinates, element, mesh_type)
     assert False
 
@@ -69,7 +71,23 @@ def _face_normals_3d(coordinates, element, mesh_type) -> float:
     for i_face, face in enumerate(faces):
         # I will only consider the first 2 edges, regardless of the element type. 
         # flat elements, where 2 edges already span the plane and normal
-        edges = _face_order(face, boundary_mesh_type)
+        edges = _face_order(face, boundary_mesh_type[i_face])
+        edge_1  = edges[0]
+        edge_2 = edges[1]
+        edge_direction_1 = coordinates[edge_1[1]] - coordinates[edge_1[0]]
+        edge_direction_2 = coordinates[edge_2[1]] - coordinates[edge_2[0]]
+        normals[i_face, :] = -np.cross(edge_direction_1, edge_direction_2)
+        normals[i_face, :] /= np.linalg.norm(normals[i_face, :])
+    return normals
+
+def _face_normals_wface(coordinates, element, mesh_type) -> float:
+    faces = _face_order(element, mesh_type)
+    boundary_mesh_type = _get_boundary_element_type(mesh_type)
+    normals = np.zeros((len(faces),3), dtype=float)
+    for i_face, face in enumerate(faces):
+        # I will only consider the first 2 edges, regardless of the element type. 
+        # flat elements, where 2 edges already span the plane and normal
+        edges = _face_order(face, boundary_mesh_type[i_face])
         edge_1  = edges[0]
         edge_2 = edges[1]
         edge_direction_1 = coordinates[edge_1[1]] - coordinates[edge_1[0]]
@@ -85,7 +103,7 @@ def face_areas(coordinates, element, mesh_type) -> float:
     face_areas = np.zeros(num_faces, dtype=float)
 
     for i_face, face in enumerate(faces):
-        face_areas[i_face] = volume(coordinates, face, boundary_mesh_type)
+        face_areas[i_face] = volume(coordinates, face, boundary_mesh_type[i_face])
 
     return face_areas 
     
@@ -93,9 +111,9 @@ def face_areas(coordinates, element, mesh_type) -> float:
 def center(coordinates, element) -> float:
     center = np.zeros(3, dtype=float)
     dim = coordinates.shape[1]
-    for vertex_coord in coordinates[element]:
+    for vertex_coord in coordinates[np.array(element)]:
         center[:dim] += vertex_coord
-    center /= element.shape[0]
+    center /= np.array(element).shape[0]
     return center[:dim]
 
 def volume(coordinates, element, mesh_type) -> float:
@@ -109,6 +127,8 @@ def volume(coordinates, element, mesh_type) -> float:
         return _volume_tetra(coordinates, element)
     elif mesh_type == "hex":
         return _volume_hex(coordinates, element)
+    elif mesh_type == "wface":
+        return _volume_wface(coordinates, element)
     assert False
 
 def _area_triangle(coordinates, element) -> float:
@@ -154,6 +174,13 @@ def _volume_hex(coordinates, element) -> float:
         d = center_point
         volume += np.abs(np.dot((a-d), np.cross((b-d), (c-d))))/6
     return volume
+
+def _volume_wface(coordinates, element) -> float:
+    volume = 0
+    faces = _face_order_wface(element)
+    area_triangle = _area_triangle(coordinates, faces[0])
+    height = np.linalg.norm(coordinates[element[0]] - coordinates[element[3]])
+    return area_triangle * height
         
     
 def inradius(coordinates, element, mesh_type) -> float:
@@ -164,7 +191,9 @@ def inradius(coordinates, element, mesh_type) -> float:
     elif mesh_type == "tetra":
         return _inradius_tetra(coordinates, element)
     elif mesh_type == "hex":
-        return _inradius_hex(coordinates, element)
+        return _inradius_generic(coordinates, element, 'hex')
+    elif mesh_type == "wface":
+        return _inradius_generic(coordinates, element, 'wface')
     assert False
 
 def _inradius_triangle(coordinates, element) -> float:
@@ -199,8 +228,22 @@ def _inradius_tetra(coordinates, element) -> float:
     volume = _volume_tetra(coordinates, element)
     return 3 * volume / area
 
-def _inradius_hex(coordinates, element) -> float:
-    assert False
+def _inradius_generic(coordinates, element, mesh_type) -> float:
+    """
+    strategy: find the shortest path from the center to each side (defined by face center and normal)
+    use the minimum of all these shortest paths
+    """
+    faces = _face_order(element, mesh_type)
+    normals = face_normals(coordinates, element, mesh_type)
+    element_center = center(coordinates, element)
+    n_faces = len(faces)
+    distances = np.empty(n_faces, dtype=float)
+    for i_face, face in enumerate(faces):
+        face_center = center(coordinates, face)
+        face_normal = normals[i_face]
+        distances[i_face] = np.abs(np.dot(face_center - element_center, face_normal))
+    return np.min(distances)
+        
 
 
 
@@ -218,6 +261,8 @@ def _face_order(element, mesh_type):
         return _face_order_tetra(element)
     elif mesh_type == 'hex':
         return _face_order_hex(element)
+    elif mesh_type == 'wface':
+        return _face_order_wface(element)
     else:
         assert False
 
@@ -233,15 +278,20 @@ def _face_order_tetra(element):
 def _face_order_hex(element):
     return [(element[0], element[1], element[2], element[3]), (element[4], element[5], element[6], element[7]), (element[0], element[1], element[5], element[4]), (element[1], element[2], element[6], element[5]), (element[2], element[3], element[7], element[6]), (element[3], element[0], element[4], element[7])] 
 
+def _face_order_wface(element):
+    return [(element[0], element[1], element[2]), (element[3], element[4], element[5]), (element[0], element[3], element[4], element[1]), (element[1], element[4], element[5], element[2]),(element[2], element[5], element[3], element[0]) ]
+
 def _get_num_vertices_per_face(mesh_type) -> float:
     if mesh_type == "triangle":
-        return 2
+        return [2, 2, 2]
     elif mesh_type == "quad":
-        return 2
+        return [2, 2, 2, 2]
     elif mesh_type == "tetra":
-        return 3
+        return [3, 3, 3, 3]
     elif mesh_type == "hex":
-        return 4
+        return [4, 4, 4, 4, 4, 4]
+    elif mesh_type == "wface":
+        return [3, 3, 4, 4, 4]
     assert False
 
 def _get_dimension(mesh_type):
@@ -267,18 +317,22 @@ def _get_faces_per_element(mesh_type):
         return 4
     elif mesh_type == 'hex':
         return 6
+    elif mesh_type == 'wface':
+        return 5
     else:
         assert False
 
 def _get_boundary_element_type(mesh_type):
     if mesh_type == 'triangle':
-        return 'line'
+        return ['line', 'line', 'line']
     elif mesh_type == 'quad':
-        return 'line'
+        return ['line', 'line', 'line', 'line']
     elif mesh_type == 'tetra':
-        return 'triangle'
+        return ['triangle', 'triangle', 'triangle']
     elif mesh_type == 'hex':
-        return 'quad'
+        return ['quad', 'quad', 'quad', 'quad', 'quad', 'quad' ]
+    elif mesh_type == 'wface':
+        return ['triangle', 'triangle', 'quad', 'quad', 'quad']
     else:
         assert False
 
