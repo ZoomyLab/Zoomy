@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.model import *
-import library.reconstruction as reconstruction
+from library.model.model import *
+import library.pysolver.reconstruction as reconstruction
 
 @pytest.mark.critical
 def test_recon_const_1d():

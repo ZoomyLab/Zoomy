@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.model import *
-import library.flux as num_flux
-import library.reconstruction as reconstruction
+from library.model.model import *
+import library.pysolver.flux as num_flux
+import library.pysolver.reconstruction as reconstruction
 
 
 @pytest.mark.critical

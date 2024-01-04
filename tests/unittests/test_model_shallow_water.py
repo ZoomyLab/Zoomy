@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
-from library.misc import *
-from library.models.shallow_water import *
-import library.boundary_conditions as BC
-import library.initial_conditions as IC
-from library.fvm_mesh import *
-from library.model import create_default_mesh_and_model
+from library.misc.misc import *
+from library.model.models.shallow_water import *
+import library.model.boundary_conditions as BC
+import library.model.initial_conditions as IC
+from library.mesh.fvm_mesh import *
+from library.model.model import create_default_mesh_and_model
 
 
 @pytest.mark.critical

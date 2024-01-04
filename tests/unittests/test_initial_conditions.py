@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from library.initial_conditions import *
+from library.model.initial_conditions import *
 
 
 @pytest.mark.critical
@@ -11,21 +11,24 @@ def test_default():
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = Constant().apply(Q, X)
+    Q = Constant(lambda n_fields: np.ones(n_fields)).apply(Q, X)
     assert np.allclose(Q, np.ones_like(Q))
 
 
 @pytest.mark.critical
 def test_RP():
-    def f(n: int) -> FArray:
+    def fl(n: int) -> FArray:
         return np.ones(n, dtype=float)
+
+    def fr(n: int) -> FArray:
+        return 2*np.ones(n, dtype=float)
 
     Q = np.zeros((10, 3))
     x = np.linspace(-1, 1, 10)
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = RP(left=f).apply(Q, X)
+    Q = RP().apply(X, Q)
     assert np.allclose(Q[:5, :], np.ones((5, 3)))
     assert np.allclose(Q[5:, :], 2 * np.ones((5, 3)))
 
@@ -42,7 +45,7 @@ def test_UserFunction():
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = UserFunction(function=f).apply(Q, X)
+    Q = UserFunction(function=f).apply(X, Q)
     assert np.allclose(Q[:5, :], np.ones((5, 3)))
     assert np.allclose(Q[5:, :], 2 * np.ones((5, 3)))
 

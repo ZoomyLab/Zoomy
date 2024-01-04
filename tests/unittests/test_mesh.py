@@ -11,15 +11,15 @@ def test_create_1d_mesh():
     assert True
 
 
-@pytest.mark.critical
-@pytest.mark.parametrize("mesh_type", ["quad", "tri"])
-def test_load_2d_mesh(mesh_type: str):
-    main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
-        mesh_type,
-    )
-    assert True
+# @pytest.mark.critical
+# @pytest.mark.parametrize("mesh_type", ["quad", "tri"])
+# def test_load_2d_mesh(mesh_type: str):
+#     main_dir = os.getenv("SMS")
+#     mesh = Mesh.load_gmsh(
+#         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+#         mesh_type,
+#     )
+#     assert True
 
 
 
@@ -142,7 +142,7 @@ def test_extrude_and_write_3d_mesh():
     )
 
 @pytest.mark.critical
-@pytest.mark.parametrize("mesh_type", ["quad", "tri"])
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_extrude_2d_as_fvm_mesh(mesh_type:str):
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
