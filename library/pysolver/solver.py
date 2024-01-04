@@ -5,6 +5,10 @@ from attr import define, field
 from typing import Callable, Optional, Type
 from copy import deepcopy
 from time import time as gettime
+import os
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 from library.model.model import *
 from library.model.models.base import register_parameter_defaults
@@ -15,6 +19,7 @@ import library.pysolver.nonconservative_flux as nonconservative_flux
 import library.pysolver.timestepping as timestepping
 import library.misc.io as io
 import library.mesh.fvm_mesh as fvm_mesh
+from library.pysolver.ode import *
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -108,6 +113,13 @@ def _get_source(mesh, runtime_model, settings):
             runtime_model.source(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
     return source
 
+def _get_source_jac(mesh, runtime_model, settings):
+    def source_jac(dt, Q, Qaux, parameters, dQ):
+        # Loop over the inner elements
+        for i_elem in range(mesh.n_elements):
+            runtime_model.source_jacobian(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+    return source_jac
+
 
 def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions, settings):
     compute_num_flux = settings.num_flux
@@ -169,7 +181,7 @@ def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions
     return operator_rhs_split
     
 
-def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
+def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
     iteration = 0
     time = 0.0
 
@@ -182,8 +194,8 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         complete_symbol="█",
         not_complete_symbol="-",
     )
-    # progressbar.progress_explain = ""
-    # progressbar.update()
+    progressbar.progress_explain = ""
+    progressbar.update()
     # force=True is needed in order to disable old logging root handlers (if multiple test cases are run by one file)
     # otherwise only a logfile will be created for the first testcase but the log file gets deleted by rmtree
     # logging.basicConfig(
@@ -211,20 +223,23 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
 
     time_start = gettime()
 
-    model_functions = model.get_runtime_model()
-    _ = model.create_c_interface()
-    runtime_model = model.load_c_model()
+    if runtime_model is None:
+        model_functions = model.get_runtime_model()
+        _ = model.create_c_interface()
+        runtime_model = model.load_c_model()
 
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
     space_solution_operator = _get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
     compute_source = _get_source(mesh, runtime_model, settings)
+    compute_source_jac = _get_source_jac(mesh, runtime_model, settings)
     compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
     min_inradius = np.min(mesh.element_inradius)
 
-
+    # print(f'hi from process {os.getpid()}')
     while (time < settings.time_end):
+        # print(f'in loop from process {os.getpid()}')
         Q = deepcopy(Qnew)
         dt = settings.compute_dt(Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue)
         assert dt > 10**(-6)
@@ -241,8 +256,8 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
             if time + dt * 1.001 > settings.time_end:
                 dt = settings.time_end - time + 10 ** (-10)
 
-        Qnew = time_ode_solver(space_solution_operator, Q, Qaux, parameters, dt)
-        Qnew = time_ode_solver(compute_source, Qnew, Qaux, parameters, dt)
+        Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+        Qnew = ode_solver_source(compute_source, Qnew, Qaux, parameters, dt, func_jac = compute_source_jac)
 
         # if time > 0.8:
         #     gradQ = mesh.gradQ(Q)
@@ -271,6 +286,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, time_ode_solver):
         #         iteration, gettime() - time_start, time, dt, error
         #     )
         # )
+        # print(f'finished timestep: {os.getpid()}')
         progressbar.set_stat(min(time, settings.time_end))
         progressbar.update()
 
