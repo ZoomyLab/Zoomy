@@ -328,7 +328,7 @@ def _get_boundary_element_type(mesh_type):
     elif mesh_type == 'quad':
         return ['line', 'line', 'line', 'line']
     elif mesh_type == 'tetra':
-        return ['triangle', 'triangle', 'triangle']
+        return ['triangle', 'triangle', 'triangle', 'triangle']
     elif mesh_type == 'hex':
         return ['quad', 'quad', 'quad', 'quad', 'quad', 'quad' ]
     elif mesh_type == 'wface':

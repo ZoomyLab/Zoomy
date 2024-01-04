@@ -1,6 +1,7 @@
 import pytest
 
 from library.mesh.fvm_mesh import *
+import library.misc.io as io
 from library.misc.misc import all_class_members_identical
 
 
@@ -40,9 +41,9 @@ def test_write_to_hdf5():
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         'quad',
     )
-    filepath = os.path.join(main_dir, "output/test.hdf5")
+    filepath = os.path.join(main_dir, "output")
     os.makedirs(os.path.split(filepath)[0], exist_ok=True)
-    mesh.write_to_hdf5(filepath)
+    mesh.write_to_hdf5(filepath, filename='test.hdf5')
     assert True
 
 
@@ -76,9 +77,10 @@ def test_from_hdf5():
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         'quad',
     )
-    filepath = os.path.join(main_dir, "output/test.hdf5")
-    os.makedirs(os.path.split(filepath)[0], exist_ok=True)
-    mesh.write_to_hdf5(filepath)
+    filepath = os.path.join(main_dir, "output")
+    os.makedirs(filepath, exist_ok=True)
+    mesh.write_to_hdf5(filepath, filename='test.hdf5')
+    filepath = os.path.join(filepath, 'test.hdf5')
     mesh_loaded = Mesh.from_hdf5(filepath)
     members = [
         attr
@@ -132,7 +134,7 @@ def test_extrude_and_write_3d_mesh():
         10,
     )
     filepath = os.path.join(main_dir, "output/test_extruded")
-    write_to_file_vtk_from_vertices_edges(
+    io._write_to_vtk_from_vertices_edges(
         filepath,
         mesh_type,
         vertices_3d,
@@ -159,14 +161,14 @@ def test_extrude_2d_as_fvm_mesh(mesh_type:str):
 
 
 if __name__ == "__main__":
-    # test_create_1d_mesh()
-    # test_load_2d_mesh("quad")
-    # test_load_2d_mesh("triangle")
-    # test_load_3d_mesh("tetra")
-    # test_write_to_hdf5()
-    # test_from_hdf5()
-    # test_write_to_file_vtk()
-    # test_read_vtk_cell_fields()
-    # test_extrude_and_write_3d_mesh()
+    test_create_1d_mesh()
+    test_load_2d_mesh("quad")
+    test_load_2d_mesh("triangle")
+    test_load_3d_mesh("tetra")
+    test_write_to_hdf5()
+    test_from_hdf5()
+    test_write_to_file_vtk()
+    test_read_vtk_cell_fields()
+    test_extrude_and_write_3d_mesh()
     test_extrude_2d_as_fvm_mesh('quad')
-    # test_extrude_2d_as_fvm_mesh('triangle')
+    test_extrude_2d_as_fvm_mesh('triangle')
