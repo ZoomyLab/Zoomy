@@ -40,6 +40,13 @@ from sympy import legendre
 def legendre_shifted(order, x):
     return legendre(order, 2*x-1) * (-1)**(order)
 
+def test_basis(order, x):
+    if order == 0:
+        return 1.
+    if order == 1:
+        return 1-x
+    return 0.
+
 class Basis():
     def __init__(self, basis=legendre_shifted):
         self.basis = basis

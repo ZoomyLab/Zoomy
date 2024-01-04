@@ -81,13 +81,13 @@ class ShallowWater(Model):
         return out
 
     def manning(self):
-        assert "nu" in vars(self.parameters)
+        assert "nm" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]
         u = hu / h
         p = self.parameters
-        out[1] = -p.g * (p.nu**2) * hu * Abs(u) ** (7 / 3)
+        out[1] = -p.g * (p.nm**2) * u * Abs(u) / h**(7/3)
         return out
 
     def chezy(self):

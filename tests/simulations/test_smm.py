@@ -342,6 +342,49 @@ def test_smm_grad_2d():
         start_at_time=1.0,
     )
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_smm_1d_crazy_basis():
+    level = 1
+    settings = Settings(
+        name="ShallowMoments",
+        momentum_eqns=[1] + [2 + l for l in range(level)],
+        parameters={"g": 1.0, "C": 1.0, "nu": 0.001},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.9),
+        time_end=10.00,
+        output_snapshots=50,
+    )
+
+    bc_tags = ["left", "right"]
+    bc_tags_periodic_to = ["right", "left"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    ic = IC.RP(
+        left=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
+        right=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
+    )
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian"]},
+        basis = Basis(basis=test_basis)
+    )
+    mesh = Mesh.create_1d((-1, 1), 100)
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
+
 
 if __name__ == "__main__":
     # test_smm_1d()
@@ -349,5 +392,6 @@ if __name__ == "__main__":
     # test_smm_2d("triangle")
     # test_inflowoutflow_2d()
     # test_steffler()
-    test_channel_with_hole_2d()
+    # test_channel_with_hole_2d()
     # test_smm_grad_2d()
+    test_smm_1d_crazy_basis()
