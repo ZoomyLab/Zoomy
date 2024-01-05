@@ -1,9 +1,9 @@
 import numpy as np
-import library.mesh.mesh_util as mesh_util
 from sympy import integrate, diff
 from sympy.abc import x
 from sympy import lambdify
 
+import library.mesh.mesh_util as mesh_util
 # from library.model.models.shallow_moments import Basis
 
 
