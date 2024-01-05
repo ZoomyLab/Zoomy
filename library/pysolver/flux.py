@@ -57,7 +57,7 @@ def LLF_wb():
     def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props = None):
         IWB = np.eye(Qi.shape[0])
         IWB[-1,:] = 0.
-        IWB[0, -1] = 1.
+        IWB[0, -1] = 0.
         EVi = np.zeros_like(Qi)
         EVj = np.zeros_like(Qj)
         model_functions.eigenvalues(Qi, Qauxi, param, normal, EVi )

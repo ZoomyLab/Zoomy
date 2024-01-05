@@ -40,7 +40,7 @@ class Settings():
     output_clean_dir: bool= True
 
 def _initialize_problem(model, mesh):
-    n_ghosts = model.boundary_conditions.initialize(mesh)
+    model.boundary_conditions.initialize(mesh)
 
     n_fields = model.n_fields
     n_elements = mesh.n_elements

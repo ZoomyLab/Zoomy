@@ -3,6 +3,7 @@ import pytest
 from types import SimpleNamespace
 import concurrent.futures
 import os
+from copy import deepcopy as copy
 
 from library.pysolver.solver import *
 from library.model.model import *
@@ -127,32 +128,52 @@ def test_calibration_1d(inputs):
         output_dir = f'out_{index}'
     )
 
+    hin = 0.2329
+    huin = 0.155
+
+    def bump(x):
+        return 0.05 * np.exp(-(x[0]**2) * 10)
+
+    def slope(x):
+        return 0.
+        return -(x[0]+5.)/100. + 0.1
+
+    def ic_func(x):
+        Q = np.zeros(3, dtype=float)
+        Q[0] = 0.10 - bump(x)
+        Q[1] = 0.
+        Q[2] = slope(x) + bump(x)
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
     bc_tags = ["left", "right"]
     bc_tags_periodic_to = ["right", "left"]
 
-    hout = 0.1
-    vin = .1
-    inflow_dict = {1: vin*hout}
-    outflow_dict = {0: hout}
+    # inflow_dict = {0: hout, 1: vin*hout}
+    # outflow_dict = {}
 
+    # I want to extrapolate the bottom topography in order to avoid a reconstruction problem (wave generation)
+    dx = 10./100.
+    x_minus = copy(mesh.element_center[0])
+    x_minus[0] -= dx
+    x_plus = copy(mesh.element_center[-1])
+    x_plus[0] += dx
+    inflow_dict = {0: hin,1: huin, 2: slope(x_minus) }
+    outflow_dict = { 2:slope(x_plus) }
     bcs = BC.BoundaryConditions(
         [
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
             BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
         ]
     )
+    # bcs = BC.BoundaryConditions(
+    #     [
+    #         BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+    #         BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+    #     ]
+    # )
 
-    def bump(x):
-        return 0.05 * np.exp(-(x[0]**2) * 10)
-
-    def ic_func(x):
-        Q = np.zeros(3, dtype=float)
-        Q[0] = hout - bump(x)
-        Q[1] = vin*hout
-        Q[2] = bump(x)
-        return Q
-
-    ic = IC.UserFunction(ic_func)
     # ic = IC.RestartFromHdf5(
     #     path_to_old_mesh="out_restart/mesh.hdf5",
     #     path_to_fields="out_restart/fields.hdf5",
@@ -169,8 +190,8 @@ def test_calibration_1d(inputs):
         initial_conditions=ic,
         settings={"friction": ['manning']},
     )
-    model_functions = model.get_runtime_model()
-    _ = model.create_c_interface()
+    # model_functions = model.get_runtime_model()
+    # _ = model.create_c_interface()
     runtime_model = model.load_c_model()
 
 
@@ -188,7 +209,7 @@ if __name__ == "__main__":
     # test_swetopo_2d("quad")
     # test_swetopo_2d("triangle")
 
-    runs = 40
+    runs = 5
     samples_index = list(range(runs))
     samples_nm = list(np.linspace(0.00, 1.0, runs))
     # test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
