@@ -7,6 +7,7 @@ autowraptmp
 .tmp
 .~lock.architecture.odp#
 bin
+.venv
 dependencies
 library/solver/libkokkos.a
 library/solver/Kokkos_hwloc.o

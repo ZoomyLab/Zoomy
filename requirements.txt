@@ -1,0 +1,15 @@
+numpy
+meshio
+h5py
+attrs
+sympy
+pyyaml
+pyprog
+
+pytest
+
+matplotlib
+pyvista
+ipywidgets
+ipyfilechooser
+scipy
