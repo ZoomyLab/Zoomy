@@ -81,7 +81,7 @@ def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, 
     for k, v in parameters.items():
         attrs.create_dataset(k, data=v)
 
-        grp = f.create_group('timeseries')
+    grp = f.create_group('timeseries')
     for i_snapshot in range(len(snapshots)):
         # load timeseries data
         time = fields[str(i_snapshot)]['time'][()]
@@ -104,3 +104,38 @@ def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, 
     f.close()
     settings.close()
     fields.close()
+
+#TODO unfinished
+# def combine_calibration_hdf5_files(filepath_list, output_filepath, combine_along_parameter=['nm']):
+#     main_dir = os.getenv("SMS")
+#     f =  h5py.File(os.path.join(main_dir , output_filepath), "w")
+#     # load the first mesh to extract the mesh and parameters
+#     fin = h5py.File(filepath_list[0], "r")
+
+#     attrs = f.create_group("mesh")
+#     attrs.create_dataset("centers", data=f['mesh']['centers'][()])
+
+#     parameters = {key: value[()] for key, value in settings['parameters'].items()}
+#     for param in combine_along_parameter:
+#         del parameters[param]
+#     attrs = f.create_group("parameters")
+#     for k, v in parameters.items():
+#         attrs.create_dataset(k, data=v)
+
+
+#     grp = f.create_group('simulations')
+#     for i, filepath in enumerate(filepath_list):
+#         fin = h5py.File(filepath, "r")
+#         params = [(param, parameters[param]) for param in combine_along_parameter]
+#         sim = grp.create_group(f'{i}')
+#         for (p_name, p_value) in params:
+#             sim.create_dataset(p_name, data=p_value, dtype=float)
+#             timeseries = grp.create_group('timeseries')
+#             snapshots = list(fin['timeseries'].keys())
+#             for i_snapshot in range(len(snapshots)):
+#                 timeseries.create_dataset("time", data=fin['timeseries']['0']['time'][()], dtype=float)
+
+
+#         fin.close()
+
+#     f.close()
