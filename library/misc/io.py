@@ -14,6 +14,12 @@ def init_output_directory(path, clean):
         for f in filelist:
             os.remove(os.path.join(path, f))
 
+def save_settings(filepath, settings):
+    with h5py.File(os.path.join(filepath, 'settings.hdf5'), "w") as f:
+        attrs = f.create_group('parameters')
+        for k, v in settings.parameters.items():
+            attrs.create_dataset(k, data=v)
+
 def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all):
     if not write_all and  time < next_write_at:
         return i_snapshot

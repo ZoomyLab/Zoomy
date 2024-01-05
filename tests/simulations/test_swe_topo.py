@@ -11,6 +11,7 @@ import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.pysolver.ode import *
 import library.misc.io as io
+import library.postprocessing.postprocessing as postprocessing
 
 
 @pytest.mark.critical
@@ -123,7 +124,7 @@ def test_calibration_1d(inputs):
         reconstruction=recon.constant,
         num_flux=flux.LLF_wb(),
         compute_dt=timestepping.adaptive(CFL=0.9),
-        time_end=100.0,
+        time_end=1.0,
         output_snapshots=100,
         output_dir = f'out_{index}'
     )
@@ -201,6 +202,11 @@ def test_calibration_1d(inputs):
     logging.debug(f"Process {os.getpid()}: nm {settings.parameters['nm']}")
     io.generate_vtk(settings.output_dir)
 
+    #TODO the custom functions should be a individual postprocessing function that appends to Qaux! Then I can use the other tools (e.g. vtk) as well
+    custom_functions = [('u', lambda X, Q, Qaux, param: Q[:,1]/Q[:,0]), ('Fr', lambda X, Q, Qaux, param: Q[:,1]/Q[:,0] / np.sqrt(param['g']*Q[:,0])), ('E', lambda X, Q, Qaux, param: Q[:,1]**2/Q[:,0] + param['g']*Q[:,0]),]
+    postprocessing.extract_pointwise_timeseries_data_as_hft5(settings.output_dir, os.path.join(settings.output_dir, 'calibration_data.hdf5'), field_names=['h', 'hu', 'b'], aux_field_names=[], custom_functions = custom_functions)
+
+
 
 
 
@@ -212,10 +218,10 @@ if __name__ == "__main__":
     runs = 5
     samples_index = list(range(runs))
     samples_nm = list(np.linspace(0.00, 1.0, runs))
-    # test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
+    test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
     # for inputs in list(zip(samples_index, samples_nm)):
     #     test_calibration_1d(inputs)
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        # Use executor.map to apply the function to each item in parallel
-        executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
+    #     # Use executor.map to apply the function to each item in parallel
+    #     executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
 

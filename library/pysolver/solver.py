@@ -220,6 +220,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
     i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
     mesh.write_to_hdf5(settings.output_dir)
+    io.save_settings(settings.output_dir, settings)
 
     time_start = gettime()
 
