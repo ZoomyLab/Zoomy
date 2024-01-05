@@ -122,7 +122,7 @@ def test_calibration_1d(inputs):
         reconstruction=recon.constant,
         num_flux=flux.LLF_wb(),
         compute_dt=timestepping.adaptive(CFL=0.9),
-        time_end=10.0,
+        time_end=100.0,
         output_snapshots=100,
         output_dir = f'out_{index}'
     )
@@ -142,23 +142,23 @@ def test_calibration_1d(inputs):
         ]
     )
 
-    # def bump(x):
-    #     return 0.05 * np.exp(-(x[0]**2) * 10)
+    def bump(x):
+        return 0.05 * np.exp(-(x[0]**2) * 10)
 
-    # def ic_func(x):
-    #     Q = np.zeros(3, dtype=float)
-    #     Q[0] = hout - bump(x)
-    #     Q[1] = vin*hout
-    #     Q[2] = bump(x)
-    #     return Q
+    def ic_func(x):
+        Q = np.zeros(3, dtype=float)
+        Q[0] = hout - bump(x)
+        Q[1] = vin*hout
+        Q[2] = bump(x)
+        return Q
 
-    # ic = IC.UserFunction(ic_func)
-    ic = IC.RestartFromHdf5(
-        path_to_old_mesh="out_restart/mesh.hdf5",
-        path_to_fields="out_restart/fields.hdf5",
-        mesh_new=mesh,
-        mesh_identical=True,
-    )
+    ic = IC.UserFunction(ic_func)
+    # ic = IC.RestartFromHdf5(
+    #     path_to_old_mesh="out_restart/mesh.hdf5",
+    #     path_to_fields="out_restart/fields.hdf5",
+    #     mesh_new=mesh,
+    #     mesh_identical=True,
+    # )
 
     model = ShallowWaterTopo(
         dimension=1,
@@ -169,8 +169,8 @@ def test_calibration_1d(inputs):
         initial_conditions=ic,
         settings={"friction": ['manning']},
     )
-    # model_functions = model.get_runtime_model()
-    # _ = model.create_c_interface()
+    model_functions = model.get_runtime_model()
+    _ = model.create_c_interface()
     runtime_model = model.load_c_model()
 
 
@@ -188,13 +188,13 @@ if __name__ == "__main__":
     # test_swetopo_2d("quad")
     # test_swetopo_2d("triangle")
 
-    runs = 2
+    runs = 40
     samples_index = list(range(runs))
-    samples_nm = list(np.linspace(0.00, 1.155, runs))
-    test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
+    samples_nm = list(np.linspace(0.00, 1.0, runs))
+    # test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
     # for inputs in list(zip(samples_index, samples_nm)):
     #     test_calibration_1d(inputs)
-    # with concurrent.futures.ProcessPoolExecutor() as executor:
-    #     # Use executor.map to apply the function to each item in parallel
-    #     executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Use executor.map to apply the function to each item in parallel
+        executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
 
