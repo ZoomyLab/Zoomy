@@ -13,3 +13,4 @@ pyvista
 ipywidgets
 ipyfilechooser
 scipy
+Cython >= 3.0.7
