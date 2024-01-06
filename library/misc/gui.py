@@ -10,7 +10,7 @@ import yaml
 import importlib.util
 
 def import_module_from_path(path):
-    spec = importlib.util.spec_from_file_location("module.name", path)
+    spec = importlib.util.spec_from_file_location(os.path.splitext(os.path.basename(path))[0], path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -33,7 +33,7 @@ def get_gui_tags(path):
 
         # Check the docstring of all functions and classes in these files
         for name, obj in inspect.getmembers(module):
-            if inspect.isfunction(obj) or inspect.isclass(obj):
+            if (inspect.isfunction(obj) or inspect.isclass(obj)) and obj.__module__ == module.__name__:
                 docstring = inspect.getdoc(obj)
                 if docstring:
                     # Parse the docstring using the docstring_parser module
@@ -42,8 +42,8 @@ def get_gui_tags(path):
                     # Print out all 'gui' tags
                     for meta in parsed_docstring.meta:
                         if meta.args == ['gui']:
-                            yml = yaml.safe_load( parsed_docstring.meta[1].description)
-                            print(yml)
+                            yml = yaml.safe_load( meta.description)
+                            print(os.path.basename(path), obj.__name__, yml)
     except:
         print(f"Could not import module from {path}")
         pass

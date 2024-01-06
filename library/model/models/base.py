@@ -58,6 +58,12 @@ def get_sympy_eigenvalues(eigenvalue_func):
 
 @define(slots=True, frozen=False, kw_only=True)
 class Model:
+    """
+    Generic (virtual) model implementation.
+
+    :gui:
+    - model
+    """
     name: str
     dimension: int = 1
     boundary_conditions: BoundaryConditions = BoundaryConditions(
