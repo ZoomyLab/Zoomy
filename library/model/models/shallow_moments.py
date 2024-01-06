@@ -10,7 +10,7 @@ from copy import deepcopy
 from scipy import interpolate
 import sympy
 from sympy import Symbol, Matrix, lambdify
-from sympy import *
+# from sympy import *
 from sympy import zeros, ones
 
 from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
@@ -90,6 +90,13 @@ class Basis():
         return integrate(diff(self.basis(k, x), x) * diff(self.basis(i, x), x), (x, 0, 1))
 
 class ShallowMoments(Model):
+    """
+    Shallow Moments 1d
+
+    :gui: 
+    - model
+    - advanced
+    """
     def __init__(
         self,
         boundary_conditions,
