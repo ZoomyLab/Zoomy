@@ -47,8 +47,30 @@ def recover_3d_from_smm_as_vtk(model, output_path, path_to_mesh, path_to_fields,
     (points_3d, element_vertices_3d, mesh_type) = fvm_mesh.extrude_2d_element_vertices_mesh(mesh.type, mesh.vertex_coordinates, mesh.element_vertices, Q[:,0], Nz)
     io._write_to_vtk_from_vertices_edges(os.path.join(output_path, 'mesh3d.vtk'), mesh_type, points_3d, element_vertices_3d, fields =UVW)
 
+def append_custom_fields_to_aux_fields_for_hdf5(input_folderpath, custom_functions):
+    fields =  h5py.File(os.path.join(input_folderpath, 'fields.hdf5'), "r+")
+    settings =  h5py.File(os.path.join(input_folderpath, 'settings.hdf5'), "r")
+    mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(input_folderpath, 'mesh.hdf5'))
+    snapshots = list(fields.keys())
+    n_fields = fields[str(0)]['Q'].shape[1]
+    n_aux_fields  = fields[str(0)]['Qaux'][()].shape[1]
 
-def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, field_names=None, aux_field_names=None, custom_functions=None):
+    parameters = {key: value[()] for key, value in settings['parameters'].items()}
+    Qaux_new = np.zeros((mesh.n_elements, n_aux_fields+len(custom_functions)), dtype=float)
+
+    for i_snapshot in range(len(snapshots)):
+        # load timeseries data
+        time = fields[str(i_snapshot)]['time'][()]
+        Q = fields[str(i_snapshot)]['Q'][()]
+        Qaux = fields[str(i_snapshot)]['Qaux'][()]
+        Qaux_new[:, :n_aux_fields] = Qaux
+        for i, (name, func) in enumerate(custom_functions):
+            Qaux_new[:, n_aux_fields+i] = func(mesh.element_center, Q, Qaux, parameters)   
+        del fields[str(i_snapshot)]['Qaux']
+        fields[str(i_snapshot)].create_dataset("Qaux", data=Qaux_new)
+
+
+def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, field_names=None, aux_field_names=None):
     fields =  h5py.File(os.path.join(input_folderpath, 'fields.hdf5'), "r")
     settings =  h5py.File(os.path.join(input_folderpath, 'settings.hdf5'), "r")
     # mesh =  h5py.File(os.path.join(input_folderpath, 'mesh.hdf5'), "r")
@@ -62,10 +84,6 @@ def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, 
         field_names = [str(i) for i in range(n_fields)]
     if aux_field_names is None: 
         aux_field_names += [str(i) for i in range(n_aux_fields)]
-    if custom_functions is not None:
-        n_custom_fields = len(custom_functions)
-        Qcustom = np.zeros((mesh.n_elements, n_custom_fields), dtype=float)
-    
     #convert back to dict
     parameters = {key: value[()] for key, value in settings['parameters'].items()}
     # parameters = settings['parameters'][()]
@@ -87,9 +105,6 @@ def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, 
         time = fields[str(i_snapshot)]['time'][()]
         Q = fields[str(i_snapshot)]['Q'][()]
         Qaux = fields[str(i_snapshot)]['Qaux'][()]
-        # compute custom aux fields
-        for i, (name, func) in enumerate(custom_functions):
-            Qcustom[:,i] = func(mesh.element_center, Q, Qaux, parameters) 
 
         # write timeseries data
         attrs = grp.create_group(str(i_snapshot))
@@ -98,8 +113,6 @@ def write_to_calibration_dataformat(input_folderpath: str, output_filepath:str, 
             attrs.create_dataset(field_name, data=Q[:,i])
         for i, field_name in enumerate(aux_field_names):
             attrs.create_dataset(field_name, data=Qaux[:,i])
-        for i, (field_name, func) in enumerate(custom_functions):
-            attrs.create_dataset(field_name, data=Qcustom[:,i])
 
     f.close()
     settings.close()
