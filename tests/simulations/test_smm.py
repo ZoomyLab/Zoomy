@@ -221,7 +221,7 @@ def test_channel_with_hole_2d():
     settings = Settings(
         name="ShallowMoments2d",
         momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
-        parameters={"g": 9.81, "C": 16.0, "nu": 0.0016},
+        parameters={"g": 9.81, "C": 1000.0, "nu": 1./1000.},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
@@ -239,15 +239,16 @@ def test_channel_with_hole_2d():
     # outflow_dict = {0: 1.0}
 
     inflow_dict = {i: 0.0 for i in range(0, 2 * (1 + level) + 1)}
-    inflow_dict[0] = 0.1
-    inflow_dict[1] = -0.4
+    inflow_dict[0] = 1.0
+    inflow_dict[1] = -50.5
+    inflow_dict[5] = -0.0
     outflow_dict = {}
 
     bcs = BC.BoundaryConditions(
         [
             BC.Wall(physical_tag="hole"),
-            BC.Extrapolation(physical_tag="top"),
-            BC.Extrapolation(physical_tag="bottom"),
+            BC.Wall(physical_tag="top"),
+            BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
             BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
         ]
@@ -259,7 +260,7 @@ def test_channel_with_hole_2d():
     #     )
     # )
 
-    folder = "./output_channel_chezy_newtonian_restart_2"
+    folder = "./output_channel_turbulent_restart_3"
     map_fields = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6}
     ic = IC.RestartFromHdf5(
         path_to_old_mesh=folder + "/mesh.hdf5",
@@ -294,8 +295,8 @@ def test_smm_grad_2d():
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=1.0,
-        output_snapshots=30,
+        time_end=30.0,
+        output_snapshots=300,
     )
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -392,6 +393,6 @@ if __name__ == "__main__":
     # test_smm_2d("triangle")
     # test_inflowoutflow_2d()
     # test_steffler()
-    # test_channel_with_hole_2d()
+    test_channel_with_hole_2d()
     # test_smm_grad_2d()
-    test_smm_1d_crazy_basis()
+    # test_smm_1d_crazy_basis()

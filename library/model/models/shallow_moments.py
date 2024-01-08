@@ -94,8 +94,9 @@ class ShallowMoments(Model):
     Shallow Moments 1d
 
     :gui: 
-    - model
-    - advanced
+    - tab: model
+    - requires: [ 'mesh.dimension': 1 ]
+
     """
     def __init__(
         self,
@@ -182,6 +183,10 @@ class ShallowMoments(Model):
         return out
 
     def newtonian(self):
+        """
+        :gui:
+            - requires_parameter: ('nu', 0.0)
+        """
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
@@ -193,6 +198,11 @@ class ShallowMoments(Model):
         return out
 
     def slip(self):
+        """
+        :gui:
+            - requires_parameter: ('lamda', 0.0)
+            - requires_parameter: ('rho', 1.0)
+        """
         assert "lamda" in vars(self.parameters)
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
@@ -205,6 +215,10 @@ class ShallowMoments(Model):
         return out
 
     def chezy(self):
+        """
+        :gui:
+            - requires_parameter: ('C', 1000.0)
+        """
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
