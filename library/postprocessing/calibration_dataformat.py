@@ -3,20 +3,20 @@ import numpy as np
 import h5py
 
 
-def read_common_data(f):
-    coordinates = f['mesh']['centers'][()]
-    parameters = {key: value[()] for key, value in f['parameters'].items()}
-    n_snapshots = len(list(f['timeseries'].keys()))
+def read_common_data(open_file):
+    coordinates = open_file['mesh']['centers'][()]
+    parameters = {key: value[()] for key, value in open_file['parameters'].items()}
+    n_snapshots = len(list(open_file['timeseries'].keys()))
 
     return coordinates, parameters, n_snapshots
 
-def read_fields_at_snapshot(f, i_snapshot, fields):
+def read_fields_at_snapshot(open_file, i_snapshot, fields):
     if type(fields) == str:
         fields = [fields]
 
     out = []
     for field_name in fields:
-        out.append(f['timeseries'][str(i_snapshot)][field_name][()])
+        out.append(open_file['timeseries'][str(i_snapshot)][field_name][()])
     return out
 
 
