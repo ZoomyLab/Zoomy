@@ -10,6 +10,7 @@ from library.pysolver.ode import RK1
 import library.misc.io as io
 from library.pysolver.reconstruction import GradientMesh
 import library.postprocessing.postprocessing as postprocessing
+import argparse
 
 
 @pytest.mark.critical
@@ -217,16 +218,23 @@ def test_steffler():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_channel_with_hole_2d():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", type=str, default='output/', help="Output folder path")
+    parser.add_argument("--vel", type=float, default=0.7, help="Velocity for inflow")
+    parser.add_argument("--nu", type=float, default=1./1000., help="kinematic viscosity")
+    parser.add_argument("--C", type=float, default=100, help="Chezy friction coefficient")
+    args = parser.parse_args()
     level = 2
     settings = Settings(
         name="ShallowMoments2d",
         momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
-        parameters={"g": 9.81, "C": 1000.0, "nu": 1./1000.},
+        parameters={"g": 9.81, "C": args.C, "nu": args.nu},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=5.0,
+        time_end=2.0,
         output_snapshots=100,
+        output_dir=args.path
     )
 
     main_dir = os.getenv("SMS")
@@ -240,8 +248,7 @@ def test_channel_with_hole_2d():
 
     inflow_dict = {i: 0.0 for i in range(0, 2 * (1 + level) + 1)}
     inflow_dict[0] = 1.0
-    inflow_dict[1] = -50.5
-    inflow_dict[5] = -0.0
+    inflow_dict[1] = args.vel
     outflow_dict = {}
 
     bcs = BC.BoundaryConditions(
@@ -254,21 +261,31 @@ def test_channel_with_hole_2d():
         ]
     )
 
+    def ic_func(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = 1.0
+        Q[1] = args.vel
+        if x[0] < 0.5:
+            Q[0] += 0.1 * x[1]
+            Q[1] += 0.1 * x[1] * args.vel
+        return Q
+
+    ic = IC.UserFunction(ic_func)
     # ic = IC.Constant(
     #     constants=lambda n_fields: np.array(
-    #         [1.0, 0.1] + [0.0 for i in range(n_fields - 2)]
+    #         [1.0, 0.7] + [0.0 for i in range(n_fields - 2)]
     #     )
     # )
 
     folder = "./output_channel_turbulent_restart_3"
     map_fields = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6}
-    ic = IC.RestartFromHdf5(
-        path_to_old_mesh=folder + "/mesh.hdf5",
-        path_to_fields=folder + "/fields.hdf5",
-        mesh_new=mesh,
-        mesh_identical=True,
-        map_fields=map_fields,
-    )
+    # ic = IC.RestartFromHdf5(
+    #     path_to_old_mesh=folder + "/mesh.hdf5",
+    #     path_to_fields=folder + "/fields.hdf5",
+    #     mesh_new=mesh,
+    #     mesh_identical=True,
+    #     map_fields=map_fields,
+    # )
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
