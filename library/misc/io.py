@@ -20,11 +20,11 @@ def save_settings(filepath, settings):
         for k, v in settings.parameters.items():
             attrs.create_dataset(k, data=v)
 
-def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all):
+def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all, filename='fields.hdf5'):
     if not write_all and  time < next_write_at:
         return i_snapshot
 
-    _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux)
+    _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux, filename=filename)
     return i_snapshot +1
 
 def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fields.hdf5'):
@@ -90,9 +90,9 @@ def _write_to_vtk_from_vertices_edges(
     meshout.write(filepath + ".vtk")
     
 
-def generate_vtk(filepath: str, field_names=None, aux_field_names=None):
+def generate_vtk(filepath: str, field_names=None, aux_field_names=None, filename_fields='fields.hdf5', filename_out = 'out'):
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
-    file_fields =  h5py.File(os.path.join(filepath, 'fields.hdf5'), "r")
+    file_fields =  h5py.File(os.path.join(filepath, filename_fields), "r")
     mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(filepath, 'mesh.hdf5'))
     snapshots = list(file_fields.keys())
     # init timestamp file
@@ -103,7 +103,7 @@ def generate_vtk(filepath: str, field_names=None, aux_field_names=None):
         time = file_fields[snapshot]['time'][()]
         Q = file_fields[snapshot]['Q'][()]
         Qaux = file_fields[snapshot]['Qaux'][()]
-        filename = 'out.{}'.format(int(snapshot))
+        filename = f'{filename_out}.{int(snapshot)}'
         fullpath = os.path.join(filepath, filename )
 
         #TODO callout to compute pointwise data?
@@ -129,7 +129,7 @@ def generate_vtk(filepath: str, field_names=None, aux_field_names=None):
         )
 
     #finalize vtk
-    with open(os.path.join(filepath , "time.vtk.series"), "x") as f:
+    with open(os.path.join(filepath , f"{filename_out}.vtk.series"), "x") as f:
         json.dump(vtk_timestamp_file, f)
 
     file_fields.close()

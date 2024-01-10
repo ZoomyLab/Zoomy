@@ -16,7 +16,7 @@ import argparse
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d():
-    level = 4
+    level = 0
     settings = Settings(
         name="ShallowMoments",
         momentum_eqns=[1] + [2 + l for l in range(level)],
@@ -54,6 +54,7 @@ def test_smm_1d():
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
 
 
 @pytest.mark.critical
@@ -405,11 +406,11 @@ def test_smm_1d_crazy_basis():
 
 
 if __name__ == "__main__":
-    # test_smm_1d()
+    test_smm_1d()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
     # test_inflowoutflow_2d()
     # test_steffler()
-    test_channel_with_hole_2d()
+    # test_channel_with_hole_2d()
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()

@@ -216,9 +216,11 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
     i_snapshot = 0
+    i_snapshot_tmp = 0
     dt_snapshot = settings.time_end/(settings.output_snapshots-1)
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
     i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
+    i_snapshot_tmp = io.save_fields(settings.output_dir, time, 0, i_snapshot_tmp, Qnew, Qaux, settings.output_write_all, filename='fields_intermediate.hdf5')
     mesh.write_to_hdf5(settings.output_dir)
     io.save_settings(settings.output_dir, settings)
 
@@ -257,7 +259,15 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
             if time + dt * 1.001 > settings.time_end:
                 dt = settings.time_end - time + 10 ** (-10)
 
+        # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+
+        # TODO print out the snapshots for testing SINDy
+        # TODO this is not exactly what I want. I want to use the high fidelity solution as an IC in each time step! and do one time step from there
+        # But is this really what I want? Inspired from GNS, this is not a robust way of doing it. However, how it is currenlty, it also does not makes sence, because 
+        # after some time, I will be very far off the true solution.
+        i_snapshot_tmp = io.save_fields(settings.output_dir, time, 0, i_snapshot_tmp, Qnew, Qaux, settings.output_write_all, filename='fields_intermediate.hdf5')
+
         Qnew = ode_solver_source(compute_source, Qnew, Qaux, parameters, dt, func_jac = compute_source_jac)
 
         # if time > 0.8:
