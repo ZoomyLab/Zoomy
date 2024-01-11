@@ -5,6 +5,8 @@ output/
 *out*
 autowraptmp
 .tmp
+.tmp/*
+temp/
 .~lock.architecture.odp#
 bin
 .venv
