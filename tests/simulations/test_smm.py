@@ -23,7 +23,7 @@ def test_smm_1d():
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.adaptive(CFL=0.9),
+        compute_dt=timestepping.constant(dt = 0.01),
         time_end=1.0,
         output_snapshots=100,
     )
@@ -54,7 +54,50 @@ def test_smm_1d():
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
-    io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
+
+def test_sindy_generate_reference_data():
+    level = 0
+    settings = Settings(
+        name="ShallowMoments",
+        momentum_eqns=[1] + [2 + l for l in range(level)],
+        parameters={"g": 9.81, "C": 20.0, "nu": 0.0016},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.constant(dt = 0.01),
+        time_end=4.0,
+        output_snapshots=100,
+        output_dir = f'output_{str(level)}'
+    )
+
+    bc_tags = ["left", "right"]
+    bc_periodic_to = ["right", "left"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Extrapolation(physical_tag=tag)
+            for (tag, periodic_to) in zip(bc_tags, bc_periodic_to)
+        ]
+    )
+    ic = IC.RP(
+        left=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
+        right=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
+    )
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"eigenvalue_mode": "symbolic", "friction": ["chezy", "newtonian"]},
+    )
+    mesh = Mesh.create_1d((-1, 20), 200)
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
+
+
 
 
 @pytest.mark.critical
@@ -406,7 +449,8 @@ def test_smm_1d_crazy_basis():
 
 
 if __name__ == "__main__":
-    test_smm_1d()
+    # test_smm_1d()
+    test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
     # test_inflowoutflow_2d()

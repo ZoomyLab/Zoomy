@@ -179,9 +179,112 @@ def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions
             dQ[i_elem] -= (flux+nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
         return dQ
     return operator_rhs_split
-    
+
 
 def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
+    iteration = 0
+    time = 0.0
+
+    assert model.dimension == mesh.dimension
+
+    progressbar = pyprog.ProgressBar(
+        "{}: ".format(settings.name),
+        "\r",
+        settings.time_end,
+        complete_symbol="█",
+        not_complete_symbol="-",
+    )
+    progressbar.progress_explain = ""
+    progressbar.update()
+    # force=True is needed in order to disable old logging root handlers (if multiple test cases are run by one file)
+    # otherwise only a logfile will be created for the first testcase but the log file gets deleted by rmtree
+    # logging.basicConfig(
+    #     filename=os.path.join(
+    #         os.path.join(main_dir, self.output_dir), "logfile.log"
+    #     ),
+    #     filemode="w",
+    #     level=self.logging_level,
+    #     force=True,
+    # )
+    # logger = logging.getLogger(__name__ + ":solve_steady")
+
+    Q, Qaux = _initialize_problem(model, mesh)
+    parameters = model.parameter_values
+    Qnew = deepcopy(Q)
+
+    # for callback in self.callback_function_list_init:
+    #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+
+    i_snapshot = 0
+    dt_snapshot = settings.time_end/(settings.output_snapshots-1)
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
+    mesh.write_to_hdf5(settings.output_dir)
+    io.save_settings(settings.output_dir, settings)
+
+    time_start = gettime()
+
+    if runtime_model is None:
+        model_functions = model.get_runtime_model()
+        _ = model.create_c_interface()
+        runtime_model = model.load_c_model()
+
+    # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
+    # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
+    # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
+    space_solution_operator = _get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
+    compute_source = _get_source(mesh, runtime_model, settings)
+    compute_source_jac = _get_source_jac(mesh, runtime_model, settings)
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
+    min_inradius = np.min(mesh.element_inradius)
+
+    # print(f'hi from process {os.getpid()}')
+    while (time < settings.time_end):
+        # print(f'in loop from process {os.getpid()}')
+        Q = deepcopy(Qnew)
+        dt = settings.compute_dt(Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue)
+        assert dt > 10**(-6)
+
+        assert not np.isnan(dt) and np.isfinite(dt)
+
+        # if iteration < self.warmup_interations:
+        #     dt *= self.dt_relaxation_factor
+        # if dt < self.dtmin:
+        #     dt = self.dtmin
+
+        # add 0.001 safty measure to avoid very small time steps
+        if settings.truncate_last_time_step:
+            if time + dt * 1.001 > settings.time_end:
+                dt = settings.time_end - time + 10 ** (-10)
+
+        # TODO this two things should be 'callouts'!!
+        Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+        Qnew = ode_solver_source(compute_source, Qnew, Qaux, parameters, dt, func_jac = compute_source_jac)
+
+        # Update solution and time
+        time += dt
+        iteration += 1
+
+        # for callback in self.callback_function_list_post_solvestep:
+        #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+
+        i_snapshot = io.save_fields(settings.output_dir, time, (i_snapshot+1)*dt_snapshot, i_snapshot, Qnew, Qaux, settings.output_write_all)
+        
+        # logger.info(
+        #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
+        #         iteration, gettime() - time_start, time, dt, error
+        #     )
+        # )
+        # print(f'finished timestep: {os.getpid()}')
+        progressbar.set_stat(min(time, settings.time_end))
+        progressbar.update()
+
+    progressbar.end()
+    return settings
+
+    
+
+def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
     iteration = 0
     time = 0.0
 
@@ -242,6 +345,12 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
 
     # print(f'hi from process {os.getpid()}')
     while (time < settings.time_end):
+        assert i_snapshot == i_snapshot_tmp
+        Qnew_load, Qaux_load, time_load = io.load_fields_from_hdf5('output_lvl1/fields.hdf5', i_snapshot = i_snapshot-1)
+        # map the fields
+        Qnew[:, 0] = Qnew_load[:, 0]
+        Qnew[:, 1] = Qnew_load[:, 1]
+        
         # print(f'in loop from process {os.getpid()}')
         Q = deepcopy(Qnew)
         dt = settings.compute_dt(Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue)
@@ -266,7 +375,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
         # TODO this is not exactly what I want. I want to use the high fidelity solution as an IC in each time step! and do one time step from there
         # But is this really what I want? Inspired from GNS, this is not a robust way of doing it. However, how it is currenlty, it also does not makes sence, because 
         # after some time, I will be very far off the true solution.
-        i_snapshot_tmp = io.save_fields(settings.output_dir, time, 0, i_snapshot_tmp, Qnew, Qaux, settings.output_write_all, filename='fields_intermediate.hdf5')
+        Qnew_save = np.array(Qnew)
 
         Qnew = ode_solver_source(compute_source, Qnew, Qaux, parameters, dt, func_jac = compute_source_jac)
 
@@ -291,6 +400,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
         #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
         i_snapshot = io.save_fields(settings.output_dir, time, (i_snapshot+1)*dt_snapshot, i_snapshot, Qnew, Qaux, settings.output_write_all)
+        i_snapshot_tmp = io.save_fields(settings.output_dir, time,(i_snapshot_tmp+1)*dt_snapshot , i_snapshot_tmp, Qnew_save, Qaux, settings.output_write_all, filename='fields_intermediate.hdf5')
         
         # logger.info(
         #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
