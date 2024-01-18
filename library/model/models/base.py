@@ -118,6 +118,7 @@ class Model:
         self.aux_initial_conditions = aux_initial_conditions
 
         self.variables = register_sympy_attribute(fields, "q")
+        self.variables_ghost = register_sympy_attribute(fields, "qg")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
         updated_parameters = {**parameters_default, **parameters}
         self.parameters = register_sympy_attribute(updated_parameters, "p")
@@ -173,6 +174,10 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
+    #TODO create c_boundary_interface similat to create_c_interface
+
+    #TODO write to output/.tmp
+    #TODO rename to c_model_interface
     def create_c_interface(self, path='./.tmp/'):
         # define matrix symbols that will be used as substitutions for the currelty used symbols in the
         # expressions
