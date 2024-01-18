@@ -1,4 +1,19 @@
+#include "../../.tmp/Model_1/model_code.h"
+
 #include <iostream>
+
+// settings struct
+// load settings
+	// requires a save function on the python side
+// load_ic
+	// requires a save function on the python side
+
+// problem: boundary conditions:
+	// can I get them as sympy?
+
+
+
+
 
 int main(int argc, char** argv) {
 

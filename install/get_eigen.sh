@@ -7,7 +7,8 @@ eigen_ver="3.4.0"
 get_eigen() {
 	local ver="$1"
 	# download eigen release and extract, if it doesn't exist
-	local pname="eigen"
+	local pname="eigen-$eigen_ver"
+	echo $pname
 	if [ -d "$pname" ]; then
 		echo "Existing directory \"$pname\" found. Skipping download and configuration..."
 	else
