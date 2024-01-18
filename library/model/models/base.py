@@ -175,6 +175,88 @@ class Model:
         self.sympy_right_eigenvectors = None
 
     #TODO create c_boundary_interface similat to create_c_interface
+    def create_c_boundary_interface(self, path='.tmp/'):
+        # define matrix symbols that will be used as substitutions for the currelty used symbols in the
+        # expressions
+        Q = MatrixSymbol('Q', self.n_fields, 1)
+        Q_ghost = MatrixSymbol('Qg', self.n_fields, 1)
+        Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
+        parameters = MatrixSymbol('parameters', self.n_parameters, 1)
+        normal = MatrixSymbol('normal', self.dimension, 1)
+
+
+        #TODO copy all (needed) boudnary functions (deepcopy) to a list. Maybe having the list of needed BC functions is an input?
+        #TODO make the dimensions switch
+        #TODO aggregate
+        #TODO convert
+        #TODO create module
+        #TODO delete the code below
+
+
+        # copy in order to not mess up the sypy expressions of the class - in case I want to call the
+        # function a second time
+        sympy_flux = deepcopy(self.sympy_flux)
+        sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
+        sympy_source = deepcopy(self.sympy_source)
+        sympy_source_jacobian = deepcopy(self.sympy_source_jacobian)
+        sympy_nonconservative_matrix = deepcopy(self.sympy_nonconservative_matrix)
+        sympy_quasilinear_matrix = deepcopy(self.sympy_quasilinear_matrix)
+        sympy_eigenvalues = deepcopy(self.sympy_eigenvalues)
+        sympy_left_eigenvectors = deepcopy(self.sympy_left_eigenvectors)
+        sympy_right_eigenvectors = deepcopy(self.sympy_right_eigenvectors)
+
+        # make all dimension dependent functions 3d to simplify the C part of the interface
+        if self.dimension == 1:
+            sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
+            sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[0], sympy_flux_jacobian[0]]
+            sympy_nonconservative_matrix = [sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[0]]
+            sympy_quasilinear_matrix = [sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[0]]
+        elif self.dimension == 2:
+            sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
+            sympy_flux_jacobian = [sympy_flux_jacobian[0], sympy_flux_jacobian[1], sympy_flux_jacobian[0]]
+            sympy_nonconservative_matrix = [sympy_nonconservative_matrix[0], sympy_nonconservative_matrix[1], sympy_nonconservative_matrix[0]]
+            sympy_quasilinear_matrix = [sympy_quasilinear_matrix[0], sympy_quasilinear_matrix[1], sympy_quasilinear_matrix[0]]
+        elif self.dimension == 3:
+            pass
+        else:
+            assert False
+
+        # aggregate all expressions that are substituted and converted to C into the right data structure
+        list_matrix_symbols = [Q, Qaux, parameters]
+        list_attributes = [self.variables, self.aux_variables, self.parameters]
+        list_expressions = sympy_flux + sympy_flux_jacobian + sympy_nonconservative_matrix + sympy_quasilinear_matrix + [sympy_source, sympy_source_jacobian]
+        list_expression_names = ['flux_x', 'flux_y', 'flux_z', 
+                                 'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z',
+                                 'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
+                                 'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
+                                 'source', 'source_jacobian']
+        list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
+        list_attributes_incl_normal = [self.variables, self.aux_variables, self.parameters, self.sympy_normal]
+        if sympy_eigenvalues is not None:
+            list_expressions_incl_normal = [sympy_eigenvalues]
+            list_expression_names_incl_normal = ['eigenvalues']
+        else:
+            list_expressions_incl_normal = []
+            list_expression_names_incl_normal = []
+
+        # convert symbols to matrix symbols
+        for i in range(len(list_expressions)):
+            for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
+                list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
+        for i in range(len(list_expressions_incl_normal)):
+            for attr, matrix_symbol in zip(list_attributes_incl_normal, list_matrix_symbols_incl_normal):
+                list_expressions_incl_normal[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_incl_normal[i], attr, matrix_symbol)
+                
+
+        # aggregate data structure to be passed to the C converter module
+        expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
+        expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names_incl_normal, list_expressions_incl_normal)]
+
+        directory = os.path.join(path, self.name)
+        module_name = 'model'
+
+        # create c module
+        create_module(module_name, expression_name_tuples, directory)
 
     #TODO write to output/.tmp
     #TODO rename to c_model_interface
