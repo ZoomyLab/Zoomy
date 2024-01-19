@@ -62,7 +62,7 @@ def test_swe_2d(mesh_type):
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type
     )
 
