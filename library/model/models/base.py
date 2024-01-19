@@ -79,6 +79,7 @@ class Model:
     n_aux_fields: int
     n_parameters: int
     variables: IterableNamespace
+    variables_ghost: IterableNamespace
     aux_variables: IterableNamespace
     parameters: IterableNamespace
     parameters_default: dict
@@ -186,7 +187,6 @@ class Model:
 
 
         #TODO copy all (needed) boudnary functions (deepcopy) to a list. Maybe having the list of needed BC functions is an input?
-        #TODO make the dimensions switch
         #TODO aggregate
         #TODO convert
         #TODO create module
