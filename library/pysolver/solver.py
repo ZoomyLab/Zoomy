@@ -38,9 +38,10 @@ class Settings():
     output_write_all: bool = False
     output_dir: str = 'output'
     output_clean_dir: bool= True
+    solver_code_base: str = 'python'
 
 def _initialize_problem(model, mesh):
-    model.boundary_conditions.initialize(mesh)
+    model.boundary_conditions.initialize(mesh, model.variables, model.aux_variables , model.parameters, model.sympy_normal)
 
     n_fields = model.n_fields
     n_elements = mesh.n_elements
@@ -72,14 +73,14 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
                 #TODO PROBLEM: the C interface has eigenvalues as reference, python interface
                 # needs to return a value, because it cant do by-reference
                 ev_i = runtime_model.eigenvalues(
-                    Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
+                    Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face]
                 )
                 if ev_i is not None:
                     eigenvalues_i = ev_i
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_i)))
 
                 ev_j = runtime_model.eigenvalues(
-                    Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
+                    Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face]
                 )
                 if ev_j is not None:
                     eigenvalues_j = ev_j
@@ -90,16 +91,16 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
         for i in range(mesh.n_boundary_elements):
             i_elem = mesh.boundary_face_corresponding_element[i]
             i_face = mesh.boundary_face_element_face_index[i]
-            Q_ghost = boundary_conditions.apply(i, i_elem, Q, mesh.element_face_normals[i_elem, i_face], settings.momentum_eqns)
+            Q_ghost = boundary_conditions.apply(i, i_elem, Q, Qaux, parameters, mesh.element_face_normals[i_elem, i_face])
             # reconstruct 
             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], Q_ghost, i_elem )
 
             runtime_model.eigenvalues(
-                Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_i
+                Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face] 
             )
             max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
             runtime_model.eigenvalues(
-                Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], eigenvalues_j
+                Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face] 
             )
             max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
 
@@ -160,7 +161,7 @@ def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions
         for i in range(mesh.n_boundary_elements):
             i_elem = mesh.boundary_face_corresponding_element[i]
             i_face = mesh.boundary_face_element_face_index[i]
-            Q_ghost = boundary_conditions.apply(i, i_elem, Q, mesh.element_face_normals[i_elem, i_face], settings.momentum_eqns)
+            Q_ghost = boundary_conditions.apply(i, i_elem, Q, Qaux, parameters, mesh.element_face_normals[i_elem, i_face])
             # i_neighbor = mesh.element_neighbors[i_elem, i_face]
             # reconstruct 
             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], Q_ghost, i_elem )
@@ -224,7 +225,12 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
 
     time_start = gettime()
 
-    if runtime_model is None:
+    if settings.solver_code_base == 'python':
+        runtime_model = model.get_runtime_model()
+        runtime_bc = model.get_runtime_boundary_conditions()
+        model.boundary_conditions.runtime_bc = runtime_bc
+    elif settings.solver_code_base=='C':
+        _ = model.create_c_boundary_interface()
         model_functions = model.get_runtime_model()
         _ = model.create_c_interface()
         runtime_model = model.load_c_model()

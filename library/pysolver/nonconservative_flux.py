@@ -21,7 +21,7 @@ def segmentpath(integration_order=3):
             out = np.zeros((n_fields, n_fields), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
-                model.nonconservative_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters, tmp) 
+                tmp = model.nonconservative_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
                 out = tmp * normal[d]
             return out
 

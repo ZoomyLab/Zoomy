@@ -11,11 +11,9 @@ def LF():
         flux = model_functions.flux
         dim = normal.shape[0]
         num_eq = Qi.shape[0]
-        Fi = np.zeros((num_eq))
-        Fj = np.zeros((num_eq))
         for d in range(dim):
-            flux[d](Qi, Qauxi, param, Fi)  
-            flux[d](Qj, Qauxj, param, Fj)  
+            Fi = flux[d](Qi, Qauxi, param)  
+            Fj = flux[d](Qj, Qauxj, param)  
             Qout += 0.5 * (Fi + Fj) * normal[d]
         Qout -= 0.5 * dt_dx * (Qj - Qi)
         return Qout, False
@@ -27,10 +25,8 @@ Rusanov (local Lax-Friedrichs) flux implementation
 """
 def LLF():
     def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props = None):
-        EVi = np.zeros_like(Qi)
-        EVj = np.zeros_like(Qj)
-        model_functions.eigenvalues(Qi, Qauxi, param, normal, EVi )
-        model_functions.eigenvalues(Qj, Qauxj, param, normal, EVj )
+        EVi = model_functions.eigenvalues(Qi, Qauxi, param, normal)
+        EVj = model_functions.eigenvalues(Qj, Qauxj, param, normal)
         assert not np.isnan(EVi).any()
         assert not np.isnan(EVj).any()
         smax = np.max(np.abs(np.vstack([EVi, EVj])))
@@ -38,11 +34,9 @@ def LLF():
         flux = model_functions.flux
         dim = normal.shape[0]
         num_eq = Qi.shape[0]
-        Fi = np.zeros((num_eq))
-        Fj = np.zeros((num_eq))
         for d in range(dim):
-            flux[d](Qi, Qauxi, param, Fi)  
-            flux[d](Qj, Qauxj, param, Fj)  
+            Fi = flux[d](Qi, Qauxi, param)  
+            Fj = flux[d](Qj, Qauxj, param)  
             Qout += 0.5 * (Fi + Fj) * normal[d]
         Qout -= 0.5 * smax * (Qj - Qi)
         return Qout, False
@@ -60,8 +54,8 @@ def LLF_wb():
         IWB[0, -1] = 0.
         EVi = np.zeros_like(Qi)
         EVj = np.zeros_like(Qj)
-        model_functions.eigenvalues(Qi, Qauxi, param, normal, EVi )
-        model_functions.eigenvalues(Qj, Qauxj, param, normal, EVj )
+        EVi = model_functions.eigenvalues(Qi, Qauxi, param, normal)
+        EVj = model_functions.eigenvalues(Qj, Qauxj, param, normal)
         assert not np.isnan(EVi).any()
         assert not np.isnan(EVj).any()
         smax = np.max(np.abs(np.vstack([EVi, EVj])))

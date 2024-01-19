@@ -1,8 +1,6 @@
 import numpy as np
 import os
 
-import sympy as sym
-
 from attr import define, field
 from typing import Union, Optional, Callable, List, Dict
 
@@ -21,12 +19,17 @@ class BoundaryCondition:
     """ 
     Default implementation. The required data for the 'ghost cell' is the data from the interior cell. Can be overwritten e.g. to implement periodic boundary conditions.
     """
-    def fill_maps_for_boundary_conditions(self, mesh, map_required_elements, map_functions):
+    def fill_maps_for_boundary_conditions(self, mesh, map_required_elements, map_functions, map_boundary_function_name_to_index, map_boundary_index_to_function):
         for i_edge in range(mesh.n_boundary_elements):
             boundary_tag_name = mesh.boundary_tag_names[mesh.boundary_face_tag[i_edge]].decode("utf-8")
             if self.physical_tag == boundary_tag_name:
                 map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[i_edge]
-                map_functions[i_edge] = self.get_boundary_condition_function()
+                if boundary_tag_name in map_boundary_function_name_to_index:
+                    map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
+                else:
+                    index = len(map_boundary_function_name_to_index)
+                    map_boundary_function_name_to_index[boundary_tag_name] = index
+                    map_boundary_index_to_function[index] = self.get_boundary_condition_function()
 
     def get_boundary_condition_function(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
@@ -38,8 +41,8 @@ class BoundaryCondition:
 @define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
     def get_boundary_condition_function(self):
-        def f(Q, Q_ghost, parameters, normal):
-            return Q_ghost
+        def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
+            return Q
         return f
 
 
@@ -58,33 +61,15 @@ class InflowOutflow(BoundaryCondition):
 
 @define(slots=True, frozen=False, kw_only=True)
 class Wall(BoundaryCondition):
-    """
-    momentum_field_indices: list(int): indicate which fields need to be mirrored at the wall
-    permeability: float : 1.0 corresponds to a perfect reflection (impermeable wall)
-    """
-    momentum_field_indices: List[int] = [1,2]
-    permeability: float = 1.0
-
-
     def get_boundary_condition_function(self):
-        def f(Q, Q_ghost, parameters, normal):
-            out = Matrix[Q_ghost]
-            dim = normal.shape[0]
-            momentum = self.variables[self.momentum_field_indices]
-            u = hu / h
-            h_g = self.variables_ghost[0]
-            hu_g = self.variables_ghost[1]
-            u_g = hu_g / h_g
-            p = self.parameters
-            n_wall = self.sympy_normal
-            out = Matrix([0 for i in range(self.n_fields)])
-            out[0] = h
-            U = [u]
-            normal_momentum_coef = momentum.dot(normal)
-            transverse_momentum = momentum - normal_momentum_coef * normal
-            momentum_wall = transverse_momentum - normal_momentum_coef * normal
-            out[self.momentum_field_indices] = momentum_wall
-            return out
+        def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
+            Qn, Qt = projection_in_normal_and_transverse_direction(
+                Q, momentum_eqns, normal
+            )
+            # flip the normal direcion for impermeable wall
+            return project_in_x_y_and_recreate_Q(
+                -Qn, Qt, Q, momentum_eqns, normal
+            )
         return f
 
 
@@ -93,11 +78,11 @@ class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
 
     def get_boundary_condition_function(self):
-        def f(Q, Q_ghost, parameters, normal):
-            return Q_ghost
+        def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
+            return Q
         return f
 
-    def fill_maps_for_boundary_conditions(self, mesh, map_required_elements, map_functions):
+    def fill_maps_for_boundary_conditions(self, mesh, map_required_elements, map_functions, map_boundary_function_name_to_index, map_boundary_index_to_function):
         hits = 0
         for i_edge in range(mesh.n_boundary_elements):
             boundary_tag_name = mesh.boundary_tag_names[mesh.boundary_face_tag[i_edge]].decode("utf-8")
@@ -107,8 +92,16 @@ class Periodic(BoundaryCondition):
                     j_boundary_tag_name = mesh.boundary_tag_names[mesh.boundary_face_tag[j_edge]].decode("utf-8")
                     if self.periodic_to_physical_tag == j_boundary_tag_name:
                         if hits == j_hits:
+                            # map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[j_edge]
+                            # map_functions[i_edge] = self.get_boundary_condition_function()
                             map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[j_edge]
-                            map_functions[i_edge] = self.get_boundary_condition_function()
+                            if boundary_tag_name in map_boundary_function_name_to_index:
+                                map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
+                            else:
+                                index = len(map_boundary_function_name_to_index)
+                                map_boundary_function_name_to_index[boundary_tag_name] = index
+                                map_boundary_index_to_function[index] = self.get_boundary_condition_function()
+                                map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
                         j_hits +=1
                 hits +=1
 
@@ -117,16 +110,23 @@ class Periodic(BoundaryCondition):
 class BoundaryConditions:
     boundary_conditions: list[BoundaryCondition]
     map_boundary_index_to_required_elements: IArray = np.empty(0, dtype=int)
-    map_boundary_index_to_boundary_function_index: List[Callable] = []
+    map_boundary_index_to_boundary_function_index: List[int] = []
+    map_index_to_function: List[Callable] = []
+    map_index_to_function_name: List[str] = []
 
     def initialize(self, mesh):
         self.map_boundary_index_to_required_elements = np.empty(mesh.n_boundary_elements, dtype=int)
         self.map_boundary_index_to_boundary_function_index = [None]  * mesh.n_boundary_elements
+        _map_boundary_function_name_to_index: Dict[str, int] = {}
+        _map_boundary_index_to_function: Dict[int, Callable] = {}
         for bc in self.boundary_conditions:
-            bc.fill_maps_for_boundary_conditions(mesh, self.map_boundary_index_to_required_elements, self.map_boundary_index_to_boundary_function_index)
+            bc.fill_maps_for_boundary_conditions(mesh, self.map_boundary_index_to_required_elements, self.map_boundary_index_to_boundary_function_index, _map_boundary_function_name_to_index, _map_boundary_index_to_function)
         
         for val in self.map_boundary_index_to_boundary_function_index:
             assert val is not None
+
+        self.map_index_to_function_name = list(_map_boundary_function_name_to_index.keys())
+        self.map_index_to_function = list(_map_boundary_index_to_function.values())
     
     def collect_requried_element_data(self, Q_global):
         return Q_global[self.map_boundary_index_to_required_elements]
@@ -141,7 +141,7 @@ class BoundaryConditions:
         n_boundary_elements = self.map_boundary_index_to_required_elements.shape[0]
         assert Q_neighbor.shape[0] == n_boundary_elements
         for i_edge in range(n_boundary_elements):
-            Q_ghost[i_edge] = self.map_boundary_index_to_boundary_function_index[i_edge](Q_neighbor[i_edge], boundary_normals[i_edge], momentum_eqns)
+            Q_ghost[i_edge] = self.map_index_to_function[self.map_boundary_index_to_boundary_function_index[i_edge]](Q_neighbor[i_edge], boundary_normals[i_edge], momentum_eqns)
 
     def apply(self, i_boundary_element, i_corresponding_element, Q, boundary_normal, momentum_eqns):
-        return self.map_boundary_index_to_boundary_function_index[i_boundary_element](Q[self.map_boundary_index_to_required_elements[i_boundary_element]], boundary_normal, momentum_eqns)
+        return self.map_index_to_function[self.map_boundary_index_to_boundary_function_index[i_boundary_element]](Q[self.map_boundary_index_to_required_elements[i_boundary_element]], boundary_normal, momentum_eqns)

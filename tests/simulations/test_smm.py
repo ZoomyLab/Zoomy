@@ -450,10 +450,10 @@ def test_smm_1d_crazy_basis():
 
 if __name__ == "__main__":
     # test_smm_1d()
-    test_sindy_generate_reference_data()
+    # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
-    # test_inflowoutflow_2d()
+    test_inflowoutflow_2d()
     # test_steffler()
     # test_channel_with_hole_2d()
     # test_smm_grad_2d()

@@ -58,7 +58,7 @@ def test_swe_2d(mesh_type):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={'friction': ['chezy'], 'eigenvalue_mode': 'numerical'},
+        settings={'friction': ['chezy'], 'eigenvalue_mode': 'symbolic'},
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
