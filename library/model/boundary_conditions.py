@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import h5py
 
 import sympy as sym
 from sympy import Matrix
@@ -173,3 +174,9 @@ class BoundaryConditions:
         ## python
         qout = func(q, qaux, parameters, boundary_normal)
         return qout
+    
+    def save_boundary_map_to_hdf5(self, filepath, filename='boundary_map.hdf5'):
+        with h5py.File(os.path.join(filepath, filename), "w") as f:
+            f.create_dataset("boundary_function_index", data=self.map_boundary_index_to_boundary_function_index)
+            f.create_dataset("required_elements", data=self.map_boundary_index_to_required_elements)
+            f.create_dataset("boundary_function_name", data=self.boundary_functions_name)
