@@ -380,7 +380,7 @@ class Model:
         out = {'flux': flux, 'flux_jacobian': flux_jacobian, 'nonconservative_matrix':nonconservative_matrix, 'quasilinear_matrix':quasilinear_matrix, 'source': source, 'source_jacobian': source_jacobian, 'eigenvalues':eigenvalues}
         return SimpleNamespace(**out)
 
-    def get_runtime_boundary_conditions(self):
+    def get_boundary_conditions(self):
         """Returns a runtime boundary_conditions for numpy arrays from the symbolic model."""
         n_boundary_functions = len(self.boundary_conditions.boundary_functions)
         # bcs = [None for i in range(n_boundary_functions)]
@@ -402,7 +402,7 @@ class Model:
         return bcs
 
 
-    def get_runtime_model(self):
+    def get_pde(self):
         """Returns a runtime model for numpy arrays from the symbolic model."""
         l_flux = [lambdify(
             (
