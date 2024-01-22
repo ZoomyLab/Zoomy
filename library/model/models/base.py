@@ -112,7 +112,7 @@ class Model:
         settings: dict = {},
         settings_default: dict = {"eigenvalue_mode": "symbolic" },
     ):
-        self.name = 'Model' + '_{}'.format(dimension)
+        self.name = 'Model'
         self.dimension = dimension
         self.boundary_conditions = boundary_conditions
         self.initial_conditions = initial_conditions

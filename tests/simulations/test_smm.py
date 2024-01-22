@@ -496,7 +496,7 @@ def test_c_solver(mesh_type):
     )
 
     fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
-    io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output_dir)
 
 
 if __name__ == "__main__":
