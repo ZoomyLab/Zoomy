@@ -33,7 +33,7 @@ def test_model_initialization_1d():
     )
 
     # TODO make this one function call and replace others as well
-    _ = model.get_runtime_model()
+    _ = model.get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 
@@ -94,7 +94,7 @@ def test_model_initialization_2d():
     )
 
     # TODO make this one function call and replace others as well
-    _ = model.get_runtime_model()
+    _ = model.get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 

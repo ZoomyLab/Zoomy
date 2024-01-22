@@ -28,7 +28,7 @@ def test_model_initialization(dimension):
         normals,
     ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
 
-    functions = model.get_runtime_model()
+    functions = model.get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 

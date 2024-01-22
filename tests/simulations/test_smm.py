@@ -447,14 +447,66 @@ def test_smm_1d_crazy_basis():
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
+def test_c_solver(mesh_type):
+    level = 0
+    settings = Settings(
+        name="ShallowMoments2d",
+        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
+        parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=1.0,
+        output_snapshots=100,
+    )
+
+    bc_tags = ["left", "right", "top", "bottom"]
+    bc_tags_periodic_to = ["right", "left", "bottom", "top"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    ic = IC.RP(
+        left=lambda n_field: np.array(
+            [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+        ),
+        right=lambda n_field: np.array(
+            [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+        ),
+    )
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ["chezy", "newtonian"]},
+    )
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+        mesh_type,
+    )
+
+    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
+    io.generate_vtk(settings.output_dir)
+
 
 if __name__ == "__main__":
     # test_smm_1d()
     # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
-    test_inflowoutflow_2d()
+    # test_inflowoutflow_2d()
     # test_steffler()
     # test_channel_with_hole_2d()
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
+    test_c_solver('quad')
