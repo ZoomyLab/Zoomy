@@ -3,6 +3,7 @@ import numpy as np
 import h5py
 import meshio
 import json
+import shutil
 
 import library.mesh.fvm_mesh as fvm_mesh
 
@@ -12,7 +13,10 @@ def init_output_directory(path, clean):
     if clean:
         filelist = [ f for f in os.listdir(path)]
         for f in filelist:
-            os.remove(os.path.join(path, f))
+            if os.path.isdir(os.path.join(path, f)):
+                shutil.rmtree(os.path.join(path, f))
+            else:
+                os.remove(os.path.join(path, f))
 
 def save_settings(filepath, settings):
     with h5py.File(os.path.join(filepath, 'settings.hdf5'), "w") as f:
