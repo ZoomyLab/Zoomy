@@ -40,6 +40,7 @@ class Settings():
     output_clean_dir: bool= True
     solver_code_base: str = 'python'
 
+
 def _initialize_problem(model, mesh):
     model.boundary_conditions.initialize(mesh, model.variables, model.aux_variables , model.parameters, model.sympy_normal)
 
@@ -197,6 +198,7 @@ def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode
     Q, Qaux = _initialize_problem(model, mesh)
     parameters = model.parameter_values
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    _ = io.save_fields(settings.output_dir, 0., 0., 0, Q, Qaux, settings.output_write_all)
     mesh.write_to_hdf5(settings.output_dir)
     io.save_settings(settings.output_dir, settings)
 
