@@ -36,7 +36,7 @@ class Settings():
     truncate_last_time_step: bool = True
     output_snapshots: int = 10
     output_write_all: bool = False
-    output_dir: str = 'output'
+    output_dir: str = 'outputs/output'
     output_clean_dir: bool= True
     solver_code_base: str = 'python'
 
@@ -182,8 +182,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings
     return operator_rhs_split
 
 def load_runtime_model(model):
-    runtime_pde = model.get_runtime_model()
-    runtime_bc = model.get_runtime_boundary_conditions()
+    runtime_pde = model.get_pde()
+    runtime_bc = model.get_boundary_conditions()
     model.boundary_conditions.runtime_bc = runtime_bc
     return runtime_pde, runtime_bc
 
@@ -193,7 +193,17 @@ def save_model_to_C(model, settings):
     _ = model.create_c_boundary_interface(path=os.path.join(settings.output_dir, 'c_interface'))
 
 
-def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
+def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"):
+    Q, Qaux = _initialize_problem(model, mesh)
+    parameters = model.parameter_values
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    mesh.write_to_hdf5(settings.output_dir)
+    io.save_settings(settings.output_dir, settings)
+
+    save_model_to_C(model, settings)
+    model.boundary_conditions.save_boundary_map_to_hdf5(settings.output_dir)    
+
+def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1):
     iteration = 0
     time = 0.0
 
@@ -340,13 +350,10 @@ def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode
 
     pde, bc = load_runtime_model(model)
 
-    # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
-    # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
-    # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
-    space_solution_operator = _get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
-    compute_source = _get_source(mesh, runtime_model, settings)
-    compute_source_jac = _get_source_jac(mesh, runtime_model, settings)
-    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
+    space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, model.boundary_conditions, settings)
+    compute_source = _get_source(mesh, pde, settings)
+    compute_source_jac = _get_source_jac(mesh, pde, settings)
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, model.boundary_conditions, settings)
     min_inradius = np.min(mesh.element_inradius)
 
     # print(f'hi from process {os.getpid()}')
