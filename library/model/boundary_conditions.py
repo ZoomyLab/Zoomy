@@ -33,6 +33,7 @@ class BoundaryCondition:
                     index = len(map_boundary_function_name_to_index)
                     map_boundary_function_name_to_index[boundary_tag_name] = index
                     map_boundary_index_to_function[index] = self.get_boundary_condition_function(Matrix(Q.get_list()), Matrix(Qaux.get_list()),  Matrix(parameters.get_list()), Matrix(normal.get_list()))
+                    map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
 
     def get_boundary_condition_function(self, Q, Qaux,  parameters, normal):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
@@ -160,5 +161,15 @@ class BoundaryConditions:
 
     #TODO add Qaux_ghost to everything
     #TODO add Q, Qghost, ... to func
+    #TODO delete i_corresponding_element
     def apply(self, i_boundary_element, i_corresponding_element, Q, Qaux, parameters, boundary_normal):
-        return self.runtime_bc[self.map_boundary_index_to_boundary_function_index[i_boundary_element]](Q[self.map_boundary_index_to_required_elements[i_boundary_element]], Qaux[self.map_boundary_index_to_required_elements[i_boundary_element]], parameters, boundary_normal )
+        q = Q[self.map_boundary_index_to_required_elements[i_boundary_element]]
+        qaux = Qaux[self.map_boundary_index_to_required_elements[i_boundary_element]]
+        func = self.runtime_bc[self.map_boundary_index_to_boundary_function_index[i_boundary_element]]
+        ## C
+        # qout = np.zeros_like(q)
+        # func(q, qaux, parameters, boundary_normal, qout)
+        # return qout
+        ## python
+        qout = func(q, qaux, parameters, boundary_normal)
+        return qout

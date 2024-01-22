@@ -52,7 +52,7 @@ def _initialize_problem(model, mesh):
     Q = model.initial_conditions.apply(mesh.element_center, Q)
     return Q, Qaux
 
-def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, settings):
+def _get_compute_max_abs_eigenvalue(mesh, pde, boundary_conditions, settings):
     reconstruction = settings.reconstruction
     reconstruction_edge = settings.reconstruction_edge
     def compute_max_abs_eigenvalue(Q, Qaux, parameters):
@@ -72,14 +72,14 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
 
                 #TODO PROBLEM: the C interface has eigenvalues as reference, python interface
                 # needs to return a value, because it cant do by-reference
-                ev_i = runtime_model.eigenvalues(
+                ev_i = pde.eigenvalues(
                     Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face]
                 )
                 if ev_i is not None:
                     eigenvalues_i = ev_i
                 max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_i)))
 
-                ev_j = runtime_model.eigenvalues(
+                ev_j = pde.eigenvalues(
                     Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face]
                 )
                 if ev_j is not None:
@@ -95,11 +95,11 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
             # reconstruct 
             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(mesh, [Q, Qaux], Q_ghost, i_elem )
 
-            runtime_model.eigenvalues(
+            pde.eigenvalues(
                 Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face] 
             )
             max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
-            runtime_model.eigenvalues(
+            pde.eigenvalues(
                 Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face] 
             )
             max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
@@ -107,22 +107,22 @@ def _get_compute_max_abs_eigenvalue(mesh, runtime_model, boundary_conditions, se
         return max_abs_eigenvalue
     return compute_max_abs_eigenvalue
 
-def _get_source(mesh, runtime_model, settings):
+def _get_source(mesh, pde, settings):
     def source(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
-            runtime_model.source(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+            pde.source(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
     return source
 
-def _get_source_jac(mesh, runtime_model, settings):
+def _get_source_jac(mesh, pde, settings):
     def source_jac(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
-            runtime_model.source_jacobian(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+            pde.source_jacobian(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
     return source_jac
 
 
-def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions, settings):
+def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
     compute_num_flux = settings.num_flux
     compute_nc_flux = settings.nc_flux
     reconstruction = settings.reconstruction
@@ -142,11 +142,11 @@ def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions
                 #TODO callout to a requirement of the flux
                 mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
                 flux, failed = compute_num_flux(
-                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
+                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], pde, mesh_props=mesh_props
                 )
                 assert not failed
                 nc_flux, failed = compute_nc_flux(
-                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model
+                    Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], pde
                 )
                 assert not failed
             
@@ -169,17 +169,28 @@ def _get_semidiscrete_solution_operator(mesh, runtime_model, boundary_conditions
             # callout to a requirement of the flux
             mesh_props = SimpleNamespace(dt_dx= dt / (2*mesh.element_inradius[i_elem]))
             flux, failed = compute_num_flux(
-                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model, mesh_props=mesh_props
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], pde, mesh_props=mesh_props
             )
             assert not failed
             nc_flux, failed = compute_nc_flux(
-                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], runtime_model
+                Qi, Qj, Qauxi, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face], pde
             )
             assert not failed
 
             dQ[i_elem] -= (flux+nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
         return dQ
     return operator_rhs_split
+
+def load_runtime_model(model):
+    runtime_pde = model.get_runtime_model()
+    runtime_bc = model.get_runtime_boundary_conditions()
+    model.boundary_conditions.runtime_bc = runtime_bc
+    return runtime_pde, runtime_bc
+
+
+def save_model_to_C(model, settings):
+    _ = model.create_c_interface(path=os.path.join(settings.output_dir, 'c_interface'))
+    _ = model.create_c_boundary_interface(path=os.path.join(settings.output_dir, 'c_interface'))
 
 
 def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
@@ -225,23 +236,15 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
 
     time_start = gettime()
 
-    if settings.solver_code_base == 'python':
-        runtime_model = model.get_runtime_model()
-        runtime_bc = model.get_runtime_boundary_conditions()
-        model.boundary_conditions.runtime_bc = runtime_bc
-    elif settings.solver_code_base=='C':
-        _ = model.create_c_boundary_interface()
-        model_functions = model.get_runtime_model()
-        _ = model.create_c_interface()
-        runtime_model = model.load_c_model()
+    pde, bc = load_runtime_model(model)
 
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
-    # space_solution_operator = get_semidiscrete_solution_operator(mesh, runtime_model, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
-    space_solution_operator = _get_semidiscrete_solution_operator(mesh, runtime_model, model.boundary_conditions, settings)
-    compute_source = _get_source(mesh, runtime_model, settings)
-    compute_source_jac = _get_source_jac(mesh, runtime_model, settings)
-    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, runtime_model, model.boundary_conditions, settings)
+    # space_solution_operator = get_semidiscrete_solution_operator(mesh, pde, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
+    space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, model.boundary_conditions, settings)
+    compute_source = _get_source(mesh, pde, settings)
+    compute_source_jac = _get_source_jac(mesh, pde, settings)
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, model.boundary_conditions, settings)
     min_inradius = np.min(mesh.element_inradius)
 
     # print(f'hi from process {os.getpid()}')
@@ -290,7 +293,7 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
 
     
 
-def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1, runtime_model = None):
+def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1):
     iteration = 0
     time = 0.0
 
@@ -335,10 +338,7 @@ def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode
 
     time_start = gettime()
 
-    if runtime_model is None:
-        model_functions = model.get_runtime_model()
-        _ = model.create_c_interface()
-        runtime_model = model.load_c_model()
+    pde, bc = load_runtime_model(model)
 
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)

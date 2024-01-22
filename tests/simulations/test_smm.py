@@ -176,12 +176,12 @@ def test_inflowoutflow_2d():
             BC.Wall(physical_tag="top"),
             BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
         ]
     )
     ic = IC.Constant(
         constants=lambda n_fields: np.array(
-            [1.0, 0.36] + [0.0 for i in range(n_fields - 2)]
+            [1.0, 0.1, 0.1] + [0.0 for i in range(n_fields - 3)]
         )
     )
     model = ShallowMoments2d(

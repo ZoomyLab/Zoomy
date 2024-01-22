@@ -5,6 +5,7 @@ import os
 import logging
 from copy import deepcopy
 from ctypes import cdll
+from functools import partial
 
 import sympy
 from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol 
@@ -173,6 +174,33 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
+    def load_c_boundary_conditions(self, n_boundary_functions, path='./.tmp'):
+        folder = os.path.join(path, self.name)
+        files_found = []
+        for file in os.listdir(folder):
+            if file.startswith("boundary_conditions") and file.endswith(".so"):
+                files_found.append(os.path.join(folder, file))
+
+        assert len(files_found) == 1
+        library_path = files_found[0]
+
+        c_bcs = cdll.LoadLibrary(library_path)
+
+        boundary_functions = [None for i in range(n_boundary_functions)]
+        for i in range(n_boundary_functions):
+            boundary_functions[i] = eval(f"c_bcs.boundary_condition_{i}")
+
+        # define array prototypes
+        array_1d_double = npct.ndpointer(dtype=np.double,ndim=1, flags='CONTIGUOUS')
+    
+        # define function prototype
+        for i in range(n_boundary_functions):
+            boundary_functions[i].argtypes = [array_1d_double, array_1d_double, array_1d_double, array_1d_double, array_1d_double]
+            boundary_functions[i].restype = None
+
+        return boundary_functions
+        
+
     #TODO create c_boundary_interface similat to create_c_interface
     def create_c_boundary_interface(self, path='.tmp/'):
         # define matrix symbols that will be used as substitutions for the currelty used symbols in the
@@ -288,7 +316,7 @@ class Model:
         folder = os.path.join(path, self.name)
         files_found = []
         for file in os.listdir(folder):
-            if file.endswith(".so"):
+            if file.startswith("model") and file.endswith(".so"):
                 files_found.append(os.path.join(folder, file))
 
         assert len(files_found) == 1
@@ -354,7 +382,12 @@ class Model:
 
     def get_runtime_boundary_conditions(self):
         """Returns a runtime boundary_conditions for numpy arrays from the symbolic model."""
-        bcs = [lambda Q, Qaux, param, normal: np.squeeze(np.array(lambdify(
+        n_boundary_functions = len(self.boundary_conditions.boundary_functions)
+        # bcs = [None for i in range(n_boundary_functions)]
+        # l_bcs = []
+        bcs = []
+        for i in range(n_boundary_functions):
+            func =lambdify(
             [
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
@@ -362,8 +395,10 @@ class Model:
                 self.sympy_normal.get_list(),
             ],
             self.boundary_conditions.boundary_functions[i],
-            "numpy",
-        )(Q, Qaux, param, normal)), axis=-1) for i in range(len(self.boundary_conditions.boundary_functions))]
+            "numpy")
+            # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
+            f = lambda q, qaux, p, n, func=func: np.squeeze(np.array(func(q, qaux, p, n) ), axis=-1)
+            bcs.append(f)
         return bcs
 
 
@@ -378,9 +413,8 @@ class Model:
             self.sympy_flux[d],
             "numpy",
         ) for d in range(self.dimension)]
-        # l_flux = lambda Q, Qaux, param: np.array(_l_flux(Q, Qaux, param))[:,:,:,0]
-        # flux = vectorize(l_flux)
-        flux = [lambda Q, Qaux, param:  np.squeeze(np.array(l_flux[d](Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
+        # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
+        flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
         l_flux_jacobian = lambdify(
             [
                 self.variables.get_list(),
@@ -405,15 +439,15 @@ class Model:
         nonconservative_matrix = l_nonconservative_matrix
         # nonconservative_matrix = vectorize(l_nonconservative_matrix)
 
-        l_quasilinear_matrix = lambdify(
+        l_quasilinear_matrix = [lambdify(
             [
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_quasilinear_matrix,
+            self.sympy_quasilinear_matrix[d],
             "numpy",
-        )
+        ) for d in range(self.dimension)]
         quasilinear_matrix = l_quasilinear_matrix
         # quasilinear_matrix = vectorize(l_quasilinear_matrix)
 
