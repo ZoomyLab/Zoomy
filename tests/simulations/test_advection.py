@@ -2,17 +2,18 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.solver import *
-from library.model import *
-import library.initial_conditions as IC
-import library.boundary_conditions as BC
-from library.ode import RK1
-import library.io as io
+from library.pysolver.solver import *
+from library.model.model import *
+import library.model.initial_conditions as IC
+import library.model.boundary_conditions as BC
+from library.pysolver.ode import RK1
+import library.misc.io as io
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", momentum_eqns = [0], parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "Advection", parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
 
 
     bc_tags = ["left", "right"]
@@ -41,7 +42,7 @@ def test_advection_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = flux.LLF, compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
+    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -74,7 +75,7 @@ def test_advection_2d(mesh_type):
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_advection_3d(mesh_type):
-    settings = Settings(name = "Advection", momentum_eqns = [0, 1], parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF, compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_snapshots = 10)
+    settings = Settings(name = "Advection",  parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_snapshots = 10)
 
 
     bc_tags = ["left", "right", "top", "bottom", "front", "back"]
@@ -107,6 +108,6 @@ def test_advection_3d(mesh_type):
 
 if __name__ == "__main__":
     test_advection_1d()
-    # test_advection_2d("quad")
-    # test_advection_2d("triangle")
-    # test_advection_3d("tetra")
+    test_advection_2d("quad")
+    test_advection_2d("triangle")
+    test_advection_3d("tetra")

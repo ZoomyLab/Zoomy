@@ -18,7 +18,6 @@ def create_default_mesh_and_model(
     fields: Union[int, list] = 1,
     aux_fields: Union[int, list] = 0,
     parameters: Union[int, list, dict] = 0,
-    momentum_eqns: list = [-1],
     settings: dict = {},
 ):
     main_dir = os.getenv("SMS")

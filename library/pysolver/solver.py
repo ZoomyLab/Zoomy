@@ -25,7 +25,6 @@ from library.pysolver.ode import *
 @define(slots=True, frozen=False, kw_only=True)
 class Settings():
     name : str = 'Simulation'
-    momentum_eqns: list[int] = [0]
     parameters : dict = {}
     reconstruction : Callable = recon.constant
     reconstruction_edge: Callable = recon.constant_edge

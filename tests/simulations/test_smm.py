@@ -19,7 +19,6 @@ def test_smm_1d():
     level = 0
     settings = Settings(
         name="ShallowMoments",
-        momentum_eqns=[1] + [2 + l for l in range(level)],
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -59,7 +58,6 @@ def test_sindy_generate_reference_data():
     level = 0
     settings = Settings(
         name="ShallowMoments",
-        momentum_eqns=[1] + [2 + l for l in range(level)],
         parameters={"g": 9.81, "C": 20.0, "nu": 0.0016},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -107,7 +105,6 @@ def test_smm_2d(mesh_type):
     level = 2
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -158,7 +155,6 @@ def test_inflowoutflow_2d():
     level = 0
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -208,7 +204,6 @@ def test_steffler():
     level = 2
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 9.81, "C": 16.0, "nu": 0.0016},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -271,7 +266,6 @@ def test_channel_with_hole_2d():
     level = 2
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 9.81, "C": args.C, "nu": args.nu},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -351,7 +345,6 @@ def test_smm_grad_2d():
     level = 2
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 1.0, "C": 16.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -410,7 +403,6 @@ def test_smm_1d_crazy_basis():
     level = 1
     settings = Settings(
         name="ShallowMoments",
-        momentum_eqns=[1] + [2 + l for l in range(level)],
         parameters={"g": 1.0, "C": 1.0, "nu": 0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -454,7 +446,6 @@ def test_c_solver(mesh_type):
     level = 0
     settings = Settings(
         name="ShallowMoments2d",
-        momentum_eqns=[1, 2] + [3 + l for l in range(2 * level)],
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
@@ -503,10 +494,10 @@ if __name__ == "__main__":
     # test_smm_1d()
     # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
-    # test_smm_2d("triangle")
+    test_smm_2d("triangle")
     # test_inflowoutflow_2d()
     # test_steffler()
     # test_channel_with_hole_2d()
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
-    test_c_solver('quad')
+    # test_c_solver('quad')

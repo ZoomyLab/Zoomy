@@ -19,7 +19,6 @@ import library.postprocessing.postprocessing as postprocessing
 def test_swetopo_1d():
     settings = Settings(
         name="ShallowWaterTopo",
-        momentum_eqns=[1],
         parameters={"g": 1.0},
         reconstruction=recon.constant,
         num_flux=flux.LLF_wb(),
@@ -67,7 +66,6 @@ def test_swetopo_1d():
 def test_swetopo_2d(mesh_type):
     settings = Settings(
         name="ShallowWater2d",
-        momentum_eqns=[1, 2],
         parameters={"g": 1.0, "C": 1.0},
         reconstruction=recon.constant,
         num_flux=flux.LLF_wb(),
@@ -119,7 +117,6 @@ def test_calibration_1d(inputs):
     mesh = Mesh.create_1d((-5, 5), 100)
     settings = Settings(
         name="Calibration",
-        momentum_eqns=[1],
         parameters=parameters,
         reconstruction=recon.constant,
         num_flux=flux.LLF_wb(),
