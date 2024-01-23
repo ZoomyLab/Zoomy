@@ -7,16 +7,22 @@ set -eu
 # These are overwritten if the respective arguments are passed to the script.
 kokkos_path_def='${VOLKOSPATH}/dependencies/kokkos'
 eigen_path_def='${VOLKOSPATH}/dependencies/eigen'
+pnetcdf_path_def='${VOLKOSPATH}/dependencies/pnetcdf/src'
+hdf5_path_def='${VOLKOSPATH}/dependencies/hdf5'
 
 # variable names in the Makefile
 kokkos_path_var="KOKKOS_PATH"
 eigen_path_var="EIGEN_PATH"
+pnetcdf_path_var="PNETCDF_PATH"
+hdf5_path_var="HDF5_PATH"
 
 # flag for default options only
 alldefault=0
 # declare empty, because zero-length is used as condition later
 kokkos_path=
 eigen_path=
+pnetcdf_path=
+hdf5_path=
 
 # use getopt to parse short and long options
 ! getopt --test > /dev/null
@@ -26,7 +32,7 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
 else
 	VALID_ARGS=$(getopt \
 	-o hak:p: \
-	--long help,all-default,kokkos:,eigen: \
+	--long help,all-default,kokkos:,eigen:, hdf5:,  \
 	-- "$@")
 	if [[ $? -ne 0 ]]; then
 		echo "getopt failed to parse arguments. Exiting..."
@@ -44,8 +50,12 @@ Valid options are:
   -h, --help         : Show options
   -k, --kokkos       : Provide path to existing kokkos installation.
                        Default: \"$kokkos_path_def\"
-  -p, --eigen      : Provide path to existing eigen installation.
+  -e, --eigen      : Provide path to existing eigen installation.
                        Default: \"$eigen_path_def\"
+  -h, --hdf5      : Provide path to existing hdf5 installation.
+                       Default: \"$hdf5_path_def\"
+  -p, --pnetcdf      : Provide path to existing pnetcdf installation.
+                       Default: \"$pnetcdf_path_def\"
 
 If a relative path is provided, it is interpreted as relative to
 VOLKOS's root directory.
@@ -82,6 +92,27 @@ for specifying the paths.
 			--) shift;
 				break
 				;;
+			-p | --pnetcf)
+				if [ "$2" = "default" ]; then
+					pnetcdf_path="$pnetcdf_path_def"
+				else
+					pnetcdf_path="$2"
+				fi
+				echo "pnetcdf path argument: \"$pnetcdf_path\"."
+				shift 2
+				;;
+			-h | --hdf5)
+				if [ "$2" = "default" ]; then
+					hdf5_path="$hdf5_path_def"
+				else
+					hdf5_path="$2"
+				fi
+				echo "hdf5 path argument: \"$hdf5_path\"."
+				shift 2
+				;;
+			--) shift;
+				break
+				;;
 		esac
 	done
 fi
@@ -107,7 +138,7 @@ require_env_var MPICC
 echo -e "Prerequisites met.\n"
 
 
-if ((alldefault == 0)) &&  [[ ( -z "$kokkos_path" || -z "$eigen_path" ) ]]; then
+if ((alldefault == 0)) &&  [[ ( -z "$kokkos_path" || -z "$eigen_path" || -z "$pnetcdf_path" || -z "$hdf5_path") ]]; then
 	echo -n \
 "Entering interactive mode...
 -------------------------------------------------
@@ -191,11 +222,15 @@ ask_or_default() {
 
 kokkos_path=$(ask_or_default "$kokkos_path" "$kokkos_path_def" "$kokkos_path_var")
 eigen_path=$(ask_or_default "$eigen_path" "$eigen_path_def" "$eigen_path_var")
+pnetcdf_path=$(ask_or_default "$pnetcdf_path" "$pnetcdf_path_def" "$pnetcdf_path_var")
+hdf5_path=$(ask_or_default "$hdf5_path" "$hdf5_path_def" "$hdf5_path_var")
 
 echo "Paths: "
 echo "$path_varname=\"$VOLKOSPATH\""
 echo "$kokkos_path_var=\"$kokkos_path\""
 echo "$eigen_path_var=\"$eigen_path\""
+echo "$pnetcdf_path_var=\"$pnetcdf_path\""
+echo "$hdf5_path_var=\"$hdf5_path\""
 
 
 makefile="$VOLKOSPATH/library/solver/Makefile"
@@ -210,6 +245,8 @@ if [ -f "$makefile" ]; then
 	echo "Entering paths into Makefile..."
 	replace_path "$kokkos_path_var" "$kokkos_path"
 	replace_path "$eigen_path_var" "$eigen_path"
+	replace_path "$pnetcdf_path_var" "$pnetcdf_path"
+	replace_path "$hdf5_path_var" "$hdf5_path"
 else
 	echo "Makefile not found at: $makefile"
 	echo "Exiting..."
@@ -232,6 +269,20 @@ fi
 if [ "$eigen_path" = "$eigen_path_def" ]; then
   cd ${VOLKOSPATH}/dependencies
 	"$sd/get_eigen.sh"
+	echo ""
+  cd ${VOLKOSPATH}
+fi
+
+if [ "$hdf5_path" = "$hdf5_path_def" ]; then
+  cd ${VOLKOSPATH}/dependencies
+	"$sd/get_hdf5.sh"
+	echo ""
+  cd ${VOLKOSPATH}
+fi
+
+if [ "$pnetcdf_path" = "$pnetcdf_path_def" ]; then
+  cd ${VOLKOSPATH}/dependencies
+	"$sd/get_pnetcdf.sh"
 	echo ""
   cd ${VOLKOSPATH}
 fi

@@ -56,6 +56,8 @@ GIT_COMMIT := $(shell git describe)
 EIGEN_PATH=${VOLKOSPATH}/dependencies/eigen
 KOKKOS_PATH=${VOLKOSPATH}/dependencies/kokkos
 KOKKOS_SRC_PATH = ${KOKKOS_PATH}
+PNETCDF_PATH=${VOLKOSPATH}/dependencies/PnetCDF/src
+HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
 
 ## by default build for cpu, alternative should be gpu
 ifndef ($arch)
@@ -108,7 +110,7 @@ UNITTESTS = $(BIN_DIR_UT)/dambreak
 dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
 
-CXXFLAGS = -O3 -I${PNETCDF_PATH}/include
+CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`
 
@@ -230,7 +232,7 @@ endif
 CXXFLAGS += $(VOLKOS_MODEL_FLAGS)
 LINK = ${CXX}
 
-LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf
+LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -lhdf5
 # LDFLAGS = 
 
 SRC = driver.cpp

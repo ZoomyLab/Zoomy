@@ -2,7 +2,7 @@
 
 # when changing dependency versions,
 # make sure that the related paths in the Makefile are still valid.
-pnetcdf_ver="1.12.3"
+hdf5_ver="184445f"
 
 get_n_threads_build() {
 	if ! command -v "lscpu" &> /dev/null
@@ -16,19 +16,23 @@ get_n_threads_build() {
 	echo $(( maxThreads - 2 >= 1 ? maxThreads - 2 : 1 ))
 }
 
-get_pnetcdf() {
+get_hdf5() {
 	local ver="$1"
-	# download PnetCDF release and extract, if it doesn't exist
-	local pname="PnetCDF"
+	# download hdf5 release and extract, if it doesn't exist
+	local pname="hdf5"
 	if [ -d "$pname" ]; then
 		echo "Existing directory \"$pname\" found. Skipping download and configuration..."
 	else
 		echo "Downloading $pname..."
 		wd="$(pwd -P)"
-		local archive_base="pnetcdf-${ver}"
+		local archive_base="hdf5-develop-${ver}"
 		local archive="${archive_base}.tar.gz"
-		wget "https://parallel-netcdf.github.io/Release/${archive}"
+		echo "-----------------------"
+		echo $archive
+		echo "-----------------------"
+		wget "https://github.com/HDFGroup/hdf5/releases/download/snapshot/$archive" 
 		tar -xvzf "$archive"
+		mv "hdfsrc" "hdf5"
 
 		# rename, configure and build
 		mv "$archive_base" $pname
@@ -39,9 +43,12 @@ get_pnetcdf() {
 		np=$(get_n_threads_build)
 		make -j $np
 
-		# remove archive
+		make install 
+
+
+		# # remove archive
 		rm "$wd/$archive"
 	fi
 }
 
-get_pnetcdf "$pnetcdf_ver"
+get_hdf5 "$hdf5_ver"
