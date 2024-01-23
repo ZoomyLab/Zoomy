@@ -23,6 +23,20 @@ def save_settings(filepath, settings):
         attrs = f.create_group('parameters')
         for k, v in settings.parameters.items():
             attrs.create_dataset(k, data=v)
+        f.create_dataset('parameter_values', data=np.array(list(settings.parameters.values()), dtype=float))
+        f.create_dataset('name', data=settings.name)
+        f.create_dataset('output_dir', data=settings.output_dir)
+        f.create_dataset('output_snapshots', data=settings.output_snapshots)
+        f.create_dataset('output_write_all', data=settings.output_write_all)
+        f.create_dataset('output_clean_dir', data=settings.output_clean_dir)
+        # f.create_dataset('reconstruction', data.settings.reconstruction.__name__, dtype=h5py.string_dtype())
+        # f.create_dataset('reconstruction_edge', data.settings.reconstruction_edge.__name__, dtype=h5py.string_dtype())  
+        # f.create_dataset('num_flux', data.settings.num_flux.__name__, dtype=h5py.string_dtype())        
+        # f.create_dataset('nc_flux', data.settings.nc_flux.__name__, dtype=h5py.string_dtype())
+        # f.create_dataset('compute_dt', data.settings.compute_dt.__name__, dtype=h5py.string_dtype())
+        # f.create_dataset('compute_dt_args', data=settings.compute_dt_args)
+        f.create_dataset('time_end', data=settings.time_end)
+        
 
 def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all, filename='fields.hdf5'):
     if not write_all and  time < next_write_at:

@@ -452,6 +452,7 @@ def test_c_solver(mesh_type):
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=1.0,
         output_snapshots=100,
+        output_clean_dir=True
     )
 
     bc_tags = ["left", "right", "top", "bottom"]

@@ -4,6 +4,7 @@
 // #include "../../dependencies/hdf5/c++/src/H5Cpp.h"
 #include "pnetcdf.h"
 #include "hdf5.h"
+#include "settings.h"
 
 
 #include <iostream>
@@ -38,13 +39,26 @@ void openPnetCDFFile(const std::string& filePath) {
 }
 
 
+//TODO create a mesh class?
+//TODO create a loader
 void openHDF5File(const std::string& filePath) {
 	hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     if (file < 0) {
         std::cerr << "Error opening file: " << filePath << std::endl;
     } else {
         std::cout << "File opened successfully." << std::endl;
-        // Don't forget to close the file when you're done with it
+
+		hid_t group = H5Gopen(file, "mesh", H5P_DEFAULT);
+		hid_t dataset = H5Dopen(group, "dimension", H5P_DEFAULT);
+		// TODO dimension should be an attribute (small dataset)
+		// TODO same applies for all small datasets (e.g. integers or strings)
+		int dimension;
+		H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &dimension);
+		std::cout << "Dimension: " << dimension << std::endl;
+
+
+
+
         H5Fclose(file);
     }
 }
@@ -54,16 +68,19 @@ void openHDF5File(const std::string& filePath) {
 int main(int argc, char** argv) {
 
 
-    MPI_Init(&argc, &argv);
-
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  	// openHDF5File("../outputs/output_c/mesh.hdf5");
+	// openPnetCDFFile("../outputs/output_c/mesh.nc");
+	Settings settings = Settings("../outputs/output_c/settings.hdf5");
 
   	std::cout << "MAIN" << std::endl;
-  	openHDF5File("../outputs/output_c/mesh.hdf5");
-	// openPnetCDFFile("../outputs/output_c/mesh.nc");
 
-	MPI_Finalize();
+    // MPI_Init(&argc, &argv);
+    // int rank;
+    // MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  	// std::cout << "MAIN Parallel" << std::endl;
+
+	// MPI_Finalize();
 
 	// Read command line arguments 
 	//  if (argc != 4){
