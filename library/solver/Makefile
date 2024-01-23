@@ -111,6 +111,7 @@ dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
 
 CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include
+# CXXFLAGS = -O3  -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`
 
@@ -232,7 +233,8 @@ endif
 CXXFLAGS += $(VOLKOS_MODEL_FLAGS)
 LINK = ${CXX}
 
-LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -lhdf5
+LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -l:libhdf5.so.1000
+# LDFLAGS = -L${HDF5_PATH}/lib -lhdf5
 # LDFLAGS = 
 
 SRC = driver.cpp
