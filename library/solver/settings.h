@@ -25,15 +25,7 @@ public:
 
     Settings(std::string filepath)
     {
-	    hid_t file = H5Fopen(filepath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-        if (file < 0) 
-        {
-            std::cerr << "Error opening file: " << filepath << std::endl;
-        } 
-        else 
-        {
-            std::cout << "File opened successfully." << std::endl;
-
+	    hid_t file = loadHDF5(filepath);
         readStringFromDataset(file, "name", this->name);
         readDoubleArrayFromDataset(file, "parameter_values", this->parameters);
         readDoubleFromDataset(file, "time_end", this->time_end);
@@ -42,9 +34,7 @@ public:
         readBoolFromDataset(file, "output_write_all", this->output_write_all);
         readBoolFromDataset(file, "output_clean_dir", this->output_clean_dir);
         readBoolFromDataset(file, "truncate_last_time_step", this->truncate_last_time_step);
-
         H5Fclose(file);
-        }
     }
 };
 

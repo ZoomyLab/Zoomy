@@ -7,6 +7,13 @@
 #include <vector>
 #include <iostream>
 
+hid_t loadHDF5(const std::string& filePath) {
+    hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    if (file < 0) {
+        std::cerr << "Error opening file: " << filePath << std::endl;
+    } 
+    return file;
+}
 
 void readDoubleFromDataset(hid_t &file, const std::string& datasetName, double& outputVar) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
@@ -17,7 +24,6 @@ void readDoubleFromDataset(hid_t &file, const std::string& datasetName, double& 
     else 
     {
         H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &outputVar);
-        std::cout << datasetName << ": " << outputVar << std::endl;
         H5Dclose(dataset);
     }
 }
@@ -31,7 +37,6 @@ void readIntFromDataset(hid_t &file, const std::string& datasetName, int& output
     else 
     {
         H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &outputVar);
-        std::cout << datasetName << ": " << outputVar << std::endl;
         H5Dclose(dataset);
     }
 }
@@ -46,7 +51,6 @@ void readBoolFromDataset(hid_t &file, const std::string& datasetName, bool& outp
     else 
     {
         H5Dread(dataset, H5T_NATIVE_HBOOL, H5S_ALL, H5S_ALL, H5P_DEFAULT, &outputVar);
-        std::cout << datasetName << ": " << outputVar << std::endl;
         H5Dclose(dataset);
     }
 }
@@ -108,30 +112,65 @@ void readStringFromDataset(hid_t file, const std::string& datasetName, std::stri
     } 
     else 
     {
-        // Get the size of the dataset
-        hid_t dataspace = H5Dget_space(dataset);
-        hsize_t size = H5Sget_simple_extent_npoints(dataspace);
+        // Get the native datatype
+        hid_t filetype = H5Dget_type(dataset);
+        hid_t memtype = H5Tget_native_type(filetype, H5T_DIR_ASCEND);
 
-        // Allocate memory for the string
-        char* buffer = new char[size + 1];
+        // Get the dataspace
+        hid_t dataspace = H5Dget_space(dataset);
 
         // Read the dataset
-        H5Dread(dataset, H5T_C_S1, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
-
-        // Null-terminate the string
-        buffer[size] = '\0';
+        char* buffer;
+        H5Dread(dataset, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, &buffer);
 
         // Assign the buffer to the output string
         outputString = buffer;
 
         // Free the buffer
-        delete[] buffer;
+        H5Dvlen_reclaim(memtype, dataspace, H5P_DEFAULT, &buffer);
 
-        // Close the dataspace and dataset
+        // Close the datatype and dataset
+        H5Tclose(memtype);
+        H5Tclose(filetype);
         H5Sclose(dataspace);
         H5Dclose(dataset);
     }
 }
+
+// void readStringFromDataset(hid_t file, const std::string& datasetName, std::string& outputString) {
+//     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
+//     if (dataset < 0) 
+//     {
+//         std::cerr << "Error opening dataset: " << datasetName << std::endl;
+//     } 
+//     else 
+//     {
+//         // Get the size of the dataset
+//         hid_t dataspace = H5Dget_space(dataset);
+//         hsize_t size = H5Sget_simple_extent_npoints(dataspace);
+
+//         std::cout << "Size: " << size << std::endl;
+
+//         // Allocate memory for the string
+//         char* buffer = new char[size + 1];
+
+//         // Read the dataset
+//         H5Dread(dataset, H5T_C_S1, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
+
+//         // Null-terminate the string
+//         buffer[size] = '\0';
+
+//         // Assign the buffer to the output string
+//         outputString = buffer;
+
+//         // Free the buffer
+//         delete[] buffer;
+
+//         // Close the dataspace and dataset
+//         H5Sclose(dataspace);
+//         H5Dclose(dataset);
+//     }
+// }
 
 void readDouble2DArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<double>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
