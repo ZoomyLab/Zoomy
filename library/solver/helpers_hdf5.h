@@ -1,13 +1,14 @@
-// fileIO.h
-#ifndef FILE_IO_H
-#define FILE_IO_H
+// helpers_hdf5.h
+#ifndef HELPERS_HDF5_H
+#define HELPERS_HDF5_H
 
 #include "hdf5.h"
 #include <string>
 #include <vector>
 #include <iostream>
 
-hid_t loadHDF5(const std::string& filePath) {
+
+hid_t openHdf5(const std::string& filePath) {
     hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     if (file < 0) {
         std::cerr << "Error opening file: " << filePath << std::endl;
@@ -321,4 +322,20 @@ void readStringArrayFromDataset(hid_t file, const std::string& datasetName, std:
 }
 
 
-#endif // FILE_IO_H
+double loadFieldFromHdf5(hid_t& file, int index, std::vector<std::vector<double>>& Q, std::vector<std::vector<double>>& Qaux)
+{
+    std::string groupName = std::to_string(index);
+    hid_t group = H5Gopen(file, groupName.c_str(), H5P_DEFAULT);
+    if (group < 0) 
+    {
+        std::cerr << "Error opening group: " << groupName << std::endl;
+    } 
+    else 
+    {
+        readDouble2dArrayFromDataset(group, "Q", Q);
+    }
+    return 0.;
+}
+
+
+#endif // HELPERS_HDF5_H

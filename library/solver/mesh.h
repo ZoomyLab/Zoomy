@@ -5,7 +5,7 @@
 #include "hdf5.h"
 #include <string>
 #include <vector>
-#include "fileIO.h"
+#include "helpers_hdf5.h"
 
 class Mesh
 {
@@ -37,7 +37,7 @@ public:
 
     Mesh(std::string filepath)
     {
-	    hid_t file = loadHDF5(filepath);
+	    hid_t file = openHdf5(filepath);
         readIntFromDataset(file, "dimension", this->dimension);
         readStringFromDataset(file, "type", this->type);
         readIntFromDataset(file, "n_elements", this->n_elements);
