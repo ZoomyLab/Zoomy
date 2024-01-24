@@ -56,7 +56,6 @@ public:
         readIntArrayFromDataset(file, "boundary_face_tag", this->boundary_face_tag);
         readStringArrayFromDataset(file, "boundary_tag_names", this->boundary_tag_names);
         H5Fclose(file);
-        std::cout << "Mesh dimension: " << this->dimension << std::endl;
     }
 };
 
