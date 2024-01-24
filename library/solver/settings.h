@@ -1,4 +1,4 @@
-// Settings.h
+// settings.h
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
@@ -18,10 +18,10 @@ public:
     // std::string compute_dt;
     double time_end;
     bool truncate_last_time_step;
+    std::string output_dir;
     int output_snapshots;
     bool output_write_all;
     bool output_clean_dir;
-    std::string output_dir;
 
     Settings(std::string filepath)
     {

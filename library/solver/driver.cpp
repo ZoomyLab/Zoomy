@@ -5,64 +5,21 @@
 #include "pnetcdf.h"
 #include "hdf5.h"
 #include "settings.h"
+#include "mesh.h"
 
 
 #include <iostream>
 #include <string>
 #include <mpi.h>
 
-// settings struct
-// load settings
-// load pde
-// load bc
-// load mesh
-// load initial conditions
-// bc struct
-// load bc_mappings
-// load_ic
-
-void openPnetCDFFile(const std::string& filePath) {
-	int ncid;
-	int status = ncmpi_open(MPI_COMM_WORLD, filePath.c_str(), NC_NOWRITE, MPI_INFO_NULL, &ncid);
-	if (status != NC_NOERR) {
-		std::cerr << "Error opening file: " << filePath << std::endl;
-	} else {
-		std::cout << "File opened successfully." << std::endl;
-		// Don't forget to close the file when you're done with it
-		status = ncmpi_close(ncid);
-		if (status != NC_NOERR) {
-			std::cerr << "Error closing file: " << filePath << std::endl;
-		} else {
-			std::cout << "File closed successfully." << std::endl;
-		}
-	}
-}
-
-
-//TODO create a mesh class?
-//TODO create a loader
-void openHDF5File(const std::string& filePath) {
-	hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-    if (file < 0) {
-        std::cerr << "Error opening file: " << filePath << std::endl;
-    } else {
-        std::cout << "File opened successfully." << std::endl;
-
-		hid_t group = H5Gopen(file, "mesh", H5P_DEFAULT);
-		hid_t dataset = H5Dopen(group, "dimension", H5P_DEFAULT);
-		// TODO dimension should be an attribute (small dataset)
-		// TODO same applies for all small datasets (e.g. integers or strings)
-		int dimension;
-		H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &dimension);
-		std::cout << "Dimension: " << dimension << std::endl;
-
-
-
-
-        H5Fclose(file);
-    }
-}
-
+// [x] settings struct
+// [x] load settings
+// [ ] load mesh
+// [ ] load initial conditions
+// [ ] load pde
+// [ ] load bc
+// [ ] bc-mesh struct
+// [ ] load bc_mesh_mappings
 
 
 int main(int argc, char** argv) {
@@ -71,6 +28,7 @@ int main(int argc, char** argv) {
   	// openHDF5File("../outputs/output_c/mesh.hdf5");
 	// openPnetCDFFile("../outputs/output_c/mesh.nc");
 	Settings settings = Settings("../outputs/output/settings.hdf5");
+	Mesh mesh = Mesh("../outputs/output/mesh.hdf5");
 
   	std::cout << "MAIN" << std::endl;
 
