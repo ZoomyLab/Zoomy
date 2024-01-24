@@ -23,7 +23,7 @@ class Mesh:
     n_faces_per_element: int
     vertex_coordinates: FArray
     element_vertices: IArray
-    element_face_areas: IArray
+    element_face_areas: FArray
     element_center: FArray
     element_volume: FArray
     element_inradius: FArray
@@ -783,7 +783,7 @@ class Mesh:
     @classmethod
     def from_hdf5(cls, filepath: str):
         with h5py.File(filepath, "r") as file:
-            file_mesh = file["mesh"]
+            file_mesh = file
             mesh = cls(
                 file_mesh["dimension"][()],
                 (file_mesh["type"][()]).decode("utf-8"),
@@ -836,34 +836,33 @@ class Mesh:
 
     def write_to_hdf5(self, filepath: str, filename='mesh.hdf5'):
         with h5py.File(os.path.join(filepath, filename), "w") as f:
-            attrs = f.create_group("mesh")
-            attrs.create_dataset("dimension", data=self.dimension)
-            attrs.create_dataset("type", data=self.type)
-            attrs.create_dataset("n_elements", data=self.n_elements)
-            attrs.create_dataset("n_vertices", data=self.n_vertices)
-            attrs.create_dataset("n_boundary_elements", data=self.n_boundary_elements)
-            attrs.create_dataset("n_faces_per_element", data=self.n_faces_per_element)
-            attrs.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
-            attrs.create_dataset("element_vertices", data=self.element_vertices, dtype=int)
-            attrs.create_dataset("element_face_areas", data=self.element_face_areas)
-            attrs.create_dataset("element_center", data=self.element_center)
-            attrs.create_dataset("element_volume", data=self.element_volume)
-            attrs.create_dataset("element_inradius", data=self.element_inradius)
-            attrs.create_dataset("element_face_normals", data=self.element_face_normals)
-            attrs.create_dataset("element_n_neighbors", data=self.element_n_neighbors)
-            attrs.create_dataset("element_neighbors", data=self.element_neighbors)
-            attrs.create_dataset("element_neighbors_face_index", data=self.element_neighbors_face_index)
-            attrs.create_dataset(
+            f.create_dataset("dimension", data=self.dimension)
+            f.create_dataset("type", data=self.type)
+            f.create_dataset("n_elements", data=self.n_elements)
+            f.create_dataset("n_vertices", data=self.n_vertices)
+            f.create_dataset("n_boundary_elements", data=self.n_boundary_elements)
+            f.create_dataset("n_faces_per_element", data=self.n_faces_per_element)
+            f.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
+            f.create_dataset("element_vertices", data=self.element_vertices, dtype=int)
+            f.create_dataset("element_face_areas", data=self.element_face_areas)
+            f.create_dataset("element_center", data=self.element_center)
+            f.create_dataset("element_volume", data=self.element_volume)
+            f.create_dataset("element_inradius", data=self.element_inradius)
+            f.create_dataset("element_face_normals", data=self.element_face_normals)
+            f.create_dataset("element_n_neighbors", data=self.element_n_neighbors)
+            f.create_dataset("element_neighbors", data=self.element_neighbors)
+            f.create_dataset("element_neighbors_face_index", data=self.element_neighbors_face_index)
+            f.create_dataset(
                 "boundary_face_vertices", data=self.boundary_face_vertices
             )
-            attrs.create_dataset(
+            f.create_dataset(
                 "boundary_face_corresponding_element", data=self.boundary_face_corresponding_element
             )
-            attrs.create_dataset(
+            f.create_dataset(
                 "boundary_face_element_face_index", data=self.boundary_face_element_face_index
             )
-            attrs.create_dataset("boundary_face_tag", data=self.boundary_face_tag)
-            attrs.create_dataset("boundary_tag_names", data=self.boundary_tag_names)
+            f.create_dataset("boundary_face_tag", data=self.boundary_face_tag)
+            f.create_dataset("boundary_tag_names", data=self.boundary_tag_names)
 
 def _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_element):
     n_edges = 0
