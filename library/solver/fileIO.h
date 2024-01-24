@@ -138,7 +138,7 @@ void readStringFromDataset(hid_t file, const std::string& datasetName, std::stri
 }
 
 
-void readDouble2DArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<double>>& outputArray) {
+void readDouble2dArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<double>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -155,8 +155,19 @@ void readDouble2DArrayFromDataset(hid_t file, const std::string& datasetName, st
         // Resize the output array to match the dimensions of the dataset
         outputArray.resize(dims[0], std::vector<double>(dims[1]));
 
+        // Create a temporary buffer to hold the data
+        double* buffer = new double[dims[0] * dims[1]];
+
         // Read the dataset
-        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, outputArray[0].data());
+        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
+
+        // Copy the data from the buffer into the output array
+        for (hsize_t i = 0; i < dims[0]; ++i)
+            for (hsize_t j = 0; j < dims[1]; ++j)
+                outputArray[i][j] = buffer[i * dims[1] + j];
+
+        // Delete the buffer
+        delete[] buffer;
 
         // Close the dataspace and dataset
         H5Sclose(dataspace);
@@ -164,8 +175,7 @@ void readDouble2DArrayFromDataset(hid_t file, const std::string& datasetName, st
     }
 }
 
-
-void readInt2DArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<int>>& outputArray) {
+void readInt2dArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<int>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -182,12 +192,25 @@ void readInt2DArrayFromDataset(hid_t file, const std::string& datasetName, std::
         // Resize the output array to match the dimensions of the dataset
         outputArray.resize(dims[0], std::vector<int>(dims[1]));
 
+        // Create a temporary buffer to hold the data
+        int* buffer = new int[dims[0] * dims[1]];
+
         // Read the dataset
-        H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, outputArray[0].data());
+        H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
+
+        // Copy the data from the buffer into the output array
+        for (hsize_t i = 0; i < dims[0]; ++i)
+            for (hsize_t j = 0; j < dims[1]; ++j)
+                outputArray[i][j] = buffer[i * dims[1] + j];
+
+        // Delete the buffer
+        delete[] buffer;
 
         // Close the dataspace and dataset
         H5Sclose(dataspace);
         H5Dclose(dataset);
     }
 }
+
+
 #endif // FILE_IO_H
