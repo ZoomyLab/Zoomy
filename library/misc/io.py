@@ -29,6 +29,7 @@ def save_settings(filepath, settings):
         f.create_dataset('output_snapshots', data=settings.output_snapshots)
         f.create_dataset('output_write_all', data=settings.output_write_all)
         f.create_dataset('output_clean_dir', data=settings.output_clean_dir)
+        f.create_dataset('truncate_last_time_step', data=settings.truncate_last_time_step)  
         # f.create_dataset('reconstruction', data.settings.reconstruction.__name__, dtype=h5py.string_dtype())
         # f.create_dataset('reconstruction_edge', data.settings.reconstruction_edge.__name__, dtype=h5py.string_dtype())  
         # f.create_dataset('num_flux', data.settings.num_flux.__name__, dtype=h5py.string_dtype())        

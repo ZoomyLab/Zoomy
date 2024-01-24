@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 
   	// openHDF5File("../outputs/output_c/mesh.hdf5");
 	// openPnetCDFFile("../outputs/output_c/mesh.nc");
-	Settings settings = Settings("../outputs/output_c/settings.hdf5");
+	Settings settings = Settings("../outputs/output/settings.hdf5");
 
   	std::cout << "MAIN" << std::endl;
 
