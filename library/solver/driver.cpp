@@ -14,7 +14,7 @@
 
 // [x] settings struct
 // [x] load settings
-// [ ] load mesh
+// [x] load mesh
 // [ ] load initial conditions
 // [ ] load pde
 // [ ] load bc

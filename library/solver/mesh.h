@@ -31,6 +31,9 @@ public:
     std::vector<int> boundary_face_element_face_index;
     std::vector<int> boundary_face_tag;
     std::vector<std::string> boundary_tag_names;
+    std::vector<int> boundary_function_index;
+    std::vector<int> boundary_function_required_element;
+    std::vector<std::string> boundary_function_name;
 
     Mesh(std::string filepath)
     {
@@ -55,6 +58,17 @@ public:
         readIntArrayFromDataset(file, "boundary_face_element_face_index", this->boundary_face_element_face_index);
         readIntArrayFromDataset(file, "boundary_face_tag", this->boundary_face_tag);
         readStringArrayFromDataset(file, "boundary_tag_names", this->boundary_tag_names);
+        if (H5Lexists(file, "boundary_function_index", H5P_DEFAULT))
+        {
+            readIntArrayFromDataset(file, "boundary_function_index", this->boundary_function_index);
+            readIntArrayFromDataset(file, "required_elements", this->boundary_function_required_element);
+            readStringArrayFromDataset(file, "boundary_function_name", this->boundary_function_name);
+        }
+        else
+        {
+            std::cerr << "Boundary Conditions related data not present. You can append the data by using the function - model.boundary_conditions.append_boundary_map_to_mesh_hdf5(settings.output_dir) - in the pyhon API." << std::endl;
+        }
+        
         H5Fclose(file);
     }
 };

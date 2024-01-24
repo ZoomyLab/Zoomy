@@ -202,7 +202,7 @@ def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode
     io.save_settings(settings.output_dir, settings)
 
     save_model_to_C(model, settings)
-    model.boundary_conditions.save_boundary_map_to_hdf5(settings.output_dir)    
+    model.boundary_conditions.append_boundary_map_to_mesh_hdf5(settings.output_dir)    
 
 def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1):
     iteration = 0

@@ -175,8 +175,8 @@ class BoundaryConditions:
         qout = func(q, qaux, parameters, boundary_normal)
         return qout
     
-    def save_boundary_map_to_hdf5(self, filepath, filename='boundary_map.hdf5'):
-        with h5py.File(os.path.join(filepath, filename), "w") as f:
+    def append_boundary_map_to_mesh_hdf5(self, filepath, filename='mesh.hdf5'):
+        with h5py.File(os.path.join(filepath, filename), "a") as f:
             f.create_dataset("boundary_function_index", data=self.map_boundary_index_to_boundary_function_index)
             f.create_dataset("required_elements", data=self.map_boundary_index_to_required_elements)
             f.create_dataset("boundary_function_name", data=self.boundary_functions_name)
