@@ -22,7 +22,7 @@ public:
     std::vector<std::vector<double>> element_center;
     std::vector<double> element_volume;
     std::vector<double> element_inradius;
-    std::vector<std::vector<double>> element_face_normals;
+    std::vector<std::vector<std::vector<double>>> element_face_normals;
     std::vector<int> element_n_neighbors;
     std::vector<std::vector<int>> element_neighbors;
     std::vector<std::vector<int>> element_neighbors_face_index;
@@ -42,12 +42,19 @@ public:
         readIntFromDataset(file, "n_faces_per_element", this->n_faces_per_element);
         readDouble2dArrayFromDataset(file, "vertex_coordinates", this->vertex_coordinates);
         readInt2dArrayFromDataset(file, "element_vertices", this->element_vertices);
-        // readStringFromDataset(file, "name", this->name);
-        // readStringFromDataset(file, "output_dir", this->output_dir);
-        // readIntFromDataset(file, "output_snapshots", this->output_snapshots);
-        // readBoolFromDataset(file, "output_write_all", this->output_write_all);
-        // readBoolFromDataset(file, "output_clean_dir", this->output_clean_dir);
-        // readBoolFromDataset(file, "truncate_last_time_step", this->truncate_last_time_step);
+        readDouble2dArrayFromDataset(file, "element_face_areas", this->element_face_areas);
+        readDouble2dArrayFromDataset(file, "element_center", this->element_center);
+        readDoubleArrayFromDataset(file, "element_volume", this->element_volume);
+        readDoubleArrayFromDataset(file, "element_inradius", this->element_inradius);
+        readDouble3dArrayFromDataset(file, "element_face_normals", this->element_face_normals);
+        readIntArrayFromDataset(file, "element_n_neighbors", this->element_n_neighbors);
+        readInt2dArrayFromDataset(file, "element_neighbors", this->element_neighbors);
+        readInt2dArrayFromDataset(file, "element_neighbors_face_index", this->element_neighbors_face_index);
+        readInt2dArrayFromDataset(file, "boundary_face_vertices", this->boundary_face_vertices);
+        readIntArrayFromDataset(file, "boundary_face_corresponding_element", this->boundary_face_corresponding_element);
+        readIntArrayFromDataset(file, "boundary_face_element_face_index", this->boundary_face_element_face_index);
+        readIntArrayFromDataset(file, "boundary_face_tag", this->boundary_face_tag);
+        readStringArrayFromDataset(file, "boundary_tag_names", this->boundary_tag_names);
         H5Fclose(file);
         std::cout << "Mesh dimension: " << this->dimension << std::endl;
     }
