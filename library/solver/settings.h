@@ -5,7 +5,7 @@
 #include "hdf5.h"
 #include <string>
 #include <vector>
-#include "fileIO.h"
+#include "helpers_hdf5.h"
 
 class Settings
 {
@@ -25,7 +25,7 @@ public:
 
     Settings(std::string filepath)
     {
-	    hid_t file = loadHDF5(filepath);
+	    hid_t file = openHdf5(filepath);
         readStringFromDataset(file, "name", this->name);
         readDoubleArrayFromDataset(file, "parameter_values", this->parameters);
         readDoubleFromDataset(file, "time_end", this->time_end);

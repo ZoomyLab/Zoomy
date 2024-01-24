@@ -2,10 +2,11 @@
 #include "../../outputs/output_c/c_interface/Model/boundary_conditions_code.h"
 #include "../../outputs/output_c/c_interface/Model/model_code.h"
 // #include "../../dependencies/hdf5/c++/src/H5Cpp.h"
-#include "pnetcdf.h"
+// #include "pnetcdf.h"
 #include "hdf5.h"
 #include "settings.h"
 #include "mesh.h"
+#include "model.h"
 
 
 #include <iostream>
@@ -15,22 +16,27 @@
 // [x] settings struct
 // [x] load settings
 // [x] load mesh
-// [ ] load initial conditions
+// [x] load initial conditions
 // [ ] load pde
 // [ ] load bc
-// [ ] bc-mesh struct
-// [ ] load bc_mesh_mappings
+// [x] bc-mesh struct
+// [x] load bc_mesh_mappings
 
 
 int main(int argc, char** argv) {
-
-
-  	// openHDF5File("../outputs/output_c/mesh.hdf5");
-	// openPnetCDFFile("../outputs/output_c/mesh.nc");
 	Settings settings = Settings("../outputs/output/settings.hdf5");
 	Mesh mesh = Mesh("../outputs/output/mesh.hdf5");
+	std::vector<std::vector<double>> Q;
+	std::vector<std::vector<double>> Qaux;
+	double time = 0.;
+	hid_t file_fields = openHdf5("../outputs/output/fields.hdf5");
+	time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
+	std::cout << "Q[0][0]: " << Q[0][0] << std::endl;
+    H5Fclose(file_fields);
 
-  	std::cout << "MAIN" << std::endl;
+	// Model<1> model;
+
+	std::cout << "MAIN" << std::endl;
 
     // MPI_Init(&argc, &argv);
     // int rank;

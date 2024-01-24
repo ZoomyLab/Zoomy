@@ -110,7 +110,7 @@ UNITTESTS = $(BIN_DIR_UT)/dambreak
 dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
 
-CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include
+CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include -DDIM=$(DIM)
 # CXXFLAGS = -O3  -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`
@@ -237,7 +237,7 @@ LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -l:libhdf5.s
 # LDFLAGS = -L${HDF5_PATH}/lib -lhdf5
 # LDFLAGS = 
 
-SRC = driver.cpp
+SRC = driver.cpp ../../outputs/output_c/c_interface/Model/model_code.cpp
 SRC_UT = unitTests/dambreak.cpp
 OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o))
 OBJ_UT = $(BIN_DIR_UT)/$(notdir $(SRC_UT:.cpp=.o))
