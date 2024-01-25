@@ -8,7 +8,7 @@ class Model
 {
 public:
     const int dimension = 1;
-    void flux(double *Q, double *Qaux, double *parameters, double **out)
+    void flux(std::vector<double>& Q, std::vector<double>& Qaux, std::vector<double>& parameters, std::vector<std::vector<double>>& Qout)
     {
         std::cerr << "flux function not implemented for this dimension" << std::endl;
         std::exit(1);
@@ -17,9 +17,9 @@ public:
 
 // Specialization for DIM = 1
 template <>
-void Model<1>::flux(double *Q, double *Qaux, double *parameters, double **out)
+void Model<1>::flux(std::vector<double>& Q, std::vector<double>& Qaux, std::vector<double>& parameters, std::vector<std::vector<double>>& Qout)
 {
-    int i = flux_test();
+    Qout[0][0] = 9999.;
     // flux_x(Q, Qaux, parameters, out[0]);
 }
 

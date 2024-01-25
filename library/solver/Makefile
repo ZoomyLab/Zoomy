@@ -58,6 +58,7 @@ KOKKOS_PATH=${VOLKOSPATH}/dependencies/kokkos
 KOKKOS_SRC_PATH = ${KOKKOS_PATH}
 PNETCDF_PATH=${VOLKOSPATH}/dependencies/PnetCDF/src
 HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
+MODEL_PATH=${VOLKOSPATH}/outputs/output_c/c_interface/Model
 
 ## by default build for cpu, alternative should be gpu
 ifndef ($arch)
@@ -237,9 +238,12 @@ LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -l:libhdf5.s
 # LDFLAGS = -L${HDF5_PATH}/lib -lhdf5
 # LDFLAGS = 
 
-SRC = driver.cpp ../../outputs/output_c/c_interface/Model/model_code.cpp
+# SRC = driver.cpp ../../outputs/output_c/c_interface/Model/model_code.cpp
+# SRC = driver.cpp 
+SRC = driver.cpp $(MODEL_PATH)/model_code.cpp
 SRC_UT = unitTests/dambreak.cpp
-OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o))
+# OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o)) $(BIN_DIR)/$(notdir $(SRC:.c=.o) )
+OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o)) 
 OBJ_UT = $(BIN_DIR_UT)/$(notdir $(SRC_UT:.cpp=.o))
 
 # what does this do?

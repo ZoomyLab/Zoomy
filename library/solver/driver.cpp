@@ -31,10 +31,12 @@ int main(int argc, char** argv) {
 	double time = 0.;
 	hid_t file_fields = openHdf5("../outputs/output/fields.hdf5");
 	time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
-	std::cout << "Q[0][0]: " << Q[0][0] << std::endl;
     H5Fclose(file_fields);
 
-	// Model<1> model;
+	Model<1> model;
+	std::vector<std::vector<double>> F(1, std::vector<double>(2));
+	model.flux(Q[0], Qaux[0], settings.parameters, F);
+	std::cout << "flux_x: " << F[0][0] << std::endl;
 
 	std::cout << "MAIN" << std::endl;
 
