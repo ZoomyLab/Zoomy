@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "mesh.h"
 #include "model.h"
+#include "boundary_conditions.h"
 
 
 #include <iostream>

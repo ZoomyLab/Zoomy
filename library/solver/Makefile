@@ -238,11 +238,10 @@ LDFLAGS = -L${PNETCDF_PATH}/libs/.libs -lpnetcdf -L${HDF5_PATH}/lib -l:libhdf5.s
 # LDFLAGS = -L${HDF5_PATH}/lib -lhdf5
 # LDFLAGS = 
 
-# SRC = driver.cpp ../../outputs/output_c/c_interface/Model/model_code.cpp
-# SRC = driver.cpp 
-SRC = driver.cpp $(MODEL_PATH)/model_code.cpp
+# SRC = driver.cpp $(MODEL_PATH)/model_code.c
+SRC = driver.cpp $(MODEL_PATH)/model_code.cpp $(MODEL_PATH)/boundary_conditions_code.cpp
 SRC_UT = unitTests/dambreak.cpp
-# OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o)) $(BIN_DIR)/$(notdir $(SRC:.c=.o) )
+# OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o) $(SRC:.c=.o)) 
 OBJ = $(BIN_DIR)/$(notdir $(SRC:.cpp=.o)) 
 OBJ_UT = $(BIN_DIR_UT)/$(notdir $(SRC_UT:.cpp=.o))
 
