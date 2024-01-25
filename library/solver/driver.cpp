@@ -35,9 +35,14 @@ int main(int argc, char** argv) {
     H5Fclose(file_fields);
 
 	Model<1> model;
-	std::vector<std::vector<double>> F(1, std::vector<double>(2));
-	model.flux(Q[0], Qaux[0], settings.parameters, F);
-	std::cout << "flux_x: " << F[0][0] << std::endl;
+	std::vector<std::vector<double>> F(3, std::vector<double>(3));
+	for (int i = 0; i < 3; ++i) {
+		std::cout << "Q[" << i << "]: " << Q[0][i] << std::endl;
+		std::cout << "F[" << i << "]: " << F[0][i] << std::endl;
+		std::cout << "Q[" << i << "]: " << Qaux[0].data() << std::endl;
+	}
+	// model.flux(Q[0], Qaux[0], settings.parameters, F);
+	// std::cout << "flux_x: " << F[0][0] << std::endl;
 
 	std::cout << "MAIN" << std::endl;
 

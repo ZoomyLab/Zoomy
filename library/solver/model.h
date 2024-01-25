@@ -19,8 +19,8 @@ public:
 template <>
 void Model<1>::flux(std::vector<double>& Q, std::vector<double>& Qaux, std::vector<double>& parameters, std::vector<std::vector<double>>& Qout)
 {
-    Qout[0][0] = 9999.;
-    // flux_x(Q, Qaux, parameters, out[0]);
+    // Qout[0][0] = 9999.;
+    flux_x(Q.data(), Qaux.data(), parameters.data(), Qout[0].data());
 }
 
 // // Specialization for DIM = 2
