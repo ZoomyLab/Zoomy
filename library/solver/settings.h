@@ -26,14 +26,14 @@ public:
     Settings(std::string filepath)
     {
 	    hid_t file = openHdf5(filepath);
-        readStringFromDataset(file, "name", this->name);
-        readDoubleArrayFromDataset(file, "parameter_values", this->parameters);
-        readDoubleFromDataset(file, "time_end", this->time_end);
-        readStringFromDataset(file, "output_dir", this->output_dir);
-        readIntFromDataset(file, "output_snapshots", this->output_snapshots);
-        readBoolFromDataset(file, "output_write_all", this->output_write_all);
-        readBoolFromDataset(file, "output_clean_dir", this->output_clean_dir);
-        readBoolFromDataset(file, "truncate_last_time_step", this->truncate_last_time_step);
+        readString(file, "name", this->name);
+        readDoubleArray(file, "parameter_values", this->parameters);
+        readDouble(file, "time_end", this->time_end);
+        readString(file, "output_dir", this->output_dir);
+        readInt(file, "output_snapshots", this->output_snapshots);
+        readBool(file, "output_write_all", this->output_write_all);
+        readBool(file, "output_clean_dir", this->output_clean_dir);
+        readBool(file, "truncate_last_time_step", this->truncate_last_time_step);
         H5Fclose(file);
     }
 };

@@ -16,7 +16,7 @@ hid_t openHdf5(const std::string& filePath) {
     return file;
 }
 
-void readDoubleFromDataset(hid_t &file, const std::string& datasetName, double& outputVar) {
+void readDouble(hid_t &file, const std::string& datasetName, double& outputVar) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -29,7 +29,7 @@ void readDoubleFromDataset(hid_t &file, const std::string& datasetName, double& 
     }
 }
 
-void readIntFromDataset(hid_t &file, const std::string& datasetName, int& outputVar) {
+void readInt(hid_t &file, const std::string& datasetName, int& outputVar) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -43,7 +43,7 @@ void readIntFromDataset(hid_t &file, const std::string& datasetName, int& output
 }
 
 
-void readBoolFromDataset(hid_t &file, const std::string& datasetName, bool& outputVar) {
+void readBool(hid_t &file, const std::string& datasetName, bool& outputVar) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -56,7 +56,7 @@ void readBoolFromDataset(hid_t &file, const std::string& datasetName, bool& outp
     }
 }
 
-void readDoubleArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<double>& outputArray) {
+void readDoubleArray(hid_t file, const std::string& datasetName, std::vector<double>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -80,7 +80,7 @@ void readDoubleArrayFromDataset(hid_t file, const std::string& datasetName, std:
     }
 }
 
-void readIntArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<int>& outputArray) {
+void readIntArray(hid_t file, const std::string& datasetName, std::vector<int>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -105,7 +105,7 @@ void readIntArrayFromDataset(hid_t file, const std::string& datasetName, std::ve
 }
     
 
-void readStringFromDataset(hid_t file, const std::string& datasetName, std::string& outputString) {
+void readString(hid_t file, const std::string& datasetName, std::string& outputString) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -139,7 +139,7 @@ void readStringFromDataset(hid_t file, const std::string& datasetName, std::stri
 }
 
 
-void readDouble2dArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<double>>& outputArray) {
+void readDouble2dArray(hid_t file, const std::string& datasetName, std::vector<std::vector<double>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -176,7 +176,7 @@ void readDouble2dArrayFromDataset(hid_t file, const std::string& datasetName, st
     }
 }
 
-void readInt2dArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<int>>& outputArray) {
+void readInt2dArray(hid_t file, const std::string& datasetName, std::vector<std::vector<int>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -213,7 +213,7 @@ void readInt2dArrayFromDataset(hid_t file, const std::string& datasetName, std::
     }
 }
 
-void readDouble3dArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::vector<std::vector<double>>>& outputArray) {
+void readDouble3dArray(hid_t file, const std::string& datasetName, std::vector<std::vector<std::vector<double>>>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -251,7 +251,7 @@ void readDouble3dArrayFromDataset(hid_t file, const std::string& datasetName, st
     }
 }
 
-void readStringArrayFromDataset(hid_t file, const std::string& datasetName, std::vector<std::string>& outputArray) {
+void readStringArray(hid_t file, const std::string& datasetName, std::vector<std::string>& outputArray) {
     hid_t dataset = H5Dopen(file, datasetName.c_str(), H5P_DEFAULT);
     if (dataset < 0) 
     {
@@ -332,8 +332,8 @@ double loadFieldFromHdf5(hid_t& file, int index, std::vector<std::vector<double>
     } 
     else 
     {
-        readDouble2dArrayFromDataset(group, "Q", Q);
-        readDouble2dArrayFromDataset(group, "Qaux", Qaux);
+        readDouble2dArray(group, "Q", Q);
+        readDouble2dArray(group, "Qaux", Qaux);
     }
     return 0.;
 }
