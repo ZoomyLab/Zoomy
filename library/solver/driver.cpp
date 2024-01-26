@@ -6,7 +6,7 @@
 #include "hdf5.h"
 #include "settings.h"
 #include "mesh.h"
-// #include "model.h"
+#include "model.h"
 #include "boundary_conditions.h"
 // #include "containers.h"
 // #include "SArray.h"
@@ -42,6 +42,10 @@ int main(int argc, char **argv)
 		realArr2 q2 = realArr2("q2", 3, 2);
 		realArr3 q3 = realArr3("q3", N, M, D);
 
+		std::cout << q2.data() << std::endl;
+		std::cout << get_first2(q2, 1).data() << std::endl;
+		std::cout << get_last2(q2, 1).data() << std::endl;
+
 		double * q3_ptr = q3.data();
 		for (int i = 0; i < N * M * D; ++i)
 		{
@@ -54,7 +58,7 @@ int main(int argc, char **argv)
 			{
 				for (int i = 0; i < N; ++i)
 				{
-					std::cout << "q3[" << i << "]["<< j << "]["  << d << "]:"  << q3(i, j, d) << std::endl;
+					// std::cout << "q3[" << i << "]["<< j << "]["  << d << "]:"  << q3(i, j, d) << std::endl;
 				}
 			}
 		}
@@ -81,8 +85,8 @@ int main(int argc, char **argv)
 		realArr2 F = realArr2("F", 3, dim);
 		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
 		// realArr f = F.at2(1)
-		auto f = get_element2(F, 1);
-		auto dfdq = get_element3(dFdQ, 1);
+		auto f = get_last2(F, 1);
+		auto dfdq = get_last3(dFdQ, 1);
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
@@ -90,7 +94,7 @@ int main(int argc, char **argv)
 		{
 			for (int j = 0; j < 3; ++j)
 			{
-				std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
+				// std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
 		// 			for (int k = 0; k < 3; ++k)
 		// 			{
 		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
