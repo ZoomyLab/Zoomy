@@ -47,6 +47,16 @@
 typedef unsigned long ulong;
 typedef unsigned int  uint;
 
+template <typename DataType, typename... Properties>
+KOKKOS_INLINE_FUNCTION auto get_element2(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
+  return Kokkos::subview(view, Kokkos::ALL(), fixed_dim);
+}
+
+template <typename DataType, typename... Properties>
+KOKKOS_INLINE_FUNCTION auto get_element3(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
+  return Kokkos::subview(view, Kokkos::ALL(), Kokkos::ALL(), fixed_dim);
+}
+
 
 #ifdef __NVCC__
   typedef Kokkos::View<real*     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> realArr;

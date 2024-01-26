@@ -78,22 +78,25 @@ int main(int argc, char **argv)
 
 		const int dim = 2;
 		// Model<dim> model;
-		std::vector<std::vector<double>> F(dim, std::vector<double>(3));
-		std::vector<std::vector<std::vector<double>>> dFdQ(dim, std::vector<std::vector<double>>(3, std::vector<double>(3)));
-		// model.flux(Q[0], (*Qaux_ptr)[0], settings.parameters, F);
+		realArr2 F = realArr2("F", 3, dim);
+		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
+		// realArr f = F.at2(1)
+		auto f = get_element2(F, 1);
+		auto dfdq = get_element3(dFdQ, 1);
+		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
-		// for (int i = 0; i < dim; ++i)
-		// {
-		// 	for (int j = 0; j < 3; ++j)
-		// 	{
-		// 		std::cout << "F[" << i << "][" << j << "]: " << F[i][j] << std::endl;
+		for (int i = 0; i < 3; ++i)
+		{
+			for (int j = 0; j < 3; ++j)
+			{
+				std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
 		// 			for (int k = 0; k < 3; ++k)
 		// 			{
 		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
 		// 			}
-		// 	}
-		// }
+			}
+		}
 		std::cout << "MAIN" << std::endl;
 
 		// MPI_Init(&argc, &argv);
