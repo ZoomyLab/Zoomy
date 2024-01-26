@@ -10,7 +10,7 @@ class Model
 public:
     const int dimension = 1;
 
-    void flux(realArr& Q, realArr& Qaux, realArr& parameters, realArr2& Qout)
+    void flux(const realArr Q, const realArr Qaux, const realArr parameters, realArr2& Qout)
     {
         std::cerr << "flux function not implemented for this dimension" << std::endl;
         std::exit(1);
@@ -47,14 +47,14 @@ public:
 
 // Specialization for DIM = 1
 template <>
-void Model<1>::flux(realArr& Q, realArr& Qaux, realArr& parameters, realArr2& Qout)
+void Model<1>::flux(const realArr Q, const realArr Qaux, const realArr parameters, realArr2& Qout)
 {
     flux_x(Q.data(), Qaux.data(), parameters.data(), Qout.data());
 }
 
 // Specialization for DIM = 2
 template <>
-void Model<2>::flux(realArr& Q, realArr& Qaux, realArr& parameters, realArr2& Qout)
+void Model<2>::flux(const realArr Q, const realArr Qaux, const realArr parameters, realArr2& Qout)
 {
     flux_x(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 0).data());
     flux_y(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 1).data());
@@ -62,7 +62,7 @@ void Model<2>::flux(realArr& Q, realArr& Qaux, realArr& parameters, realArr2& Qo
 
 // Specialization for DIM = 3
 template <>
-void Model<3>::flux(realArr& Q, realArr& Qaux, realArr& parameters, realArr2& Qout)
+void Model<3>::flux(const realArr Q, const realArr Qaux, const realArr parameters, realArr2& Qout)
 {
     flux_x(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 0).data());
     flux_y(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 1).data());

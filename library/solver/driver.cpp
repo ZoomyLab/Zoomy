@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 		double * q3_ptr = q3.data();
 		for (int i = 0; i < N * M * D; ++i)
 		{
-			std::cout << q3_ptr[i] << std::endl;
+			// std::cout << q3_ptr[i] << std::endl;
 		}
 
 		for (int d = 0; d < D; ++d)
@@ -81,20 +81,20 @@ int main(int argc, char **argv)
 		H5Fclose(file_fields);
 
 		const int dim = 2;
-		// Model<dim> model;
+		Model<dim> model;
 		realArr2 F = realArr2("F", 3, dim);
 		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
 		// realArr f = F.at2(1)
 		auto f = get_last2(F, 1);
 		auto dfdq = get_last3(dFdQ, 1);
-		// model.flux(Q[0], Qaux[0], settings.parameters, F);
+		model.flux(get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, F);
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
 		for (int i = 0; i < 3; ++i)
 		{
 			for (int j = 0; j < 3; ++j)
 			{
-				// std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
+				std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
 		// 			for (int k = 0; k < 3; ++k)
 		// 			{
 		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
