@@ -4,6 +4,7 @@
 # make sure that the related paths in the Makefile are still valid.
 kokkos_ver="3.7.01"
 
+
 get_kokkos() {
 	local ver="$1"
 	# clone KOKKOS, if no kokkos dir exists
@@ -12,6 +13,11 @@ get_kokkos() {
 	else
 		echo "Cloning kokkos..."
 		git clone --depth 1 --branch $ver https://github.com/kokkos/kokkos.git
+		#TODO manually added. investigate why necessary, but not in serhei (I think due to a MR in kokkos)
+		#If I leave this as it is, I probably need to specify CXX and openmp flags to the makefile
+		mkdir build
+		cd build
+		./../kokkos/generate_makefile.bash
 	fi
 }
 

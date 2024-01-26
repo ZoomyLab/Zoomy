@@ -2,7 +2,8 @@
 
 # when changing dependency versions,
 # make sure that the related paths in the Makefile are still valid.
-hdf5_ver="184445f"
+# hdf5_ver="184445f"
+hdf5_ver="1_14_2"
 
 get_n_threads_build() {
 	if ! command -v "lscpu" &> /dev/null
@@ -25,12 +26,14 @@ get_hdf5() {
 	else
 		echo "Downloading $pname..."
 		wd="$(pwd -P)"
-		local archive_base="hdf5-develop-${ver}"
+		# local archive_base="hdf5-develop-${ver}"
+		local archive_base="hdf5-${ver}"
 		local archive="${archive_base}.tar.gz"
 		echo "-----------------------"
 		echo $archive
 		echo "-----------------------"
-		wget "https://github.com/HDFGroup/hdf5/releases/download/snapshot/$archive" 
+		# wget "https://github.com/HDFGroup/hdf5/releases/download/snapshot/$archive" 
+		wget "https://github.com/HDFGroup/hdf5/releases/download/$archive_base/$archive"
 		tar -xvzf "$archive"
 		mv "hdfsrc" "hdf5"
 

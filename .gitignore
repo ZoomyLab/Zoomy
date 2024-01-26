@@ -42,3 +42,5 @@ library/solver/Kokkos_OpenMP_Task.o
 library/solver/Kokkos_Profiling.o
 library/solver/Kokkos_SharedAlloc.o
 library/solver/Kokkos_Spinwait.o
+library/solver/boundary_conditions_code.o
+library/solver/model_code.o

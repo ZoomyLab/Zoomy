@@ -5,10 +5,17 @@ set -eu
 # Default paths for dependencies.
 # Will be written to Makefile, therefore variable expansion is suppressed.
 # These are overwritten if the respective arguments are passed to the script.
+
+
+# Create the dependencies directory if it does not exist
+if [ ! -d "$../dependencies" ]; then
+	mkdir -p "../dependencies"
+fi
+
 kokkos_path_def='${VOLKOSPATH}/dependencies/kokkos'
 eigen_path_def='${VOLKOSPATH}/dependencies/eigen'
 pnetcdf_path_def='${VOLKOSPATH}/dependencies/pnetcdf/src'
-hdf5_path_def='${VOLKOSPATH}/dependencies/hdf5'
+hdf5_path_def='${VOLKOSPATH}/dependencies/hdf5/hdf5'
 
 # variable names in the Makefile
 kokkos_path_var="KOKKOS_PATH"
