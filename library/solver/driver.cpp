@@ -6,8 +6,12 @@
 #include "hdf5.h"
 #include "settings.h"
 #include "mesh.h"
-#include "model.h"
+// #include "model.h"
 #include "boundary_conditions.h"
+// #include "containers.h"
+// #include "SArray.h"
+#include "define.h"
+#include<Kokkos_Core.hpp>
 
 #include <iostream>
 #include <string>
@@ -24,72 +28,88 @@
 
 int main(int argc, char **argv)
 {
-	Settings settings = Settings("../outputs/output_c/settings.hdf5");
-	Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
-	std::vector<std::vector<double>> Q;
-	std::vector<std::vector<double>> Qaux;
-	std::vector<std::vector<double>> *Qaux_ptr = nullptr;
-
-	double time = 0.;
-	hid_t file_fields = openHdf5("../outputs/output_c/fields.hdf5");
-	time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
-	// Qaux can be empty. However, I still need to iterate over it in the code, because I do not want to guard it with an if statement.
-	// Therefore I reference it to Q. This also probibites me to use Qaux directly, rather I need to take a pointer to it.
-	if (!Qaux.empty())
+	Kokkos::initialize();
 	{
-		Qaux_ptr = &Qaux;
+		Settings settings = Settings("../outputs/output_c/settings.hdf5");
+		Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
+		std::vector<std::vector<double>> Q;
+		std::vector<std::vector<double>> Qaux;
+		// realArr q = realArr("q", 3);
+		// Kokkos::View<float* > b("b", 10);
+		Kokkos::View<float* > b;
+		b = Kokkos::View<float* >("b", 10);
+		// for (int i = 0; i < 3; ++i)
+		// 	std::cout << "q[" << i << "]: " << q(i) << std::endl;
+		// VEC Q;
+		// std::vector<std::vector<double>> *Qaux_ptr = nullptr;
+
+		double time = 0.;
+		hid_t file_fields = openHdf5("../outputs/output_c/fields.hdf5");
+		time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
+		// Qaux can be empty. However, I still need to iterate over it in the code, because I do not want to guard it with an if statement.
+		// Therefore I reference it to Q. This also probibites me to use Qaux directly, rather I need to take a pointer to it.
+		// if (!Qaux.empty())
+		// {
+		// 	std::cout << "Qaux is not empty" << std::endl;
+		// 	Qaux_ptr = &Qaux;
+		// }
+		// else
+		// {
+		// 	std::cout << "Qaux is empty" << std::endl;
+		// 	Qaux_ptr = &Q;
+		// }
+		H5Fclose(file_fields);
+
+		const int dim = 2;
+		// Model<dim> model;
+		std::vector<std::vector<double>> F(dim, std::vector<double>(3));
+		std::vector<std::vector<std::vector<double>>> dFdQ(dim, std::vector<std::vector<double>>(3, std::vector<double>(3)));
+		// model.flux(Q[0], (*Qaux_ptr)[0], settings.parameters, F);
+		// model.flux(Q[0], Qaux[0], settings.parameters, F);
+		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
+		// for (int i = 0; i < dim; ++i)
+		// {
+		// 	for (int j = 0; j < 3; ++j)
+		// 	{
+		// 		std::cout << "F[" << i << "][" << j << "]: " << F[i][j] << std::endl;
+		// 			for (int k = 0; k < 3; ++k)
+		// 			{
+		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
+		// 			}
+		// 	}
+		// }
+		std::cout << "MAIN" << std::endl;
+
+		// MPI_Init(&argc, &argv);
+		// int rank;
+		// MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+		// std::cout << "MAIN Parallel" << std::endl;
+
+
+		// Read command line arguments
+		//  if (argc != 4){
+		//   std::cerr << RERROR "The program is run as: ./nprogram inputFolder/ outputFolder/ Nthreads" << std::endl;
+		// 	  return 0;
+		// }
+
+		// {
+		// SERGHEI serghei;
+
+		// serghei.inFolder = argv[1];
+		// serghei.outFolder = argv[2];
+
+		// serghei.par.nthreads = atoi(argv[3]);
+
+		// if(!serghei.start(argc, argv)) return 0;
+		// if(!serghei.compute()) return 0;
+		// if(!serghei.finalise()) return 0;
+
+		// } // scope guard required to ensure serghei destructor is called
+
+		// Kokkos::finalize();
+		//  MPI_Finalize();
 	}
-	else
-	{
-		Qaux_ptr = &Q;
-	}
-	H5Fclose(file_fields);
-
-	Model<1> model;
-	std::vector<std::vector<double>> F(3, std::vector<double>(3));
-	// for (int i = 0; i < 3; ++i)
-	// {
-	// 	std::cout << "Q[" << i << "]: " << Q[0][i] << std::endl;
-	// 	std::cout << "F[" << i << "]: " << F[0][i] << std::endl;
-	// 	std::cout << "Q[" << i << "]: " << (*Qaux_ptr)[0].data() << std::endl;
-	// }
-	model.flux(Q[0], (*Qaux_ptr)[0], settings.parameters, F);
-	std::cout << "flux_x: " << F[0][0] << std::endl;
-	std::cout << "flux_x: " << F[0][1] << std::endl;
-	std::cout << "flux_x: " << F[0][2] << std::endl;
-
-	std::cout << "MAIN" << std::endl;
-
-	// MPI_Init(&argc, &argv);
-	// int rank;
-	// MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-	// std::cout << "MAIN Parallel" << std::endl;
-
-	// MPI_Finalize();
-
-	// Read command line arguments
-	//  if (argc != 4){
-	//   std::cerr << RERROR "The program is run as: ./nprogram inputFolder/ outputFolder/ Nthreads" << std::endl;
-	// 	  return 0;
-	// }
-
-	// {
-	// SERGHEI serghei;
-
-	// serghei.inFolder = argv[1];
-	// serghei.outFolder = argv[2];
-
-	// serghei.par.nthreads = atoi(argv[3]);
-
-	// if(!serghei.start(argc, argv)) return 0;
-	// if(!serghei.compute()) return 0;
-	// if(!serghei.finalise()) return 0;
-
-	// } // scope guard required to ensure serghei destructor is called
-
-	// Kokkos::finalize();
-	//  MPI_Finalize();
-
-	return 1;
+	Kokkos::finalize();
+	return 0;
 }

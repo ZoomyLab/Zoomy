@@ -101,7 +101,7 @@ ifeq ($(VOLKOS_DEBUG_MPI),1)
 debug=yes
 endif
 
-KOKKOS_DEBUG=no
+KOKKOS_DEBUG=yes
 ifeq ($(KOKKOS_DEBUG),yes)
 debug=yes
 endif
@@ -114,6 +114,8 @@ EXE = $(BIN_DIR)/volkos
 UNITTESTS = $(BIN_DIR_UT)/dambreak
 dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
+#TODO this needs to be an input parameter?
+DIM = 1
 
 CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include -DDIM=$(DIM)
 # CXXFLAGS = -O3  -I${HDF5_PATH}/include

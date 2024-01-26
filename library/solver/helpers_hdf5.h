@@ -333,6 +333,7 @@ double loadFieldFromHdf5(hid_t& file, int index, std::vector<std::vector<double>
     else 
     {
         readDouble2dArrayFromDataset(group, "Q", Q);
+        readDouble2dArrayFromDataset(group, "Qaux", Qaux);
     }
     return 0.;
 }
