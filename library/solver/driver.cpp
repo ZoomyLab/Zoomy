@@ -32,6 +32,11 @@ int main(int argc, char** argv) {
 	double time = 0.;
 	hid_t file_fields = openHdf5("../outputs/output/fields.hdf5");
 	time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
+	if (Qaux.empty())
+	{
+		std::cout << "Qaux is empty" << std::endl;
+		std::vector<std::vector<double>>& Qaux = Q;
+	}
     H5Fclose(file_fields);
 
 	Model<1> model;
