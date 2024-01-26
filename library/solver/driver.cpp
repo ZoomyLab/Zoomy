@@ -34,20 +34,30 @@ int main(int argc, char **argv)
 		Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
 		std::vector<std::vector<double>> Q;
 		std::vector<std::vector<double>> Qaux;
+
+		const int N = 3;
+		const int M = 4;
+		const int D = 2;
 		realArr q = realArr("q", 3);
 		realArr2 q2 = realArr2("q2", 3, 2);
-		// // Kokkos::View<float* > b("b", 10);
-		// Kokkos::View<float* > b;
-		// b = Kokkos::View<float* >("b", 10);
-		for (int i = 0; i < 3; ++i)
+		realArr3 q3 = realArr3("q3", N, M, D);
+
+		double * q3_ptr = q3.data();
+		for (int i = 0; i < N * M * D; ++i)
 		{
-			for (int j = 0; j < 2; ++j)
+			std::cout << q3_ptr[i] << std::endl;
+		}
+
+		for (int d = 0; d < D; ++d)
+		{
+			for (int j = 0; j < M; ++j)
 			{
-				std::cout << "q2[" << i << "]["<< j << "]: " << q2(i, j) << std::endl;
+				for (int i = 0; i < N; ++i)
+				{
+					std::cout << "q3[" << i << "]["<< j << "]["  << d << "]:"  << q3(i, j, d) << std::endl;
+				}
 			}
 		}
-		// VEC Q;
-		// std::vector<std::vector<double>> *Qaux_ptr = nullptr;
 
 		double time = 0.;
 		hid_t file_fields = openHdf5("../outputs/output_c/fields.hdf5");
