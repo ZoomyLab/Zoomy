@@ -34,12 +34,18 @@ int main(int argc, char **argv)
 		Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
 		std::vector<std::vector<double>> Q;
 		std::vector<std::vector<double>> Qaux;
-		// realArr q = realArr("q", 3);
-		// Kokkos::View<float* > b("b", 10);
-		Kokkos::View<float* > b;
-		b = Kokkos::View<float* >("b", 10);
-		// for (int i = 0; i < 3; ++i)
-		// 	std::cout << "q[" << i << "]: " << q(i) << std::endl;
+		realArr q = realArr("q", 3);
+		realArr2 q2 = realArr2("q2", 3, 2);
+		// // Kokkos::View<float* > b("b", 10);
+		// Kokkos::View<float* > b;
+		// b = Kokkos::View<float* >("b", 10);
+		for (int i = 0; i < 3; ++i)
+		{
+			for (int j = 0; j < 2; ++j)
+			{
+				std::cout << "q2[" << i << "]["<< j << "]: " << q2(i, j) << std::endl;
+			}
+		}
 		// VEC Q;
 		// std::vector<std::vector<double>> *Qaux_ptr = nullptr;
 

@@ -49,15 +49,31 @@ typedef unsigned int  uint;
 
 
 #ifdef __NVCC__
-  typedef Kokkos::View<real*     ,Kokkos::LayoutRight,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> realArr;
-  typedef Kokkos::View<int*     ,Kokkos::LayoutRight,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> intArr;
-  typedef Kokkos::View<bool*     ,Kokkos::LayoutRight,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> boolArr;
-  typedef Kokkos::View<double*     ,Kokkos::LayoutRight,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> doubleArr;
+  typedef Kokkos::View<real*     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> realArr;
+  typedef Kokkos::View<real**     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> realArr2;
+  typedef Kokkos::View<real***     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> realArr3;
+  typedef Kokkos::View<int*     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> intArr;
+  typedef Kokkos::View<int**     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> intArr2;
+  typedef Kokkos::View<int***     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> intArr3;
+  typedef Kokkos::View<bool*     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> boolArr;
+  typedef Kokkos::View<bool**     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> boolArr2;
+  typedef Kokkos::View<bool***     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> boolArr3;
+  typedef Kokkos::View<double*     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> doubleArr;
+  typedef Kokkos::View<double**     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> doubleArr2;
+  typedef Kokkos::View<double***     ,Kokkos::LayoutLeft,Kokkos::Device<Kokkos::Cuda,Kokkos::CudaUVMSpace>> doubleArr3;
 #else
-  typedef Kokkos::View<real*     ,Kokkos::LayoutRight> realArr;
-  typedef Kokkos::View<int*     ,Kokkos::LayoutRight> intArr;
-  typedef Kokkos::View<bool*     ,Kokkos::LayoutRight> boolArr;
-  typedef Kokkos::View<double*     ,Kokkos::LayoutRight> doubleArr;
+  typedef Kokkos::View<real*     ,Kokkos::LayoutLeft> realArr;
+  typedef Kokkos::View<real**     ,Kokkos::LayoutLeft> realArr2;
+  typedef Kokkos::View<real***     ,Kokkos::LayoutLeft> realArr3;
+  typedef Kokkos::View<int*     ,Kokkos::LayoutLeft> intArr;
+  typedef Kokkos::View<int**     ,Kokkos::LayoutLeft> intArr2;
+  typedef Kokkos::View<int***     ,Kokkos::LayoutLeft> intArr3;
+  typedef Kokkos::View<bool*     ,Kokkos::LayoutLeft> boolArr;
+  typedef Kokkos::View<bool**     ,Kokkos::LayoutLeft> boolArr2;
+  typedef Kokkos::View<bool***     ,Kokkos::LayoutLeft> boolArr3;
+  typedef Kokkos::View<double**     ,Kokkos::LayoutLeft> doubleArr;
+  typedef Kokkos::View<double**     ,Kokkos::LayoutLeft> doubleArr2;
+  typedef Kokkos::View<double***     ,Kokkos::LayoutLeft> doubleArr3;
 #endif
 
 #ifdef __NVCC__
