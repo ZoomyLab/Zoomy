@@ -3,15 +3,15 @@
 #define SETTINGS_H
 
 #include "hdf5.h"
+#include "define.h"
 #include <string>
-#include <vector>
 #include "helpers_hdf5.h"
 
 class Settings
 {
 public:
     std::string name;
-    std::vector<double> parameters;
+    realArr parameters;
     // std::string reconstruction;
     // std::string reconstruction_edge;
     // std::string numerical_flux;

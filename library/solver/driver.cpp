@@ -32,8 +32,8 @@ int main(int argc, char **argv)
 	{
 		Settings settings = Settings("../outputs/output_c/settings.hdf5");
 		Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
-		std::vector<std::vector<double>> Q;
-		std::vector<std::vector<double>> Qaux;
+		realArr2 Q;
+		realArr2 Qaux;
 
 		const int N = 3;
 		const int M = 4;

@@ -3,6 +3,8 @@
 #ifndef _PARAMS_H_
 #define _PARAMS_H_
 
+#include <iostream>
+
 // Index for variables
 #define idH  0
 #define idHU 1

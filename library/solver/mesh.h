@@ -3,8 +3,10 @@
 #define MESH_H
 
 #include "hdf5.h"
-#include <string>
+#include "define.h"
 #include <vector>
+#include <string>
+#include "define.h"
 #include "helpers_hdf5.h"
 
 class Mesh
@@ -16,23 +18,23 @@ public:
     int n_vertices;
     int n_boundary_elements;
     int n_faces_per_element;
-    std::vector<std::vector<double>> vertex_coordinates;
-    std::vector<std::vector<int>> element_vertices;
-    std::vector<std::vector<double>> element_face_areas;
-    std::vector<std::vector<double>> element_center;
-    std::vector<double> element_volume;
-    std::vector<double> element_inradius;
-    std::vector<std::vector<std::vector<double>>> element_face_normals;
-    std::vector<int> element_n_neighbors;
-    std::vector<std::vector<int>> element_neighbors;
-    std::vector<std::vector<int>> element_neighbors_face_index;
-    std::vector<std::vector<int>> boundary_face_vertices;
-    std::vector<int> boundary_face_corresponding_element;
-    std::vector<int> boundary_face_element_face_index;
-    std::vector<int> boundary_face_tag;
+    realArr2 vertex_coordinates;
+    intArr2 element_vertices;
+    realArr2 element_face_areas;
+    realArr2 element_center;
+    realArr element_volume;
+    realArr element_inradius;
+    realArr3 element_face_normals;
+    intArr element_n_neighbors;
+    intArr2 element_neighbors;
+    intArr2 element_neighbors_face_index;
+    intArr2 boundary_face_vertices;
+    intArr boundary_face_corresponding_element;
+    intArr boundary_face_element_face_index;
+    intArr boundary_face_tag;
     std::vector<std::string> boundary_tag_names;
-    std::vector<int> boundary_function_index;
-    std::vector<int> boundary_function_required_element;
+    intArr boundary_function_index;
+    intArr boundary_function_required_element;
     std::vector<std::string> boundary_function_name;
 
     Mesh(std::string filepath)
