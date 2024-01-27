@@ -346,5 +346,56 @@ double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux)
     return 0.;
 }
 
+void writeDouble2dArray(hid_t group, const std::string& datasetName, const realArr2& inputArray) {
+    // Get the dimensions of the input array
+    hsize_t dims[2] = {inputArray.extent(0), inputArray.extent(1)};
+
+    // Create the dataspace for the dataset
+    hid_t dataspace = H5Screate_simple(2, dims, NULL);
+
+    // Create the dataset
+    hid_t dataset = H5Dcreate(group, datasetName.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (dataset < 0) 
+    {
+        std::cerr << "Error creating dataset: " << datasetName << std::endl;
+    } 
+    else 
+    {
+        // Write the data to the dataset
+        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, inputArray.data());
+
+        // Close the dataset and dataspace
+        H5Dclose(dataset);
+        H5Sclose(dataspace);
+    }
+}
+
+
+void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, const realArr2& Qaux)
+{
+    std::string groupName = std::to_string(index);
+    hid_t group = H5Gcreate(file, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (group < 0) 
+    {
+        std::cerr << "Error creating group: " << groupName << std::endl;
+    } 
+    else 
+    {
+        // Write time to the group
+        hid_t dataspace = H5Screate(H5S_SCALAR);
+        hid_t dataset = H5Dcreate(group, "time", H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &time);
+        H5Dclose(dataset);
+        H5Sclose(dataspace);
+
+        // Write Q and Qaux to the group
+        writeDouble2dArray(group, "Q", Q);
+        writeDouble2dArray(group, "Qaux", Qaux);
+
+        H5Gclose(group);
+    }
+}
+
+
 
 #endif // HELPERS_HDF5_H
