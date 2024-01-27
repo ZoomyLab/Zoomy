@@ -117,7 +117,7 @@ dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 #TODO this needs to be an input parameter?
 DIM = 1
 
-CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include -DDIM=$(DIM)
+CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${HDF5_PATH}/include -DDIMENSION=$(DIMENSION) -DN_BOUNDARY_CONDITIONS=$(N_BOUNDARY_CONDITIONS)
 # CXXFLAGS = -O3  -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`
