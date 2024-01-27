@@ -8,8 +8,6 @@
 #include "mesh.h"
 #include "model.h"
 #include "boundary_conditions.h"
-// #include "containers.h"
-// #include "SArray.h"
 #include "define.h"
 #include<Kokkos_Core.hpp>
 
@@ -17,131 +15,40 @@
 #include <string>
 #include <mpi.h>
 
-// [x] settings struct
-// [x] load settings
-// [x] load mesh
-// [x] load initial conditions
-// [ ] load pde
-// [ ] load bc
-// [x] bc-mesh struct
-// [x] load bc_mesh_mappings
-
-
 int main(int argc, char **argv)
 {
+	// read make parameters
+	const int dimension = DIMENSION;
+	const int n_boundary_conditions = N_BOUNDARY_CONDITIONS;	
+	const int n_elements = N_ELEMENTS;
+	const int n_fields = N_FIELDS;
+	const int n_fields_aux = N_FIELDS_AUX;
+	const std::string path_settings = PATH_SETTINGS;
+	const std::string path_mesh = PATH_MESH;
+	const std::string path_fields = PATH_FIELDS;
+	// const int dimension = 2;
+	// const int n_boundary_conditions = 4;	
+	// const int n_elements = 100;
+	// const int n_fields = 3;
+	// const int n_fields_aux = 0;
+	// const std::string path_settings = "../outputs/output_c/settings.hdf5";
+	// const std::string path_mesh = "../outputs/output_c/mesh.hdf5";
+	// const std::string path_fields = "../outputs/output_c/fields.hdf5";
+
 	Kokkos::initialize();
 	{
-		Settings settings = Settings("../outputs/output_c/settings.hdf5");
-		Mesh mesh = Mesh("../outputs/output_c/mesh.hdf5");
-		realArr2 Q;
-		realArr2 Qaux;
-
-		const int N = 3;
-		const int M = 4;
-		const int D = 2;
-		realArr q = realArr("q", 3);
-		realArr2 q2 = realArr2("q2", 3, 2);
-		realArr3 q3 = realArr3("q3", N, M, D);
-
-		std::cout << q2.data() << std::endl;
-		std::cout << get_first2(q2, 1).data() << std::endl;
-		std::cout << get_last2(q2, 1).data() << std::endl;
-
-		double * q3_ptr = q3.data();
-		for (int i = 0; i < N * M * D; ++i)
-		{
-			// std::cout << q3_ptr[i] << std::endl;
-		}
-
-		for (int d = 0; d < D; ++d)
-		{
-			for (int j = 0; j < M; ++j)
-			{
-				for (int i = 0; i < N; ++i)
-				{
-					// std::cout << "q3[" << i << "]["<< j << "]["  << d << "]:"  << q3(i, j, d) << std::endl;
-				}
-			}
-		}
-
-		double time = 0.;
-		hid_t file_fields = openHdf5("../outputs/output_c/fields.hdf5");
-		time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
-		// Qaux can be empty. However, I still need to iterate over it in the code, because I do not want to guard it with an if statement.
-		// Therefore I reference it to Q. This also probibites me to use Qaux directly, rather I need to take a pointer to it.
-		// if (!Qaux.empty())
-		// {
-		// 	std::cout << "Qaux is not empty" << std::endl;
-		// 	Qaux_ptr = &Qaux;
-		// }
-		// else
-		// {
-		// 	std::cout << "Qaux is empty" << std::endl;
-		// 	Qaux_ptr = &Q;
-		// }
+		// INITIALIZE
+		realArr2 Q("Q", n_fields, n_elements);
+		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
+		Settings settings = Settings(path_settings);
+		Mesh mesh = Mesh(path_mesh);
+		hid_t file_fields = openHdf5(path_fields);
+		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		H5Fclose(file_fields);
-
-		int dim(DIMENSION);
-		realArr normal = get_last2(get_last3(mesh.element_face_normals, 0), 0);
-		Model model;
-		realArr2 F = realArr2("F", 3, dim);
-		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
-		// realArr f = F.at2(1)
-		auto f = get_last2(F, 1);
-		auto dfdq = get_last3(dFdQ, 1);
-		model.eigenvalues(get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, f );
-		// model.flux(Q[0], Qaux[0], settings.parameters, F);
-		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
-
+		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
 
-		realArr bc = realArr("bc", 3);
-		boundary_conditions.apply(3, get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, bc);
-		std::cout << "bc" << std::endl;
-
-		for (int i = 0; i < 3; ++i)
-		{
-			std::cout << "bc[" << i << "]: " << bc(i) << std::endl;
-			// for (int j = 0; j < 3; ++j)
-			// {
-				// std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
-		// 			for (int k = 0; k < 3; ++k)
-		// 			{
-		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
-		// 			}
-			// }
-		}
-		std::cout << "MAIN" << std::endl;
-
-		// MPI_Init(&argc, &argv);
-		// int rank;
-		// MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-		// std::cout << "MAIN Parallel" << std::endl;
-
-
-		// Read command line arguments
-		//  if (argc != 4){
-		//   std::cerr << RERROR "The program is run as: ./nprogram inputFolder/ outputFolder/ Nthreads" << std::endl;
-		// 	  return 0;
-		// }
-
-		// {
-		// SERGHEI serghei;
-
-		// serghei.inFolder = argv[1];
-		// serghei.outFolder = argv[2];
-
-		// serghei.par.nthreads = atoi(argv[3]);
-
-		// if(!serghei.start(argc, argv)) return 0;
-		// if(!serghei.compute()) return 0;
-		// if(!serghei.finalise()) return 0;
-
-		// } // scope guard required to ensure serghei destructor is called
-
-		// Kokkos::finalize();
-		//  MPI_Finalize();
+		// RUN
 	}
 	Kokkos::finalize();
 	return 0;
