@@ -82,20 +82,20 @@ int main(int argc, char **argv)
 		H5Fclose(file_fields);
 
 		int dim(DIMENSION);
+		realArr normal = get_last2(get_last3(mesh.element_face_normals, 0), 0);
 		Model model;
 		realArr2 F = realArr2("F", 3, dim);
 		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
 		// realArr f = F.at2(1)
 		auto f = get_last2(F, 1);
 		auto dfdq = get_last3(dFdQ, 1);
-		model.flux(get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, F);
+		model.eigenvalues(get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, f );
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
 
 		auto boundary_conditions = BoundaryConditions();
 
 		realArr bc = realArr("bc", 3);
-		realArr normal = get_last2(get_last3(mesh.element_face_normals, 0), 0);
 		boundary_conditions.apply(3, get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, bc);
 		std::cout << "bc" << std::endl;
 

@@ -60,6 +60,11 @@ public:
     {
         sympy::source_jacobian(Q.data(), Qaux.data(), parameters.data(), Qout.data());
     }
+
+    void eigenvalues(const realArr Q, const realArr Qaux, const realArr parameters, const realArr normal,  realArr& Qout)
+    {
+        sympy::eigenvalues(Q.data(), Qaux.data(), parameters.data(), normal.data(), Qout.data());
+    }
 };
 
 #endif // MODEL_HH
