@@ -5,8 +5,6 @@
 #include "define.h"
 #include <vector>
 
-#define N_BOUNDARY_CONDITIONS 4
-
 using BoundaryConditionFunc = void (*)(double*, double*, double*, double*, double*);
 
 // Class to hold all boundary condition functions
@@ -19,16 +17,16 @@ public:
     BoundaryConditions() 
     {
         #if N_BOUNDARY_CONDITIONS > 0
-            boundary_conditions.push_back(boundary_condition_0);
+            boundary_conditions.push_back(sympy::boundary_condition_0);
         #endif
         #if N_BOUNDARY_CONDITIONS > 1
-            boundary_conditions.push_back(boundary_condition_1);
+            boundary_conditions.push_back(sympy::boundary_condition_1);
         #endif
         #if N_BOUNDARY_CONDITIONS > 2
-            boundary_conditions.push_back(boundary_condition_2);
+            boundary_conditions.push_back(sympy::boundary_condition_2);
         #endif
         #if N_BOUNDARY_CONDITIONS > 3
-            boundary_conditions.push_back(boundary_condition_3);
+            boundary_conditions.push_back(sympy::boundary_condition_3);
         #endif
     }
 

@@ -37,4 +37,9 @@ sudo apt install cmake
 sudo apt install bc
 ```
 
+## Changes on the sympy files:
+- .c to .cpp
+- using namespace sympy (or the source and source_jacobian function is named twice)
+- inline? const? double* to kokkos view?
+ 
 

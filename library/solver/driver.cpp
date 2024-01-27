@@ -26,6 +26,7 @@
 // [x] bc-mesh struct
 // [x] load bc_mesh_mappings
 
+
 int main(int argc, char **argv)
 {
 	Kokkos::initialize();
@@ -80,8 +81,8 @@ int main(int argc, char **argv)
 		// }
 		H5Fclose(file_fields);
 
-		const int dim = 2;
-		Model<dim> model;
+		int dim(DIMENSION);
+		Model model;
 		realArr2 F = realArr2("F", 3, dim);
 		realArr3 dFdQ = realArr3("dFdQ", 3, 3, dim);
 		// realArr f = F.at2(1)
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
 		realArr bc = realArr("bc", 3);
 		realArr normal = get_last2(get_last3(mesh.element_face_normals, 0), 0);
 		boundary_conditions.apply(3, get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, bc);
+		std::cout << "bc" << std::endl;
 
 		for (int i = 0; i < 3; ++i)
 		{
