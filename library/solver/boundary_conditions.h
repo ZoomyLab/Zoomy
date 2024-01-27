@@ -2,42 +2,128 @@
 #define BOUNDARY_CONDITIONS_H
 
 #include "../../outputs/output_c/c_interface/Model/boundary_conditions_code.h"
+#include "define.h"
+#include <vector>
 
-template <int N_BOUNDARY_CONDITIONS>
-class BoundaryConditions
-{
+#define N_BOUNDARY_CONDITIONS 4
+
+using BoundaryConditionFunc = void (*)(double*, double*, double*, double*, double*);
+
+// Class to hold all boundary condition functions
+
+class BoundaryConditions {
 public:
-    const int dimension = 1;
-    void flux(std::vector<double>& Q, std::vector<double>& Qaux, std::vector<double>& parameters, std::vector<std::vector<double>>& Qout)
+    // Vector to hold all boundary condition functions
+    std::vector<BoundaryConditionFunc> boundary_conditions;
+
+    BoundaryConditions() 
     {
-        std::cerr << "flux function not implemented for this dimension" << std::endl;
-        std::exit(1);
+        #if N_BOUNDARY_CONDITIONS > 0
+            boundary_conditions.push_back(boundary_condition_0);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 1
+            boundary_conditions.push_back(boundary_condition_1);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 2
+            boundary_conditions.push_back(boundary_condition_2);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 3
+            boundary_conditions.push_back(boundary_condition_3);
+        #endif
+    }
+
+    // // Constructor
+    // BoundaryConditions();
+
+    // Function to apply a specific boundary condition
+    void apply(int index, const realArr& Q, const realArr& Qaux, const realArr& parameters, const realArr& normal, realArr& Qout) {
+        boundary_conditions[index](Q.data(), Qaux.data(), parameters.data(), normal.data(), Qout.data());
     }
 };
 
-// Specialization for DIM = 1
-template <>
-void BoundaryConditions<1>::flux(std::vector<double>& Q, std::vector<double>& Qaux, std::vector<double>& parameters, std::vector<std::vector<double>>& Qout)
-{
-    Qout[0][0] = 9999.;
-    // flux_x(Q, Qaux, parameters, out[0]);
-}
-
-// // Specialization for DIM = 2
 // template <>
-// void Model<2>::flux(double *Q, double *Qaux, double *parameters, double **out)
-// {
-//     flux_x(Q, Qaux, parameters, out[0]);
-//     flux_y(Q, Qaux, parameters, out[1]);
+// BoundaryConditions<1>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
 // }
 
-// // Specialization for DIM = 3
 // template <>
-// void Model<3>::flux(double *Q, double *Qaux, double *parameters, double **out)
-// {
-//     flux_x(Q, Qaux, parameters, out[0]);
-//     flux_y(Q, Qaux, parameters, out[1]);
-//     flux_z(Q, Qaux, parameters, out[2]);
+// BoundaryConditions<2>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
 // }
+
+// template <>
+// BoundaryConditions<3>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+// }
+
+// template <>
+// BoundaryConditions<4>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+// }
+
+// template <>
+// BoundaryConditions<5>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+//     boundary_conditions.push_back(boundary_condition_4);
+// }
+
+// template <>
+// BoundaryConditions<6>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+//     boundary_conditions.push_back(boundary_condition_4);
+//     boundary_conditions.push_back(boundary_condition_5);
+// }
+
+// template <>
+// BoundaryConditions<7>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+//     boundary_conditions.push_back(boundary_condition_4);
+//     boundary_conditions.push_back(boundary_condition_5);
+//     boundary_conditions.push_back(boundary_condition_6);
+// }
+
+// template <>
+// BoundaryConditions<8>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+//     boundary_conditions.push_back(boundary_condition_4);
+//     boundary_conditions.push_back(boundary_condition_5);
+//     boundary_conditions.push_back(boundary_condition_6);
+//     boundary_conditions.push_back(boundary_condition_7);
+// }
+
+// template <>
+// BoundaryConditions<9>::BoundaryConditions() {
+//     boundary_conditions.push_back(boundary_condition_0);
+//     boundary_conditions.push_back(boundary_condition_1);
+//     boundary_conditions.push_back(boundary_condition_2);
+//     boundary_conditions.push_back(boundary_condition_3);
+//     boundary_conditions.push_back(boundary_condition_4);
+//     boundary_conditions.push_back(boundary_condition_5);
+//     boundary_conditions.push_back(boundary_condition_6);
+//     boundary_conditions.push_back(boundary_condition_7);
+//     boundary_conditions.push_back(boundary_condition_7);
+//     boundary_conditions.push_back(boundary_condition_8);
+// }
+
+
+// // ... and so on for each value of N_BOUNDARY_CONDITIONS
 
 #endif // BOUNDARY_CONDITIONS_HH

@@ -90,16 +90,24 @@ int main(int argc, char **argv)
 		model.flux(get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, F);
 		// model.flux(Q[0], Qaux[0], settings.parameters, F);
 		// model.quasilinear_matrix(Q[0], Qaux[0], settings.parameters, dFdQ);
+
+		auto boundary_conditions = BoundaryConditions();
+
+		realArr bc = realArr("bc", 3);
+		realArr normal = get_last2(get_last3(mesh.element_face_normals, 0), 0);
+		boundary_conditions.apply(3, get_last2(Q, 0), get_last2(Qaux, 0), settings.parameters, normal, bc);
+
 		for (int i = 0; i < 3; ++i)
 		{
-			for (int j = 0; j < 3; ++j)
-			{
-				std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
+			std::cout << "bc[" << i << "]: " << bc(i) << std::endl;
+			// for (int j = 0; j < 3; ++j)
+			// {
+				// std::cout << "dffq[" << i << "][" << j << "]: " << dfdq(i, j) << std::endl;
 		// 			for (int k = 0; k < 3; ++k)
 		// 			{
 		// 				std::cout << "dFdQ[" << i << "][" << j << "]: " << "[" << k << "]: " << dFdQ[i][j][k] << std::endl;
 		// 			}
-			}
+			// }
 		}
 		std::cout << "MAIN" << std::endl;
 
