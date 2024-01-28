@@ -8,8 +8,19 @@
 #include <iostream>
 
 
-hid_t openHdf5(const std::string& filePath) {
-    hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+hid_t openHdf5(const std::string& filePath, std::string mode = "r" ) {
+    hid_t file;
+    if (mode == "r") {
+        file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    } else if (mode == "r+") {
+        file = H5Fopen(filePath.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    } else if (mode == "w") {
+        file = H5Fcreate(filePath.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    } else {
+        std::cerr << "Invalid file mode: " << mode << ". Use 'r' for read-only, 'r+' for read/write, 'w' for write." << std::endl;
+        return -1;
+    }
+    // hid_t file = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     if (file < 0) {
         std::cerr << "Error opening file: " << filePath << std::endl;
     } 
@@ -332,7 +343,7 @@ void readStringArray(hid_t file, const std::string& datasetName, std::vector<std
 
 double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux)
 {
-    std::string groupName = std::to_string(index);
+    std::string groupName = "iteration_" + std::to_string(index);
     hid_t group = H5Gopen(file, groupName.c_str(), H5P_DEFAULT);
     if (group < 0) 
     {
@@ -373,8 +384,20 @@ void writeDouble2dArray(hid_t group, const std::string& datasetName, const realA
 
 void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, const realArr2& Qaux)
 {
-    std::string groupName = std::to_string(index);
+    if (file < 0 )
+    {
+        std::cerr << "ERROR: in file " << std::endl;
+    }
+    std::string groupName = "iteration_" + std::to_string(index);
+
+        // Delete the group if it exists
+    if (H5Lexists(file, groupName.c_str(), H5P_DEFAULT))
+    {
+        H5Ldelete(file, groupName.c_str(), H5P_DEFAULT);
+    }
+
     hid_t group = H5Gcreate(file, groupName.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
     if (group < 0) 
     {
         std::cerr << "Error creating group: " << groupName << std::endl;

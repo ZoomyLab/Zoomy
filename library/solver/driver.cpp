@@ -43,13 +43,14 @@ int main(int argc, char **argv)
 		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
 		Settings settings = Settings(path_settings);
 		Mesh mesh = Mesh(path_mesh);
-		hid_t file_fields = openHdf5(path_fields);
+		// hid_t file_fields = openHdf5(path_fields);
+		hid_t file_fields = openHdf5(path_fields, "r+");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
 
 		// RUN
-		int iteration = 1;
+		int iteration = 10;
 		time += 1.;
 		//TODO problem: in c, I cannot start the group name with an integer (e.g. iteration). I needs to start with something else
 		// maybe append a underscore
