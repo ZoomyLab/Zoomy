@@ -19,7 +19,7 @@ get_n_threads_build() {
 get_pnetcdf() {
 	local ver="$1"
 	# download PnetCDF release and extract, if it doesn't exist
-	local pname="PnetCDF"
+	local pname="pnetcdf"
 	if [ -d "$pname" ]; then
 		echo "Existing directory \"$pname\" found. Skipping download and configuration..."
 	else

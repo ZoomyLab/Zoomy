@@ -12,6 +12,10 @@ if [ ! -d "$../dependencies" ]; then
 	mkdir -p "../dependencies"
 fi
 
+if [ ! -d "$../bin" ]; then
+	mkdir -p "../bin"
+fi
+
 kokkos_path_def='${VOLKOSPATH}/dependencies/kokkos'
 eigen_path_def='${VOLKOSPATH}/dependencies/eigen'
 pnetcdf_path_def='${VOLKOSPATH}/dependencies/pnetcdf/src'
