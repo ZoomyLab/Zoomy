@@ -58,7 +58,7 @@ KOKKOS_PATH=${VOLKOSPATH}/dependencies/kokkos
 KOKKOS_SRC_PATH = ${KOKKOS_PATH}
 #TODO path difference windows/wsl vs laptop
 # PNETCDF_PATH=${VOLKOSPATH}/dependencies/pnetcdf/src
-PNETCDF_PATH=${VOLKOSPATH}/dependencies/PnetCDF/src
+PNETCDF_PATH=${VOLKOSPATH}/dependencies/pnetcdf/src
 # HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
 #TODO path difference windows/wsl vs laptop
 HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
