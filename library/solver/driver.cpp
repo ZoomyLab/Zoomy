@@ -27,26 +27,16 @@ int main(int argc, char **argv)
 	const std::string path_settings = PATH_SETTINGS;
 	const std::string path_mesh = PATH_MESH;
 	const std::string path_fields = PATH_FIELDS;
-	// const int dimension = 2;
-	// const int n_boundary_conditions = 4;	
-	// const int n_elements = 100;
-	// const int n_fields = 3;
-	// const int n_fields_aux = 0;
-	// const std::string path_settings = "../outputs/output_c/settings.hdf5";
-	// const std::string path_mesh = "../outputs/output_c/mesh.hdf5";
-	// const std::string path_fields = "../outputs/output_c/fields.hdf5";
 
 	Kokkos::initialize();
 	{
 		std::cout << "C program running" << std::endl;
-		// INITIALIZE
+		// INITIALIZE arrays
 		realArr2 Q("Q", n_fields, n_elements);
 		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
 		Settings settings = Settings(path_settings);
 		Mesh mesh = Mesh(path_mesh);
-		// hid_t file_fields = openHdf5(path_fields);
 		hid_t file_fields = openHdf5(path_fields, "r+");
-		hid_t file_test = openHdf5("/home/ingo/Git/SMM/shallow-moments-simulation/outputs/output_c/test.hdf5", "w");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
@@ -54,12 +44,8 @@ int main(int argc, char **argv)
 		// RUN
 		int iteration = 1;
 		time += 1.;
-		//TODO problem: in c, I cannot start the group name with an integer (e.g. iteration). I needs to start with something else
-		// maybe append a underscore
-		//TODO: adapt the python side to do the same!
 		saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
-		H5Fclose(file_test);
 		H5Fclose(file_fields);
 	}
 	Kokkos::finalize();
