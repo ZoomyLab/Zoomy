@@ -38,6 +38,7 @@ int main(int argc, char **argv)
 
 	Kokkos::initialize();
 	{
+		std::cout << "C program running" << std::endl;
 		// INITIALIZE
 		realArr2 Q("Q", n_fields, n_elements);
 		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
@@ -45,18 +46,24 @@ int main(int argc, char **argv)
 		Mesh mesh = Mesh(path_mesh);
 		// hid_t file_fields = openHdf5(path_fields);
 		hid_t file_fields = openHdf5(path_fields, "r+");
+		hid_t file_test = openHdf5("/home/ingo/Git/SMM/shallow-moments-simulation/outputs/output_c/test.hdf5", "w");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
 
 		// RUN
-		int iteration = 10;
+		int iteration = 1;
 		time += 1.;
 		//TODO problem: in c, I cannot start the group name with an integer (e.g. iteration). I needs to start with something else
 		// maybe append a underscore
 		//TODO: adapt the python side to do the same!
-		saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
+		saveFieldToHdf5(file_fields, 0, time, Q, Qaux);
+		saveFieldToHdf5(file_fields, iteration, time+1., Q, Qaux);
 
+		time = loadFieldFromHdf5(file_fields, 1, Q, Qaux);
+		std::cout << "time: " << time << std::endl;
+
+		H5Fclose(file_test);
 		H5Fclose(file_fields);
 	}
 	Kokkos::finalize();

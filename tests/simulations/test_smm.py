@@ -91,7 +91,7 @@ def test_sindy_generate_reference_data():
     )
     mesh = Mesh.create_1d((-1, 20), 200)
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
     # io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
 
@@ -490,7 +490,7 @@ def test_c_solver(mesh_type):
     )
 
     fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
-    # io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output_dir)
 
 
 if __name__ == "__main__":

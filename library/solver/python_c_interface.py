@@ -26,6 +26,8 @@ def run_driver():
    path = f"{main_dir}/bin"
    command = "./volkos"
    make_process = subprocess.Popen(command, shell=True, stderr=subprocess.STDOUT, cwd=path)
+   if make_process.wait() != 0:
+      print(subprocess.STDOUT) 
 
 
 

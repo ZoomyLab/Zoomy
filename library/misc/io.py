@@ -114,15 +114,19 @@ def generate_vtk(filepath: str, field_names=None, aux_field_names=None, filename
     file_fields =  h5py.File(os.path.join(filepath, filename_fields), "r")
     mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(filepath, 'mesh.hdf5'))
     snapshots = list(file_fields.keys())
+    print(snapshots)
     # init timestamp file
     vtk_timestamp_file = {"file-series-version": "1.0", "files": []}
+
+    def get_iteration_from_datasetname(name):
+        return int(name.split('_')[1])
 
     # write out vtk files for each timestamp
     for snapshot in snapshots:
         time = file_fields[snapshot]['time'][()]
         Q = file_fields[snapshot]['Q'][()]
         Qaux = file_fields[snapshot]['Qaux'][()]
-        filename = f'{filename_out}.{int(snapshot)}'
+        filename = f'{filename_out}.{get_iteration_from_datasetname(snapshot)}'
         fullpath = os.path.join(filepath, filename )
 
         #TODO callout to compute pointwise data?

@@ -214,6 +214,7 @@ def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode
     modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'boundary_conditions_code.cpp')))
     modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'boundary_conditions_code.h')))
     c_interface.build(dimension=mesh.dimension, n_boundary_conditions=len(model.boundary_conditions.boundary_conditions), n_elements=mesh.n_elements, n_fields=model.n_fields, n_fields_aux=model.aux_variables.length(), path_settings= os.path.join(settings.output_dir, 'settings.hdf5'), path_mesh=os.path.join(settings.output_dir, 'mesh.hdf5'), path_fields=os.path.join(settings.output_dir, 'fields.hdf5'))
+    c_interface.run_driver()
 
 
     

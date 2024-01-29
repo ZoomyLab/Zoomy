@@ -345,21 +345,26 @@ double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux)
 {
     std::string groupName = "iteration_" + std::to_string(index);
     hid_t group = H5Gopen(file, groupName.c_str(), H5P_DEFAULT);
-    if (group < 0) 
+    double time = 0.;
+    if (group < 0)
     {
         std::cerr << "Error opening group: " << groupName << std::endl;
     } 
     else 
     {
+        readDouble(group, "time", time);
         readDouble2dArray(group, "Q", Q);
         readDouble2dArray(group, "Qaux", Qaux);
     }
-    return 0.;
+    return time;
 }
 
 void writeDouble2dArray(hid_t group, const std::string& datasetName, const realArr2& inputArray) {
+    // Note: I want all my data to be stores row-major, so I need to transpose the data.
+    // So I swap the dimensions dims already.
+
     // Get the dimensions of the input array
-    hsize_t dims[2] = {inputArray.extent(0), inputArray.extent(1)};
+    hsize_t dims[2] = {inputArray.extent(1), inputArray.extent(0)};
 
     // Create the dataspace for the dataset
     hid_t dataspace = H5Screate_simple(2, dims, NULL);
@@ -372,8 +377,19 @@ void writeDouble2dArray(hid_t group, const std::string& datasetName, const realA
     } 
     else 
     {
-        // Write the data to the dataset
-        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, inputArray.data());
+        // Create a new array for the transposed data
+        realArr2 transposedArray("transposedArray", inputArray.extent(1), inputArray.extent(0));
+
+        // Copy the data to the new array in a transposed order
+        for (int i = 0; i < inputArray.extent(0); ++i)
+            for (int j = 0; j < inputArray.extent(1); ++j)
+                transposedArray(j, i) = inputArray(i, j);
+
+        // Write the transposed data to the dataset
+        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, transposedArray.data());
+
+        // // Write the data to the dataset
+        // H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, inputArray.data());
 
         // Close the dataset and dataspace
         H5Dclose(dataset);
@@ -404,6 +420,7 @@ void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, con
     } 
     else 
     {
+        std::cout << "Writing iteration: " << index << " time: " << time << std::endl;
         // Write time to the group
         hid_t dataspace = H5Screate(H5S_SCALAR);
         hid_t dataset = H5Dcreate(group, "time", H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -416,6 +433,7 @@ void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, con
         writeDouble2dArray(group, "Qaux", Qaux);
 
         H5Gclose(group);
+   	    H5Fflush(file, H5F_SCOPE_GLOBAL);
     }
 }
 
