@@ -20,6 +20,8 @@ import library.pysolver.timestepping as timestepping
 import library.misc.io as io
 import library.mesh.fvm_mesh as fvm_mesh
 from library.pysolver.ode import *
+from library.solver import python_c_interface as c_interface
+from library.solver import modify_sympy_c_code as modify_sympy_c_code
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -203,6 +205,18 @@ def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode
 
     save_model_to_C(model, settings)
     model.boundary_conditions.append_boundary_map_to_mesh_hdf5(settings.output_dir)    
+
+    #TODO refactor this part into its own function
+    main_dir = os.getenv("SMS")
+    modify_sympy_c_code.change_file_ending_from_c_to_cpp(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model')))
+    modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'model_code.cpp')))
+    modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'model_code.h')))
+    modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'boundary_conditions_code.cpp')))
+    modify_sympy_c_code.introduce_sympy_namespace(os.path.join(main_dir, os.path.join(settings.output_dir, 'c_interface/Model', 'boundary_conditions_code.h')))
+    c_interface.build(dimension=mesh.dimension, n_boundary_conditions=len(model.boundary_conditions.boundary_conditions), n_elements=mesh.n_elements, n_fields=model.n_fields, n_fields_aux=model.aux_variables.length(), path_settings= os.path.join(settings.output_dir, 'settings.hdf5'), path_mesh=os.path.join(settings.output_dir, 'mesh.hdf5'), path_fields=os.path.join(settings.output_dir, 'fields.hdf5'))
+
+
+    
 
 def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1):
     iteration = 0
