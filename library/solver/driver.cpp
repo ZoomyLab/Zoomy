@@ -57,11 +57,7 @@ int main(int argc, char **argv)
 		//TODO problem: in c, I cannot start the group name with an integer (e.g. iteration). I needs to start with something else
 		// maybe append a underscore
 		//TODO: adapt the python side to do the same!
-		saveFieldToHdf5(file_fields, 0, time, Q, Qaux);
-		saveFieldToHdf5(file_fields, iteration, time+1., Q, Qaux);
-
-		time = loadFieldFromHdf5(file_fields, 1, Q, Qaux);
-		std::cout << "time: " << time << std::endl;
+		saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
 		H5Fclose(file_test);
 		H5Fclose(file_fields);

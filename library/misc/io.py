@@ -114,7 +114,6 @@ def generate_vtk(filepath: str, field_names=None, aux_field_names=None, filename
     file_fields =  h5py.File(os.path.join(filepath, filename_fields), "r")
     mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(filepath, 'mesh.hdf5'))
     snapshots = list(file_fields.keys())
-    print(snapshots)
     # init timestamp file
     vtk_timestamp_file = {"file-series-version": "1.0", "files": []}
 

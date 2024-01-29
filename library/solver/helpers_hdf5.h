@@ -169,21 +169,10 @@ void readDouble2dArray(hid_t file, const std::string& datasetName, realArr2& out
 
         // Resize the output array to match the dimensions of the dataset
         // outputArray.resize(dims[1], std::vector<double>(dims[0]));
-        outputArray = realArr2("outputArray", dims[1], dims[0]);
-
-        // Create a temporary buffer to hold the data
-        double* buffer = new double[dims[0] * dims[1]];
+        outputArray = realArr2("outputArray", dims[0], dims[1]);
 
         // Read the dataset
-        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
-
-        // Copy the data from the buffer into the output array
-        for (hsize_t i = 0; i < dims[0]; ++i)
-            for (hsize_t j = 0; j < dims[1]; ++j)
-                outputArray(j, i) = buffer[i * dims[1] + j];
-
-        // Delete the buffer
-        delete[] buffer;
+        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, outputArray.data());
 
         // Close the dataspace and dataset
         H5Sclose(dataspace);
@@ -200,29 +189,16 @@ void readInt2dArray(hid_t file, const std::string& datasetName, intArr2& outputA
     else 
     {
         // Get the dimensions of the dataset
-        // Note: HDF5 stores data in row-major order, so we need to transpose the data
         hid_t dataspace = H5Dget_space(dataset);
         int ndims = H5Sget_simple_extent_ndims(dataspace);
         hsize_t dims[ndims];
         H5Sget_simple_extent_dims(dataspace, dims, NULL);
 
         // Resize the output array to match the dimensions of the dataset
-        // outputArray.resize(dims[1], std::vector<int>(dims[0]));
-        outputArray = intArr2("outputArray", dims[1], dims[0]);
-
-        // Create a temporary buffer to hold the data
-        int* buffer = new int[dims[0] * dims[1]];
+        outputArray = intArr2("outputArray", dims[0], dims[1]);
 
         // Read the dataset
-        H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
-
-        // Copy the data from the buffer into the output array
-        for (hsize_t i = 0; i < dims[0]; ++i)
-            for (hsize_t j = 0; j < dims[1]; ++j)
-                outputArray(j, i) = buffer[i * dims[1] + j];
-
-        // Delete the buffer
-        delete[] buffer;
+        H5Dread(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, outputArray.data());
 
         // Close the dataspace and dataset
         H5Sclose(dataspace);
@@ -238,7 +214,6 @@ void readDouble3dArray(hid_t file, const std::string& datasetName, realArr3& out
     } 
     else 
     {
-        // Note: HDF5 stores data in row-major order, so we need to transpose the data
         // Get the dimensions of the dataset
         hid_t dataspace = H5Dget_space(dataset);
         int ndims = H5Sget_simple_extent_ndims(dataspace);
@@ -246,23 +221,10 @@ void readDouble3dArray(hid_t file, const std::string& datasetName, realArr3& out
         H5Sget_simple_extent_dims(dataspace, dims, NULL);
 
         // Resize the output array to match the dimensions of the dataset
-        // outputArray.resize(dims[2], std::vector<std::vector<double>>(dims[1], std::vector<double>(dims[0])));
-        outputArray = realArr3("outputArray", dims[2], dims[1], dims[0]);
-
-        // Create a temporary buffer to hold the data
-        double* buffer = new double[dims[0] * dims[1] * dims[2]];
+        outputArray = realArr3("outputArray", dims[0], dims[1], dims[2]);
 
         // Read the dataset
-        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer);
-
-        // Copy the data from the buffer into the output array
-        for (hsize_t i = 0; i < dims[0]; ++i)
-            for (hsize_t j = 0; j < dims[1]; ++j)
-                for (hsize_t k = 0; k < dims[2]; ++k)
-                    outputArray(k, j, i) = buffer[i * dims[1] * dims[2] + j * dims[2] + k];
-
-        // Delete the buffer
-        delete[] buffer;
+        H5Dread(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, outputArray.data());
 
         // Close the dataspace and dataset
         H5Sclose(dataspace);
@@ -345,26 +307,21 @@ double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux)
 {
     std::string groupName = "iteration_" + std::to_string(index);
     hid_t group = H5Gopen(file, groupName.c_str(), H5P_DEFAULT);
-    double time = 0.;
-    if (group < 0)
+    if (group < 0) 
     {
         std::cerr << "Error opening group: " << groupName << std::endl;
     } 
     else 
     {
-        readDouble(group, "time", time);
         readDouble2dArray(group, "Q", Q);
         readDouble2dArray(group, "Qaux", Qaux);
     }
-    return time;
+    return 0.;
 }
 
 void writeDouble2dArray(hid_t group, const std::string& datasetName, const realArr2& inputArray) {
-    // Note: I want all my data to be stores row-major, so I need to transpose the data.
-    // So I swap the dimensions dims already.
-
     // Get the dimensions of the input array
-    hsize_t dims[2] = {inputArray.extent(1), inputArray.extent(0)};
+    hsize_t dims[2] = {inputArray.extent(0), inputArray.extent(1)};
 
     // Create the dataspace for the dataset
     hid_t dataspace = H5Screate_simple(2, dims, NULL);
@@ -377,19 +334,8 @@ void writeDouble2dArray(hid_t group, const std::string& datasetName, const realA
     } 
     else 
     {
-        // Create a new array for the transposed data
-        realArr2 transposedArray("transposedArray", inputArray.extent(1), inputArray.extent(0));
-
-        // Copy the data to the new array in a transposed order
-        for (int i = 0; i < inputArray.extent(0); ++i)
-            for (int j = 0; j < inputArray.extent(1); ++j)
-                transposedArray(j, i) = inputArray(i, j);
-
-        // Write the transposed data to the dataset
-        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, transposedArray.data());
-
-        // // Write the data to the dataset
-        // H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, inputArray.data());
+        // te the data to the dataset
+        H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, inputArray.data());
 
         // Close the dataset and dataspace
         H5Dclose(dataset);
@@ -420,7 +366,6 @@ void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, con
     } 
     else 
     {
-        std::cout << "Writing iteration: " << index << " time: " << time << std::endl;
         // Write time to the group
         hid_t dataspace = H5Screate(H5S_SCALAR);
         hid_t dataset = H5Dcreate(group, "time", H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -436,7 +381,6 @@ void saveFieldToHdf5(hid_t& file, int index, double time, const realArr2& Q, con
    	    H5Fflush(file, H5F_SCOPE_GLOBAL);
     }
 }
-
 
 
 #endif // HELPERS_HDF5_H
