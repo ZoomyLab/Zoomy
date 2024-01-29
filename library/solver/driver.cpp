@@ -10,6 +10,10 @@
 #include "model.h"
 #include "boundary_conditions.h"
 #include "define.h"
+#include "ode.h"
+#include "timestepping.h"
+#include "max_abs_eigenvalue.h"
+#include "iterators.h"
 #include<Kokkos_Core.hpp>
 
 #include <iostream>
@@ -28,26 +32,49 @@ int main(int argc, char **argv)
 	const std::string path_mesh = PATH_MESH;
 	const std::string path_fields = PATH_FIELDS;
 
+
 	Kokkos::initialize();
 	{
 		std::cout << "C program running" << std::endl;
+
 		// INITIALIZE arrays
 		realArr2 Q("Q", n_fields, n_elements);
 		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
 		Settings settings = Settings(path_settings);
+		realArr parameters = settings.parameters;
 		Mesh mesh = Mesh(path_mesh);
 		hid_t file_fields = openHdf5(path_fields, "r+");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
+		realArr2 face_iteration_list = create_face_iteration_list(mesh);
+
+		TimeStepper* timestepper = new Constant(0.1);
+
+		int iteration = 0;
+		double dt = 0.1;
+		double max_abs_ev = 0.;
 
 		// RUN
-		int iteration = 1;
-		time += 1.;
-		saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
+		while (time < settings.time_end)
+		{
+			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, face_iteration_list, model, mesh);
+			dt = timestepper->get_dt(max_abs_ev);
+			if (time + dt*1.01 > settings.time_end)
+				dt = settings.time_end - time;
+
+			iteration++;
+			time += dt;
+			saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
+		}
+
+		// int iteration = 1;
+		// time += 1.;
+		// saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
 		H5Fclose(file_fields);
 	}
+	// delete timestepper();
 	Kokkos::finalize();
 	return 0;
 }

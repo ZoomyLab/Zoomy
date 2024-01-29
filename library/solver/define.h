@@ -48,13 +48,18 @@ typedef unsigned long ulong;
 typedef unsigned int  uint;
 
 template <typename DataType, typename... Properties>
-KOKKOS_INLINE_FUNCTION auto get_first2(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
+KOKKOS_INLINE_FUNCTION auto get_element2(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
   return Kokkos::subview(view, fixed_dim, Kokkos::ALL());
 }
 
 template <typename DataType, typename... Properties>
-KOKKOS_INLINE_FUNCTION auto get_first3(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
+KOKKOS_INLINE_FUNCTION auto get_element3(Kokkos::View<DataType, Properties...> view, int fixed_dim) {
   return Kokkos::subview(view, fixed_dim,  Kokkos::ALL(), Kokkos::ALL());
+}
+
+template <typename DataType, typename... Properties>
+KOKKOS_INLINE_FUNCTION auto get_element_and_face(Kokkos::View<DataType, Properties...> view, int element, int face) {
+  return Kokkos::subview(view, element, face, Kokkos::ALL());
 }
 
 template <typename DataType, typename... Properties>
