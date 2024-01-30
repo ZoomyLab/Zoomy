@@ -157,6 +157,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings
                 # and if statement to avoid double edge computation (as I do now)
                 # avoid double edge computation
                 dQ[i_elem] -= (flux+nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_elem]
+                
                 dQ[i_neighbor] += (flux-nc_flux) * mesh.element_face_areas[i_elem, i_face] / mesh.element_volume[i_neighbor]
 
         # Loop over boundary faces
@@ -201,6 +202,8 @@ def fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
     _ = io.save_fields(settings.output_dir, 0., 0., 0, Q, Qaux, settings.output_write_all)
     mesh.write_to_hdf5(settings.output_dir)
+
+    settings.parameters = model.parameters.to_value_dict(model.parameter_values)
     io.save_settings(settings.output_dir, settings)
 
     save_model_to_C(model, settings)
@@ -258,6 +261,8 @@ def fvm_unsteady_semidiscrete(mesh, model, settings, ode_solver_flux=RK1, ode_so
     io.init_output_directory(settings.output_dir, settings.output_clean_dir)
     i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
     mesh.write_to_hdf5(settings.output_dir)
+
+    settings.parameters = model.parameters.to_value_dict(model.parameter_values)
     io.save_settings(settings.output_dir, settings)
 
     time_start = gettime()
@@ -348,6 +353,7 @@ def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode
 
     Q, Qaux = _initialize_problem(model, mesh)
     parameters = model.parameter_values
+    settings.parameters
     Qnew = deepcopy(Q)
 
     # for callback in self.callback_function_list_init:
@@ -360,6 +366,8 @@ def fvm_sindy_timestep_generator(mesh, model, settings, ode_solver_flux=RK1, ode
     i_snapshot = io.save_fields(settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all)
     i_snapshot_tmp = io.save_fields(settings.output_dir, time, 0, i_snapshot_tmp, Qnew, Qaux, settings.output_write_all, filename='fields_intermediate.hdf5')
     mesh.write_to_hdf5(settings.output_dir)
+
+    settings.parameters = model.parameters.to_value_dict(model.parameter_values)
     io.save_settings(settings.output_dir, settings)
 
     time_start = gettime()

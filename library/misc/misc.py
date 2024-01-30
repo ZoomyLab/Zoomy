@@ -29,6 +29,10 @@ class IterableNamespace(SimpleNamespace):
 
     def get_list(self):
         return self.iterable_obj
+    
+    def to_value_dict(self, values):
+        out = {k: values[i] for i, k in enumerate(vars(self).keys())}
+        return out
 
 
 def require(requirement):
