@@ -11,6 +11,7 @@
 #include "boundary_conditions.h"
 #include "define.h"
 #include "ode.h"
+#include "space_solution_operator.h"
 #include "timestepping.h"
 #include "max_abs_eigenvalue.h"
 #include "iterators.h"
@@ -48,21 +49,33 @@ int main(int argc, char **argv)
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
-		realArr2 face_iteration_list = create_face_iteration_list(mesh);
+		intArr2 face_iteration_list = create_face_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.1);
+		TimeStepper* timestepper = new Constant(0.01);
 
 		int iteration = 0;
-		double dt = 0.1;
-		double max_abs_ev = 0.;
+		double dt;
+		double max_abs_ev;
 
+		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, mesh, face_iteration_list, "fvm_semidiscrete_split_step");
+
+		Integrator integrator = Integrator("RK1");
+		for (int i; i < parameters.extent(0); i++)
+			std::cout << parameters(i) << std::endl;
+
+		settings.time_end = 0.1;
 		// RUN
 		while (time < settings.time_end)
 		{
 			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, face_iteration_list, model, mesh);
+
 			dt = timestepper->get_dt(max_abs_ev);
-			if (time + dt*1.01 > settings.time_end)
+			if (time + dt * 1.01 > settings.time_end)
 				dt = settings.time_end - time;
+
+			integrator.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
+
+			std::cout << "iteration: " << iteration << " time: " << time << " dt: " << dt << std::endl;
 
 			iteration++;
 			time += dt;

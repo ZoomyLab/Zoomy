@@ -11,43 +11,43 @@ public:
     {
         sympy::flux_x(Q.data(), Qaux.data(), parameters.data(), Qout.data());
         #if DIMENSION > 1
-            sympy::flux_y(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 1).data());
+            sympy::flux_y(Q.data(), Qaux.data(), parameters.data(), get_dimension2(Qout, 1).data());
         #endif
         #if DIMENSION > 2
-            sympy::flux_z(Q.data(), Qaux.data(), parameters.data(), get_last2(Qout, 2).data());
+            sympy::flux_z(Q.data(), Qaux.data(), parameters.data(), get_dimension2(Qout, 2).data());
         #endif
     }
 
     void flux_jacobian(const realArr Q, const realArr Qaux, const realArr parameters, realArr3& Qout)
     {
-        sympy::flux_jacobian_x(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 0).data());
+        sympy::flux_jacobian_x(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 0).data());
         #if DIMENSION > 1
-            sympy::flux_jacobian_y(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 1).data());
+            sympy::flux_jacobian_y(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 1).data());
         #endif
         #if DIMENSION > 2
-            sympy::flux_jacobian_z(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 2).data());
+            sympy::flux_jacobian_z(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 2).data());
         #endif
     }
 
     void nonconservative_matrix(const realArr Q, const realArr Qaux, const realArr parameters, realArr3& Qout)
     {
-        sympy::nonconservative_matrix_x(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 0).data());
+        sympy::nonconservative_matrix_x(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 0).data());
         #if DIMENSION > 1
-            sympy::nonconservative_matrix_y(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 1).data());
+            sympy::nonconservative_matrix_y(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 1).data());
         #endif
         #if DIMENSION > 2
-            sympy::nonconservative_matrix_z(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 2).data());
+            sympy::nonconservative_matrix_z(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 2).data());
         #endif
     }
 
     void quasilinear_matrix(const realArr Q, const realArr Qaux, const realArr parameters, realArr3& Qout)
     {
-        sympy::quasilinear_matrix_x(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 0).data());
+        sympy::quasilinear_matrix_x(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 0).data());
         #if DIMENSION > 1
-            sympy::quasilinear_matrix_y(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 1).data());
+            sympy::quasilinear_matrix_y(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 1).data());
         #endif
         #if DIMENSION > 2
-            sympy::quasilinear_matrix_z(Q.data(), Qaux.data(), parameters.data(), get_last3(Qout, 2).data());
+            sympy::quasilinear_matrix_z(Q.data(), Qaux.data(), parameters.data(), get_dimension3(Qout, 2).data());
         #endif
     }
 

@@ -4,17 +4,20 @@
 
 #include <cmath>
 
-double max_abs(realArr arr) 
+#ifndef MAX_ABS_EIGENVALUE_H
+#define MAX_ABS_EIGENVALUE_H
+
+double max_abs(const realArr arr) 
 {
-    double max_abs = abs(arr(0));
+    double maxabs = abs(arr(0));
     for (int i = 1; i < arr.extent(0); ++i)
     {
-        max_abs = max(max_abs, abs(arr(i)));
+        maxabs = max(maxabs, abs(arr(i)));
     }
-    return max_abs;
+    return maxabs;
 }
 
-double max_abs_eigenvalue(realArr2 Q, realArr2 Qaux, realArr param, const realArr2 faces,  Model& model, Mesh& mesh)
+double max_abs_eigenvalue(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 faces,  Model& model, Mesh& mesh)
 {
     realArr eigenvalues = realArr("eigenvalues", Q.extent(1));
     int i = 0;
@@ -32,3 +35,5 @@ double max_abs_eigenvalue(realArr2 Q, realArr2 Qaux, realArr param, const realAr
     }
     return max_abs_ev;
 }
+
+#endif // MAX_ABS_EIGENVALUE_H

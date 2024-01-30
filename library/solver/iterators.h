@@ -2,7 +2,7 @@
 #include "mesh.h"
 #include <vector>
 
-realArr2 create_face_iteration_list(Mesh& mesh)
+intArr2 create_face_iteration_list(Mesh& mesh)
 {
     std::vector<std::tuple<int, int>> faces;
     for (int element = 0; element < mesh.n_elements; ++element)
@@ -16,11 +16,12 @@ realArr2 create_face_iteration_list(Mesh& mesh)
                 }
             }
         }
-    realArr2 face_iteration_list = realArr2("face_iteration_list", faces.size(), 2);
+    intArr2 face_iteration_list = intArr2("face_iteration_list", faces.size(), 2);
     for (int i = 0; i < faces.size(); ++i)
     {
         face_iteration_list(i, 0) = std::get<0>(faces[i]);
         face_iteration_list(i, 1) = std::get<1>(faces[i]);
+
     }
     return face_iteration_list;
 }
