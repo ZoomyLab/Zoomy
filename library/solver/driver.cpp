@@ -49,25 +49,23 @@ int main(int argc, char **argv)
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
-		intArr2 face_iteration_list = create_face_iteration_list(mesh);
+		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.01);
+		TimeStepper* timestepper = new Constant(0.05);
 
 		int iteration = 0;
 		double dt;
 		double max_abs_ev;
 
-		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, mesh, face_iteration_list, "fvm_semidiscrete_split_step");
+		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 
 		Integrator integrator = Integrator("RK1");
-		for (int i; i < parameters.extent(0); i++)
-			std::cout << parameters(i) << std::endl;
 
-		settings.time_end = 0.1;
+		settings.time_end = 2.0;
 		// RUN
 		while (time < settings.time_end)
 		{
-			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, face_iteration_list, model, mesh);
+			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, element_neighbor_index_iteration_list, model, mesh);
 
 			dt = timestepper->get_dt(max_abs_ev);
 			if (time + dt * 1.01 > settings.time_end)

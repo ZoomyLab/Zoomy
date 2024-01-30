@@ -68,7 +68,7 @@ KOKKOS_INLINE_FUNCTION auto get_dimension3(Kokkos::View<DataType, Properties...>
 }
 
 template <typename DataType, typename... Properties>
-KOKKOS_INLINE_FUNCTION auto get_element_and_face(Kokkos::View<DataType, Properties...> view, int element, int face) {
+KOKKOS_INLINE_FUNCTION auto get_normal(Kokkos::View<DataType, Properties...> view, int element, int face) {
   return Kokkos::subview(view, element, face, Kokkos::ALL());
 }
 

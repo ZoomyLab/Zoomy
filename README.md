@@ -41,5 +41,14 @@ sudo apt install bc
 - .c to .cpp
 - using namespace sympy (or the source and source_jacobian function is named twice)
 - inline? const? double* to kokkos view?
+
+## Open questions:
+- Are the arrays initiaized with zeros -> if not, do so. If yes, remove one part where I do it.
+- Boundary conditions for Qaux
+- lambdas in space operator as classes?
+- nc-flux?
+- dynamic includes (see todo)
+- adaptive time stepping
+- source term
  
 

@@ -24,13 +24,13 @@ double max_abs_eigenvalue(const realArr2 Q, const realArr2 Qaux, const realArr p
     int element = faces(0, 0);
     int face = faces(0, 1);
 
-    model.eigenvalues(get_element2(Q, element), get_element2(Q, element), param, get_element_and_face(mesh.element_face_normals,element, face), eigenvalues);
+    model.eigenvalues(get_element2(Q, element), get_element2(Q, element), param, get_normal(mesh.element_face_normals,element, face), eigenvalues);
     double max_abs_ev = max_abs(eigenvalues);
     for (int i = 0; i < faces.extent(0); ++i)
     {
         element = faces(i, 0);
         face = faces(i, 1);
-        model.eigenvalues(get_element2(Q, element), get_element2(Q, element), param, get_element_and_face(mesh.element_face_normals,element, face), eigenvalues);
+        model.eigenvalues(get_element2(Q, element), get_element2(Q, element), param, get_normal(mesh.element_face_normals,element, face), eigenvalues);
         max_abs_ev = max(max_abs_ev, max_abs(eigenvalues));
     }
     return max_abs_ev;

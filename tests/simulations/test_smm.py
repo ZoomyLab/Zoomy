@@ -263,7 +263,7 @@ def test_channel_with_hole_2d():
     parser.add_argument("--nu", type=float, default=1./1000., help="kinematic viscosity")
     parser.add_argument("--C", type=float, default=100, help="Chezy friction coefficient")
     args = parser.parse_args()
-    level = 2
+    level = 0
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": args.C, "nu": args.nu},
@@ -334,7 +334,8 @@ def test_channel_with_hole_2d():
         settings={"friction": ["chezy", "newtonian"]},
     )
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
     io.generate_vtk(settings.output_dir)
 
 
