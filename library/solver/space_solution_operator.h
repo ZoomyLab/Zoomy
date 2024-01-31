@@ -145,4 +145,30 @@ class SpaceSolutionOperator : public OdeOperator
         }
 };
 
+class SourceSolutionOperator : public OdeOperator
+{
+    private:
+        Model model;
+
+    public:
+        SourceSolutionOperator(Model model): model(model){}
+        ~SourceSolutionOperator() = default;
+
+        void evaluate(const realArr2 Q, const realArr2 Qaux, const realArr param, realArr2& out)
+        {
+            const int n_elements = Q.extent(0);
+            const int n_fields = Q.extent(1);
+            realArr s = realArr("s", n_fields);
+            for (int i = 0; i < n_elements; ++i)
+            {
+                model.source(get_element2(Q, i), get_element2(Qaux, i), param, s);
+                for (int j = 0; j < n_fields; ++j)
+                {
+                    out(i, j) = s(j);
+                }
+
+            }
+        }
+};
+
 #endif // SPACE_SOLUTION_OPERATOR_H
