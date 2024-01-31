@@ -28,6 +28,24 @@ public:
         #if N_BOUNDARY_CONDITIONS > 3
             boundary_conditions.push_back(sympy::boundary_condition_3);
         #endif
+        #if N_BOUNDARY_CONDITIONS > 4
+            boundary_conditions.push_back(sympy::boundary_condition_4);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 5
+            boundary_conditions.push_back(sympy::boundary_condition_5);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 6
+            boundary_conditions.push_back(sympy::boundary_condition_6);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 7
+            boundary_conditions.push_back(sympy::boundary_condition_7);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 8
+            boundary_conditions.push_back(sympy::boundary_condition_8);
+        #endif
+        #if N_BOUNDARY_CONDITIONS > 9
+            boundary_conditions.push_back(sympy::boundary_condition_9);
+        #endif
     }
 
     // // Constructor
