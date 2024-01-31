@@ -51,17 +51,22 @@ int main(int argc, char **argv)
 		auto boundary_conditions = BoundaryConditions();
 		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.05);
+		TimeStepper* timestepper = new Constant(0.0005);
 
 		int iteration = 0;
 		double dt;
 		double max_abs_ev;
 
+		double dt_print_interval = settings.time_end / 50;
+		double dt_print_next = dt_print_interval;
+
 		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
+		SourceSolutionOperator source_solution_operator = SourceSolutionOperator(model);
 
-		Integrator integrator = Integrator("RK1");
+		Integrator integrator_space = Integrator("RK1");
+		Integrator integrator_source = Integrator("RK1");
 
-		settings.time_end = 2.0;
+		// settings.time_end = 2.0;
 		// RUN
 		while (time < settings.time_end)
 		{
@@ -71,13 +76,18 @@ int main(int argc, char **argv)
 			if (time + dt * 1.01 > settings.time_end)
 				dt = settings.time_end - time;
 
-			integrator.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
+			integrator_space.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
+			integrator_source.evaluate(source_solution_operator, Q, Qaux, parameters, dt, Q);
 
 			std::cout << "iteration: " << iteration << " time: " << time << " dt: " << dt << std::endl;
 
 			iteration++;
 			time += dt;
-			saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
+			if (time > dt_print_next)
+			{
+				saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
+				dt_print_next += dt_print_interval;
+			}
 		}
 
 		// int iteration = 1;

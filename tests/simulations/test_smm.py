@@ -444,14 +444,14 @@ def test_smm_1d_crazy_basis():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_c_solver(mesh_type):
-    level = 0
+    level = 1
     settings = Settings(
         name="ShallowMoments2d",
-        parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+        parameters={"g": 1.0, "C": 10.0, "nu": 0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=1.0,
+        time_end=0.2,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir='outputs/output_c'
@@ -486,8 +486,72 @@ def test_c_solver(mesh_type):
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
 
-        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+        os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type,
+    )
+
+    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
+    io.generate_vtk(settings.output_dir)
+
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_c_hole():
+    level = 1
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={"g": 1.0, "C": 30.0, "nu": 0.01},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=2.0,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir='outputs/output_c'
+    )
+
+
+    inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
+    inflow_dict[1] = 0.36
+    outflow_dict = {0: 0.1}
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Wall(physical_tag="hole"),
+            BC.Wall(physical_tag="top"),
+            BC.Wall(physical_tag="bottom"),
+            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+        ]
+    )
+
+    def ic_func(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = 0.1
+        Q[1] = 0.36
+        # Q[3] = 0.1
+        # if x[0] < 0.5:
+        #     Q[0] += 0.1 * x[1]
+        #     Q[1] += 0.1 * x[1] * args.vel
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        settings={"friction": ["chezy"]},
+        # settings={},
+    )
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.load_gmsh(
+
+        os.path.join(main_dir, "meshes/channel_2d_hole/mesh_finest.msh"),
+        "triangle",
     )
 
     fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
@@ -504,4 +568,5 @@ if __name__ == "__main__":
     # test_channel_with_hole_2d()
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
-    test_c_solver('quad')
+    # test_c_solver('quad')
+    test_c_hole()
