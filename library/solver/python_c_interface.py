@@ -14,6 +14,11 @@ def build(dimension=2, n_boundary_conditions=4, n_elements=100, n_fields=3, n_fi
    path_mesh=os.path.join(main_dir , path_mesh)
    path_fields=os.path.join(main_dir , path_fields)
 
+   command = "make clean"
+   make_process = subprocess.Popen(command, shell=True, stderr=subprocess.STDOUT, cwd=path)
+   if make_process.wait() != 0:
+      print(subprocess.STDOUT) 
+
    command = " ".join(["make", f"DIMENSION={dimension}", f"N_BOUNDARY_CONDITIONS={n_boundary_conditions}", f"N_ELEMENTS={n_elements}", f"N_FIELDS={n_fields}", f"N_FIELDS_AUX={n_fields_aux}", f"PATH_SETTINGS={path_settings}", f"PATH_MESH={path_mesh}", f"PATH_FIELDS={path_fields}"])
    # command = ["make", f"dimension={dimension}",  f"arch={architecture}"] 
    # command = "make" 
