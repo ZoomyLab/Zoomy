@@ -236,6 +236,7 @@ def _get_boundary_edges_cells(msh, list_of_edges, element_type):
                     break
                 offset += cell.data.shape[0]
         assert hit is not False
+        assert hit is not []
         results[i_edge] = hit
     return list(results)
 
