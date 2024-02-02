@@ -101,9 +101,13 @@ ifeq ($(VOLKOS_DEBUG_MPI),1)
 debug=yes
 endif
 
-KOKKOS_DEBUG=yes
-ifeq ($(KOKKOS_DEBUG),yes)
+DEBUG=yes
+ifeq ($(DEBUG),yes)
 debug=yes
+endif
+PROFILING=yes
+ifeq ($(DEBUG),yes)
+profiling=yes
 endif
 
 ########### LEAVE THIS ALONE ##############
@@ -199,10 +203,6 @@ ifdef VOLKOS_DEBUG_OUTPUT
 		VOLKOS_MODEL_FLAGS += -DVOLKOS_DEBUG_OUTPUT=$(VOLKOS_DEBUG_OUTPUT)
 endif
 
-ifeq ($(debug),yes)
-	VOLKOS_MODEL_FLAGS += -g
-endif
-
 ifdef VOLKOS_REAL
 	ifeq ($(VOLKOS_REAL),single)
 		VOLKOS_MODEL_FLAGS += -DVOLKOS_REAL=1
@@ -221,7 +221,19 @@ ifeq ($(arch),cpu)
 	CXX = ${MPICXX}
 	CXXFLAGS += -DKOKKOS_ENABLE_CXX17 -DKOKKOS_CXX_STANDARD=c++17 -std=c++17 
 	KOKKOS_DEVICES = "OpenMP"
+	ifeq ($(profiling),yes)
+		CXXFLAGS += -pg -g
+		LDPROFILING += -pg
+		KOKKOS_OPTIONS = "aggressive_vectorization"
+	else
 	KOKKOS_OPTIONS = "aggressive_vectorization,disable_profiling"
+endif
+	ifeq ($(debug),yes)
+		CXXFLAGS += -g
+	else
+		CXXFLAGS += -O3
+	endif
+
 endif
 
 ifeq ($(arch),gpu)
