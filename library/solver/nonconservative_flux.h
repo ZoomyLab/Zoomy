@@ -45,7 +45,7 @@ void segmentpath(const realArr& qi, const realArr& qj, const realArr& qauxi, con
 {
     realArr xi;
     realArr wi;
-    gauss(1, xi, wi);
+    gauss(3, xi, wi);
     shift_integration(xi, wi);
 
     const int n_int = xi.extent(0);
