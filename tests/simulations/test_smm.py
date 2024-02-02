@@ -22,7 +22,7 @@ def test_smm_1d():
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.constant(dt=0.01),
+        compute_dt=timestepping.constant(dt = 0.01),
         time_end=1.0,
         output_snapshots=100,
     )
@@ -54,7 +54,6 @@ def test_smm_1d():
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
-
 def test_sindy_generate_reference_data():
     level = 0
     settings = Settings(
@@ -62,7 +61,7 @@ def test_sindy_generate_reference_data():
         parameters={"g": 9.81, "C": 20.0, "nu": 0.0016},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.constant(dt=0.01),
+        compute_dt=timestepping.constant(dt = 0.01),
         time_end=4.0,
         output_snapshots=100,
         output_dir=f"output_{str(level)}",
@@ -95,6 +94,8 @@ def test_sindy_generate_reference_data():
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
     # io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
+
+
 
 
 @pytest.mark.critical
@@ -171,7 +172,7 @@ def test_inflowoutflow_2d():
             BC.Wall(physical_tag="top"),
             BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
         ]
     )
     ic = IC.Constant(
@@ -305,7 +306,7 @@ def test_channel_with_hole_2d():
     )
 
     def ic_func(x):
-        Q = np.zeros(3 + 2 * level, dtype=float)
+        Q = np.zeros(3+2*level, dtype=float)
         Q[0] = 1.0
         Q[1] = args.vel
         if x[0] < 0.5:
@@ -405,7 +406,6 @@ def test_smm_grad_2d():
         start_at_time=1.0,
     )
 
-
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d_crazy_basis():
@@ -447,7 +447,6 @@ def test_smm_1d_crazy_basis():
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
-
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -494,6 +493,7 @@ def test_c_solver(mesh_type):
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
+
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type,
     )
@@ -502,7 +502,6 @@ def test_c_solver(mesh_type):
         mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
     )
     io.generate_vtk(settings.output_dir)
-
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -539,7 +538,7 @@ def test_c_turbulence():
     )
 
     def ic_func(x):
-        Q = np.zeros(3 + 2 * level, dtype=float)
+        Q = np.zeros(3+2*level, dtype=float)
         Q[0] = 0.1
         Q[1] = 0.36
         # Q[3] = 0.1
@@ -578,6 +577,7 @@ def test_c_turbulence():
         rebuild_mesh=False,
         rebuild_c=True,
     )
+
     # io.generate_vtk(settings.output_dir)
 
 
