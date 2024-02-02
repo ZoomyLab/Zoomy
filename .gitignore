@@ -16,3 +16,4 @@ library/solver/*.hpp
 library/solver/*.o
 library/solver/*.tmp
 library/solver/KokkosCore_config.h
+profiling_result.png
