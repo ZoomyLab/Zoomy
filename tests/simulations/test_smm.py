@@ -22,7 +22,7 @@ def test_smm_1d():
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.constant(dt = 0.01),
+        compute_dt=timestepping.constant(dt=0.01),
         time_end=1.0,
         output_snapshots=100,
     )
@@ -54,6 +54,7 @@ def test_smm_1d():
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
+
 def test_sindy_generate_reference_data():
     level = 0
     settings = Settings(
@@ -61,10 +62,10 @@ def test_sindy_generate_reference_data():
         parameters={"g": 9.81, "C": 20.0, "nu": 0.0016},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.constant(dt = 0.01),
+        compute_dt=timestepping.constant(dt=0.01),
         time_end=4.0,
         output_snapshots=100,
-        output_dir = f'output_{str(level)}'
+        output_dir=f"output_{str(level)}",
     )
 
     bc_tags = ["left", "right"]
@@ -94,8 +95,6 @@ def test_sindy_generate_reference_data():
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
     # io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
-
-
 
 
 @pytest.mark.critical
@@ -172,7 +171,7 @@ def test_inflowoutflow_2d():
             BC.Wall(physical_tag="top"),
             BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
+            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
         ]
     )
     ic = IC.Constant(
@@ -258,10 +257,16 @@ def test_steffler():
 @pytest.mark.unfinished
 def test_channel_with_hole_2d():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path", type=str, default='output/', help="Output folder path")
+    parser.add_argument(
+        "--path", type=str, default="output/", help="Output folder path"
+    )
     parser.add_argument("--vel", type=float, default=0.7, help="Velocity for inflow")
-    parser.add_argument("--nu", type=float, default=1./1000., help="kinematic viscosity")
-    parser.add_argument("--C", type=float, default=100, help="Chezy friction coefficient")
+    parser.add_argument(
+        "--nu", type=float, default=1.0 / 1000.0, help="kinematic viscosity"
+    )
+    parser.add_argument(
+        "--C", type=float, default=100, help="Chezy friction coefficient"
+    )
     args = parser.parse_args()
     level = 0
     settings = Settings(
@@ -272,7 +277,7 @@ def test_channel_with_hole_2d():
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=2.0,
         output_snapshots=100,
-        output_dir=args.path
+        output_dir=args.path,
     )
 
     main_dir = os.getenv("SMS")
@@ -300,7 +305,7 @@ def test_channel_with_hole_2d():
     )
 
     def ic_func(x):
-        Q = np.zeros(3+2*level, dtype=float)
+        Q = np.zeros(3 + 2 * level, dtype=float)
         Q[0] = 1.0
         Q[1] = args.vel
         if x[0] < 0.5:
@@ -335,7 +340,9 @@ def test_channel_with_hole_2d():
     )
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
+    fvm_c_unsteady_semidiscete(
+        mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
+    )
     io.generate_vtk(settings.output_dir)
 
 
@@ -398,6 +405,7 @@ def test_smm_grad_2d():
         start_at_time=1.0,
     )
 
+
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d_crazy_basis():
@@ -433,12 +441,13 @@ def test_smm_1d_crazy_basis():
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian"]},
-        basis = Basis(basis=test_basis)
+        basis=Basis(basis=test_basis),
     )
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -454,7 +463,7 @@ def test_c_solver(mesh_type):
         time_end=0.2,
         output_snapshots=100,
         output_clean_dir=True,
-        output_dir='outputs/output_c'
+        output_dir="outputs/output_c",
     )
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -485,17 +494,19 @@ def test_c_solver(mesh_type):
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type,
     )
 
-    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
+    fvm_c_unsteady_semidiscete(
+        mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
+    )
     io.generate_vtk(settings.output_dir)
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
-def test_c_hole():
+def test_c_turbulence():
     level = 1
     settings = Settings(
         name="ShallowMoments2d",
@@ -503,12 +514,15 @@ def test_c_hole():
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=2.0,
+        time_end=0.3,
         output_snapshots=100,
-        output_clean_dir=True,
-        output_dir='outputs/output_c'
+        output_clean_dir=False,
+        output_dir="outputs/output_c",
+        # n_threads=os.cpu_count(),
+        n_threads=48,
     )
 
+    print(f"number of available cpus: {os.cpu_count()}")
 
     inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
     inflow_dict[1] = 0.36
@@ -525,7 +539,7 @@ def test_c_hole():
     )
 
     def ic_func(x):
-        Q = np.zeros(3+2*level, dtype=float)
+        Q = np.zeros(3 + 2 * level, dtype=float)
         Q[0] = 0.1
         Q[1] = 0.36
         # Q[3] = 0.1
@@ -548,14 +562,23 @@ def test_c_hole():
         # settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    # mesh = Mesh.load_gmsh(
+    #     os.path.join(main_dir, "meshes/channel_2d_hole/mesh_finest.msh"),
+    #     "triangle",
+    # )
+    mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
 
-        os.path.join(main_dir, "meshes/channel_2d_hole/mesh_finest.msh"),
-        "triangle",
+    fvm_c_unsteady_semidiscete(
+        mesh,
+        model,
+        settings,
+        ode_solver_flux="RK1",
+        ode_solver_source="RK1",
+        rebuild_model=False,
+        rebuild_mesh=False,
+        rebuild_c=True,
     )
-
-    fvm_c_unsteady_semidiscete(mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1")
-    io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output_dir)
 
 
 if __name__ == "__main__":
@@ -569,4 +592,4 @@ if __name__ == "__main__":
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
-    test_c_hole()
+    test_c_turbulence()

@@ -30,12 +30,17 @@ int main(int argc, char **argv)
 	const int n_elements = N_ELEMENTS;
 	const int n_fields = N_FIELDS;
 	const int n_fields_aux = N_FIELDS_AUX;
+	const int n_threads = N_THREADS;
 	const std::string path_settings = PATH_SETTINGS;
 	const std::string path_mesh = PATH_MESH;
 	const std::string path_fields = PATH_FIELDS;
+	
+	Kokkos::Timer timer;
+	double time_start = timer.seconds();
+  	Kokkos::InitializationSettings kokkosSettings;
+	if(n_threads!=0) kokkosSettings.set_num_threads(n_threads);
 
-
-	Kokkos::initialize();
+	Kokkos::initialize(kokkosSettings);
 	{
 		std::cout << "C program running" << std::endl;
 
@@ -97,6 +102,8 @@ int main(int argc, char **argv)
 		H5Fclose(file_fields);
 	}
 	// delete timestepper();
+	double time_end = timer.seconds();
+	std::cout << "Time elapsed: " << time_end - time_start << std::endl;
 	Kokkos::finalize();
 	return 0;
 }

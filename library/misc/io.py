@@ -46,9 +46,15 @@ def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all, f
     _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux, filename=filename)
     return i_snapshot +1
 
-def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fields.hdf5'):
+def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fields.hdf5', overwrite=True):
     with h5py.File(os.path.join(filepath, filename), "a") as f:
-        attrs = f.create_group('iteration_' + str(i_snapshot))
+        group_name = 'iteration_' + str(i_snapshot)
+        if group_name in f:
+            if overwrite:
+                del f[group_name]
+            else:
+                raise ValueError(f"Group {group_name} already exists in {filename}")
+        attrs = f.create_group(group_name)
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
         if Qaux is not None:
