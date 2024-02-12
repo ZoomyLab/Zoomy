@@ -8,7 +8,7 @@
 #ifndef SPACE_SOLUTION_OPERATOR_H
 #define SPACE_SOLUTION_OPERATOR_H
 
-void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, Mesh& mesh, BoundaryConditions& boundary_conditions, realArr2& out)
+void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, const Mesh& mesh, BoundaryConditions& boundary_conditions, realArr2& out)
 {
 
     //TODO passing num_flux and nc_flux as lambdas with non-zero capture list does not work. Maybe I should use a class instead?
@@ -118,15 +118,16 @@ class OdeOperator
 
 class SpaceSolutionOperator : public OdeOperator
 {
+    // TODO this should not hold the mesh or any other data!
     private:
         Model model;
         BoundaryConditions boundary_conditions;
-        Mesh mesh;
+        const Mesh mesh;
         intArr2 element_neighbor_index_tuples;
-        void (*method)(const realArr2, const realArr2, const realArr, const intArr2, Model&, Mesh&, BoundaryConditions&, realArr2&);
+        void (*method)(const realArr2, const realArr2, const realArr, const intArr2, Model&, const Mesh&, BoundaryConditions&, realArr2&);
 
     public:
-        SpaceSolutionOperator(Model model, BoundaryConditions boundary_conditions, Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
+        SpaceSolutionOperator(Model model, BoundaryConditions boundary_conditions, const Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
         {
             if (method == "fvm_semidiscrete_split_step")
             {

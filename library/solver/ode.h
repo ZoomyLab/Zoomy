@@ -1,6 +1,5 @@
 #include "define.h"
 #include "model.h"
-#include "mesh.h"
 #include "space_solution_operator.h"
 
 #ifndef ODE_H

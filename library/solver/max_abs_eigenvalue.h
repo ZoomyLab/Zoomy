@@ -17,7 +17,7 @@ double max_abs(const realArr arr)
     return maxabs;
 }
 
-double max_abs_eigenvalue(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 faces,  Model& model, Mesh& mesh)
+double max_abs_eigenvalue(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 faces,  Model& model, const Mesh& mesh)
 {
     realArr eigenvalues = realArr("eigenvalues", Q.extent(1));
     int i = 0;

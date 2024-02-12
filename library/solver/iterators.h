@@ -2,7 +2,7 @@
 #include "mesh.h"
 #include <vector>
 
-intArr2 create_neighbor_index_iteration_list(Mesh& mesh)
+intArr2 create_neighbor_index_iteration_list(const Mesh& mesh)
 {
     std::vector<std::tuple<int, int>> element_neighbor_tuple;
     for (int element = 0; element < mesh.n_elements; ++element)

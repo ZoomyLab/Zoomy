@@ -459,7 +459,7 @@ def test_c_solver(mesh_type):
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=0.2,
+        time_end=1.2,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir="outputs/output_c",

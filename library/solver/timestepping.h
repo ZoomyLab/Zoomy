@@ -25,7 +25,7 @@ private:
     double CFL; // Courant–Friedrichs–Lewy condition
     double min_inradius;
 public:
-    Adaptive(double CFL, Mesh& mesh, Model& model) : CFL(CFL) {
+    Adaptive(double CFL, const Mesh& mesh, Model& model) : CFL(CFL) {
         this->min_inradius = mesh.element_inradius(0);
         for (int i = 0; i < mesh.n_elements; ++i)
         {

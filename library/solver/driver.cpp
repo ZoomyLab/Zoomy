@@ -20,10 +20,12 @@
 #include <iostream>
 #include <string>
 #include <mpi.h>
+#include <chrono>
 
 
 int main(int argc, char **argv)
 {
+	auto start_main = std::chrono::high_resolution_clock::now();
 	// read make parameters
 	const int dimension = DIMENSION;
 	const int n_boundary_conditions = N_BOUNDARY_CONDITIONS;	
@@ -49,14 +51,14 @@ int main(int argc, char **argv)
 		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
 		Settings settings = Settings(path_settings);
 		realArr parameters = settings.parameters;
-		Mesh mesh = Mesh(path_mesh);
+		const Mesh mesh = Mesh(path_mesh);
 		hid_t file_fields = openHdf5(path_fields, "r+");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
 		auto boundary_conditions = BoundaryConditions();
 		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.0005);
+		TimeStepper* timestepper = new Constant(0.05);
 
 		int iteration = 0;
 		double dt;
@@ -64,8 +66,7 @@ int main(int argc, char **argv)
 
 		double dt_print_interval = settings.time_end / 50;
 		double dt_print_next = dt_print_interval;
-
-		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
+SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 		SourceSolutionOperator source_solution_operator = SourceSolutionOperator(model);
 
 		Integrator integrator_space = Integrator("RK1");
@@ -73,6 +74,7 @@ int main(int argc, char **argv)
 
 		// settings.time_end = 2.0;
 		// RUN
+		auto start_loop = std::chrono::high_resolution_clock::now();
 		while (time < settings.time_end)
 		{
 			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, element_neighbor_index_iteration_list, model, mesh);
@@ -100,10 +102,16 @@ int main(int argc, char **argv)
 		// saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
 		H5Fclose(file_fields);
+		auto end = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> diff_loop = end-start_loop;
+		std::cout << "Loop time: " << diff_loop.count() << " s\n";
 	}
 	// delete timestepper();
 	double time_end = timer.seconds();
 	std::cout << "Time elapsed: " << time_end - time_start << std::endl;
 	Kokkos::finalize();
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> diff_main = end-start_main;
+	std::cout << "Total time: " << diff_main.count() << " s\n";
 	return 0;
 }
