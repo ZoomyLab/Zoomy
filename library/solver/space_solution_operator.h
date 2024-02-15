@@ -1,3 +1,5 @@
+#include<Kokkos_Core.hpp>
+
 #include "define.h"
 #include "model.h"
 #include "boundary_conditions.h"
@@ -8,7 +10,7 @@
 #ifndef SPACE_SOLUTION_OPERATOR_H
 #define SPACE_SOLUTION_OPERATOR_H
 
-void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, const Mesh& mesh, BoundaryConditions& boundary_conditions, realArr2& out)
+void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, const Mesh& mesh, const BoundaryConditions& boundary_conditions, realArr2& out)
 {
 
     //TODO passing num_flux and nc_flux as lambdas with non-zero capture list does not work. Maybe I should use a class instead?
@@ -25,19 +27,10 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
     const int n_fields = Q.extent(1);
     const int n_elements = Q.extent(0);
     const int n_inner_faces = element_neighbor_index_tuples.extent(0);
-    int element;
-    int i_neighbor;
-    int face;
-    int neighbor;
+
     realArr eigenvalues = realArr("eigenvalues", n_fields);
     double max_abs_ev = -1.;
-    realArr normal;
-    realArr qi;
-    realArr qj;
-    realArr qauxi;
-    realArr qauxj;
-    realArr F = realArr("F", n_fields);
-    realArr NC = realArr("NC", n_fields);
+
     out = realArr2("out", n_elements, n_fields);
     for (int i = 0; i < n_elements; ++i)
     {
@@ -48,13 +41,25 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
     }
 
 
-    for (int i = 0; i < n_inner_faces; ++i)
+    // for (int i = 0; i < n_inner_faces; ++i)
+    Kokkos::parallel_for("Space Solution Operator: inner edges", n_inner_faces, KOKKOS_LAMBDA (const int i)
     {
+        int element;
+        int i_neighbor;
+        int face;
+        int neighbor;
+        realArr normal;
+        realArr qi;
+        realArr qj;
+        realArr qauxi;
+        realArr qauxj;
+        realArr F = realArr("F", n_fields);
+        realArr NC = realArr("NC", n_fields);
+        
         element = element_neighbor_index_tuples(i, 0);
         i_neighbor = element_neighbor_index_tuples(i, 1);
         neighbor = mesh.element_neighbors(element, i_neighbor);
         face = mesh.element_neighbors_face_index(element, i_neighbor);
-
         qi = get_element2(Q, element);
         qj = get_element2(Q, neighbor);
         qauxi = get_element2(Qaux, element);
@@ -74,10 +79,23 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
             out(element, i) -= (F(i) + NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(element);
             out(neighbor, i) += (F(i) - NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(neighbor);
         }
-    }
+    });
 
-    for (int i = 0; i < mesh.n_boundary_elements; ++i)
+
+    // for (int i = 0; i < mesh.n_boundary_elements; ++i)
+    Kokkos::parallel_for("Space Solution Operator: boundary edges", mesh.n_boundary_elements, KOKKOS_LAMBDA (const int i)
     {
+        int element;
+        int face;
+        int neighbor;
+        realArr normal;
+        realArr qi;
+        // realArr qj;
+        realArr qauxi;
+        realArr qauxj;
+        realArr F = realArr("F", n_fields);
+        realArr NC = realArr("NC", n_fields);
+        realArr qj = realArr("qj", n_fields);
         element = mesh.boundary_face_corresponding_element(i);
         face = mesh.boundary_face_element_face_index(i);
         neighbor = mesh.element_neighbors(element, face);
@@ -89,7 +107,8 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         int i_boundary_function_index = mesh.boundary_function_index(i);
         realArr q_req = get_element2(Q, mesh.boundary_function_required_element(i));
         realArr qaux_req = get_element2(Q, mesh.boundary_function_required_element(i));
-        boundary_conditions.apply(mesh.boundary_function_index(i), q_req, qaux_req, param, normal, qj);
+
+        boundary_conditions.apply(i_boundary_function_index, q_req, qaux_req, param, normal, qj);
         //TODO this should probably also be done using a dedicated boundary condition...
         qauxj = qauxi;
 
@@ -98,14 +117,14 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         // model.eigenvalues(qj, qauxj, param, normal, eigenvalues);
         // max_abs_ev = max(max_abs_ev, max_abs(eigenvalues));
 
-        numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
-        nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
+        // numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
+        // nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
 
-        for (int i = 0; i < n_fields; ++i)
-        {
-            out(element, i) -= (F(i) + NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(element);
-        }
-    }
+        // for (int i = 0; i < n_fields; ++i)
+        // {
+        //     out(element, i) -= (F(i) + NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(element);
+        // }
+    });
 
 }
 
@@ -121,13 +140,13 @@ class SpaceSolutionOperator : public OdeOperator
     // TODO this should not hold the mesh or any other data!
     private:
         Model model;
-        BoundaryConditions boundary_conditions;
+        const BoundaryConditions boundary_conditions;
         const Mesh mesh;
         intArr2 element_neighbor_index_tuples;
-        void (*method)(const realArr2, const realArr2, const realArr, const intArr2, Model&, const Mesh&, BoundaryConditions&, realArr2&);
+        void (*method)(const realArr2, const realArr2, const realArr, const intArr2, Model&, const Mesh&, const BoundaryConditions&, realArr2&);
 
     public:
-        SpaceSolutionOperator(Model model, BoundaryConditions boundary_conditions, const Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
+        SpaceSolutionOperator(Model model, const BoundaryConditions boundary_conditions, const Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
         {
             if (method == "fvm_semidiscrete_split_step")
             {
@@ -159,16 +178,17 @@ class SourceSolutionOperator : public OdeOperator
         {
             const int n_elements = Q.extent(0);
             const int n_fields = Q.extent(1);
-            realArr s = realArr("s", n_fields);
-            for (int i = 0; i < n_elements; ++i)
+            // for (int i = 0; i < n_elements; ++i)
+            Kokkos::parallel_for("Source Solution Operator", n_elements, KOKKOS_LAMBDA (const int i)
             {
+                realArr s = realArr("s", n_fields);
                 model.source(get_element2(Q, i), get_element2(Qaux, i), param, s);
                 for (int j = 0; j < n_fields; ++j)
                 {
                     out(i, j) = s(j);
                 }
 
-            }
+            });
         }
 };
 

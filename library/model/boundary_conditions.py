@@ -177,6 +177,10 @@ class BoundaryConditions:
     
     def append_boundary_map_to_mesh_hdf5(self, filepath, filename='mesh.hdf5'):
         with h5py.File(os.path.join(filepath, filename), "a") as f:
+            delete_datasets = ["boundary_function_index", "required_elements", "boundary_function_name"]
+            for name in delete_datasets:
+                if name in f:
+                    del f[name]
             f.create_dataset("boundary_function_index", data=self.map_boundary_index_to_boundary_function_index)
             f.create_dataset("required_elements", data=self.map_boundary_index_to_required_elements)
             f.create_dataset("boundary_function_name", data=self.boundary_functions_name)

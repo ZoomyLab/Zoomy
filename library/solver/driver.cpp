@@ -55,18 +55,19 @@ int main(int argc, char **argv)
 		hid_t file_fields = openHdf5(path_fields, "r+");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
 		Model model = Model();
-		auto boundary_conditions = BoundaryConditions();
+		const auto boundary_conditions = BoundaryConditions();
 		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.05);
+		TimeStepper* timestepper = new Constant(0.01);
 
 		int iteration = 0;
 		double dt;
 		double max_abs_ev;
 
-		double dt_print_interval = settings.time_end / 50;
+        const int n_snapshots = 100;
+		double dt_print_interval = settings.time_end / (double)n_snapshots;
 		double dt_print_next = dt_print_interval;
-SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
+		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 		SourceSolutionOperator source_solution_operator = SourceSolutionOperator(model);
 
 		Integrator integrator_space = Integrator("RK1");

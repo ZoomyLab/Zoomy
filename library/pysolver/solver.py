@@ -6,6 +6,7 @@ from typing import Callable, Optional, Type
 from copy import deepcopy
 from time import time as gettime
 import os
+import shutil
 
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -284,22 +285,25 @@ def fvm_c_unsteady_semidiscete(
     rebuild_mesh=True,
     rebuild_c=True,
 ):
-    if rebuild_model or rebuild_mesh:
-        Q, Qaux = _initialize_problem(model, mesh)
-        parameters = model.parameter_values
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
-        _ = io.save_fields(
-            settings.output_dir, 0.0, 0.0, 0, Q, Qaux, settings.output_write_all
-        )
+    io.clean_files(settings.output_dir, ".vtk")
+    io.clean_files(settings.output_dir, ".vtk.series")
+    io.clean_files(settings.output_dir, "fields.hdf5")
+    Q, Qaux = _initialize_problem(model, mesh)
+    parameters = model.parameter_values
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    _ = io.save_fields(
+        settings.output_dir, 0.0, 0.0, 0, Q, Qaux, settings.output_write_all
+    )
 
     if rebuild_mesh:
         mesh.write_to_hdf5(settings.output_dir)
 
-    if rebuild_model or rebuild_mesh:
-        settings.parameters = model.parameters.to_value_dict(model.parameter_values)
-        io.save_settings(settings.output_dir, settings)
+    settings.parameters = model.parameters.to_value_dict(model.parameter_values)
+    io.save_settings(settings.output_dir, settings)
 
     if rebuild_model or rebuild_mesh:
+        if os.path.exists(os.path.join(settings.output_dir, "c_interface")):
+            shutil.rmtree(os.path.join(settings.output_dir, "c_interface"))
         save_model_to_C(model, settings)
         model.boundary_conditions.append_boundary_map_to_mesh_hdf5(settings.output_dir)
         modify_sympy_c_code.transform_code(settings)
@@ -316,6 +320,7 @@ def fvm_c_unsteady_semidiscete(
             path_fields=os.path.join(settings.output_dir, "fields.hdf5"),
             n_threads=settings.n_threads,
         )
+
     c_interface.run_driver(settings.n_threads)
 
 

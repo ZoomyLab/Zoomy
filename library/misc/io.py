@@ -1,4 +1,4 @@
-import os 
+import os
 import numpy as np
 import h5py
 import meshio
@@ -11,44 +11,70 @@ import library.mesh.fvm_mesh as fvm_mesh
 def init_output_directory(path, clean):
     os.makedirs(path, exist_ok=True)
     if clean:
-        filelist = [ f for f in os.listdir(path)]
+        filelist = [f for f in os.listdir(path)]
         for f in filelist:
             if os.path.isdir(os.path.join(path, f)):
                 shutil.rmtree(os.path.join(path, f))
             else:
                 os.remove(os.path.join(path, f))
 
+
 def save_settings(filepath, settings):
-    with h5py.File(os.path.join(filepath, 'settings.hdf5'), "w") as f:
-        attrs = f.create_group('parameters')
+    with h5py.File(os.path.join(filepath, "settings.hdf5"), "w") as f:
+        attrs = f.create_group("parameters")
         for k, v in settings.parameters.items():
             attrs.create_dataset(k, data=v)
-        f.create_dataset('parameter_values', data=np.array(list(settings.parameters.values()), dtype=float))
-        f.create_dataset('name', data=settings.name)
-        f.create_dataset('output_dir', data=settings.output_dir)
-        f.create_dataset('output_snapshots', data=settings.output_snapshots)
-        f.create_dataset('output_write_all', data=settings.output_write_all)
-        f.create_dataset('output_clean_dir', data=settings.output_clean_dir)
-        f.create_dataset('truncate_last_time_step', data=settings.truncate_last_time_step)  
+        f.create_dataset(
+            "parameter_values",
+            data=np.array(list(settings.parameters.values()), dtype=float),
+        )
+        f.create_dataset("name", data=settings.name)
+        f.create_dataset("output_dir", data=settings.output_dir)
+        f.create_dataset("output_snapshots", data=settings.output_snapshots)
+        f.create_dataset("output_write_all", data=settings.output_write_all)
+        f.create_dataset("output_clean_dir", data=settings.output_clean_dir)
+        f.create_dataset(
+            "truncate_last_time_step", data=settings.truncate_last_time_step
+        )
         # f.create_dataset('reconstruction', data.settings.reconstruction.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('reconstruction_edge', data.settings.reconstruction_edge.__name__, dtype=h5py.string_dtype())  
-        # f.create_dataset('num_flux', data.settings.num_flux.__name__, dtype=h5py.string_dtype())        
+        # f.create_dataset('reconstruction_edge', data.settings.reconstruction_edge.__name__, dtype=h5py.string_dtype())
+        # f.create_dataset('num_flux', data.settings.num_flux.__name__, dtype=h5py.string_dtype())
         # f.create_dataset('nc_flux', data.settings.nc_flux.__name__, dtype=h5py.string_dtype())
         # f.create_dataset('compute_dt', data.settings.compute_dt.__name__, dtype=h5py.string_dtype())
         # f.create_dataset('compute_dt_args', data=settings.compute_dt_args)
-        f.create_dataset('time_end', data=settings.time_end)
-        
+        f.create_dataset("time_end", data=settings.time_end)
 
-def save_fields(filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all, filename='fields.hdf5'):
-    if not write_all and  time < next_write_at:
+
+def clean_files(filepath, filename=".vtk"):
+    main_dir = os.getenv("SMS")
+    abs_filepath = os.path.join(main_dir, filepath)
+    for file in os.listdir(abs_filepath):
+        if file.endswith(filename):
+            os.remove(os.path.join(abs_filepath, file))
+
+
+def save_fields(
+    filepath,
+    time,
+    next_write_at,
+    i_snapshot,
+    Q,
+    Qaux,
+    write_all,
+    filename="fields.hdf5",
+):
+    if not write_all and time < next_write_at:
         return i_snapshot
 
     _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux, filename=filename)
-    return i_snapshot +1
+    return i_snapshot + 1
 
-def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fields.hdf5', overwrite=True):
+
+def _save_fields_to_hdf5(
+    filepath, i_snapshot, time, Q, Qaux=None, filename="fields.hdf5", overwrite=True
+):
     with h5py.File(os.path.join(filepath, filename), "a") as f:
-        group_name = 'iteration_' + str(i_snapshot)
+        group_name = "iteration_" + str(i_snapshot)
         if group_name in f:
             if overwrite:
                 del f[group_name]
@@ -60,16 +86,17 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, filename='fie
         if Qaux is not None:
             attrs.create_dataset("Qaux", data=Qaux)
 
-def load_fields_from_hdf5(filepath, i_snapshot = -1):
+
+def load_fields_from_hdf5(filepath, i_snapshot=-1):
     with h5py.File(filepath, "r") as f:
         if i_snapshot == -1:
-            i_snapshot = len(f.keys())-1
+            i_snapshot = len(f.keys()) - 1
         else:
             i_snapshot = i_snapshot
         group = f[str(i_snapshot)]
-        time = group['time'][()]
-        Q = group['Q'][()]
-        Qaux = group['Qaux'][()]
+        time = group["time"][()]
+        Q = group["Q"][()]
+        Qaux = group["Qaux"][()]
     return Q, Qaux, time
 
 
@@ -113,51 +140,67 @@ def _write_to_vtk_from_vertices_edges(
     filename_base, filename_ext = os.path.splitext(filename)
     os.makedirs(path, exist_ok=True)
     meshout.write(filepath + ".vtk")
-    
 
-def generate_vtk(filepath: str, field_names=None, aux_field_names=None, filename_fields='fields.hdf5', filename_out = 'out'):
+
+def generate_vtk(
+    filepath: str,
+    field_names=None,
+    aux_field_names=None,
+    filename_fields="fields.hdf5",
+    filename_out="out",
+):
+    main_dir = os.getenv("SMS")
+    abs_filepath = os.path.join(main_dir, filepath)
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
-    file_fields =  h5py.File(os.path.join(filepath, filename_fields), "r")
-    mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(filepath, 'mesh.hdf5'))
+    file_fields = h5py.File(os.path.join(abs_filepath, filename_fields), "r")
+    mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(abs_filepath, "mesh.hdf5"))
     snapshots = list(file_fields.keys())
     # init timestamp file
     vtk_timestamp_file = {"file-series-version": "1.0", "files": []}
 
     def get_iteration_from_datasetname(name):
-        return int(name.split('_')[1])
+        return int(name.split("_")[1])
 
     # write out vtk files for each timestamp
     for snapshot in snapshots:
-        time = file_fields[snapshot]['time'][()]
-        Q = file_fields[snapshot]['Q'][()]
-        Qaux = file_fields[snapshot]['Qaux'][()]
-        filename = f'{filename_out}.{get_iteration_from_datasetname(snapshot)}'
-        fullpath = os.path.join(filepath, filename )
+        time = file_fields[snapshot]["time"][()]
+        Q = file_fields[snapshot]["Q"][()]
+        Qaux = file_fields[snapshot]["Qaux"][()]
+        filename = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
+        fullpath = os.path.join(abs_filepath, filename)
 
-        #TODO callout to compute pointwise data?
+        # TODO callout to compute pointwise data?
         point_fields = None
         point_field_names = None
-
 
         if field_names is None:
             field_names = [str(i) for i in range(Q.shape[1])]
         if aux_field_names is None:
-            aux_field_names = ['aux_{}'.format(str(i)) for i in range(Qaux.shape[1])]
+            aux_field_names = ["aux_{}".format(str(i)) for i in range(Qaux.shape[1])]
 
         fields = np.concatenate((Q, Qaux), axis=-1)
         field_names = field_names + aux_field_names
 
-        _write_to_vtk_from_vertices_edges(fullpath, mesh.type, mesh.vertex_coordinates, mesh.element_vertices, fields=fields, field_names=field_names,point_fields=point_fields, point_field_names=point_field_names)
+        _write_to_vtk_from_vertices_edges(
+            fullpath,
+            mesh.type,
+            mesh.vertex_coordinates,
+            mesh.element_vertices,
+            fields=fields,
+            field_names=field_names,
+            point_fields=point_fields,
+            point_field_names=point_field_names,
+        )
 
         vtk_timestamp_file["files"].append(
             {
-                "name": filename + '.vtk',
+                "name": filename + ".vtk",
                 "time": time,
             }
         )
 
-    #finalize vtk
-    with open(os.path.join(filepath , f"{filename_out}.vtk.series"), "x") as f:
+    # finalize vtk
+    with open(os.path.join(abs_filepath, f"{filename_out}.vtk.series"), "w") as f:
         json.dump(vtk_timestamp_file, f)
 
     file_fields.close()

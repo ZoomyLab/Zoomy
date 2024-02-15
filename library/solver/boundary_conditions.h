@@ -52,7 +52,7 @@ public:
     // BoundaryConditions();
 
     // Function to apply a specific boundary condition
-    void apply(int index, const realArr& Q, const realArr& Qaux, const realArr& parameters, const realArr& normal, realArr& Qout) {
+    void apply(int index, const realArr& Q, const realArr& Qaux, const realArr& parameters, const realArr& normal, realArr& Qout) const {
         boundary_conditions[index](Q.data(), Qaux.data(), parameters.data(), normal.data(), Qout.data());
     }
 };

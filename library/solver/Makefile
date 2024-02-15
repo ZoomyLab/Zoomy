@@ -101,11 +101,13 @@ ifeq ($(VOLKOS_DEBUG_MPI),1)
 debug=yes
 endif
 
-DEBUG=yes
+debug=no
+profiling=no
+DEBUG=no
 ifeq ($(DEBUG),yes)
 debug=yes
 endif
-PROFILING=yes
+PROFILING=no
 ifeq ($(DEBUG),yes)
 profiling=yes
 endif
