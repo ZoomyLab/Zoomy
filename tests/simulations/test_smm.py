@@ -518,8 +518,6 @@ def test_c_turbulence():
         output_snapshots=100,
         output_clean_dir=False,
         output_dir="outputs/output_c",
-        # n_threads=os.cpu_count(),
-        n_threads=4,
     )
 
     print(f"number of available cpus: {os.cpu_count()}")
@@ -563,8 +561,8 @@ def test_c_turbulence():
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
-        # os.path.join(main_dir, "meshes/channel_2d_hole/mesh_coarse.msh"),
+        # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
+        os.path.join(main_dir, "meshes/channel_2d_hole/mesh_coarse.msh"),
         "triangle",
      )
     # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
@@ -575,11 +573,11 @@ def test_c_turbulence():
         settings,
         ode_solver_flux="RK1",
         ode_solver_source="RK1",
-        rebuild_model=False,
-        rebuild_mesh=False,
+        rebuild_model=True,
+        rebuild_mesh=True,
         rebuild_c=True,
     )
-    #fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
     # io.generate_vtk(settings.output_dir)
 
