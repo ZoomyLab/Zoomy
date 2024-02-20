@@ -555,9 +555,9 @@ def test_c_turbulence():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        # settings={"friction": ["chezy", "newtonian"]},
+        settings={"friction": ["chezy", "newtonian"]},
         # settings={"friction": ["chezy"]},
-        settings={},
+        # settings={},
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(

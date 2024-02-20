@@ -10,8 +10,9 @@
 #include "model.h"
 #include "boundary_conditions.h"
 #include "define.h"
-#include "ode.h"
-#include "space_solution_operator.h"
+#include "ode_flux.h"
+#include "ode_source.h"
+#include "fvm.h"
 #include "timestepping.h"
 #include "max_abs_eigenvalue.h"
 #include "iterators.h"
@@ -38,12 +39,6 @@ int main(int argc, char **argv)
 	const std::string path_fields = PATH_FIELDS;
 	const std::string timestepper_type = TIMESTEPPER;
 	const double timestepper_param = TIMESTEPPER_PARAM;
-	const std::string ode_space = ODE_SPACE;
-	const std::string ode_source = ODE_SOURCE;
-	std::cout << "timestepper_type: " << timestepper_type << std::endl;
-	std::cout << "timestepper_param: " << timestepper_param << std::endl;
-	std::cout << "ode_space: " << ode_space << std::endl;
-	std::cout << "ode_source: " << ode_source << std::endl;
 
 	const char* env_n_threads = std::getenv("OMP_N_THREADS");
 	int n_threads = 1; // Default value
@@ -85,11 +80,11 @@ int main(int argc, char **argv)
         const int n_snapshots = 100;
 		double dt_print_interval = settings.time_end / (double)n_snapshots;
 		double dt_print_next = dt_print_interval;
-		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
-		SourceSolutionOperator source_solution_operator = SourceSolutionOperator(model);
+		// Integrator integrator_space = Integrator(ode_space);
+		// Integrator integrator_source = Integrator(ode_source);
+		FluxSolutionOperator FSO = FluxSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
+		SourceSolutionOperator SSO = SourceSolutionOperator(model);
 
-		Integrator integrator_space = Integrator(ode_space);
-		Integrator integrator_source = Integrator(ode_source);
 
 		double dt;
 		int iteration;
@@ -105,8 +100,10 @@ int main(int argc, char **argv)
 			if (time + dt * 1.01 > settings.time_end)
 				dt = settings.time_end - time;
 
-			integrator_space.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
-			integrator_source.evaluate(source_solution_operator, Q, Qaux, parameters, dt, Q);
+			FLUX_INTEGRATOR(FSO, Q, Qaux, parameters, dt, Q);
+			SSO.evaluate(Q, Qaux, parameters, dt, Q);
+			// integrator_space.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
+			// integrator_source.evaluate(source_solution_operator, Q, Qaux, parameters, dt, Q);
 
 			std::cout << "iteration: " << iteration << " time: " << time << " dt: " << dt << std::endl;
 
@@ -124,11 +121,11 @@ int main(int argc, char **argv)
 		// saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
 		H5Fclose(file_fields);
+		delete timestepper;
 		auto end = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> diff_loop = end-start_loop;
 		std::cout << "Loop time: " << diff_loop.count() << " s\n";
 	}
-	// delete timestepper();
 	double time_end = timer.seconds();
 	std::cout << "Time elapsed: " << time_end - time_start << std::endl;
 	Kokkos::finalize();

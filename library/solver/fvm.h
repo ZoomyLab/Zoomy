@@ -6,9 +6,10 @@
 #include "mesh.h"
 #include "numerical_flux.h"
 #include "nonconservative_flux.h"
+#include "ode_source.h"
 
-#ifndef SPACE_SOLUTION_OPERATOR_H
-#define SPACE_SOLUTION_OPERATOR_H
+#ifndef FVM_H
+#define FVM_H
 
 void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, const Mesh& mesh, const BoundaryConditions& boundary_conditions, realArr2& out)
 {
@@ -128,14 +129,8 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
 
 }
 
-class OdeOperator
-{
-    public:
-        virtual void evaluate(const realArr2 Q, const realArr2 Qaux, const realArr param, realArr2 &out) = 0;
-        virtual ~OdeOperator() = default;
-};
 
-class SpaceSolutionOperator : public OdeOperator
+class FluxSolutionOperator
 {
     // TODO this should not hold the mesh or any other data!
     private:
@@ -146,7 +141,7 @@ class SpaceSolutionOperator : public OdeOperator
         void (*method)(const realArr2, const realArr2, const realArr, const intArr2, Model&, const Mesh&, const BoundaryConditions&, realArr2&);
 
     public:
-        SpaceSolutionOperator(Model model, const BoundaryConditions boundary_conditions, const Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
+        FluxSolutionOperator(Model model, const BoundaryConditions boundary_conditions, const Mesh mesh, intArr2 element_neighbor_index_tuples, std::string method): model(model), boundary_conditions(boundary_conditions), mesh(mesh), element_neighbor_index_tuples(element_neighbor_index_tuples)
         {
             if (method == "fvm_semidiscrete_split_step")
             {
@@ -154,10 +149,10 @@ class SpaceSolutionOperator : public OdeOperator
             }
             else
             {
-                this->method = fvm_semidiscrete_split_step;
+                throw std::invalid_argument("Invalid space solution method");
             }
         }
-        ~SpaceSolutionOperator() = default;
+        ~FluxSolutionOperator() = default;
 
         void evaluate(const realArr2 Q, const realArr2 Qaux, const realArr param, realArr2& out)
         {
@@ -165,7 +160,7 @@ class SpaceSolutionOperator : public OdeOperator
         }
 };
 
-class SourceSolutionOperator : public OdeOperator
+class SourceSolutionOperator 
 {
     private:
         Model model;
@@ -174,7 +169,7 @@ class SourceSolutionOperator : public OdeOperator
         SourceSolutionOperator(Model model): model(model){}
         ~SourceSolutionOperator() = default;
 
-        void evaluate(const realArr2 Q, const realArr2 Qaux, const realArr param, realArr2& out)
+        void evaluate(const realArr2 Q, const realArr2 Qaux, const realArr param, double dt, realArr2& out)
         {
             const int n_elements = Q.extent(0);
             const int n_fields = Q.extent(1);
@@ -182,7 +177,9 @@ class SourceSolutionOperator : public OdeOperator
             Kokkos::parallel_for("Source Solution Operator", n_elements, KOKKOS_LAMBDA (const int i)
             {
                 realArr s = realArr("s", n_fields);
-                model.source(get_element2(Q, i), get_element2(Qaux, i), param, s);
+                // model.source(get_element2(Q, i), get_element2(Qaux, i), param, s);
+                // integrator.evaluate(get_element2(Q, i), get_element2(Qaux, i), param, dt, s);
+                SOURCE_INTEGRATOR(model, get_element2(Q, i), get_element2(Qaux, i), param, dt, s);
                 for (int j = 0; j < n_fields; ++j)
                 {
                     out(i, j) = s(j);
@@ -192,4 +189,4 @@ class SourceSolutionOperator : public OdeOperator
         }
 };
 
-#endif // SPACE_SOLUTION_OPERATOR_H
+#endif // FVM_H

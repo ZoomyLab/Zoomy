@@ -43,8 +43,8 @@ def build(
             f"PATH_FIELDS={path_fields}",
             f"TIMESTEPPER=Adaptive",
             f"TIMESTEPPER_PARAM={0.45}",
-            f"ODE_SPACE=RK1",
-            f"ODE_SOURCE=RK1",
+            f"ODE_FLUX={1}",
+            f"ODE_SOURCE={1}",
         ]
     )
     print(f"make command : {command}")
