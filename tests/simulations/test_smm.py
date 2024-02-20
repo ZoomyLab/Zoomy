@@ -516,7 +516,7 @@ def test_c_turbulence():
         compute_dt=timestepping.constant(dt=0.01),
         time_end=2.00,
         output_snapshots=100,
-        output_clean_dir=False,
+        output_clean_dir=True,
         output_dir="outputs/output_c",
     )
 

@@ -9,6 +9,8 @@ import library.mesh.fvm_mesh as fvm_mesh
 
 
 def init_output_directory(path, clean):
+    main_dir = os.getenv("SMS")
+    path = os.path.join(main_dir, path) 
     os.makedirs(path, exist_ok=True)
     if clean:
         filelist = [f for f in os.listdir(path)]
@@ -20,6 +22,8 @@ def init_output_directory(path, clean):
 
 
 def save_settings(filepath, settings):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, "settings.hdf5"), "w") as f:
         attrs = f.create_group("parameters")
         for k, v in settings.parameters.items():
@@ -48,9 +52,10 @@ def save_settings(filepath, settings):
 def clean_files(filepath, filename=".vtk"):
     main_dir = os.getenv("SMS")
     abs_filepath = os.path.join(main_dir, filepath)
-    for file in os.listdir(abs_filepath):
-        if file.endswith(filename):
-            os.remove(os.path.join(abs_filepath, file))
+    if os.path.exists(abs_filepath):
+        for file in os.listdir(abs_filepath):
+            if file.endswith(filename):
+                os.remove(os.path.join(abs_filepath, file))
 
 
 def save_fields(
@@ -73,6 +78,8 @@ def save_fields(
 def _save_fields_to_hdf5(
     filepath, i_snapshot, time, Q, Qaux=None, filename="fields.hdf5", overwrite=True
 ):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, filename), "a") as f:
         group_name = "iteration_" + str(i_snapshot)
         if group_name in f:
@@ -88,6 +95,8 @@ def _save_fields_to_hdf5(
 
 
 def load_fields_from_hdf5(filepath, i_snapshot=-1):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "r") as f:
         if i_snapshot == -1:
             i_snapshot = len(f.keys()) - 1

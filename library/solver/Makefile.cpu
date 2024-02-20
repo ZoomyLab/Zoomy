@@ -15,7 +15,6 @@ default: main
 
 
 include ${KOKKOS_PATH}/Makefile.kokkos
-include ${PETSC_PATH}/Makefile.kokkos
 
 
 # main: $(EXE) $(UNITTESTS)
