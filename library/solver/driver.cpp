@@ -21,6 +21,7 @@
 #include <string>
 #include <mpi.h>
 #include <chrono>
+#include <cstdlib>
 
 
 int main(int argc, char **argv)
@@ -32,10 +33,21 @@ int main(int argc, char **argv)
 	const int n_elements = N_ELEMENTS;
 	const int n_fields = N_FIELDS;
 	const int n_fields_aux = N_FIELDS_AUX;
-	const int n_threads = N_THREADS;
 	const std::string path_settings = PATH_SETTINGS;
 	const std::string path_mesh = PATH_MESH;
 	const std::string path_fields = PATH_FIELDS;
+
+	const char* env_n_threads = std::getenv("OMP_N_THREADS");
+	int n_threads = 1; // Default value
+	if (env_n_threads) {
+	    try {
+	        n_threads = std::stoi(env_n_threads);
+	    } catch (std::invalid_argument& e) {
+	        std::cout << "Invalid value for OMP_N_THREADS, using default value 1" << std::endl;
+	    }
+	} else {
+	    std::cout << "OMP_N_THREADS not set, using default value 1" << std::endl;
+	}
 	
 	Kokkos::Timer timer;
 	double time_start = timer.seconds();

@@ -11,7 +11,6 @@ def build(
     path_settings="outputs/output_c/settings.hdf5",
     path_mesh="outputs/output_c/mesh.hdf5",
     path_fields="outputs/output_c/fields.hdf5",
-    n_threads=1,
 ):
     main_dir = os.getenv("SMS")
     path = f"{main_dir}/library/solver"
@@ -23,8 +22,6 @@ def build(
     path_settings = os.path.join(main_dir, path_settings)
     path_mesh = os.path.join(main_dir, path_mesh)
     path_fields = os.path.join(main_dir, path_fields)
-    n_threads = n_threads
-    print(f"number of used threads: {n_threads}")
 
     command = "make clean"
     make_process = subprocess.Popen(
@@ -41,7 +38,6 @@ def build(
             f"N_ELEMENTS={n_elements}",
             f"N_FIELDS={n_fields}",
             f"N_FIELDS_AUX={n_fields_aux}",
-            f"N_THREADS={n_threads}",
             f"PATH_SETTINGS={path_settings}",
             f"PATH_MESH={path_mesh}",
             f"PATH_FIELDS={path_fields}",
@@ -57,10 +53,10 @@ def build(
         print(subprocess.STDOUT)
 
 
-def run_driver(n_threads:int):
+def run_driver():
     main_dir = os.getenv("SMS")
     path = f"{main_dir}/bin"
-    command = " ".join(["export OPM_PROC_BIND=spread;", "export OMP_PLACES=threads;", f"export OMP_NUM_THREADS={n_threads};","./volkos;"])
+    command = " ".join(["./volkos;"])
     make_process = subprocess.Popen(
         command, shell=True, stderr=subprocess.STDOUT, cwd=path
     )

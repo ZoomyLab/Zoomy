@@ -318,10 +318,9 @@ def fvm_c_unsteady_semidiscete(
             path_settings=os.path.join(settings.output_dir, "settings.hdf5"),
             path_mesh=os.path.join(settings.output_dir, "mesh.hdf5"),
             path_fields=os.path.join(settings.output_dir, "fields.hdf5"),
-            n_threads=settings.n_threads,
         )
 
-    c_interface.run_driver(settings.n_threads)
+    c_interface.run_driver()
 
 
 def fvm_unsteady_semidiscrete(
