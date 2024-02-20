@@ -17,12 +17,14 @@ if [ ! -d "$../bin" ]; then
 fi
 
 kokkos_path_def='${VOLKOSPATH}/dependencies/kokkos'
+petsc_path_def='${VOLKOSPATH}/dependencies/petsc'
 eigen_path_def='${VOLKOSPATH}/dependencies/eigen'
 pnetcdf_path_def='${VOLKOSPATH}/dependencies/pnetcdf/src'
 hdf5_path_def='${VOLKOSPATH}/dependencies/hdf5/hdf5'
 
 # variable names in the Makefile
 kokkos_path_var="KOKKOS_PATH"
+petsc_path_var="PETSC_PATH"
 eigen_path_var="EIGEN_PATH"
 pnetcdf_path_var="PNETCDF_PATH"
 hdf5_path_var="HDF5_PATH"
@@ -31,6 +33,7 @@ hdf5_path_var="HDF5_PATH"
 alldefault=0
 # declare empty, because zero-length is used as condition later
 kokkos_path=
+petsc_path=
 eigen_path=
 pnetcdf_path=
 hdf5_path=
@@ -43,7 +46,7 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
 else
 	VALID_ARGS=$(getopt \
 	-o hak:p: \
-	--long help,all-default,kokkos:,eigen:, hdf5:,  \
+	--long help,all-default,kokkos:,eigen:, hdf5:, petsc:,  \
 	-- "$@")
 	if [[ $? -ne 0 ]]; then
 		echo "getopt failed to parse arguments. Exiting..."
@@ -65,7 +68,9 @@ Valid options are:
                        Default: \"$eigen_path_def\"
   -h, --hdf5      : Provide path to existing hdf5 installation.
                        Default: \"$hdf5_path_def\"
-  -p, --pnetcdf      : Provide path to existing pnetcdf installation.
+  -pet, --petsc   : Provide path to existing petsc installation.
+                       Default: \"$petsc_path_def\"
+  -pnet, --pnetcdf   : Provide path to existing pnetcdf installation.
                        Default: \"$pnetcdf_path_def\"
 
 If a relative path is provided, it is interpreted as relative to
@@ -91,6 +96,15 @@ for specifying the paths.
 				echo "kokkos path: \"$kokkos_path\"."
 				shift 2
 				;;
+			-pet | --petsc)
+				if [ "$2" = "default" ]; then
+					petsc_path="$petsc_path_def"
+				else
+					petsc_path="$2"
+				fi
+				echo "petsc path: \"$petsc_path\"."
+				shift 2
+				;;
 			-e | --eigen)
 				if [ "$2" = "default" ]; then
 					eigen_path="$eigen_path_def"
@@ -103,7 +117,7 @@ for specifying the paths.
 			--) shift;
 				break
 				;;
-			-p | --pnetcf)
+			-pnet | --pnetcf)
 				if [ "$2" = "default" ]; then
 					pnetcdf_path="$pnetcdf_path_def"
 				else
@@ -149,7 +163,7 @@ require_env_var MPICC
 echo -e "Prerequisites met.\n"
 
 
-if ((alldefault == 0)) &&  [[ ( -z "$kokkos_path" || -z "$eigen_path" || -z "$pnetcdf_path" || -z "$hdf5_path") ]]; then
+if ((alldefault == 0)) &&  [[ ( -z "$kokkos_path" || -z "petsc_path" || -z "$eigen_path" || -z "$pnetcdf_path" || -z "$hdf5_path") ]]; then
 	echo -n \
 "Entering interactive mode...
 -------------------------------------------------
@@ -232,6 +246,7 @@ ask_or_default() {
 }
 
 kokkos_path=$(ask_or_default "$kokkos_path" "$kokkos_path_def" "$kokkos_path_var")
+petsc_path=$(ask_or_default "$petsc_path" "$petsc_path_def" "$petsc_path_var")
 eigen_path=$(ask_or_default "$eigen_path" "$eigen_path_def" "$eigen_path_var")
 pnetcdf_path=$(ask_or_default "$pnetcdf_path" "$pnetcdf_path_def" "$pnetcdf_path_var")
 hdf5_path=$(ask_or_default "$hdf5_path" "$hdf5_path_def" "$hdf5_path_var")
@@ -239,6 +254,7 @@ hdf5_path=$(ask_or_default "$hdf5_path" "$hdf5_path_def" "$hdf5_path_var")
 echo "Paths: "
 echo "$path_varname=\"$VOLKOSPATH\""
 echo "$kokkos_path_var=\"$kokkos_path\""
+echo "$petsc_path_var=\"$petsc_path\""
 echo "$eigen_path_var=\"$eigen_path\""
 echo "$pnetcdf_path_var=\"$pnetcdf_path\""
 echo "$hdf5_path_var=\"$hdf5_path\""
@@ -255,6 +271,7 @@ replace_path() {
 if [ -f "$makefile" ]; then
 	echo "Entering paths into Makefile..."
 	replace_path "$kokkos_path_var" "$kokkos_path"
+	replace_path "$petsc_path_var" "$petsc_path"
 	replace_path "$eigen_path_var" "$eigen_path"
 	replace_path "$pnetcdf_path_var" "$pnetcdf_path"
 	replace_path "$hdf5_path_var" "$hdf5_path"
@@ -273,6 +290,14 @@ if [ "$kokkos_path" = "$kokkos_path_def" ]; then
 # 	get_kokkos "$kokkos_ver"
   cd ${VOLKOSPATH}/dependencies
 	"$sd/get_kokkos.sh"
+	echo ""
+  cd ${VOLKOSPATH}
+fi
+
+if [ "$petsc_path" = "$petsc_path_def" ]; then
+# 	get_petsc "$petsc_ver"
+  cd ${VOLKOSPATH}/dependencies
+	"$sd/get_petsc.sh"
 	echo ""
   cd ${VOLKOSPATH}
 fi

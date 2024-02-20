@@ -56,6 +56,8 @@ GIT_COMMIT := $(shell git describe)
 EIGEN_PATH=${VOLKOSPATH}/dependencies/eigen
 KOKKOS_PATH=${VOLKOSPATH}/dependencies/kokkos
 KOKKOS_SRC_PATH = ${KOKKOS_PATH}
+PETSC_PATH=${VOLKOSPATH}/dependencies/petsc
+PETSC_SRC_PATH = ${KOKKOS_PATH}
 #TODO path difference windows/wsl vs laptop
 # PNETCDF_PATH=${VOLKOSPATH}/dependencies/pnetcdf/src
 PNETCDF_PATH=${VOLKOSPATH}/dependencies/pnetcdf/src
