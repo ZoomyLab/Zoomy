@@ -36,6 +36,14 @@ int main(int argc, char **argv)
 	const std::string path_settings = PATH_SETTINGS;
 	const std::string path_mesh = PATH_MESH;
 	const std::string path_fields = PATH_FIELDS;
+	const std::string timestepper_type = TIMESTEPPER;
+	const double timestepper_param = TIMESTEPPER_PARAM;
+	const std::string ode_space = ODE_SPACE;
+	const std::string ode_source = ODE_SOURCE;
+	std::cout << "timestepper_type: " << timestepper_type << std::endl;
+	std::cout << "timestepper_param: " << timestepper_param << std::endl;
+	std::cout << "ode_space: " << ode_space << std::endl;
+	std::cout << "ode_source: " << ode_source << std::endl;
 
 	const char* env_n_threads = std::getenv("OMP_N_THREADS");
 	int n_threads = 1; // Default value
@@ -70,10 +78,8 @@ int main(int argc, char **argv)
 		const auto boundary_conditions = BoundaryConditions();
 		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
-		TimeStepper* timestepper = new Constant(0.01);
+		TimeStepper* timestepper = get_timestepper(timestepper_type, timestepper_param, mesh, model);
 
-		int iteration = 0;
-		double dt;
 		double max_abs_ev;
 
         const int n_snapshots = 100;
@@ -82,8 +88,11 @@ int main(int argc, char **argv)
 		SpaceSolutionOperator space_solution_operator = SpaceSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 		SourceSolutionOperator source_solution_operator = SourceSolutionOperator(model);
 
-		Integrator integrator_space = Integrator("RK1");
-		Integrator integrator_source = Integrator("RK1");
+		Integrator integrator_space = Integrator(ode_space);
+		Integrator integrator_source = Integrator(ode_source);
+
+		double dt;
+		int iteration;
 
 		// settings.time_end = 2.0;
 		// RUN

@@ -31,6 +31,10 @@ public:
         {
             this->method = RK1;
         }
+        else
+        {
+            throw std::invalid_argument("Invalid ODE integration method");
+        }
     }
     void evaluate(OdeOperator& func, const realArr2 Q, const realArr2 Qaux, const realArr param, double dt, realArr2& out)
     {

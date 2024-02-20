@@ -38,3 +38,15 @@ public:
     }
     ~Adaptive() {}
 };
+
+TimeStepper* get_timestepper(std::string method, double param, const Mesh& mesh, Model& model)
+{
+    TimeStepper *timestepper;
+    if (method == "Constant")
+        timestepper = new Constant(param);
+    else if (method == "Adaptive")
+		timestepper = new Adaptive(param, mesh, model);
+    else
+        throw std::invalid_argument("Invalid time stepping method");
+    return timestepper;
+}
