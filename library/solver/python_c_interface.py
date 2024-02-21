@@ -61,6 +61,7 @@ def run_driver():
     main_dir = os.getenv("SMS")
     path = f"{main_dir}/bin"
     command = " ".join(["./volkos;"])
+    # command = " ".join(["mpicc ./volkos;"])
     make_process = subprocess.Popen(
         command, shell=True, stderr=subprocess.STDOUT, cwd=path
     )

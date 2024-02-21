@@ -11,6 +11,7 @@ get_petsc() {
 		echo "Cloning PETSc..."
 		git clone -b release https://gitlab.com/petsc/petsc.git petsc
 		cd petsc
+		# ./configure --with-fortran-bindings=0 --download-fblaslapack --PETSC_ARCH=build_arch --download-mpich --PETSC_DIR=$PWD --prefix=$PWD/build
 		./configure --with-fortran-bindings=0 --download-fblaslapack --PETSC_ARCH=build_arch --PETSC_DIR=$PWD --prefix=$PWD/build
 		make all check
 	fi
