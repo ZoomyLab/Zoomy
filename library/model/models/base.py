@@ -8,7 +8,7 @@ from ctypes import cdll
 from functools import partial
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol 
+from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol, fraction, cancel
 from sympy import zeros, ones
 from sympy.utilities.autowrap import autowrap, ufuncify, make_routine
 from sympy.abc import x, y 
@@ -24,6 +24,21 @@ from library.misc.custom_types import FArray
 from library.misc.misc import vectorize  # type: ignore
 from library.misc.misc import IterableNamespace
 from library.model.sympy2c import create_module
+
+def custom_simplify(expr):
+    return powsimp(expr, combine="all", force=False, deep=True)
+
+def regularize_denominator(expr, regularization_constant = 10**(-4), regularize = True):
+    if not regularize:
+        return expr
+    def regularize(expr):
+        (nom, den) = fraction(cancel(expr))
+        return nom * den / (den*2 + regularization_constant)
+    for i in range(expr.shape[0]):
+        for j in range(expr.shape[1]):
+            expr[i,j] = regularize(expr[i,j])
+    return expr
+
 
 def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
     def numerical_eigenvalues(Q, Qaux, parameters, normal, Qout):
@@ -145,18 +160,18 @@ class Model:
             ]
             for d in range(self.dimension):
                 self.sympy_flux_jacobian[d] = Matrix(
-                    powsimp(
-                        Matrix(self.sympy_flux[d]).jacobian(self.variables),
-                        combine="all",
-                        force=True,
+                        custom_simplify(
+                            Matrix(self.sympy_flux[d]).jacobian(self.variables),
                     )
                 )
         else:
             self.sympy_flux_jacobian = self.flux_jacobian()
         self.sympy_source = self.source()
         if self.source_jacobian() is None:
-            self.sympy_source_jacobian = powsimp(
-                self.sympy_source.jacobian(self.variables), combine="all", force=True
+            self.sympy_source_jacobian = Matrix(
+                    custom_simplify(
+                        Matrix(self.sympy_source).jacobian(self.variables),
+                )
             )
         else:
             self.sympy_source_jacobian = self.source_jacobian()
@@ -252,7 +267,7 @@ class Model:
         sympy_flux = deepcopy(self.sympy_flux)
         sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
         sympy_source = deepcopy(self.sympy_source)
-        sympy_source_jacobian = deepcopy(self.sympy_source_jacobian)
+        sympy_source_jacobian = deepcopy(regularize_denominator(self.sympy_source_jacobian))
         sympy_nonconservative_matrix = deepcopy(self.sympy_nonconservative_matrix)
         sympy_quasilinear_matrix = deepcopy(self.sympy_quasilinear_matrix)
         sympy_eigenvalues = deepcopy(self.sympy_eigenvalues)
@@ -571,7 +586,7 @@ def eigenvalue_dict_to_matrix(eigenvalues):
     evs = []
     for ev, mult in eigenvalues.items():
         for i in range(mult):
-            evs.append(powsimp(ev, combine="all", force=True))
+            evs.append(custom_simplify(ev))
     return Matrix(evs)
 
 
