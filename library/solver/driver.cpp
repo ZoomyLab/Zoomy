@@ -26,28 +26,131 @@
 #include <chrono>
 #include <cstdlib>
 
-int main(int argc, char **args)
+int linear_solve(const realArr2& matrix, const realArr& rhs, realArr& solution)
+{
+  PetscInt n = matrix.extent(0);
+  Vec         sol, b; /* approx solution, RHS, exact solution */
+  Mat         A;       /* linear system matrix */
+  KSP         ksp;     /* linear solver context */
+  PC          pc;      /* preconditioner context */
+  PetscReal   norm;    /* norm of solution error */
+  PetscInt    i, col[n], its;
+  PetscScalar value[n];
+
+  /*
+     Create vectors
+  */
+  PetscCall(VecCreate(PETSC_COMM_SELF, &sol));
+  PetscCall(PetscObjectSetName((PetscObject)sol, "solution"));
+  PetscCall(VecSetSizes(sol, PETSC_DECIDE, n));
+  PetscCall(VecSetFromOptions(sol));
+  PetscCall(VecCreate(PETSC_COMM_SELF, &b));
+  PetscCall(PetscObjectSetName((PetscObject)b, "rhs"));
+  PetscCall(VecSetSizes(b, PETSC_DECIDE, n));
+  PetscCall(VecSetFromOptions(b));
+
+  /*
+     Create matrix.
+  */
+  PetscCall(MatCreate(PETSC_COMM_SELF, &A));
+  PetscCall(MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, n, n));
+  PetscCall(MatSetFromOptions(A));
+  PetscCall(MatSetUp(A));
+
+  /*
+    Set vector 
+  */
+  for (i = 0; i < n; i++) {
+	  PetscCall(VecSetValue(b, i, rhs(i), INSERT_VALUES));
+  }
+  PetscCall(VecAssemblyBegin(b));
+  PetscCall(VecAssemblyEnd(b));
+
+  /*
+     Assemble matrix
+  */
+  for (i = 0; i < n; i++) {
+  	for (int j = 0; j < n; j++) {
+		PetscCall(MatSetValue(A, i, j, matrix(i,j), INSERT_VALUES));
+	}
+  }
+  PetscCall(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+  PetscCall(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+
+
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                Create the linear solver and set various options
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  PetscCall(KSPCreate(PETSC_COMM_SELF, &ksp));
+
+  /*
+     Set operators. Here the matrix that defines the linear system
+     also serves as the matrix that defines the preconditioner.
+  */
+  PetscCall(KSPSetOperators(ksp, A, A));
+
+  /*
+     Set linear solver defaults for this problem (optional).
+     - By extracting the KSP and PC contexts from the KSP context,
+       we can then directly call any KSP and PC routines to set
+       various options.
+     - The following four statements are optional; all of these
+       parameters could alternatively be specified at runtime via
+       KSPSetFromOptions();
+  */
+  PetscCall(KSPGetPC(ksp, &pc));
+  PetscCall(PCSetType(pc, PCJACOBI));
+  PetscCall(KSPSetTolerances(ksp, 1.e-5, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
+
+  /*
+    Set runtime options, e.g.,
+        -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
+    These options will override those specified above as long as
+    KSPSetFromOptions() is called _after_ any other customization
+    routines.
+  */
+  PetscCall(KSPSetFromOptions(ksp));
+
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                      Solve the linear system
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  PetscCall(KSPSolve(ksp, b, sol));
+
+  PetscCall(KSPGetIterationNumber(ksp, &its));
+  PetscCall(PetscPrintf(PETSC_COMM_SELF, "Iterations %" PetscInt_FMT "\n", its));
+
+//   /* check that KSP automatically handles the fact that the the new non-zero values in the matrix are propagated to the KSP solver */
+//   PetscCall(MatShift(A, 2.0));
+//   PetscCall(KSPSolve(ksp, b, x));
+
+  /*
+	Copy the values back to the solution array
+  */
+
+  for (i = 0; i < n; i++) {
+	  VecGetValues(sol, 1, &i, &solution[i]);
+  }
+
+  /*
+     Free work space.  All PETSc objects should be destroyed when they
+     are no longer needed.
+  */
+  PetscCall(KSPDestroy(&ksp));
+  PetscCall(VecDestroy(&b));
+  PetscCall(VecDestroy(&sol));
+  PetscCall(MatDestroy(&A));
+  return 0;
+}
+
+int linear_solve_test(int n)
 {
   Vec         x, b, u; /* approx solution, RHS, exact solution */
   Mat         A;       /* linear system matrix */
   KSP         ksp;     /* linear solver context */
   PC          pc;      /* preconditioner context */
   PetscReal   norm;    /* norm of solution error */
-  PetscInt    i, n = 10, col[3], its;
-  PetscMPIInt size;
+  PetscInt    i, col[3], its;
   PetscScalar value[3];
-
-  PetscFunctionBeginUser;
-  PetscCall(PetscInitialize(&argc, &args, (char *)0, ""));
-  PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
-  PetscCheck(size == 1, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "This is a uniprocessor example only!");
-
-  PetscCall(PetscOptionsGetInt(NULL, NULL, "-n", &n, NULL));
-
-  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-         Compute the matrix and right-hand-side vector that define
-         the linear system, Ax = b.
-     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
   /*
      Create vectors.  Note that we form 1 vector from scratch and
@@ -160,34 +263,14 @@ int main(int argc, char **args)
   */
   PetscCall(KSPDestroy(&ksp));
 
-  /* test if prefixes properly propagate to PCMPI objects */
-//   if (PCMPIServerActive) {
-//     PetscCall(KSPCreate(PETSC_COMM_SELF, &ksp));
-//     PetscCall(KSPSetOptionsPrefix(ksp, "prefix_test_"));
-//     PetscCall(MatSetOptionsPrefix(A, "prefix_test_"));
-//     PetscCall(KSPSetOperators(ksp, A, A));
-//     PetscCall(KSPSetFromOptions(ksp));
-//     PetscCall(KSPSolve(ksp, b, x));
-//     PetscCall(KSPDestroy(&ksp));
-//   }
-
   PetscCall(VecDestroy(&x));
   PetscCall(VecDestroy(&u));
   PetscCall(VecDestroy(&b));
   PetscCall(MatDestroy(&A));
-
-  /*
-     Always call PetscFinalize() before exiting a program.  This routine
-       - finalizes the PETSc libraries as well as MPI
-       - provides summary and diagnostic information if certain runtime
-         options are chosen (e.g., -log_view).
-  */
-  PetscCall(PetscFinalize());
   return 0;
 }
 
-
-int main2(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	auto start_main = std::chrono::high_resolution_clock::now();
 	// read make parameters
@@ -213,7 +296,17 @@ int main2(int argc, char **argv)
 	} else {
 	    std::cout << "OMP_N_THREADS not set, using default value 1" << std::endl;
 	}
-	
+
+	PetscInt n = 10;
+	PetscMPIInt size;
+
+	PetscFunctionBeginUser;
+  	PetscCall(PetscInitialize(&argc, &argv, (char *)0, ""));
+  	PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
+  	PetscCheck(size == 1, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "This is a uniprocessor example only!");
+  	PetscCall(PetscOptionsGetInt(NULL, NULL, "-n", &n, NULL));
+
+
 	Kokkos::Timer timer;
 	double time_start = timer.seconds();
   	Kokkos::InitializationSettings kokkosSettings;
@@ -247,6 +340,22 @@ int main2(int argc, char **argv)
 		FluxSolutionOperator FSO = FluxSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 		SourceSolutionOperator SSO = SourceSolutionOperator(model);
 
+
+		realArr2 A("Q", 2, 2);
+		realArr b("b", 2);
+		realArr x("x", 2);
+		A(0, 0) = 2.0;
+		A(1, 1) = 2.0;
+		b(0) = 1.0;
+		b(1) = 1.0;
+		std::cout << "--------------------------------" << std::endl;
+		std::cout << "--------------------------------" << std::endl;
+		std::cout << "--------------------------------" << std::endl;
+		int err = linear_solve(A, b, x);
+		std::cout << "x: " << x(0) << " " << x(1) << std::endl;
+		std::cout << "--------------------------------" << std::endl;
+		std::cout << "--------------------------------" << std::endl;
+		std::cout << "--------------------------------" << std::endl;
 
 		double dt;
 		int iteration;
@@ -294,5 +403,6 @@ int main2(int argc, char **argv)
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> diff_main = end-start_main;
 	std::cout << "Total time: " << diff_main.count() << " s\n";
+  	PetscCall(PetscFinalize());
 	return 0;
 }
