@@ -43,61 +43,6 @@ void BDF1(Model& model, const realArr Q, const realArr Qaux, const realArr param
 
 
     int err = solve_small_linear_system(A, rhs, out);
-    if (out(0) <= 0.)
-    {
-        for (int j = 0; j < param.extent(0); ++j)
-        {
-            std::cout << "param(" << j << ") = " << param(j) << std::endl;
-        }
-        for (int j = 0; j < n_fields; ++j)
-        {
-            std::cout << "out(" << j << ") = " << out(j) << std::endl;
-        }
-        for (int j = 0; j < n_fields; ++j)
-        {
-            std::cout << "Q(" << j << ") = " << Q(j) << std::endl;
-        }
-        for (int j = 0; j < n_fields; ++j)
-        {
-            for (int k = 0; k < n_fields; ++k)
-            {
-                std::cout << "J(" << j << ", " << k << ") = " << jac(j, k) << std::endl;
-            }
-
-        }
-        for (int j = 0; j < n_fields; ++j)
-        {
-            for (int k = 0; k < n_fields; ++k)
-            {
-                std::cout << "A(" << j << ", " << k << ") = " << A(j, k) << std::endl;
-            }
-
-        }
-        std::cout << "----------------" << std::endl;
-    }
-    bool bnan = false;
-    for (int i = 0; i < n_fields; ++i)
-    {
-        if (std::isnan(out(i))) bnan = true;
-
-    }
-    if (bnan)
-    {
-        std::cout << "NaNs found" << std::endl;
-        for (int i = 0; i < n_fields; ++i)
-        {
-            std::cout << "Q(" << i << ") = " << Q(i) << std::endl;
-            for (int j = 0; j < n_fields; ++j)
-            {
-                std::cout << "A(" << i << ", " << j << ") = " << A(i, j) << std::endl;
-            }
-        }
-        for (int i = 0; i < n_fields; ++i)
-        {
-            std::cout << "sol(" << i << ") = " << out(i) << std::endl;
-        }
-        std::cout << "----------------" << std::endl;
-    }
 }
 
 #if ODE_SOURCE == 1

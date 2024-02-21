@@ -30,6 +30,7 @@ def build(
     if make_process.wait() != 0:
         print(subprocess.STDOUT)
 
+    #TODO add make options from python (timestepper, ODE)
     command = " ".join(
         [
             "make",

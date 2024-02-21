@@ -103,9 +103,10 @@ ifeq ($(VOLKOS_DEBUG_MPI),1)
 debug=yes
 endif
 
-debug=yes
+# TODO add debug/profiling command line options
+debug=no
 profiling=no
-DEBUG=yes
+DEBUG=no
 ifeq ($(DEBUG),yes)
 debug=yes
 endif

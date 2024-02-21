@@ -111,16 +111,7 @@ int main(int argc, char **argv)
 				dt = settings.time_end - time;
 
 			FLUX_INTEGRATOR(FSO, Q, Qaux, parameters, dt, Q);
-			SSO.evaluate(Q, Qaux, parameters, dt, Q);
-			bool berr = false;
-			for (int i = 0; i < n_elements; ++i)
-			{
-				if (Q(0,i) <= 0.)
-				{
-					berr = true;
-				}
-			}
-			if (berr) break;
+			// SSO.evaluate(Q, Qaux, parameters, dt, Q);
 			// integrator_space.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
 			// integrator_source.evaluate(source_solution_operator, Q, Qaux, parameters, dt, Q);
 
