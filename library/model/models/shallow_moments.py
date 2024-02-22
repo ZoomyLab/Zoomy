@@ -330,7 +330,7 @@ class ShallowMoments2d(Model):
         return [nc_x, nc_y]
 
     def eigenvalues(self):
-        # compute eigenvalues for the level 0 system
+        # we delete heigher order moments (level >= 2) for analytical eigenvalues
         offset = self.levels+1
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
         for d in range(1, self.dimension):
