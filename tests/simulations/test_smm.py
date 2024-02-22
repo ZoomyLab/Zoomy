@@ -506,25 +506,27 @@ def test_c_solver(mesh_type):
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_c_turbulence():
-    level = 0
+    level = 8
     settings = Settings(
         name="ShallowMoments2d",
-        parameters={"g": 9.81, "C": 30.0, "nu": 0.01},
+        parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         #compute_dt=timestepping.adaptive(CFL=0.15),
         compute_dt=timestepping.constant(dt=0.01),
-        time_end=0.20,
+        time_end=3.00,
         output_snapshots=100,
-        output_clean_dir=True,
+        output_clean_dir=False,
         output_dir="outputs/output_c",
     )
 
     print(f"number of available cpus: {os.cpu_count()}")
 
+    velocity = 30.*1000./3600.
+    height = 0.5
     inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
-    inflow_dict[0] = 0.1
-    inflow_dict[1] = 0.*10
+    inflow_dict[0] = height
+    inflow_dict[1] = velocity * height
     outflow_dict = {}
     # outflow_dict = {0: 0.1}
 
@@ -540,7 +542,7 @@ def test_c_turbulence():
 
     def ic_func(x):
         Q = np.zeros(3+2*level, dtype=float)
-        Q[0] = 0.1
+        Q[0] = height
         Q[1] = 0.
         Q[2] = 0.
         # Q[3] = 0.1
@@ -559,17 +561,18 @@ def test_c_turbulence():
         boundary_conditions=bcs,
         initial_conditions=ic,
         # settings={"friction": ["chezy", "newtonian"]},
-        # settings={"friction": ["chezy"]},
-        settings={},
+        settings={"friction": ["newtonian"]},
+        # settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
-        # os.path.join(main_dir, "meshes/channel_2d_hole/mesh_coarse.msh"),
-        # os.path.join(main_dir, "meshes/channel_2d_hole/mesh_coarse.msh"),
-        "triangle",
-     )
-    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+    # mesh = Mesh.load_gmsh(
+    #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
+    #     "triangle",
+    #  )
+    mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
 
     fvm_c_unsteady_semidiscete(
         mesh,
@@ -578,10 +581,9 @@ def test_c_turbulence():
         ode_solver_flux="RK1",
         ode_solver_source="RK1",
         rebuild_model=True,
-        rebuild_mesh=True,
+        rebuild_mesh=False,
         rebuild_c=True,
     )
-    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
     io.generate_vtk(settings.output_dir)
 
