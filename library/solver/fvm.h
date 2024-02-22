@@ -118,13 +118,13 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         // model.eigenvalues(qj, qauxj, param, normal, eigenvalues);
         // max_abs_ev = max(max_abs_ev, max_abs(eigenvalues));
 
-        // numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
-        // nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
+        numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
+        nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
 
-        // for (int i = 0; i < n_fields; ++i)
-        // {
-        //     out(element, i) -= (F(i) + NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(element);
-        // }
+        for (int i = 0; i < n_fields; ++i)
+        {
+            out(element, i) -= (F(i) + NC(i)) * mesh.element_face_areas(element, face) / mesh.element_volume(element);
+        }
     });
 
 }
