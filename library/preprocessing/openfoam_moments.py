@@ -2,10 +2,18 @@ import pyvista as pv
 import matplotlib.pyplot as plt
 import numpy as np
 from copy import deepcopy
+import os
+import re
+from scipy.spatial import KDTree
+
+from library.mesh.fvm_mesh import Mesh
+from library.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
+
+
+main_dir = os.getenv("SMS")
 
 
 def load_file(filename):
-    filename = 'channelflow_coarse_103.vtm'
     reader = pv.get_reader(filename)
     # get(0) gets us the internal (not boundary) data. The boundary data is non-existant anyways in our case
     vtkfile = reader.read().get(0)
@@ -14,13 +22,18 @@ def load_file(filename):
 def get_fields(vtkfile, fieldnames):
     fields = []
     for fieldname in fieldnames:
-        field = vtkfile.point_data[fieldname]
+        #point field)s
+        # field = vtkfile.point_data[fieldname]
+        field = vtkfile.cell_data[fieldname]
         fields.append(np.array(field))
     return fields
     # return np.array(fields)
 
 def get_coordinates(vtkfile):
-    return np.array(vtkfile.points)
+    # point coordinates
+    # return np.array(vtkfile.points)
+    # cell centers
+    return vtkfile.cell_centers().points
 
 def get_time(vtkfile):
     return vtkfile.field_data['TimeValue'][0]
@@ -129,22 +142,61 @@ def convert_openfoam_to_moments_single(filename, n_levels):
     Q, basis = compute_shallow_moment_projection(fields, coordinates, n_levels)
     return coordinates, Q, time, basis
 
-def convert_openforam_to_moments(filepath, n_levels):
-    hdffile = h5py.File(os.path.join(filepath/'openfoam_moments.hdf5', 'w'))
+def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_order):
+    sort_order = None
+
+    # file order
+    file_number_list = []
+    file_start = ""
     for i_file, file in enumerate(os.listdir(filepath)):
         if file.endswith(".vtm"):
-            coordinates, Q, time, basis = convert_openfoam_to_moments_single(file, n_levels)
-            if i_file == 0:
-                return
-                # TODO save mesh
-            #TODO same time
-            #TODO save Q
+            file_start = file.split("_")[0]
+            file_start = file.rsplit('_', 1)[0]
+            index = int(file.rsplit('_', 1)[1].split('.')[0])
+            # index = int(re.findall(r'\d+', file)[-1])
+            file_number_list.append(index)
 
-def sort_openfoam_hdf5_file_by_mesh_coordinates(filepath_mesh, filepath_openfoam):
-    #TODO sort 
-    return 0
+    # first iteration
+    file0 = os.path.join(filepath, file_start) + "_" + str(0) + ".vtm"
+    coordinates, Q, time, basis = convert_openfoam_to_moments_single(file0, n_levels)
+    Q, sort_order = sort_fields_by_mesh(filepath_hdf5_mesh_for_order, coordinates, Q)
+    save_fields_to_hdf5(filepath, 0, time, Q, Qaux=None, filename="fields_openfoam.hdf5")
 
-    
+    iter = 1
+    total = len(file_number_list)
+    print(f'Conversion {iter}/{total} completed.')
+    iter +=1
+    # loop iterations
+    for i, i_file in enumerate(file_number_list[1:]):
+        file = os.path.join(filepath, file_start) + "_" + str(i_file) + ".vtm"
+        coordinates, Q, time, basis = convert_openfoam_to_moments_single(file, n_levels)
+        Q = apply_order_to_fields(sort_order, Q)
+        save_fields_to_hdf5(filepath, i+1, time, Q, Qaux=None, filename="fields_openfoam.hdf5")
+        print(f'Conversion {iter}/{total} completed.')
+        iter +=1
+    # loop iterations
+
+def sort_fields_by_mesh(filepath_mesh, coordinates, Q):
+    #coordinates are still 3d, while Q is 2d and the mesh is 2d
+    n_layers, n_elements_per_layer = get_number_of_layers_and_elements_in_plane(coordinates)
+    coords_2d = coordinates[:n_elements_per_layer,:2]
+    mesh = Mesh.from_hdf5(filepath_mesh)
+    coords_ordered = mesh.element_center
+    # Construct a KDTree from coords_2d
+    tree = KDTree(coords_2d)
+
+    # Find the indices of the nearest points in coords_2d to the points in coords_ordered
+    _, indices = tree.query(coords_ordered)
+
+    # Use these indices to sort Q and coords_2d
+    Q_sorted = Q[:,indices]
+    return Q_sorted, indices
+
+def apply_order_to_fields(order, Q):
+    return Q[:, order] 
+
+
+
 def plot_contour(coordinates, field):
     fig, ax = plt.subplots()
     n_layer, n_elements_per_layer = get_number_of_layers_and_elements_in_plane(coordinates)
@@ -213,18 +265,22 @@ def load_openfoam_file(filepath):
 
 
 def test_load():
-    coordinates, fields, time = load_openfoam_file('channelflow_coarse_131.vtm')
+    filepath = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse'), 'channelflow_coarse_0.vtm')
+    coordinates, fields, time = load_openfoam_file(filepath)
 
 def test_moment_projection():
-    coordinates, fields, time = load_openfoam_file('channelflow_coarse_131.vtm')
+    filepath = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse'), 'channelflow_coarse_0.vtm')
+    coordinates, fields, time = load_openfoam_file(filepath)
     Q, basis = compute_shallow_moment_projection(fields, coordinates, 3)
 
 def test_convert_openfoam_single():
-    X, Q, t, basis = convert_openfoam_to_moments_single('channelflow_coarse_131.vtm', 3)
+    filepath = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse'), 'channelflow_coarse_0.vtm')
+    X, Q, t, basis = convert_openfoam_to_moments_single(filepath, 3)
 
 def test_plots():
-    coordinates, fields, time = load_openfoam_file('channelflow_coarse_131.vtm')
-    X, Q, t, basis = convert_openfoam_to_moments_single('channelflow_coarse_131.vtm', 3)
+    filepath = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse'), 'channelflow_coarse_0.vtm')
+    coordinates, fields, time = load_openfoam_file(filepath)
+    X, Q, t, basis = convert_openfoam_to_moments_single(filepath, 3)
     fig, ax = plot_data_vs_moments(fields, coordinates, Q, basis, 0)
     plt.show()
     fig, ax = plot_basis(basis_legendre)
@@ -232,11 +288,34 @@ def test_plots():
     fig, ax = plot_contour(coordinates, Q[0])
     plt.show()
 
+def test_sort():
+    filepath = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse'), 'channelflow_coarse_0.vtm')
+    filepath_gmsh = os.path.join(os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'))
+
+    mesh_gmsh = Mesh.load_gmsh(filepath_gmsh, 'triangle')
+    mesh_gmsh.write_to_hdf5(os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse')))
+
+    filepath_hdf_mesh = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse/mesh.hdf5'))
+    mesh = Mesh.from_hdf5(filepath_hdf_mesh)
+
+    coordinates, fields, time = load_openfoam_file(filepath)
+    Q, basis = compute_shallow_moment_projection(fields, coordinates, 3)
+
+    # mesh_comparison = Mesh.load_gmsh(os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_3d.msh'), 'tetra')
+
+    sort_fields_by_mesh(filepath_hdf_mesh, coordinates, Q)
+
+def test_convert_openfoam_to_moments():
+    filepath = os.path.join(main_dir, 'openfoam_data/channelflow_coarse')
+    filepath_target_mesh = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse/mesh.hdf5'))
+    convert_openforam_to_moments(filepath, 3, filepath_target_mesh)
+
 
 if __name__ == '__main__':
 
-    test_load()
-    test_moment_projection()
-    test_convert_openfoam_single()
-    test_plots()
-
+    # test_load()
+    # test_moment_projection()
+    # test_convert_openfoam_single()
+    # test_plots()
+    # test_sort()
+    test_convert_openfoam_to_moments()
