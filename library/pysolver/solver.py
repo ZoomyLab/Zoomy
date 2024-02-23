@@ -41,7 +41,7 @@ class Settings:
     output_dir: str = "outputs/output"
     output_clean_dir: bool = True
     solver_code_base: str = "python"
-    n_threads: int = 1
+    callbacks: [str] = []
 
 
 def _initialize_problem(model, mesh):

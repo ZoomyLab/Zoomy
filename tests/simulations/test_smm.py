@@ -506,7 +506,8 @@ def test_c_solver(mesh_type):
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_c_turbulence():
-    level = 8
+    main_dir = os.getenv("SMS")
+    level = 3
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
@@ -516,8 +517,9 @@ def test_c_turbulence():
         compute_dt=timestepping.constant(dt=0.01),
         time_end=3.00,
         output_snapshots=100,
-        output_clean_dir=False,
-        output_dir="outputs/output_c",
+        output_clean_dir=True,
+        output_dir=os.path.join(main_dir, "outputs/output_c"),
+        callbacks=['LoadOpenfoam']
     )
 
     print(f"number of available cpus: {os.cpu_count()}")
@@ -532,11 +534,16 @@ def test_c_turbulence():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="hole"),
+            # BC.Wall(physical_tag="hole"),
+            # BC.Wall(physical_tag="top"),
+            # BC.Wall(physical_tag="bottom"),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.Wall(physical_tag="pillar"),
             BC.Wall(physical_tag="top"),
             BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
 
@@ -565,14 +572,15 @@ def test_c_turbulence():
         # settings={},
     )
     main_dir = os.getenv("SMS")
-    # mesh = Mesh.load_gmsh(
+    mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
-    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+        # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+        os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
     #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
-    #     "triangle",
-    #  )
-    mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+        "triangle",
+     )
+    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
 
     fvm_c_unsteady_semidiscete(
         mesh,
@@ -581,7 +589,7 @@ def test_c_turbulence():
         ode_solver_flux="RK1",
         ode_solver_source="RK1",
         rebuild_model=True,
-        rebuild_mesh=False,
+        rebuild_mesh=True,
         rebuild_c=True,
     )
 

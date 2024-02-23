@@ -22,6 +22,7 @@ public:
     int output_snapshots;
     bool output_write_all;
     bool output_clean_dir;
+    std::vector<std::string> callbacks;
 
     Settings(std::string filepath)
     {
@@ -34,6 +35,7 @@ public:
         readBool(file, "output_write_all", this->output_write_all);
         readBool(file, "output_clean_dir", this->output_clean_dir);
         readBool(file, "truncate_last_time_step", this->truncate_last_time_step);
+        readStringArray(file, "callbacks", this->callbacks);
         H5Fclose(file);
     }
 };

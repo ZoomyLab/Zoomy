@@ -16,6 +16,7 @@
 #include "timestepping.h"
 #include "max_abs_eigenvalue.h"
 #include "iterators.h"
+#include "callbacks.h"
 #include<Kokkos_Core.hpp>
 #include <petscksp.h>
 
@@ -53,14 +54,14 @@ int main(int argc, char **argv)
 	    std::cout << "OMP_N_THREADS not set, using default value 1" << std::endl;
 	}
 
-	PetscInt n = 10;
+	// PetscInt n = 10;
 	PetscMPIInt size;
 
 	PetscFunctionBeginUser;
   	PetscCall(PetscInitialize(&argc, &argv, (char *)0, ""));
   	PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
   	PetscCheck(size == 1, PETSC_COMM_WORLD, PETSC_ERR_WRONG_MPI_SIZE, "This is a uniprocessor example only!");
-  	PetscCall(PetscOptionsGetInt(NULL, NULL, "-n", &n, NULL));
+  	// PetscCall(PetscOptionsGetInt(NULL, NULL, "-n", &n, NULL));
 
 
 	Kokkos::Timer timer;
@@ -73,8 +74,8 @@ int main(int argc, char **argv)
 		std::cout << "C program running" << std::endl;
 
 		// INITIALIZE arrays
-		realArr2 Q("Q", n_fields, n_elements);
-		realArr2 Qaux("Qaux", n_fields_aux, n_elements);
+		realArr2 Q("Q", n_elements, n_fields);
+		realArr2 Qaux("Qaux", n_elements, n_fields_aux);
 		Settings settings = Settings(path_settings);
 		realArr parameters = settings.parameters;
 		const Mesh mesh = Mesh(path_mesh);
@@ -88,7 +89,7 @@ int main(int argc, char **argv)
 
 		double max_abs_ev;
 
-        const int n_snapshots = 100;
+        const int n_snapshots = 10;
 		double dt_print_interval = settings.time_end / (double)n_snapshots;
 		double dt_print_next = dt_print_interval;
 		// Integrator integrator_space = Integrator(ode_space);
@@ -100,6 +101,11 @@ int main(int argc, char **argv)
 		int iteration = 0;
 
 		// settings.time_end = 2.0;
+
+		Callbacks callbacks;
+		callbacks.register_callbacks(settings.callbacks);
+		callbacks.call_init(settings, mesh, model, boundary_conditions, Q, Qaux, parameters, max_abs_ev, time, dt, iteration);
+
 		// RUN
 		auto start_loop = std::chrono::high_resolution_clock::now();
 		while (time < settings.time_end)
@@ -109,6 +115,8 @@ int main(int argc, char **argv)
 			dt = timestepper->get_dt(max_abs_ev);
 			if (time + dt * 1.01 > settings.time_end)
 				dt = settings.time_end - time;
+
+			callbacks.call_loop(settings, mesh, model, boundary_conditions, Q, Qaux, parameters, max_abs_ev, time, dt, iteration);
 
 			FLUX_INTEGRATOR(FSO, Q, Qaux, parameters, dt, Q);
 			// SSO.evaluate(Q, Qaux, parameters, dt, Q);
@@ -135,6 +143,7 @@ int main(int argc, char **argv)
 		auto end = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> diff_loop = end-start_loop;
 		std::cout << "Loop time: " << diff_loop.count() << " s\n";
+		callbacks.call_close(settings, mesh, model, boundary_conditions, Q, Qaux, parameters, max_abs_ev, time, dt, iteration);
 	}
 	double time_end = timer.seconds();
 	std::cout << "Time elapsed: " << time_end - time_start << std::endl;

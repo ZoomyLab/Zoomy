@@ -47,6 +47,7 @@ def save_settings(filepath, settings):
         # f.create_dataset('compute_dt', data.settings.compute_dt.__name__, dtype=h5py.string_dtype())
         # f.create_dataset('compute_dt_args', data=settings.compute_dt_args)
         f.create_dataset("time_end", data=settings.time_end)
+        f.create_dataset("callbacks", data=settings.callbacks)
 
 
 def clean_files(filepath, filename=".vtk"):

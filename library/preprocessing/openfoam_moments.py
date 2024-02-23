@@ -5,6 +5,7 @@ from copy import deepcopy
 import os
 import re
 from scipy.spatial import KDTree
+import h5py
 
 from library.mesh.fvm_mesh import Mesh
 from library.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
@@ -143,6 +144,7 @@ def convert_openfoam_to_moments_single(filename, n_levels):
     return coordinates, Q, time, basis
 
 def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_order):
+    filename = "fields_openfoam.hdf5"
     sort_order = None
 
     # file order
@@ -156,12 +158,17 @@ def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_orde
             # index = int(re.findall(r'\d+', file)[-1])
             file_number_list.append(index)
 
+    file_number_list.sort()
+
     # first iteration
-    file0 = os.path.join(filepath, file_start) + "_" + str(0) + ".vtm"
+    file0 = os.path.join(filepath, file_start) + "_" + str(file_number_list[0]) + ".vtm"
     coordinates, Q, time, basis = convert_openfoam_to_moments_single(file0, n_levels)
     Q, sort_order = sort_fields_by_mesh(filepath_hdf5_mesh_for_order, coordinates, Q)
-    save_fields_to_hdf5(filepath, 0, time, Q, Qaux=None, filename="fields_openfoam.hdf5")
+    if os.path.exists(os.path.join(filepath, filename)):
+        os.remove(os.path.join(filepath, filename))
+    save_fields_to_hdf5(filepath, 0, time, Q.T, Qaux=None, filename=filename)
 
+    # loop iterations
     iter = 1
     total = len(file_number_list)
     print(f'Conversion {iter}/{total} completed.')
@@ -171,10 +178,10 @@ def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_orde
         file = os.path.join(filepath, file_start) + "_" + str(i_file) + ".vtm"
         coordinates, Q, time, basis = convert_openfoam_to_moments_single(file, n_levels)
         Q = apply_order_to_fields(sort_order, Q)
-        save_fields_to_hdf5(filepath, i+1, time, Q, Qaux=None, filename="fields_openfoam.hdf5")
+        save_fields_to_hdf5(filepath, i+1, time, Q.T, Qaux=None, filename=filename)
         print(f'Conversion {iter}/{total} completed.')
         iter +=1
-    # loop iterations
+
 
 def sort_fields_by_mesh(filepath_mesh, coordinates, Q):
     #coordinates are still 3d, while Q is 2d and the mesh is 2d

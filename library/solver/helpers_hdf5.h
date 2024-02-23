@@ -303,20 +303,24 @@ void readStringArray(hid_t file, const std::string& datasetName, std::vector<std
 }
 
 
-double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux)
+double loadFieldFromHdf5(hid_t& file, int index, realArr2& Q, realArr2& Qaux, bool skip_Qaux=false)
 {
     std::string groupName = "iteration_" + std::to_string(index);
     hid_t group = H5Gopen(file, groupName.c_str(), H5P_DEFAULT);
-    if (group < 0) 
+    double time;
+    if (group < 0)
     {
         std::cerr << "Error opening group: " << groupName << std::endl;
     } 
     else 
     {
+
         readDouble2dArray(group, "Q", Q);
-        readDouble2dArray(group, "Qaux", Qaux);
+        readDouble(group, "time", time);
+        if (!skip_Qaux)
+            readDouble2dArray(group, "Qaux", Qaux);
     }
-    return 0.;
+    return time;
 }
 
 void writeDouble2dArray(hid_t group, const std::string& datasetName, const realArr2& inputArray) {

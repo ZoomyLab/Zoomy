@@ -104,14 +104,13 @@ debug=yes
 endif
 
 # TODO add debug/profiling command line options
-debug=no
-profiling=no
-DEBUG=no
+DEBUG=yes
+PROFILING=no
+
 ifeq ($(DEBUG),yes)
 debug=yes
 endif
-PROFILING=no
-ifeq ($(DEBUG),yes)
+ifeq ($(PROFILING),yes)
 profiling=yes
 endif
 
