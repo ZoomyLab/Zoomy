@@ -519,7 +519,7 @@ def test_c_turbulence():
         output_snapshots=100,
         output_clean_dir=True,
         output_dir=os.path.join(main_dir, "outputs/output_c"),
-        callbacks=['LoadOpenfoam']
+        callbacks=['LoadOpenfoam', 'ComputeFoamDeltaDataSet']
     )
 
     print(f"number of available cpus: {os.cpu_count()}")

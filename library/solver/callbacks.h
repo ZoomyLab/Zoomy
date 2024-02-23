@@ -87,10 +87,10 @@ class LoadOpenfoam : public Callback
         double &dt,
         int &iteration) override
         {
-            // double next_time = loadFieldFromHdf5(this->file_fields, iteration+1, Q, Qaux, true);
+            double next_time = loadFieldFromHdf5(this->file_fields, iteration+1, Q, Qaux, true);
             time = loadFieldFromHdf5(this->file_fields, iteration, Q, Qaux, true);
             dt = 0.1;
-            // dt = next_time - time;
+            dt = next_time - time;
         }
 
     void call_close(const Settings &settings,
@@ -106,6 +106,85 @@ class LoadOpenfoam : public Callback
         int &iteration) override
         {
             H5Fclose(this->file_fields);
+            return;
+        }
+};
+
+class ComputeFoamDeltaDataSet : public Callback
+{
+    public:
+    hid_t file_fields;
+    hid_t file_data_input;
+    hid_t file_data_output;
+    void call_init(const Settings &settings,
+                   const Mesh &mesh,
+                   const Model &model,
+                   const BoundaryConditions &boundary_conditions,
+                   realArr2 &Q,
+                   realArr2 &Qaux,
+                   realArr &parameters,
+                   double &max_abs_ev,
+                   double &time,
+                   double &dt,
+                   int &iteration) override
+    {
+        const std::string path_fields = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/fields_openfoam.hdf5";
+        const std::string path_data_input = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/closure_dataset_input.hdf5";
+        const std::string path_data_output = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/closure_dataset_output.hdf5";
+        this->file_fields= openHdf5(path_fields, "r");
+        this->file_data_input= openHdf5(path_data_input, "w");
+        this->file_data_output = openHdf5(path_data_output, "w");
+        return;
+    }
+
+    void call_loop(const Settings &settings,
+        const Mesh &mesh,
+        const Model &model,
+        const BoundaryConditions &boundary_conditions,
+        realArr2 &Q,
+        realArr2 &Qaux,
+        realArr &parameters,
+        double &max_abs_ev,
+        double &time,
+        double &dt,
+        int &iteration) override
+        {
+            realArr2 QIC = realArr2(Q);
+            realArr2 Qsol = realArr2(Q);
+            realArr2 deltaQ = realArr2(Q);
+            realArr2 deltaQaux = realArr2(Q);
+            realArr2 Qauxsol = realArr2(Qaux);
+            realArr2 QauxIC = realArr2(Qaux);
+            double time_ic = loadFieldFromHdf5(this->file_fields, iteration, QIC, QauxIC, true);
+            double time_sol = loadFieldFromHdf5(this->file_fields, iteration+1, Qsol, Qauxsol, true);
+            for (int i = 0; i < Q.extent(0); ++i)
+            {
+                for (int j = 0; j < Q.extent(1); ++j)
+                {
+                    deltaQ(i, j) = Qsol(i, j) - Q(i, j);
+                    deltaQaux(i, j) = Qauxsol(i, j) - Qaux(i, j);
+                }
+            }
+
+            saveFieldToHdf5(this->file_data_input, iteration, time_sol, QIC, QauxIC);
+            saveFieldToHdf5(this->file_data_output, iteration, time_sol, deltaQ, deltaQaux);
+        }
+
+    void call_close(const Settings &settings,
+        const Mesh &mesh,
+        const Model &model,
+        const BoundaryConditions &boundary_conditions,
+        realArr2 &Q,
+        realArr2 &Qaux,
+        realArr &parameters,
+        double &max_abs_ev,
+        double &time,
+        double &dt,
+        int &iteration) override
+        {
+            H5Fclose(this->file_fields);
+            H5Fclose(this->file_data_input);
+            H5Fclose(this->file_data_output);
             return;
         }
 };
@@ -131,6 +210,10 @@ class Callbacks
                 if (name == "LoadOpenfoam")
                 {
                     this->callbacks.push_back(new LoadOpenfoam());
+                }
+                else if (name == "ComputeFoamDeltaDataSet")
+                {
+                    this->callbacks.push_back(new ComputeFoamDeltaDataSet());
                 }
             }
         }
