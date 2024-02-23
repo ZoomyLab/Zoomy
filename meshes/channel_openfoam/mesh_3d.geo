@@ -10,11 +10,11 @@ N_layers = 30;
 N_layers_water = N_layers * height_water/(height_air + height_water);
 N_layers_air = N_layers * height_air/(height_air + height_water);
 
-/* scale = 0.5; */
+scale = 0.5;
 /* scale = 0.25; */
 /* scale = 0.125; */
 /* scale = 0.0625; */
-scale = 0.03125;
+/* scale = 0.03125; */
 
 Point(1) = {0, 0, 0, scale};
 Point(2) = {0, width, 0, scale};
