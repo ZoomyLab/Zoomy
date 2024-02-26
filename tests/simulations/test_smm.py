@@ -507,7 +507,7 @@ def test_c_solver(mesh_type):
 @pytest.mark.unfinished
 def test_c_turbulence():
     main_dir = os.getenv("SMS")
-    level = 3
+    level = 0
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
@@ -515,11 +515,15 @@ def test_c_turbulence():
         num_flux=flux.LLF(),
         #compute_dt=timestepping.adaptive(CFL=0.15),
         compute_dt=timestepping.constant(dt=0.01),
-        time_end=3.00,
+        time_end=0.50,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir=os.path.join(main_dir, "outputs/output_c"),
-        callbacks=['LoadOpenfoam', 'ComputeFoamDeltaDataSet']
+        callbacks=['ComputeFoamDeltaDataSet', 'LoadOpenfoam' ]
+        # callbacks=['LoadOpenfoam', 'ComputeFoamDeltaDataSet']
+        # callbacks=['ComputeFoamDeltaDataSet']
+        # callbacks=['LoadOpenfoam']
+        # callbacks=[]
     )
 
     print(f"number of available cpus: {os.cpu_count()}")

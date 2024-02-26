@@ -121,7 +121,7 @@ EXE = $(BIN_DIR)/volkos
 UNITTESTS = $(BIN_DIR_UT)/dambreak
 dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
-CXXFLAGS = -O3 -I${PNETCDF_PATH}/include -I${PETSC_PATH}/build_arch/include -I${PETSC_PATH}/include -I${HDF5_PATH}/include -DDIMENSION=$(DIMENSION) -DN_BOUNDARY_CONDITIONS=$(N_BOUNDARY_CONDITIONS) -DN_ELEMENTS=$(N_ELEMENTS) -DN_FIELDS=$(N_FIELDS) -DN_FIELDS_AUX=$(N_FIELDS_AUX) -DPATH_SETTINGS=\"$(PATH_SETTINGS)\" -DPATH_MESH=\"$(PATH_MESH)\" -DPATH_FIELDS=\"$(PATH_FIELDS)\" -DTIMESTEPPER=\"$(TIMESTEPPER)\" -DTIMESTEPPER_PARAM=$(TIMESTEPPER_PARAM) -DODE_FLUX=$(ODE_FLUX) -DODE_SOURCE=$(ODE_SOURCE)
+CXXFLAGS = -I${PNETCDF_PATH}/include -I${PETSC_PATH}/build_arch/include -I${PETSC_PATH}/include -I${HDF5_PATH}/include -DDIMENSION=$(DIMENSION) -DN_BOUNDARY_CONDITIONS=$(N_BOUNDARY_CONDITIONS) -DN_ELEMENTS=$(N_ELEMENTS) -DN_FIELDS=$(N_FIELDS) -DN_FIELDS_AUX=$(N_FIELDS_AUX) -DPATH_SETTINGS=\"$(PATH_SETTINGS)\" -DPATH_MESH=\"$(PATH_MESH)\" -DPATH_FIELDS=\"$(PATH_FIELDS)\" -DTIMESTEPPER=\"$(TIMESTEPPER)\" -DTIMESTEPPER_PARAM=$(TIMESTEPPER_PARAM) -DODE_FLUX=$(ODE_FLUX) -DODE_SOURCE=$(ODE_SOURCE)
 # CXXFLAGS = -O3  -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`
@@ -228,15 +228,12 @@ ifeq ($(arch),cpu)
 		CXXFLAGS += -pg -g
 		LDPROFILING += -pg
 		KOKKOS_OPTIONS = "aggressive_vectorization"
-	else
-	KOKKOS_OPTIONS = "aggressive_vectorization,disable_profiling"
-endif
-	ifeq ($(debug),yes)
+	else ifeq ($(debug),yes)
 		CXXFLAGS += -g
 	else
 		CXXFLAGS += -O3
+		KOKKOS_OPTIONS = "aggressive_vectorization, disable profiling"
 	endif
-
 endif
 
 ifeq ($(arch),gpu)

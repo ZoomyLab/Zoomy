@@ -9,6 +9,7 @@
 #include "boundary_conditions.h"
 #include "hdf5.h"
 #include "helpers_hdf5.h"
+#include "misc.h"
 
 class Callback
 {
@@ -89,7 +90,6 @@ class LoadOpenfoam : public Callback
         {
             double next_time = loadFieldFromHdf5(this->file_fields, iteration+1, Q, Qaux, true);
             time = loadFieldFromHdf5(this->file_fields, iteration, Q, Qaux, true);
-            dt = 0.1;
             dt = next_time - time;
         }
 
@@ -149,25 +149,24 @@ class ComputeFoamDeltaDataSet : public Callback
         double &dt,
         int &iteration) override
         {
-            realArr2 QIC = realArr2(Q);
-            realArr2 Qsol = realArr2(Q);
-            realArr2 deltaQ = realArr2(Q);
-            realArr2 deltaQaux = realArr2(Q);
-            realArr2 Qauxsol = realArr2(Qaux);
-            realArr2 QauxIC = realArr2(Qaux);
-            double time_ic = loadFieldFromHdf5(this->file_fields, iteration, QIC, QauxIC, true);
-            double time_sol = loadFieldFromHdf5(this->file_fields, iteration+1, Qsol, Qauxsol, true);
+            //TODO I do not use Qaux in. This is misleading.
+            if (iteration == 0)
+                return;
+            realArr2 QIC = realArr2("QIC", Q.extent(0), Q.extent(1));
+            realArr2 Qsol = realArr2("Qsol", Q.extent(0), Q.extent(1));
+            realArr2 deltaQ = realArr2("deltaQ", Q.extent(0), Q.extent(1));
+            double time_ic = loadFieldFromHdf5(this->file_fields, iteration-1, QIC, Qaux, true);
+            double time_sol = loadFieldFromHdf5(this->file_fields, iteration, Qsol, Qaux, true);
             for (int i = 0; i < Q.extent(0); ++i)
             {
                 for (int j = 0; j < Q.extent(1); ++j)
                 {
-                    deltaQ(i, j) = Qsol(i, j) - Q(i, j);
-                    deltaQaux(i, j) = Qauxsol(i, j) - Qaux(i, j);
+                    deltaQ(i, j) = Qsol(i, j) - QIC(i, j);
+
                 }
             }
-
-            saveFieldToHdf5(this->file_data_input, iteration, time_sol, QIC, QauxIC);
-            saveFieldToHdf5(this->file_data_output, iteration, time_sol, deltaQ, deltaQaux);
+            saveFieldToHdf5(this->file_data_input, iteration - 1, time_ic, QIC, Qaux);
+            saveFieldToHdf5(this->file_data_output, iteration-1, time_sol-time_ic, deltaQ, Qaux);
         }
 
     void call_close(const Settings &settings,

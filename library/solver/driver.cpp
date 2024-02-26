@@ -14,6 +14,7 @@
 #include "ode_source.h"
 #include "fvm.h"
 #include "timestepping.h"
+#include "misc.h"
 #include "max_abs_eigenvalue.h"
 #include "iterators.h"
 #include "callbacks.h"
@@ -81,26 +82,25 @@ int main(int argc, char **argv)
 		const Mesh mesh = Mesh(path_mesh);
 		hid_t file_fields = openHdf5(path_fields, "r+");
 		double time = loadFieldFromHdf5(file_fields, 0, Q, Qaux);
+		realArr2 Qold = realArr2("Qold", Q.extent(0), Q.extent(1));
+		realArr2 Qauxold = realArr2("Qauxold", Qaux.extent(0), Qaux.extent(1));
 		Model model = Model();
 		const auto boundary_conditions = BoundaryConditions();
 		intArr2 element_neighbor_index_iteration_list = create_neighbor_index_iteration_list(mesh);
 
 		TimeStepper* timestepper = get_timestepper(timestepper_type, timestepper_param, mesh, model);
+		int max_iteration = 99999;
 
 		double max_abs_ev;
 
         const int n_snapshots = 10;
 		double dt_print_interval = settings.time_end / (double)n_snapshots;
 		double dt_print_next = dt_print_interval;
-		// Integrator integrator_space = Integrator(ode_space);
-		// Integrator integrator_source = Integrator(ode_source);
 		FluxSolutionOperator FSO = FluxSolutionOperator(model, boundary_conditions, mesh, element_neighbor_index_iteration_list, "fvm_semidiscrete_split_step");
 		SourceSolutionOperator SSO = SourceSolutionOperator(model);
 
 		double dt;
 		int iteration = 0;
-
-		// settings.time_end = 2.0;
 
 		Callbacks callbacks;
 		callbacks.register_callbacks(settings.callbacks);
@@ -108,8 +108,10 @@ int main(int argc, char **argv)
 
 		// RUN
 		auto start_loop = std::chrono::high_resolution_clock::now();
-		while (time < settings.time_end)
+		while (time < settings.time_end && iteration < max_iteration)
 		{
+			Qold = realArr2(Q);
+			Qauxold = realArr2(Qaux);
 			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, element_neighbor_index_iteration_list, model, mesh);
 
 			dt = timestepper->get_dt(max_abs_ev);
@@ -118,12 +120,8 @@ int main(int argc, char **argv)
 
 			callbacks.call_loop(settings, mesh, model, boundary_conditions, Q, Qaux, parameters, max_abs_ev, time, dt, iteration);
 
-			FLUX_INTEGRATOR(FSO, Q, Qaux, parameters, dt, Q);
-			// SSO.evaluate(Q, Qaux, parameters, dt, Q);
-			// integrator_space.evaluate(space_solution_operator, Q, Qaux, parameters, dt, Q);
-			// integrator_source.evaluate(source_solution_operator, Q, Qaux, parameters, dt, Q);
-
-			std::cout << "iteration: " << iteration << " time: " << time << " dt: " << dt << std::endl;
+			FLUX_INTEGRATOR(FSO, Qold, Qauxold, parameters, dt, Q);
+			// SSO.evaluate(Qold, Qauxold, parameters, dt, Q);
 
 			iteration++;
 			time += dt;
@@ -133,10 +131,6 @@ int main(int argc, char **argv)
 				dt_print_next += dt_print_interval;
 			}
 		}
-
-		// int iteration = 1;
-		// time += 1.;
-		// saveFieldToHdf5(file_fields, iteration, time, Q, Qaux);
 
 		H5Fclose(file_fields);
 		delete timestepper;

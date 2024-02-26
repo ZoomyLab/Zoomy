@@ -103,7 +103,8 @@ def load_fields_from_hdf5(filepath, i_snapshot=-1):
             i_snapshot = len(f.keys()) - 1
         else:
             i_snapshot = i_snapshot
-        group = f[str(i_snapshot)]
+        # group = f[str(i_snapshot)]
+        group = f[f"iteration_{i_snapshot}"]
         time = group["time"][()]
         Q = group["Q"][()]
         Qaux = group["Qaux"][()]

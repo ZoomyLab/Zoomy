@@ -315,7 +315,7 @@ def test_sort():
 def test_convert_openfoam_to_moments():
     filepath = os.path.join(main_dir, 'openfoam_data/channelflow_coarse')
     filepath_target_mesh = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse/mesh.hdf5'))
-    convert_openforam_to_moments(filepath, 3, filepath_target_mesh)
+    convert_openforam_to_moments(filepath, 0, filepath_target_mesh)
 
 
 if __name__ == '__main__':
