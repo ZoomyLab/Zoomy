@@ -601,7 +601,7 @@ def test_c_turbulence():
 
 
 if __name__ == "__main__":
-    # test_smm_1d()
+    test_smm_1d()
     # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
@@ -611,4 +611,4 @@ if __name__ == "__main__":
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
-    test_c_turbulence()
+    # test_c_turbulence()
