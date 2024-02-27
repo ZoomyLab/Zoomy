@@ -72,14 +72,26 @@ class Spline(Legendre_shifted):
         basis = bspline_basis_set(degree, knots, x)
         return basis
 
-# class OrthogonalSplineWithConstant(Legendre_shifted):
-#     def basis_definition(self,order, x):
-#         # x = Symbol('x')
-#         assert order <=3
-#         degree = 1
-#         knots = [0,0, 0.5,1, 1]
-#         basis = bspline_basis_set(degree, knots, x)
-#         return basis[order]
+class OrthogonalSplineWithConstant(Legendre_shifted):
+    def basis_definition(self, degree=1, knots = [0, 0, 0.5, 1, 1]):
+        x = Symbol('x')
+        def prod(u, v):
+            return integrate(u*v, (x, 0, 1))
+        basis = bspline_basis_set(degree, knots, x)
+        basis = [1] + basis
+        orth = deepcopy(basis)
+        for i in range(1, len(orth)):
+            for j in range(0,i):
+                orth[i] -= prod(basis[i], orth[j]) * orth[j]
+            orth[i] /= sympy.sqrt(prod(orth[i], orth[i]))
+
+        str = ""
+        for i in range(len(orth)):
+            for j in range(len(orth)):
+                str += f"{(prod(orth[i], orth[j]))} "
+            str += "\n"
+        print(str)
+        return orth
     
 
 
@@ -500,5 +512,6 @@ def reconstruct_uvw(Q, grad, lvl, phi, psi):
     
 if __name__ == "__main__":
     # basis = Legendre_shifted(2)
-    basis = Spline()
-    # basis.plot()
+    # basis = Spline()
+    basis = OrthogonalSplineWithConstant()
+    basis.plot()

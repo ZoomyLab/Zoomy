@@ -507,7 +507,7 @@ def test_c_solver(mesh_type):
 @pytest.mark.unfinished
 def test_c_turbulence():
     main_dir = os.getenv("SMS")
-    level = 1
+    level = 0
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
@@ -599,9 +599,52 @@ def test_c_turbulence():
 
     io.generate_vtk(settings.output_dir)
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_spline_1d():
+    level = 2
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.constant(dt = 0.01),
+        time_end=1.0,
+        output_snapshots=100,
+        output_dir='outputs/output_spline'
+    )
+
+    bc_tags = ["left", "right"]
+    bc_tags_periodic_to = ["right", "left"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    ic = IC.RP(
+        left=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
+        right=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
+    )
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"eigenvalue_mode": "symbolic", "friction": ["chezy", "newtonian"]},
+        basis=Basis(basis=Spline()),
+    )
+    mesh = Mesh.create_1d((-1, 1), 100)
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
+
 
 if __name__ == "__main__":
-    test_smm_1d()
+    # test_smm_1d()
     # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
@@ -612,3 +655,4 @@ if __name__ == "__main__":
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
     # test_c_turbulence()
+    test_spline_1d()
