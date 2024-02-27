@@ -12,6 +12,8 @@ import sympy
 from sympy import Symbol, Matrix, lambdify
 # from sympy import *
 from sympy import zeros, ones
+from sympy import bspline_basis, bspline_basis_set
+from sympy.abc import x
 
 from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
 from library.model.models.base import Model
@@ -33,22 +35,56 @@ from library.model import *
 
 from attr import define
 from sympy import integrate, diff
-from sympy.abc import x
 
 from sympy import legendre
 
-def legendre_shifted(order, x):
-    return legendre(order, 2*x-1) * (-1)**(order)
+class Legendre_shifted:
+    def basis_definition(self):
+        x = Symbol('x')
+        b = lambda k, x: legendre(k, 2*x-1) * (-1)**(k)
+        return [b(k, x) for k in range(self.order+1)]
 
-def test_basis(order, x):
-    if order == 0:
-        return 1.
-    if order == 1:
-        return 1-x
-    return 0.
+    def __init__(self, order = 1, **kwargs):
+        self.order = order
+        self.basis = self.basis_definition(**kwargs)
+
+
+    def get(self, k):
+        return self.basis[k]
+    
+    def eval(self, k, z):
+        return self.get(k).subs(x, z)
+
+    def plot(self):
+        fig, ax = plt.subplots()
+        X = np.linspace(0,1,100)
+        for i in range(len(self.basis)):
+            # print(self.get(i))
+            f = lambdify(x, self.get(i)) 
+            y = np.array([f(xi) for xi in X])
+            ax.plot(X, y, label=f"basis {i}")
+        plt.legend()
+        plt.show()
+
+class Spline(Legendre_shifted):
+    def basis_definition(self, degree=1, knots = [0, 0, 0.5, 1, 1]):
+        x = Symbol('x')
+        basis = bspline_basis_set(degree, knots, x)
+        return basis
+
+# class OrthogonalSplineWithConstant(Legendre_shifted):
+#     def basis_definition(self,order, x):
+#         # x = Symbol('x')
+#         assert order <=3
+#         degree = 1
+#         knots = [0,0, 0.5,1, 1]
+#         basis = bspline_basis_set(degree, knots, x)
+#         return basis[order]
+    
+
 
 class Basis():
-    def __init__(self, basis=legendre_shifted):
+    def __init__(self, basis=Legendre_shifted()):
         self.basis = basis
     
     def compute_matrices(self, level):
@@ -69,25 +105,25 @@ class Basis():
     Compute <phi_k, phi_i>
     """
     def _M(self, k, i):
-        return integrate(self.basis(k, x) * self.basis(i, x), (x, 0, 1))
+        return integrate(self.basis.eval(k, x) * self.basis.eval(i, x), (x, 0, 1))
 
     """ 
     Compute <phi_k, phi_i, phi_j>
     """
     def _A(self, k, i, j):
-        return integrate(self.basis(k, x) * self.basis(i, x) * self.basis(j, x), (x, 0, 1))
+        return integrate(self.basis.eval(k, x) * self.basis.eval(i, x) * self.basis.eval(j, x), (x, 0, 1))
 
     """ 
     Compute <(phi')_k, phi_j, int(phi)_j>
     """
     def _B(self, k, i, j):
-        return integrate(diff(self.basis(k, x), x) * integrate(self.basis(j, x), x) * self.basis(i, x), (x, 0, 1))
+        return integrate(diff(self.basis.eval(k, x), x) * integrate(self.basis.eval(j, x), x) * self.basis.eval(i, x), (x, 0, 1))
 
     """ 
     Compute <(phi')_k, (phi')_j>
     """
     def _D(self, k, i):
-        return integrate(diff(self.basis(k, x), x) * diff(self.basis(i, x), x), (x, 0, 1))
+        return integrate(diff(self.basis.eval(k, x), x) * diff(self.basis.eval(i, x), x), (x, 0, 1))
 
 class ShallowMoments(Model):
     """
@@ -460,3 +496,9 @@ def reconstruct_uvw(Q, grad, lvl, phi, psi):
         return result
 
     return u, v, w
+
+    
+if __name__ == "__main__":
+    # basis = Legendre_shifted(2)
+    basis = Spline()
+    # basis.plot()
