@@ -312,10 +312,10 @@ def test_sort():
 
     sort_fields_by_mesh(filepath_hdf_mesh, coordinates, Q)
 
-def test_convert_openfoam_to_moments():
+def test_convert_openfoam_to_moments(level = 0):
     filepath = os.path.join(main_dir, 'openfoam_data/channelflow_coarse')
     filepath_target_mesh = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse/mesh.hdf5'))
-    convert_openforam_to_moments(filepath, 0, filepath_target_mesh)
+    convert_openforam_to_moments(filepath, level, filepath_target_mesh)
 
 
 if __name__ == '__main__':
@@ -325,4 +325,4 @@ if __name__ == '__main__':
     # test_convert_openfoam_single()
     # test_plots()
     # test_sort()
-    test_convert_openfoam_to_moments()
+    test_convert_openfoam_to_moments(level=1)

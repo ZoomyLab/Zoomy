@@ -507,7 +507,7 @@ def test_c_solver(mesh_type):
 @pytest.mark.unfinished
 def test_c_turbulence():
     main_dir = os.getenv("SMS")
-    level = 0
+    level = 1
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
