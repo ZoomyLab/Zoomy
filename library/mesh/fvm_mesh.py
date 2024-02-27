@@ -835,7 +835,8 @@ class Mesh:
         meshout.write(filepath + ".vtk")
 
     def write_to_hdf5(self, filepath: str, filename='mesh.hdf5'):
-        with h5py.File(os.path.join(filepath, filename), "w") as f:
+        main_dir = os.getenv("SMS")
+        with h5py.File(os.path.join(os.path.join(main_dir, filepath), filename), "w") as f:
             f.create_dataset("dimension", data=self.dimension)
             f.create_dataset("type", data=self.type)
             f.create_dataset("n_elements", data=self.n_elements)
