@@ -601,14 +601,14 @@ def test_c_turbulence():
 
 @pytest.mark.critical
 @pytest.mark.unfinished
-def test_spline_1d():
+def test_spline_strongbc_1d():
     level = 2
     settings = Settings(
         name="ShallowMoments",
-        parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+        parameters={"g": 1., "C": 1.0, "nu": 0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        compute_dt=timestepping.constant(dt = 0.01),
+        compute_dt=timestepping.adaptive(CFL=0.9),
         time_end=1.0,
         output_snapshots=100,
         output_dir='outputs/output_spline'
@@ -634,13 +634,40 @@ def test_spline_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["chezy", "newtonian"]},
-        basis=Basis(basis=Spline()),
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+        # basis=Basis(basis=Spline()),
+        # basis=Basis(basis=OrthogonalSplineWithConstant(degree=2, knots=[0, 0.01, 0.01, 0.5, 0.9, 1])),
+        # basis=Basis(basis=OrthogonalSplineWithConstant(degree=2, knots=[0,0.1, 0.3, 0.5, 1, 1])),
+        # basis=Basis(basis=OrthogonalSplineWithConstant(degree=1, knots=[0, 0.0, 0.1, 1])),
     )
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
+    Q, Qaux, time = io.load_fields_from_hdf5(os.path.join(settings.output_dir, "fields.hdf5"))
+    list_U, list_means, list_of_positions, Z, list_h = generate_velocity_profiles(Q, mesh.element_center, model, [np.array([x]) for x in np.arange(-0.9, 0.9, 0.2)])
+    fig, ax = plt.subplots()
+    dim = 0
+    ax.plot(mesh.element_center[:,0], Q[:,0], label='h')
+    def rescale(U, scale=0.5):
+        return (U)/(np.max(U)-np.min(U)) * scale * np.max(np.abs(U))
+        
+    for i, pos in enumerate(list_of_positions):
+        if i == 0:
+            ax.plot(pos + rescale(list_U[i][dim]), list_h[i] * Z, color='green', label='velocity profile')
+            # ax.plot(pos + list_means[i][dim] * np.ones_like(Z), list_h[i] * Z, color='red', label='mean profile')
+            ax.plot(pos * np.ones_like(Z), list_h[i] * Z, color='black', label='zero velocity reference')
+        else:
+            ax.plot(pos + rescale(list_U[i][dim]), list_h[i] * Z, color='green')
+            # ax.plot(pos + list_means[i][dim] * np.ones_like(Z), list_h[i] * Z, color='red')
+            ax.plot(pos * np.ones_like(Z), list_h[i] * Z, color='black')
+    ax.set_xlabel('x/velocity-profile')
+    ax.set_ylabel('h/z')
+    plt.title('Dam-break with spline basis')
+    plt.legend()
+    plt.show()
+
 
 
 if __name__ == "__main__":
@@ -655,4 +682,4 @@ if __name__ == "__main__":
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
     # test_c_turbulence()
-    test_spline_1d()
+    test_spline_strongbc_1d()

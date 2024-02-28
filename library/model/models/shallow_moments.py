@@ -14,6 +14,7 @@ from sympy import Symbol, Matrix, lambdify
 from sympy import zeros, ones
 from sympy import bspline_basis, bspline_basis_set
 from sympy.abc import x
+import h5py
 
 from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
 from library.model.models.base import Model
@@ -57,7 +58,7 @@ class Legendre_shifted:
 
     def plot(self):
         fig, ax = plt.subplots()
-        X = np.linspace(0,1,100)
+        X = np.linspace(0,1,1000)
         for i in range(len(self.basis)):
             # print(self.get(i))
             f = lambdify(x, self.get(i)) 
@@ -65,6 +66,14 @@ class Legendre_shifted:
             ax.plot(X, y, label=f"basis {i}")
         plt.legend()
         plt.show()
+
+    def reconstruct_velocity_profile(self, alpha, Z=np.linspace(0,1,100)):
+        u = np.zeros_like(Z)
+        for i in range(len(self.basis)):
+            b = lambdify(x, self.get(i)) 
+            u[:] += alpha[i] * b(Z)
+        return u
+
 
 class Spline(Legendre_shifted):
     def basis_definition(self, degree=1, knots = [0, 0, 0.5, 1, 1]):
@@ -78,19 +87,22 @@ class OrthogonalSplineWithConstant(Legendre_shifted):
         def prod(u, v):
             return integrate(u*v, (x, 0, 1))
         basis = bspline_basis_set(degree, knots, x)
-        basis = [1] + basis
+        add_basis = [1]
+        # add_basis = [sympy.Piecewise((0, x<0.1), (1, True))]
+        basis = add_basis + basis[:-1]
         orth = deepcopy(basis)
         for i in range(1, len(orth)):
             for j in range(0,i):
-                orth[i] -= prod(basis[i], orth[j]) * orth[j]
+                orth[i] -= prod(basis[i], orth[j]) / prod(orth[j], orth[j]) * orth[j]
+        for i in range(len(orth)):
             orth[i] /= sympy.sqrt(prod(orth[i], orth[i]))
 
-        str = ""
-        for i in range(len(orth)):
-            for j in range(len(orth)):
-                str += f"{(prod(orth[i], orth[j]))} "
-            str += "\n"
-        print(str)
+        # str = ""
+        # for i in range(len(orth)):
+        #     for j in range(len(orth)):
+        #         str += f"{(prod(orth[i], orth[j]))} "
+        #     str += "\n"
+        # print(str)
         return orth
     
 
@@ -112,6 +124,30 @@ class Basis():
                 for j in range(level+1):
                     self.A[k, i, j] = self._A(k, i, j)
                     self.B[k, i, j] = self._B(k, i, j)
+    
+    def enforce_boundary_conditions(self, enforced_basis=[-2, -1], rhs=np.zeros(2)):
+        rhs[1] = 0.
+        level = len(self.basis.basis)-1
+        constraint_bottom = [self.basis.eval(i, 0.) for i in range(level+1)]
+        constraint_top = [diff(self.basis.eval(i, x), x).subs(x, 1.) for i in range(level+1)]
+        A = Matrix([constraint_bottom, constraint_top])
+        I = np.linspace(0, level, 1+level, dtype=int)
+        I_enforce = I[enforced_basis]
+        I_free = np.delete(I, I_enforce)
+        A_enforce = A[:, list(I_enforce)]
+        A_free = np.array(A[:, list(I_free)], dtype=float)
+        A_enforce_inv = np.array(A_enforce.inv(), dtype=float)
+        def f(Q):
+            for i, q in enumerate(Q):
+                q_enforce = q[I_enforce+1]
+                q_free = q[I_free+1]
+                b = rhs - np.dot(A_free, q_free)
+                result =  np.dot(A_enforce_inv, b)
+                Q[i, I_enforce+1] = result
+            return Q
+        return f
+            
+        
 
     """ 
     Compute <phi_k, phi_i>
@@ -506,12 +542,65 @@ def reconstruct_uvw(Q, grad, lvl, phi, psi):
         result += u_z * (z * grad_h[0] + grad_hb[0])
         result += v_z * (z * grad_h[1] + grad_hb[1])
         return result
-
     return u, v, w
+
+def generate_velocity_profiles(
+    Q,
+    centers,
+    model: Model,
+    list_of_positions: list[np.ndarray],
+):
+    def find_closest_element(centers, pos):
+        assert centers.shape[1] == np.array(pos).shape[0]
+        return np.argmin(np.linalg.norm(centers - pos, axis=1))
+
+    # find the closest element to the given position
+    vertices = []
+    for pos in list_of_positions:
+        vertex = find_closest_element(centers, pos)
+        vertices.append(vertex)
+
+    Z = np.linspace(0,1,100)
+    list_profiles = []
+    list_means = []
+    level = int((model.n_fields-1)/model.dimension)-1
+    offset = level + 1
+    list_h = []
+    for vertex in vertices:
+        profiles = []
+        means = []
+        for d in range(model.dimension):
+            q = Q[vertex, :]
+            h = q[0]
+            coefs = q[1+d*offset:1+(d+1)*offset]/h
+            profile = model.basis.basis.reconstruct_velocity_profile(coefs, Z=Z)
+            mean = coefs[0]
+            profiles.append(profile)
+            means.append(mean)
+        list_profiles.append(profiles)
+        list_means.append(means)
+        list_h.append(h)
+    return list_profiles, list_means, list_of_positions, Z, list_h
+
+            
+
 
     
 if __name__ == "__main__":
-    # basis = Legendre_shifted(2)
+    # basis = Legendre_shifted(1)
     # basis = Spline()
-    basis = OrthogonalSplineWithConstant()
+    basis = OrthogonalSplineWithConstant(degree=2, knots=[0, 0.1, 0.3,0.5, 1,1])
+    # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.02, 0.04, 0.06, 0.08, 0.1,  1])
+    # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
     basis.plot()
+
+    # basis = Basis(basis=Legendre_shifted(order=2))
+    # f = basis.enforce_boundary_conditions()
+    # q = np.array([[1., 0.1, 0., 0.]])
+    # print(f(q))
+
+
+    # X = np.linspace(0,1,100)
+    # U = basis.reconstruct_velocity_profile([0, 0.0, 0., 0, 1], Z=X)
+    # plt.plot(U, X)
+    # plt.show()

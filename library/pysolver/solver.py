@@ -135,7 +135,7 @@ def _get_source(mesh, pde, settings):
     def source(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
-            pde.source(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+            dQ[i_elem] = pde.source(Q[i_elem], Qaux[i_elem], parameters)
 
     return source
 
@@ -144,7 +144,7 @@ def _get_source_jac(mesh, pde, settings):
     def source_jac(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_elem in range(mesh.n_elements):
-            pde.source_jacobian(Q[i_elem], Qaux[i_elem], parameters, dQ[i_elem])
+            dQ[i_elem] = pde.source_jacobian(Q[i_elem], Qaux[i_elem], parameters)
 
     return source_jac
 
@@ -352,7 +352,10 @@ def fvm_unsteady_semidiscrete(
     # )
     # logger = logging.getLogger(__name__ + ":solve_steady")
 
+    enforce_boundary_conditions = model.basis.enforce_boundary_conditions()
+
     Q, Qaux = _initialize_problem(model, mesh)
+    Q = enforce_boundary_conditions(Q)
     parameters = model.parameter_values
     Qnew = deepcopy(Q)
 
@@ -373,6 +376,7 @@ def fvm_unsteady_semidiscrete(
     time_start = gettime()
 
     pde, bc = load_runtime_model(model)
+
 
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
@@ -410,9 +414,14 @@ def fvm_unsteady_semidiscrete(
 
         # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+        Qnew = enforce_boundary_conditions(Qnew)
         Qnew = ode_solver_source(
             compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
         )
+        # Qnew  += -Q+ode_solver_source(
+        #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
+        # )
+        Qnew = enforce_boundary_conditions(Qnew)
 
         # Update solution and time
         time += dt

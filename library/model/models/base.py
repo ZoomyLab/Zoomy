@@ -491,7 +491,7 @@ class Model:
             self.sympy_source,
             "numpy",
         )
-        source = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=-1)
+        source = lambda Q, Qaux, param:  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=-1)
         # source = vectorize(l_source)
 
         l_source_jacobian = lambdify(
