@@ -126,7 +126,6 @@ class Basis():
                     self.B[k, i, j] = self._B(k, i, j)
     
     def enforce_boundary_conditions(self, enforced_basis=[-2, -1], rhs=np.zeros(2)):
-        rhs[1] = 0.
         level = len(self.basis.basis)-1
         constraint_bottom = [self.basis.eval(i, 0.) for i in range(level+1)]
         constraint_top = [diff(self.basis.eval(i, x), x).subs(x, 1.) for i in range(level+1)]
