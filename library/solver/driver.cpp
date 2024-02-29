@@ -118,10 +118,11 @@ int main(int argc, char **argv)
 			if (time + dt * 1.01 > settings.time_end)
 				dt = settings.time_end - time;
 
-			callbacks.call_loop(settings, mesh, model, boundary_conditions, Q, Qaux, parameters, max_abs_ev, time, dt, iteration);
+			callbacks.call_loop(settings, mesh, model, boundary_conditions, Qold, Qauxold, parameters, max_abs_ev, time, dt, iteration);
 
 			FLUX_INTEGRATOR(FSO, Qold, Qauxold, parameters, dt, Q);
-			// SSO.evaluate(Qold, Qauxold, parameters, dt, Q);
+			SSO.evaluate(Q, Qaux, parameters, dt, Q);
+
 
 			iteration++;
 			time += dt;
