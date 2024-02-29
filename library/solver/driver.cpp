@@ -113,6 +113,7 @@ int main(int argc, char **argv)
 			Qold = realArr2(Q);
 			Qauxold = realArr2(Qaux);
 			max_abs_ev = max_abs_eigenvalue(Q, Qaux, parameters, element_neighbor_index_iteration_list, model, mesh);
+			std::cout << "max_abs_ev " << max_abs_ev << std::endl;
 
 			dt = timestepper->get_dt(max_abs_ev);
 			if (time + dt * 1.01 > settings.time_end)

@@ -48,7 +48,6 @@ class ShearShallowFlow2d(Model):
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
-        self.basis = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         super().__init__(
@@ -136,5 +135,31 @@ class ShearShallowFlow2d(Model):
         dhdx = self.aux_variables.dhdx
         # out[1] = h * p.g * (p.ex - p.ez * dhdx)
         return out
+
+    def eigenvalues(self):
+        evs = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        u = hu/h
+        v = hv/h
+        P11 = self.variables[3]
+        P12 = self.variables[4]
+        P22 = self.variables[5]
+        p = self.parameters
+
+        b = sympy.sqrt(P11)
+        a = sympy.sqrt(p.g * h + 3*P11)
+
+        # evs[0] = u
+        evs[0] = 1.
+        evs[1] = u
+        evs[2] = u + b
+        evs[3] = u - b
+        evs[4] = u + a
+        evs[5] = u - a
+
+        return evs
+        
 
 
