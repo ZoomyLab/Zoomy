@@ -71,7 +71,7 @@ class LoadOpenfoam : public Callback
                    double &dt,
                    int &iteration) override
     {
-        const std::string path_fields = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/fields_openfoam.hdf5";
+        const std::string path_fields = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_mid/fields_openfoam.hdf5";
         this->file_fields = openHdf5(path_fields);
         return;
     }
@@ -128,9 +128,9 @@ class ComputeFoamDeltaDataSet : public Callback
                    double &dt,
                    int &iteration) override
     {
-        const std::string path_fields = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/fields_openfoam.hdf5";
-        const std::string path_data_input = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/closure_dataset_input.hdf5";
-        const std::string path_data_output = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_coarse/closure_dataset_output.hdf5";
+        const std::string path_fields = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_mid/fields_openfoam.hdf5";
+        const std::string path_data_input = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_mid/closure_dataset_input.hdf5";
+        const std::string path_data_output = "/home/ingo/Git/SMM/shallow-moments-simulation/openfoam_data/channelflow_mid/closure_dataset_output.hdf5";
         this->file_fields= openHdf5(path_fields, "r");
         this->file_data_input= openHdf5(path_data_input, "w");
         this->file_data_output = openHdf5(path_data_output, "w");

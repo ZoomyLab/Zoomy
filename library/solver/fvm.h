@@ -26,6 +26,7 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
     };
     const int dim = mesh.dimension;
     const int n_fields = Q.extent(1);
+    const int n_aux_fields = Qaux.extent(1);
     const int n_elements = Q.extent(0);
     const int n_inner_faces = element_neighbor_index_tuples.extent(0);
 
@@ -49,13 +50,20 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         int i_neighbor;
         int face;
         int neighbor;
-        realArr normal;
-        realArr qi;
-        realArr qj;
-        realArr qauxi;
-        realArr qauxj;
         realArr F = realArr("F", n_fields);
         realArr NC = realArr("NC", n_fields);
+        realArr qi = realArr("qi", n_fields);
+        realArr qj = realArr("qj", n_fields);
+        realArr qauxi = realArr("qauxi", n_aux_fields);
+        realArr qauxj = realArr("qauxj", n_aux_fields);
+        realArr normal = realArr("normal", dim);
+        // realArr normal;
+        // realArr qi;
+        // realArr qj;
+        // realArr qauxi;
+        // realArr qauxj;
+        // realArr F = realArr("F", n_fields);
+        // realArr NC = realArr("NC", n_fields);
         
         element = element_neighbor_index_tuples(i, 0);
         i_neighbor = element_neighbor_index_tuples(i, 1);
@@ -89,14 +97,18 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         int element;
         int face;
         int neighbor;
-        realArr normal;
-        realArr qi;
+        // realArr normal;
+        // realArr qi;
         // realArr qj;
-        realArr qauxi;
-        realArr qauxj;
+        // realArr qauxi
+        // realArr qauxj;
         realArr F = realArr("F", n_fields);
         realArr NC = realArr("NC", n_fields);
+        realArr qi = realArr("qi", n_fields);
         realArr qj = realArr("qj", n_fields);
+        realArr qauxi = realArr("qauxi", n_aux_fields);
+        realArr qauxj = realArr("qauxj", n_aux_fields);
+        realArr normal = realArr("normal", dim);
         element = mesh.boundary_face_corresponding_element(i);
         face = mesh.boundary_face_element_face_index(i);
         neighbor = mesh.element_neighbors(element, face);
@@ -110,6 +122,7 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         realArr qaux_req = get_element2(Q, mesh.boundary_function_required_element(i));
 
         boundary_conditions.apply(i_boundary_function_index, q_req, qaux_req, param, normal, qj);
+
         //TODO this should probably also be done using a dedicated boundary condition...
         qauxj = qauxi;
 

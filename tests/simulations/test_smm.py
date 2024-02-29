@@ -505,9 +505,8 @@ def test_c_solver(mesh_type):
 
 @pytest.mark.critical
 @pytest.mark.unfinished
-def test_c_turbulence():
+def test_restart_from_openfoam(level=1):
     main_dir = os.getenv("SMS")
-    level = 0
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
@@ -515,9 +514,9 @@ def test_c_turbulence():
         num_flux=flux.LLF(),
         #compute_dt=timestepping.adaptive(CFL=0.15),
         compute_dt=timestepping.constant(dt=0.01),
-        time_end=0.50,
+        time_end=2.00,
         output_snapshots=100,
-        output_clean_dir=True,
+        output_clean_dir=False,
         output_dir=os.path.join(main_dir, "outputs/output_c"),
         callbacks=['ComputeFoamDeltaDataSet', 'LoadOpenfoam' ]
         # callbacks=['LoadOpenfoam', 'ComputeFoamDeltaDataSet']
@@ -528,7 +527,7 @@ def test_c_turbulence():
 
     print(f"number of available cpus: {os.cpu_count()}")
 
-    velocity = 30.*1000./3600.
+    velocity = 1.
     height = 0.5
     inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
     inflow_dict[0] = height
@@ -543,7 +542,7 @@ def test_c_turbulence():
             # BC.Wall(physical_tag="bottom"),
             # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
             # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            BC.Wall(physical_tag="pillar"),
+            # BC.Wall(physical_tag="pillar"),
             BC.Wall(physical_tag="top"),
             BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
@@ -574,13 +573,108 @@ def test_c_turbulence():
         # settings={"friction": ["chezy", "newtonian"]},
         settings={"friction": ["newtonian"]},
         # settings={},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+    main_dir = os.getenv("SMS")
+    # mesh = Mesh.load_gmsh(
+    # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+    #     # os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
+    #     os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
+    #     "triangle",
+    #  )
+    mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+
+    fvm_c_unsteady_semidiscete(
+        mesh,
+        model,
+        settings,
+        ode_solver_flux="RK1",
+        ode_solver_source="RK1",
+        rebuild_model=True,
+        rebuild_mesh=False,
+        rebuild_c=True,
+    )
+
+    io.generate_vtk(settings.output_dir)
+
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_restart_from_openfoam_prediction(level=1, coefs=[1.957, -16.829, 3.119, 8.151, 0, -4.466, 0.061, 3.444]):
+    main_dir = os.getenv("SMS")
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={**{"g": 9.81,  "nu": 1.034*10**(-6)}, **{f"C{i+1}": coef for i, coef in enumerate(coefs)}},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        #compute_dt=timestepping.adaptive(CFL=0.15),
+        compute_dt=timestepping.constant(dt=0.01),
+        time_end=2.00,
+        output_snapshots=100,
+        output_clean_dir=False,
+        output_dir=os.path.join(main_dir, "outputs/output_c_prediction"),
+        callbacks=[]
+    )
+
+    print(f"number of available cpus: {os.cpu_count()}")
+
+    velocity = 1.
+    height = 0.5
+    inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
+    inflow_dict[0] = height
+    inflow_dict[1] = velocity * height
+    outflow_dict = {}
+    # outflow_dict = {0: 0.1}
+
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Wall(physical_tag="hole"),
+            # BC.Wall(physical_tag="top"),
+            # BC.Wall(physical_tag="bottom"),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(physical_tag="pillar"),
+            BC.Wall(physical_tag="top"),
+            BC.Wall(physical_tag="bottom"),
+            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+        ]
+    )
+
+    def ic_func(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = height
+        Q[1] = 0.
+        Q[2] = 0.
+        # Q[3] = 0.1
+        # if x[0] < 0.5:
+        #     Q[0] += 0.1 * x[1]
+        #     Q[1] += 0.1 * x[1] * args.vel
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        settings={"friction": ["newtonian", "sindy"]},
+        # settings={},
+        basis=Basis(basis=Legendre_shifted(order=level)),
     )
     main_dir = os.getenv("SMS")
     mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
         # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
-        os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
+        # os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
+        os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'),
     #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
         "triangle",
      )
@@ -668,6 +762,103 @@ def test_spline_strongbc_1d():
     plt.legend()
     plt.show()
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_restart_from_openfoam_plotter(level=1):
+    main_dir = os.getenv("SMS")
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        #compute_dt=timestepping.adaptive(CFL=0.15),
+        compute_dt=timestepping.constant(dt=0.01),
+        time_end=2.00,
+        output_snapshots=100,
+        output_clean_dir=False,
+        output_dir=os.path.join(main_dir, "outputs/output_c"),
+        callbacks=['ComputeFoamDeltaDataSet', 'LoadOpenfoam' ]
+        # callbacks=['LoadOpenfoam', 'ComputeFoamDeltaDataSet']
+        # callbacks=['ComputeFoamDeltaDataSet']
+        # callbacks=['LoadOpenfoam']
+        # callbacks=[]
+    )
+
+    print(f"number of available cpus: {os.cpu_count()}")
+
+    velocity = 30.*1000./3600.
+    height = 0.5
+    inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
+    inflow_dict[0] = height
+    inflow_dict[1] = velocity * height
+    outflow_dict = {}
+    # outflow_dict = {0: 0.1}
+
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Wall(physical_tag="hole"),
+            # BC.Wall(physical_tag="top"),
+            # BC.Wall(physical_tag="bottom"),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(physical_tag="pillar"),
+            BC.Wall(physical_tag="top"),
+            BC.Wall(physical_tag="bottom"),
+            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+        ]
+    )
+
+    def ic_func(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = height
+        Q[1] = 0.
+        Q[2] = 0.
+        # Q[3] = 0.1
+        # if x[0] < 0.5:
+        #     Q[0] += 0.1 * x[1]
+        #     Q[1] += 0.1 * x[1] * args.vel
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        settings={"friction": ["newtonian"]},
+        # settings={},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+    main_dir = os.getenv("SMS")
+    # mesh = Mesh.load_gmsh(
+    # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+    #     # os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
+    #     os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
+    #     "triangle",
+    #  )
+    mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+
+    # fvm_c_unsteady_semidiscete(
+    #     mesh,
+    #     model,
+    #     settings,
+    #     ode_solver_flux="RK1",
+    #     ode_solver_source="RK1",
+    #     rebuild_model=False,
+    #     rebuild_mesh=False,
+    #     rebuild_c=True,
+    # )
+
+    io.generate_vtk(settings.output_dir)
+
 
 
 if __name__ == "__main__":
@@ -681,5 +872,7 @@ if __name__ == "__main__":
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
-    # test_c_turbulence()
-    test_spline_strongbc_1d()
+    # test_restart_from_openfoam()
+    test_restart_from_openfoam_prediction()
+    # test_restart_from_openfoam_plotter()
+    # test_spline_strongbc_1d()

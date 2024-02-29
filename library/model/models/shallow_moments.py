@@ -463,6 +463,21 @@ class ShallowMoments2d(Model):
                 out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
         return out
 
+
+    def sindy(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+self.levels+1+offset]
+        p = self.parameters
+        out[1] += p.C1 * sympy.Abs(ha[0]/h) + p.C2 * sympy.Abs(ha[1]/h) + p.C3 * sympy.Abs(ha[0]/h)**(7/3)+ p.C4 * sympy.Abs(ha[1]/h)**(7/3)
+        out[2] += p.C5 * sympy.Abs(ha[0]/h) + p.C6 * sympy.Abs(ha[1]/h) + p.C7 * sympy.Abs(ha[0]/h)**(7/3)+ p.C8 * sympy.Abs(ha[1]/h)**(7/3)
+        out[3] += p.C1 * sympy.Abs(ha[0]/h) + p.C2 * sympy.Abs(ha[1]/h) + p.C3 * sympy.Abs(ha[0]/h)**(7/3)+ p.C4 * sympy.Abs(ha[1]/h)**(7/3)
+        out[4] += p.C5 * sympy.Abs(ha[0]/h) + p.C6 * sympy.Abs(ha[1]/h) + p.C7 * sympy.Abs(ha[0]/h)**(7/3)+ p.C8 * sympy.Abs(ha[1]/h)**(7/3)
+        return out
+
     def slip(self):
         assert "lamda" in vars(self.parameters)
         assert "rho" in vars(self.parameters)

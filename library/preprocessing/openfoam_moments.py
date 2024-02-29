@@ -9,6 +9,7 @@ import h5py
 
 from library.mesh.fvm_mesh import Mesh
 from library.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
+import library.misc.io as io
 
 
 main_dir = os.getenv("SMS")
@@ -143,14 +144,15 @@ def convert_openfoam_to_moments_single(filename, n_levels):
     Q, basis = compute_shallow_moment_projection(fields, coordinates, n_levels)
     return coordinates, Q, time, basis
 
-def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_order):
+def convert_openfoam_to_moments(filepath, n_levels, filepath_mesh_for_order, meshtype_order='triganle'):
+    filepath_vtk = os.path.join(filepath, "VTK")
     filename = "fields_openfoam.hdf5"
     sort_order = None
 
     # file order
     file_number_list = []
     file_start = ""
-    for i_file, file in enumerate(os.listdir(filepath)):
+    for i_file, file in enumerate(os.listdir(filepath_vtk)):
         if file.endswith(".vtm"):
             file_start = file.split("_")[0]
             file_start = file.rsplit('_', 1)[0]
@@ -159,11 +161,13 @@ def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_orde
             file_number_list.append(index)
 
     file_number_list.sort()
+    print(file_number_list)
 
     # first iteration
-    file0 = os.path.join(filepath, file_start) + "_" + str(file_number_list[0]) + ".vtm"
+    file0 = os.path.join(filepath_vtk, file_start) + "_" + str(file_number_list[0]) + ".vtm"
     coordinates, Q, time, basis = convert_openfoam_to_moments_single(file0, n_levels)
-    Q, sort_order = sort_fields_by_mesh(filepath_hdf5_mesh_for_order, coordinates, Q)
+    mesh_order = Mesh.load_gmsh(filepath_mesh_for_order, meshtype_order)
+    Q, sort_order = sort_fields_by_mesh(mesh_order, coordinates, Q)
     if os.path.exists(os.path.join(filepath, filename)):
         os.remove(os.path.join(filepath, filename))
     save_fields_to_hdf5(filepath, 0, time, Q.T, Qaux=None, filename=filename)
@@ -175,7 +179,7 @@ def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_orde
     iter +=1
     # loop iterations
     for i, i_file in enumerate(file_number_list[1:]):
-        file = os.path.join(filepath, file_start) + "_" + str(i_file) + ".vtm"
+        file = os.path.join(filepath_vtk, file_start) + "_" + str(i_file) + ".vtm"
         coordinates, Q, time, basis = convert_openfoam_to_moments_single(file, n_levels)
         Q = apply_order_to_fields(sort_order, Q)
         save_fields_to_hdf5(filepath, i+1, time, Q.T, Qaux=None, filename=filename)
@@ -183,11 +187,10 @@ def convert_openforam_to_moments(filepath, n_levels, filepath_hdf5_mesh_for_orde
         iter +=1
 
 
-def sort_fields_by_mesh(filepath_mesh, coordinates, Q):
+def sort_fields_by_mesh(mesh, coordinates, Q):
     #coordinates are still 3d, while Q is 2d and the mesh is 2d
     n_layers, n_elements_per_layer = get_number_of_layers_and_elements_in_plane(coordinates)
     coords_2d = coordinates[:n_elements_per_layer,:2]
-    mesh = Mesh.from_hdf5(filepath_mesh)
     coords_ordered = mesh.element_center
     # Construct a KDTree from coords_2d
     tree = KDTree(coords_2d)
@@ -310,12 +313,15 @@ def test_sort():
 
     # mesh_comparison = Mesh.load_gmsh(os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_3d.msh'), 'tetra')
 
-    sort_fields_by_mesh(filepath_hdf_mesh, coordinates, Q)
+    sort_fields_by_mesh(mesh, coordinates, Q)
 
 def test_convert_openfoam_to_moments(level = 0):
-    filepath = os.path.join(main_dir, 'openfoam_data/channelflow_coarse')
-    filepath_target_mesh = os.path.join(os.path.join(main_dir, 'openfoam_data/channelflow_coarse/mesh.hdf5'))
-    convert_openforam_to_moments(filepath, level, filepath_target_mesh)
+    # filepath = os.path.join(main_dir, 'openfoam_data/channelflow_coarse')
+    foam_sim = os.getenv("FOAM_SIM")
+    filepath = os.path.join(foam_sim, 'multiphase/interFoam/RAS/channelflow_mid')
+    filepath_target_mesh = os.path.join(os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'))
+    convert_openfoam_to_moments(filepath, level, filepath_target_mesh, meshtype_order='triangle')
+
 
 
 if __name__ == '__main__':
@@ -326,3 +332,6 @@ if __name__ == '__main__':
     # test_plots()
     # test_sort()
     test_convert_openfoam_to_moments(level=1)
+    filepath = os.path.join(main_dir, 'openfoam_data/channelflow_mid')
+    filepath_mesh = os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh')
+    io.generate_vtk(filepath, filepath_gmsh=filepath_mesh,gmsh_mesh_type='triangle',  filename_fields="fields_openfoam.hdf5", filename_out="fields_openfoam_vtk", skip_aux=True)

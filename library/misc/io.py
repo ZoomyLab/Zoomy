@@ -155,16 +155,22 @@ def _write_to_vtk_from_vertices_edges(
 
 def generate_vtk(
     filepath: str,
+    filepath_gmsh: str = None,
+    gmsh_mesh_type: str = None,
     field_names=None,
     aux_field_names=None,
     filename_fields="fields.hdf5",
     filename_out="out",
+    skip_aux=False,
 ):
     main_dir = os.getenv("SMS")
     abs_filepath = os.path.join(main_dir, filepath)
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
     file_fields = h5py.File(os.path.join(abs_filepath, filename_fields), "r")
-    mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(abs_filepath, "mesh.hdf5"))
+    if filepath_gmsh is not None:
+        mesh = fvm_mesh.Mesh.load_gmsh(os.path.join(main_dir, filepath_gmsh), gmsh_mesh_type)
+    else:
+        mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(abs_filepath, "mesh.hdf5"))
     snapshots = list(file_fields.keys())
     # init timestamp file
     vtk_timestamp_file = {"file-series-version": "1.0", "files": []}
@@ -176,7 +182,10 @@ def generate_vtk(
     for snapshot in snapshots:
         time = file_fields[snapshot]["time"][()]
         Q = file_fields[snapshot]["Q"][()]
-        Qaux = file_fields[snapshot]["Qaux"][()]
+        if not skip_aux:
+            Qaux = file_fields[snapshot]["Qaux"][()]
+        else:
+            Qaux = np.empty((Q.shape[0], 0))
         filename = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
         fullpath = os.path.join(abs_filepath, filename)
 
