@@ -20,3 +20,5 @@ profiling_result.png
 
 meshes
 openfoam_data/*
+openfoam_data/channelflow_coarse
+openfoam_data/mesh.hdf5
