@@ -19,4 +19,4 @@ library/solver/KokkosCore_config.h
 profiling_result.png
 
 meshes
-openfoam_data
+openfoam_data/*
