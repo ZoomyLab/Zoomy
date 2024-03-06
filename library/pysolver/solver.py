@@ -42,6 +42,8 @@ class Settings:
     output_clean_dir: bool = True
     solver_code_base: str = "python"
     callbacks: [str] = []
+    debug: bool = False
+    profiling: bool = False
 
 
 def _initialize_problem(model, mesh):
@@ -318,6 +320,9 @@ def fvm_c_unsteady_semidiscete(
             path_settings=os.path.join(settings.output_dir, "settings.hdf5"),
             path_mesh=os.path.join(settings.output_dir, "mesh.hdf5"),
             path_fields=os.path.join(settings.output_dir, "fields.hdf5"),
+            model_path = os.path.join(settings.output_dir, "c_interface/Model"),
+            debug = settings.debug,
+            profiling = settings.profiling,
         )
 
     c_interface.run_driver()
@@ -352,10 +357,10 @@ def fvm_unsteady_semidiscrete(
     # )
     # logger = logging.getLogger(__name__ + ":solve_steady")
 
-    enforce_boundary_conditions = model.basis.enforce_boundary_conditions()
+    # enforce_boundary_conditions = model.basis.enforce_boundary_conditions()
 
     Q, Qaux = _initialize_problem(model, mesh)
-    Q = enforce_boundary_conditions(Q)
+    # Q = enforce_boundary_conditions(Q)
     parameters = model.parameter_values
     Qnew = deepcopy(Q)
 
@@ -414,14 +419,14 @@ def fvm_unsteady_semidiscrete(
 
         # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
-        Qnew = enforce_boundary_conditions(Qnew)
+        # Qnew = enforce_boundary_conditions(Qnew)
         Qnew = ode_solver_source(
             compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
         )
         # Qnew  += -Q+ode_solver_source(
         #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
         # )
-        Qnew = enforce_boundary_conditions(Qnew)
+        # Qnew = enforce_boundary_conditions(Qnew)
 
         # Update solution and time
         time += dt

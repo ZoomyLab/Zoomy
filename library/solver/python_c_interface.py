@@ -11,6 +11,9 @@ def build(
     path_settings="outputs/output_c/settings.hdf5",
     path_mesh="outputs/output_c/mesh.hdf5",
     path_fields="outputs/output_c/fields.hdf5",
+    model_path="outputs/output_c/c_interface",
+    debug=False,
+    profiling=False,
 ):
     main_dir = os.getenv("SMS")
     path = f"{main_dir}/library/solver"
@@ -42,10 +45,13 @@ def build(
             f"PATH_SETTINGS={path_settings}",
             f"PATH_MESH={path_mesh}",
             f"PATH_FIELDS={path_fields}",
+            f"MODEL_PATH={model_path}",
             f"TIMESTEPPER=Adaptive",
             f"TIMESTEPPER_PARAM={0.45}",
             f"ODE_FLUX={1}",
             f"ODE_SOURCE={-1}",
+            f"DEBUG={int(debug)}",
+            f"PROFILING={int(profiling)}",
         ]
     )
     print(f"make command : {command}")

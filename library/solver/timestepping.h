@@ -1,6 +1,7 @@
 #include "define.h"
 #include "model.h"
 #include "mesh.h"
+#include <cassert>
 
 class TimeStepper {
 public:
@@ -34,7 +35,9 @@ public:
     }
     double get_dt(double max_abs_eigenvalue)
     {
-        return this->CFL * this->min_inradius / max_abs_eigenvalue;
+        double dt =  this->CFL * this->min_inradius / max_abs_eigenvalue;
+        assert(dt > 0.0000001);
+        return dt;
     }
     ~Adaptive() {}
 };

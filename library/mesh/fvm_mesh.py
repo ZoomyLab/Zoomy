@@ -97,13 +97,13 @@ class Mesh:
         ]
 
         n_boundary_elements = 2
-        boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
+        # boundary_face_vertices = np.array([(0), (n_elements)], dtype=int)
         boundary_face_corresponding_element = np.array([0, n_elements-1], dtype=int)
         boundary_face_element_face_index = np.array([0, 1], dtype=int)
         boundary_face_tag = np.array([0, 1])
         boundary_tag_names = np.array(['left', 'right'], dtype='S10')
 
-        boundary_face_vertices = np.array([0, n_elements - 1], dtype=int)
+        boundary_face_vertices = np.array([[0], [n_elements - 1]], dtype=int)
 
         return cls(dimension, 'line', n_elements, n_elements + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
 

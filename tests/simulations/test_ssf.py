@@ -12,6 +12,99 @@ from library.pysolver.reconstruction import GradientMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_ssf():
+
+    Lx = 1.3
+    Cf = 0.0036
+    h0 = 7.98 * 10**(-3)
+    a = 0.05
+    g = 9.81
+    theta = 0.05011
+    phi = 22.76
+    Cr = 0.00035
+
+    main_dir = os.getenv("SMS")
+    settings = Settings(
+        name="ShearShallowFlow",
+        parameters={"g": g, "Cr": Cr, "theta": theta, "phi": phi},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.6),
+        # compute_dt=timestepping.constant(dt=0.01),
+        time_end=25.00,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir=os.path.join(main_dir, "outputs/output_ssf"),
+        callbacks=[],
+        debug=True,
+        profiling=False,
+    )
+
+    # velocity = 1.*1000./3600.
+    # height = 0.5
+    # inflow_dict = {i: 0.0 for i in range(0, 3)}
+    # inflow_dict[0] = height
+    # inflow_dict[1] = velocity * height
+    # outflow_dict = {}
+    # outflow_dict = {0: 0.1}
+
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Wall(physical_tag="hole"),
+            # BC.Wall(physical_tag="top"),
+            # BC.Wall(physical_tag="bottom"),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(physical_tag="pillar"),
+            # BC.Wall(physical_tag="top"),
+            # BC.Wall(physical_tag="bottom"),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+        ]
+    )
+
+    def ic_func(x):
+        Q = np.zeros(3, dtype=float)
+        # Q[0] = height
+        Q[0] = h0 * (1 + a * np.sin(2 * np.pi * x[0] / Lx))
+        Q[1] = h0 * np.sqrt( g * h0 * np.tan(theta) / Cf )
+        Q[2] = phi * h0**2 / 2
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+    model = ShearShallowFlow(
+        dimension = 1,
+        fields=3,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        # settings={"friction": ["newtonian"]},
+        settings={"friction": ["friction_paper"]},
+    )
+    main_dir = os.getenv("SMS")
+
+    mesh = Mesh.create_1d([0, Lx], 100)
+
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+
+    fvm_c_unsteady_semidiscete(
+        mesh,
+        model,
+        settings,
+        ode_solver_flux="RK1",
+        ode_solver_source="RK1",
+        rebuild_model=True,
+        rebuild_mesh=True,
+        rebuild_c=True,
+    )
+
+    io.generate_vtk(settings.output_dir)
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -28,7 +121,9 @@ def test_ssf_2d():
         output_snapshots=100,
         output_clean_dir=True,
         output_dir=os.path.join(main_dir, "outputs/output_ssf"),
-        callbacks=[]
+        callbacks=[],
+        debug=False,
+        profiling=False,
     )
 
     velocity = 36.*1000./3600.
@@ -102,4 +197,5 @@ def test_ssf_2d():
 
 
 if __name__ == "__main__":
-    test_ssf_2d()
+    test_ssf()
+    # test_ssf_2d()

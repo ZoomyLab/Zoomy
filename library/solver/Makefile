@@ -64,7 +64,6 @@ PNETCDF_PATH=${VOLKOSPATH}/dependencies/pnetcdf/src
 # HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
 #TODO path difference windows/wsl vs laptop
 HDF5_PATH=${VOLKOSPATH}/dependencies/hdf5/hdf5
-MODEL_PATH=${VOLKOSPATH}/outputs/output_c/c_interface/Model
 
 ## by default build for cpu, alternative should be gpu
 ifndef ($arch)
@@ -103,16 +102,24 @@ ifeq ($(VOLKOS_DEBUG_MPI),1)
 debug=yes
 endif
 
-# TODO add debug/profiling command line options
-DEBUG=yes
-PROFILING=no
 
-ifeq ($(DEBUG),yes)
+# TODO add debug/profiling command line options
+# DEBUG=yes
+# PROFILING=no
+
+
+debug=no
+profiling=no
+ifeq ($(DEBUG),1)
 debug=yes
 endif
-ifeq ($(PROFILING),yes)
+ifeq ($(PROFILING),1)
 profiling=yes
 endif
+
+$(info debug=$(debug))
+$(info profiling=$(profiling))
+
 
 # Define binary folders and build executable name
 BIN_DIR = ${VOLKOSPATH}/bin
@@ -121,7 +128,7 @@ EXE = $(BIN_DIR)/volkos
 UNITTESTS = $(BIN_DIR_UT)/dambreak
 dummy_build_folder := $(shell mkdir -p $(BIN_DIR) $(BIN_DIR_UT))
 
-CXXFLAGS = -I${PNETCDF_PATH}/include -I${PETSC_PATH}/build_arch/include -I${PETSC_PATH}/include -I${HDF5_PATH}/include -DDIMENSION=$(DIMENSION) -DN_BOUNDARY_CONDITIONS=$(N_BOUNDARY_CONDITIONS) -DN_ELEMENTS=$(N_ELEMENTS) -DN_FIELDS=$(N_FIELDS) -DN_FIELDS_AUX=$(N_FIELDS_AUX) -DPATH_SETTINGS=\"$(PATH_SETTINGS)\" -DPATH_MESH=\"$(PATH_MESH)\" -DPATH_FIELDS=\"$(PATH_FIELDS)\" -DTIMESTEPPER=\"$(TIMESTEPPER)\" -DTIMESTEPPER_PARAM=$(TIMESTEPPER_PARAM) -DODE_FLUX=$(ODE_FLUX) -DODE_SOURCE=$(ODE_SOURCE)
+CXXFLAGS = -I${PNETCDF_PATH}/include -I${PETSC_PATH}/build_arch/include -I${PETSC_PATH}/include -I${HDF5_PATH}/include -DDIMENSION=$(DIMENSION) -DN_BOUNDARY_CONDITIONS=$(N_BOUNDARY_CONDITIONS) -DN_ELEMENTS=$(N_ELEMENTS) -DN_FIELDS=$(N_FIELDS) -DN_FIELDS_AUX=$(N_FIELDS_AUX) -DPATH_SETTINGS=\"$(PATH_SETTINGS)\" -DPATH_MESH=\"$(PATH_MESH)\" -DPATH_FIELDS=\"$(PATH_FIELDS)\" -DTIMESTEPPER=\"$(TIMESTEPPER)\" -DTIMESTEPPER_PARAM=$(TIMESTEPPER_PARAM) -DODE_FLUX=$(ODE_FLUX) -DODE_SOURCE=$(ODE_SOURCE) -I${MODEL_PATH}
 # CXXFLAGS = -O3  -I${HDF5_PATH}/include
 # CXXFLAGS = -O3
 MPICXX=`which mpic++`

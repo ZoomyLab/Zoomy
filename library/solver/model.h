@@ -1,7 +1,7 @@
 #ifndef MODEL_H
 #define MODEL_H
 
-#include "../../outputs/output_c/c_interface/Model/model_code.h"
+#include "model_code.h"
 #include "define.h"
 
 class Model
