@@ -58,6 +58,7 @@ def _initialize_problem(model, mesh):
     Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
 
     Q = model.initial_conditions.apply(mesh.element_center, Q)
+    Qaux = model.aux_initial_conditions.apply(mesh.element_center, Qaux)
     return Q, Qaux
 
 
@@ -420,6 +421,11 @@ def fvm_unsteady_semidiscrete(
         # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
         # Qnew = enforce_boundary_conditions(Qnew)
+
+        hb = lambda t, x : np.cos(x[:, 0] -t)
+        Qaux[:,0] = hb(time, mesh.element_center)
+        Qaux = Qaux.reshape((Q.shape[0], 1))
+
         Qnew = ode_solver_source(
             compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
         )

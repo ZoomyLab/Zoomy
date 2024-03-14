@@ -15,6 +15,105 @@ import argparse
 
 @pytest.mark.critical
 @pytest.mark.unfinished
+def test_smm_wave():
+    level = 0
+    settings = Settings(
+        name="ShallowMomentsWave",
+        parameters={"g": 1.0, "lamda": 1.0, "nu": 1., "ex": 0.0, "rho":1., "ez": 1.0},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.9),
+        # compute_dt=timestepping.constant(dt=0.1),
+        time_end=10*2*np.pi,
+        output_snapshots=100,
+        output_dir = 'outputs/wave'
+    )
+
+    bc_tags = ["left", "right"]
+    bc_tags_periodic_to = ["right", "left"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    def custom_ic(x):
+        Q = np.zeros(level+2, dtype=float)
+        Q[0] = np.sin(x[0]) + 2
+        Q[1] = Q[0] 
+        return Q
+
+    def custom_ic_aux(x):
+        Q = np.zeros(1, dtype=float)
+        Q[0] = np.cos(x[0])
+        return Q
+
+    # ic = IC.Constant(constants = lambda n_fields: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
+    ic = IC.UserFunction(custom_ic)
+    icaux = IC.UserFunction(custom_ic_aux)
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=['dhdx'],
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        aux_initial_conditions=icaux,
+        # settings={"eigenvalue_mode": "symbolic", "friction": ["slip", "newtonian", "inclined_plane"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": [] , "topography": True},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+    mesh = Mesh.create_1d((0, 2*np.pi), 30)
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
+
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_smm_analytical():
+    level = 3
+    settings = Settings(
+        name="ShallowMomentsAnalytical",
+        parameters={"g": 1.0, "lamda": 1.0, "nu": 1., "ex": 1.0, "rho":1., "ez": 0.0},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.1),
+        # compute_dt=timestepping.constant(dt=0.1),
+        time_end=5.0,
+        output_snapshots=100,
+        output_dir = 'outputs/analytical'
+    )
+
+    bc_tags = ["left", "right"]
+    bc_tags_periodic_to = ["right", "left"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    # ic = IC.Constant(constants = lambda n_fields: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
+    ic = IC.Constant(constants = lambda n_fields: [1., 0.1,] + [0 for i in range(level)])
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"eigenvalue_mode": "symbolic", "friction": ["slip", "newtonian", "inclined_plane"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["slip", "newtonian", "inclined_plane"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+    mesh = Mesh.create_1d((-1, 1), 100)
+
+    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    io.generate_vtk(settings.output_dir)
+
+@pytest.mark.critical
+@pytest.mark.unfinished
 def test_smm_1d():
     level = 0
     settings = Settings(
@@ -873,6 +972,8 @@ if __name__ == "__main__":
     # test_smm_1d_crazy_basis()
     # test_c_solver('quad')
     # test_restart_from_openfoam()
-    test_restart_from_openfoam_prediction()
+    # test_restart_from_openfoam_prediction()
     # test_restart_from_openfoam_plotter()
     # test_spline_strongbc_1d()
+    # test_smm_analytical()
+    test_smm_wave()

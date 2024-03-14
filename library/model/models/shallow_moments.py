@@ -18,6 +18,7 @@ import h5py
 
 from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
 from library.model.models.base import Model
+import library.model.initial_conditions as IC
 
 
 # from library.solver.baseclass import BaseYaml
@@ -185,6 +186,7 @@ class ShallowMoments(Model):
         self,
         boundary_conditions,
         initial_conditions,
+        aux_initial_conditions=IC.Constant(),
         dimension=1,
         fields=2,
         aux_fields=0,
@@ -207,6 +209,7 @@ class ShallowMoments(Model):
             parameters_default = parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
+            aux_initial_conditions=aux_initial_conditions,
             settings={**settings_default, **settings},
         )
 
@@ -264,6 +267,21 @@ class ShallowMoments(Model):
         dhdx = self.aux_variables.dhdx
         out[1] = h * p.g * (p.ex - p.ez * dhdx)
         return out
+
+    def inclined_plane(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        out[1] = h * p.g * (p.ex)
+        return out
+
+    def material_wave(self):
+        assert "nu" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        b = 
+        return out
+        
 
     def newtonian(self):
         """
