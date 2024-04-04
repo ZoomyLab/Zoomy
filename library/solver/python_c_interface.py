@@ -2,7 +2,10 @@ import subprocess
 import os
 
 
+
+
 def build(
+    
     dimension=2,
     n_boundary_conditions=4,
     n_elements=100,
@@ -37,6 +40,10 @@ def build(
     command = " ".join(
         [
             "make",
+            "arch=gpu",
+            "device=Volta100", 
+            # "device=cuda", 
+            # "device=Tesla100", 
             f"DIMENSION={dimension}",
             f"N_BOUNDARY_CONDITIONS={n_boundary_conditions}",
             f"N_ELEMENTS={n_elements}",
@@ -45,7 +52,7 @@ def build(
             f"PATH_SETTINGS={path_settings}",
             f"PATH_MESH={path_mesh}",
             f"PATH_FIELDS={path_fields}",
-            f"MODEL_PATH={model_path}",
+            f"MODEL_PATH={os.path.join(main_dir, model_path)}",
             f"TIMESTEPPER=Adaptive",
             f"TIMESTEPPER_PARAM={0.45}",
             f"ODE_FLUX={1}",

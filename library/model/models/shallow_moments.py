@@ -279,7 +279,6 @@ class ShallowMoments(Model):
         assert "nu" in vars(self.parameters)
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        b = 
         return out
         
 

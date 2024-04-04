@@ -11,19 +11,29 @@
 #ifndef FVM_H
 #define FVM_H
 
+KOKKOS_INLINE_FUNCTION void numerical_flux(Model& model, const realArr qi, const realArr qj, const realArr qauxi, const realArr qauxj, const realArr param, const realArr normal, realArr& F)
+{
+    rusanov(qi, qj, qauxi, qauxj, param, normal, model, F);
+}
+
+KOKKOS_INLINE_FUNCTION void nonconservative_flux(Model& model, const realArr qi, const realArr qj, const realArr qauxi, const realArr qauxj, const realArr param, const realArr normal, realArr& NC)
+{
+    segmentpath(qi, qj, qauxi, qauxj, param, normal, model, NC);
+}
+
 void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const realArr param, const intArr2 element_neighbor_index_tuples, Model& model, const Mesh& mesh, const BoundaryConditions& boundary_conditions, realArr2& out)
 {
 
     //TODO passing num_flux and nc_flux as lambdas with non-zero capture list does not work. Maybe I should use a class instead?
-    auto numerical_flux = [&model](const realArr qi, const realArr qj, const realArr qauxi, const realArr qauxj, const realArr param, const realArr normal, realArr& F) -> void
-    {
-        rusanov(qi, qj, qauxi, qauxj, param, normal, model, F);
-    };
+//     auto numerical_flux =  [model] __device__ (const realArr qi, const realArr qj, const realArr qauxi, const realArr qauxj, const realArr param, const realArr normal, realArr& F) -> void
+//     {
+//         rusanov(qi, qj, qauxi, qauxj, param, normal, model, F);
+//     };
 
-    auto nonconservative_flux = [&model](const realArr& qi, const realArr& qj, const realArr& qauxi, const realArr& qauxj, const realArr& param, const realArr& normal, realArr& NC) -> void
-    {
-        segmentpath(qi, qj, qauxi, qauxj, param, normal, model, NC);
-    };
+//    auto nonconservative_flux = [model] __device__  (const realArr& qi, const realArr& qj, const realArr& qauxi, const realArr& qauxj, const realArr& param, const realArr& normal, realArr& NC) -> void
+//    {
+//        segmentpath(qi, qj, qauxi, qauxj, param, normal, model, NC);
+//    };
     const int dim = mesh.dimension;
     const int n_fields = Q.extent(1);
     const int n_aux_fields = Qaux.extent(1);
@@ -80,8 +90,8 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         // model.eigenvalues(qj, qauxj, param, normal, eigenvalues);
         // max_abs_ev = max(max_abs_ev, max_abs(eigenvalues));
 
-        numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
-        nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
+        // numerical_flux(model, qi, qj, qauxi, qauxj, param, normal, F);
+        // nonconservative_flux(model, qi, qj, qauxi, qauxj, param, normal, NC);
 
         for (int i = 0; i < n_fields; ++i)
         {
@@ -131,8 +141,8 @@ void fvm_semidiscrete_split_step(const realArr2 Q, const realArr2 Qaux, const re
         // model.eigenvalues(qj, qauxj, param, normal, eigenvalues);
         // max_abs_ev = max(max_abs_ev, max_abs(eigenvalues));
 
-        numerical_flux(qi, qj, qauxi, qauxj, param, normal, F);
-        nonconservative_flux(qi, qj, qauxi, qauxj, param, normal, NC);
+        // numerical_flux(model, qi, qj, qauxi, qauxj, param, normal, F);
+        // nonconservative_flux(model, qi, qj, qauxi, qauxj, param, normal, NC);
 
         for (int i = 0; i < n_fields; ++i)
         {
