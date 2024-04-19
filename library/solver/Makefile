@@ -245,7 +245,8 @@ endif
 
 ifeq ($(arch),gpu)
 	archCheck=checkGPU
-	CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper -x cu -ccbin ${MPICXX}
+	# CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper -x cu -ccbin ${MPICXX}
+	CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper -ccbin ${MPICXX}
 	#CXX = clang
 	CXXFLAGS += -DKOKKOS_ENABLE_CXX17 -DKOKKOS_CXX_STANDARD=c++17 -std=c++17 
 	KOKKOS_DEVICES = "Cuda"
