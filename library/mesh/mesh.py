@@ -191,9 +191,11 @@ class Mesh:
     boundary_face_cells: IArray
     boundary_face_ghosts: IArray
     boundary_face_function_numbers: IArray
+    boundary_face_face_indices: IArray
     face_cells: IArray
     face_normals: FArray
     face_volumes: FArray
+    boundary_conditions_sorted_names: CArray
 
     @classmethod
     def from_gmsh(cls, filepath):
@@ -232,18 +234,22 @@ class Mesh:
 
         boundary_face_cells = {k: [] for k in boundary_dict.values()}
         boundary_face_ghosts = {k: [] for k in boundary_dict.values()}
+        boundary_face_face_indices = {k: [] for k in boundary_dict.values()}
         face_cells = []
         face_normals = []
         face_volumes = []
         n_faces = egEnd-egStart
+        allowed_keys = []
         for e in range(egStart, egEnd):
             label = gdm.getLabelValue("Face Sets", e)
             # 2 cells support an face. Ghost cell is the one with the higher number
             if label > -1:
+                allowed_keys.append(label)
                 boundary_cell = gdm.getSupport(e).min() - cStart
                 boundary_ghost = gdm.getSupport(e).max() - cStart
                 boundary_face_cells[label].append(boundary_cell)
                 boundary_face_ghosts[label].append(boundary_ghost)
+                boundary_face_face_indices[label].append(e-egStart)
                 # boundary_face_vertices[label].append(gdm.getCone(e)-vStart)
             _face_cells = gdm.getSupport(e)
             face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(e)
@@ -261,13 +267,28 @@ class Mesh:
         face_normals = np.array(face_normals, dtype=float)
         face_cells = np.array(face_cells, dtype=int)
         boundary_face_function_numbers = _boundary_dict_indices(boundary_face_cells)
+
+        # get rid of empty keys in the boundary_dict (e.g. no surface values in 2d)
+        boundary_dict_inverted = {v: k for k, v in boundary_dict.items()}
+        boundary_dict_reduced = {k: boundary_dict_inverted[k] for k in allowed_keys}
+
+        # sort the dict by the values
+        sorted_keys = np.array(list(boundary_dict_reduced.keys()), dtype=int)
+        sorted_keys.sort()
+        boundary_dict = {k: boundary_dict_reduced[k] for k in sorted_keys}
+        boundary_face_cells = {k: boundary_face_cells[k] for k in sorted_keys}
+        boundary_face_ghosts = {k: boundary_face_ghosts[k] for k in sorted_keys}
+        boundary_face_face_indices = {k: boundary_face_face_indices[k] for k in sorted_keys}
+
+        boundary_conditions_sorted_names = np.array(list(boundary_dict.keys()), dtype='str')
         boundary_face_cells = np.array(_boundary_dict_to_list(boundary_face_cells), dtype=int)
         boundary_face_ghosts = np.array(_boundary_dict_to_list(boundary_face_ghosts), dtype=int)
+        boundary_face_face_indices = np.array(_boundary_dict_to_list(boundary_face_face_indices), dtype=int)
         n_boundary_faces =  boundary_face_cells.shape[0]
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates, cell_vertices, cell_faces, cell_volumes, cell_centers, cell_inradius, boundary_face_cells, boundary_face_ghosts, boundary_face_function_numbers, face_cells, face_normals, face_volumes)
+        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates, cell_vertices, cell_faces, cell_volumes, cell_centers, cell_inradius, boundary_face_cells, boundary_face_ghosts, boundary_face_function_numbers, boundary_face_face_indices, face_cells, face_normals, face_volumes, boundary_conditions_sorted_names)
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -290,36 +311,40 @@ class Mesh:
             mesh.create_dataset("boundary_face_cells", data=self.boundary_face_cells)
             mesh.create_dataset("boundary_face_ghosts", data=self.boundary_face_ghosts)
             mesh.create_dataset("boundary_face_function_numbers", data=self.boundary_face_function_numbers)
+            mesh.create_dataset("boundary_face_face_indices", data=self.boundary_face_face_indices)
             mesh.create_dataset("face_cells", data=self.face_cells)
             mesh.create_dataset("face_normals", data=self.face_normals)
             mesh.create_dataset("face_volumes", data=self.face_volumes)
+            mesh.create_dataset("boundary_conditions_sorted_names", data=np.array(self.boundary_conditions_sorted_names, dtype='S'))
 
     
     @classmethod
     def from_hdf5(cls, filepath: str):
         with h5py.File(filepath, "r") as file:
-            file_mesh = file
+            file = file
             mesh = cls(
-                file_mesh["mesh"]["dimension"][()],
-                (file_mesh["mesh"]["type"][()]).decode("utf-8"),
-                file_mesh["mesh"]["n_cells"][()],
-                file_mesh["mesh"]["n_inner_cells"][()],
-                file_mesh["mesh"]["n_faces"][()],
-                file_mesh["mesh"]["n_vertices"][()],
-                file_mesh["mesh"]["n_boundary_faces"][()],
-                file_mesh["mesh"]["n_faces_per_cell"][()],
-                file_mesh["mesh"]["vertex_coordinates"][()],
-                file_mesh["mesh"]["cell_vertices"][()],
-                file_mesh["mesh"]["cell_faces"][()],
-                file_mesh["mesh"]["cell_volumes"][()],
-                file_mesh["mesh"]["cell_centers"][()],
-                file_mesh["mesh"]["cell_inradius"][()],
-                file_mesh["mesh"]["boundary_face_cells"][()],
-                file_mesh["mesh"]["boundary_face_ghosts"][()],
-                file_mesh["mesh"]["boundary_face_function_numbers"][()],
-                file_mesh["mesh"]["face_cells"][()],
-                file_mesh["mesh"]["face_normals"][()],
-                file_mesh["mesh"]["face_volumes"][()],
+                file["mesh"]["dimension"][()],
+                (file["mesh"]["type"][()]).decode("utf-8"),
+                file["mesh"]["n_cells"][()],
+                file["mesh"]["n_inner_cells"][()],
+                file["mesh"]["n_faces"][()],
+                file["mesh"]["n_vertices"][()],
+                file["mesh"]["n_boundary_faces"][()],
+                file["mesh"]["n_faces_per_cell"][()],
+                file["mesh"]["vertex_coordinates"][()],
+                file["mesh"]["cell_vertices"][()],
+                file["mesh"]["cell_faces"][()],
+                file["mesh"]["cell_volumes"][()],
+                file["mesh"]["cell_centers"][()],
+                file["mesh"]["cell_inradius"][()],
+                file["mesh"]["boundary_face_cells"][()],
+                file["mesh"]["boundary_face_ghosts"][()],
+                file["mesh"]["boundary_face_function_numbers"][()],
+                file["mesh"]["boundary_face_face_indices"][()],
+                file["mesh"]["face_cells"][()],
+                file["mesh"]["face_normals"][()],
+                file["mesh"]["face_volumes"][()],
+                np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str')
             )
         return mesh
 

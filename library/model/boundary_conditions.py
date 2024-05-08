@@ -111,10 +111,10 @@ class Wall(BoundaryCondition):
 class BoundaryConditions:
     boundary_conditions: list[BoundaryCondition]
     # map_boundary_index_to_required_elements: IArray = np.empty(0, dtype=int)
-    map_function_index_to_physical_index: List[int] = []
+    # map_function_index_to_physical_index: List[int] = []
     boundary_functions: List[Callable] = []
     # boundary_functions_name: List[str] = []
-    # runtime_bc: list[Callable] = []
+    # runtime_bcs: list[Callable] = []
     initialized: bool = False
 
     #TODO add variables, ghost_variables and so on. Pass it to full_maps...
@@ -122,17 +122,22 @@ class BoundaryConditions:
         # self.map_boundary_index_to_required_elements = np.empty(mesh.n_boundary_elements, dtype=int)
         # self.map_boundary_index_to_boundary_function_index = [None]  * mesh.n_boundary_elements
         # _map_boundary_function_name_to_index: Dict[str, int] = {}
+        map_physical_name_to_physical_index = []
 
         # _map_boundary_index_to_function: Dict[int, Callable] = {}
         for i_bc, bc in enumerate(self.boundary_conditions):
             # bc.fill_maps_for_boundary_conditions(mesh, self.map_boundary_index_to_required_elements, self.map_boundary_index_to_boundary_function_index, _map_boundary_function_name_to_index, _map_boundary_index_to_function, Q, Qaux, parameters, normal)
-            map_function_index_to_physical_index.append(map_boundary_name_to_index[bc.physical_tag])
-            boundary_functions.append(bc.get_boundary_condition_function(Q, Qaux, parameters, normal))
+            map_physical_name_to_physical_index.append(map_boundary_name_to_index[bc.physical_tag])
+            self.boundary_functions.append(bc.get_boundary_condition_function(Q, Qaux, parameters, normal))
+            # sort such that the lowest physical index is first, which corresponds to the mesh.boundary_function_index indices.
+        sort_order = sorted(range(len(map_physical_name_to_physical_index)), key=map_physical_name_to_physical_index.__getitem__)
+        self.boundary_functions = self.boundary_functions[sort_order]
         self.initialized=True
 
     def get_boundary_function_list(self):
-        assert initialized
+        assert self.initialized
         return self.boundary_functions
+    
 
     def get_map_function_index_to_physical_index(self):
         """

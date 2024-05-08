@@ -1003,9 +1003,9 @@ def test_petsc(mesh_type):
         settings={"friction": ["chezy", "newtonian"]},
     )
     main_dir = os.getenv("SMS")
-    mesh, boundary_labels_dict, ghost_cells_dict = petscMesh.load_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
 
-    fvm_c_unsteady_semidiscete(
+    jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
     )
     # io.generate_vtk(settings.output_dir)
