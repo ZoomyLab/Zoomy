@@ -9,6 +9,7 @@ import library.model.boundary_conditions as BC
 from library.pysolver.ode import RK1
 import library.misc.io as io
 from library.pysolver.reconstruction import GradientMesh
+import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 
@@ -958,6 +959,57 @@ def test_restart_from_openfoam_plotter(level=1):
 
     io.generate_vtk(settings.output_dir)
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
+def test_petsc(mesh_type):
+    level = 0
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={"g": 1.0, "C": 10.0, "nu": 0.001},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=1.2,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir="outputs/output_c",
+    )
+
+    bc_tags = ["left", "right", "top", "bottom"]
+    bc_tags_periodic_to = ["right", "left", "bottom", "top"]
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Extrapolation(physical_tag=tag)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
+    )
+    ic = IC.RP(
+        left=lambda n_field: np.array(
+            [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+        ),
+        right=lambda n_field: np.array(
+            [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+        ),
+    )
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ["chezy", "newtonian"]},
+    )
+    main_dir = os.getenv("SMS")
+    mesh, boundary_labels_dict, ghost_cells_dict = petscMesh.load_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+
+    fvm_c_unsteady_semidiscete(
+        mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
+    )
+    # io.generate_vtk(settings.output_dir)
+
 
 
 if __name__ == "__main__":
@@ -970,10 +1022,12 @@ if __name__ == "__main__":
     # test_channel_with_hole_2d()
     # test_smm_grad_2d()
     # test_smm_1d_crazy_basis()
-    test_c_solver('quad')
+    # test_c_solver('quad')
     # test_restart_from_openfoam()
     # test_restart_from_openfoam_prediction()
     # test_restart_from_openfoam_plotter()
     # test_spline_strongbc_1d()
     # test_smm_analytical()
     # test_smm_wave()
+    test_petsc('quad')
+    # test_petsc('triangle')

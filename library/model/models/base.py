@@ -18,7 +18,7 @@ from typing import Optional, Any, Type, Union
 from types import SimpleNamespace
 
 
-from library.model.boundary_conditions import BoundaryConditions, Periodic
+from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.misc.custom_types import FArray
 from library.misc.misc import vectorize  # type: ignore
@@ -84,8 +84,8 @@ class Model:
     dimension: int = 1
     boundary_conditions: BoundaryConditions = BoundaryConditions(
         [
-            Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            Extrapolation(physical_tag="left"),
+            Extrapolation(physical_tag="right"),
         ]
     )
     initial_conditions: InitialConditions = Constant()
