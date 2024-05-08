@@ -5,7 +5,8 @@ import meshio
 import json
 import shutil
 
-import library.mesh.fvm_mesh as fvm_mesh
+# import library.mesh.fvm_mesh as fvm_mesh
+from library.mesh.mesh import *
 
 
 def init_output_directory(path, clean):
@@ -67,28 +68,31 @@ def save_fields(
     Q,
     Qaux,
     write_all,
-    filename="fields.hdf5",
 ):
     if not write_all and time < next_write_at:
         return i_snapshot
 
-    _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux, filename=filename)
+    _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux)
     return i_snapshot + 1
 
 
 def _save_fields_to_hdf5(
-    filepath, i_snapshot, time, Q, Qaux=None, filename="fields.hdf5", overwrite=True
+    filepath, i_snapshot, time, Q, Qaux=None, overwrite=True
 ):
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
-    with h5py.File(os.path.join(filepath, filename), "a") as f:
+    with h5py.File(filepath, "a") as f:
+        if i_snapshot == 0:
+            fields = f.create_group('fields')
+        else:
+            fields = f['fields']
         group_name = "iteration_" + str(i_snapshot)
-        if group_name in f:
+        if group_name in fields:
             if overwrite:
-                del f[group_name]
+                del fields[group_name]
             else:
                 raise ValueError(f"Group {group_name} already exists in {filename}")
-        attrs = f.create_group(group_name)
+        attrs = fields.create_group(group_name)
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
         if Qaux is not None:
@@ -115,7 +119,7 @@ def _write_to_vtk_from_vertices_edges(
     filepath,
     mesh_type,
     vertex_coordinates,
-    element_vertices,
+    cell_vertices,
     fields=None,
     field_names=None,
     point_fields=None,
@@ -130,11 +134,12 @@ def _write_to_vtk_from_vertices_edges(
         or mesh_type == "tetra"
     )
     d_fields = {}
+    n_inner_elements = cell_vertices.shape[0]
     if fields is not None:
         if field_names is None:
             field_names = [str(i) for i in range(fields.shape[0])]
         for i_fields, _ in enumerate(fields.T):
-            d_fields[field_names[i_fields]] = [fields[:, i_fields]]
+            d_fields[field_names[i_fields]] = [fields[:n_inner_elements, i_fields]]
     point_d_fields = {}
     if point_fields is not None:
         if point_field_names is None:
@@ -143,7 +148,7 @@ def _write_to_vtk_from_vertices_edges(
             point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
     meshout = meshio.Mesh(
         vertex_coordinates,
-        [(fvm_mesh.convert_mesh_type_to_meshio_mesh_type(mesh_type), element_vertices)],
+        [(mesh_type, cell_vertices)],
         cell_data=d_fields,
         point_data=point_d_fields,
     )
@@ -155,22 +160,20 @@ def _write_to_vtk_from_vertices_edges(
 
 def generate_vtk(
     filepath: str,
-    filepath_gmsh: str = None,
-    gmsh_mesh_type: str = None,
     field_names=None,
     aux_field_names=None,
-    filename_fields="fields.hdf5",
-    filename_out="out",
     skip_aux=False,
 ):
     main_dir = os.getenv("SMS")
     abs_filepath = os.path.join(main_dir, filepath)
+    path = os.path.dirname(abs_filepath)
+    filename_out = 'out'
+    full_filepath_out = os.path.join(path, filename_out)
+    # abs_filepath = os.path.join(main_dir, filepath)
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
-    file_fields = h5py.File(os.path.join(abs_filepath, filename_fields), "r")
-    if filepath_gmsh is not None:
-        mesh = fvm_mesh.Mesh.load_gmsh(os.path.join(main_dir, filepath_gmsh), gmsh_mesh_type)
-    else:
-        mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(abs_filepath, "mesh.hdf5"))
+    file = h5py.File(os.path.join(main_dir, filepath), "r")
+    file_fields = file['fields']
+    mesh = Mesh.from_hdf5(abs_filepath)
     snapshots = list(file_fields.keys())
     # init timestamp file
     vtk_timestamp_file = {"file-series-version": "1.0", "files": []}
@@ -186,8 +189,8 @@ def generate_vtk(
             Qaux = file_fields[snapshot]["Qaux"][()]
         else:
             Qaux = np.empty((Q.shape[0], 0))
-        filename = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
-        fullpath = os.path.join(abs_filepath, filename)
+        output_vtk = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
+ 
 
         # TODO callout to compute pointwise data?
         point_fields = None
@@ -201,11 +204,14 @@ def generate_vtk(
         fields = np.concatenate((Q, Qaux), axis=-1)
         field_names = field_names + aux_field_names
 
+        vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[0], 3))
+        vertex_coordinates_3d[:, :mesh.dimension] = mesh.vertex_coordinates
+
         _write_to_vtk_from_vertices_edges(
-            fullpath,
+            os.path.join(path, output_vtk),
             mesh.type,
-            mesh.vertex_coordinates,
-            mesh.element_vertices,
+            vertex_coordinates_3d,
+            mesh.cell_vertices,
             fields=fields,
             field_names=field_names,
             point_fields=point_fields,
@@ -214,13 +220,13 @@ def generate_vtk(
 
         vtk_timestamp_file["files"].append(
             {
-                "name": filename + ".vtk",
+                "name": output_vtk + ".vtk",
                 "time": time,
             }
         )
 
     # finalize vtk
-    with open(os.path.join(abs_filepath, f"{filename_out}.vtk.series"), "w") as f:
+    with open(os.path.join(path, f"{full_filepath_out}.vtk.series"), "w") as f:
         json.dump(vtk_timestamp_file, f)
 
-    file_fields.close()
+    file.close()

@@ -358,6 +358,8 @@ def jax_fvm_unsteady_semidiscrete(
     iteration = 0
     time = 0.0
 
+    output_hdf5_path = os.path.join(settings.output_dir, f'{settings.name}.h5')
+
     assert model.dimension == mesh.dimension
 
     progressbar = pyprog.ProgressBar(
@@ -379,14 +381,14 @@ def jax_fvm_unsteady_semidiscrete(
     # for callback in self.callback_function_list_init:
     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
-    # i_snapshot = 0
-    # dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-    # io.init_output_directory(settings.output_dir, settings.output_clean_dir)
-    # i_snapshot = io.save_fields(
-    #     settings.output_dir, time, 0, i_snapshot, Qnew, Qaux, settings.output_write_all
-    # )
+    i_snapshot = 0
+    dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    mesh.write_to_hdf5(output_hdf5_path)
+    i_snapshot = io.save_fields(
+        output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
+    )
 
-    # mesh.write_to_hdf5(settings.output_dir)
 
     # settings.parameters = model.parameters.to_value_dict(model.parameter_values)
     # io.save_settings(settings.output_dir, settings)
@@ -451,15 +453,15 @@ def jax_fvm_unsteady_semidiscrete(
     #     # for callback in self.callback_function_list_post_solvestep:
     #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
-    #     i_snapshot = io.save_fields(
-    #         settings.output_dir,
-    #         time,
-    #         (i_snapshot + 1) * dt_snapshot,
-    #         i_snapshot,
-    #         Qnew,
-    #         Qaux,
-    #         settings.output_write_all,
-    #     )
+        i_snapshot = io.save_fields(
+            output_hdf5_path,
+            time,
+            (i_snapshot + 1) * dt_snapshot,
+            i_snapshot,
+            Qnew,
+            Qaux,
+            settings.output_write_all,
+        )
 
     #     # logger.info(
     #     #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
@@ -467,8 +469,8 @@ def jax_fvm_unsteady_semidiscrete(
     #     #     )
     #     # )
     #     # print(f'finished timestep: {os.getpid()}')
-    #     progressbar.set_stat(min(time, settings.time_end))
-    #     progressbar.update()
+        # progressbar.set_stat(min(time, settings.time_end))
+        # progressbar.update()
 
     progressbar.end()
     return settings

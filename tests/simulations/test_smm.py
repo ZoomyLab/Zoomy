@@ -973,7 +973,7 @@ def test_petsc(mesh_type):
         time_end=1.2,
         output_snapshots=100,
         output_clean_dir=True,
-        output_dir="outputs/output_c",
+        output_dir="outputs/output_jax",
     )
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -1009,7 +1009,7 @@ def test_petsc(mesh_type):
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    # io.generate_vtk(settings.output_dir)
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
 
