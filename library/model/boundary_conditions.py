@@ -118,20 +118,22 @@ class BoundaryConditions:
     initialized: bool = False
 
     #TODO add variables, ghost_variables and so on. Pass it to full_maps...
-    def initialize(self, map_boundary_name_to_index, Q, Qaux, parameters, normal):
+    def initialize(self, mesh, Q, Qaux, parameters, normal):
         # self.map_boundary_index_to_required_elements = np.empty(mesh.n_boundary_elements, dtype=int)
         # self.map_boundary_index_to_boundary_function_index = [None]  * mesh.n_boundary_elements
         # _map_boundary_function_name_to_index: Dict[str, int] = {}
-        map_physical_name_to_physical_index = []
+        # map_physical_name_to_physical_index = []
 
+        dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
+        dict_index_to_function = {i: None for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         # _map_boundary_index_to_function: Dict[int, Callable] = {}
         for i_bc, bc in enumerate(self.boundary_conditions):
             # bc.fill_maps_for_boundary_conditions(mesh, self.map_boundary_index_to_required_elements, self.map_boundary_index_to_boundary_function_index, _map_boundary_function_name_to_index, _map_boundary_index_to_function, Q, Qaux, parameters, normal)
-            map_physical_name_to_physical_index.append(map_boundary_name_to_index[bc.physical_tag])
-            self.boundary_functions.append(bc.get_boundary_condition_function(Q, Qaux, parameters, normal))
-            # sort such that the lowest physical index is first, which corresponds to the mesh.boundary_function_index indices.
-        sort_order = sorted(range(len(map_physical_name_to_physical_index)), key=map_physical_name_to_physical_index.__getitem__)
-        self.boundary_functions = self.boundary_functions[sort_order]
+            # map_physical_name_to_physical_index.append(map_boundary_name_to_index[bc.physical_tag])
+            dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = bc.get_boundary_condition_function(Q, Qaux, parameters, normal)
+
+
+        self.boundary_functions = list(dict_index_to_function.values())
         self.initialized=True
 
     def get_boundary_function_list(self):

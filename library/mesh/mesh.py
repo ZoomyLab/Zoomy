@@ -217,7 +217,8 @@ class Mesh:
         cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_centers = np.zeros((n_inner_cells, dim), dtype=float)
-        cell_volumes = np.zeros((n_inner_cells), dtype=float)
+        # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
+        cell_volumes = np.ones((n_cells), dtype=float)
         cell_inradius = compute_cell_inradius(dm)
         vertex_coordinates = np.array(dm.getCoordinates()).reshape((-1, dim))
         for i_c, c in enumerate(range(cStart, cEnd)):
@@ -280,7 +281,7 @@ class Mesh:
         boundary_face_ghosts = {k: boundary_face_ghosts[k] for k in sorted_keys}
         boundary_face_face_indices = {k: boundary_face_face_indices[k] for k in sorted_keys}
 
-        boundary_conditions_sorted_names = np.array(list(boundary_dict.keys()), dtype='str')
+        boundary_conditions_sorted_names = np.array(list(boundary_dict.values()), dtype='str')
         boundary_face_cells = np.array(_boundary_dict_to_list(boundary_face_cells), dtype=int)
         boundary_face_ghosts = np.array(_boundary_dict_to_list(boundary_face_ghosts), dtype=int)
         boundary_face_face_indices = np.array(_boundary_dict_to_list(boundary_face_face_indices), dtype=int)

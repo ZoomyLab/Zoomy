@@ -57,77 +57,38 @@ def _initialize_problem(model, mesh):
     Q = np.empty((n_cells, n_fields), dtype=float)
     Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
 
-    Q = model.initial_conditions.apply(mesh.cell_centers, Q)
-    Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
+    Q[:mesh.n_inner_cells] = model.initial_conditions.apply(mesh.cell_centers, Q[:mesh.n_inner_cells])
+    Qaux[:mesh.n_inner_cells] = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux[:mesh.n_inner_cells])
     return Q, Qaux
 
 
-def _get_compute_max_abs_eigenvalue(mesh, pde, boundary_conditions, settings):
-    reconstruction = settings.reconstruction
-    reconstruction_edge = settings.reconstruction_edge
+def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
+    # reconstruction = settings.reconstruction
+    # reconstruction_edge = settings.reconstruction_edge
 
     def compute_max_abs_eigenvalue(Q, Qaux, parameters):
         max_abs_eigenvalue = -np.inf
         eigenvalues_i = np.empty(Q.shape[1], dtype=float)
         eigenvalues_j = np.empty(Q.shape[1], dtype=float)
-        # Loop over the inner elements
-        for i_elem in range(mesh.n_elements):
-            for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
-                i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
-                if i_elem > i_neighbor:
-                    continue
-                i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
-                # reconstruct
-                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(
-                    mesh, [Q, Qaux], i_elem, i_th_neighbor
-                )
+        for i_face in range(mesh.n_faces):
+            i_cellA, i_cellB = mesh.face_cells[i_face]
+            qA = Q[i_cellA]
+            qB = Q[i_cellB]
+            qauxA = Qaux[i_cellA]
+            qauxB = Qaux[i_cellB]
 
-                # TODO PROBLEM: the C interface has eigenvalues as reference, python interface
-                # needs to return a value, because it cant do by-reference
-                ev_i = pde.eigenvalues(
-                    Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face]
-                )
-                if ev_i is not None:
-                    eigenvalues_i = ev_i
-                max_abs_eigenvalue = max(
-                    max_abs_eigenvalue, np.max(np.abs(eigenvalues_i))
-                )
+            normal = mesh.face_normals[i_face]
 
-                ev_j = pde.eigenvalues(
-                    Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face]
-                )
-                if ev_j is not None:
-                    eigenvalues_j = ev_j
-                max_abs_eigenvalue = max(
-                    max_abs_eigenvalue, np.max(np.abs(eigenvalues_j))
-                )
+            evA = pde.eigenvalues(qA, qauxA, parameters, normal)
+            evB = pde.eigenvalues(qB, qauxB, parameters, normal)
+            max_abs_eigenvalue = max(
+                max_abs_eigenvalue, np.max(np.abs(evA))
+            )
+            max_abs_eigenvalue = max(
+                max_abs_eigenvalue, np.max(np.abs(evB))
+            )
 
         assert max_abs_eigenvalue > 10 ** (-6)
-        # Loop over boundary faces
-        for i in range(mesh.n_boundary_elements):
-            i_elem = mesh.boundary_face_corresponding_element[i]
-            i_face = mesh.boundary_face_element_face_index[i]
-            Q_ghost = boundary_conditions.apply(
-                i,
-                i_elem,
-                Q,
-                Qaux,
-                parameters,
-                mesh.element_face_normals[i_elem, i_face],
-            )
-            # reconstruct
-            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(
-                mesh, [Q, Qaux], Q_ghost, i_elem
-            )
-
-            pde.eigenvalues(
-                Qi, Qauxi, parameters, mesh.element_face_normals[i_elem, i_face]
-            )
-            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
-            pde.eigenvalues(
-                Qj, Qauxj, parameters, mesh.element_face_normals[i_elem, i_face]
-            )
-            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(eigenvalues_j)))
 
         return max_abs_eigenvalue
 
@@ -137,8 +98,9 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, boundary_conditions, settings):
 def _get_source(mesh, pde, settings):
     def source(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
-        for i_elem in range(mesh.n_elements):
-            dQ[i_elem] = pde.source(Q[i_elem], Qaux[i_elem], parameters)
+        for i_cell in range(mesh.n_inner_cells):
+            dQ[i_cell] = pde.source(Q[i_cell], Qaux[i_cell], parameters)
+        return dQ
 
     return source
 
@@ -146,130 +108,168 @@ def _get_source(mesh, pde, settings):
 def _get_source_jac(mesh, pde, settings):
     def source_jac(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
-        for i_elem in range(mesh.n_elements):
-            dQ[i_elem] = pde.source_jacobian(Q[i_elem], Qaux[i_elem], parameters)
+        for i_cell in range(mesh.n_inner_cells):
+            dQ[i_cell] = pde.source_jacobian(Q[i_cell], Qaux[i_cell], parameters)
+        return dQ
 
     return source_jac
 
-
-def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
+def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
     compute_num_flux = settings.num_flux
     compute_nc_flux = settings.nc_flux
-    reconstruction = settings.reconstruction
-    reconstruction_edge = settings.reconstruction_edge
+    # reconstruction = settings.reconstruction
+    # reconstruction_edge = settings.reconstruction_edge
 
     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
-        # Loop over the inner elements
-        for i_elem in range(mesh.n_elements):
-            for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
-                i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
-                if i_elem > i_neighbor:
-                    continue
-                i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
-                # reconstruct
-                [Qi, Qauxi], [Qj, Qauxj] = reconstruction(
-                    mesh, [Q, Qaux], i_elem, i_th_neighbor
-                )
-
-                # TODO callout to a requirement of the flux
-                mesh_props = SimpleNamespace(
-                    dt_dx=dt / (2 * mesh.element_inradius[i_elem])
-                )
-                flux, failed = compute_num_flux(
-                    Qi,
-                    Qj,
-                    Qauxi,
-                    Qauxj,
-                    parameters,
-                    mesh.element_face_normals[i_elem, i_face],
-                    pde,
-                    mesh_props=mesh_props,
-                )
-                assert not failed
-                nc_flux, failed = compute_nc_flux(
-                    Qi,
-                    Qj,
-                    Qauxi,
-                    Qauxj,
-                    parameters,
-                    mesh.element_face_normals[i_elem, i_face],
-                    pde,
-                )
-                assert not failed
-
-                # TODO index map (elem_edge_index) such that I do not need:
-                # and if statement to avoid double edge computation (as I do now)
-                # avoid double edge computation
-                dQ[i_elem] -= (
-                    (flux + nc_flux)
-                    * mesh.element_face_areas[i_elem, i_face]
-                    / mesh.element_volume[i_elem]
-                )
-
-                dQ[i_neighbor] += (
-                    (flux - nc_flux)
-                    * mesh.element_face_areas[i_elem, i_face]
-                    / mesh.element_volume[i_neighbor]
-                )
-
-        # Loop over boundary faces
-        for i in range(mesh.n_boundary_elements):
-            i_elem = mesh.boundary_face_corresponding_element[i]
-            i_face = mesh.boundary_face_element_face_index[i]
-            Q_ghost = boundary_conditions.apply(
-                i,
-                i_elem,
-                Q,
-                Qaux,
-                parameters,
-                mesh.element_face_normals[i_elem, i_face],
-            )
-            # i_neighbor = mesh.element_neighbors[i_elem, i_face]
-            # reconstruct
-            [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(
-                mesh, [Q, Qaux], Q_ghost, i_elem
-            )
-
-            # callout to a requirement of the flux
-            mesh_props = SimpleNamespace(dt_dx=dt / (2 * mesh.element_inradius[i_elem]))
-            flux, failed = compute_num_flux(
-                Qi,
-                Qj,
-                Qauxi,
-                Qauxj,
-                parameters,
-                mesh.element_face_normals[i_elem, i_face],
-                pde,
-                mesh_props=mesh_props,
-            )
+        for i_face in range(mesh.n_faces):
+            #reconstruct
+            i_cellA, i_cellB = mesh.face_cells[i_face]
+            qA = Q[i_cellA]
+            qB = Q[i_cellB]
+            qauxA = Qaux[i_cellA]
+            qauxB = Qaux[i_cellB]
+            
+            normal = mesh.face_normals[i_face]
+            flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
             assert not failed
-            nc_flux, failed = compute_nc_flux(
-                Qi,
-                Qj,
-                Qauxi,
-                Qauxj,
-                parameters,
-                mesh.element_face_normals[i_elem, i_face],
-                pde,
-            )
+            nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
             assert not failed
 
-            dQ[i_elem] -= (
+            dQ[i_cellA] -= (
                 (flux + nc_flux)
-                * mesh.element_face_areas[i_elem, i_face]
-                / mesh.element_volume[i_elem]
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellA]
+            )
+
+            dQ[i_cellB] += (
+                (flux - nc_flux)
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellB]
             )
         return dQ
+            
+    return operator_rhs_split
+
+
+# def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
+#     compute_num_flux = settings.num_flux
+#     compute_nc_flux = settings.nc_flux
+#     reconstruction = settings.reconstruction
+#     reconstruction_edge = settings.reconstruction_edge
+
+#     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
+#         # Loop over the inner elements
+#         for i_elem in range(mesh.n_elements):
+#             for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
+#                 i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
+#                 if i_elem > i_neighbor:
+#                     continue
+#                 i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
+#                 # reconstruct
+#                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(
+#                     mesh, [Q, Qaux], i_elem, i_th_neighbor
+#                 )
+
+#                 # TODO callout to a requirement of the flux
+#                 mesh_props = SimpleNamespace(
+#                     dt_dx=dt / (2 * mesh.element_inradius[i_elem])
+#                 )
+#                 flux, failed = compute_num_flux(
+#                     Qi,
+#                     Qj,
+#                     Qauxi,
+#                     Qauxj,
+#                     parameters,
+#                     mesh.element_face_normals[i_elem, i_face],
+#                     pde,
+#                     mesh_props=mesh_props,
+#                 )
+#                 assert not failed
+#                 nc_flux, failed = compute_nc_flux(
+#                     Qi,
+#                     Qj,
+#                     Qauxi,
+#                     Qauxj,
+#                     parameters,
+#                     mesh.element_face_normals[i_elem, i_face],
+#                     pde,
+#                 )
+#                 assert not failed
+
+#                 # TODO index map (elem_edge_index) such that I do not need:
+#                 # and if statement to avoid double edge computation (as I do now)
+#                 # avoid double edge computation
+#                 dQ[i_elem] -= (
+#                     (flux + nc_flux)
+#                     * mesh.element_face_areas[i_elem, i_face]
+#                     / mesh.element_volume[i_elem]
+#                 )
+
+#                 dQ[i_neighbor] += (
+#                     (flux - nc_flux)
+#                     * mesh.element_face_areas[i_elem, i_face]
+#                     / mesh.element_volume[i_neighbor]
+#                 )
+
+#         # Loop over boundary faces
+#         for i in range(mesh.n_boundary_elements):
+#             i_elem = mesh.boundary_face_corresponding_element[i]
+#             i_face = mesh.boundary_face_element_face_index[i]
+#             Q_ghost = boundary_conditions.apply(
+#                 i,
+#                 i_elem,
+#                 Q,
+#                 Qaux,
+#                 parameters,
+#                 mesh.element_face_normals[i_elem, i_face],
+#             )
+#             # i_neighbor = mesh.element_neighbors[i_elem, i_face]
+#             # reconstruct
+#             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(
+#                 mesh, [Q, Qaux], Q_ghost, i_elem
+#             )
+
+#             # callout to a requirement of the flux
+#             mesh_props = SimpleNamespace(dt_dx=dt / (2 * mesh.element_inradius[i_elem]))
+#             flux, failed = compute_num_flux(
+#                 Qi,
+#                 Qj,
+#                 Qauxi,
+#                 Qauxj,
+#                 parameters,
+#                 mesh.element_face_normals[i_elem, i_face],
+#                 pde,
+#                 mesh_props=mesh_props,
+#             )
+#             assert not failed
+#             nc_flux, failed = compute_nc_flux(
+#                 Qi,
+#                 Qj,
+#                 Qauxi,
+#                 Qauxj,
+#                 parameters,
+#                 mesh.element_face_normals[i_elem, i_face],
+#                 pde,
+#             )
+#             assert not failed
+
+#             dQ[i_elem] -= (
+#                 (flux + nc_flux)
+#                 * mesh.element_face_areas[i_elem, i_face]
+#                 / mesh.element_volume[i_elem]
+#             )
+#         return dQ
 
     return operator_rhs_split
 
 
 def load_runtime_model(model):
     runtime_pde = model.get_pde()
-    runtime_bcs = model.create_python_boundary_interface(printer='numpy')
+    # runtime_bcs = model.create_python_boundary_interface(printer='numpy')
+    runtime_bcs = model.get_boundary_conditions()
     # runtime_bc = model.get_boundary_conditions()
-    model.boundary_conditions.runtime_bc = runtime_bcs
-    return runtime_pde, runtime_bc
+    # model.boundary_conditions.runtime_bc = runtime_bcs
+    return runtime_pde, runtime_bcs
 
 
 def save_model_to_C(model, settings):
@@ -339,7 +339,7 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
         iteration.create_dataset("Q", time)
         iteration.create_dataset("Qaux", time)
 
-def apply_BC(mesh, Q, Qaux, parameters, runtime_bcs):
+def apply_boundary_conditions(mesh, Q, Qaux, parameters, runtime_bcs):
     for i_bc_face in range(mesh.n_boundary_faces):
         i_face = mesh.boundary_face_face_indices[i_bc_face]
         i_bc_func = mesh.boundary_face_function_numbers[i_bc_face]
@@ -350,9 +350,6 @@ def apply_BC(mesh, Q, Qaux, parameters, runtime_bcs):
         q_ghost = bc_func(q_cell, qaux_cell, parameters, normal)
         Q[mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
-
-
-
 
 
 def jax_fvm_unsteady_semidiscrete(
@@ -397,63 +394,59 @@ def jax_fvm_unsteady_semidiscrete(
     time_start = gettime()
 
     pde, bcs = load_runtime_model(model)
-    Q = apply_BC(mesh, Q, Qaux, parameters, bcs)
+    Q = apply_boundary_conditions(mesh, Q, Qaux, parameters, bcs)
     Qnew = deepcopy(Q)
 
 
-    # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
-    # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
-    # space_solution_operator = get_semidiscrete_solution_operator(mesh, pde, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
+    space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, bcs, settings)
     # space_solution_operator = _get_semidiscrete_solution_operator(
     #     mesh, pde, model.boundary_conditions, settings
     # )
-    # compute_source = _get_source(mesh, pde, settings)
-    # compute_source_jac = _get_source_jac(mesh, pde, settings)
-    # compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(
-    #     mesh, pde, model.boundary_conditions, settings
-    # )
-    # min_inradius = np.min(mesh.element_inradius)
+    compute_source = _get_source(mesh, pde, settings)
+    compute_source_jac = _get_source_jac(mesh, pde, settings)
+
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(
+        mesh, pde, settings
+    )
+    min_inradius = np.min(mesh.cell_inradius)
 
     # print(f'hi from process {os.getpid()}')
-    # while time < settings.time_end:
+    while time < settings.time_end:
     #     # print(f'in loop from process {os.getpid()}')
-    #     Q = deepcopy(Qnew)
-    #     dt = settings.compute_dt(
-    #         Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
-    #     )
-    #     assert dt > 10 ** (-6)
+        Q = deepcopy(Qnew)
+        dt = settings.compute_dt(
+            Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
+        )
+        assert dt > 10 ** (-6)
+        assert not np.isnan(dt) and np.isfinite(dt)
 
-    #     assert not np.isnan(dt) and np.isfinite(dt)
-
-    #     # if iteration < self.warmup_interations:
-    #     #     dt *= self.dt_relaxation_factor
-    #     # if dt < self.dtmin:
-    #     #     dt = self.dtmin
+        # if iteration < self.warmup_interations:
+        #     dt *= self.dt_relaxation_factor
+        # if dt < self.dtmin:
+        #     dt = self.dtmin
 
     #     # add 0.001 safty measure to avoid very small time steps
-    #     if settings.truncate_last_time_step:
-    #         if time + dt * 1.001 > settings.time_end:
-    #             dt = settings.time_end - time + 10 ** (-10)
+        if settings.truncate_last_time_step:
+            if time + dt * 1.001 > settings.time_end:
+                dt = settings.time_end - time + 10 ** (-10)
 
     #     # TODO this two things should be 'callouts'!!
-    #     Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
-    #     # Qnew = enforce_boundary_conditions(Qnew)
-
-    #     hb = lambda t, x : np.cos(x[:, 0] -t)
-    #     Qaux[:,0] = hb(time, mesh.element_center)
-    #     Qaux = Qaux.reshape((Q.shape[0], 1))
-
-    #     Qnew = ode_solver_source(
-    #         compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+        # Qnew = enforce_boundary_conditions(Qnew)
+        Qnew = ode_solver_source(
+            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        )
+        Q = apply_boundary_conditions(mesh, Qnew, Qaux, parameters, bcs)
     #     )
     #     # Qnew  += -Q+ode_solver_source(
     #     #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
     #     # )
     #     # Qnew = enforce_boundary_conditions(Qnew)
 
-    #     # Update solution and time
-    #     time += dt
-    #     iteration += 1
+        # Update solution and time
+        time += dt
+        iteration += 1
+        print(iteration, time, dt)
 
     #     # for callback in self.callback_function_list_post_solvestep:
     #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
@@ -680,7 +673,7 @@ def fvm_sindy_timestep_generator(
     pde, bc = load_runtime_model(model)
 
     space_solution_operator = _get_semidiscrete_solution_operator(
-        mesh, pde, model.boundary_conditions, settings
+        mesh, pde, bcs, settings
     )
     compute_source = _get_source(mesh, pde, settings)
     compute_source_jac = _get_source_jac(mesh, pde, settings)
