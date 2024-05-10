@@ -138,8 +138,8 @@ def _write_to_vtk_from_vertices_edges(
     if fields is not None:
         if field_names is None:
             field_names = [str(i) for i in range(fields.shape[0])]
-        for i_fields, _ in enumerate(fields.T):
-            d_fields[field_names[i_fields]] = [fields[:n_inner_elements, i_fields]]
+        for i_fields, _ in enumerate(fields):
+            d_fields[field_names[i_fields]] = [fields[i_fields, :n_inner_elements]]
     point_d_fields = {}
     if point_fields is not None:
         if point_field_names is None:
@@ -201,17 +201,17 @@ def generate_vtk(
         if aux_field_names is None:
             aux_field_names = ["aux_{}".format(str(i)) for i in range(Qaux.shape[1])]
 
-        fields = np.concatenate((Q, Qaux), axis=-1)
+        fields = np.concatenate((Q, Qaux), axis=0)
         field_names = field_names + aux_field_names
 
-        vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[0], 3))
-        vertex_coordinates_3d[:, :mesh.dimension] = mesh.vertex_coordinates
+        vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[1], 3))
+        vertex_coordinates_3d[:, :mesh.dimension] = mesh.vertex_coordinates.T
 
         _write_to_vtk_from_vertices_edges(
             os.path.join(path, output_vtk),
             mesh.type,
             vertex_coordinates_3d,
-            mesh.cell_vertices,
+            mesh.cell_vertices.T,
             fields=fields,
             field_names=field_names,
             point_fields=point_fields,

@@ -57,20 +57,19 @@ class Wall(BoundaryCondition):
 
 
     def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
-        out = Matrix( Q)
-        dim = normal.shape[0]
-        n_fields = Q.shape[0]
-        momentum = Matrix([Q[k] for k in self.momentum_field_indices])
-        h = Q[0]
-        hu = momentum[0]
-        u = hu / h
+        q = Matrix(Q)
+        n = Matrix(normal)
+        dim = normal.length()
+        n_fields = Q.length()
+        momentum = Matrix([q[k] for k in self.momentum_field_indices])
+        zero = 10**(-20)*q[0]
+        h = q[0]
         p = parameters
-        out = Matrix([0 for i in range(n_fields)])
+        out = Matrix([zero for i in range(n_fields)])
         out[0] = h
-        U = [u]
-        normal_momentum_coef = momentum.dot(normal)
-        transverse_momentum = momentum - normal_momentum_coef * normal
-        momentum_wall = transverse_momentum - self.permeability * normal_momentum_coef * normal
+        normal_momentum_coef = momentum.dot(n)
+        transverse_momentum = momentum - normal_momentum_coef * n
+        momentum_wall = transverse_momentum - self.permeability * normal_momentum_coef * n
         for i_k, k in enumerate(self.momentum_field_indices):
             out[k] = momentum_wall[i_k]
         return out

@@ -289,7 +289,7 @@ class Mesh:
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates, cell_vertices, cell_faces, cell_volumes, cell_centers, cell_inradius, boundary_face_cells, boundary_face_ghosts, boundary_face_function_numbers, boundary_face_face_indices, face_cells, face_normals, face_volumes, boundary_conditions_sorted_names)
+        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, boundary_conditions_sorted_names)
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -358,17 +358,17 @@ class Mesh:
         point_data: dict = {},
     ):
         d_fields = {}
-        vertex_coords_3d = np.zeros((self.vertex_coordinates.shape[0], 3))
-        vertex_coords_3d[:, :self.vertex_coordinates.shape[1]] = self.vertex_coordinates
+        vertex_coords_3d = np.zeros((3, self.vertex_coordinates.shape[1]))
+        vertex_coords_3d[:self.vertex_coordinates.shape[0], :] = self.vertex_coordinates
         if fields is not None:
             if field_names is None:
                 field_names = [str(i) for i in range(fields.shape[0])]
-            for i_fields, field in enumerate(fields.T):
+            for i_fields, field in enumerate(fields):
                 d_fields[field_names[i_fields]] = [field]
         # the brackets around the second argument (cells) indicate that I have only mesh type of mesh element of type self.type, with corresponding vertices.
         meshout = meshio.Mesh(
             vertex_coords_3d,
-            [(self.type, self.cell_vertices)],
+            [(self.type, self.cell_vertices.T)],
             cell_data=d_fields,
             point_data=point_data,
         )
@@ -402,4 +402,4 @@ if __name__ == "__main__":
     mesh.write_to_hdf5('./test.h5')
     mesh = Mesh.from_hdf5('./test.h5')
     # mesh.write_to_vtk('./test.vtk')
-    mesh.write_to_vtk('./test.vtk', fields=np.ones((mesh.n_inner_cells, 2), dtype=float), field_names=['A', 'B'])
+    mesh.write_to_vtk('./test.vtk', fields=np.ones((2, mesh.n_inner_cells), dtype=float), field_names=['A', 'B'])

@@ -17,7 +17,10 @@ def segmentpath(integration_order=3):
     def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
         n_fields = Qi.shape[0]
+
+        # n_cells = Qi.shape[1]
         def B(s):
+            # out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
             out = np.zeros((n_fields, n_fields), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
@@ -25,6 +28,7 @@ def segmentpath(integration_order=3):
                 out = tmp * normal[d]
             return out
 
+        # Bint = np.zeros((n_fields, n_fields, n_cells))
         Bint = np.zeros((n_fields, n_fields))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
@@ -32,5 +36,30 @@ def segmentpath(integration_order=3):
         # and taken out of the integral
 
         return -0.5 * Bint@(Qj-Qi), False
+        # return -0.5 * np.einsum('ij..., j...->i...', Bint, (Qj-Qi)), False
 
-    return nc_flux
+    def nc_flux_vectorized(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
+        dim = normal.shape[0]
+        n_fields = Qi.shape[0]
+
+        n_cells = Qi.shape[1]
+        def B(s):
+            out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
+            # out = np.zeros((n_fields, n_fields), dtype=float)
+            tmp = np.zeros_like(out)
+            for d in range(dim):
+                tmp = model.nonconservative_matrix_vectorized[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
+                out = tmp * normal[d]
+            return out
+
+        Bint = np.zeros((n_fields, n_fields, n_cells))
+        # Bint = np.zeros((n_fields, n_fields))
+        for w, s in zip(weights, samples):
+            Bint += w * B(s)
+        # The multiplication with (Qj-Qi) the part dPsi/ds out of the integral above. But since I use a segment path, dPsi/ds is (Qj-Qi)=const
+        # and taken out of the integral
+
+        # return -0.5 * Bint@(Qj-Qi), False
+        return -0.5 * np.einsum('ij..., j...->i...', Bint, (Qj-Qi)), False
+
+    return nc_flux_vectorized

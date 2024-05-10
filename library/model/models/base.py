@@ -25,6 +25,18 @@ from library.misc.misc import vectorize  # type: ignore
 from library.misc.misc import IterableNamespace
 from library.model.sympy2c import create_module
 
+def vectorize_nonconservative_matrix(expr, lambdified_expr):
+    nonconservative_matrix = []
+    for e, le in zip(expr, lambdified_expr):
+        if len(list(e.free_symbols)) > 0:
+            nonconservative_matrix.append(lambda Q, Qaux, param, f=le:  f(Q, Qaux, param))
+        else:
+            #constant matrix. Needs to be vectorized.
+            constant_matrix = np.array(e, dtype=float)
+            nonconservative_matrix.append(lambda Q, Qaux, param, f=le:  np.stack([ constant_matrix for i in range(Q.shape[1])], axis=-1))
+    return nonconservative_matrix
+
+
 def custom_simplify(expr):
     return powsimp(expr, combine="all", force=False, deep=True)
 
@@ -38,6 +50,7 @@ def regularize_denominator(expr, regularization_constant = 10**(-4), regularize 
         for j in range(expr.shape[1]):
             expr[i,j] = regularize(expr[i,j])
     return expr
+
 
 
 def get_numerical_eigenvalues(dim , n_fields, quasilinear_matrix):
@@ -489,7 +502,10 @@ class Model:
             printer,
         ) for d in range(self.dimension)]
         # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-        flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
+        # flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
+        flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=1) for d in range(self.dimension)]
+        # flux = [lambda Q, Qaux, param, f=l_flux[d]:  jnp.squeeze(jnp.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
+        # flux = l_flux
         l_flux_jacobian = lambdify(
             [
                 self.variables.get_list(),
@@ -511,7 +527,9 @@ class Model:
             self.sympy_nonconservative_matrix[d],
             printer,
         ) for d in range(self.dimension)]
-        nonconservative_matrix = l_nonconservative_matrix
+        # nonconservative_matrix = [lambda Q, Qaux, param, f=l_nonconservative_matrix[d]:  f(Q, Qaux, param) for d in range(self.dimension)]
+        nonconservative_matrix = vectorize_nonconservative_matrix(self.sympy_nonconservative_matrix, l_nonconservative_matrix)
+        # nonconservative_matrix = l_nonconservative_matrix
         # nonconservative_matrix = vectorize(l_nonconservative_matrix)
 
         l_quasilinear_matrix = [lambdify(
@@ -537,7 +555,8 @@ class Model:
                 self.sympy_eigenvalues,
                 printer,
             )
-            eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=-1)
+            # eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=-1)
+            eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1)
             # eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
         elif self.settings.eigenvalue_mode == 'numerical':
             eigenvalues = None
@@ -551,7 +570,7 @@ class Model:
             self.sympy_source,
             printer,
         )
-        source = lambda Q, Qaux, param:  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=-1)
+        source = lambda Q, Qaux, param:  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=1)
         # source = vectorize(l_source)
 
         l_source_jacobian = lambdify(

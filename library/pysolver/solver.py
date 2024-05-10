@@ -54,11 +54,11 @@ def _initialize_problem(model, mesh):
     n_fields = model.n_fields
     n_cells = mesh.n_cells
 
-    Q = np.empty((n_cells, n_fields), dtype=float)
-    Qaux = np.zeros((Q.shape[0], model.aux_variables.length()))
+    Q = np.empty((n_fields, n_cells), dtype=float)
+    Qaux = np.zeros((model.aux_variables.length(), n_cells), dtype=float)
 
-    Q[:mesh.n_inner_cells] = model.initial_conditions.apply(mesh.cell_centers, Q[:mesh.n_inner_cells])
-    Qaux[:mesh.n_inner_cells] = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux[:mesh.n_inner_cells])
+    Q[:, :mesh.n_inner_cells] = model.initial_conditions.apply(mesh.cell_centers, Q[:, :mesh.n_inner_cells])
+    Qaux[:, :mesh.n_inner_cells] = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux[:, :mesh.n_inner_cells])
     return Q, Qaux
 
 
@@ -66,18 +66,19 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
     # reconstruction = settings.reconstruction
     # reconstruction_edge = settings.reconstruction_edge
 
+    # TODO vectorize
     def compute_max_abs_eigenvalue(Q, Qaux, parameters):
         max_abs_eigenvalue = -np.inf
         eigenvalues_i = np.empty(Q.shape[1], dtype=float)
         eigenvalues_j = np.empty(Q.shape[1], dtype=float)
         for i_face in range(mesh.n_faces):
-            i_cellA, i_cellB = mesh.face_cells[i_face]
-            qA = Q[i_cellA]
-            qB = Q[i_cellB]
-            qauxA = Qaux[i_cellA]
-            qauxB = Qaux[i_cellB]
+            i_cellA, i_cellB = mesh.face_cells[:, i_face]
+            qA = Q[:, i_cellA]
+            qB = Q[:, i_cellB]
+            qauxA = Qaux[:, i_cellA]
+            qauxB = Qaux[:, i_cellB]
 
-            normal = mesh.face_normals[i_face]
+            normal = mesh.face_normals[:, i_face]
 
             evA = pde.eigenvalues(qA, qauxA, parameters, normal)
             evB = pde.eigenvalues(qB, qauxB, parameters, normal)
@@ -92,17 +93,45 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
 
         return max_abs_eigenvalue
 
-    return compute_max_abs_eigenvalue
+    def compute_max_abs_eigenvalue_vectorized(Q, Qaux, parameters):
+        max_abs_eigenvalue = -np.inf
+        eigenvalues_i = np.empty(Q.shape[1], dtype=float)
+        eigenvalues_j = np.empty(Q.shape[1], dtype=float)
+        i_cellA = mesh.face_cells[0]
+        i_cellB = mesh.face_cells[1]
+        qA = Q[:, i_cellA]
+        qB = Q[:, i_cellB]
+        qauxA = Qaux[:, i_cellA]
+        qauxB = Qaux[:, i_cellB]
+
+        normal = mesh.face_normals
+
+        evA = pde.eigenvalues(qA, qauxA, parameters, normal)
+        evB = pde.eigenvalues(qB, qauxB, parameters, normal)
+        max_abs_eigenvalue = max(np.abs(evA).max(), np.abs(evB).max())
+
+        assert max_abs_eigenvalue > 10 ** (-6)
+
+        return max_abs_eigenvalue
+
+
+    return compute_max_abs_eigenvalue_vectorized
 
 
 def _get_source(mesh, pde, settings):
     def source(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_cell in range(mesh.n_inner_cells):
-            dQ[i_cell] = pde.source(Q[i_cell], Qaux[i_cell], parameters)
+            dQ[:, i_cell] = pde.source(Q[:, i_cell], Qaux[:, i_cell], parameters)
         return dQ
 
-    return source
+
+    def source_vectorized(dt, Q, Qaux, parameters, dQ):
+        # Loop over the inner elements
+        dQ[:, :mesh.n_inner_cells] = pde.source(Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], parameters)
+        return dQ
+
+    return source_vectorized
 
 
 def _get_source_jac(mesh, pde, settings):
@@ -121,34 +150,193 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
     # reconstruction_edge = settings.reconstruction_edge
 
     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
+        dQ = np.zeros_like(dQ)
         for i_face in range(mesh.n_faces):
             #reconstruct
-            i_cellA, i_cellB = mesh.face_cells[i_face]
-            qA = Q[i_cellA]
-            qB = Q[i_cellB]
-            qauxA = Qaux[i_cellA]
-            qauxB = Qaux[i_cellB]
+            i_cellA, i_cellB = mesh.face_cells[:, i_face]
+            qA = Q[:, i_cellA]
+            qB = Q[:, i_cellB]
+            qauxA = Qaux[:, i_cellA]
+            qauxB = Qaux[:, i_cellB]
             
-            normal = mesh.face_normals[i_face]
+            normal = mesh.face_normals[:, i_face]
             flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
             assert not failed
-            nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            nc_flux = np.zeros_like(flux)
             assert not failed
 
-            dQ[i_cellA] -= (
+
+            dQ[:, i_cellA] -= (
                 (flux + nc_flux)
                 * mesh.face_volumes[i_face]
                 / mesh.cell_volumes[i_cellA]
             )
 
-            dQ[i_cellB] += (
+            dQ[:, i_cellB] += (
                 (flux - nc_flux)
                 * mesh.face_volumes[i_face]
                 / mesh.cell_volumes[i_cellB]
             )
+
+        return dQ
+
+    def operator_rhs_split_check(dt, Q, Qaux, parameters, dQ):
+        dQ = np.zeros_like(dQ)
+        flux_check = np.zeros((3, mesh.n_faces))
+        nc_flux_check = np.zeros((3, mesh.n_faces))
+        dQ_face_check_m = np.zeros((3, mesh.n_faces))
+        dQ_face_check_p = np.zeros((3, mesh.n_faces))
+        iA = np.zeros((mesh.n_faces), dtype=int)
+        iB = np.zeros((mesh.n_faces), dtype=int)
+        for i_face in range(mesh.n_faces):
+            #reconstruct
+            i_cellA, i_cellB = mesh.face_cells[:, i_face]
+            qA = Q[:, i_cellA]
+            qB = Q[:, i_cellB]
+            qauxA = Qaux[:, i_cellA]
+            qauxB = Qaux[:, i_cellB]
+            
+            normal = mesh.face_normals[:, i_face]
+            flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            assert not failed
+            # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            nc_flux = np.zeros_like(flux)
+            assert not failed
+
+
+            dQ[:, i_cellA] -= (
+                (flux + nc_flux)
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellA]
+            )
+
+            dQ[:, i_cellB] += (
+                (flux - nc_flux)
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellB]
+            )
+            flux_check[:, i_face] = flux
+            nc_flux_check[:, i_face] = nc_flux
+            iA[i_face] = i_cellA
+            iB[i_face] = i_cellB
+
+            dQ_face_check_m[:, i_face] -= ( 
+                (flux + nc_flux)
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellA]
+            )
+            dQ_face_check_p[:, i_face] += (
+                (flux - nc_flux)
+                * mesh.face_volumes[i_face]
+                / mesh.cell_volumes[i_cellB]
+            )
+        return dQ, flux_check, nc_flux_check, iA, iB, dQ_face_check_m, dQ_face_check_p
+
+    def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
+        dQ = np.zeros_like(dQ)
+        iA = mesh.face_cells[0]
+        iB = mesh.face_cells[1]
+        qA = Q[:, iA]
+        qB = Q[:, iB]
+        qauxA = Qaux[:, iA]
+        qauxB = Qaux[:, iB]
+        normals = mesh.face_normals
+        face_volumes = mesh.face_volumes
+        cell_volumesA = mesh.cell_volumes[iA]
+        cell_volumesB = mesh.cell_volumes[iB]
+
+        flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        assert not failed
+        # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        nc_flux = np.zeros_like(flux)
+        assert not failed
+
+        # dQcheck = np.zeros_like(dQ)
+        # dQcheck, flux_check, nc_flux_check, iA_check, iB_check, dQ_m, dQ_p = operator_rhs_split_check(dt, Q, Qaux, parameters, dQcheck)
+
+        # for i_face in range(mesh.n_faces):
+        #     i_cellA, i_cellB = mesh.face_cells[:, i_face]
+
+        #     dQ[:, i_cellA] -= (
+        #         (flux + nc_flux)[:, i_face]
+        #         * mesh.face_volumes[i_face]
+        #         / mesh.cell_volumes[i_cellA]
+        #     )
+
+        #     dQ[:, i_cellB] += (
+        #         (flux - nc_flux)[:, i_face]
+        #         * mesh.face_volumes[i_face]
+        #         / mesh.cell_volumes[i_cellB]
+        #     )
+
+
+        for faces in mesh.cell_faces:
+            # I need to know if the cell_face is part of A or B and only add that contribution
+            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
+            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
+
+            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
+                (flux + nc_flux)
+                * face_volumes
+                / cell_volumesA
+            )[:, faces][:, iA_masked]
+
+            dQ[:, :mesh.n_inner_cells][:, iB_masked] += (
+                (flux - nc_flux)
+                * face_volumes
+                / cell_volumesB
+            )[:, faces][:, iB_masked]
+
+        # for faces in mesh.cell_faces:
+        #     cellsA = iA[faces]
+        #     i_cellsA1 = np.sort(np.unique(cellsA, return_index=True)[1])
+        #     cellsA1 = cellsA[i_cellsA1]
+        #     facesA1 = faces[i_cellsA1]
+        #     i_cellsA2 = np.setdiff1d(np.array(list(range(64))),  i_cellsA1)
+        #     cellsA2 = cellsA[i_cellsA2]
+        #     facesA2 = faces[i_cellsA2]
+
+        #     cellsB = iB[faces]
+        #     i_cellsB1 = np.sort(np.unique(cellsB, return_index=True)[1])
+        #     cellsB1 = cellsB[i_cellsB1]
+        #     facesB1 = faces[i_cellsB1]
+        #     i_cellsB2 = np.setdiff1d(np.array(list(range(64))),  i_cellsB1)
+        #     cellsB2 = cellsB[i_cellsB2]
+        #     facesB2 = faces[i_cellsB2]
+
+        #     dQm[:, cellsA1] -= (
+        #         (flux + nc_flux)
+        #         * face_volumes
+        #         / cell_volumesA
+        #     )[:, facesA1]
+        #     dQm[:, cellsA2] -= (
+        #         (flux + nc_flux)
+        #         * face_volumes
+        #         / cell_volumesA
+        #     )[:, facesA2]
+
+        #     dQp[:, cellsB1] += (
+        #         (flux - nc_flux)
+        #         * face_volumes
+        #         / cell_volumesB
+        #     )[:, facesB1]
+
+        #     dQp[:, cellsB2] += (
+        #         (flux - nc_flux)
+        #         * face_volumes
+        #         / cell_volumesB
+        #     )[:, facesB2]
+        # dQ = 0.5*(dQm + dQp)
+
+
+        
+
+
         return dQ
             
-    return operator_rhs_split
+    return operator_rhs_split_vectorized
+    # return operator_rhs_split
 
 
 # def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
@@ -339,16 +527,17 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
         iteration.create_dataset("Q", time)
         iteration.create_dataset("Qaux", time)
 
+#TODO vectorize
 def apply_boundary_conditions(mesh, Q, Qaux, parameters, runtime_bcs):
     for i_bc_face in range(mesh.n_boundary_faces):
         i_face = mesh.boundary_face_face_indices[i_bc_face]
         i_bc_func = mesh.boundary_face_function_numbers[i_bc_face]
         bc_func = runtime_bcs[i_bc_func]
-        q_cell = Q[mesh.boundary_face_cells[i_bc_face]]
-        qaux_cell = Qaux[mesh.boundary_face_cells[i_bc_face]]
-        normal = mesh.face_normals[i_face]
+        q_cell = Q[:, mesh.boundary_face_cells[i_bc_face]]
+        qaux_cell = Qaux[:, mesh.boundary_face_cells[ i_bc_face]]
+        normal = mesh.face_normals[:, i_face]
         q_ghost = bc_func(q_cell, qaux_cell, parameters, normal)
-        Q[mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
+        Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
 

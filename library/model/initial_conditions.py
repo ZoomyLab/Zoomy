@@ -23,47 +23,63 @@ class InitialConditions:
 class Constant(InitialConditions):
     constants: Callable[[int], FArray] = lambda n_fields: np.array([1.] + [0. for i in range(n_fields-1)])
     def apply(self, X, Q):
-        n_fields = Q.shape[1]
-        for i, q in enumerate(Q):
-            Q[i] = self.constants(n_fields)
+        n_fields = Q.shape[0]
+        for i in range(Q.shape[1]):
+            Q[:,i] = self.constants(n_fields)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RP(InitialConditions):
-    left: Callable[[int], FArray] = lambda n_fields: np.ones(n_fields, dtype=float)
-    right: Callable[[int], FArray] = lambda n_fields: 2.0 * np.ones(
-        n_fields, dtype=float
-    )
+    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
+    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
     jump_position_x: float = 0.0
 
     def apply(self, X, Q):
-        assert X.shape[0] == Q.shape[0]
-        n_fields = Q.shape[1]
-        for i, q in enumerate(Q):
-            if X[i, 0] < self.jump_position_x:
-                Q[i] = self.left(n_fields)
+        assert X.shape[1] == Q.shape[1]
+        n_fields = Q.shape[0]
+        for i in range(Q.shape[1]):
+            if X[0, i] < self.jump_position_x:
+               Q[:,i]  = self.left(n_fields)
             else:
-                Q[i] = self.right(n_fields)
+                Q[:,i] = self.right(n_fields)
         return Q
 
 @define(slots=True, frozen=False)
 class RP2d(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.ones(n_fields, dtype=float)
-    high: Callable[[int], FArray] = lambda n_fields: 2.0 * np.ones(
-        n_fields, dtype=float
-    )
+    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
+    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
     jump_position_x: float = 0.0
     jump_position_y: float = 0.0
 
     def apply(self, X, Q):
-        assert X.shape[0] == Q.shape[0]
+        assert X.shape[1] == Q.shape[1]
         n_fields = Q.shape[1]
-        for i, q in enumerate(Q):
-            if X[i, 0] < self.jump_position_x and X[i,1] < self.jump_position_y:
-                Q[i] = self.high(n_fields)
+        for i in range(Q.shape[1]):
+            if X[0, i] < self.jump_position_x and X[1,i] < self.jump_position_y:
+                Q[:,i] = self.high(n_fields)
             else:
-                Q[i] = self.low(n_fields)
+                Q[:,i] = self.low(n_fields)
+        return Q
+
+@define(slots=True, frozen=False)
+class RadialDambreak(InitialConditions):
+    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
+    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    radius: float = 0.1
+
+    def apply(self, X, Q):
+        dim = X.shape[0]
+        center = np.zeros(dim)
+        for d in range(dim):
+            center[d] = X[d, :].mean()
+        assert X.shape[1] == Q.shape[1]
+        n_fields = Q.shape[1]
+        for i in range(Q.shape[1]):
+            if np.linalg.norm(X[:, i]-center) <= self.radius:
+                Q[:,i] = self.high(n_fields)
+            else:
+                Q[:,i] = self.low(n_fields)
         return Q
 
 
@@ -72,11 +88,11 @@ class UserFunction(InitialConditions):
     function: Optional[Callable[[FArray], FArray]] = None
 
     def apply(self, X, Q):
-        assert X.shape[0] == Q.shape[0]
+        assert X.shape[1] == Q.shape[1]
         if self.function is None:
             self.function = lambda x: np.zeros(Q.shape[1])
-        for i, x in enumerate(X):
-            Q[i] = self.function(x)
+        for i, x in enumerate(X.T):
+            Q[:, i] = self.function(x)
         return Q
 
 #TODO do time interpolation

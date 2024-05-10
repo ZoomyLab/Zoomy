@@ -969,8 +969,9 @@ def test_petsc(mesh_type):
         parameters={"g": 1.0, "C": 10.0, "nu": 0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
+        nc_flux=nonconservative_flux.segmentpath(1),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=1.2,
+        time_end=2.0,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir="outputs/output_jax",
@@ -981,15 +982,15 @@ def test_petsc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag=tag)
+            BC.Wall(physical_tag=tag)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
-    ic = IC.RP(
-        left=lambda n_field: np.array(
+    ic = IC.RadialDambreak(
+        high=lambda n_field: np.array(
             [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
         ),
-        right=lambda n_field: np.array(
+        low=lambda n_field: np.array(
             [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
         ),
     )
@@ -1003,8 +1004,8 @@ def test_petsc(mesh_type):
         settings={"friction": ["chezy", "newtonian"]},
     )
     main_dir = os.getenv("SMS")
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_finest.msh".format(mesh_type)))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_finest.msh".format(mesh_type)))
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
