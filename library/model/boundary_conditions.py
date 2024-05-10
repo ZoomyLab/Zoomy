@@ -75,119 +75,61 @@ class Wall(BoundaryCondition):
         return out
 
 
-# @define(slots=True, frozen=False, kw_only=True)
-# class Periodic(BoundaryCondition):
-#     periodic_to_physical_tag: str
+@define(slots=True, frozen=False, kw_only=True)
+class Periodic(BoundaryCondition):
+    periodic_to_physical_tag: str
 
-#     def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
-#         return Matrix(Q)
-
-#     def fill_maps_for_boundary_conditions(self, mesh, map_required_elements, map_functions, map_boundary_function_name_to_index, map_boundary_index_to_function, Q, Qaux, parameters, normal):
-#         hits = 0
-#         for i_edge in range(mesh.n_boundary_elements):
-#             boundary_tag_name = mesh.boundary_tag_names[mesh.boundary_face_tag[i_edge]].decode("utf-8")
-#             if self.physical_tag == boundary_tag_name:
-#                 j_hits = 0
-#                 for j_edge in range(mesh.n_boundary_elements):
-#                     j_boundary_tag_name = mesh.boundary_tag_names[mesh.boundary_face_tag[j_edge]].decode("utf-8")
-#                     if self.periodic_to_physical_tag == j_boundary_tag_name:
-#                         if hits == j_hits:
-#                             # map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[j_edge]
-#                             # map_functions[i_edge] = self.get_boundary_condition_function()
-#                             map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[j_edge]
-#                             if boundary_tag_name in map_boundary_function_name_to_index:
-#                                 map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
-#                             else:
-#                                 index = len(map_boundary_function_name_to_index)
-#                                 map_boundary_function_name_to_index[boundary_tag_name] = index
-#                                 map_boundary_index_to_function[index] = self.get_boundary_condition_function(Matrix(Q.get_list()), Matrix(Qaux.get_list()), Matrix(parameters.get_list()), Matrix(normal.get_list()))
-#                                 map_functions[i_edge] = map_boundary_function_name_to_index[boundary_tag_name]
-#                         j_hits +=1
-#                 hits +=1
-
+    def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
+        return Matrix(Q)
 
 @define(slots=True, frozen=False)
 class BoundaryConditions:
     boundary_conditions: list[BoundaryCondition]
-    # map_boundary_index_to_required_elements: IArray = np.empty(0, dtype=int)
-    # map_function_index_to_physical_index: List[int] = []
     boundary_functions: List[Callable] = []
-    # boundary_functions_name: List[str] = []
-    # runtime_bcs: list[Callable] = []
     initialized: bool = False
 
-    #TODO add variables, ghost_variables and so on. Pass it to full_maps...
+
+    def resolve_periodic_bcs(self, mesh):
+        dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
+        dict_function_index_to_physical_tag = {i: v for i, v in enumerate(mesh.boundary_conditions_sorted_physical_tags)}
+
+        for i_bc, bc in enumerate(self.boundary_conditions):
+            if type(bc) == Periodic:
+                from_physical_tag = dict_function_index_to_physical_tag[dict_physical_name_to_index[bc.periodic_to_physical_tag]]
+                to_physical_tag = dict_function_index_to_physical_tag[dict_physical_name_to_index[bc.physical_tag]]
+                #this is not cells, this is yet the boundary  index -> extract the cell index from here.
+                from_cells_boundary_face_index = mesh.boundary_face_physical_tags == from_physical_tag
+                to_cells_boundary_face_index = mesh.boundary_face_physical_tags == to_physical_tag
+
+                from_cells = mesh.boundary_face_cells[from_cells_boundary_face_index]
+                to_cells = mesh.boundary_face_ghosts[to_cells_boundary_face_index]
+
+                from_coords = mesh.cell_centers[:, from_cells]
+                to_coords = mesh.cell_centers[:, to_cells]
+
+
+                sort_order_from = np.lexsort([from_coords[d, :] for d in range(mesh.dimension)])
+                sort_order_to = np.lexsort([to_coords[d, :] for d in range(mesh.dimension)])
+
+                mesh.boundary_face_ghosts[to_cells_boundary_face_index][sort_order_to] = mesh.boundary_face_cells[from_cells_boundary_face_index][sort_order_from]
+        return mesh
+
     def initialize(self, mesh, Q, Qaux, parameters, normal):
-        # self.map_boundary_index_to_required_elements = np.empty(mesh.n_boundary_elements, dtype=int)
-        # self.map_boundary_index_to_boundary_function_index = [None]  * mesh.n_boundary_elements
-        # _map_boundary_function_name_to_index: Dict[str, int] = {}
-        # map_physical_name_to_physical_index = []
 
         dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         dict_index_to_function = {i: None for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
-        # _map_boundary_index_to_function: Dict[int, Callable] = {}
+        periodic_bcs_ghosts = []
         for i_bc, bc in enumerate(self.boundary_conditions):
-            # bc.fill_maps_for_boundary_conditions(mesh, self.map_boundary_index_to_required_elements, self.map_boundary_index_to_boundary_function_index, _map_boundary_function_name_to_index, _map_boundary_index_to_function, Q, Qaux, parameters, normal)
-            # map_physical_name_to_physical_index.append(map_boundary_name_to_index[bc.physical_tag])
             dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = bc.get_boundary_condition_function(Q, Qaux, parameters, normal)
-
-
+            if type(bc) == Periodic:
+                function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
+                periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]
         self.boundary_functions = list(dict_index_to_function.values())
+        mesh = self.resolve_periodic_bcs(mesh)
         self.initialized=True
+        return mesh
 
     def get_boundary_function_list(self):
         assert self.initialized
         return self.boundary_functions
     
-
-    def get_map_function_index_to_physical_index(self):
-        """
-        for each boundary edge, I get the physical index. I want to know the function index. I need to search through the list for that, since I cannot pass a dict to C. Alternatively, I can change the physical index in petsc later in the C code to correspond to the bcs.
-        """
-        assert initialized
-        return self.map_function_index_to_physical_index
-
-    def find_function_index(self, physical_index):
-        for i_func, idx in enumerate(self.map_function_index_to_physical_index):
-            if idx == physical_index:
-                return i_func 
-        print("physical index not found.")
-        assert False
-        
-        
-    # def apply_all(self, Q_ghost, Q_neighbor, boundary_normals, momentum_eqns):
-    #     """
-    #     Q_ghost: output cells I want to write to
-    #     Q_neighbor: cells used to derive the boundary conditions from, e.g. neighboring cells (can be the periodic cells)
-    #     boundary_normals: outgoing normal of the Q_neighbor cell
-    #     momentum_eqns: 
-    #     """
-    #     n_boundary_elements = self.map_boundary_index_to_required_elements.shape[0]
-    #     assert Q_neighbor.shape[0] == n_boundary_elements
-    #     for i_edge in range(n_boundary_elements):
-    #         Q_ghost[i_edge] = self.runtime_bc[self.map_boundary_index_to_boundary_function_index[i_edge]](Q_neighbor[i_edge], boundary_normals[i_edge], momentum_eqns)
-
-    # #TODO add Qaux_ghost to everything
-    # #TODO add Q, Qghost, ... to func
-    # #TODO delete i_corresponding_element
-    # def apply(self, i_boundary_element, i_corresponding_element, Q, Qaux, parameters, boundary_normal):
-    #     q = Q[self.map_boundary_index_to_required_elements[i_boundary_element]]
-    #     qaux = Qaux[self.map_boundary_index_to_required_elements[i_boundary_element]]
-    #     func = self.runtime_bc[self.map_boundary_index_to_boundary_function_index[i_boundary_element]]
-    #     ## C
-    #     # qout = np.zeros_like(q)
-    #     # func(q, qaux, parameters, boundary_normal, qout)
-    #     # return qout
-    #     ## python
-    #     qout = func(q, qaux, parameters, boundary_normal)
-    #     return qout
-    
-    # def append_boundary_map_to_mesh_hdf5(self, filepath, filename='mesh.hdf5'):
-    #     with h5py.File(os.path.join(filepath, filename), "a") as f:
-    #         delete_datasets = ["boundary_function_index", "required_elements", "boundary_function_name"]
-    #         for name in delete_datasets:
-    #             if name in f:
-    #                 del f[name]
-    #         f.create_dataset("boundary_function_index", data=self.map_boundary_index_to_boundary_function_index)
-    #         f.create_dataset("required_elements", data=self.map_boundary_index_to_required_elements)
-    #         f.create_dataset("boundary_function_name", data=self.boundary_functions_name)

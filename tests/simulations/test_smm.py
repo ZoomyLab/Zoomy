@@ -963,7 +963,7 @@ def test_restart_from_openfoam_plotter(level=1):
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_petsc(mesh_type):
-    level = 0
+    level = 1
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 1.0, "C": 10.0, "nu": 0.001},
@@ -982,18 +982,25 @@ def test_petsc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag=tag)
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
-    ic = IC.RadialDambreak(
-        high=lambda n_field: np.array(
-            [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
-        ),
-        low=lambda n_field: np.array(
-            [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
-        ),
-    )
+    # ic = IC.RadialDambreak(
+    #     high=lambda n_field: np.array(
+    #         [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+    #     ),
+    #     low=lambda n_field: np.array(
+    #         [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
+    #     ),
+    # )
+
+    def custom_ic(x):
+        Q = np.zeros(1+2*(level+1), dtype=float)
+        Q[0] = 2 * x[1] * (x[0] < 0.5) + 2
+        return Q
+
+    ic = IC.UserFunction(function = custom_ic)
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
@@ -1005,7 +1012,7 @@ def test_petsc(mesh_type):
     )
     main_dir = os.getenv("SMS")
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_finest.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1

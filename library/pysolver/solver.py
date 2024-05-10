@@ -57,8 +57,8 @@ def _initialize_problem(model, mesh):
     Q = np.empty((n_fields, n_cells), dtype=float)
     Qaux = np.zeros((model.aux_variables.length(), n_cells), dtype=float)
 
-    Q[:, :mesh.n_inner_cells] = model.initial_conditions.apply(mesh.cell_centers, Q[:, :mesh.n_inner_cells])
-    Qaux[:, :mesh.n_inner_cells] = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux[:, :mesh.n_inner_cells])
+    Q = model.initial_conditions.apply(mesh.cell_centers, Q)
+    Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
     return Q, Qaux
 
 
