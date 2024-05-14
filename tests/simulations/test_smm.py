@@ -1019,6 +1019,126 @@ def test_petsc(mesh_type):
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
+def test_enforce_w_bc(mesh_type):
+    level = 0
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={"g": -2./32, "C": 0., "nu": 0.001},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        nc_flux=nonconservative_flux.segmentpath(1),
+        # compute_dt=timestepping.adaptive(CFL=.45),
+        compute_dt=timestepping.constant(dt=1.),
+        time_end=10.,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir="outputs/output_jax",
+    )
+
+    bc_tags = ["left", "right", "top", "bottom"]
+
+    inflow_dict = {i: 0.0 for i in range(0, 2 * (1 + level) + 1)}
+    inflow_dict[0] = 0.1
+    inflow_dict[1] = -0.36
+    outflow_dict = {}
+    # outflow_dict = {0: 1.0}
+
+    # bcs = BC.BoundaryConditions(
+    #     [
+    #         BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+    #         BC.InflowOutflow(physical_tag="outflow", prescribe_fields= outflow_dict),
+    #         # BC.Wall(physical_tag="top", momentum_field_indices=[[1,4], [2,5], [3,6]]),
+    #         # BC.Wall(physical_tag="bottom", momentum_field_indices=[[1,4], [2,5], [3,6]]),
+    #         BC.Extrapolation(physical_tag="top"),
+    #         BC.Extrapolation(physical_tag="bottom"),
+    #     ]
+    # )
+
+    offset = level+1
+    # bcs = BC.BoundaryConditions(
+    #     [
+    #         BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+    #         BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
+    #         # BC.Wall(physical_tag="hole", momentum_field_indices=[[1,4], [2,5], [3,6]]),
+    #         BC.Wall(physical_tag="hole", momentum_field_indices=[[1 + l, 1 + offset + l] for l in range(level+1)]),
+    #         BC.Extrapolation(physical_tag="top"),
+    #         BC.Extrapolation(physical_tag="bottom"),
+    #     ]
+    # )
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Extrapolation(physical_tag="left"),
+            BC.Extrapolation(physical_tag="right"),
+            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+            # BC.Wall(physical_tag="hole", momentum_field_indices=[[1 + l, 1 + offset + l] for l in range(level+1)]),
+        ]
+    )
+
+    # ic = IC.RP(
+    #     low=lambda n_fields: np.array(
+    #         [0.1, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     high=lambda n_fields: np.array(
+    #         [0.2, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
+    #     )
+    # )
+
+    ic = IC.RP(
+        low=lambda n_fields: np.array(
+            [0.1] + [0.0 for i in range(n_fields - 3)]
+        ),
+        high=lambda n_fields: np.array(
+            [0.2] + [0.0 for i in range(n_fields - 3)]
+        )
+    )
+
+    model = Advection(
+        dimension=2,
+        # fields=3 + 2 * level,
+        fields=1,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": []},
+        # settings={"friction": ["chezy", "newtonian"]},
+        # basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+
+    # model = ShallowMoments2d(
+    #     dimension=2,
+    #     fields=3 + 2 * level,
+    #     aux_fields=0,
+    #     parameters=settings.parameters,
+    #     boundary_conditions=bcs,
+    #     initial_conditions=ic,
+    #     # settings={"friction": []},
+    #     settings={"friction": ["chezy", "newtonian"]},
+    #     basis=Basis(basis=Legendre_shifted(order=level)),
+    # )
+
+    main_dir = os.getenv("SMS")
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finer.msh"))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"))
+
+    print(mesh.boundary_conditions_sorted_names)
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
 
 
 if __name__ == "__main__":
@@ -1038,5 +1158,6 @@ if __name__ == "__main__":
     # test_spline_strongbc_1d()
     # test_smm_analytical()
     # test_smm_wave()
-    test_petsc('quad')
+    # test_petsc('quad')
     # test_petsc('triangle')
+    test_enforce_w_bc('quad')

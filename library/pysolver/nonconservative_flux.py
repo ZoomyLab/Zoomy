@@ -62,4 +62,5 @@ def segmentpath(integration_order=3):
         # return -0.5 * Bint@(Qj-Qi), False
         return -0.5 * np.einsum('ij..., j...->i...', Bint, (Qj-Qi)), False
 
+    # return nc_flux
     return nc_flux_vectorized

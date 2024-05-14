@@ -162,8 +162,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             normal = mesh.face_normals[:, i_face]
             flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
             assert not failed
-            # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
-            nc_flux = np.zeros_like(flux)
+            nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            # nc_flux = np.zeros_like(flux)
             assert not failed
 
 
@@ -331,7 +331,6 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
 
         
-
 
         return dQ
             

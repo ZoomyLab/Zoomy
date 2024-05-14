@@ -221,12 +221,13 @@ if __name__ == "__main__":
     # samples_nm = list(np.linspace(0.00, 1.0, runs))
     # test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
 
-    samples_nm = np.array([0.18522998, 0.21373984, 0.90098982, 0.62404143, 0.74924814, 0.43507782, 0.56212977, 0.13558316, 0.93821473, 0.81558724, 0.26883783, 0.9614834 , 0.64311975, 0.76290171, 0.40335104, 0.05360399, 0.51875912, 0.89793244, 0.28845358, 0.45508638, 0.35757987, 0.68192228, 0.66353067, 0.86532508, 0.10779579, 0.53201022, 0.34471072, 0.59951843, 0.97655874, 0.17069256, 0.09871624, 0.48155783, 0.04876159, 0.01279554, 0.7040163 , 0.77789664, 0.38633745, 0.22568898, 0.30824329, 0.84441708])
+    # samples_nm = np.array([0.18522998, 0.21373984, 0.90098982, 0.62404143, 0.74924814, 0.43507782, 0.56212977, 0.13558316, 0.93821473, 0.81558724, 0.26883783, 0.9614834 , 0.64311975, 0.76290171, 0.40335104, 0.05360399, 0.51875912, 0.89793244, 0.28845358, 0.45508638, 0.35757987, 0.68192228, 0.66353067, 0.86532508, 0.10779579, 0.53201022, 0.34471072, 0.59951843, 0.97655874, 0.17069256, 0.09871624, 0.48155783, 0.04876159, 0.01279554, 0.7040163 , 0.77789664, 0.38633745, 0.22568898, 0.30824329, 0.84441708])
+    samples_nm = np.array([0.3])
     samples_index = list(range(samples_nm.shape[0]))
     # test_calibration_1d(list(zip(samples_index, samples_nm))[-1])
-    # for inputs in list(zip(samples_index, samples_nm)):
-    #     test_calibration_1d(inputs)
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    for inputs in list(zip(samples_index, samples_nm)):
+        test_calibration_1d(inputs)
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
         # Use executor.map to apply the function to each item in parallel
-        executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
+        # executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
 

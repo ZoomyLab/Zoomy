@@ -52,7 +52,7 @@ class Wall(BoundaryCondition):
     momentum_field_indices: list(int): indicate which fields need to be mirrored at the wall
     permeability: float : 1.0 corresponds to a perfect reflection (impermeable wall)
     """
-    momentum_field_indices: List[int] = [1,2]
+    momentum_field_indices: List[List[int]] = [[1,2]]
     permeability: float = 1.0
 
 
@@ -61,17 +61,21 @@ class Wall(BoundaryCondition):
         n = Matrix(normal)
         dim = normal.length()
         n_fields = Q.length()
-        momentum = Matrix([q[k] for k in self.momentum_field_indices])
+        momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
         zero = 10**(-20)*q[0]
         h = q[0]
         p = parameters
         out = Matrix([zero for i in range(n_fields)])
         out[0] = h
-        normal_momentum_coef = momentum.dot(n)
-        transverse_momentum = momentum - normal_momentum_coef * n
-        momentum_wall = transverse_momentum - self.permeability * normal_momentum_coef * n
-        for i_k, k in enumerate(self.momentum_field_indices):
-            out[k] = momentum_wall[i_k]
+        momentum_list_wall = []
+        for momentum in momentum_list:
+            normal_momentum_coef = momentum.dot(n)
+            transverse_momentum = momentum - normal_momentum_coef * n
+            momentum_wall = transverse_momentum - self.permeability * normal_momentum_coef * n
+            momentum_list_wall.append( momentum_wall )
+        for l, momentum_wall in zip(self.momentum_field_indices, momentum_list_wall):
+            for i_k, k in enumerate(l):
+                out[k] = momentum_wall[i_k]
         return out
 
 
@@ -111,7 +115,18 @@ class BoundaryConditions:
                 sort_order_from = np.lexsort([from_coords[d, :] for d in range(mesh.dimension)])
                 sort_order_to = np.lexsort([to_coords[d, :] for d in range(mesh.dimension)])
 
-                mesh.boundary_face_ghosts[to_cells_boundary_face_index][sort_order_to] = mesh.boundary_face_cells[from_cells_boundary_face_index][sort_order_from]
+                # advanded indexing creates copies. So I need to construct indexing sets to overwrite the content of 
+                # mesh.boundary_face_ghosts[to_cells_boundary_face_index][sort_order_to]
+
+                indices_ghosts = np.array(list(range(to_cells_boundary_face_index.shape[0])))
+                indices_ghosts = indices_ghosts[to_cells_boundary_face_index] 
+                indices_ghosts = indices_ghosts[sort_order_to] 
+
+                indices_cells = np.array(list(range(to_cells_boundary_face_index.shape[0])))
+                indices_cells = indices_cells[from_cells_boundary_face_index] 
+                indices_cells = indices_cells[sort_order_from] 
+
+                mesh.boundary_face_ghosts[indices_ghosts] = mesh.boundary_face_cells[indices_cells]
         return mesh
 
     def initialize(self, mesh, Q, Qaux, parameters, normal):

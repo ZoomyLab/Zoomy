@@ -25,6 +25,20 @@ from library.misc.misc import vectorize  # type: ignore
 from library.misc.misc import IterableNamespace
 from library.model.sympy2c import create_module
 
+def vectorize_constant_sympy_expressions(expr, Q, Qaux):
+    symbol_list = Q.get_list() + Qaux.get_list()
+    q0 = Q[0]
+    for i in range(expr.shape[0]):
+        for j in range(expr.shape[1]):
+            if not any(symbol in expr[i, j].free_symbols for symbol in symbol_list):
+                if expr[i, j] == 0:
+                    expr[i, j] = 10**(-20) * q0
+                elif expr[i, j]:
+                    expr[i, j] *= q0/q0
+                    # print('I don\'t know how to vectorize this yet')
+                    # assert False
+    return expr
+
 def vectorize_nonconservative_matrix(expr, lambdified_expr):
     nonconservative_matrix = []
     for e, le in zip(expr, lambdified_expr):
@@ -482,6 +496,7 @@ class Model:
                 self.parameters.get_list(),
                 self.sympy_normal.get_list(),
             ],
+            # vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
             self.boundary_conditions.boundary_functions[i],
             printer)
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
@@ -498,7 +513,7 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ),
-            self.sympy_flux[d],
+            vectorize_constant_sympy_expressions(self.sympy_flux[d], self.variables, self.aux_variables),
             printer,
         ) for d in range(self.dimension)]
         # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
@@ -524,11 +539,11 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_nonconservative_matrix[d],
+            vectorize_constant_sympy_expressions(self.sympy_nonconservative_matrix[d], self.variables, self.aux_variables),
             printer,
         ) for d in range(self.dimension)]
-        # nonconservative_matrix = [lambda Q, Qaux, param, f=l_nonconservative_matrix[d]:  f(Q, Qaux, param) for d in range(self.dimension)]
-        nonconservative_matrix = vectorize_nonconservative_matrix(self.sympy_nonconservative_matrix, l_nonconservative_matrix)
+        nonconservative_matrix = [lambda Q, Qaux, param, f=l_nonconservative_matrix[d]:  f(Q, Qaux, param) for d in range(self.dimension)]
+        # nonconservative_matrix = vectorize_nonconservative_matrix(self.sympy_nonconservative_matrix, l_nonconservative_matrix)
         # nonconservative_matrix = l_nonconservative_matrix
         # nonconservative_matrix = vectorize(l_nonconservative_matrix)
 
@@ -552,7 +567,7 @@ class Model:
                     self.parameters.get_list(),
                     self.sympy_normal.get_list(),
                 ],
-                self.sympy_eigenvalues,
+                vectorize_constant_sympy_expressions(self.sympy_eigenvalues, self.variables, self.aux_variables),
                 printer,
             )
             # eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=-1)
@@ -567,7 +582,7 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_source,
+            vectorize_constant_sympy_expressions(self.sympy_source, self.variables, self.aux_variables),
             printer,
         )
         source = lambda Q, Qaux, param:  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=1)
@@ -579,7 +594,7 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_source_jacobian,
+            vectorize_constant_sympy_expressions(self.sympy_source_jacobian, self.variables, self.aux_variables),
             printer,
         )
         source_jacobian = l_source_jacobian

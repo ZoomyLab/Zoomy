@@ -10,6 +10,7 @@ from library.pysolver.ode import RK1
 import library.misc.io as io
 from library.pysolver.reconstruction import GradientMesh
 import library.postprocessing.postprocessing as postprocessing
+import library.mesh.mesh as petscMesh
 import argparse
 
 @pytest.mark.critical
@@ -115,8 +116,8 @@ def test_ssf_2d():
         parameters={"g": 9.81},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        #compute_dt=timestepping.adaptive(CFL=0.15),
-        compute_dt=timestepping.constant(dt=0.01),
+        compute_dt=timestepping.adaptive(CFL=0.15),
+        # compute_dt=timestepping.constant(dt=0.01),
         time_end=2.00,
         output_snapshots=100,
         output_clean_dir=True,
@@ -146,6 +147,8 @@ def test_ssf_2d():
             BC.Wall(physical_tag="bottom"),
             BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
             BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            # BC.Wall(physical_tag="inflow"),
+            # BC.Wall(physical_tag="outflow"),
         ]
     )
 
@@ -170,32 +173,39 @@ def test_ssf_2d():
         settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
-    #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
-    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
-        # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
-        # os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
-        os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'),
-    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
-        "triangle",
-     )
+    # mesh = Mesh.load_gmsh(
+    # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
+    #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_coarse.msh"),
+    #     # os.path.join(main_dir, 'meshes/channel_openfoam/mesh_coarse_2d.msh'),
+    #     os.path.join(main_dir, 'meshes/simple_openfoam/mesh_2d_mid.msh'),
+    # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
+    #     "triangle",
+    #  )
     # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
 
-    fvm_c_unsteady_semidiscete(
-        mesh,
-        model,
-        settings,
-        ode_solver_flux="RK1",
-        ode_solver_source="RK1",
-        rebuild_model=True,
-        rebuild_mesh=True,
-        rebuild_c=True,
-    )
+    # fvm_c_unsteady_semidiscete(
+    #     mesh,
+    #     model,
+    #     settings,
+    #     ode_solver_flux="RK1",
+    #     ode_solver_source="RK1",
+    #     rebuild_model=True,
+    #     rebuild_mesh=True,
+    #     rebuild_c=True,
+    # )
 
-    io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output_dir)
+
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
 
 if __name__ == "__main__":
-    test_ssf()
-    # test_ssf_2d()
+    # test_ssf()
+    test_ssf_2d()

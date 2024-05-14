@@ -40,9 +40,9 @@ class RP(InitialConditions):
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
             if X[0, i] < self.jump_position_x:
-               Q[:,i]  = self.left(n_fields)
+               Q[:,i]  = self.high(n_fields)
             else:
-                Q[:,i] = self.right(n_fields)
+                Q[:,i] = self.low(n_fields)
         return Q
 
 @define(slots=True, frozen=False)
@@ -74,7 +74,7 @@ class RadialDambreak(InitialConditions):
         for d in range(dim):
             center[d] = X[d, :].mean()
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[1]
+        n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
             if np.linalg.norm(X[:, i]-center) <= self.radius:
                 Q[:,i] = self.high(n_fields)

@@ -444,8 +444,7 @@ class ShallowMoments2d(Model):
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
     def source(self):
-        zero = 10**(-20) * self.variables[0]
-        out = Matrix([zero for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_fields)])
         if self.settings.topography:
             out += self.topography()
         if self.settings.friction:
