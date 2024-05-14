@@ -8,6 +8,7 @@ import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.pysolver.ode import RK1
 import library.misc.io as io
+import library.mesh.mesh as petscMesh
 
 
 @pytest.mark.critical
@@ -105,9 +106,91 @@ def test_advection_3d(mesh_type):
     io.generate_vtk(settings.output_dir)
 
 
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
+def test_periodic_bc(mesh_type):
+    settings = Settings(
+        name="Advection",
+        parameters={"px": -2./8, "py": -0./8.,},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        nc_flux=nonconservative_flux.segmentpath(1),
+        compute_dt=timestepping.constant(dt=1.),
+        time_end=10.,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir="outputs/output_advection",
+    )
+
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Extrapolation(physical_tag="left"),
+            # BC.Extrapolation(physical_tag="right"),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            # BC.Extrapolation(physical_tag="top"),
+            # BC.Extrapolation(physical_tag="bottom"),
+            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            # BC.Wall(physical_tag="hole", momentum_field_indices=[[1 + l, 1 + offset + l] for l in range(level+1)]),
+        ]
+    )
+
+    # ic = IC.RP(
+    #     low=lambda n_fields: np.array(
+    #         [0.1, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     high=lambda n_fields: np.array(
+    #         [0.2, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
+    #     )
+    # )
+
+    ic = IC.RP2d(
+        low=lambda n_fields: np.array(
+            [0.1] + [0.0 for i in range(n_fields - 3)]
+        ),
+        high=lambda n_fields: np.array(
+            [0.2] + [0.0 for i in range(n_fields - 3)]
+        ),
+        jump_position_x = 0,
+        jump_position_y = 1.
+    )
+
+    # ic = IC.RadialDambreak(
+    #     low=lambda n_fields: np.array(
+    #         [0.1] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     high=lambda n_fields: np.array(
+    #         [0.2] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     radius = 0.2,
+    # )
+
+    model = Advection(
+        dimension=2,
+        fields=1,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": []},
+    )
+
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+
 
 if __name__ == "__main__":
-    test_advection_1d()
-    test_advection_2d("quad")
-    test_advection_2d("triangle")
-    test_advection_3d("tetra")
+    # test_advection_1d()
+    # test_advection_2d("quad")
+    # test_advection_2d("triangle")
+    # test_advection_3d("tetra")
+    test_periodic_bc("quad")

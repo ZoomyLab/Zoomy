@@ -54,7 +54,7 @@ class RP2d(InitialConditions):
 
     def apply(self, X, Q):
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[1]
+        n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
             if X[0, i] < self.jump_position_x and X[1,i] < self.jump_position_y:
                 Q[:,i] = self.high(n_fields)

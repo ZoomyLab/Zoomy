@@ -2,6 +2,8 @@ import numpy as np
 import os
 import h5py
 
+from copy import deepcopy
+
 import sympy as sym
 from sympy import Matrix
 
@@ -97,6 +99,8 @@ class BoundaryConditions:
         dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         dict_function_index_to_physical_tag = {i: v for i, v in enumerate(mesh.boundary_conditions_sorted_physical_tags)}
 
+        mesh_copy = deepcopy(mesh)
+
         for i_bc, bc in enumerate(self.boundary_conditions):
             if type(bc) == Periodic:
                 from_physical_tag = dict_function_index_to_physical_tag[dict_physical_name_to_index[bc.periodic_to_physical_tag]]
@@ -126,7 +130,8 @@ class BoundaryConditions:
                 indices_cells = indices_cells[from_cells_boundary_face_index] 
                 indices_cells = indices_cells[sort_order_from] 
 
-                mesh.boundary_face_ghosts[indices_ghosts] = mesh.boundary_face_cells[indices_cells]
+                # mesh.boundary_face_ghosts[indices_ghosts] = mesh.boundary_face_cells[indices_cells]
+                mesh.boundary_face_cells[indices_cells] = mesh_copy.boundary_face_cells[indices_ghosts]
         return mesh
 
     def initialize(self, mesh, Q, Qaux, parameters, normal):

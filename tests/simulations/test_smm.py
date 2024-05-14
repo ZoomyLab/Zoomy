@@ -1026,7 +1026,7 @@ def test_enforce_w_bc(mesh_type):
     level = 0
     settings = Settings(
         name="ShallowMoments2d",
-        parameters={"g": -2./32, "C": 0., "nu": 0.001},
+        parameters={"g": -2./8, "C": -0./8., "nu": 0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
@@ -1071,12 +1071,14 @@ def test_enforce_w_bc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
-            BC.Extrapolation(physical_tag="right"),
-            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
-            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            # BC.Extrapolation(physical_tag="left"),
+            # BC.Extrapolation(physical_tag="right"),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            # BC.Extrapolation(physical_tag="top"),
+            # BC.Extrapolation(physical_tag="bottom"),
             BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
             # BC.Wall(physical_tag="hole", momentum_field_indices=[[1 + l, 1 + offset + l] for l in range(level+1)]),
         ]
     )
@@ -1090,13 +1092,25 @@ def test_enforce_w_bc(mesh_type):
     #     )
     # )
 
-    ic = IC.RP(
+    # ic = IC.RP2d(
+    #     low=lambda n_fields: np.array(
+    #         [0.1] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     high=lambda n_fields: np.array(
+    #         [0.2] + [0.0 for i in range(n_fields - 3)]
+    #     ),
+    #     jump_position_x = 0,
+    #     jump_position_y = 1.
+    # )
+
+    ic = IC.RadialDambreak(
         low=lambda n_fields: np.array(
             [0.1] + [0.0 for i in range(n_fields - 3)]
         ),
         high=lambda n_fields: np.array(
             [0.2] + [0.0 for i in range(n_fields - 3)]
-        )
+        ),
+        radius = 0.2,
     )
 
     model = Advection(
@@ -1125,8 +1139,8 @@ def test_enforce_w_bc(mesh_type):
     # )
 
     main_dir = os.getenv("SMS")
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finer.msh"))
