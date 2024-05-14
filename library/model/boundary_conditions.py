@@ -4,6 +4,7 @@ import h5py
 
 from copy import deepcopy
 
+import sympy
 import sympy as sym
 from sympy import Matrix
 
@@ -26,14 +27,14 @@ class BoundaryCondition:
     Default implementation. The required data for the 'ghost cell' is the data from the interior cell. Can be overwritten e.g. to implement periodic boundary conditions.
     """
 
-    def get_boundary_condition_function(self, Q, Qaux,  parameters, normal):
+    def get_boundary_condition_function(self, time, position,  Q, Qaux,  parameters, normal):
         print("BoundaryCondition is a virtual class. Use one if its derived classes!")
         assert False
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
-    def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
+    def get_boundary_condition_function(self, time, position,  Q, Qaux, parameters, normal):
         return Matrix(Q)
 
 
@@ -41,10 +42,13 @@ class Extrapolation(BoundaryCondition):
 class InflowOutflow(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
-    def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
-        Qout = Matrix( Q )
+    def get_boundary_condition_function(self, time, position, Q, Qaux, parameters, normal):
+        # Extrapolate all fields
+        Qout = Matrix(Q)
+
+        # Set the fields which are prescribed in boundary condition dict
         for k, v in self.prescribe_fields.items():
-            Qout[k] = v
+            Qout[k] = eval(v)
         return Qout
             
 
@@ -58,7 +62,7 @@ class Wall(BoundaryCondition):
     permeability: float = 1.0
 
 
-    def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
+    def get_boundary_condition_function(self, time, position, Q, Qaux, parameters, normal):
         q = Matrix(Q)
         n = Matrix(normal)
         dim = normal.length()
@@ -85,7 +89,7 @@ class Wall(BoundaryCondition):
 class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
 
-    def get_boundary_condition_function(self, Q, Qaux, parameters, normal):
+    def get_boundary_condition_function(self,time, position, Q, Qaux, parameters, normal):
         return Matrix(Q)
 
 @define(slots=True, frozen=False)
@@ -134,13 +138,13 @@ class BoundaryConditions:
                 mesh.boundary_face_cells[indices_cells] = mesh_copy.boundary_face_cells[indices_ghosts]
         return mesh
 
-    def initialize(self, mesh, Q, Qaux, parameters, normal):
+    def initialize(self, mesh, time, position, Q, Qaux, parameters, normal):
 
         dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         dict_index_to_function = {i: None for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         periodic_bcs_ghosts = []
         for i_bc, bc in enumerate(self.boundary_conditions):
-            dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = bc.get_boundary_condition_function(Q, Qaux, parameters, normal)
+            dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = bc.get_boundary_condition_function(time, position, Q,  Qaux, parameters, normal)
             if type(bc) == Periodic:
                 function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
                 periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]

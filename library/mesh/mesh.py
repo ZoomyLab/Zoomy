@@ -196,6 +196,7 @@ class Mesh:
     face_cells: IArray
     face_normals: FArray
     face_volumes: FArray
+    face_centers: FArray
     boundary_conditions_sorted_physical_tags: IArray
     boundary_conditions_sorted_names: CArray
 
@@ -223,7 +224,6 @@ class Mesh:
         # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
         cell_volumes = np.ones((n_cells), dtype=float)
         cell_inradius = compute_cell_inradius(dm)
-        vertex_coordinates = np.array(dm.getCoordinates()).reshape((-1, dim))
         for i_c, c in enumerate(range(cStart, cEnd)):
             cell_volume, cell_center, cell_normal = dm.computeCellGeometryFVM(c)
             transitive_closure_points, transitive_closure_orientation = dm.getTransitiveClosure(c, useCone=True)
@@ -237,6 +237,7 @@ class Mesh:
         
 
 
+        vertex_coordinates = np.array(gdm.getCoordinates()).reshape((-1, dim))
         boundary_face_cells = {k: [] for k in boundary_dict.values()}
         boundary_face_ghosts = {k: [] for k in boundary_dict.values()}
         boundary_face_face_indices = {k: [] for k in boundary_dict.values()}
@@ -244,8 +245,10 @@ class Mesh:
         face_cells = []
         face_normals = []
         face_volumes = []
+        face_centers = []
         n_faces = egEnd-egStart
         allowed_keys = []
+        vertex_coordinates = np.array(dm.getCoordinates()).reshape((-1, dim))
         for e in range(egStart, egEnd):
             label = gdm.getLabelValue("Face Sets", e)
             # 2 cells support an face. Ghost cell is the one with the higher number
@@ -263,6 +266,14 @@ class Mesh:
                 _face_ghost = gdm.getSupport(e).max()
                 cell_centers[_face_ghost] = cell_centers[_face_cell]
 
+            face_vertices = gdm.getCone(e)
+            assert len(face_vertices) == 2
+            vertexA = face_vertices[0] - vgStart
+            vertexB = face_vertices[1] - vgStart
+            coordA = gdm.getCoordinates()[vertexA:vertexA+dim]
+            coordB = gdm.getCoordinates()[vertexB:vertexB+dim]
+            face_center = 0.5 * (coordA + coordB)
+            face_centers.append(face_center)
             _face_cells = gdm.getSupport(e)
             face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(e)
             face_volumes.append(face_volume)
@@ -276,6 +287,7 @@ class Mesh:
             
 
         face_volumes = np.array(face_volumes, dtype=float)
+        face_centers = np.array(face_centers, dtype=float)
         face_normals = np.array(face_normals, dtype=float)
         face_cells = np.array(face_cells, dtype=int)
         boundary_face_function_numbers = _boundary_dict_indices(boundary_face_cells)
@@ -302,7 +314,7 @@ class Mesh:
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names)
+        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names)
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -330,6 +342,7 @@ class Mesh:
             mesh.create_dataset("face_cells", data=self.face_cells)
             mesh.create_dataset("face_normals", data=self.face_normals)
             mesh.create_dataset("face_volumes", data=self.face_volumes)
+            mesh.create_dataset("face_centers", data=self.face_centers)
             mesh.create_dataset("boundary_conditions_sorted_physical_tags", data=np.array(self.boundary_conditions_sorted_physical_tags))
             mesh.create_dataset("boundary_conditions_sorted_names", data=np.array(self.boundary_conditions_sorted_names, dtype='S'))
 
@@ -361,6 +374,7 @@ class Mesh:
                 file["mesh"]["face_cells"][()],
                 file["mesh"]["face_normals"][()],
                 file["mesh"]["face_volumes"][()],
+                file["mesh"]["face_centers"][()],
                 file["mesh"]["boundary_conditions_sorted_physical_tags"][()],
                 np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str')
             )

@@ -48,7 +48,7 @@ class Settings:
 
 def _initialize_problem(model, mesh):
     model.boundary_conditions.initialize(
-        mesh, model.variables, model.aux_variables, model.parameters, model.sympy_normal
+        mesh, model.time, model.position, model.variables, model.aux_variables, model.parameters, model.sympy_normal
     )
 
     n_fields = model.n_fields
@@ -527,7 +527,7 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
         iteration.create_dataset("Qaux", time)
 
 #TODO vectorize
-def apply_boundary_conditions(mesh, Q, Qaux, parameters, runtime_bcs):
+def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
     for i_bc_face in range(mesh.n_boundary_faces):
         i_face = mesh.boundary_face_face_indices[i_bc_face]
         i_bc_func = mesh.boundary_face_function_numbers[i_bc_face]
@@ -535,7 +535,8 @@ def apply_boundary_conditions(mesh, Q, Qaux, parameters, runtime_bcs):
         q_cell = Q[:, mesh.boundary_face_cells[i_bc_face]]
         qaux_cell = Qaux[:, mesh.boundary_face_cells[ i_bc_face]]
         normal = mesh.face_normals[:, i_face]
-        q_ghost = bc_func(q_cell, qaux_cell, parameters, normal)
+        position = mesh.face_centers[i_face]
+        q_ghost = bc_func(time, position, q_cell, qaux_cell, parameters, normal)
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
@@ -566,7 +567,7 @@ def jax_fvm_unsteady_semidiscrete(
 
     parameters = model.parameter_values
     pde, bcs = load_runtime_model(model)
-    Q = apply_boundary_conditions(mesh, Q, Qaux, parameters, bcs)
+    Q = apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
 
     # for callback in self.callback_function_list_init:
     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
@@ -585,7 +586,7 @@ def jax_fvm_unsteady_semidiscrete(
 
     time_start = gettime()
 
-    Q = apply_boundary_conditions(mesh, Q, Qaux, parameters, bcs)
+    Q = apply_boundary_conditions(mesh,time, Q, Qaux, parameters, bcs)
     Qnew = deepcopy(Q)
 
 
@@ -624,10 +625,10 @@ def jax_fvm_unsteady_semidiscrete(
     #     # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
         # Qnew = enforce_boundary_conditions(Qnew)
-        # Qnew = ode_solver_source(
-        #     compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
-        # )
-        Q = apply_boundary_conditions(mesh, Qnew, Qaux, parameters, bcs)
+        Qnew = ode_solver_source(
+            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        )
+        Q = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
     #     )
     #     # Qnew  += -Q+ode_solver_source(
     #     #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
