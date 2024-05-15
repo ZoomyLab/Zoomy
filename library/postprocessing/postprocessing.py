@@ -6,12 +6,15 @@ from sympy import lambdify, integrate
 
 from library.pysolver.reconstruction import GradientMesh
 import library.mesh.fvm_mesh as fvm_mesh
+import library.mesh.mesh as petscMesh
 import library.misc.io as io
 from library.model.models.shallow_moments import reconstruct_uvw
 
-def recover_3d_from_smm_as_vtk(model, output_path, path_to_mesh, path_to_fields, Nz = 10, start_at_time=0, scale_h = 1.):
-    fields =  h5py.File(path_to_fields, "r")
-    mesh = fvm_mesh.Mesh.from_hdf5(path_to_mesh)
+def recover_3d_from_smm_as_vtk(model, output_path, path_to_simulation, Nz = 10, start_at_time=0, scale_h = 1.):
+    sim =  h5py.File(path_to_simulation, "r")
+    fields = sim['fields']
+    # mesh = sim['mesh']
+    mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
     n_snapshots = len(list(fields.keys()))
 
     Z = np.linspace(0, 1, Nz)

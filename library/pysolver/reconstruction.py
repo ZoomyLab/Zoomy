@@ -3,7 +3,8 @@ from attrs import define
 
 
 from library.misc.custom_types import IArray, FArray, CArray
-from library.mesh.fvm_mesh import *
+import library.mesh.fvm_mesh as fvm_mesh
+import library.mesh.mesh as petsc_mesh
 
 # TODO get rid of the boundary_conditions requirement
 # HOW: rewrite mesh:segments. The mesh should already allocate indices for the ghost cells for each inner element (in particular element_neighbor ids)
@@ -159,7 +160,7 @@ def constant_old(mesh, fields):
 
 
 @define(slots=True, frozen=True)
-class GradientMesh(Mesh):
+class GradientMesh(fvm_mesh.Mesh):
     #TODO Problem: currently I use nx = [1, 0], ny = [0,1] - however, I think I need to do minmod(nx, -nx) or something similar in nd?
     element_face_coefficients: IArray
 
@@ -189,6 +190,39 @@ class GradientMesh(Mesh):
                 q_neighbor = Q[i_neighbor]
                 for d in range(dim):
                     gradQ[i_elem, :, d] += self.element_face_coefficients[i_elem, i_face, d] * (q_neighbor - q_self)
+        return gradQ
+
+@define(slots=True, frozen=True)
+class GradientPetscMesh(petsc_mesh.Mesh):
+    #TODO Problem: currently I use nx = [1, 0], ny = [0,1] - however, I think I need to do minmod(nx, -nx) or something similar in nd?
+    cell_face_coefficients: IArray
+
+    @classmethod 
+    def fromMesh(cls, msh):
+        dim = msh.dimension
+        cell_face_coefficients = np.zeros((msh.n_cells, msh.n_faces_per_cell, dim ), dtype=float)
+        normals = [np.eye(dim)[d, :] for d in range(dim)]
+
+        for i_cell in range(msh.n_cells):
+            x_self = msh.cell_centers[i_cell]
+            for i_face in range(msh.cell_faces[i_cell]):
+                x_neighbor = msh.cell_centers[msh.cell_neighbors[i_elem][i_face]]
+                for d in range(dim):
+                    cell_face_coefficients[i_elem][i_face][d] = max(np.dot(normals[d], msh.cell_face_normals[i_elem, i_face]), 0.)
+                    cell_face_coefficients[i_elem][i_face][d] /= np.linalg.norm(x_neighbor-x_self)
+        return cls(msh.dimension, msh.type, msh.n_cells, msh.n_vertices, msh.n_boundary_cells, msh.n_faces_per_cell, msh.vertex_coordinates, msh.cell_vertices, msh.cell_face_areas, msh.cell_center, msh.cell_volume, msh.cell_inradius, msh.cell_face_normals, msh.cell_n_neighbors, msh.cell_neighbors, msh.cell_neighbors_face_index, msh.boundary_face_vertices, msh.boundary_face_corresponding_cell, msh.boundary_face_cell_face_index, msh.boundary_face_tag, msh.boundary_tag_names, cell_face_coefficients)
+
+    def gradQ(self, Q):
+        dim = self.dimension
+        n_fields = Q.shape[1]
+        gradQ = np.zeros((self.n_cells, n_fields, dim), dtype=float)
+        for i_elem in range(self.n_cells):
+            q_self = Q[i_elem]
+            for i_face in range(self.cell_n_neighbors[i_elem]):
+                i_neighbor = self.cell_neighbors[i_elem, i_face]
+                q_neighbor = Q[i_neighbor]
+                for d in range(dim):
+                    gradQ[i_elem, :, d] += self.cell_face_coefficients[i_elem, i_face, d] * (q_neighbor - q_self)
         return gradQ
 
 

@@ -20,7 +20,6 @@ def get_physical_boundary_labels(filepath):
     return boundary_dict
 
 
-
 def _compute_inradius_generic(cell_center, face_centers, face_normals):
     """
     strategy: find the shortest path from the center to each side (defined by face center and normal)
@@ -34,7 +33,7 @@ def _compute_inradius_generic(cell_center, face_centers, face_normals):
     if inradius  <= 0:
        inradius = np.array(face_centers - cell_center).min() 
     return inradius
-        
+
 
 def compute_cell_inradius(dm):
     """
@@ -60,7 +59,7 @@ def compute_cell_inradius(dm):
 
 
 # def construct_ghost_cells(dm, boundary_dict):
-#     dm.constructGhostCells() 
+#     dm.constructGhostCells()
 #     (eStart, eEnd) = dm.getDepthStratum(1)
 #     ghost_cells = {k: [] for k in boundary_dict.values()}
 #     for e in range(eStart, eEnd):
@@ -125,14 +124,10 @@ def _boundary_dict_indices(d):
         indices +=  [index for v in values]
         index +=1
     return np.array(indices, dtype=int)
-    
-    
-
-
 
 
 # def load_gmsh_to_dm(filepath):
-#     dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD) 
+#     dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
 #     boundary_dict = get_physical_boundary_labels(filepath)
 #     dm, ghost_cells_dict = construct_ghost_cells(dm, boundary_dict)
 #     return dm, boundary_dict, ghost_cells_dict
@@ -144,7 +139,6 @@ def load_gmsh_to_fvm(filepath):
     boundary_face_corresponding_element = boundary_dict_to_list(boundary_cells_dict)
     boundary_face_vertices = boundary_dict_to_list(boundary_face_vertices_dict)
     return dm, boundary_dict, ghost_cells_dict
-
 
 
 def _get_mesh_type(dm):
@@ -171,7 +165,7 @@ def convert_to_fvm_mesh(dm, boundary_dict, ghost_cells_dict):
             boundary_face_tag.append(be_list_key)
     boundary_tag_names = boundary_dict.keys()
 
-    
+
 @define(slots=True, frozen=True)
 class Mesh:
     dimension: int
@@ -199,6 +193,8 @@ class Mesh:
     face_centers: FArray
     boundary_conditions_sorted_physical_tags: IArray
     boundary_conditions_sorted_names: CArray
+    lsq_matrix: FArray
+    lsq_diff_matrix: FArray
 
     @classmethod
     def from_gmsh(cls, filepath):
@@ -234,8 +230,6 @@ class Mesh:
             cell_vertices[i_c,: ] = _cell_vertices - vStart
             cell_centers[i_c, :] = cell_center
             cell_volumes[i_c] = cell_volume
-        
-
 
         vertex_coordinates = np.array(gdm.getCoordinates()).reshape((-1, dim))
         boundary_face_cells = {k: [] for k in boundary_dict.values()}
@@ -266,13 +260,7 @@ class Mesh:
                 _face_ghost = gdm.getSupport(e).max()
                 cell_centers[_face_ghost] = cell_centers[_face_cell]
 
-            face_vertices = gdm.getCone(e)
-            assert len(face_vertices) == 2
-            vertexA = face_vertices[0] - vgStart
-            vertexB = face_vertices[1] - vgStart
-            coordA = gdm.getCoordinates()[vertexA:vertexA+dim]
-            coordB = gdm.getCoordinates()[vertexB:vertexB+dim]
-            face_center = 0.5 * (coordA + coordB)
+            face_center = gdm.computeCellGeometryFVM(e)[1]
             face_centers.append(face_center)
             _face_cells = gdm.getSupport(e)
             face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(e)
@@ -280,12 +268,34 @@ class Mesh:
             face_normals.append(face_normal)
             face_cells.append(_face_cells)
 
+        lsq_matrix = []
+        lsq_diff_matrix = -np.eye(n_cells, dtype=float)
         # I only want to iterate over the inner cells, but in the ghosted mesh
         for i_c, c in enumerate(range(cgStart, cgStart + n_inner_cells)):
             faces = gdm.getCone(c) - egStart
             cell_faces[i_c,:] = faces
-            
 
+            neighbors = np.array(
+                [
+                    gdm.getSupport(f)[gdm.getSupport(f) != c][0]
+                    for f in gdm.getCone(c)
+                ]
+            )
+            # tc = gdm.getTransitiveClosure(c, useCone=True)[0]
+            # neighbors = tc[np.logical_and(np.logical_and(tc >= cgStart, tc < cgEnd), tc != c)] - cStart
+            n_neighbors = neighbors.shape[0]
+            dX = np.zeros((n_neighbors * dim, dim), dtype=float)
+            mat = np.zeros((dim , n_faces_per_cell * dim), dtype=float)
+            for d in range(dim):
+                for i_neighbor, neigbor in enumerate(neighbors):
+                    dX[i_neighbor + d * n_neighbors, d ] = cell_centers[i_neighbor][d] - cell_centers[i_c][d]
+            mat[:, :n_neighbors*dim] = np.linalg.inv(dX.T @ dX) @ dX.T
+            lsq_matrix.append(mat)
+            lsq_diff_matrix[i_c, neighbors] = 1.
+
+
+
+        lsq_matrix = np.array(lsq_matrix, dtype=float)
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
         face_normals = np.array(face_normals, dtype=float)
@@ -314,7 +324,7 @@ class Mesh:
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names)
+        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_matrix, lsq_diff_matrix)
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -345,8 +355,9 @@ class Mesh:
             mesh.create_dataset("face_centers", data=self.face_centers)
             mesh.create_dataset("boundary_conditions_sorted_physical_tags", data=np.array(self.boundary_conditions_sorted_physical_tags))
             mesh.create_dataset("boundary_conditions_sorted_names", data=np.array(self.boundary_conditions_sorted_names, dtype='S'))
+            mesh.create_dataset("lsq_matrix", data=np.array(self.lsq_matrix))
+            mesh.create_dataset("lsq_diff_matrix", data=np.array(self.lsq_diff_matrix))
 
-    
     @classmethod
     def from_hdf5(cls, filepath: str):
         with h5py.File(filepath, "r") as file:
@@ -376,10 +387,11 @@ class Mesh:
                 file["mesh"]["face_volumes"][()],
                 file["mesh"]["face_centers"][()],
                 file["mesh"]["boundary_conditions_sorted_physical_tags"][()],
-                np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str')
+                np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str'),
+                file["mesh"]["lsq_matrix"][()],
+                file["mesh"]["lsq_diff_matrix"][()],
             )
         return mesh
-
 
     def write_to_vtk(
         self,
@@ -408,7 +420,6 @@ class Mesh:
         if not os.path.exists(path) and path != "":
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
-
 
 
 if __name__ == "__main__":

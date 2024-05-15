@@ -48,7 +48,7 @@ class Settings:
 
 def _initialize_problem(model, mesh):
     model.boundary_conditions.initialize(
-        mesh, model.time, model.position, model.variables, model.aux_variables, model.parameters, model.sympy_normal
+        mesh, model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.sympy_normal
     )
 
     n_fields = model.n_fields
@@ -536,7 +536,10 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         qaux_cell = Qaux[:, mesh.boundary_face_cells[ i_bc_face]]
         normal = mesh.face_normals[:, i_face]
         position = mesh.face_centers[i_face]
-        q_ghost = bc_func(time, position, q_cell, qaux_cell, parameters, normal)
+        # I cannot use the mesh.boudnary_face_cells because this is potenntially a periodic ghost cell..
+        position_cell = mesh.cell_centers[:, mesh.boundary_face_cells[i_bc_face]]
+        distance = np.linalg.norm(position - position_cell)
+        q_ghost = bc_func(time, position, distance, q_cell, qaux_cell, parameters, normal)
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
@@ -616,6 +619,9 @@ def jax_fvm_unsteady_semidiscrete(
         #     dt *= self.dt_relaxation_factor
         # if dt < self.dtmin:
         #     dt = self.dtmin
+
+        A = mesh.lsq_matrix @ mesh.lsq_diff_matrix 
+        dQ = A @ Q.T
 
     #     # add 0.001 safty measure to avoid very small time steps
         if settings.truncate_last_time_step:

@@ -1025,44 +1025,56 @@ def test_enforce_w_bc():
     level = 1
     settings = Settings(
         name="ShallowMoments2d",
-        parameters={"g": 9.81, "C": 3.0, "nu": 1.034*10**(-6)},
+        parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
         compute_dt=timestepping.adaptive(CFL=.45),
-        time_end=5.,
+        time_end=10.,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir="outputs/output_jax2",
     )
 
-    # inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
-    inflow_dict = {}
-    inflow_dict[0] = "0.1*sympy.sin(2*3.14*time)+ 0.2"
-    inflow_dict[1] = "0.1"
-    inflow_dict[2] = "0.0"
-    outflow_dict = {0: "0.1"}
-    outflow_dict = {3: "0.0"}
-    outflow_dict = {4: "0.0"}
-    # outflow_dict = {}
+    inflow_dict = {i: "0.0" for i in range(1, 2 * (1 + level) + 1)}
+    # inflow_dict = {}
+    # inflow_dict[0] = "0.1*sympy.sin(2*3.14*time)+ 1.0 + 0.1*X[1]"
+    h0 = "Q[0]"
+    hu0 = 1.0
+    w0 = 10.0
+    dxh = f"(Q[0] - {h0})/(2*dX)"
+    # dxh = f"0"
+    dxhu = f"(Q[1] - {hu0})/(2*dX)"
+    nominator = f"-({w0} + Q[2] - 3/2 * dX * {dxhu} + 3/2 * dX * {hu0}/{h0} * {dxh})"
+    denominator = f"1/2 * dX / {h0} * {dxh} + 1"
+    # inflow_dict[0] = f"{h0}"
+    inflow_dict[1] = f"{hu0}"
+    inflow_dict[2] = f'{nominator}/{denominator}'
+    # inflow_dict[2] = f'{nominator}/{denominator}'
+    outflow_dict = {0: f"{h0}"}
+    # outflow_dict = {3: "0.0"}
+    # outflow_dict = {4: "0.0"}
+    outflow_dict = {}
 
     offset = level+1
     bcs = BC.BoundaryConditions(
         [
             BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
             BC.InflowOutflow(physical_tag="outflow", prescribe_fields= outflow_dict),
-            # BC.Wall(physical_tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)]),
-            # BC.Wall(physical_tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)]),
+            BC.Wall(physical_tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            BC.Wall(physical_tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
             # BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
             # BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Extrapolation(physical_tag="top"),
-            BC.Extrapolation(physical_tag="bottom"),
+            # BC.Extrapolation(physical_tag="top"),
+            # BC.Extrapolation(physical_tag="bottom"),
+            # BC.Extrapolation(physical_tag="left"),
+            # BC.Extrapolation(physical_tag="right"),
         ]
     )
 
     ic = IC.Constant(
         constants=lambda n_fields: np.array(
-            [0.1, 0.00, 0.0] + [0.0 for i in range(n_fields - 3)]
+            [1.0, 0.0, 0.0] + [0.0 for i in range(n_fields - 3)]
         )
     )
 
@@ -1081,7 +1093,9 @@ def test_enforce_w_bc():
 
 
     main_dir = os.getenv("SMS")
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"))
     mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
+    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finer.msh"))
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"))
@@ -1092,6 +1106,14 @@ def test_enforce_w_bc():
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    # postprocessing.recover_3d_from_smm_as_vtk(
+    #     model,
+    #     settings.output_dir,
+    #     os.path.join(settings.output_dir, "mesh.hdf5"),
+    #     os.path.join(settings.output_dir, "fields.hdf5"),
+    #     Nz=10,
+    #     start_at_time=1.0,
+    # )
 
 
 

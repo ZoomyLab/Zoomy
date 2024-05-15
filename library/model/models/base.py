@@ -191,6 +191,7 @@ class Model:
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
         self.time = sympy.symbols('time', real=True)
         self.position = register_sympy_attribute(dimension, "X")
+        self.distance = sympy.symbols('dX', real=True)
         updated_parameters = {**parameters_default, **parameters}
         self.parameters = register_sympy_attribute(updated_parameters, "p")
         self.parameters_default = parameters_default
@@ -495,6 +496,7 @@ class Model:
             [
                 self.time,
                 self.position.get_list(),
+                self.distance,
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
@@ -504,7 +506,7 @@ class Model:
             self.boundary_conditions.boundary_functions[i],
             printer)
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-            f = lambda time, position, q, qaux, p, n, func=func: np.squeeze(np.array(func(time, position, q, qaux, p, n) ), axis=-1)
+            f = lambda time, position, distance, q, qaux, p, n, func=func: np.squeeze(np.array(func(time, position, distance, q, qaux, p, n) ), axis=-1)
             bcs.append(f)
         return bcs
 
