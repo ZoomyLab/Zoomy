@@ -125,26 +125,73 @@ def test_periodic_bc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Extrapolation(physical_tag="left"),
-            # BC.Extrapolation(physical_tag="right"),
             BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
             BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            # BC.Extrapolation(physical_tag="top"),
-            # BC.Extrapolation(physical_tag="bottom"),
             BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
             BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            # BC.Wall(physical_tag="hole", momentum_field_indices=[[1 + l, 1 + offset + l] for l in range(level+1)]),
         ]
     )
 
-    # ic = IC.RP(
-    #     low=lambda n_fields: np.array(
-    #         [0.1, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
-    #     ),
-    #     high=lambda n_fields: np.array(
-    #         [0.2, 0.36, 0.0] + [0.0 for i in range(n_fields - 3)]
-    #     )
-    # )
+    ic = IC.RP2d(
+        low=lambda n_fields: np.array(
+            [0.1] + [0.0 for i in range(n_fields - 3)]
+        ),
+        high=lambda n_fields: np.array(
+            [0.2] + [0.0 for i in range(n_fields - 3)]
+        ),
+        jump_position_x = 0,
+        jump_position_y = 1.
+    )
+
+    model = Advection(
+        dimension=2,
+        fields=1,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": []},
+    )
+
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+@pytest.mark.critical
+@pytest.mark.unfinished
+@pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
+def test_limiter(mesh_type):
+    settings = Settings(
+        name="Advection",
+        parameters={"px": -1./8, "py": -0./8.,},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        nc_flux=nonconservative_flux.segmentpath(1),
+        compute_dt=timestepping.adaptive(CFL=0.25),
+        time_end=10.,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir="outputs/output_advection",
+    )
+
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            # BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+            # BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            BC.Extrapolation(physical_tag="bottom"),
+            BC.Extrapolation(physical_tag="top"),
+        ]
+    )
+
 
     ic = IC.RP2d(
         low=lambda n_fields: np.array(
@@ -167,6 +214,13 @@ def test_periodic_bc(mesh_type):
     #     radius = 0.2,
     # )
 
+    # def custom_ic(x):
+    #     Q = np.zeros(1, dtype=float)
+    #     Q[0] = x[0]
+    #     return Q
+
+    # ic = IC.UserFunction(custom_ic)
+
     model = Advection(
         dimension=2,
         fields=1,
@@ -179,12 +233,12 @@ def test_periodic_bc(mesh_type):
 
 
     main_dir = os.getenv("SMS")
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
 
     jax_fvm_unsteady_semidiscrete(
-        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+        mesh, model, settings, ode_solver_flux=RK2, ode_solver_source=RK2
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=['Q'], aux_field_names=['dQdx', 'dQdy', 'phi'])
 
 
 
@@ -193,4 +247,5 @@ if __name__ == "__main__":
     # test_advection_2d("quad")
     # test_advection_2d("triangle")
     # test_advection_3d("tetra")
-    test_periodic_bc("quad")
+    # test_periodic_bc("quad")
+    test_limiter("quad")

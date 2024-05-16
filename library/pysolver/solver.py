@@ -53,9 +53,10 @@ def _initialize_problem(model, mesh):
 
     n_fields = model.n_fields
     n_cells = mesh.n_cells
+    n_aux_fields = model.aux_variables.length()
 
     Q = np.empty((n_fields, n_cells), dtype=float)
-    Qaux = np.zeros((model.aux_variables.length(), n_cells), dtype=float)
+    Qaux = np.zeros((n_aux_fields, n_cells), dtype=float)
 
     Q = model.initial_conditions.apply(mesh.cell_centers, Q)
     Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
@@ -154,6 +155,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         for i_face in range(mesh.n_faces):
             #reconstruct
             i_cellA, i_cellB = mesh.face_cells[:, i_face]
+            rA = mesh.face_centers[i_face] - mesh.cell_centers[i_cellA]
+            rB = mesh.face_centers[i_face] - mesh.cell_centers[i_cellA]
             qA = Q[:, i_cellA]
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
@@ -235,10 +238,20 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
+
+        phi = Qaux[-1]
+        gradQ = np.zeros((Q.shape[0], Q.shape[1], 2), dtype=float)
+        gradQ[:,:,0] = Qaux[-3]
+        gradQ[:,:,1] = Qaux[-2]
+
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
-        qA = Q[:, iA]
-        qB = Q[:, iB]
+
+        rA = mesh.face_centers - mesh.cell_centers[:, iA].T
+        rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+
+        qA = Q[:, iA] + phi[iA] * np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
+        qB = Q[:, iB] + phi[iB] * np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -526,7 +539,7 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
         iteration.create_dataset("Q", time)
         iteration.create_dataset("Qaux", time)
 
-#TODO vectorize
+# TODO vectorize
 def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
     for i_bc_face in range(mesh.n_boundary_faces):
         i_face = mesh.boundary_face_face_indices[i_bc_face]
@@ -542,6 +555,18 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         q_ghost = bc_func(time, position, distance, q_cell, qaux_cell, parameters, normal)
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
+
+def get_limiter(name='min'):
+    if name == 'min':
+        def f(x):
+            return np.min((np.ones_like(x), x), axis=0)
+        return f
+    elif name == "Venkatakrishnan":
+        def f(x):
+            return (x**2 + 2*x)/(x**2 + x + 2.*np.ones_like(x))
+        return f
+    else:
+        assert False
 
 
 def jax_fvm_unsteady_semidiscrete(
@@ -564,6 +589,12 @@ def jax_fvm_unsteady_semidiscrete(
     progressbar.progress_explain = ""
     progressbar.update()
 
+    # reconstruction
+    i_aux_recon = model.aux_variables.length()
+    model.aux_variables = register_sympy_attribute(model.aux_variables.get_list() + ['dQdx', 'dQdy', 'limiter'])
+    model.n_aux_fields = model.aux_variables.length()
+
+
     Q, Qaux = _initialize_problem(model, mesh)
 
     # runtime_bcs = model.create_python_boundary_interface(printer='numpy')
@@ -583,15 +614,12 @@ def jax_fvm_unsteady_semidiscrete(
         output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
     )
 
-
     # settings.parameters = model.parameters.to_value_dict(model.parameter_values)
     # io.save_settings(settings.output_dir, settings)
 
     time_start = gettime()
 
-    Q = apply_boundary_conditions(mesh,time, Q, Qaux, parameters, bcs)
     Qnew = deepcopy(Q)
-
 
     space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, bcs, settings)
     # space_solution_operator = _get_semidiscrete_solution_operator(
@@ -605,9 +633,11 @@ def jax_fvm_unsteady_semidiscrete(
     )
     min_inradius = np.min(mesh.cell_inradius)
 
+    limiter = get_limiter(name='Venkatakrishnan')
+
     # print(f'hi from process {os.getpid()}')
     while time < settings.time_end:
-    #     # print(f'in loop from process {os.getpid()}')
+        #     # print(f'in loop from process {os.getpid()}')
         Q = deepcopy(Qnew)
         dt = settings.compute_dt(
             Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
@@ -620,34 +650,121 @@ def jax_fvm_unsteady_semidiscrete(
         # if dt < self.dtmin:
         #     dt = self.dtmin
 
-        A = mesh.lsq_matrix @ mesh.lsq_diff_matrix 
-        dQ = A @ Q.T
+        # reconstruction
+        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
+        delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
+        delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
+        delta_Q_max = np.max(delta_Q, axis=2)
+        # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
+        delta_Q_min = np.min(delta_Q, axis=2)
+        # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
 
-    #     # add 0.001 safty measure to avoid very small time steps
+        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
+        gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
+        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
+        gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
+        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        phi = np.min((phi0, phi1), axis=0)
+
+
+        phi = np.ones_like(Q)
+        dQmax = np.zeros_like(Q)
+        dQmin = np.zeros_like(Q)
+        for c in range(mesh.n_inner_cells):
+            for f in mesh.cell_faces[:, c]:
+                n = mesh.face_cells[:, f][0]
+                if n == c:
+                    n = mesh.face_cells[:, f][1]
+                dQmax[:, c] = np.max((dQmax[:, c], -Q[:, c] + Q[:, n]), axis=0 )
+                dQmin[:, c] = np.min((dQmin[:, c], -Q[:, c] + Q[:, n]), axis=0 )
+        for c in (mesh.boundary_face_cells):
+            for f in mesh.cell_faces[:, c]:
+                n = mesh.face_cells[:, f][0]
+                if n == c:
+                    n = mesh.face_cells[:, f][1]
+                dQmax[:, c] = np.max((dQmax[:, c], -Q[:, c] + Q[:, n]), axis=0 )
+                dQmin[:, c] = np.min((dQmin[:, c], -Q[:, c] + Q[:, n]), axis=0 )
+        for c in range(mesh.n_inner_cells):
+            for f in mesh.cell_faces[:, c]:
+                n = mesh.face_cells[:, f][0]
+                if n == c:
+                    n = mesh.face_cells[:, f][1]
+                rij = mesh.face_centers[f] - mesh.cell_centers[:, c]
+                gradQ_rij = np.einsum('kd, d ->k', gradQ[:,:,c], rij)
+                phi_ij = np.ones(Q.shape[0])
+                if gradQ_rij > 0:
+                    phi_ij = limiter(dQmax[:, c] / gradQ_rij)
+                elif gradQ_rij < 0:
+                    phi_ij = limiter(dQmin[:, c] / gradQ_rij)
+            
+                phi[:, c] = np.min((phi[:, c], phi_ij), axis=0)
+
+        for c in (mesh.boundary_face_cells):
+            for f in mesh.cell_faces[:, c]:
+                n = mesh.face_cells[:, f][0]
+                if n == c:
+                    n = mesh.face_cells[:, f][1]
+                rij = mesh.face_centers[f] - mesh.cell_centers[:, c]
+                gradQ_rij = np.einsum('kd, d ->k', gradQ[:,:,c], rij)
+                phi_ij = np.ones(Q.shape[0])
+                if gradQ_rij > 0:
+                    phi_ij = limiter(dQmax[:, c] / gradQ_rij)
+                elif gradQ_rij < 0:
+                    phi_ij = limiter(dQmin[:, c] / gradQ_rij)
+            
+                phi[:, c] = np.min((phi[:, c], phi_ij), axis=0)
+
+
+
+
+        assert phi.min() >= 0
+        assert phi.max() <= 1
+
+        Qaux[i_aux_recon] = gradQ[0][0]
+        Qaux[i_aux_recon+1] = gradQ[0][1]
+        Qaux[i_aux_recon+2] = phi
+
+
+
+        #     # add 0.001 safty measure to avoid very small time steps
         if settings.truncate_last_time_step:
             if time + dt * 1.001 > settings.time_end:
                 dt = settings.time_end - time + 10 ** (-10)
 
-    #     # TODO this two things should be 'callouts'!!
+        #     # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
         # Qnew = enforce_boundary_conditions(Qnew)
         Qnew = ode_solver_source(
             compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
         )
-        Q = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
-    #     )
-    #     # Qnew  += -Q+ode_solver_source(
-    #     #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
-    #     # )
-    #     # Qnew = enforce_boundary_conditions(Qnew)
+        Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
+        #     )
+        #     # Qnew  += -Q+ode_solver_source(
+        #     #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
+        #     # )
+        #     # Qnew = enforce_boundary_conditions(Qnew)
 
         # Update solution and time
         time += dt
         iteration += 1
         print(iteration, time, dt)
 
-    #     # for callback in self.callback_function_list_post_solvestep:
-    #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+        #     # for callback in self.callback_function_list_post_solvestep:
+        #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
 
         i_snapshot = io.save_fields(
             output_hdf5_path,
@@ -665,8 +782,8 @@ def jax_fvm_unsteady_semidiscrete(
     #     #     )
     #     # )
     #     # print(f'finished timestep: {os.getpid()}')
-        # progressbar.set_stat(min(time, settings.time_end))
-        # progressbar.update()
+    # progressbar.set_stat(min(time, settings.time_end))
+    # progressbar.update()
 
     progressbar.end()
     return settings

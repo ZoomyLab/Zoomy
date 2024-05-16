@@ -1072,11 +1072,23 @@ def test_enforce_w_bc():
         ]
     )
 
+
     ic = IC.Constant(
         constants=lambda n_fields: np.array(
             [1.0, 0.0, 0.0] + [0.0 for i in range(n_fields - 3)]
         )
     )
+
+    def custom_ic(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = 2*np.ones_like(x[0])
+        Q[1] = x[0]
+        Q[2] = x[1]
+        Q[3] = x[0]**2 
+        Q[4] = x[1]**2 
+        return Q
+
+    ic = IC.UserFunction(custom_ic)
 
 
     model = ShallowMoments2d(
@@ -1105,7 +1117,7 @@ def test_enforce_w_bc():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=['Q'], aux_field_names=['dQdx', 'dQdy', 'phi'])
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
     #     settings.output_dir,
