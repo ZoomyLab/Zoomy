@@ -1,19 +1,27 @@
 name: sms
 channels:
-  - defaults
   - conda-forge
+  # - defaults
 dependencies:
   - python=3.9
-  - attrs
-  - numpy
-  - jupyterlab
-  - matplotlib
-  - pytest
-  - pyyaml
-  - meshio
-  - COMPAS
-  - scipy
-  - tqdm
-  - h5py
-  - cython
-  - pyprog
+  - pip
+  - pip:
+    - attrs
+    - numpy
+    - ipython
+    - ipykernel
+    - matplotlib
+    - pytest
+    - meshio
+    - scipy
+    - h5py
+    - pyprog
+    - mpi4py
+    - petsc4py
+variables:
+  PETSC_DIR: '/home/ingo/petsc'
+  PETSC_ARCH: 'linux-gnu'
+  SMS: '/home/ingo/Git/SMM/shallow-moments-simulation'
+  PYTHONPATH: ':/home/ingo/Git/SMM/shallow-moments-simulation'
+
+
