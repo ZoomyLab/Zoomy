@@ -1,11 +1,11 @@
 import numpy as np
 
-def RK1(func, Q, Qaux, param, dt, func_jac=None):
+def RK1(func, Q, Qaux, param, dt, func_jac=None, func_bc=None):
     dQ = np.zeros_like(Q)
     dQ = func(dt, Q, Qaux, param, dQ)
     return Q + dt * dQ
 
-def RK2(func, Q, Qaux, param, dt, func_jac = None):
+def RK2(func, Q, Qaux, param, dt, func_jac = None, func_bc=None):
     """
     heun scheme
     """
@@ -17,7 +17,7 @@ def RK2(func, Q, Qaux, param, dt, func_jac = None):
     Q2 = Q1 + dt * dQ
     return 0.5 * (Q0 + Q2)
 
-def RK3(func, Q, Qaux, param, dt, func_jac=None):
+def RK3(func, Q, Qaux, param, dt, func_jac=None, func_bc=None):
     """
     """
     dQ = np.zeros_like(Q)
@@ -32,7 +32,7 @@ def RK3(func, Q, Qaux, param, dt, func_jac=None):
     # func(dt, Q3, Qaux, param, dQ)
     return Q3
 
-def RKimplicit(func, Q, Qaux, param, dt, func_jac=None):
+def RKimplicit(func, Q, Qaux, param, dt, func_jac=None, func_bc=None):
     """
     implicit euler
     """

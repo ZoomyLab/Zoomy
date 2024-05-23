@@ -1114,10 +1114,10 @@ def test_enforce_w_bc():
 
     print(mesh.boundary_conditions_sorted_names)
 
-    jax_fvm_unsteady_semidiscrete(
-        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
-    )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=['Q'], aux_field_names=['dQdx', 'dQdy', 'phi'])
+    # jax_fvm_unsteady_semidiscrete(
+    #     mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    # )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
     #     settings.output_dir,
