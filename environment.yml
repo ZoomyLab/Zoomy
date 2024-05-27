@@ -18,6 +18,10 @@ dependencies:
     - pyprog
     - mpi4py
     - petsc4py
+    - pyvista
+    - trame
+    - trame-vtk
+    - trame-vuetify
 variables:
   PETSC_DIR: '/home/ingo/petsc'
   PETSC_ARCH: 'linux-gnu'
