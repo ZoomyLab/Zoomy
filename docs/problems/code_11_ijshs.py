@@ -55,7 +55,7 @@ def extract_1d_slice(mesh, pos=[15, 0, 0]):
 def extract_1d_data(directory, filename='internal.vtu', pos = [15, 0, 0], stride=10):
     folder_names = [name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name))]
     def sorting_key(name):
-        prefix = 'nozzle_mid_'
+        prefix = 'nozzle_openfoam_'
         if name.startswith(prefix):
             return int(name[len(prefix):])
         else:
