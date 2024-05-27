@@ -50,6 +50,21 @@ class InflowOutflow(BoundaryCondition):
         for k, v in self.prescribe_fields.items():
             Qout[k] = eval(v)
         return Qout
+
+@define(slots=True, frozen=False, kw_only=True)
+class FromData(BoundaryCondition):
+    prescribe_fields: dict[int, np.ndarray]
+    timeline: np.ndarray
+
+    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+        # Extrapolate all fields
+        Qout = Matrix(Q)
+
+        # Set the fields which are prescribed in boundary condition dict
+        for k, v in self.prescribe_fields.items():
+            spline = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
+            Qout[k] = spline
+        return Qout
             
 
 @define(slots=True, frozen=False, kw_only=True)
