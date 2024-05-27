@@ -207,6 +207,86 @@ class Mesh:
     lsq_lin_recon_matrix: FArray
 
     @classmethod
+    def create_1d(cls, domain: tuple[float, float], n_inner_cells: int):
+        xL = domain[0]
+        xR = domain[1]
+
+        n_cells = n_inner_cells + 2
+        n_vertices = n_inner_cells + 1
+        dimension = 1
+        n_faces_per_cell = 2
+        n_faces = n_inner_cells+1
+        n_boundary_faces=2
+        dx = (xR - xL) / n_inner_cells
+        vertex_coordinates = np.zeros((n_vertices, 1))
+        vertex_coordinates[:, 0] = np.linspace(
+            xL, xR, n_vertices, dtype=float
+        )
+        cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
+        cell_vertices[:, 0] = list(range(0, n_vertices-1))
+        cell_vertices[:, 1] = list(range(1, n_vertices))
+        cell_volumes = dx * np.ones(n_cells, dtype=float)
+        cell_inradius = dx/2 * np.ones(n_cells, dtype=float)
+
+        face_normals = np.zeros((n_faces, dimension), dtype=float)
+        face_volumes = np.ones((n_faces), dtype=float)
+
+        cell_centers = np.zeros((n_cells, dimension), dtype=float)
+        cell_centers[:n_inner_cells, 0] = np.arange(xL + dx / 2, xR, dx)
+        cell_centers[n_inner_cells, 0] = xL - dx/2
+        cell_centers[n_inner_cells+1, 0] = xR + dx/2
+        cell_neighbors = (n_cells+1) * np.ones((n_cells, n_faces_per_cell), dtype=int)
+
+        cell_faces = np.empty((n_inner_cells, n_faces_per_cell), dtype=int)
+        cell_faces[:, 0] = list(range(0, n_faces-1))
+        cell_faces[:, 1] = list(range(1, n_faces))
+
+        #inner cells
+        for i_cell in range(0, n_cells):
+            cell_neighbors[i_cell, :] = [i_cell-1, i_cell+1]
+        # left neighbor of 0is the first ghost
+        cell_neighbors[0, 0] = n_inner_cells
+        # right neighbor of n_inner_cell is the second ghost
+        cell_neighbors[n_inner_cells, 1] = n_inner_cells+1
+        # left neighbor of first ghost is empty 
+        cell_neighbors[n_inner_cells, 0] = n_cells+1
+        # right neighbor of first ghost is first cell
+        cell_neighbors[n_inner_cells, 1] = 0
+        # left neighbor of second ghost is last inner 
+        cell_neighbors[n_inner_cells+1, 0] = n_inner_cells-1
+        # right neighbor of second ghost is empty
+        cell_neighbors[n_inner_cells+1, 1] = n_cells+1
+
+        for i_face in range(0, n_faces):
+            face_normals[i_face, 0] = 1.
+
+        boundary_face_cells = np.array([0, n_inner_cells-1], dtype=int)
+        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells+1], dtype=int)
+        boundary_face_function_numbers = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_function_numbers[0] = 0
+        boundary_face_function_numbers[1] = 1
+        boundary_face_physical_tags = np.array([0, 1], dtype=int)
+        boundary_face_face_indices = np.array([0, n_faces-1], dtype=int)
+
+        face_cells = np.empty((n_faces, 2), dtype=int)
+        face_cells[1:n_faces-1, 0] = list(range(0,n_inner_cells-1))
+        face_cells[1:n_faces-1, 1] = list(range(1,n_inner_cells))
+        face_cells[0, 0] = n_inner_cells
+        face_cells[0, 1] = 0
+        face_cells[-1, 0] = n_inner_cells-1
+        face_cells[-1, 1] = n_inner_cells+1
+        face_centers = 0.5*(cell_centers[face_cells[:,0]] + cell_centers[face_cells[:,1]])
+
+        boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
+        boundary_conditions_sorted_names = np.array(['left', 'right'])
+
+        lsq_lin_recon_matrix = np.zeros((n_cells, dimension, n_cells), dtype=float)
+
+
+        # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
+        return cls(dimension, 'line', n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_lin_recon_matrix)
+
+    @classmethod
     def from_gmsh(cls, filepath):
         dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD) 
         boundary_dict = get_physical_boundary_labels(filepath)
