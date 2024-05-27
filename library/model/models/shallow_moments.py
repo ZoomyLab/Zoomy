@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import re
 import logging
 import numpy.polynomial.legendre as L
 import numpy.polynomial.chebyshev as C
@@ -39,6 +40,7 @@ from attr import define
 from sympy import integrate, diff
 
 from sympy import legendre
+from sympy import lambdify
 
 class Legendre_shifted:
     def basis_definition(self):
@@ -56,6 +58,21 @@ class Legendre_shifted:
     
     def eval(self, k, z):
         return self.get(k).subs(x, z)
+
+    # TODO vectorization not yet working properly without loop
+    def get_lambda(self, k):
+        # s = str(self.get(k)).replace('x', 'z')
+        # s = re.sub(r'([^+-]+)', r'np.ones_like(z)*(\1)', s)
+        # lam = lambda z: eval(s)
+        f = lambdify(x, self.get(k)) 
+        def lam(z):
+            if type(z) == int or type(z) == float:
+                return f(z)
+            elif type(z) == list or type(z) == np.ndarray:
+                return np.array([f(xi) for xi in z])
+            else: 
+                assert False
+        return lam
 
     def plot(self):
         fig, ax = plt.subplots()
@@ -620,10 +637,10 @@ def generate_velocity_profiles(
 if __name__ == "__main__":
     # basis = Legendre_shifted(1)
     # basis = Spline()
-    basis = OrthogonalSplineWithConstant(degree=2, knots=[0, 0.1, 0.3,0.5, 1,1])
+    # basis = OrthogonalSplineWithConstant(degree=2, knots=[0, 0.1, 0.3,0.5, 1,1])
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.02, 0.04, 0.06, 0.08, 0.1,  1])
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
-    basis.plot()
+    # basis.plot()
 
     # basis = Basis(basis=Legendre_shifted(order=2))
     # f = basis.enforce_boundary_conditions()
@@ -631,7 +648,16 @@ if __name__ == "__main__":
     # print(f(q))
 
 
+    basis =Legendre_shifted(order=2)
+    z = np.linspace(0,1,100)
+    f = basis.get_lambda(1)
+    print(f(z), f(1.0))
+    # f = basis.get_lambda(1)
+    # print(f(z))
+
+
     # X = np.linspace(0,1,100)
     # U = basis.reconstruct_velocity_profile([0, 0.0, 0., 0, 1], Z=X)
     # plt.plot(U, X)
     # plt.show()
+
