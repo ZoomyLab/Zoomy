@@ -239,10 +239,55 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
 
-        phi = Qaux[-1]
-        gradQ = np.zeros((Q.shape[0], Q.shape[1], 2), dtype=float)
-        gradQ[:,:,0] = Qaux[-3]
-        gradQ[:,:,1] = Qaux[-2]
+        i_recon_start = Q.shape[0]
+        # phi = Qaux[i_recon_start+mesh.dimension:]
+        # gradQ = np.zeros((Q.shape[0], Q.shape[1], 2), dtype=float)
+        # gradQ[:,:,:] = Qaux[i_recon_start:i_recon_start+mesh.dimension]
+
+        limiter = get_limiter(name='Venkatakrishnan')
+
+        # reconstruction
+        n_fields = Q.shape[0]
+        gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
+        phi = np.zeros_like(Q)
+        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
+        delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
+        delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
+        delta_Q_max = np.max(delta_Q, axis=2)
+        # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
+        delta_Q_min = np.min(delta_Q, axis=2)
+        # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
+
+        ## DEBUG COPY GRADIENT
+        delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
+        delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
+
+        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
+        gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
+        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
+        gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
+        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
+
+        # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
+        # for i in range(model.n_fields):
+        #     Qaux[i_aux_recon+mesh.dimension+i, :] = phi[i]
 
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
@@ -250,8 +295,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         rA = mesh.face_centers - mesh.cell_centers[:, iA].T
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
 
-        qA = Q[:, iA] + phi[iA] * np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
-        qB = Q[:, iB] + phi[iB] * np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)
+        qA = Q[:, iA] + phi[:, iA] * np.einsum('kd..., ...d->k...', gradQ[:, :, iA], rA)
+        qB = Q[:, iB] + phi[:, iB] * np.einsum('kd..., ...d->k...', gradQ[:, :, iB], rB)
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -612,10 +657,10 @@ def jax_fvm_unsteady_semidiscrete(
     progressbar.update()
 
     # reconstruction
-    i_aux_recon = model.aux_variables.length()
-    recon_variables = [f'dQdx_{i}' for i in range(mesh.dimension)] + [f'phi_{f}' for f in range(model.n_fields)]
-    model.aux_variables = register_sympy_attribute(model.aux_variables.get_list() + recon_variables)
-    model.n_aux_fields = model.aux_variables.length()
+    # i_aux_recon = model.aux_variables.length()
+    # recon_variables = [f'dQdx_{i}' for i in range(mesh.dimension)] + [f'phi_{f}' for f in range(model.n_fields)]
+    # model.aux_variables = register_sympy_attribute(model.aux_variables.get_list() + recon_variables)
+    # model.n_aux_fields = model.aux_variables.length()
 
 
     Q, Qaux = _initialize_problem(model, mesh)
@@ -673,103 +718,48 @@ def jax_fvm_unsteady_semidiscrete(
         # if dt < self.dtmin:
         #     dt = self.dtmin
 
-        # reconstruction
-        gradQ = np.zeros((model.n_fields, mesh.dimension, mesh.n_cells), dtype=float)
-        phi = np.zeros_like(Q)
-        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
-        delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
-        delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
-        # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
-        delta_Q_max = np.max(delta_Q, axis=2)
-        # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
-        delta_Q_min = np.min(delta_Q, axis=2)
-        # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
+        # # reconstruction
+        # gradQ = np.zeros((model.n_fields, mesh.dimension, mesh.n_cells), dtype=float)
+        # phi = np.zeros_like(Q)
+        # gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
+        # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
+        # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        # # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
+        # delta_Q_max = np.max(delta_Q, axis=2)
+        # # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
+        # delta_Q_min = np.min(delta_Q, axis=2)
+        # # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
 
-        ## DEBUG COPY GRADIENT
-        delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
-        delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
+        # ## DEBUG COPY GRADIENT
+        # delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
+        # delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
 
-        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
-        gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
-        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
-        phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
-        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
-        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
-        phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
+        # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
 
-        rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
-        gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
-        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
-        phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
-        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
-        phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
-
-
-        phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
+        # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
 
 
-        # phi = np.ones_like(Q)
-        # dQmax = np.zeros_like(Q)
-        # dQmin = np.zeros_like(Q)
-        # for c in range(mesh.n_inner_cells):
-        #     for f in mesh.cell_faces[:, c]:
-        #         n = mesh.face_cells[:, f][0]
-        #         if n == c:
-        #             n = mesh.face_cells[:, f][1]
-        #         dQmax[:, c] = np.max((dQmax[:, c], -Q[:, c] + Q[:, n]), axis=0 )
-        #         dQmin[:, c] = np.min((dQmin[:, c], -Q[:, c] + Q[:, n]), axis=0 )
-        # for c in (mesh.boundary_face_cells):
-        #     for f in mesh.cell_faces[:, c]:
-        #         n = mesh.face_cells[:, f][0]
-        #         if n == c:
-        #             n = mesh.face_cells[:, f][1]
-        #         dQmax[:, c] = np.max((dQmax[:, c], -Q[:, c] + Q[:, n]), axis=0 )
-        #         dQmin[:, c] = np.min((dQmin[:, c], -Q[:, c] + Q[:, n]), axis=0 )
-        # for c in range(mesh.n_inner_cells):
-        #     for f in mesh.cell_faces[:, c]:
-        #         n = mesh.face_cells[:, f][0]
-        #         if n == c:
-        #             n = mesh.face_cells[:, f][1]
-        #         rij = mesh.face_centers[f] - mesh.cell_centers[:, c]
-        #         gradQ_rij = np.einsum('kd, d ->k', gradQ[:,:,c], rij)
-        #         phi_ij = np.ones(Q.shape[0])
-        #         if gradQ_rij > 0:
-        #             phi_ij = limiter(dQmax[:, c] / gradQ_rij)
-        #         elif gradQ_rij < 0:
-        #             phi_ij = limiter(dQmin[:, c] / gradQ_rij)
-            
-        #         phi[:, c] = np.min((phi[:, c], phi_ij), axis=0)
+        # phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
 
-        # for c in (mesh.boundary_face_cells):
-        #     for f in mesh.cell_faces[:, c]:
-        #         n = mesh.face_cells[:, f][0]
-        #         if n == c:
-        #             n = mesh.face_cells[:, f][1]
-        #         rij = mesh.face_centers[f] - mesh.cell_centers[:, c]
-        #         gradQ_rij = np.einsum('kd, d ->k', gradQ[:,:,c], rij)
-        #         phi_ij = np.ones(Q.shape[0])
-        #         if gradQ_rij > 0:
-        #             phi_ij = limiter(dQmax[:, c] / gradQ_rij)
-        #         elif gradQ_rij < 0:
-        #             phi_ij = limiter(dQmin[:, c] / gradQ_rij)
-            
-        #         phi[:, c] = np.min((phi[:, c], phi_ij), axis=0)
-
-
-
-
-        # assert phi.min() >= 0
-        # assert phi.max() <= 1
-
-        Qaux[i_aux_recon] = gradQ[0][0]
-        Qaux[i_aux_recon+1] = gradQ[0][1]
-        for i in range(model.n_fields):
-            Qaux[i_aux_recon+2+i, :] = phi[i]
+        # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
+        # for i in range(model.n_fields):
+        #     Qaux[i_aux_recon+mesh.dimension+i, :] = phi[i]
 
 
 
