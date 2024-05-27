@@ -1144,6 +1144,120 @@ def test_enforce_w_bc():
     #     start_at_time=1.0,
     # )
 
+# @pytest.mark.critical
+@pytest.mark.unfinished
+def test_ijshs24():
+    level = 1
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={"g": 9.81, "C": 30.0, "nu": 1.034*10**(-6)},
+        # parameters={"g": 9.81, "C": 3.0, "nu": 1.034*10**(-1)},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        nc_flux=nonconservative_flux.segmentpath(1),
+        compute_dt=timestepping.adaptive(CFL=.9),
+        time_end=10.,
+        output_snapshots=100,
+        output_clean_dir=True,
+        output_dir="outputs/output_ijshs24",
+    )
+
+    # inflow_dict = {i: "0.0" for i in range(1, 2 * (1 + level) + 1)}
+    inflow_dict = {}
+    # inflow_dict[0] = "0.1*sympy.sin(2*3.14*time)+ 1.0 + 0.1*X[1]"
+    h0 = "Q[0]"
+    hu0 = 0.1
+    w0 = 0.0
+    dxh = f"(Q[0] - {h0})/(2*dX)"
+    # dxh = f"0"
+    dxhu = f"(Q[1] - {hu0})/(2*dX)"
+    nominator = f"-({w0} + Q[2] - 3/2 * dX * {dxhu} + 3/2 * dX * {hu0}/{h0} * {dxh})"
+    denominator = f"1/2 * dX / {h0} * {dxh} + 1"
+    inflow_dict[0] = f"{1.0}"
+    # inflow_dict[0] = f"{h0}"
+    inflow_dict[1] = f"{hu0}"
+    # inflow_dict[2] = f'{nominator}/{denominator}'
+    inflow_dict.update({i: "0.0" for i in range(2, 2+level)})
+    # inflow_dict[2] = f'{nominator}/{denominator}'
+    # outflow_dict = {0: f"{h0}"}
+    # outflow_dict = {3: "0.0"}
+    # outflow_dict = {4: "0.0"}
+    outflow_dict = {}
+
+    data_dict = {}
+    data_dict[0] = np.linspace(1, 2, 10)
+    data_dict[1] = np.linspace(0.1, 0.1, 10)
+    data_dict[2] = np.linspace(0, 0, 10)
+    timeline = np.linspace(0, 10, 10)
+
+    offset = level+1
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(physical_tag="outflow", prescribe_fields= outflow_dict),
+            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            BC.FromData(physical_tag='left', prescribe_fields=data_dict, timeline=timeline),
+            # BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
+            # BC.Wall(physical_tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Wall(physical_tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            # BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+            # BC.Extrapolation(physical_tag="top"),
+            # BC.Extrapolation(physical_tag="bottom"),
+            BC.Extrapolation(physical_tag="right"),
+            # BC.Extrapolation(physical_tag="left"),
+            # BC.Extrapolation(physical_tag="right"),
+        ]
+    )
+
+
+    ic = IC.Constant(
+        constants=lambda n_fields: np.array(
+            [1.0, 0.0] + [0.0 for i in range(n_fields - 2)]
+        )
+    )
+
+    def custom_ic(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = 2*np.ones_like(x[0])
+        Q[1] = x[0]
+        Q[3] = x[0]**2 
+        return Q
+
+    # ic = IC.UserFunction(custom_ic)
+
+
+    model = ShallowMoments(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": []},
+        settings={"friction": ["chezy", "newtonian"]},
+        # settings={"friction": ["newtonian"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.create_1d((0, 10), 500)
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    # io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    # postprocessing.recover_3d_from_smm_as_vtk(
+    #     model,
+    #     settings.output_dir,
+    #     os.path.join(settings.output_dir, "mesh.hdf5"),
+    #     os.path.join(settings.output_dir, "fields.hdf5"),
+    #     Nz=10,
+    #     start_at_time=1.0,
+    # )
+
 
 
 if __name__ == "__main__":
@@ -1165,4 +1279,5 @@ if __name__ == "__main__":
     # test_smm_wave()
     # test_petsc('quad')
     # test_petsc('triangle')
-    test_enforce_w_bc()
+    # test_enforce_w_bc()
+    test_ijshs24()
