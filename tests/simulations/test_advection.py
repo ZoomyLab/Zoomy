@@ -236,7 +236,7 @@ def test_limiter(mesh_type):
     mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)))
 
     jax_fvm_unsteady_semidiscrete(
-        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+        mesh, model, settings, ode_solver_flux=RK2, ode_solver_source=RK1
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=['Q'], aux_field_names=['dQdx', 'dQdy', 'phi'])
 
