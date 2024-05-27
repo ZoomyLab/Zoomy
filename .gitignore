@@ -24,3 +24,14 @@ openfoam_data/channelflow_coarse
 openfoam_data/mesh.hdf5
 profile_vectorized.prof
 profile.prof
+
+# quarto 
+public
+__pycache__
+/.quarto/
+*.quarto*
+.venv
+_output
+_output*
+_freeze
+*.vscode*

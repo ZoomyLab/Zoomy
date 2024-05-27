@@ -1,0 +1,109 @@
+---
+title: Wiki
+number-sections: true
+---
+
+## Installation{#sec-wiki-installation}
+
+### Quick install on Ubuntu/Debian
+
+1\. [Install Quarto](https://quarto.org/docs/get-started/)
+
+2\. Run the `install.sh` in the `scripts` folder to install all other project requirements.
+
+### General installation
+
+1\. [Install Quarto](https://quarto.org/docs/get-started/)
+
+2\. Install all depenencies listed in the `scripts/install.sh`
+
+3\. Create a python environment for python dependencies, e.g. using
+
+```{.bash}
+python -m pip install venv .venv
+```
+
+in the root folder of the project. Thiscreates a virtual environment called `.venv`.
+Now load the environment using 
+
+```
+source .venv/bin/activate
+```
+
+and install the python dependencies with 
+```
+python -m pip install -r requirements.txt
+```
+
+::: {.callout-warning}
+Each time you start a new shell (or open VSCode), you need to load the python environment again using
+```
+source .venv/bin/activate
+```
+after navigating into the root folder of the project.
+:::
+
+## Documentation
+
+We recommend using VS-Code with the Quarto extension installed for any technical writing. Especially in the [*Quarto Visual Mode*](https://quarto.org/docs/visual-editor/vscode/)*,* inserting figures/tables/references works like a charm.
+Add your content in the `docs/report` section. Feel free to add new `*.ipynb` or `*.qmd` files. Make sure to add there files into the `_quarto-public.yml` and/or `_quarto-private.yml` to be renderes on the public/private website beloning to this project.
+
+## Presentation
+
+There is a basic quarto template located in `docs/presentation`.
+
+## Adding a new file to the webpage
+
+We have two versions of the website. A private and a public one. The configuration can be found in `_quarto-private.yml` and `quarto-public.yml` respectively. 
+Open the corresponding file and add the path to the new file in the `sidebar` section.
+
+## Rebuilding the website
+The website is rebuild automatically after a new pushed commit to the main-branch of teh project.
+
+## Testing the full page locally:
+### Debian/Ubuntu
+Run the `scripts/build.sh` shell script.
+
+::: {.callout-warning}
+The script is used in the gitlab-ci to build the website. If you change the script, you might break the automatic building of the webpage.
+:::
+
+### Other OS:
+The following commands are based on the shell commands on Debian/Ubuntu. You need to use the corresponding commands for your OS.
+If you use a different OS, please contribute your workflow in a script `build_<OS>.sh`, where you replace `<OS>` with the OS you are using.
+
+Build the private/public webpage via
+```
+quarto render --profile public
+```
+or 
+```
+quarto render --profile private
+```
+Now build the presentation, if you want it to be included:
+```
+cd docs/presentation
+quarto render
+cd ../..
+```
+Now copy paste the presentation into the public/private output folder, if you want to enable thel link *presentation*:
+```
+cd _output-public
+cp -r ../_output_presentation .
+cd ..
+```
+or
+```
+cd _output-private
+cp -r ../_output_presentation .
+cd ..
+```
+Lastly, copy the public webpage content into the private folder, if you want to enable the link *public website*:
+```
+cd _output-private
+cp -r ../_output-public .
+cd ..
+```
+
+## FAQ: 
+

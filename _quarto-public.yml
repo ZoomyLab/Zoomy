@@ -1,0 +1,22 @@
+project:
+  output-dir: _output-public
+
+website:
+  navbar:
+    left:
+      - text: "Organization"
+        file: docs/orga/organization.qmd
+  sidebar: 
+    - id: organization
+      title: "Organization"
+      contents:
+        - docs/orga/organization.qmd
+        - docs/orga/milestones.qmd
+        - docs/orga/tasklist.qmd
+        - docs/orga/meeting1.qmd
+        - docs/orga/meeting2.qmd
+
+
+
+
+

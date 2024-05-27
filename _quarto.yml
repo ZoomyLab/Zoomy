@@ -1,0 +1,29 @@
+profile:
+  default: private
+  group: 
+    - [private, public]
+
+project:
+  type: website
+
+bibliography: docs/references.bib
+
+website:
+  navbar:
+    logo: "docs/images/logo_mbd.png"
+    logo-href: /index.qmd
+  page-footer:
+    background: light
+    border: true
+    left: "Contact : [**Alan Correa**](mailto:correa@mbd.rwth-aachen.de), [**Ingo Steldermann**](mailto:steldermann@mbd.rwth-aachen.de)"
+    right: "[![](/docs/images/logo_mbd.png){width=200px fig-alt=MBD  }](https://www.mbd.rwth-aachen.de)" 
+
+format:
+  html:
+    theme: [cosmo, mbd.scss]
+    css: styles.css
+    toc: true
+    code-block-bg: true
+    code-copy: true
+
+    

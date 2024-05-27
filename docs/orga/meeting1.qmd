@@ -1,0 +1,15 @@
+---
+title: "Meeting 1: Kick-off"
+---
+
+We discussed:
+
+-   MBD Vision for the project
+
+-   Milestones
+
+-   Grading
+
+-   Documentation with Quarto
+
+-   First tasks(see [todos](./tasklist.qmd))

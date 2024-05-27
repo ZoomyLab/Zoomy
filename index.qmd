@@ -1,0 +1,22 @@
+---
+title: "Project title"
+nocite: |
+  @*
+sidebar: false
+---
+
+![](/docs/images/teaser.png){fig-align="center" width="4in"}
+
+## Abstract
+
+
+## Getting started
+
+Have a look at our [wiki](/docs/wiki/index.qmd).
+
+
+### References
+
+::: {#refs}
+:::
+
