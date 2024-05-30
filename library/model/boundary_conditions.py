@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import h5py
+from time import time as get_time
 
 from copy import deepcopy
 
@@ -51,6 +52,19 @@ class InflowOutflow(BoundaryCondition):
             Qout[k] = eval(v)
         return Qout
 
+
+def _sympy_interpolate_data(time, timeline, data):
+    assert timeline.shape[0] == data.shape[0]
+    conditions = ((data[0], time <= timeline[0])),
+    for i in range(timeline.shape[0]-1):
+        t0 = timeline[i]
+        t1 = timeline[i+1]
+        y0 = data[i]
+        y1 = data[i+1]
+        conditions += (-(time-t1)/(t1-t0)*y0 +(time-t0)/(t1-t0)*y1 , time <= t1),
+    conditions += ((data[-1], time > timeline[-1])),
+    return sympy.Piecewise(*conditions)
+
 @define(slots=True, frozen=False, kw_only=True)
 class FromData(BoundaryCondition):
     prescribe_fields: dict[int, np.ndarray]
@@ -61,9 +75,11 @@ class FromData(BoundaryCondition):
         Qout = Matrix(Q)
 
         # Set the fields which are prescribed in boundary condition dict
+        time_start = get_time()
         for k, v in self.prescribe_fields.items():
-            spline = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
-            Qout[k] = spline
+            # interp_func = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
+            interp_func = _sympy_interpolate_data(time, self.timeline, v)
+            Qout[k] = interp_func
         return Qout
             
 
