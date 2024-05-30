@@ -1,5 +1,6 @@
 
 import numpy as np
+import re
 from scipy.integrate import quad
 from scipy.interpolate import CubicSpline
 from scipy.optimize import minimize_scalar
@@ -8,13 +9,14 @@ import os
 
 def get_interface_position(data, pos):
     def objective(interface_pos):
-        f_data = CubicSpline(pos, data)
+        # f_data = CubicSpline(pos, data)
+        f_data = lambda x: np.interp(x, pos, data)
         f_recon = lambda x: 1.*(x <= interface_pos) + 0.
-        integral, error = quad(lambda x: (f_data(x) - f_recon(x))**2, pos[0], pos[-1])
+        integral, error = quad(lambda x: (f_data(x) - f_recon(x))**2, pos[0], pos[-1], points=pos, limit=2*pos.shape[0])
         # assert error < 10**(-6)
         return integral
 
-    res = minimize_scalar(objective, [pos[0], 1.0, pos[-1]], [pos[0], pos[-1]])
+    res = minimize_scalar(objective, [pos[0], 0.5*(pos[0] + pos[-1]), pos[-1]], [pos[0], pos[-1]])
     interface_pos = res.x
     return interface_pos
 
@@ -24,6 +26,29 @@ def read_vtk(filepath):
     mesh = reader.read()
     scalar_field_names = mesh.cell_data.keys()
     return mesh, scalar_field_names
+
+def extract_smm_data_1d(directory, filename='internal.vtu', pos = [2.2, 0, 0], stride=10):
+    file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
+    def sorting_key(name):
+        number = re.finall(r'\d+', name)
+        return number
+    file_names = sorted(folder_names, key=sorting_key)
+    file_names = file_names[::stride]
+    l_q = []
+    iteration = []
+    for file in file_names:
+        path = os.path.join(directory,file)
+        mesh, _ = read_vtk(path)
+
+        x = np.array(mesh.cell_centers().points)[:, 0]
+        q = np.array(mesh.cell_data)
+        sort_order = np.argsort(x)
+        x = x[sort_order]
+        q = q[sort_order]
+
+        l_q.append(q)
+        iteration.append(sorting_key(file))
+    return x, np.array(l_q), np.array(iteration)
 
 
 def extract_1d_slice(mesh, pos=[15, 0, 0]):

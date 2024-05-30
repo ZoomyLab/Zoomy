@@ -1,0 +1,391 @@
+---
+title: 'IJSHS2024'
+author: 
+  - name: Ingo Steldermann
+    email: steldermann@mbd.rwth-aachen.de
+    affiliations:
+    - name: MBD
+      city: Aachen
+      state: Germany
+  - name: Jonas Bünning
+  - name: Elena
+  - name: Julia Kowalski
+    affiliations:
+    - name: MBD
+keywords:
+    - kw1
+    - kw2
+abstract: 'abstract text'
+abstract-title: ''
+format: 
+  html: default
+  docx:
+    reference-doc: template.docx
+bibliography: 11_references.bib
+---
+
+## TODOs
+
+* [ ] boundary layer not well resolved in openfoam. Can I extract data where the velocity profile tends to zero in the profile? Maybe I this is also related to the model parameters?
+* [ ] h-finder does not work well in some cases (I think sharp gradients e.g. in the IC). E.g. the h-plot for the initial time steps is wrong 
+* [ ] Project velocity profile to moments at inflow boundary -> compute errors?
+    * maybe split in projection and model errors? First can clearly me mitiated by SMM, open question to answere here is if this also helps for the model errors.
+        * Two main sources of model errors based on thesis: inflow + junctions
+* [ ] write Elena
+    * Get Diplomarbeit from Desire Plenker (ref in BA)
+    * Deadlines?
+    * Progress
+    * Further proceeding/ work plan 
+* [ ] SMM experiments
+    * vary inflow BC position
+    * vary between prescribring u, w, u and w
+    * e.g. include dx_hb?
+
+
+## Introduction
+
+* Hydropower Energy in mines
+* What has been analysed in the past
+* What are the open questions
+* What has been analysed by IWW
+* What is missing for me that I donna address in the papaer
+    * Inflow source term is prescribed -> with satisfactory result, but only in terms of waves
+    * Boundary conditions
+        * allowanec of a 3d-2d coupling approach
+        * refer to TUM work
+    * Use the SMM hierarchy to reduce the projection error in the interface between 3d/2d
+    * Use the availability to model vertical velocities to better approximate the inflow
+    * Test where an appropriate coupling interface would sit 
+    * Compare this to reality, as was done by IWW, by checking the waves
+    * GOAL: for optimization of e.g. inflow geometry, a full network is needed and a 'hand-derived' inflow condition is insufficient
+    * GOAL: SMM allow for that thansition with a *customizable* error. 
+* Open ends:
+    * Junctions (Turbulence)
+    * Rebound
+
+## The shallow moment method
+
+### Reference system
+
+* Conceptual
+    * From Navier Stokes
+    * From a viewpoint of SWE
+* Mathematical 
+    * Legendre
+    * Idea of Projection
+    * Full system
+    * Look at example systems 
+
+    The governing equations are given by the incompressible Navier-Stokes system, where the flow is bounded by a basal topography $h_b(t,x)$ and the free surface $h_s(t,x)$.
+Following @kowalski_2019, we assume kinematic boundary conditions @hutter_2003, conduct a scaling analysis based on a shallow flow approximation, and assume a hydrostatic pressure-dominated flow, before  introducing a mapping of the z-axis onto the unit interval $\zeta \in [0, 1]$ using the transformation 
+
+\begin{equation*}\label{eq:mapping}
+    \zeta = \frac{z - h_b(t,x)}{h(t,x)}.
+\end{equation*}
+
+As a result, we obtain the still vertically resolved reference system, in which $\tilde{\cdot}$ indicates mapped quantities
+
+$$
+    \partial_t  \left( h  \right) + \partial_{x} \left( h u_m  \right)  = 0
+$${#eq-reference_system_mass}
+
+$$
+    \partial_{t} \left( h \tilde{u}  \right) + \partial_{x} \left( h \tilde{u}^2 + \frac{g}{2}e_z h^2  \right)  + \partial_{\zeta } \left( h \tilde{u} \omega - \frac{\tilde{\sigma}_{xz}}{\rho}   \right)= g h   \left( e_x - e_z \partial_{x}h_b   \right)
+$${#eq-reference_system_momentum}
+
+<!-- \begin{align} 
+    & \partial_t  \left( h  \right) + \partial_{x} \left( h u_m  \right)  = 0 \label{eq:reference_system:mass} \\
+    & \partial_{t} \left( h \tilde{u}  \right) + \partial_{x} \left( h \tilde{u}^2 + \frac{g}{2}e_z h^2  \right)  + \partial_{\zeta } \left( h \tilde{u} \omega - \frac{\tilde{\sigma}_{xz}}{\rho}   \right)= g h   \left( e_x - e_z \partial_{x}h_b   \right) \label{eq:reference_system:momentum:x} \\
+\end{align} -->
+
+Here, $h(t,x)$ denotes the height of the flow, namely the difference between free surface and bottom topography, $\tilde{u}(t,x,\zeta)$ stands for the velocity in x-direction, and $\tilde{\sigma}_{xz}(t,x,z) is the only non-zero components of the deviatoric stress tensor. The density $\rho$ and the gravitational acceleration $g_i = (g e_x, g e_y, g e_z)$ are constants of the system. 
+
+We furthermore introduced the mean velocity
+
+\begin{eqnarray*}
+   u_m(t,x) := \int_{0}^{1} \tilde{u}(t, x, \zeta) \: d{\zeta}
+\end{eqnarray*}
+
+and the vertical coupling operator 
+
+\begin{equation}\label{eqn:coupling_operator}
+  \omega  = \frac{1}{h}  \left( \int_{0}^{\zeta } \partial_{x} \left( h \left(u_m - \tilde{u} \right) \right)   \right). 
+\end{equation}
+
+Notice that all vertical flow information is concentrated in the coupling operator. In the absence of vertical coupling, e.g. when the vertical velocity profile is constant $\left(\tilde{u}(t,x,\zeta) = u_m(t,x)\right)$, the classical shallow water model can be recovered by choosing an appropriate material closure relation for $\sigma_{xz}$.
+
+The momentum balance in z-direction simplifies to the hydrostatic pressure relation $\tilde{p} = h (1-\zeta) \rho g e_z$ and is already substituted in @eq-reference_system_momentum . Therefore, no direct evolution equation for the velocity $w$ in z-direction is available. However, by integration of the mass balance in its form as a divergence constraint $h \nabla \cdot (u, w)^T = 0$ multiplied by $h$, we can recover an explicit expression for the vertical velocity $\tilde{w}$:
+
+$$
+    \tilde{w} = - \partial_x \left( h \int_0^\zeta \tilde{u} d\hat{\zeta} \right) 
+    - \partial_y \left( h \int_0^\zeta \tilde{v} d\hat{\zeta} \right)
+    + \tilde{u} \partial_x \left(\zeta h + h_b \right) 
+    + \tilde{v} \partial_y \left(\zeta h + h_b \right) .
+$${#eq-recover_w}
+  
+### Bottom and free surface friction \label{sec:closure:stress:boundary}
+  To close for the stress tensor, we impose boundary conditions at the surface $h_s$ and the bottom topography $h_b$ of the flow. 
+  In many geophysical applications, including the curved channel, the flow is highly influenced by the bottom friction and it is sufficient to treat the surface $h_s$ as a stress-free boundary
+
+\begin{align}\label{eq:bc:surface}
+  \left. \tilde{\sigma}_{xz} \right\rvert_{\zeta=1}  = \left. \tilde{\sigma}_{yz} \right\rvert_{\zeta=1} := 0.
+\end{align}
+
+For the bottom friction, the original paper \citep{ref:kowalski:2019} states a \textit{slip boundary condition} given by
+
+\begin{align} \label{eq:bc:slip}
+  \left. \left(\tilde{u} -   \lambda \tilde{\sigma}_{xz}  \right) \right\rvert_{\zeta=0}  = \left. \left(\tilde{v} -   \lambda \tilde{\sigma}_{yz}  \right) \right\rvert_{\zeta=0} := 0 .
+\end{align}
+
+with $\lambda = \frac{\lambda_0}{\mu_0}$, where $\lambda_0$ $ \left[m \right]$ is the slip-length and $\mu_0$ $ \left[\frac{N \, s}{m^2} \right]$ is a characteristic viscosity, introduced such that the slip length $\lambda_0$ has unit $ \left[m \right]$. Other choices for the boundary conditions are also possible.
+Alternatives were for instance introduced by the authors of \citep{ref:KoellermeierSediment:2020}, who used the Manning friction law to describe a sediment transport model based on the shallow moment approach.
+Very similar to their approach, we use the \textit{Chezy friction model} as used in \citep{ref:Vasquez:2011} and stated as
+
+\begin{align} \label{eq:bc:chezy}
+  \left( \left. \tilde{\sigma}_{xz} - \frac{\rho}{C_*^2} \tilde{u} \sqrt{\tilde{u}^2 + \tilde{v}^2}  \right) \right\rvert_{\zeta=0} 
+   = \left( \left. \tilde{\sigma}_{yz} - \frac{\rho}{C_*^2} \tilde{v} \sqrt{\tilde{u}^2 + \tilde{v}^2}  \right) \right\rvert_{\zeta=0}  := 0.
+\end{align}
+
+The dimensionless Chezy coefficient $C_*$ is defined by a relation depending on the fluid height $h$ and the effective roughness height $k_s$:
+
+\begin{align} \label{eq:bc:chezy:coef}
+  C_* := 5.75 \, log \left(12 \frac{h}{k_s} \right) .
+\end{align}
+
+
+### Bulk friction \label{sec:closure:stress:bulk}
+The simple and well-suited bulk friction model for water flow is described by a Newtonian fluid with constant viscosity $\mu \in \mathbb{R}^+$. The closure for the deviatoric part of the stress tensor is then given by
+
+\begin{align}\label{eq:closure:newtonian}
+     & \tilde{\sigma}_{xz} := \frac{\mu}{h} \partial_{\zeta} \left( \tilde{u}  \right) \\
+     & \tilde{\sigma}_{yz} := \frac{\mu}{h} \partial_{\zeta} \left( \tilde{v}  \right).
+\end{align}
+
+Note that the factor $h^{-1}$ is a consequence of mapping the z-axis onto the unit interval.
+
+
+
+
+
+### SMM
+
+In this section, we derive the shallow moment system using an orthogonal Legendre basis (on the interval $I = [0, 1]$).
+We start by deriving the general result of projecting (\ref{eq:reference_system:mass})-(\ref{eq:reference_system:momentum:y}) followed by some discussion on the projection of the material closure. Lastly, we rewrite the system in its abstract matrix form.
+A derivation for more general types of basis functions is possible. A one-dimensional derivation for Chebyshev polynomials and non-orthogonal basis functions can be found in \citep{ref:steldermann:2023}.
+
+The fundamental idea of the shallow moment method is to approximate the velocities $\tilde{u}$ and $\tilde{v}$ by using a finite expansion of order $N$ (from now on called \textit{level} and the components are indicated by the index $k$) with an appropriate set of basis functions $\phi_i(\zeta)$ and coefficients $\alpha_i(t,x)$
+
+\begin{align}
+    & \tilde{u} = \sum_{i=0}^{N} \alpha_i(t,x) \phi_i(\zeta) = u_m + \sum_{i=1}^{N} \alpha_i(t,x) \phi_i(\zeta) \label{eq:basis:u}\\
+    & \tilde{v} = \sum_{i=0}^{N} \beta_i(t,x) \phi_i(\zeta) = v_m + \sum_{i=1}^{N} \beta_i(t,x) \phi_i(\zeta)\label{eq:basis:v}.
+\end{align}
+
+In the above notation, we used the fact that $\phi_0=1$ for Legendre polynomials and therefore
+
+\begin{align*}
+u_m(t,x,y) = \int_0^1 \tilde{u}(t,x,y,\zeta) \: d{\zeta} =  \int_0^1 \alpha_0(t,x,y) \phi_0(\zeta) \: d{\zeta} = \alpha_0(t,x,y).
+\end{align*}
+
+The mean velocity is an important quantity in order to recover the classical shallow water equations on the zero level $N=0$ and we may use the expressions $u_m$ and $\alpha_0$ (or $v_m$ and $\beta_0$) interchangeably, depending on the context.
+In principle, we can use different levels for $\alpha_i$ and $\beta_i$, however, since we do not assume a preferred flow direction, both levels are considered equal.
+
+The fully resolved velocity fields $\tilde{u}$ and $\tilde{v}$ are now replaced by its ansatz using \eqref{eq:basis:u} and \eqref{eq:basis:v}. The unknown coefficients $\alpha_i$ and $\beta_i$ can be obtained by using a Galerkin projection of the momentum balance in both, the x and y direction with respect to each basis function $\phi_k$
+
+\begin{align*}
+  \langle \cdot , \phi_k \rangle := \int_0^1 \cdot \, \phi_k(\zeta) \: d{\zeta} \quad \text{for } k=0,...,N
+\end{align*}
+
+Computing the moments of the momentum balances \eqref{eq:reference_system:momentum:x} and \eqref{eq:reference_system:momentum:y} without yet inserting the closure relations for the stress tensor yields the system
+
+\begin{align} \label{eq:momentsystem:general:x}
+    \begin{aligned}
+        &  \sum_{i=0}^{N} \partial_t  \left( h \alpha_i  \right) \underbrace{\langle \phi_i, \phi_k \rangle}_{=:M_{ik}} +  \partial_{x} \,  \left( \sum_{i,j=0}^{N} h \alpha_i \alpha_j  \underbrace{\langle \phi_i \phi_j, \phi_k \rangle}_{=:A_{ijk}} +  \frac{g}{2}e_z h^2 \underbrace{\langle 1, \phi_k \rangle }_{=:W_k}  \right) \\
+        &  \quad \quad +  \partial_{y} \,  \left( \sum_{i,j=0}^{N} h \alpha_i \beta  \underbrace{\langle \phi_i \phi_j, \phi_k \rangle}_{=:A_{ijk}} \right)  \\
+        & \quad\quad = \sum_{i=1}^{N} u_m \left( \partial_x  \left(h \alpha_i \right) +\partial_y  \left(h \beta_i \right) \right)   \underbrace{\langle \phi_i, \phi_k \rangle}_{=:M_{ik}}  \\
+        & \quad \quad - \sum_{i,j=1}^{N} \alpha_i \left( \partial_x  \left(h \alpha_j \right) + \partial_y  \left(h \beta_j \right) \right) \underbrace{\langle \phi_i \Phi_j, \phi_k' \rangle}_{=:B_{ijk}}  \\
+        & \quad\quad - \left.\left( \frac{\tilde{\sigma}_{xz}}{\rho} \phi_k\right) \right\rvert_{\zeta=0}^{1} + \left\langle \frac{\tilde{\sigma}_{xz}}{\rho}, \phi_k' \right\rangle \\
+        & \quad\quad+  \underbrace{\langle 1, \phi_k \rangle }_{=:W_k}g \, h \left( e_x - e_z \partial_x h_b \right), 
+    \end{aligned}
+\end{align}
+
+and 
+
+\begin{align} \label{eq:momentsystem:general:y}
+    \begin{aligned}
+        &  \sum_{i=0}^{N} \partial_t  \left( h \beta_i  \right) \underbrace{\langle \phi_i, \phi_k \rangle}_{=:M_{ik}} +  \partial_{x} \,  \left( \sum_{i,j=0}^{N} h \alpha_i \beta_j  \underbrace{\langle \phi_i \phi_j, \phi_k \rangle}_{=:A_{ijk}} \right) \\
+        &  \quad \quad +  \partial_{y} \,  \left( \sum_{i,j=0}^{N} h \beta_i \beta  \underbrace{\langle \phi_i \phi_j, \phi_k \rangle}_{=:A_{ijk}} +  \frac{g}{2}e_z h^2 \underbrace{\langle 1, \phi_k \rangle }_{=:W_k}  \right)  \\
+        & \quad\quad = \sum_{i=1}^{N} v_m \left( \partial_x  \left(h \alpha_i \right) +\partial_y  \left(h \beta_i \right) \right)   \underbrace{\langle \phi_i, \phi_k \rangle}_{=:M_{ik}}  \\
+        & \quad \quad - \sum_{i,j=1}^{N} \beta_i \left( \partial_x  \left(h \alpha_j \right) + \partial_y  \left(h \beta_j \right) \right) \underbrace{\langle \phi_i \Psi_j, \phi_k' \rangle}_{=:B_{ijk}}  \\
+        & \quad\quad - \left.\left( \frac{\tilde{\sigma}_{yz}}{\rho} \phi_k\right) \right\rvert_{\zeta=0}^{1} + \left\langle \frac{\tilde{\sigma}_{yz}}{\rho}, \phi_k' \right\rangle \\
+        & \quad\quad+  \underbrace{\langle 1, \phi_k \rangle }_{=:W_k}g \, h \left( e_y - e_z \partial_y h_b \right), 
+    \end{aligned}
+\end{align}
+
+Note that the first two terms of the right-hand side of \eqref{eq:momentsystem:general:x} and \eqref{eq:momentsystem:general:y} correspond to the Galerkin projection of the vertical coupling operator $\omega$ and used the integral of the basis function $\phi_k$ defined as $\Phi_k(\zeta) := \int_{0}^{\zeta} \phi_k(\zeta) \: d{\zeta}$. 
+Partial integration of the stress tensor leads to the following two terms on the right-hand side, where the model-dependent closure relations for the bulk stress and friction at the boundaries can be inserted.
+
+Since we consider scaled Legendre polynomials orthogonal on the unit interval, the mass matrix $M_{ik}$ is also orthogonal. Inverting the mass matrix, therefore, reduces to a simple division by its diagonal elements. Additionally, the vector $W_k = (1, 0, \ldots, 0)^T$, since $\phi_0=1$ is part of the basis and therefore orthogonal to all other basis functions.
+
+In matrix notation, the general structure of the shallow moment equations \eqref{eq:reference_system:mass}, \eqref{eq:momentsystem:general:x} and \eqref{eq:momentsystem:general:y} can be written as a set of evolution equations with non-conservative products and a source term
+
+\begin{equation}\label{eq:system:matrixform:nomassmatrix}
+    \partial_{t} \vec{Q}  + \partial_{x}\vec{F}^x(\vec{Q}) + \partial_{y}\vec{F}^y(\vec{Q}) = \vec{B}(\vec{Q}) \left( \partial_{x} \vec{Q} + \partial_{y} \vec{Q} \right) + \vec{R}(\vec{Q}),
+\end{equation}
+
+with 
+
+\begin{align*}
+    & \vec{Q} = 
+    \begin{pmatrix}
+        h \\
+        h \alpha_k \\
+        h \beta_k \\
+        h_b
+    \end{pmatrix} \\
+    & \vec{F}^x(\vec{Q}) = 
+    \begin{pmatrix}
+        h u_m \\
+        \sum_{i,j=0}^{N} h \alpha_i \alpha_j  A_{ijk} / M_{kk} +  \delta_{k0} \frac{g}{2}e_z h^2 \\
+        \sum_{i,j=0}^{N} h \alpha_i \beta_j  A_{ijk} / M_{kk} \\
+        0
+    \end{pmatrix} \\
+    & \vec{F}^y(\vec{Q})  = 
+    \begin{pmatrix}
+        h v_m \\
+        \sum_{i,j=0}^{N} h \beta_i \alpha_j A_{ijk} / M_{kk} \\
+        \sum_{i,j=0}^{N} h \beta_i \beta_j  A_{ijk} / M_{kk} +  \delta_{k0} \frac{g}{2}e_z h^2 \\
+        0
+    \end{pmatrix} \\
+    & \vec{B}(\vec{Q})= 
+    \begin{pmatrix}
+      0 &  0 & \dots & 0 & 0 \\
+      0 & u_m \delta_{k0}  - \alpha_j B_{j0k} / M_{0k} & \ldots & u_m \delta_{kN}  - \alpha_j B_{jNk} / M_{Nk} &  - gh \, e_z \\
+        0 & v_m \delta_{k0}  - \beta_j B_{j0k} / M_{0k} & \ldots &  v_m \delta_{kN}  - \beta_j B_{jNk} / M_{Nk} & - gh \, e_z \\
+        0 &  0 & \ldots & 0  & 0
+    \end{pmatrix} \\
+    & \vec{R}(\vec{Q})= 
+    \begin{pmatrix}
+        0 \\
+        - \left.\left( \rho^{-1} \tilde{\sigma}_{xz} \, \phi_k \right) \right\rvert_{\zeta=0} / M_{kk} + \left\langle \rho^{-1} \tilde{\sigma}_{xz} , \phi_k' \right\rangle / M_{kk}+ \delta_{k0} \, g \, h \, e_x \\
+        - \left.\left( \rho^{-1} \tilde{\sigma}_{yz} \, \phi_k \right) \right\rvert_{\zeta=0} / M_{kk}+ \left\langle \rho^{-1} \tilde{\sigma}_{yz} , \phi_k' \right\rangle / M_{kk} + \delta_{k0} \, g \, h \, e_y\\
+        0
+    \end{pmatrix},
+\end{align*}
+
+with $k=0,\ldots, N$ and an already used the stress-free, free-surface boundary condition \eqref{eq:bc:surface}.
+
+### Projection of the bulk friction
+
+For a \textit{Newtonian fluid} as described in \eqref{eq:closure:newtonian}, the Galerkin projection yields
+
+\begin{align}\label{eq:closure:newtonian:projected:x}
+    -\left\langle \rho^{-1} \tilde{\sigma}_{xz} , \phi_k' \right\rangle / M_{kk} = - \frac{\mu}{\rho \, h} \langle \partial_{\zeta} \tilde{u}, \phi_k' \rangle  / M_{kk}=   - \frac{\mu}{\rho \, h} \sum_{i=0}^N \alpha_i \langle \phi_i', \phi_k' \rangle / M_{kk}
+\end{align}
+
+and
+
+\begin{align}\label{eq:closure:newtonian:projected:y}
+    -\left\langle \rho^{-1} \tilde{\sigma}_{yz} , \phi_k' \right\rangle  / M_{kk}= - \frac{\mu}{\rho \, h} \langle \partial_{\zeta} \tilde{v}, \phi_k' \rangle  / M_{kk}=   - \frac{\mu}{\rho \, h} \sum_{i=0}^N \beta_i \langle \phi_i', \phi_k' \rangle / M_{kk}
+\end{align}
+
+Note that the bulk friction term is only present for $N \geq 1$.
+For the \textit{shallow water} or equivalently the \textit{shallow moment} model with $N=0$, friction can therefore only be prescribed with a suitable bottom friction closure.
+
+Note that the bulk friction term is only present for $N \geq 1$. For the \textit{shallow water} or equivalently the \textit{shallow moment} model with $N=0$, friction can therefore only be prescribed with a suitable bottom friction closure.
+
+### Projection of the bottom friction
+To ease the notation, it is convenient to use a normalized Legendre basis with 
+$\phi_k(0)=1 \quad \forall k$. Choosing normalized basis functions does not influence the results derived above.
+
+For the \textit{slip friction} model of \eqref{eq:bc:slip}, we obtain
+
+\begin{align}\label{eq:closure:slip:projected:x}
+    - \left.\left( \rho^{-1} \tilde{\sigma}_{xz} \, \phi_k \right) \right\rvert_{\zeta=0}  / M_{kk}= 
+    - \left.\left( \frac{1}{\lambda \, \rho \, M_{kk}} \tilde{u} \, \phi_k \right) \right\rvert_{\zeta=0}  = 
+    - \frac{1}{\lambda \, \rho} \sum_{i=0}^N \alpha_i   / M_{kk}
+\end{align}
+
+and
+
+\begin{align}\label{eq:closure:slip:projected:y}
+    - \left.\left( \rho^{-1} \tilde{\sigma}_{xz} \, \phi_k \right) \right\rvert_{\zeta=0} / M_{kk} = 
+    - \left.\left( \frac{1}{\lambda \, \rho \, M_{kk}} \tilde{v} \, \phi_k \right) \right\rvert_{\zeta=0}  = 
+    - \frac{1}{\lambda \, \rho} \sum_{i=0}^N \beta_i  / M_{kk}
+\end{align}
+
+
+Projecting the \textit{Chezy friction} model \eqref{eq:bc:chezy} yields
+
+\begin{align}\label{eq:closure:chezy:projected:x}
+\begin{aligned}
+   &  - \left.\left( \rho^{-1} \tilde{\sigma}_{xz} \, \phi_k \right) \right\rvert_{\zeta=0} / M_{kk}= 
+    - \left.\left(- \left( C_*^{2}  M_{kk}  \right)^{-1} \tilde{u} \sqrt{\tilde{u}^2 + \tilde{v}^2}\, \phi_k \right) \right\rvert_{\zeta=0}\\
+   &  =  - \left( C_*^{2}  M_{kk}  \right)^{-1} \sum_{l=0}^N \alpha_l \sqrt{\sum_{i, j=0}^N \left( \alpha_i \alpha_j  + \beta_i \beta_j \right) }
+\end{aligned}
+\end{align}
+
+and
+
+\begin{align}\label{eq:closure:chezy:projected:y}
+\begin{aligned}
+   &  - \left.\left( \rho^{-1} \tilde{\sigma}_{yz} \, \phi_k \right) \right\rvert_{\zeta=0} / M_{kk}= 
+    - \left.\left(- \left( C_*^{2}  M_{kk}  \right)^{-1} \tilde{v} \sqrt{\tilde{u}^2 + \tilde{v}^2}\, \phi_k \right) \right\rvert_{\zeta=0}\\
+   &  =  - \left( C_*^{2}  M_{kk}  \right)^{-1} \sum_{l=0}^N \beta_l \sqrt{\sum_{i, j=0}^N \left( \alpha_i \alpha_j  + \beta_i \beta_j \right) }
+\end{aligned}
+\end{align}
+
+In conclusion, while a Newtonian constitutive relation is certainly the most common closure for a fully resolved, three-dimensional incompressible flow model, it cannot be accounted for as a bulk friction term in the classical depth-averaged shallow water limit ($N=0$).
+The shallow moment hierarchy, however, allows to inherit closure relations from fully resolved models. In particular, they rely on the availability of gradients of the vertical velocities, allowing closure relations of the form. $\bm{\sigma}(h, \vec{u}, \nabla \cdot \vec{u}; \bm{\theta})$, where $\bm{\theta}$ are the parameters of the closure (e.g. $\bm{\theta} = (\rho, \nu)$ for a Newtonian fluid). Recall, that the shallow water equations only allow closure relations of the form $\bm{\sigma}(h, \vec{u}; \bm{\theta})$.
+
+
+## prescription of a vertical velocity as boundary condition
+
+* divergence constraint and connection to velocity
+    * connection to swe
+* imposition of vertical velocities at the boundaries
+    * the choice is yours, dof analysis
+* identify possible approaches for a 3d/2d coupling
+    * only u
+    * u and w (direct solving by dof)
+    * u and w (minimization? lsq?)
+    * only w
+    * $\partial_x h_b$
+
+$$ 
+    \partial_t q + \partial_x f(q) = 0
+$${#eq-sample_eqns}
+
+\begin{align}
+    \partial_t q + \partial_x f(q) = 0 \\
+    \partial_t q + \partial_x f(q) = 0
+\end{align}
+
+
+
+## Numerical test in a straight channel
+* Geometric setup
+    * FIGURE
+    * why the these simplifications in constrast to experiment
+    * Number of experiments
+        * Coupling BC position (3 experiments)
+        * boundary condition choices (e.g. 3)
+* OpenFOAM solver
+    * Short description of which model we use and why
+* FMM Solver? -> minimal description, maybe focus on the time dependent boundary condition
+
+### Fully resolved (OpenFOAM) solution
+* FIGURES (full 3d solution)
+* FIGURES (slices at positions, timeline of alpha, velocities, ...)
+### SMM Method
+* Error reduction after projection at the interface
+    * FIGURE: projection of slices to SMM
+* SMM simulation
+### Comparison
+* Wave timings
+* Wave heights
+* Velocities?
+* bottom friction? 
+
+## Numerical simulation of the pumped storage hydropower system
+
+## Conclusion
