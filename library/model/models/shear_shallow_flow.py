@@ -41,7 +41,7 @@ class ShearShallowFlow(Model):
         boundary_conditions,
         initial_conditions,
         dimension=1,
-        fields=2,
+        fields=3,
         aux_fields=0,
         parameters = {},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
@@ -52,7 +52,7 @@ class ShearShallowFlow(Model):
         self.n_fields = self.variables.length()
         super().__init__(
             dimension=dimension,
-            fields=3,
+            fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
             parameters_default = parameters_default,
@@ -142,10 +142,322 @@ class ShearShallowFlow(Model):
         out[2] = D11
         return out
 
-    
-        
+class ShearShallowFlowEnergy(Model):
+    """
+    Shallow Moments 
+
+    :gui: 
+    - tab: model
+    - requires: [ 'mesh.dimension': 1 ]
+
+    """
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=1,
+        fields=4,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+    ):
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+    def flux(self):
+        flux_x = Matrix([0 for i in range(self.n_fields)])
+
+        p = self.parameters
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        P11 = self.variables[2]
+        hE = self.variables[3]
+        # P11 = hE / h - u **2 - p.g*h
+        pr = p.g*h**2 / 2 + h * P11
+
+        flux_x[0] = hu
+        flux_x[1] = hu * u + p.g * h**2/2 + P11
+        flux_x[2] = u * P11
+        flux_x[3] = hE * u  + pr*u
+        return [flux_x]
+
+    def nonconservative_matrix(self):
+        nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+
+        p = self.parameters
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        P11 = self.variables[2]
+        hE = self.variables[3]
+        # P11 = hE / h - u **2 - p.g*h
+        pr = p.g*h**2 / 2 + h * P11
+
+        nc_x[2, 0] = -P11/h 
+        nc_x[2, 1] = +P11/h
+        return [nc_x]
+
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        # out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
+
+    def eigenvalues(self):
+        evs = Matrix([0 for i in range(self.n_fields)])
+
+        p = self.parameters
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        P11 = self.variables[2]
+        hE = self.variables[3]
+        # P11 = hE / h - u **2 - p.g*h
+        pr = p.g*h**2 / 2 + h * P11
+
+        b = sympy.sqrt(P11)
+        a = sympy.sqrt(p.g * h + 3*P11)
+
+        evs[0] = u
+        evs[1] = u + a
+        evs[2] = u - a
+
+        return evs
+
+    def friction_paper(self):
+        assert "phi" in vars(self.parameters)   
+        out = Matrix([0 for i in range(self.n_fields)])
+
+        p = self.parameters
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        P11 = self.variables[2]
+        hE = self.variables[3]
+        # P11 = hE / h - u **2 - p.g*h
+        pr = p.g*h**2 / 2 + h * P11
+
+        abs_u = sympy.sqrt(u**2)
+        trace_P = P11 
+        grad_b = [- sympy.tan(p.theta)]
+        # alpha = max(0, p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2))
+        alpha = sympy.Piecewise((p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2), p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2) > 0), (0, p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2) <= 0))
+        D11 = -2 * alpha / h * abs_u**3 * P11
+        Q =  alpha * trace_P * abs_u**3
 
 
+        out[1] = -h * p.g * grad_b[0] - p.Cr * u * abs_u
+        out[2] = D11
+        out[3] = - p.g * h * grad_b[0] * u - p.Cr * abs_u**3  - Q
+        return out
+
+class ShearShallowFlowPathconservative(Model):
+    """
+    Shallow Moments 
+
+    :gui: 
+    - tab: model
+    - requires: [ 'mesh.dimension': 1 ]
+
+    """
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=1,
+        fields=6,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+    ):
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+    def get_primitives(self, Q):
+        h = Q[0]
+        u = Q[1]/Q[0]
+        v = Q[2]/Q[0]
+        E11 = Q[3] 
+        E12 = Q[4] 
+        E22 = Q[5] 
+        R11 = 2*E11 - Q[1]**2 / Q[0]
+        R12 = 2*E12 - Q[1]*Q[2] / Q[0]
+        R22 = 2*E22 - Q[2]**2 / Q[0]
+        P11 = R11 / h 
+        P12 = R12 / h
+        P22 = R22 / h
+        return h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22
+
+
+    def flux(self):
+        flux_x = Matrix([0 for i in range(self.n_fields)])
+
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = self.get_primitives(self.variables.get_list())
+        p = self.parameters
+
+        flux_x[0] = h * u
+        flux_x[1] = R11 + h * u**2 + 1/2 * p.g * h**2
+        flux_x[2] = R12 + h * u * v
+        flux_x[3] = (E11 + R11) * u
+        flux_x[4] = E12 * u + 1/2 * (R11*v + R12 * u)
+        flux_x[5] = E22 * u + R12*v
+        return [flux_x]
+
+    def nonconservative_matrix(self):
+        nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = self.get_primitives(self.variables.get_list())
+        p = self.parameters
+
+        nc_x[3, 0] = -p.g * h * u
+        nc_x[4, 0] = -1/2 * p.g * h * v
+        return [nc_x]
+
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        # out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
+
+    def eigenvalues(self):
+        evs = Matrix([0 for i in range(self.n_fields)])
+
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = self.get_primitives(self.variables.get_list())
+        p = self.parameters
+
+        b = sympy.sqrt(P11)
+        a = sympy.sqrt(p.g * h + 3*P11)
+
+        evs[0] = u - a
+        evs[1] = u - b
+        evs[2] = u
+        evs[3] = u
+        evs[4] = u + b
+        evs[5] = u + a
+
+        return evs
+
+    def friction_paper(self):
+        assert "Cf" in vars(self.parameters)   
+        assert "Cr" in vars(self.parameters)   
+        assert "g" in vars(self.parameters)   
+        assert "theta" in vars(self.parameters)   
+        out = Matrix([0 for i in range(self.n_fields)])
+
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = self.get_primitives(self.variables.get_list())
+        p = self.parameters
+
+        abs_u = sympy.sqrt(u**2 + v**2)
+        grad_b = [- sympy.tan(p.theta)]
+        trace_P = P11 + P22
+        expr = p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2)
+        alpha = sympy.Piecewise(
+            (0, expr < 0),
+            (expr, True)
+            )
+
+        out[1] = -h * p.g *grad_b[0] - p.Cf * abs_u * u
+        out[2] = - p.Cf * abs_u * v
+        out[3] = - alpha * abs_u**3  * P11  - p.g * h * u  * grad_b[0] - p.Cf * abs_u * u**2
+        out[4] = - alpha * abs_u**3  * P12  - p.g * h * v  * grad_b[0] - p.Cf * abs_u * u * v
+        out[5] = - alpha * abs_u**3 * P12 - p.Cf * abs_u * v
+        return out
+
+class ShearShallowFlowPathconservative2(ShearShallowFlowPathconservative):
+    """
+    Shallow Moments 
+
+    :gui: 
+    - tab: model
+    - requires: [ 'mesh.dimension': 1 ]
+
+    """
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=1,
+        fields=6,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+    ):
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+
+    def flux(self):
+        SSF = ShearShallowFlowPathconservative(boundary_conditions=self.boundary_conditions, initial_conditions=self.initial_conditions, parameters=self.parameters_default)
+        SSF.init_sympy_functions()
+        flux_x =  0.0*SSF.sympy_flux[0]
+        return [flux_x]
+
+    def nonconservative_matrix(self):
+        SSF = ShearShallowFlowPathconservative(boundary_conditions=self.boundary_conditions, initial_conditions=self.initial_conditions, parameters=self.parameters_default)
+        SSF.init_sympy_functions()
+        nc_x = SSF.sympy_nonconservative_matrix[0] - 1.0 * SSF.sympy_flux_jacobian[0]
+        return [nc_x]
 
 
 class ShearShallowFlow2d(Model):
@@ -283,6 +595,9 @@ class ShearShallowFlow2d(Model):
 
     def friction_paper(self):
         assert "phi" in vars(self.parameters)   
+        assert "theta" in vars(self.parameters)   
+        assert "Cr" in vars(self.parameters)   
+        assert "g" in vars(self.parameters)   
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]

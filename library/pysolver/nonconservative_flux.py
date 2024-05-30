@@ -7,6 +7,49 @@ def zero():
 
     return nc_flux
 
+def segmentpath_ssf(integration_order=3):
+    """
+    doi: 10.1016/j.jcp.2020.109457
+    """
+
+    def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
+        dim = normal.shape[0]
+        n_fields = Qi.shape[0]
+
+        flux = model.flux
+        dim = normal.shape[0]
+        num_eq = Qi.shape[0]
+        assert dim == 1
+        Fi = flux[0](Qi, Qauxi, parameters)  
+        Fj = flux[0](Qj, Qauxj, parameters)  
+
+        EVi = model.eigenvalues(Qi, Qauxi, parameters, normal)
+        EVj = model.eigenvalues(Qj, Qauxj, parameters, normal)
+        assert not np.isnan(EVi).any()
+        assert not np.isnan(EVj).any()
+        SL = np.min([EVi[0], 0.5*(EVi[0]+ EVj[0])], axis=0)
+        SR = np.min([EVj[5], 0.5*(EVi[5]+ EVj[5])], axis=0)
+
+        QR = Qj
+        QL = Qi
+        FR = Fj
+        FL = Fi
+        
+        Q_star =  1/(SR-SL) * (SR * QR - SL * QL - (FR - FL)  )
+        nc = model.nonconservative_matrix[0]
+        BL = nc(0.5*(QL+ Q_star), 0.5*(Qauxi+Qauxj), parameters)[:, 0] * (Q_star[0] - QL[0])
+        BR = nc(0.5*(QR+ Q_star), 0.5*(Qauxi+Qauxj), parameters)[:, 0] * (QR[0] - Q_star[0])
+        NC_star = 1/(SR-SL) * (-BL - BR)
+        Q_star = Q_star + NC_star
+
+        Dp = np.max(SL, 0)*(Q_star - QL) + np.max(SR, 0)*(QR - Q_star)
+
+        return Dp, False
+    return nc_flux
+
+
+
+
 def segmentpath(integration_order=3):
     # compute integral of NC-Matrix int NC(Q(s)) ds for segment path Q(s) = Ql + (Qr-Ql)*s for s = [0,1]
     samples, weights = leggauss(integration_order)
@@ -48,7 +91,7 @@ def segmentpath(integration_order=3):
             # out = np.zeros((n_fields, n_fields), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
-                tmp = model.nonconservative_matrix_vectorized[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
+                tmp = model.nonconservative_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
                 out = tmp * normal[d]
             return out
 
