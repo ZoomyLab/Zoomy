@@ -34,7 +34,7 @@ def vectorize_constant_sympy_expressions(expr, Q, Qaux):
                 if expr[i, j] == 0:
                     expr[i, j] = 10**(-20) * q0
                 elif expr[i, j]:
-                    expr[i, j] *= q0/q0
+                    expr[i, j] = expr[i, j] + 10**(-20) * q0
                     # print('I don\'t know how to vectorize this yet')
                     # assert False
     return expr
