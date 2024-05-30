@@ -114,6 +114,26 @@ def load_fields_from_hdf5(filepath, i_snapshot=-1):
         Qaux = group["Qaux"][()]
     return Q, Qaux, time
 
+def load_timeline_of_fields_from_hdf5(filepath):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
+    l_time = []
+    l_Q = []
+    l_Qaux = []
+    mesh = Mesh.from_hdf5(filepath)
+    with h5py.File(filepath, "r") as f:
+        fields = f['fields']
+        n_snapshots = len(fields.keys())
+        for i in range(n_snapshots):
+            group = fields[f"iteration_{i}"]
+            time = group["time"][()]
+            Q = group["Q"][()]
+            Qaux = group["Qaux"][()]
+            l_time.append(time)
+            l_Q.append(Q)
+            l_Qaux.append(Qaux)
+    return mesh.cell_centers[0], np.array(l_Q), np.array(l_Qaux), np.array(l_time)
+
 
 def _write_to_vtk_from_vertices_edges(
     filepath,
