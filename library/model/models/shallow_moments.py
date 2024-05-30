@@ -46,6 +46,7 @@ class Legendre_shifted:
     def basis_definition(self):
         x = Symbol('x')
         b = lambda k, x: legendre(k, 2*x-1) * (-1)**(k)
+        # b = lambda k, x: legendre(k, 2*x-1)
         return [b(k, x) for k in range(self.order+1)]
 
     def __init__(self, order = 1, **kwargs):
@@ -351,6 +352,49 @@ class ShallowMoments(Model):
                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
         return out
 
+    def shear(self):
+        """
+        :gui:
+            - requires_parameter: ('beta', 1.0)
+        """
+        assert "beta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        d_phi_0 = np.zeros(self.levels+1)
+        phi_0 = np.zeros(self.levels+1)
+        for k in range(self.levels+1):
+            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+        friction_factor = 0.
+        for k in range(self.levels+1):
+            friction_factor -= p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
+        for k in range(1+self.levels):
+            out[1+k] += friction_factor /(self.basis.M[k,k]) 
+        return out
+
+    def shear_crazy(self):
+        """
+        :gui:
+            - requires_parameter: ('beta', 1.0)
+        """
+        assert "beta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        d_phi_0 = np.zeros(self.levels+1)
+        phi_0 = np.zeros(self.levels+1)
+        for k in range(self.levels+1):
+            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+        for k in range(self.levels+1):
+            out[1+k] += -p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
+        return out
+
 
 class ShallowMoments2d(Model):
     def __init__(
@@ -648,10 +692,11 @@ if __name__ == "__main__":
     # print(f(q))
 
 
-    basis =Legendre_shifted(order=2)
-    z = np.linspace(0,1,100)
-    f = basis.get_lambda(1)
-    print(f(z), f(1.0))
+    basis =Legendre_shifted(order=8)
+    basis.plot()
+    # z = np.linspace(0,1,100)
+    # f = basis.get_lambda(1)
+    # print(f(z), f(1.0))
     # f = basis.get_lambda(1)
     # print(f(z))
 
