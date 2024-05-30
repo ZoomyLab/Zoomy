@@ -37,16 +37,16 @@ def RKimplicit(func, Q, Qaux, param, dt, func_jac=None, func_bc=None):
     implicit euler
     """
     assert func_jac is not None
-    Jac = np.zeros((Q.shape[0], Q.shape[1], Q.shape[1]), dtype=float)
+    Jac = np.zeros((Q.shape[0], Q.shape[0], Q.shape[1]), dtype=float)
     dQ = np.zeros_like(Q)
-    I = np.eye(Q.shape[1])
+    I = np.eye(Q.shape[0])
 
     dQ = func(dt, Q, Qaux, param, dQ)
     Jac = func_jac(dt, Q, Qaux, param, Jac)
 
     b = Q + dt * dQ
-    for i in range(Q.shape[0]):
-        A = I - dt * Jac[i,:,:]
-        b[i] += - dt * np.dot(Jac[i,:,:], Q[i])
-        Q[i] = np.linalg.solve(A, b[i])
+    for i in range(Q.shape[1]):
+        A = I - dt * Jac[:,:, i]
+        b[:, i] += - dt * np.dot(Jac[:,:, i], Q[:, i])
+        Q[:, i] = np.linalg.solve(A, b[:, i])
     return Q

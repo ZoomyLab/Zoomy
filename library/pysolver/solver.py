@@ -139,7 +139,7 @@ def _get_source_jac(mesh, pde, settings):
     def source_jac(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_cell in range(mesh.n_inner_cells):
-            dQ[i_cell] = pde.source_jacobian(Q[i_cell], Qaux[i_cell], parameters)
+            dQ[:, :,i_cell] = pde.source_jacobian(Q[:,i_cell], Qaux[:, i_cell], parameters)
         return dQ
 
     return source_jac
@@ -306,8 +306,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
         assert not failed
-        # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
-        nc_flux = np.zeros_like(flux)
+        nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        # nc_flux = np.zeros_like(flux)
         assert not failed
 
         # dQcheck = np.zeros_like(dQ)
@@ -632,6 +632,10 @@ def get_limiter(name='min'):
         def f(x):
             return (x**2 + 2*x)/(x**2 + x + 2.*np.ones_like(x))
         return f
+    elif name == "zero":
+        def f(x):
+            return np.zeros_like(x)
+        return f
     else:
         assert False
 
@@ -702,11 +706,29 @@ def jax_fvm_unsteady_semidiscrete(
     min_inradius = np.min(mesh.cell_inradius)
 
     limiter = get_limiter(name='Venkatakrishnan')
+    limiter = get_limiter(name='zero')
 
     # print(f'hi from process {os.getpid()}')
     while time < settings.time_end:
         #     # print(f'in loop from process {os.getpid()}')
         Q = deepcopy(Qnew)
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = model.get_primitives(Q)
+        assert (P11 > 0).all
+        assert (P12 > 0).all
+        assert (P22 > 0).all
+        P11 = np.where(P11 <= 10**(-15), 10**(-15), P11)
+        P12 = np.where(P12 <= 10**(-15), 10**(-15), P12)
+        P22 = np.where(P22 <= 10**(-15), 10**(-15), P22)
+        R11 = Q[0] * P11
+        R12 = Q[0] * P12
+        R22 = Q[0] * P22
+        u = Q[1]/Q[0]
+        v = Q[2]/Q[0]
+        Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
+        Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
+        Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+
+
         dt = settings.compute_dt(
             Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
         )
@@ -771,9 +793,18 @@ def jax_fvm_unsteady_semidiscrete(
         #     # TODO this two things should be 'callouts'!!
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
         # Qnew = enforce_boundary_conditions(Qnew)
+
+        ### SSF Energy  DEBUG
+        # h = Q[0]
+        # u = Q[1] / h
+        # P11 = Q[2]
+        # hE = h*(u**2 + settings.parameters['g'] * h + P11)
+        # Q[3] = hE
+
         Qnew = ode_solver_source(
             compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
         )
+
         Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
         #     )
         #     # Qnew  += -Q+ode_solver_source(
