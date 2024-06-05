@@ -381,6 +381,7 @@ class Mesh:
         lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
         for i_c, c in enumerate(range(cgStart, cgEnd )):
             neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
+            assert not (i_c == neighbors).any()
             n_neighbors = neighbors.shape[0]
             if n_neighbors == 1:
                 neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
