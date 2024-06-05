@@ -86,12 +86,12 @@ def test_ssf():
         initial_conditions=ic,
         # settings={"friction": ["chezy", "newtonian"]},
         # settings={"friction": ["newtonian"]},
-        settings={"friction": ["friction_paper"]},
+        # settings={"friction": ["friction_paper"]},
     )
     main_dir = os.getenv("SMS")
 
     # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
-    mesh = petscMesh.Mesh.create_1d((0, Lx), 500)
+    mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
@@ -204,12 +204,11 @@ def test_ssf_pathconservative():
 
     main_dir = os.getenv("SMS")
     settings = Settings(
-        name="ShearShallowFlowPathconservative",
         parameters={"g": g, "Cf": Cf, "theta": theta, "phi": phi, "Cr":Cr},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
-        nc_flux = nonconservative_flux.zero(),
-        # nc_flux = nonconservative_flux.segmentpath(),
+        # nc_flux = nonconservative_flux.zero(),
+        nc_flux = nonconservative_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.9),
         # compute_dt=timestepping.constant(dt=0.01),
         time_end=26.99,
@@ -265,21 +264,22 @@ def test_ssf_pathconservative():
         Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
         return Q
 
-    # def ic_func(x):
-    #     Q = np.zeros(6, dtype=float)
-    #     Q[0] = np.where(x[0]<0.5, 0.02, 0.01)
-    #     P11 = 10**(-4)
-    #     P22 = P11
-    #     P12 = 0
-    #     R11 = Q[0] * P11
-    #     R12 = Q[0] * P12
-    #     R22 = Q[0] * P22
-    #     u = 0.
-    #     v = 0.
-    #     Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
-    #     Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
-    #     Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
-    #     return Q
+    def ic_func(x):
+        Q = np.zeros(6, dtype=float)
+        Q[0] = np.where(x[0]<0.5, 0.02, 0.01)
+        # P11 = 10**(-1)
+        P11 = 0.
+        P22 = P11
+        P12 = 0
+        R11 = Q[0] * P11
+        R12 = Q[0] * P12
+        R22 = Q[0] * P22
+        u = 0.
+        v = 0.
+        Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
+        Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
+        Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+        return Q
 
     ic = IC.UserFunction(ic_func)
 
@@ -290,12 +290,12 @@ def test_ssf_pathconservative():
         # settings={"friction": ["chezy", "newtonian"]},
         # settings={"friction": ["newtonian"]},
         # settings={"friction": []},
-        settings={"friction": ["friction_paper"]},
+        # settings={"friction": ["friction_paper"]},
     )
     main_dir = os.getenv("SMS")
 
     # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
-    mesh = petscMesh.Mesh.create_1d((0, Lx), 500)
+    mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 

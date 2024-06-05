@@ -1258,6 +1258,194 @@ def test_ijshs24():
     #     start_at_time=1.0,
     # )
 
+# @pytest.mark.critical
+@pytest.mark.unfinished
+def test_eccomas_hyperbolicity():
+    level = 2
+    Cf = 1/200.
+    Cr = 0.00
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={"g": 9.81, "C": 1/Cf, "Cf": Cf, "Cr": Cr},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.1),
+        # compute_dt=timestepping.constant(dt=0.1),
+        time_end=10,
+        output_snapshots=100,
+        output_dir = 'outputs/eccomas/SMMWE'
+    )
+
+    offset = level+1
+    bcs = BC.BoundaryConditions(
+        [
+            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
+            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            BC.Extrapolation(physical_tag="left"),
+            BC.Extrapolation(physical_tag="right"),
+        ]
+    )
+
+
+    P11_0 = 0.00
+    # a1_high = np.sqrt(0.02 * P11_0 * 3 )
+    # a1_low = np.sqrt(0.01 * P11_0* 3 )
+    a1_high = 0
+    a1_low = 0
+    # a2_high = np.sqrt(0.02 * P11_0 * 5 )
+    # a2_low = np.sqrt(0.01 * P11_0* 5 )
+    a2_high = 0
+    a2_low = 0
+    # a1_high = np.sqrt( P11_0 * 3 )
+    # a1_low = np.sqrt( P11_0* 3 )
+    # ic = IC.RP(
+    #     high=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
+    #     low=lambda n_field: np.array([.01, 0.0] + [0.0 for l in range(level)]),
+    # )
+    # ic = IC.RP(
+    #     high=lambda n_field: np.array([0.02, 0.0, a1_high] + [0.0 for l in range(level-1)]),
+    #     low=lambda n_field: np.array([.01, 0.0, a1_low] + [0.0 for l in range(level-1)]),
+    # )
+    ic = IC.RP(
+        high=lambda n_field: np.array([0.02, 0.0, a1_high, a2_high] + [0.0 for l in range(level-2)]),
+        low=lambda n_field: np.array([.01, 0.0, a1_low, a2_high] + [0.0 for l in range(level-2)]),
+    )
+
+    model_SMMWS = ShallowMomentsSSFEnergy(
+        dimension=1,
+        fields=2 + level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ['chezy']},
+        basis=BasisNoHOM(basis=Legendre_shifted(order=level)),
+    )
+    # print(f"Eigenvalues SSF:")
+    # print(model_SSF.sympy_eigenvalues)
+    # print("\n")
+    
+    # model_SMM = ShallowMoments(
+    #     dimension=1,
+    #     fields=2 + level,
+    #     aux_fields=0,
+    #     parameters=settings.parameters,
+    #     boundary_conditions=bcs,
+    #     initial_conditions=ic,
+    #     settings={"friction": ['chezy']},
+    #     basis=Basis(basis=Legendre_shifted(order=level)),
+    # )
+
+
+    def ic_func(x):
+        Q = np.zeros(6, dtype=float)
+        Q[0] = np.where(x[0]<0.0, 0.02, 0.01)
+        P11 = P11_0
+        # P11 = 0.
+        P22 = P11
+        P12 = 0
+        R11 = Q[0] * P11
+        R12 = Q[0] * P12
+        R22 = Q[0] * P22
+        u = 0.
+        v = 0.
+        Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
+        Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
+        Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+
+    model_SSF = ShearShallowFlowPathconservative(
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ["chezy"]},
+        # settings={"friction": ["newtonian"]},
+        # settings={"friction": []},
+        # settings={"friction": ["friction_paper"]},
+    )
+    model_SSF.name = 'ShearShallowFlowPathconservative'
+
+    def ic_func(x):
+        Q = np.zeros(3, dtype=float)
+        Q[0] = np.where(x[0]<0.0, 0.02, 0.01)
+        Q[2] =  P11_0
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+
+    model_SSF_orig = ShearShallowFlow(
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        # settings={"friction": ["newtonian"]},
+        settings={"friction": ["chezy"]},
+        # settings={"friction": []},
+        # settings={"friction": ["friction_paper"]},
+    )
+    model_SSF_orig.name = 'ShearShallowFlow'
+
+    def ic_func(x):
+        Q = np.zeros(3, dtype=float)
+        Q[0] = np.where(x[0]<0.0, 0.02, 0.01)
+        return Q
+
+    ic = IC.UserFunction(ic_func)
+    
+    model_SSF_energy = ShearShallowFlowEnergy(
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        # settings={"friction": ["chezy", "newtonian"]},
+        # settings={"friction": ["newtonian"]},
+        settings={"friction": ["chezy"]},
+        # settings={"friction": []},
+        # settings={"friction": ["friction_paper"]},
+    )
+    model_SSF_energy.name = 'ShearShallowFlowEnergy'
+
+    
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
+
+    print('SMM-WS')
+    settings.output_dir = 'outputs/eccomas/SMMWE'
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model_SMMWS, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+    # print('SMM')
+    # settings.output_dir = 'outputs/eccomas/SMM'
+    # jax_fvm_unsteady_semidiscrete(
+    #     mesh, model_SMM, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    # )
+    # io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+    print('SSF')
+    settings.output_dir = 'outputs/eccomas/SSF'
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model_SSF, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+    print('SSF orig')
+    settings.output_dir = 'outputs/eccomas/SSF_orig'
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model_SSF_orig, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
+    print('SSF energy')
+    settings.output_dir = 'outputs/eccomas/SSF_energy'
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model_SSF_energy, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
 
 
 if __name__ == "__main__":
@@ -1280,4 +1468,6 @@ if __name__ == "__main__":
     # test_petsc('quad')
     # test_petsc('triangle')
     # test_enforce_w_bc()
-    test_ijshs24()
+    # test_ijshs24()
+    test_eccomas_hyperbolicity()
+
