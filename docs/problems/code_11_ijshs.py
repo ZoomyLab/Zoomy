@@ -77,10 +77,35 @@ def extract_1d_slice(mesh, pos=[15, 0, 0]):
     w = np.interp(h*x_unitheight,x[indices_water],  w[indices_water])
     return x, alpha, h, u, w
 
-def extract_1d_data(directory, filename='internal.vtu', pos = [15, 0, 0], stride=10):
+def extract_1d_data_foam11(directory, pos = [15, 0, 0], stride=10):
+    file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
+    def sorting_key(name):
+        numbers = re.findall(r'\d+', name)
+        assert len(numbers) == 1
+        return int(numbers[0])
+    file_names = sorted(file_names, key=sorting_key)
+    file_names = file_names[::stride]
+    l_h = []
+    l_u = []
+    l_w = []
+    iteration = []
+    for i, file in enumerate(file_names):
+        path = os.path.join(directory,file)
+        mesh, _ = read_vtk(path)
+        x, alpha, h, u, w = extract_1d_slice(mesh, pos)
+        l_h.append(h)
+        l_u.append(u)
+        l_w.append(w)
+        iteration.append(i * stride)
+    return x, np.array(l_h), np.array(l_u), np.array(l_w), np.array(iteration)
+
+def extract_1d_data(directory, filename='internal.vtu', pos = [15, 0, 0], stride=10, foam11=True):
+    if foam11:
+        return extract_1d_data_foam11(directory, pos, stride)
     folder_names = [name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name))]
     def sorting_key(name):
         prefix = 'nozzle_openfoam_'
+        # prefix = 'openfoam_'
         if name.startswith(prefix):
             return int(name[len(prefix):])
         else:
