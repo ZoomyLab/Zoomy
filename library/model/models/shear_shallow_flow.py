@@ -69,8 +69,8 @@ class ShearShallowFlow(Model):
         P11 = self.variables[2]
         p = self.parameters
         flux_x[0] = hu
-        flux_x[1] = hu * u + p.g * h**2/2 + P11
-        flux_x[2] = u * P11
+        flux_x[1] = hu * u + p.g * h**2/2 + h* P11
+        flux_x[2] = 0.
 
         return [flux_x]
 
@@ -81,8 +81,9 @@ class ShearShallowFlow(Model):
         u = hu/h
         P11 = self.variables[2]
 
-        nc_x[2, 0] = -P11/h 
-        nc_x[2, 1] = +P11/h
+        nc_x[2, 0] = 0
+        nc_x[2, 1] = 2*P11
+        nc_x[2, 2] = u
         return [nc_x]
 
     def source(self):
@@ -142,6 +143,20 @@ class ShearShallowFlow(Model):
         out[2] = D11
         return out
 
+
+    def chezy(self):
+        assert "Cf" in vars(self.parameters)   
+        out = Matrix([0 for i in range(self.n_fields)])
+        Q = self.variables
+
+        u = Q[1] / Q[0]
+
+        p = self.parameters
+        abs_u = sympy.sqrt(u**2)
+        out[1] =  - p.Cf * abs_u * u
+        # out[2] = - p.Cf * abs_u**3
+        return out
+
 class ShearShallowFlowEnergy(Model):
     """
     Shallow Moments 
@@ -156,7 +171,7 @@ class ShearShallowFlowEnergy(Model):
         boundary_conditions,
         initial_conditions,
         dimension=1,
-        fields=4,
+        fields=3,
         aux_fields=0,
         parameters = {},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
@@ -183,97 +198,33 @@ class ShearShallowFlowEnergy(Model):
         h = self.variables[0]
         hu = self.variables[1]
         u = hu/h
-        P11 = self.variables[2]
-        hE = self.variables[3]
-        # P11 = hE / h - u **2 - p.g*h
-        pr = p.g*h**2 / 2 + h * P11
-
+        E = self.variables[2] 
+        R = 2*E - h*u**2 
         flux_x[0] = hu
-        flux_x[1] = hu * u + p.g * h**2/2 + P11
-        flux_x[2] = u * P11
-        flux_x[3] = hE * u  + pr*u
+        flux_x[1] = hu * u + p.g * h**2/2 + R
+        flux_x[2] = (E + R) * u
         return [flux_x]
 
     def nonconservative_matrix(self):
         nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
-
         p = self.parameters
-        h = self.variables[0]
-        hu = self.variables[1]
-        u = hu/h
-        P11 = self.variables[2]
-        hE = self.variables[3]
-        # P11 = hE / h - u **2 - p.g*h
-        pr = p.g*h**2 / 2 + h * P11
-
-        nc_x[2, 0] = -P11/h 
-        nc_x[2, 1] = +P11/h
+        Q = self.variables
+        h = Q[0]
+        u = Q[1]  / h
+        nc_x[2, 0] = - p.g * h * u
         return [nc_x]
 
-    def source(self):
+    def chezy(self):
+        assert "Cf" in vars(self.parameters)   
         out = Matrix([0 for i in range(self.n_fields)])
-        if self.settings.topography:
-            out += self.topography()
-        if self.settings.friction:
-            for friction_model in self.settings.friction:
-                out += getattr(self, friction_model)()
-        return out
+        Q = self.variables
 
-    def topography(self):
-        assert "dhdx" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(self.n_fields)])
-        h = self.variables[0]
-        p = self.parameters
-        dhdx = self.aux_variables.dhdx
-        # out[1] = h * p.g * (p.ex - p.ez * dhdx)
-        return out
-
-    def eigenvalues(self):
-        evs = Matrix([0 for i in range(self.n_fields)])
+        u = Q[1] / Q[0]
 
         p = self.parameters
-        h = self.variables[0]
-        hu = self.variables[1]
-        u = hu/h
-        P11 = self.variables[2]
-        hE = self.variables[3]
-        # P11 = hE / h - u **2 - p.g*h
-        pr = p.g*h**2 / 2 + h * P11
-
-        b = sympy.sqrt(P11)
-        a = sympy.sqrt(p.g * h + 3*P11)
-
-        evs[0] = u
-        evs[1] = u + a
-        evs[2] = u - a
-
-        return evs
-
-    def friction_paper(self):
-        assert "phi" in vars(self.parameters)   
-        out = Matrix([0 for i in range(self.n_fields)])
-
-        p = self.parameters
-        h = self.variables[0]
-        hu = self.variables[1]
-        u = hu/h
-        P11 = self.variables[2]
-        hE = self.variables[3]
-        # P11 = hE / h - u **2 - p.g*h
-        pr = p.g*h**2 / 2 + h * P11
-
         abs_u = sympy.sqrt(u**2)
-        trace_P = P11 
-        grad_b = [- sympy.tan(p.theta)]
-        # alpha = max(0, p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2))
-        alpha = sympy.Piecewise((p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2), p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2) > 0), (0, p.Cr * (trace_P/h**2 - p.phi)/(trace_P**2/h**2) <= 0))
-        D11 = -2 * alpha / h * abs_u**3 * P11
-        Q =  alpha * trace_P * abs_u**3
-
-
-        out[1] = -h * p.g * grad_b[0] - p.Cr * u * abs_u
-        out[2] = D11
-        out[3] = - p.g * h * grad_b[0] * u - p.Cr * abs_u**3  - Q
+        out[1] =  - p.Cf * abs_u * u
+        out[2] = - p.Cf * abs_u**3
         return out
 
 class ShearShallowFlowPathconservative(Model):
@@ -385,6 +336,21 @@ class ShearShallowFlowPathconservative(Model):
         evs[5] = u + a
 
         return evs
+
+    def chezy(self):
+        assert "Cf" in vars(self.parameters)   
+        out = Matrix([0 for i in range(self.n_fields)])
+
+        h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = self.get_primitives(self.variables.get_list())
+        p = self.parameters
+
+        abs_u = sympy.sqrt(u**2 + v**2)
+        out[1] =  p.Cf * abs_u * u
+        out[2] = - p.Cf * abs_u * v
+        out[3] = p.Cf * abs_u * u**2
+        out[4] = p.Cf * abs_u * u * v
+        out[5] = p.Cf * abs_u * v
+        return out
 
     def friction_paper(self):
         assert "Cf" in vars(self.parameters)   
