@@ -537,7 +537,7 @@ class ShallowMoments2d(Model):
         self,
         boundary_conditions,
         initial_conditions,
-        dimension=1,
+        dimension=2,
         fields=3,
         aux_fields=0,
         parameters = {},
