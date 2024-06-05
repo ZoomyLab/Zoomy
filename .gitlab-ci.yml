@@ -1,10 +1,10 @@
 # The Docker image that will be used to build your app
 image: ubuntu:latest
 # Functions that should be executed before the build script is run
-before_script:
-  - echo "start"
+
 pages:
-  script: []
+  script:
+    - echo 'start'
   artifacts:
     paths:
       # The folder that contains the files to be exposed at the Page URL
