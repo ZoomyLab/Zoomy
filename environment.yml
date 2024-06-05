@@ -22,6 +22,7 @@ dependencies:
     - trame
     - trame-vtk
     - trame-vuetify
+    - seaborn
 variables:
   PETSC_DIR: '/home/ingo/petsc'
   PETSC_ARCH: 'linux-gnu'
