@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.4.553">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>cmake-vols-fetchcontent</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../../">
+<script src="../../../site_libs/quarto-html/quarto.js"></script>
+<script src="../../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../../site_libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../../site_libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../../../styles.css">
+</head>
+
+<body class="nav-fixed">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../../docs/images/logo_mbd.png" alt="" class="navbar-logo">
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+</div>
+          <div id="quarto-search" class="" title="Search"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#building-and-testing-hdf5-vol-connectors-with-cmake-fetchcontent" id="toc-building-and-testing-hdf5-vol-connectors-with-cmake-fetchcontent" class="nav-link active" data-scroll-target="#building-and-testing-hdf5-vol-connectors-with-cmake-fetchcontent">Building and testing HDF5 VOL connectors with CMake FetchContent</a>
+  <ul class="collapse">
+  <li><a href="#building" id="toc-building" class="nav-link" data-scroll-target="#building">Building</a>
+  <ul class="collapse">
+  <li><a href="#example---build-and-test-hdf5-asynchronous-io-vol-connector" id="toc-example---build-and-test-hdf5-asynchronous-io-vol-connector" class="nav-link" data-scroll-target="#example---build-and-test-hdf5-asynchronous-io-vol-connector">Example - Build and test HDF5 Asynchronous I/O VOL connector</a></li>
+  </ul></li>
+  <li><a href="#testing" id="toc-testing" class="nav-link" data-scroll-target="#testing">Testing</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="building-and-testing-hdf5-vol-connectors-with-cmake-fetchcontent" class="level1">
+<h1>Building and testing HDF5 VOL connectors with CMake FetchContent</h1>
+<p>This document details the process of using CMake options to build and test an HDF5 VOL connector alongside the HDF5 library when building HDF5 from source. There are several benefits that this may provide, but among them are the following:</p>
+<ul>
+<li>A VOL connector built this way can be tested at the same time that HDF5 is, which eliminates the need to have a multi-step build process where one builds HDF5, uses it to build the VOL connector and then uses the external <a href="https://github.com/hdfGroup/vol-tests">HDF5 VOL tests</a> repository to test their connector.</li>
+<li>Building VOL connectors in this manner will usually install the built connector library alongside the HDF5 library, allowing future opportunities for HDF5 to set a default plugin path such that the HDF5_PLUGIN_PATH environment variable doesn’t need to be set.</li>
+</ul>
+<section id="building" class="level2">
+<h2 class="anchored" data-anchor-id="building">Building</h2>
+<p>To enable building of an HDF5 VOL connector using HDF5’s CMake functionality, two CMake variables must first be set:</p>
+<pre><code>HDF5_VOL_ALLOW_EXTERNAL (Default: OFF)
+    This variable determines whether or not building of external HDF5 VOL connectors
+    is enabled.
+
+HDF5_ALLOW_EXTERNAL_SUPPORT (Default: "NO")
+    This variable is a string that specifies the manner in which the source code for
+    an external VOL connector will be retrieved. Currently, this variable must be set
+    to "GIT" for building external VOL connectors.</code></pre>
+<p>Once the <code>HDF5_VOL_ALLOW_EXTERNAL</code> option is set to ON and the <code>HDF5_ALLOW_EXTERNAL_SUPPORT</code> variable is set to “GIT”, the CMake cache will be populated with a predefined (currently 10) amount of new variables, named:</p>
+<pre><code>HDF5_VOL_URL01
+HDF5_VOL_URL02
+HDF5_VOL_URL03
+...</code></pre>
+<p>For each of these variables, a URL that points to an HDF5 VOL connector Git repository can be specified. These URLs should currently be HTTPS URLs. For example, to specify the HDF5 Asynchronous I/O VOL Connector developed by the ECP team, one can provide the following option to <code>cmake</code>:</p>
+<pre><code>-DHDF5_VOL_URL01=https://github.com/hpc-io/vol-async.git</code></pre>
+<p>For each URL specified, HDF5’s CMake code will attempt to use CMake’s <a href="https://cmake.org/cmake/help/latest/module/FetchContent.html">FetchContent</a> functionality to retrieve the source code for a VOL connector pointed to by that URL and will try to build that VOL connector as part of the HDF5 library build process. The VOL connector must be able to be built by CMake and currently must have a CMakeLists.txt file in the top level of the source tree in order to be buildable by this process. If the source code for a VOL connector is successfully retrieved, the HDF5 build’s CMake cache will be populated with variables from the VOL connector’s CMake code, as if one were building the connector by itself. This gives one the ability to customize the build of the connector as usual.</p>
+<p>The CMake cache will also be populated with a few new variables for each VOL connector that was successfully retrieved from a given URL. To generate these variables, the CMake code first creates an internal name for the VOL connector by stripping off the last part of the Git repository URL given for the connector, removing the “.git” suffix and any whitespace and then upper-casing the result. For example, the name of the VOL connector located at the URL https://github.com/hpc-io/vol-async.git would become “VOL-ASYNC”. Then, the following new variables get created:</p>
+<pre><code>HDF5_VOL_&lt;VOL name&gt;_BRANCH (Default: "main")
+    This variable specifies the git branch name or tag to use when fetching
+    the source code for the VOL connector with the CMake-internal name
+    '&lt;VOL name&gt;'.
+
+HDF5_VOL_&lt;VOL name&gt;_NAME (Default: "")
+    This variable specifies the string that should be used when setting the
+    HDF5_VOL_CONNECTOR environment variable for testing the VOL connector
+    with the CMake-internal name '&lt;VOL name&gt;'. The value for this variable
+    can be determined according to the canonical name given to the connector
+    by the connector's author(s), as well as any extra info that needs to be
+    passed to the connector for its configuration (see example below). This
+    variable must be set in order for the VOL connector to be testable with
+    HDF5's tests.
+
+HDF5_VOL_&lt;VOL name&gt;_TEST_PARALLEL (Default: OFF)
+    This variable determines whether the VOL connector with the CMake-internal
+    name '&lt;VOL name&gt;' should be tested against HDF5's parallel tests.</code></pre>
+<p>As an example, this would create the following variables for the previously-mentioned VOL connector:</p>
+<pre><code>HDF5_VOL_VOL-ASYNC_BRANCH
+HDF5_VOL_VOL-ASYNC_NAME
+HDF5_VOL_VOL-ASYNC_TEST_PARALLEL</code></pre>
+<p><strong>NOTE</strong> If a VOL connector requires extra information to be passed in its HDF5_VOL_<vol name="">_NAME variable and that information contains any semicolons, those semicolons should be escaped with a single backslash so that CMake doesn’t parse the string as a list. If <code>cmake</code> is run from a shell, extra care may need to be taken when escaping the semicolons depending on how the shell interprets backslashes.</vol></p>
+<section id="example---build-and-test-hdf5-asynchronous-io-vol-connector" class="level3">
+<h3 class="anchored" data-anchor-id="example---build-and-test-hdf5-asynchronous-io-vol-connector">Example - Build and test HDF5 Asynchronous I/O VOL connector</h3>
+<p>Assuming that the HDF5 source code has been checked out and a build directory has been created, running the following cmake command from that build directory will retrieve, build and test the HDF5 Asynchronous I/O VOL connector while building HDF5. Note that <code>[hdf5 options]</code> represents other build options that would typically be passed when building HDF5, such as <code>CMAKE_INSTALL_PREFIX</code>, <code>HDF5_BUILD_CPP_LIB</code>, etc.</p>
+<pre><code>cmake [hdf5 options]
+  -DHDF5_ENABLE_THREADSAFE=ON
+  -DHDF5_ENABLE_PARALLEL=ON
+  -DALLOW_UNSUPPORTED=ON
+  -DHDF5_TEST_API=ON
+  -DHDF5_VOL_ALLOW_EXTERNAL=ON
+  -DHDF5_ALLOW_EXTERNAL_SUPPORT="GIT"
+  -DHDF5_VOL_URL01=https://github.com/hpc-io/vol-async.git
+  -DHDF5_VOL_VOL-ASYNC_BRANCH=develop 
+  -DHDF5_VOL_VOL-ASYNC_NAME="async under_vol=0\;under_info={}"
+  -DHDF5_VOL_VOL-ASYNC_TEST_PARALLEL=ON ..</code></pre>
+<p>Here, we are specifying that:</p>
+<ul>
+<li>HDF5 should be built with thread-safety enabled (required by Async VOL connector)</li>
+<li>HDF5 should be built with parallel enabled (required by Async VOL connector)</li>
+<li>Allow unsupported HDF5 combinations (thread-safety and HL, which is on by default)</li>
+<li>Enable the API tests so that they can be tested with the Async VOL connector</li>
+<li>Build and use the HDF5 Asynchronous I/O VOL connector, located at https://github.com/hpc-io/vol-async.git</li>
+<li>Clone the Asynchronous I/O VOL connector from the repository’s ‘develop’ branch</li>
+<li>When testing the Asynchronous I/O VOL connector, the <code>HDF5_VOL_CONNECTOR</code> environment variable should be set to “async under_vol=0;under_info={}”, which specifies that the VOL connector with the canonical name “async” should be loaded and it should be passed the string “under_vol=0;under_info={}” for its configuration</li>
+<li>The Asynchronous I/O VOL connector should be tested against HDF5’s parallel API tests</li>
+</ul>
+<p>Note that this also assumes that the Asynchronous I/O VOL connector’s <a href="https://hdf5-vol-async.readthedocs.io/en/latest/gettingstarted.html#preparation">other dependencies</a> are installed on the system in a way that CMake can find them. If that is not the case, the locations for these dependencies may need to be provided to CMake by passing extra options, such as:</p>
+<pre><code>-DABT_INCLUDE_DIR=/path/to/argobots/build/include
+-DABT_LIBRARY=/path/to/argbots/build/lib/libabt.so</code></pre>
+<p>which would help CMake find an argobots installation in a non-standard location.</p>
+</section>
+</section>
+<section id="testing" class="level2">
+<h2 class="anchored" data-anchor-id="testing">Testing</h2>
+<p>To facilitate testing of HDF5 VOL connectors when building HDF5, tests from the <a href="https://github.com/hdfGroup/vol-tests">HDF5 VOL tests</a> repository were integrated back into the library and the following new CMake options were added to HDF5 builds for the 1.14.1 release:</p>
+<pre><code>HDF5_TEST_API (Default: OFF)
+    This variable determines whether the HDF5 API tests will be built and tested.
+
+HDF5_TEST_API_INSTALL (Default: OFF)
+    This variable determines whether the HDF5 API test executables will be installed
+    on the system alongside the HDF5 library.
+
+HDF5_TEST_API_ENABLE_ASYNC (Default: OFF)
+    This variable determines whether the HDF5 Asynchronous I/O API tests will be
+    built and tested. These tests will only run if a VOL connector reports that
+    it supports asynchronous I/O operations when queried via the H5Pget_vol_cap_flags
+    API routine.
+
+HDF5_TEST_API_ENABLE_DRIVER (Default: OFF)
+    This variable determines whether the HDF5 API test driver program will be
+    built and used for testing. This driver program is useful when a VOL connector
+    uses a client/server model where the server program needs to be up and running
+    before the VOL connector can function. This option is currently not functional.</code></pre>
+<p>When the <code>HDF5_TEST_API</code> option is set to ON, HDF5’s CMake code builds and tests the new API tests using the native VOL connector. When one or more external VOL connectors are built successfully with the process described in this document, the CMake code will duplicate some of these API tests by adding separate versions of the tests (for each VOL connector that was built) that set the <code>HDF5_VOL_CONNECTOR</code> environment variable to the value specified for the HDF5_VOL_<vol name="">_NAME variable for each external VOL connector at build time. Running the <code>ctest</code> command will then run these new tests which load and run with each VOL connector that was built in turn. When run via the <code>ctest</code> command, the new tests typically follow the naming scheme:</vol></p>
+<pre><code>HDF5_VOL_&lt;VOL name lowercase&gt;-h5_api_test_&lt;test name&gt;
+HDF5_VOL_&lt;VOL name lowercase&gt;-h5_api_test_parallel_&lt;test name&gt;</code></pre>
+<p><strong>NOTE</strong> If dependencies of a built VOL connector are installed on the system in a non-standard location that would typically require one to set <code>LD_LIBRARY_PATH</code> or similar, one should ensure that those environment variables are set before running tests. Otherwise, the tests that run with that connector will likely fail due to being unable to load the necessary libraries for its dependencies.</p>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Contact : <a href="mailto:correa@mbd.rwth-aachen.de"><strong>Alan Correa</strong></a>, <a href="mailto:steldermann@mbd.rwth-aachen.de"><strong>Ingo Steldermann</strong></a></p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+<p><a href="https://www.mbd.rwth-aachen.de"><img src="../../../docs/images/logo_mbd.png" class="img-fluid" alt="MBD" width="200"></a></p>
+</div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

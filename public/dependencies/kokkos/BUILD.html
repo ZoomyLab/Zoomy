@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.4.553">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>build</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body class="nav-fixed">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../docs/images/logo_mbd.png" alt="" class="navbar-logo">
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+</div>
+          <div id="quarto-search" class="" title="Search"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#installing-and-using-kokkos" id="toc-installing-and-using-kokkos" class="nav-link active" data-scroll-target="#installing-and-using-kokkos">Installing and Using Kokkos</a>
+  <ul class="collapse">
+  <li><a href="#kokkos-philosophy" id="toc-kokkos-philosophy" class="nav-link" data-scroll-target="#kokkos-philosophy">Kokkos Philosophy</a></li>
+  <li><a href="#configuring-cmake" id="toc-configuring-cmake" class="nav-link" data-scroll-target="#configuring-cmake">Configuring CMake</a></li>
+  <li><a href="#known-issues" id="toc-known-issues" class="nav-link" data-scroll-target="#known-issues">Known Issues</a><a name="KnownIssues" class="nav-link" data-scroll-target="undefined"></a>
+  <ul class="collapse">
+  <li><a href="#cray" id="toc-cray" class="nav-link" data-scroll-target="#cray">Cray</a></li>
+  <li><a href="#fortran" id="toc-fortran" class="nav-link" data-scroll-target="#fortran">Fortran</a></li>
+  </ul></li>
+  <li><a href="#spack" id="toc-spack" class="nav-link" data-scroll-target="#spack">Spack</a></li>
+  </ul></li>
+  <li><a href="#kokkos-keyword-listing" id="toc-kokkos-keyword-listing" class="nav-link" data-scroll-target="#kokkos-keyword-listing">Kokkos Keyword Listing</a>
+  <ul class="collapse">
+  <li><a href="#device-backends" id="toc-device-backends" class="nav-link" data-scroll-target="#device-backends">Device Backends</a></li>
+  <li><a href="#enable-options" id="toc-enable-options" class="nav-link" data-scroll-target="#enable-options">Enable Options</a></li>
+  <li><a href="#other-options" id="toc-other-options" class="nav-link" data-scroll-target="#other-options">Other Options</a></li>
+  <li><a href="#third-party-libraries-tpls" id="toc-third-party-libraries-tpls" class="nav-link" data-scroll-target="#third-party-libraries-tpls">Third-party Libraries (TPLs)</a></li>
+  <li><a href="#architecture-keywords" id="toc-architecture-keywords" class="nav-link" data-scroll-target="#architecture-keywords">Architecture Keywords</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+
+
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://avatars2.githubusercontent.com/u/10199860?s=200&amp;v=4.png" class="img-fluid figure-img"></p>
+<figcaption>Kokkos</figcaption>
+</figure>
+</div>
+<section id="installing-and-using-kokkos" class="level1">
+<h1>Installing and Using Kokkos</h1>
+<section id="kokkos-philosophy" class="level2">
+<h2 class="anchored" data-anchor-id="kokkos-philosophy">Kokkos Philosophy</h2>
+<p>Kokkos provides a modern CMake style build system. As C++ continues to develop for C++20 and beyond, CMake is likely to provide the most robust support for C++. Applications heavily leveraging Kokkos are strongly encouraged to use a CMake build system.</p>
+<p>You can either use Kokkos as an installed package (encouraged) or use Kokkos in-tree in your project. Modern CMake is exceedingly simple at a high-level (with the devil in the details). Once Kokkos is installed In your <code>CMakeLists.txt</code> simply use:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cmake code-with-copy"><code class="sourceCode cmake"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">find_package</span>(Kokkos <span class="ot">REQUIRED</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Then for every executable or library in your project:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cmake code-with-copy"><code class="sourceCode cmake"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">target_link_libraries</span>(<span class="bn">myTarget</span> <span class="bn">Kokkos::kokkos</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>That’s it! There is no checking Kokkos preprocessor, compiler, or linker flags. Kokkos propagates all the necessary flags to your project. This means not only is linking to Kokkos easy, but Kokkos itself can actually configure compiler and linker flags for <em>your</em> project. When configuring your project just set:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> cmake <span class="va">${srcdir}</span> <span class="dt">\</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-DKokkos_ROOT</span><span class="op">=</span><span class="va">${kokkos_install_prefix}</span> <span class="dt">\</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-DCMAKE_CXX_COMPILER</span><span class="op">=</span><span class="va">${compiler_used_to_build_kokkos}</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Note: You may need the following if your project requires a minimum CMake version older than 3.12:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cmake code-with-copy"><code class="sourceCode cmake"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">cmake_policy</span>(<span class="ot">SET</span> <span class="ot">CMP0074</span> <span class="ot">NEW</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>If building in-tree, there is no <code>find_package</code>. You can use <code>add_subdirectory(kokkos)</code> with the Kokkos source and again just link with <code>target_link_libraries(Kokkos::kokkos)</code>. The examples in <code>examples/cmake_build_installed</code> and <code>examples/cmake_build_in_tree</code> can help get you started.</p>
+</section>
+<section id="configuring-cmake" class="level2">
+<h2 class="anchored" data-anchor-id="configuring-cmake">Configuring CMake</h2>
+<p>A very basic installation of Kokkos is done with:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> cmake <span class="va">${srcdir}</span> <span class="dt">\</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a> <span class="at">-DCMAKE_CXX_COMPILER</span><span class="op">=</span>g++ <span class="dt">\</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a> <span class="at">-DCMAKE_INSTALL_PREFIX</span><span class="op">=</span><span class="va">${kokkos_install_folder}</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>which builds and installed a default Kokkos when you run <code>make install</code>. There are numerous device backends, options, and architecture-specific optimizations that can be configured, e.g.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> cmake <span class="va">${srcdir}</span> <span class="dt">\</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a> <span class="at">-DCMAKE_CXX_COMPILER</span><span class="op">=</span>g++ <span class="dt">\</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a> <span class="at">-DCMAKE_INSTALL_PREFIX</span><span class="op">=</span><span class="va">${kokkos_install_folder}</span> <span class="dt">\</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a> <span class="at">-DKokkos_ENABLE_OPENMP</span><span class="op">=</span>ON</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>which activates the OpenMP backend. All of the options controlling device backends, options, architectures, and third-party libraries (TPLs) are given below.</p>
+</section>
+<section id="known-issues" class="level2">
+<h2 class="anchored" data-anchor-id="known-issues">Known Issues<a name="KnownIssues"></a></h2>
+<section id="cray" class="level3">
+<h3 class="anchored" data-anchor-id="cray">Cray</h3>
+<ul>
+<li>The Cray compiler wrappers do static linking by default. This seems to break the Kokkos build. You will likely need to set the environment variable <code>CRAYPE_LINK_TYPE=dynamic</code> in order to link correctly. Kokkos warns during configure if this is missing.</li>
+<li>The Cray compiler identifies to CMake as Clang, but it sometimes has its own flags that differ from Clang. We try to include all exceptions, but flag errors may occur in which a Clang-specific flag is passed that the Cray compiler does not recognize.</li>
+</ul>
+</section>
+<section id="fortran" class="level3">
+<h3 class="anchored" data-anchor-id="fortran">Fortran</h3>
+<ul>
+<li>In a mixed C++/Fortran code, CMake will use the C++ linker by default. If you override this behavior and use Fortran as the link language, the link may break because Kokkos adds linker flags expecting the linker to be C++. Prior to CMake 3.18, Kokkos has no way of detecting in downstream projects that the linker was changed to Fortran. From CMake 3.18, Kokkos can use generator expressions to avoid adding flags when the linker is not C++. Note: Kokkos will not add any linker flags in this Fortran case. The user will be entirely on their own to add the appropriate linker flags.</li>
+</ul>
+</section>
+</section>
+<section id="spack" class="level2">
+<h2 class="anchored" data-anchor-id="spack">Spack</h2>
+<p>An alternative to manually building with the CMake is to use the Spack package manager. Make sure you have downloaded <a href="https://github.com/spack/spack">Spack</a>. The easiest way to configure the Spack environment is:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> source <span class="ex">spack/share/spack/setup-env.sh</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>with other scripts available for other shells. You can display information about how to install packages with:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> spack <span class="ex">info</span> kokkos</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">A</span> basic installation would be done as:</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">````</span>bash</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> spack <span class="fu">install</span> kokkos</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Spack allows options and and compilers to be tuned in the install command.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> spack <span class="fu">install</span> kokkos@3.0 %gcc@7.3.0 +openmp</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This example illustrates the three most common parameters to Spack: * Variants: specified with, e.g.&nbsp;<code>+openmp</code>, this activates (or deactivates with, e.g.&nbsp;<code>~openmp</code>) certain options. * Version: immediately following <code>kokkos</code> the <code>@version</code> can specify a particular Kokkos to build * Compiler: a default compiler will be chosen if not specified, but an exact compiler version can be given with the <code>%</code>option.</p>
+<p>For a complete list of Kokkos options, run:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> spack <span class="ex">info</span> kokkos</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>More details can be found in the <a href="../../dependencies/kokkos/Spack.html">Spack README</a></p>
+<section id="spack-development" class="level4">
+<h4 class="anchored" data-anchor-id="spack-development">Spack Development</h4>
+<p>Spack currently installs packages to a location determined by a unique hash. This hash name is not really “human readable”. Generally, Spack usage should never really require you to reference the computer-generated unique install folder. If you must know, you can locate Spack Kokkos installations with:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="op">&gt;</span> spack <span class="fu">find</span> <span class="at">-p</span> kokkos ...</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>where <code>...</code> is the unique spec identifying the particular Kokkos configuration and version.</p>
+<p>A better way to use Spack for doing Kokkos development is the dev-build feature of Spack. For dev-build details, consult the kokkos-spack repository <a href="https://github.com/kokkos/kokkos-spack/blob/master/README.md">README</a>.</p>
+</section>
+</section>
+</section>
+<section id="kokkos-keyword-listing" class="level1">
+<h1>Kokkos Keyword Listing</h1>
+<section id="device-backends" class="level2">
+<h2 class="anchored" data-anchor-id="device-backends">Device Backends</h2>
+<p>Device backends can be enabled by specifying <code>-DKokkos_ENABLE_X</code>.</p>
+<ul>
+<li>Kokkos_ENABLE_CUDA
+<ul>
+<li>Whether to build CUDA backend</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_HPX
+<ul>
+<li>Whether to build HPX backend (experimental)</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_OPENMP
+<ul>
+<li>Whether to build OpenMP backend</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_THREADS
+<ul>
+<li>Whether to build C++ thread backend</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_SERIAL
+<ul>
+<li>Whether to build serial backend</li>
+<li>BOOL Default: ON</li>
+</ul></li>
+<li>Kokkos_ENABLE_HIP (Experimental)
+<ul>
+<li>Whether to build HIP backend</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_OPENMPTARGET (Experimental)
+<ul>
+<li>Whether to build the OpenMP target backend</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+</ul>
+</section>
+<section id="enable-options" class="level2">
+<h2 class="anchored" data-anchor-id="enable-options">Enable Options</h2>
+<p>Options can be enabled by specifying <code>-DKokkos_ENABLE_X</code>.</p>
+<ul>
+<li>Kokkos_ENABLE_AGGRESSIVE_VECTORIZATION
+<ul>
+<li>Whether to aggressively vectorize loops</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_COMPILER_WARNINGS
+<ul>
+<li>Whether to print all compiler warnings</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_CUDA_CONSTEXPR
+<ul>
+<li>Whether to activate experimental relaxed constexpr functions</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_CUDA_LAMBDA
+<ul>
+<li>Whether to activate experimental lambda features</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_CUDA_LDG_INTRINSIC
+<ul>
+<li>Whether to use CUDA LDG intrinsics</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE
+<ul>
+<li>Whether to enable relocatable device code (RDC) for CUDA</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_CUDA_UVM
+<ul>
+<li>Whether to use unified memory (UM) by default for CUDA</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_DEBUG
+<ul>
+<li>Whether to activate extra debug features - may increase compile times</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_DEBUG_BOUNDS_CHECK
+<ul>
+<li>Whether to use bounds checking - will increase runtime</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_DEBUG_DUALVIEW_MODIFY_CHECK
+<ul>
+<li>Debug check on dual views</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_EXAMPLES
+<ul>
+<li>Whether to enable building examples</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_HPX_ASYNC_DISPATCH
+<ul>
+<li>Whether HPX supports asynchronous dispatch</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_IMPL_CUDA_MALLOC_ASYNC
+<ul>
+<li>Whether to enable CudaMallocAsync (requires CUDA Toolkit 11.2). This is an experimental performance feature and currently has issue when using with UCX. See https://github.com/kokkos/kokkos/issues/4228 for more details.</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_LARGE_MEM_TESTS
+<ul>
+<li>Whether to perform extra large memory tests</li>
+<li>BOOL_Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_PROFILING_LOAD_PRINT
+<ul>
+<li>Whether to print information about which profiling tools gotloaded</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ENABLE_TESTS
+<ul>
+<li>Whether to enable test suite</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+</ul>
+</section>
+<section id="other-options" class="level2">
+<h2 class="anchored" data-anchor-id="other-options">Other Options</h2>
+<ul>
+<li>Kokkos_CXX_STANDARD
+<ul>
+<li>The C++ standard for Kokkos to use: c++14, c++17, or c++20. This should be given in CMake style as 14, 17, or 20.</li>
+<li>STRING Default: 14</li>
+</ul></li>
+</ul>
+</section>
+<section id="third-party-libraries-tpls" class="level2">
+<h2 class="anchored" data-anchor-id="third-party-libraries-tpls">Third-party Libraries (TPLs)</h2>
+<p>The following options control enabling TPLs: * Kokkos_ENABLE_HPX * Whether to enable the HPX library * BOOL Default: OFF * Kokkos_ENABLE_HWLOC * Whether to enable the HWLOC library * BOOL Default: Off * Kokkos_ENABLE_LIBNUMA * Whether to enable the LIBNUMA library * BOOL Default: Off * Kokkos_ENABLE_MEMKIND * Whether to enable the MEMKIND library * BOOL Default: Off * Kokkos_ENABLE_LIBDL * Whether to enable the LIBDL library * BOOL Default: On * Kokkos_ENABLE_LIBRT * Whether to enable the LIBRT library * BOOL Default: Off</p>
+<p>The following options control finding and configuring non-CMake TPLs: * Kokkos_CUDA_DIR or CUDA_ROOT * Location of CUDA install prefix for libraries * PATH Default: * Kokkos_HWLOC_DIR or HWLOC_ROOT * Location of HWLOC install prefix * PATH Default: * Kokkos_LIBNUMA_DIR or LIBNUMA_ROOT * Location of LIBNUMA install prefix * PATH Default: * Kokkos_MEMKIND_DIR or MEMKIND_ROOT * Location of MEMKIND install prefix * PATH Default: * Kokkos_LIBDL_DIR or LIBDL_ROOT * Location of LIBDL install prefix * PATH Default: * Kokkos_LIBRT_DIR or LIBRT_ROOT * Location of LIBRT install prefix * PATH Default:</p>
+<p>The following options control <code>find_package</code> paths for CMake-based TPLs: * HPX_DIR or HPX_ROOT * Location of HPX prefix (ROOT) or CMake config file (DIR) * PATH Default:</p>
+</section>
+<section id="architecture-keywords" class="level2">
+<h2 class="anchored" data-anchor-id="architecture-keywords">Architecture Keywords</h2>
+<p>Architecture-specific optimizations can be enabled by specifying <code>-DKokkos_ARCH_X</code>.</p>
+<ul>
+<li>Kokkos_ARCH_NATIVE
+<ul>
+<li>Whether to optimize for the the local CPU architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_AMDAVX
+<ul>
+<li>Whether to optimize for the AMDAVX architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ARMV80
+<ul>
+<li>Whether to optimize for the ARMV80 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ARMV81
+<ul>
+<li>Whether to optimize for the ARMV81 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ARMV8_THUNDERX
+<ul>
+<li>Whether to optimize for the ARMV8_THUNDERX architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ARMV8_TX2
+<ul>
+<li>Whether to optimize for the ARMV8_TX2 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_BDW
+<ul>
+<li>Whether to optimize for the BDW architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_BGQ
+<ul>
+<li>Whether to optimize for the BGQ architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ZEN
+<ul>
+<li>Whether to optimize for the Zen architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ZEN2
+<ul>
+<li>Whether to optimize for the Zen2 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ZEN3
+<ul>
+<li>Whether to optimize for the Zen3 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_HSW
+<ul>
+<li>Whether to optimize for the HSW architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KEPLER30
+<ul>
+<li>Whether to optimize for the KEPLER30 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KEPLER32
+<ul>
+<li>Whether to optimize for the KEPLER32 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KEPLER35
+<ul>
+<li>Whether to optimize for the KEPLER35 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KEPLER37
+<ul>
+<li>Whether to optimize for the KEPLER37 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KNC
+<ul>
+<li>Whether to optimize for the KNC architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_KNL
+<ul>
+<li>Whether to optimize for the KNL architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_MAXWELL50
+<ul>
+<li>Whether to optimize for the MAXWELL50 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_MAXWELL52
+<ul>
+<li>Whether to optimize for the MAXWELL52 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_MAXWELL53
+<ul>
+<li>Whether to optimize for the MAXWELL53 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_PASCAL60
+<ul>
+<li>Whether to optimize for the PASCAL60 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_PASCAL61
+<ul>
+<li>Whether to optimize for the PASCAL61 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_POWER7
+<ul>
+<li>Whether to optimize for the POWER7 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_POWER8
+<ul>
+<li>Whether to optimize for the POWER8 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_POWER9
+<ul>
+<li>Whether to optimize for the POWER9 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ICL
+<ul>
+<li>Whether to optimize for the ICL architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_ICX
+<ul>
+<li>Whether to optimize for the ICX architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_SKL
+<ul>
+<li>Whether to optimize for the SKL architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_SKX
+<ul>
+<li>Whether to optimize for the SKX architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_SNB
+<ul>
+<li>Whether to optimize for the SNB architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_SPR
+<ul>
+<li>Whether to optimize for the SPR architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_TURING75
+<ul>
+<li>Whether to optimize for the TURING75 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_VOLTA70
+<ul>
+<li>Whether to optimize for the VOLTA70 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_VOLTA72
+<ul>
+<li>Whether to optimize for the VOLTA72 architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+<li>Kokkos_ARCH_WSM
+<ul>
+<li>Whether to optimize for the WSM architecture</li>
+<li>BOOL Default: OFF</li>
+</ul></li>
+</ul>
+<section id="license" class="level5">
+<h5 class="anchored" data-anchor-id="license"><a href="https://github.com/kokkos/kokkos/blob/devel/LICENSE">LICENSE</a></h5>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><a href="https://opensource.org/licenses/BSD-3-Clause"><img src="https://img.shields.io/badge/License-BSD%203--Clause-blue.svg" class="img-fluid figure-img" alt="License"></a></p>
+<figcaption>License</figcaption>
+</figure>
+</div>
+<p>Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain rights in this software.</p>
+
+
+</section>
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Contact : <a href="mailto:correa@mbd.rwth-aachen.de"><strong>Alan Correa</strong></a>, <a href="mailto:steldermann@mbd.rwth-aachen.de"><strong>Ingo Steldermann</strong></a></p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+<p><a href="https://www.mbd.rwth-aachen.de"><img src="../../docs/images/logo_mbd.png" class="img-fluid" alt="MBD" width="200"></a></p>
+</div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

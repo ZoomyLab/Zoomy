@@ -1,0 +1,46 @@
+/* css styles */
+
+
+.navbar {
+    background: linear-gradient(to right,  #8eb9e4, #f19fb1, #fabe50, white 90%);
+
+    li a{
+        /* RESET */
+        text-decoration: none;
+        line-height: 1;
+        
+        position: relative;
+        z-index: 0;
+        display: inline-block;
+        padding: 5px 5px;
+        overflow: hidden;
+        color: #333;
+        vertical-align: bottom;
+        transition: color .1s ease-out;
+     }
+
+    li a::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: 0;
+        left: 5px;
+        transform: translateY(calc(100% - 2px));
+        width: 100%;
+        height: 100%;
+        background-image: linear-gradient(#fabe50, #fabe50);
+        transition: transform .1s ease-out;
+    }
+     
+    li a:hover { 
+        color: #fff; 
+    }
+
+    li a:hover::before {
+        transform: translateY(0);
+        transition: transform .1s ease-out;
+    }
+}
+
+
+

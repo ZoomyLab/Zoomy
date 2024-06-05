@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.4.553">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Ingo Steldermann">
+<meta name="dcterms.date" content="2024-06-05">
+
+<title>Introduction to SYM2SIM (Symbolics to Simulations)</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="site_libs/quarto-nav/headroom.min.js"></script>
+<script src="site_libs/clipboard/clipboard.min.js"></script>
+<script src="site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="site_libs/quarto-search/fuse.min.js"></script>
+<script src="site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="./">
+<script src="site_libs/quarto-html/quarto.js"></script>
+<script src="site_libs/quarto-html/popper.min.js"></script>
+<script src="site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="site_libs/quarto-html/anchor.min.js"></script>
+<link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="site_libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="nav-fixed">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="./index.qmd" class="navbar-brand navbar-brand-logo">
+    <img src="./docs/images/logo_mbd.png" alt="" class="navbar-logo">
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+</div>
+          <div id="quarto-search" class="" title="Search"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#aim" id="toc-aim" class="nav-link active" data-scroll-target="#aim">Aim</a></li>
+  <li><a href="#modeling" id="toc-modeling" class="nav-link" data-scroll-target="#modeling">Modeling</a>
+  <ul class="collapse">
+  <li><a href="#example-1-2d-swe" id="toc-example-1-2d-swe" class="nav-link" data-scroll-target="#example-1-2d-swe">Example 1: 2d SWE</a>
+  <ul class="collapse">
+  <li><a href="#mesh" id="toc-mesh" class="nav-link" data-scroll-target="#mesh">Mesh</a></li>
+  <li><a href="#model" id="toc-model" class="nav-link" data-scroll-target="#model">Model</a></li>
+  <li><a href="#automatic-tex-generation" id="toc-automatic-tex-generation" class="nav-link" data-scroll-target="#automatic-tex-generation">Automatic tex generation</a></li>
+  <li><a href="#simulation" id="toc-simulation" class="nav-link" data-scroll-target="#simulation">Simulation</a></li>
+  <li><a href="#postprocessing" id="toc-postprocessing" class="nav-link" data-scroll-target="#postprocessing">Postprocessing</a></li>
+  </ul></li>
+  <li><a href="#example-2-2d-shallow-moments" id="toc-example-2-2d-shallow-moments" class="nav-link" data-scroll-target="#example-2-2d-shallow-moments">Example 2: 2d Shallow Moments</a>
+  <ul class="collapse">
+  <li><a href="#mesh-1" id="toc-mesh-1" class="nav-link" data-scroll-target="#mesh-1">Mesh</a></li>
+  <li><a href="#model-1" id="toc-model-1" class="nav-link" data-scroll-target="#model-1">Model</a></li>
+  <li><a href="#automatic-tex-generation-1" id="toc-automatic-tex-generation-1" class="nav-link" data-scroll-target="#automatic-tex-generation-1">Automatic tex generation</a></li>
+  <li><a href="#simulation-1" id="toc-simulation-1" class="nav-link" data-scroll-target="#simulation-1">Simulation</a></li>
+  <li><a href="#postprocessing-1" id="toc-postprocessing-1" class="nav-link" data-scroll-target="#postprocessing-1">Postprocessing</a></li>
+  </ul></li>
+  <li><a href="#example-3-create-your-own-model" id="toc-example-3-create-your-own-model" class="nav-link" data-scroll-target="#example-3-create-your-own-model">Example 3: Create your own model</a>
+  <ul class="collapse">
+  <li><a href="#model-definition" id="toc-model-definition" class="nav-link" data-scroll-target="#model-definition">Model definition</a></li>
+  <li><a href="#mesh-and-model-construction" id="toc-mesh-and-model-construction" class="nav-link" data-scroll-target="#mesh-and-model-construction">Mesh and model construction</a></li>
+  <li><a href="#automatic-tex-generation-2" id="toc-automatic-tex-generation-2" class="nav-link" data-scroll-target="#automatic-tex-generation-2">Automatic tex generation</a></li>
+  <li><a href="#simulation-2" id="toc-simulation-2" class="nav-link" data-scroll-target="#simulation-2">Simulation</a></li>
+  <li><a href="#postprocessing-2" id="toc-postprocessing-2" class="nav-link" data-scroll-target="#postprocessing-2">Postprocessing</a></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Introduction to SYM2SIM (Symbolics to Simulations)</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Ingo Steldermann </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">June 5, 2024</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="aim" class="level2">
+<h2 class="anchored" data-anchor-id="aim">Aim</h2>
+<p>I am interessted in a numerical framework that can solve systems of the form</p>
+<p><span class="math display">\[
+\partial_t \mathbf{Q} + \partial_{x_i} \mathbf{F}_i = NC_i \partial_{x_i} \mathbf{Q} + \mathbf{S}
+\]</span></p>
+<p>where <span class="math inline">\(\mathbf{F}\)</span> is a flux, <span class="math inline">\(NC\)</span> is a non-conservative matrix, <span class="math inline">\(\mathbf{S}\)</span> is a source term and dimension <span class="math inline">\(i=[1]\)</span> for 1d, <span class="math inline">\(i=[1,2]\)</span> for 2d and <span class="math inline">\(i = [1, 2,3]\)</span> for 3d.</p>
+<p>I have the following design thoughts on the solver</p>
+<ul>
+<li>symbolic model description for the PDE (including boundary conditions) using <code>sympy</code>. This will in turn allow for the following features
+<ul>
+<li>symbolic computation of jacobians (flux, source), eigenvalues, …</li>
+<li>solver backend can be swapped between C, python, … due to <code>sympy</code>’s code generation feature</li>
+</ul></li>
+<li>pre and postprocessing based on python
+<ul>
+<li>gmsh compatible</li>
+<li>hdf5 as intermediate format</li>
+<li>vtk conversion
+<ul>
+<li>pyvista for vtk plotting in jupyter notebooks</li>
+</ul></li>
+</ul></li>
+<li>numerics based on path-conservative 1st and 2nd order schemes for unstructured meshes
+<ul>
+<li>however, it should always be possible to ‘hack’ a 1d python solver for fast development</li>
+</ul></li>
+<li>compute intense parts can be solves via
+<ul>
+<li>python solver (numpy for CPU, jax for GPU)</li>
+<li>simple C solver on CPU/CPU using KOKKOS</li>
+<li>parallel C solver using PETSc (both CPU and GPU)</li>
+</ul></li>
+<li>simple <code>ipywidgets</code> based GUI that runs in jupyter-notebooks. Automatic generation of GUI-elements based on tags defined in the docstrings</li>
+</ul>
+<div id="4f583c96" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Load packages</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pyvista <span class="im">as</span> pv</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.interpolate <span class="im">import</span> griddata</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> copy <span class="im">import</span> deepcopy</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> seaborn </span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>seaborn.set_context(<span class="st">'talk'</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> IPython.display <span class="im">import</span> Math</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"SMS"</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pytest</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> types <span class="im">import</span> SimpleNamespace</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.model <span class="im">import</span> <span class="op">*</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.pysolver.solver <span class="im">import</span> <span class="op">*</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.pysolver.solver <span class="im">import</span> jax_fvm_unsteady_semidiscrete <span class="im">as</span> fvm_unsteady</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.pysolver.ode <span class="im">import</span> RK1</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.misc.io <span class="im">as</span> io</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.pysolver.reconstruction <span class="im">import</span> GradientMesh</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.mesh.mesh <span class="im">as</span> petscMesh</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.postprocessing.postprocessing <span class="im">as</span> postprocessing</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="modeling" class="level1">
+<h1>Modeling</h1>
+<p>Defining the model will be purely on a symbolic level based the <code>sympy</code> package.</p>
+<p>A minimal model is defined by</p>
+<ul>
+<li>flux or quasilinear matrix</li>
+<li>boundary condition</li>
+<li>initial condition</li>
+</ul>
+<p>Optionally, we can also define</p>
+<ul>
+<li>a nonconservative matrix</li>
+<li>the eigenvalues</li>
+<li>a source term</li>
+</ul>
+<p>Let’s start by one of the existing models, e.g.&nbsp;the SWEs</p>
+<section id="example-1-2d-swe" class="level2">
+<h2 class="anchored" data-anchor-id="example-1-2d-swe">Example 1: 2d SWE</h2>
+<section id="mesh" class="level3">
+<h3 class="anchored" data-anchor-id="mesh">Mesh</h3>
+<div id="9e05cfdf" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># mesh = petscMesh.Mesh.from_gmsh(os.path.join(main_dir, "meshes/triangle_2d/mesh_finest.msh"))</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(os.path.join(main_dir, <span class="st">"meshes/quad_2d/mesh_finest.msh"</span>))</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"physical tags in gmsh file: </span><span class="sc">{</span>mesh<span class="sc">.</span>boundary_conditions_sorted_names<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+physical tags in gmsh file: ['right' 'left' 'bottom' 'top']</code></pre>
+</div>
+</div>
+</section>
+<section id="model" class="level3">
+<h3 class="anchored" data-anchor-id="model">Model</h3>
+<div id="36aa8701" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">'left'</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'right'</span>),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">"right"</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'left'</span>),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">'top'</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'bottom'</span>),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">"bottom"</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'top'</span>),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> x[<span class="dv">1</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">&lt;</span> <span class="fl">0.1</span>, <span class="fl">2.</span>, <span class="fl">1.</span>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> ShallowWater2d(</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    settings<span class="op">=</span>{<span class="st">"friction"</span>: [<span class="st">"chezy"</span>]},</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    parameters <span class="op">=</span> {<span class="st">"C"</span>: <span class="fl">1.0</span>, <span class="st">"g"</span>: <span class="fl">9.81</span>, <span class="st">"ez"</span>: <span class="fl">1.0</span>}</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Since we are using symbolic math currently, we have access to all the nice featues of <code>sympy</code>. We can for instance, analytically compute * The Jacobian of the flux/source * Compute the quasilinear matrix based on the definition of a flux function and nonconservative term * Compute the analytical eigenvalues of the problem</p>
+<p>Let’s have a look at the symbolic components of our problem, where</p>
+<p><span class="math display">\[
+\begin{align*}
+&amp; Q_i: \text{state vector} \\
+&amp; n_i: \text{normal components} \\
+&amp; g, C: \text{parameters}
+\end{align*}
+\]</span></p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>There might apprear <span class="math inline">\(10^{-20}\)</span> expressions in the following functions. These are only present for python-based solver backends, since a constant (e.g.&nbsp;0 or 1) cannot be converted to vectorizable expression, which needed for a decent runtime for python code. For C-based solver backends, this workaround is not needed.</p>
+</div>
+</div>
+</section>
+<section id="automatic-tex-generation" class="level3">
+<h3 class="anchored" data-anchor-id="automatic-tex-generation">Automatic tex generation</h3>
+<div id="f56de28d" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Display Model</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Flux \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_flux[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Nonconservative \, matrix \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_nonconservative_matrix[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Eigenvalues'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_eigenvalues)) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Source'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_source)) <span class="op">+</span> <span class="st">'}'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Flux \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}q_{1}\\\frac{\frac{ez g q_{0}^{3}}{2} + q_{1}^{2}}{q_{0}}\\\frac{q_{1} q_{2}}{q_{0}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Nonconservative \, matrix \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Eigenvalues}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}\frac{n_{0} q_{1} + n_{1} q_{2}}{q_{0}}\\\frac{n_{0} q_{0} q_{1} + n_{1} q_{0} q_{2} + \sqrt{ez g q_{0}^{5}} \sqrt{n_{0}^{2} + n_{1}^{2}}}{q_{0}^{2}}\\\frac{n_{0} q_{0} q_{1} + n_{1} q_{0} q_{2} - \sqrt{ez g q_{0}^{5}} \sqrt{n_{0}^{2} + n_{1}^{2}}}{q_{0}^{2}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Source}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}0\\- \frac{1.0 q_{1} \sqrt{q_{1}^{2} + q_{2}^{2}}}{C^{2} q_{0} \left|{q_{0}}\right|}\\- \frac{1.0 q_{2} \sqrt{q_{1}^{2} + q_{2}^{2}}}{C^{2} q_{0} \left|{q_{0}}\right|}\end{matrix}\right]}\)</span></p>
+</div>
+</div>
+</section>
+<section id="simulation" class="level3">
+<h3 class="anchored" data-anchor-id="simulation">Simulation</h3>
+<div id="85ed5af0" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    reconstruction<span class="op">=</span>recon.constant,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    num_flux<span class="op">=</span>flux.LLF(),</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    nc_flux<span class="op">=</span>nonconservative_flux.segmentpath(<span class="dv">1</span>),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    compute_dt<span class="op">=</span>timestepping.adaptive(CFL<span class="op">=</span><span class="fl">.45</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    time_end<span class="op">=</span><span class="fl">1.</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    output_snapshots<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    output_clean_dir<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    output_dir<span class="op">=</span><span class="st">"outputs/output_introduction/swe"</span>,</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>fvm_unsteady(</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    mesh, model, settings, ode_solver_source<span class="op">=</span>RK1</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="postprocessing" class="level3">
+<h3 class="anchored" data-anchor-id="postprocessing">Postprocessing</h3>
+<div id="f5d2ae93" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Postprocessing</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>io.generate_vtk(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="ss">f'</span><span class="sc">{</span>settings<span class="sc">.</span>name<span class="sc">}</span><span class="ss">.h5'</span>))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>out_0 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.0.vtk'</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>out_10 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.10.vtk'</span>))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>out_98 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.98.vtk'</span>))</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>field_names <span class="op">=</span> out_0.cell_data.keys()</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Field names: </span><span class="sc">{</span>field_names<span class="sc">}</span><span class="ss">'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Field names: ['0', '1', '2']</code></pre>
+</div>
+</div>
+<div id="b3ab794a" class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>Plot VTK</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> pv.Plotter(shape<span class="op">=</span>(<span class="dv">1</span>,<span class="dv">3</span>), notebook<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">0</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_0, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=0)'</span>})</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_10, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=0.1)'</span>})</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">2</span>)</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_98, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=1)'</span>})</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>p.show(jupyter_backend<span class="op">=</span><span class="st">'static'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/cell-8-output-1.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="example-2-2d-shallow-moments" class="level2">
+<h2 class="anchored" data-anchor-id="example-2-2d-shallow-moments">Example 2: 2d Shallow Moments</h2>
+<section id="mesh-1" class="level3">
+<h3 class="anchored" data-anchor-id="mesh-1">Mesh</h3>
+<div id="73185f16" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>Read GMSH mesh</summary>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(os.path.join(main_dir, <span class="st">"meshes/quad_2d/mesh_finest.msh"</span>))</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"physical tags in gmsh file: </span><span class="sc">{</span>mesh<span class="sc">.</span>boundary_conditions_sorted_names<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+physical tags in gmsh file: ['right' 'left' 'bottom' 'top']</code></pre>
+</div>
+</div>
+</section>
+<section id="model-1" class="level3">
+<h3 class="anchored" data-anchor-id="model-1">Model</h3>
+<div id="76e9e969" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>level <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">'left'</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'right'</span>),</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">"right"</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'left'</span>),</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">'top'</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'bottom'</span>),</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        BC.Periodic(physical_tag<span class="op">=</span><span class="st">"bottom"</span>, periodic_to_physical_tag<span class="op">=</span><span class="st">'top'</span>),</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic_smm(x):</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span> <span class="op">+</span> <span class="dv">2</span><span class="op">*</span>level, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> x[<span class="dv">1</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">&lt;</span> <span class="fl">0.1</span>, <span class="fl">2.</span>, <span class="fl">1.</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>ic_smm <span class="op">=</span> IC.UserFunction(custom_ic_smm)</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>model_smm <span class="op">=</span> ShallowMoments2d(</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    fields <span class="op">=</span> <span class="dv">3</span> <span class="op">+</span> <span class="dv">2</span><span class="op">*</span>level,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic_smm,</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    settings<span class="op">=</span>{<span class="st">"friction"</span>: [<span class="st">"chezy"</span>]},</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    parameters <span class="op">=</span> {<span class="st">"C"</span>: <span class="fl">1.0</span>, <span class="st">"g"</span>: <span class="fl">9.81</span>, <span class="st">"ez"</span>: <span class="fl">1.0</span>},</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    basis <span class="op">=</span> Basis(basis<span class="op">=</span>Legendre_shifted(order<span class="op">=</span>level))</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="automatic-tex-generation-1" class="level3">
+<h3 class="anchored" data-anchor-id="automatic-tex-generation-1">Automatic tex generation</h3>
+<div id="6795ab3e" class="cell" data-execution_count="10">
+<details class="code-fold">
+<summary>Display Model</summary>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Flux \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_flux[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Nonconservative \, matrix \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_nonconservative_matrix[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Eigenvalues'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_eigenvalues)) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Source'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model.sympy_source)) <span class="op">+</span> <span class="st">'}'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Flux \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}q_{1}\\\frac{\frac{ez g q_{0}^{3}}{2} + q_{1}^{2}}{q_{0}}\\\frac{q_{1} q_{2}}{q_{0}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Nonconservative \, matrix \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0}\\1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0}\\1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0} &amp; 1.0 \cdot 10^{-20} q_{0}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Eigenvalues}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}\frac{n_{0} q_{1} + n_{1} q_{2}}{q_{0}}\\\frac{n_{0} q_{0} q_{1} + n_{1} q_{0} q_{2} + \sqrt{ez g q_{0}^{5}} \sqrt{n_{0}^{2} + n_{1}^{2}}}{q_{0}^{2}}\\\frac{n_{0} q_{0} q_{1} + n_{1} q_{0} q_{2} - \sqrt{ez g q_{0}^{5}} \sqrt{n_{0}^{2} + n_{1}^{2}}}{q_{0}^{2}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Source}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}1.0 \cdot 10^{-20} q_{0}\\- \frac{1.0 q_{1} \sqrt{q_{1}^{2} + q_{2}^{2}}}{C^{2} q_{0} \left|{q_{0}}\right|}\\- \frac{1.0 q_{2} \sqrt{q_{1}^{2} + q_{2}^{2}}}{C^{2} q_{0} \left|{q_{0}}\right|}\end{matrix}\right]}\)</span></p>
+</div>
+</div>
+</section>
+<section id="simulation-1" class="level3">
+<h3 class="anchored" data-anchor-id="simulation-1">Simulation</h3>
+<div id="84e1c76b" class="cell" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    reconstruction<span class="op">=</span>recon.constant,</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    num_flux<span class="op">=</span>flux.LLF(),</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    nc_flux<span class="op">=</span>nonconservative_flux.segmentpath(<span class="dv">1</span>),</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    compute_dt<span class="op">=</span>timestepping.adaptive(CFL<span class="op">=</span><span class="fl">.45</span>),</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    time_end<span class="op">=</span><span class="fl">1.</span>,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    output_snapshots<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    output_clean_dir<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    output_dir<span class="op">=</span><span class="st">"outputs/output_introduction/smm"</span>,</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>fvm_unsteady(</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    mesh, model_smm, settings, ode_solver_source<span class="op">=</span>RK1</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="postprocessing-1" class="level3">
+<h3 class="anchored" data-anchor-id="postprocessing-1">Postprocessing</h3>
+<div id="cff7f88b" class="cell" data-execution_count="12">
+<details class="code-fold">
+<summary>Postprocessing</summary>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>io.generate_vtk(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="ss">f'</span><span class="sc">{</span>settings<span class="sc">.</span>name<span class="sc">}</span><span class="ss">.h5'</span>))</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>out_0 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.0.vtk'</span>))</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>out_49 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.10.vtk'</span>))</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>out_98 <span class="op">=</span> pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), <span class="st">'out.98.vtk'</span>))</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>field_names <span class="op">=</span> out_0.cell_data.keys()</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(field_names)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>['0', '1', '2', '3', '4']</code></pre>
+</div>
+</div>
+<div id="08df794e" class="cell" data-execution_count="13">
+<details class="code-fold">
+<summary>Plot VTK</summary>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> pv.Plotter(shape<span class="op">=</span>(<span class="dv">2</span>,<span class="dv">3</span>), notebook<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">0</span>)</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_0, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=0)'</span>})</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_10, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=0.1)'</span>})</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">0</span>, <span class="dv">2</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_98, scalars<span class="op">=</span><span class="st">'0'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'h(t=1)'</span>})</span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">1</span>, <span class="dv">0</span>)</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_0.copy(), scalars<span class="op">=</span><span class="st">'2'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'lin. moment in x(t=0)'</span>})</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_10.copy(), scalars<span class="op">=</span><span class="st">'2'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'lin. moment in x(t=0.1)'</span>})</span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>p.subplot(<span class="dv">1</span>, <span class="dv">2</span>)</span>
+<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>p.add_mesh(out_98.copy(), scalars<span class="op">=</span><span class="st">'2'</span>, show_edges<span class="op">=</span><span class="va">False</span>, scalar_bar_args<span class="op">=</span>{<span class="st">'title'</span>: <span class="st">'lin. moment in x(t=1)'</span>})</span>
+<span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a>p.enable_parallel_projection()</span>
+<span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a>p.enable_image_style()</span>
+<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a>p.view_xy()</span>
+<span id="cb17-38"><a href="#cb17-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a>p.show(jupyter_backend<span class="op">=</span><span class="st">'static'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/cell-14-output-1.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="example-3-create-your-own-model" class="level2">
+<h2 class="anchored" data-anchor-id="example-3-create-your-own-model">Example 3: Create your own model</h2>
+<section id="model-definition" class="level3">
+<h3 class="anchored" data-anchor-id="model-definition">Model definition</h3>
+<div id="8a450fea" class="cell" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>n_fields <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-fold: false</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-summary: "Construct your own model"</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Euler1D(Model):</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>,</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        boundary_conditions,</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        initial_conditions,</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>        parameters <span class="op">=</span> {},</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        settings<span class="op">=</span>{},</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    ):</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>            dimension<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>            fields<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>            aux_fields<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>            parameters<span class="op">=</span>parameters,</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>            boundary_conditions<span class="op">=</span>boundary_conditions,</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>            initial_conditions<span class="op">=</span>initial_conditions,</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>            <span class="co"># aux_initial_conditions=aux_initial_conditions,</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>            settings<span class="op">=</span>settings,</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_system_variables(<span class="va">self</span>):</span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>        Q <span class="op">=</span> <span class="va">self</span>.variables</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>        rho <span class="op">=</span> Q[<span class="dv">0</span>]</span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>        rho_u <span class="op">=</span> Q[<span class="dv">1</span>]</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>        u <span class="op">=</span> rho_u <span class="op">/</span> rho</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>        E <span class="op">=</span> Q[<span class="dv">2</span>]</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>        e <span class="op">=</span> E<span class="op">/</span>rho <span class="op">-</span> <span class="dv">1</span><span class="op">/</span><span class="dv">2</span> <span class="op">*</span> u<span class="op">**</span><span class="dv">2</span></span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>        gamma <span class="op">=</span> <span class="va">self</span>.parameters.gamma</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span>  (gamma<span class="op">-</span><span class="dv">1</span>)<span class="op">*</span>rho<span class="op">*</span>e</span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> rho, u, e, p, E, gamma</span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> flux(<span class="va">self</span>):</span>
+<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>        flux_x <span class="op">=</span> Matrix([<span class="dv">0</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)])</span>
+<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a>        rho, u, e, p, E, gamma <span class="op">=</span> <span class="va">self</span>.get_system_variables()</span>
+<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a>        flux_x[<span class="dv">0</span>] <span class="op">=</span> rho <span class="op">*</span> u</span>
+<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>        flux_x[<span class="dv">1</span>] <span class="op">=</span> rho <span class="op">*</span> u <span class="op">*</span> u <span class="op">+</span> p</span>
+<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a>        flux_x[<span class="dv">2</span>] <span class="op">=</span> E <span class="op">*</span> u <span class="op">+</span> p <span class="op">*</span> u</span>
+<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> [flux_x]</span>
+<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-44"><a href="#cb18-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-45"><a href="#cb18-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
+<span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a>        <span class="cf">assert</span> <span class="st">"C1"</span> <span class="kw">in</span> <span class="bu">vars</span>(<span class="va">self</span>.parameters)</span>
+<span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a>        S <span class="op">=</span> Matrix([<span class="dv">0</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="va">self</span>.n_fields)])</span>
+<span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a>        rho, u, e, p, E, gamma <span class="op">=</span> <span class="va">self</span>.get_system_variables()</span>
+<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a>        S[<span class="dv">1</span>] <span class="op">=</span> <span class="op">-</span> <span class="va">self</span>.parameters.C1 <span class="op">*</span> p</span>
+<span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a>        S[<span class="dv">2</span>] <span class="op">=</span> <span class="op">-</span> <span class="va">self</span>.parameters.C1 <span class="op">*</span> p <span class="op">*</span> u</span>
+<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> S</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="mesh-and-model-construction" class="level3">
+<h3 class="anchored" data-anchor-id="mesh-and-model-construction">Mesh and model construction</h3>
+<div id="0826fcee" class="cell" data-execution_count="15">
+<details class="code-fold">
+<summary>Initialize model and mesh</summary>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.create_1d((<span class="op">-</span><span class="dv">5</span>, <span class="dv">5</span>), <span class="dv">100</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(physical_tag<span class="op">=</span><span class="st">'left'</span>),</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(physical_tag<span class="op">=</span><span class="st">"right"</span>),</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>model_euler <span class="op">=</span> Euler1D(</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>    boundary_conditions <span class="op">=</span> bcs,</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    initial_conditions <span class="op">=</span> IC.RP(</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>        high<span class="op">=</span><span class="kw">lambda</span> n_field: np.array([<span class="fl">1.</span>, <span class="op">-</span><span class="fl">0.1</span> , <span class="fl">1.</span>]),</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>        low<span class="op">=</span><span class="kw">lambda</span> n_field: np.array([<span class="fl">1.</span>,  <span class="op">+</span><span class="fl">0.1</span>, <span class="fl">1.</span>]),</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>    parameters <span class="op">=</span> {<span class="st">'gamma'</span>: <span class="fl">1.6</span>, <span class="st">'C1'</span>: <span class="fl">0.</span>},</span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="automatic-tex-generation-2" class="level3">
+<h3 class="anchored" data-anchor-id="automatic-tex-generation-2">Automatic tex generation</h3>
+<div id="342689d6" class="cell" data-execution_count="16">
+<details class="code-fold">
+<summary>Display model</summary>
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Flux \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model_euler.sympy_flux[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Nonconservative \, matrix \, in \, x'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model_euler.sympy_nonconservative_matrix[<span class="dv">0</span>])) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Eigenvalues'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model_euler.sympy_eigenvalues)) <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> <span class="st">'Source'</span> <span class="op">+</span> <span class="st">'}'</span>))</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>display(Math(<span class="vs">r'\large{'</span> <span class="op">+</span> sympy.latex(sympy.simplify(model_euler.sympy_source)) <span class="op">+</span> <span class="st">'}'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Flux \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}q_{1}\\\frac{q_{1}^{2} + \left(\gamma - 1\right) \left(q_{0} q_{2} - 0.5 q_{1}^{2}\right)}{q_{0}}\\\frac{q_{1} \left(q_{0} q_{2} + \left(\gamma - 1\right) \left(q_{0} q_{2} - 0.5 q_{1}^{2}\right)\right)}{q_{0}^{2}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Nonconservative \, matrix \, in \, x}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Eigenvalues}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}\frac{n_{0} q_{1}}{q_{0}}\\\frac{n_{0} \left(2 q_{1} - \sqrt{2} \sqrt{\gamma \left(2 \gamma q_{0} q_{2} - \gamma q_{1}^{2} - 2 q_{0} q_{2} + q_{1}^{2}\right)}\right)}{2 q_{0}}\\\frac{n_{0} \left(2 q_{1} + \sqrt{2} \sqrt{\gamma \left(2 \gamma q_{0} q_{2} - \gamma q_{1}^{2} - 2 q_{0} q_{2} + q_{1}^{2}\right)}\right)}{2 q_{0}}\end{matrix}\right]}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{Source}\)</span></p>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p><span class="math inline">\(\displaystyle \large{\left[\begin{matrix}0\\- \frac{C_{1} \left(\gamma - 1\right) \left(q_{0} q_{2} - 0.5 q_{1}^{2}\right)}{q_{0}}\\- \frac{C_{1} q_{1} \left(\gamma - 1\right) \left(q_{0} q_{2} - 0.5 q_{1}^{2}\right)}{q_{0}^{2}}\end{matrix}\right]}\)</span></p>
+</div>
+</div>
+</section>
+<section id="simulation-2" class="level3">
+<h3 class="anchored" data-anchor-id="simulation-2">Simulation</h3>
+<div id="3f069b1e" class="cell" data-execution_count="17">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    reconstruction<span class="op">=</span>recon.constant,</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    num_flux<span class="op">=</span>flux.LLF(),</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    nc_flux<span class="op">=</span>nonconservative_flux.segmentpath(<span class="dv">1</span>),</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    compute_dt<span class="op">=</span>timestepping.adaptive(CFL<span class="op">=</span><span class="fl">.9</span>),</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    time_end<span class="op">=</span><span class="fl">1.</span>,</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    output_snapshots<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>    output_clean_dir<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    output_dir<span class="op">=</span><span class="st">"outputs/output_introduction/euler"</span>,</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>fvm_unsteady(</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>    mesh, model_euler, settings, ode_solver_source<span class="op">=</span>RK1</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="66a182c6" class="cell" data-execution_count="18">
+<details class="code-fold">
+<summary>Postprocessing</summary>
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>filepath <span class="op">=</span> os.path.join(settings.output_dir, <span class="st">'Simulation.h5'</span>)</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>X, Q, Qaux, T <span class="op">=</span> io.load_timeline_of_fields_from_hdf5(filepath)</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="co"># remove the boundary points</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>Q <span class="op">=</span> Q[:, :, :<span class="op">-</span><span class="dv">2</span>]</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> X[:<span class="op">-</span><span class="dv">2</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="postprocessing-2" class="level3">
+<h3 class="anchored" data-anchor-id="postprocessing-2">Postprocessing</h3>
+<div id="2db99daa" class="cell" data-execution_count="19">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">8</span>))</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>i_time <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">0</span>].plot(X, Q[i_time, <span class="dv">0</span>, :], label<span class="op">=</span><span class="st">'rho'</span>)</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">0</span>].plot(X, Q[i_time, <span class="dv">1</span>, :], label<span class="op">=</span><span class="st">'rho u'</span>)</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">0</span>].plot(X, Q[i_time, <span class="dv">2</span>, :], label<span class="op">=</span><span class="st">'E'</span>)</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">0</span>].set_title(<span class="ss">f'Time: </span><span class="sc">{</span>T[i_time]<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>i_time <span class="op">=</span> <span class="op">-</span><span class="dv">1</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">1</span>].plot(X, Q[i_time, <span class="dv">0</span>, :], label<span class="op">=</span><span class="st">'rho'</span>)</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">1</span>].plot(X, Q[i_time, <span class="dv">1</span>, :], label<span class="op">=</span><span class="st">'rho u'</span>)</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">1</span>].plot(X, Q[i_time, <span class="dv">2</span>, :], label<span class="op">=</span><span class="st">'E'</span>)</span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>ax[<span class="dv">1</span>].set_title(<span class="ss">f'Time: </span><span class="sc">{</span>np<span class="sc">.</span><span class="bu">round</span>(T[i_time], <span class="dv">1</span>)<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="index_files/figure-html/cell-20-output-1.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+
+
+</section>
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Contact : <a href="mailto:correa@mbd.rwth-aachen.de"><strong>Alan Correa</strong></a>, <a href="mailto:steldermann@mbd.rwth-aachen.de"><strong>Ingo Steldermann</strong></a></p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+<p><a href="https://www.mbd.rwth-aachen.de"><img src="./docs/images/logo_mbd.png" class="img-fluid" alt="MBD" width="200"></a></p>
+</div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
