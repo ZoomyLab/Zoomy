@@ -1,0 +1,31 @@
+## Installation
+
+1. Clone the meshes folder
+```
+git clone https://git-ce.rwth-aachen.de/ingo.steldermann/sfs-gmsh
+```
+
+2. Rename the meshes folder
+```
+mv shs-gmsh meshes
+```
+
+3. Ensure that you have a running version of PETSc. Change the environment path in to PETSc and this project folder in the `environment.yml`. You need to change the following lines
+```
+  PETSC_DIR: '/home/ingo/petsc'
+  PETSC_ARCH: 'linux-gnu'
+  SMS: '/home/ingo/Git/SMM/shallow-moments-simulation'
+  PYTHONPATH: ':/home/ingo/Git/SMM/shallow-moments-simulation'
+```
+
+4. Install the conda environment
+
+5. activate the environment
+```
+conda activate sms
+```
+
+6. Play around with `index.ipynb` or the testcases in `tests/simulations/test_smm.py`
+
+The output is written as vtk files in `output/<output_dir of the simulation>` and can be opened with paraview.
+

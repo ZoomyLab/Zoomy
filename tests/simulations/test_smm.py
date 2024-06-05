@@ -8,7 +8,7 @@ import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.pysolver.ode import RK1
 import library.misc.io as io
-from library.pysolver.reconstruction import GradientMesh
+# from library.pysolver.reconstruction import GradientMesh
 import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
@@ -53,6 +53,7 @@ def test_smm_wave():
     # ic = IC.Constant(constants = lambda n_fields: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
     ic = IC.UserFunction(custom_ic)
     icaux = IC.UserFunction(custom_ic_aux)
+
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
@@ -125,6 +126,7 @@ def test_smm_1d():
         compute_dt=timestepping.constant(dt = 0.01),
         time_end=1.0,
         output_snapshots=100,
+        output_dir = 'outputs/output_smm_1d'
     )
 
     bc_tags = ["left", "right"]
@@ -137,11 +139,10 @@ def test_smm_1d():
         ]
     )
     ic = IC.RP(
-        left=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
-        right=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
+        high=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
+        low=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
     )
     model = ShallowMoments(
-        dimension=1,
         fields=2 + level,
         aux_fields=0,
         parameters=settings.parameters,
@@ -149,10 +150,13 @@ def test_smm_1d():
         initial_conditions=ic,
         settings={"eigenvalue_mode": "symbolic", "friction": ["chezy", "newtonian"]},
     )
-    mesh = Mesh.create_1d((-1, 1), 100)
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 def test_sindy_generate_reference_data():
     level = 0
@@ -211,6 +215,7 @@ def test_smm_2d(mesh_type):
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=1.0,
         output_snapshots=100,
+        output_dir='outputs/output_smm_2d'
     )
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -223,10 +228,10 @@ def test_smm_2d(mesh_type):
         ]
     )
     ic = IC.RP(
-        left=lambda n_field: np.array(
+        high=lambda n_field: np.array(
             [2.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
         ),
-        right=lambda n_field: np.array(
+        low=lambda n_field: np.array(
             [1.0, 0.0, 0.0] + [0.0 for l in range(2 * level)]
         ),
     )
@@ -238,15 +243,17 @@ def test_smm_2d(mesh_type):
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy", "newtonian"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
-        mesh_type,
     )
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
 @pytest.mark.critical
@@ -302,6 +309,7 @@ def test_inflowoutflow_2d():
 @pytest.mark.unfinished
 def test_steffler():
     level = 2
+    offset = level+1
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 16.0, "nu": 0.0016},
@@ -310,36 +318,38 @@ def test_steffler():
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=30.0,
         output_snapshots=100,
+        output_dir = 'outputs/steffler',
     )
 
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh"), "quad"
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh")
     )
 
     h0 = 0.061
     vin = -0.36
-    inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
-    inflow_dict[1] = h0 * vin
-    outflow_dict = {0: h0}
+    inflow_dict = {i: "0.0" for i in range(0, 2 * (1 + level) + 1)}
+    inflow_dict[0] = f"{h0}"
+    inflow_dict[1] = f"{h0 * vin}"
+    outflow_dict = {}
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="wall"),
+            BC.Wall(physical_tag="wall", momentum_field_indices=[[1 + i, 1+offset+i] for i in range(level+1)], wall_slip=0.),
             BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
             BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
-    # ic = IC.Constant(constants=lambda n_fields:np.array([h0, 0.0] + [0. for i in range(n_fields-2)]))
-    folder = "./output_lvl1_friction"
-    map_fields = {0: 0, 1: 1, 2: 2, 3: 4, 4: 5}
-    ic = IC.RestartFromHdf5(
-        path_to_old_mesh=folder + "/mesh.hdf5",
-        path_to_fields=folder + "/fields.hdf5",
-        mesh_new=mesh,
-        mesh_identical=True,
-        map_fields=map_fields,
-    )
+    ic = IC.Constant(constants=lambda n_fields:np.array([h0, 0.0] + [0. for i in range(n_fields-2)]))
+    # folder = "./output_lvl1_friction"
+    # map_fields = {0: 0, 1: 1, 2: 2, 3: 4, 4: 5}
+    # ic = IC.RestartFromHdf5(
+    #     path_to_old_mesh=folder + "/mesh.hdf5",
+    #     path_to_fields=folder + "/fields.hdf5",
+    #     mesh_new=mesh,
+    #     mesh_identical=True,
+    #     map_fields=map_fields,
+    # )
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
@@ -348,10 +358,13 @@ def test_steffler():
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
     )
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
 @pytest.mark.critical
@@ -1449,10 +1462,20 @@ def test_eccomas_hyperbolicity():
 
 
 if __name__ == "__main__":
+
+    ### TESTED
+
     # test_smm_1d()
-    # test_sindy_generate_reference_data()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
+    test_steffler()
+
+    # test_ijshs24()
+    # test_eccomas_hyperbolicity()
+
+
+    ### UNTESTED
+    # test_sindy_generate_reference_data()
     # test_inflowoutflow_2d()
     # test_steffler()
     # test_channel_with_hole_2d()
@@ -1468,6 +1491,3 @@ if __name__ == "__main__":
     # test_petsc('quad')
     # test_petsc('triangle')
     # test_enforce_w_bc()
-    # test_ijshs24()
-    test_eccomas_hyperbolicity()
-
