@@ -69,8 +69,10 @@ class ShearShallowFlow(Model):
         P11 = self.variables[2]
         p = self.parameters
         flux_x[0] = hu
-        flux_x[1] = hu * u + p.g * h**2/2 + h* P11
-        flux_x[2] = 0.
+        # flux_x[1] = hu * u + p.g * h**2/2 + h* P11
+        flux_x[1] = hu * u + p.g * h**2/2 + P11
+        # flux_x[2] = 0.
+        flux_x[2] = P11 * u
 
         return [flux_x]
 
@@ -83,7 +85,7 @@ class ShearShallowFlow(Model):
 
         nc_x[2, 0] = 0
         nc_x[2, 1] = 2*P11
-        nc_x[2, 2] = u
+        nc_x[2, 2] = 0
         return [nc_x]
 
     def source(self):
@@ -140,7 +142,7 @@ class ShearShallowFlow(Model):
 
 
         out[1] = -h * p.g * grad_b[0] - p.Cr * u * abs_u
-        out[2] = D11
+        out[2] = Q
         return out
 
 

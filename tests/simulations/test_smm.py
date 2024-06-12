@@ -1324,7 +1324,8 @@ def test_eccomas_hyperbolicity():
         low=lambda n_field: np.array([.01, 0.0, a1_low, a2_high] + [0.0 for l in range(level-2)]),
     )
 
-    model_SMMWS = ShallowMomentsSSFEnergy(
+    # model_SMMWS = ShallowMomentsSSFEnergy(
+    model_SMMWS = ShallowMomentsSSF(
         dimension=1,
         fields=2 + level,
         aux_fields=0,
@@ -1468,10 +1469,10 @@ if __name__ == "__main__":
     # test_smm_1d()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
-    test_steffler()
+    # test_steffler()
 
     # test_ijshs24()
-    # test_eccomas_hyperbolicity()
+    test_eccomas_hyperbolicity()
 
 
     ### UNTESTED

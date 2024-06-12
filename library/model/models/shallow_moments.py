@@ -218,6 +218,120 @@ class BasisNoHOM(Basis):
         return 0
         # return super()._B(k, i, j)
 
+class ShallowMomentsAugmentedSSF(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        aux_initial_conditions=IC.Constant(),
+        dimension=1,
+        fields=3,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+        basis=Basis()
+    ):
+        self.basis = basis
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        self.levels = self.n_fields - 2
+        self.basis.compute_matrices(self.levels)
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            aux_initial_conditions=aux_initial_conditions,
+            settings={**settings_default, **settings},
+        )
+   
+    def get_alphas(self): 
+        Q = self.variables
+        h = Q[0]
+        # exlude u0 and P
+        ha = Q[2:-1]
+        P = Q[-1]
+        sum_aiMii = 0
+        N = self.levels
+        for i, hai in enumerate(ha):
+            sum_aiMii += hai * self.basis.M[i+1, i+1] / h
+        
+        aN = sympy.sqrt((P - h * sum_aiMii) / (h * self.basis.M[N, N]))
+        # now I want to include u0
+        ha = Q[1:]
+        ha[-1] = aN * h
+        return ha
+
+
+    def flux(self):
+        flux = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.get_alphas()
+        P11 = self.variables[-1]
+        p = self.parameters
+        flux[0] = ha[0]
+        flux[1] = p.g * p.ez * h * h / 2
+        for k in range(self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    # TODO avoid devision by zero 
+                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+        flux[-1] = 2* P11 * ha[0] / h
+        return [flux]
+
+    def nonconservative_matrix(self):
+        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.get_alphas()
+        P11 = self.variables[-1]
+        p = self.parameters
+        um = ha[0]/h
+        # nc[1, 0] = - p.g * p.ez * h 
+        for k in range(1, self.levels+1):
+            nc[k+1, k+1] += um
+        for k in range(self.levels+1):
+            for i in range(1, self.levels+1):
+                for j in range(1, self.levels+1):
+                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+        for k in range(nc.shape[1]):
+            nc[-1, k] = 0
+        nc[-1, 1] = - P11
+        nc[-1, -1] = + P11
+        return [nc]
+
+    def eigenvalues(self):
+        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        for d in range(1, self.dimension):
+            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+        # alpha_erase = self.variables[2:]
+        # for alpha_i in alpha_erase:
+        #     A = A.subs(alpha_i, 0)
+        return eigenvalue_dict_to_matrix(A.eigenvals())
+
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
+
+
 class ShallowMoments(Model):
     """
     Shallow Moments 1d
@@ -269,7 +383,7 @@ class ShallowMoments(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux[k+1] +=  ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
         return [flux]
 
     def nonconservative_matrix(self):
@@ -284,7 +398,7 @@ class ShallowMoments(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc[k+1, i+1] -=  ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
         return [nc]
 
     def eigenvalues(self):
@@ -378,6 +492,25 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for l in range(1+self.levels):
                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+
+    def chezy_ssf(self):
+        """
+        :gui:
+            - requires_parameter: ('C', 1000.0)
+        """
+        assert "Cf" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        for i in range(1+self.levels):
+            for j in range(1+self.levels):
+                tmp += ha[i] * ha[j] / h / h
+        sqrt = sympy.sqrt(tmp)
+        for k in range(1+self.levels):
+            for l in range(1+self.levels):
+                out[1+k] += -(p.Cf * self.basis.M[k,k]) * ha[l] * sqrt / h 
         return out
 
     def shear(self):
