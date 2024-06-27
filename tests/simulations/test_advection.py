@@ -216,7 +216,7 @@ def test_reconstruction(mesh_type):
 
     def custom_ic(x):
         Q = np.zeros(1, dtype=float)
-        Q[0] = (x[0] + 2*x[1])
+        Q[0] = 1.*x[0]
         return Q
 
     ic = IC.UserFunction(custom_ic)

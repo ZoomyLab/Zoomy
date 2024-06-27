@@ -371,15 +371,18 @@ class Mesh:
         #       [y_{i+1, j} - y_{i,j}, y_{i-1, j} - y_{i,j}, y_{i, j+1} - y_{i,j}, y_{i, j-1} - y_{i,j}]]  \in \mathbb{R}^{4x2}
         # S = [S_x, S_y] \mathbb{R}^{2}
         # solve DU = DX \dot S via normal equation
-        # A = (DX.T \dot DX)^{-1} DX \mathbb{R}^{2x4}
+        # A = (DX.T \dot DX)^{-1} DX.T \mathbb{R}^{2x4}
         # so the solution is given by S = A \dot DU
         # the vectorized version is more complicated. I have the vectorization (...) in the first dimension of size n_cells
-        # However, I do not want to apply the matrix vector product on DU, but rather on a scalar field q \in \mathbb{R}^{n_cells}. This requires the need of
-        # a discretization matrix D \in \mathbb{R}^{n_cells x 4 x n_cells}, such that Dq = DU \in \mathbb{n_cells x 4}, where the first dimension is the dimension of vectorization
+        # However, I do not want to apply the matrix vector product on DU (such that I can get the reconstruction with a single matrix vector product in the solver), but rather on a scalar field q \in \mathbb{R}^{n_cells}. This requires the need of a discretization matrix D \in \mathbb{R}^{n_cells x 4 x n_cells}, such that Dq = DU \in \mathbb{n_cells x 4}, where the first dimension is the dimension of vectorization
+
+        ### NON_VECTORIZED CASE
         cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
         lsq_A = []
         lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
         for i_c, c in enumerate(range(cgStart, cgEnd )):
+
+            ### GET NEIGHBORHOOD
             neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
             assert not (i_c == neighbors).any()
             n_neighbors = neighbors.shape[0]
@@ -389,12 +392,15 @@ class Mesh:
                 neighbors = np.union1d(neighbors_of_neighbor, neighbors)
                 n_neighbors = neighbors.shape[0]
             cell_neighbors[i_c, :n_neighbors]= neighbors
+
             # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
             dX = np.zeros((n_neighbors, dim), dtype=float)
             mat = np.zeros((dim , n_faces_per_cell+1), dtype=float)
             for i_neighbor, neighbor in enumerate(neighbors):
-                lsq_D[i_c, i_neighbor, i_c] = -1.
-                lsq_D[i_c, i_neighbor, neighbor] = 1.
+                # 
+                i_data_point = i_neighbor
+                lsq_D[i_c, i_data_point, i_c] = -1.
+                lsq_D[i_c, i_data_point, neighbor] = 1.
                 # lsq_D[neighbor, i_neighbor, i_c] = 1.
                 for d in range(dim):
                     dX[i_neighbor, d ] = cell_centers[neighbor][d] - cell_centers[i_c][d]
@@ -403,6 +409,35 @@ class Mesh:
         lsq_A = np.array(lsq_A, dtype=float)
         # TODO: sparse matrix.
         lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
+
+        ### VECTORIZED CASE
+        # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
+        # lsq_A = []
+        # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
+        # for i_c, c in enumerate(range(cgStart, cgEnd )):
+        #     neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
+        #     assert not (i_c == neighbors).any()
+        #     n_neighbors = neighbors.shape[0]
+        #     if n_neighbors == 1:
+        #         neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
+        #         assert len(neighbors_of_neighbor) == n_faces_per_cell
+        #         neighbors = np.union1d(neighbors_of_neighbor, neighbors)
+        #         n_neighbors = neighbors.shape[0]
+        #     cell_neighbors[i_c, :n_neighbors]= neighbors
+        #     # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
+        #     dX = np.zeros((n_neighbors, dim), dtype=float)
+        #     mat = np.zeros((dim , n_faces_per_cell+1), dtype=float)
+        #     for i_neighbor, neighbor in enumerate(neighbors):
+        #         lsq_D[i_c, i_neighbor, i_c] = -1.
+        #         lsq_D[i_c, i_neighbor, neighbor] = 1.
+        #         # lsq_D[neighbor, i_neighbor, i_c] = 1.
+        #         for d in range(dim):
+        #             dX[i_neighbor, d ] = cell_centers[neighbor][d] - cell_centers[i_c][d]
+        #     mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
+        #     lsq_A.append(mat)
+        # lsq_A = np.array(lsq_A, dtype=float)
+        # # TODO: sparse matrix.
+        # lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
 
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
