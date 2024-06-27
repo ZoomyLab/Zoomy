@@ -35,3 +35,7 @@ _output
 _output*
 _freeze
 *.vscode*
+
+# outputs
+*.h5
+*.pkl
