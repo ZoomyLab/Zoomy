@@ -492,6 +492,7 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for l in range(1+self.levels):
                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+        return out
 
     def chezy_ssf(self):
         """
