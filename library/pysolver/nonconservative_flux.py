@@ -47,7 +47,30 @@ def segmentpath_ssf(integration_order=3):
         return Dp, False
     return nc_flux
 
+def segmentpath_1d(integration_order=3):
+    # compute integral of NC-Matrix int NC(Q(s)) ds for segment path Q(s) = Ql + (Qr-Ql)*s for s = [0,1]
+    samples, weights = leggauss(integration_order)
+    # shift from [-1, 1] to [0,1]
+    samples = 0.5 * (samples + 1)
+    weights *= 0.5
 
+    def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
+        dim = normal.shape[0]
+        assert dim == 1
+        n_fields = Qi.shape[0]
+
+        def B(s):
+            out = np.zeros((n_fields, n_fields), dtype=float)
+            tmp = np.zeros_like(out)
+            for d in range(dim):
+                tmp = model.nonconservative_matrix[0](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
+            return out
+
+        Bint = np.zeros((n_fields, n_fields))
+        for w, s in zip(weights, samples):
+            Bint += w * B(s)
+        return 0.5 * np.einsum('ij, j->i', Bint, (Qj-Qi)), False
+    return nc_flux
 
 
 def segmentpath(integration_order=3):
@@ -81,6 +104,36 @@ def segmentpath(integration_order=3):
         return -0.5 * Bint@(Qj-Qi), False
         # return -0.5 * np.einsum('ij..., j...->i...', Bint, (Qj-Qi)), False
 
+    def nc_flux_quasilinear(Qi, Qj, Qauxi, Qauxj, parameters, normal, svA, svB, vol_face, dt, model):
+        dim = normal.shape[0]
+        n_fields = Qi.shape[0]
+
+        n_cells = Qi.shape[1]
+        def B(s):
+            out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
+            # out = np.zeros((n_fields, n_fields), dtype=float)
+            tmp = np.zeros_like(out)
+            for d in range(dim):
+                tmp = model.quasilinear_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
+                out = tmp * normal[d]
+            return out
+
+        Bint = np.zeros((n_fields, n_fields, n_cells))
+        for w, s in zip(weights, samples):
+            Bint += w * B(s)
+
+
+        Bint_sq = np.einsum('ij..., jk...->ik...', Bint, Bint)
+        I = np.empty_like(Bint)
+        for i in range(n_fields):
+            I[i, i, :] = 1.
+
+        # Am = 0.5* Bint - 2*np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 2/(dt * vol_face), I)
+        Am = 0.5* Bint - np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 2/(dt * vol_face), I)  -1/4 * (dt * vol_face)/(svA + svB) * Bint_sq
+
+        return np.einsum('ij..., j...->i...', Am, (Qj-Qi)), False
+
+
     def nc_flux_vectorized(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
         n_fields = Qi.shape[0]
@@ -106,4 +159,5 @@ def segmentpath(integration_order=3):
         return -0.5 * np.einsum('ij..., j...->i...', Bint, (Qj-Qi)), False
 
     # return nc_flux
-    return nc_flux_vectorized
+    # return nc_flux_vectorized
+    return nc_flux_quasilinear

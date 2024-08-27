@@ -9,6 +9,7 @@ import inspect
 import pytest
 from copy import deepcopy
 from scipy import interpolate
+from scipy.optimize import least_squares as lsq
 import sympy
 from sympy import Symbol, Matrix, lambdify
 # from sympy import *
@@ -99,7 +100,7 @@ class Legendre_shifted:
 
 
 class Spline(Legendre_shifted):
-    def basis_definition(self, degree=1, knots = [0, 0, 0.5, 1, 1]):
+    def basis_definition(self, degree=1, knots = [0, 0, 0.001, 1, 1]):
         x = Symbol('x')
         basis = bspline_basis_set(degree, knots, x)
         return basis
@@ -147,28 +148,135 @@ class Basis():
                 for j in range(level+1):
                     self.A[k, i, j] = self._A(k, i, j)
                     self.B[k, i, j] = self._B(k, i, j)
-    
-    def enforce_boundary_conditions(self, enforced_basis=[-2, -1], rhs=np.zeros(2)):
+
+    def enforce_boundary_conditions_lsq(self, rhs=np.zeros(2), dim=1):
         level = len(self.basis.basis)-1
         constraint_bottom = [self.basis.eval(i, 0.) for i in range(level+1)]
         constraint_top = [diff(self.basis.eval(i, x), x).subs(x, 1.) for i in range(level+1)]
         A = Matrix([constraint_bottom, constraint_top])
+
+        I = np.linspace(0, level, 1+level, dtype=int)
+        I_enforce = I[1:]
+        rhs = np.zeros(2)
+        # rhs = np.zeros(level)
+        I_free = np.delete(I, I_enforce)
+        A_enforce = A[:, list(I_enforce)]
+        A_free = np.array(A[:, list(I_free)], dtype=float)
+        AtA = A_enforce.T @ A_enforce
+        reg = 10**(-6)
+        A_enforce_inv = np.array((AtA + reg * np.eye(AtA.shape[0])).inv(), dtype=float)
+        def f_1d(Q):
+            for i, q in enumerate(Q.T):
+                # alpha_enforce = q[I_enforce+1]
+                alpha_free = q[I_free+1]
+                b = rhs -np.dot(A_free, alpha_free)
+                # b = rhs 
+                result =  np.dot(A_enforce_inv, A_enforce.T @ b)
+                alpha = 1.0
+                Q[I_enforce+1, i] = (1-alpha) * Q[I_enforce+1, i] +  (alpha) * result
+            return Q
+        def f_2d(Q):
+            i1 = [[0] + [i+1 for i in range(1+level)]]
+            i2 = [[0] + [i+1+1+level for i in range(1+level)]]
+            Q1 = Q[i1]
+            Q2 = Q[i2]
+            Q1 = f_1d(Q1)
+            Q2 = f_1d(Q2)
+            Q[i1] = Q1
+            Q[i2] = Q2
+            return Q
+        if dim==1:
+            return f_1d
+        elif dim==2:
+            return f_2d
+        else:
+            assert False
+
+    def enforce_boundary_conditions_lsq2(self, rhs=np.zeros(2), dim=1):
+        level = len(self.basis.basis)-1
+        constraint_bottom = [self.basis.eval(i, 0.) for i in range(level+1)]
+        constraint_top = [diff(self.basis.eval(i, x), x).subs(x, 1.) for i in range(level+1)]
+        A = Matrix([constraint_bottom, constraint_top])
+
+        I = np.linspace(0, level, 1+level, dtype=int)
+        I_enforce = I[1:]
+        rhs = np.zeros(2)
+        # rhs = np.zeros(level)
+        I_free = np.delete(I, I_enforce)
+        A_enforce = A[:, list(I_enforce)]
+        A_free = np.array(A[:, list(I_free)], dtype=float)
+        def obj(alpha0, lam):
+            def f(alpha):
+                return  np.sum((alpha-alpha0)**2) + lam * np.sum(np.array(np.dot(A, alpha)**2, dtype=float))
+            return f
+        def f_1d(Q):
+            for i, q in enumerate(Q.T):
+                h = q[0] 
+                alpha = q[1:] / h 
+                f = obj(alpha, 0.1)
+                result = lsq(f, alpha)
+                Q[1:,i] =  h* result.x
+            return Q
+        def f_2d(Q):
+            i1 = [[0] + [i+1 for i in range(1+level)]]
+            i2 = [[0] + [i+1+1+level for i in range(1+level)]]
+            Q1 = Q[i1]
+            Q2 = Q[i2]
+            Q1 = f_1d(Q1)
+            Q2 = f_1d(Q2)
+            Q[i1] = Q1
+            Q[i2] = Q2
+            return Q
+        if dim==1:
+            return f_1d
+        elif dim==2:
+            return f_2d
+        else:
+            assert False
+    
+    def enforce_boundary_conditions(self, enforced_basis=[-2, -1], rhs=np.zeros(2), dim=1):
+        level = len(self.basis.basis)-1
+        constraint_bottom = [self.basis.eval(i, 0.) for i in range(level+1)]
+        constraint_top = [diff(self.basis.eval(i, x), x).subs(x, 1.) for i in range(level+1)]
+        A = Matrix([constraint_bottom, constraint_top][:len(enforced_basis)])
+
+        # test to only constrain bottom
+        # A = Matrix([constraint_bottom])
+        # enforced_basis = [-1]
+        # rhs=np.zeros(1)
+
         I = np.linspace(0, level, 1+level, dtype=int)
         I_enforce = I[enforced_basis]
         I_free = np.delete(I, I_enforce)
         A_enforce = A[:, list(I_enforce)]
         A_free = np.array(A[:, list(I_free)], dtype=float)
         A_enforce_inv = np.array(A_enforce.inv(), dtype=float)
-        def f(Q):
-            for i, q in enumerate(Q):
-                q_enforce = q[I_enforce+1]
-                q_free = q[I_free+1]
-                b = rhs - np.dot(A_free, q_free)
+        def f_1d(Q):
+            for i, q in enumerate(Q.T):
+                alpha_enforce = q[I_enforce+1]
+                alpha_free = q[I_free+1]
+                b = rhs - np.dot(A_free, alpha_free)
                 result =  np.dot(A_enforce_inv, b)
-                Q[i, I_enforce+1] = result
+                alpha = 1.0
+                Q[I_enforce+1, i] = (1-alpha) * Q[I_enforce+1, i] +  (alpha) * result
             return Q
-        return f
-            
+        def f_2d(Q):
+            i1 = [[0] + [i+1 for i in range(1+level)]]
+            i2 = [[0] + [i+1+1+level for i in range(1+level)]]
+            Q1 = Q[i1]
+            Q2 = Q[i2]
+            Q1 = f_1d(Q1)
+            Q2 = f_1d(Q2)
+            Q[i1] = Q1
+            Q[i2] = Q2
+            return Q
+        if dim==1:
+            return f_1d
+        elif dim==2:
+            return f_2d
+        else:
+            assert False
+
         
 
     """ 
@@ -217,6 +325,143 @@ class BasisNoHOM(Basis):
             return super()._B(k, i, j)
         return 0
         # return super()._B(k, i, j)
+
+class HybridSFFSMM(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        aux_initial_conditions=IC.Constant(),
+        dimension=1,
+        fields=3,
+        aux_fields=0,
+        parameters = {},
+        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+        basis=Basis()
+    ):
+        self.basis = basis
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        self.levels = self.n_fields - 3
+        self.basis.compute_matrices(self.levels)
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default = parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            aux_initial_conditions=aux_initial_conditions,
+            settings={**settings_default, **settings},
+        )
+   
+    def get_alphas(self): 
+        Q = self.variables
+        h = Q[0]
+        # exlude h and P
+        ha = Q[1:-1]
+        return ha
+
+
+    def flux(self):
+        flux_x = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.get_alphas()
+        a = [_ha / h for _ha in ha]
+        hu = self.variables[1]
+        u = hu / h
+        P11 = self.variables[-1]
+        p = self.parameters
+        # mass malance
+        flux_x[0] = ha[0]
+        # mean momentum (following SSF)
+        flux_x[1] = hu * u + h * P11 + p.g * h**2 / 2
+        # flux_x[1] = 0
+        # for i in range(self.levels+1):
+        #     for j in range(self.levels+1):
+        #         flux_x[1] += ha[i] * ha[j] / h * self.basis.A[0, i, j] / self.basis.M[ 0, 0 ]
+        # higher order moments (SMM)
+        for k in range(1, self.levels+1):
+            for i in range(self.levels+1):
+                for j in range(self.levels+1):
+                    flux_x[k+1] += h * a[i] * a[j] * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+        # P
+        flux_x[-1] = 2* P11 * u
+        for k in range(1, self.levels+1):
+            for i in range(1, self.levels+1):
+                for j in range(1, self.levels+1):
+                    flux_x[-1] += a[i] * a[j] * a[k] * self.basis.A[k, i, j] 
+        return [flux_x]
+
+    def nonconservative_matrix(self):
+        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.get_alphas()
+        hu = self.variables[1]
+        u = hu / h
+        a = [_ha / h for _ha in ha]
+        P11 = self.variables[-1]
+        p = self.parameters
+        um = ha[0]/h
+
+        # mean momentum 
+        # nc[1, 0] = - p.g * p.ez * h 
+        nc[1, 0] = 0
+        # higher order momennts (SMM)
+        for k in range(1, self.levels+1):
+            nc[k+1, k+1] += um
+        for k in range(self.levels+1):
+            for i in range(1, self.levels+1):
+                for j in range(1, self.levels+1):
+                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+        nc[-1, -1] = u
+        return [nc]
+
+    def eigenvalues(self):
+        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        for d in range(1, self.dimension):
+            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+        # alpha_erase = self.variables[2:]
+        # for alpha_i in alpha_erase:
+        #     A = A.subs(alpha_i, 0)
+        # return eigenvalue_dict_to_matrix(A.eigenvals())
+        evs = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        u = hu/h
+        P11 = self.variables[2]
+        p = self.parameters
+
+        b = sympy.sqrt(P11)
+        a = sympy.sqrt(p.g * h + 3*P11)
+
+        evs[0] = u
+        evs[1] = u + a
+        evs[2] = u - a
+
+        return evs
+
+
+    def source(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        if self.settings.topography:
+            out += self.topography()
+        if self.settings.friction:
+            for friction_model in self.settings.friction:
+                out += getattr(self, friction_model)()
+        return out
+
+    def topography(self):
+        assert "dhdx" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        out[1] = h * p.g * (p.ex - p.ez * dhdx)
+        return out
 
 class ShallowMomentsAugmentedSSF(Model):
     def __init__(
@@ -474,6 +719,32 @@ class ShallowMoments(Model):
                 out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
         return out
 
+    def no_slip(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        a0 = [ha[i] / h for i in range(self.levels+1)]
+        a = [ha[i] / h for i in range(self.levels+1)]
+        # for i in range(self.levels+1):
+        #     out[i+1] = ha[i]
+        phi_0 = np.zeros(self.levels+1)
+        ns_iterations = 2
+        for k in range(self.levels+1):
+            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+        def f(j, a, a0, basis_0):
+            out = 0
+            for i in range(self.levels+1):
+                # out += -2*p.ns_1*(a[i] - a0[i]) -2*p.ns_2*basis_0[j] * a[i] * basis_0[i]
+                out += -2*p.ns_2*basis_0[j] * a[i] * basis_0[i]
+            return out
+        for i in range(ns_iterations):
+            for k in range(1, 1+self.levels):
+                out[1+k] += h*(f(k, a, a0, phi_0))
+            a = [a[k] + out[k] / h for k in range(self.levels+1)]
+        # return sympy.simplify(out)
+        return out
+
     def chezy(self):
         """
         :gui:
@@ -512,6 +783,30 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for l in range(1+self.levels):
                 out[1+k] += -(p.Cf * self.basis.M[k,k]) * ha[l] * sqrt / h 
+        return out
+
+    def shear_new(self):
+        """
+        :gui:
+            - requires_parameter: ('beta', 1.0)
+        """
+        assert "beta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        d_phi_0 = np.zeros(self.levels+1)
+        phi_0 = np.zeros(self.levels+1)
+        for k in range(self.levels+1):
+            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+        friction_factor = 0.
+        for k in range(self.levels+1):
+            friction_factor -= p.beta * d_phi_0[k] * ha[k]/h/h
+        k = 0
+        # for k in range(1+self.levels):
+        out[1+k] += friction_factor * phi_0[k] /(self.basis.M[k,k]) 
         return out
 
     def shear(self):
@@ -555,6 +850,49 @@ class ShallowMoments(Model):
             phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
         for k in range(self.levels+1):
             out[1+k] += -p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
+        return out
+
+    def manning_mean(self):
+        """
+        :gui:
+            - requires_parameter: ('C', 1000.0)
+        """
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        tmp += ha[0] * ha[0] / h / h
+        sqrt = sympy.sqrt(tmp)
+        k = 0
+        l = 0
+        out[1+k] += -1.*p.C * (self.basis.M[k,k]) * ha[l] * sqrt / h 
+        return out
+
+    def steady_state(self):
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        d_phi_0 = np.zeros(self.levels+1)
+        phi_0 = np.zeros(self.levels+1)
+        for k in range(self.levels+1):
+            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+        shear_factor = 0.
+        u_bottom = 0.
+        u_diff = ha[0]/h
+        for k in range(self.levels+1):
+            u_diff +=  (phi_0[k] * ha[k]/h) 
+        for k in range(self.levels+1):
+            shear_factor +=  d_phi_0[k] *  (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
+        # for k in range(1, self.levels+1):
+        #     out[1+k] += - shear_factor *  np.abs(u_diff) * p.S *  phi_0[k] /(self.basis.M[k,k]) 
+        for k in range(1, self.levels+1):
+            # out[1+k] += - p.A * np.abs(u_diff)* (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
+            out[1+k] += - p.A * np.abs(ha[0]/h) * (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
         return out
 
 class ShallowMomentsSSF(ShallowMoments):
@@ -629,6 +967,7 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
             out[1+k] += out[1] / self.basis.M[k, k]
 
         return out
+
 
 
     def eigenvalues(self):
@@ -956,14 +1295,14 @@ if __name__ == "__main__":
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
     # basis.plot()
 
-    # basis = Basis(basis=Legendre_shifted(order=2))
-    # f = basis.enforce_boundary_conditions()
-    # q = np.array([[1., 0.1, 0., 0.]])
-    # print(f(q))
+    basis = Basis(basis=Legendre_shifted(order=4))
+    f = basis.enforce_boundary_conditions()
+    q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
+    print(f(q))
 
 
-    basis =Legendre_shifted(order=8)
-    basis.plot()
+    # basis =Legendre_shifted(order=8)
+    # basis.plot()
     # z = np.linspace(0,1,100)
     # f = basis.get_lambda(1)
     # print(f(z), f(1.0))

@@ -216,7 +216,7 @@ def test_reconstruction(mesh_type):
 
     def custom_ic(x):
         Q = np.zeros(1, dtype=float)
-        Q[0] = 1.*x[0]
+        Q[0] = 2.*x[1]
         return Q
 
     ic = IC.UserFunction(custom_ic)
@@ -233,7 +233,7 @@ def test_reconstruction(mesh_type):
 
 
     main_dir = os.getenv("SMS")
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type)))
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1

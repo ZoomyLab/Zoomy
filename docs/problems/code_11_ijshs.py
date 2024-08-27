@@ -177,7 +177,7 @@ def project_openfoam_to_smm(directory, pos=[0.5, 0, 0], stride=60, dt=0.01, leve
     moments_w = np.array(moments_w)
     if output_uw:
         return h, moments, moments_w, iteration_times, u, w
-    return h, moments, moments_w, iteration_times
+    return h, moments, moments_w, iteratio_extendedn_times
 
 def shear_at_bottom_moments(Q):
     level = Q.shape[1]-2
@@ -190,6 +190,19 @@ def shear_at_bottom_moments(Q):
 
     for i in range(level+1):
         shear += moments[:, i] * basis_0[i]
+    return shear
+
+def shear_at_bottom_moments_FD(Q, dz=0.05):
+    level = Q.shape[1]-2
+    basis_analytical =Legendre_shifted(order=level)
+    basis_0 = np.array([basis_analytical.eval(k, dz) for k in range(level+1)], dtype=float)
+    shear =  np.zeros(Q.shape[0], dtype=float)
+    h = Q[:, 0]
+    moments = Q[:, 1:] / np.repeat(h, level+1).reshape((h.shape[0], level+1))
+
+    for i in range(level+1):
+        shear += moments[:, i] * basis_0[i]
+    shear /= dz
 
     return shear
 

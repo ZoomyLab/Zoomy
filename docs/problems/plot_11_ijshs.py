@@ -38,6 +38,7 @@ import pytest
 from types import SimpleNamespace
 import argparse
 import pickle
+from concurrent.futures import ProcessPoolExecutor
 
 main_dir = os.getenv("SMS")
 from code_11_ijshs import *
@@ -57,12 +58,13 @@ matplotlib.rcParams['axes.prop_cycle'] = matplotlib.cycler(color=ccc)
 
 
 # path_to_openfoam = 'outputs/nozzle_openfoam_jonas/VTK'
-path_to_openfoam = 'outputs/openfoam_nozzle_2d'
+# path_to_openfoam = 'outputs/openfoam_nozzle_2d'
+path_to_openfoam = 'outputs/openfoam_nozzle_extended_2d'
 directory = os.path.join(main_dir, path_to_openfoam)
 
 
-def compute_shear_at_position_OF(u, z):
-    shear = (u[:, 3] - u[:, 0])/(z[3]-z[0])
+def compute_shear_at_position_OF(u, z, pos=1):
+    shear = (u[:, pos] - u[:, 0])/(z[pos]-z[0])
     return shear
 
 
@@ -73,8 +75,10 @@ def extract_data_from_openfoam(pos=[0.3, 0, 0], dt=0.1, stride=10, level=20):
     Q[:, 0] = h
     Q[:, 1:] = (moments.T * h).T
     z = np.linspace(0, 1, 100)
-    shear = compute_shear_at_position_OF(u, z)
-    return {"pos": np.array(pos), "h": h.copy(), "u":u.copy(), "w": w.copy(), "timeline":timeline.copy(), 'moments': moments.copy(), 'moments_w': moments_w.copy(), 'Q': Q.copy(), 'shear': shear.copy()}
+    shear = compute_shear_at_position_OF(u, z, pos=1)
+    shear2 = compute_shear_at_position_OF(u, z, pos=2)
+    shear3 = compute_shear_at_position_OF(u, z, pos=3)
+    return {"pos": np.array(pos), "h": h.copy(), "u":u.copy(), "w": w.copy(), "timeline":timeline.copy(), 'moments': moments.copy(), 'moments_w': moments_w.copy(), 'Q': Q.copy(), 'shear': shear.copy(), 'shear2': shear2.copy(), 'shear3': shear3.copy()}
 
 def plot_velocity_profiles_at_position(ax, directory, data, regions=[0, 5, 20, 1000], stride=10, dt=0.01):
 
@@ -92,7 +96,7 @@ def plot_velocity_profiles_at_position(ax, directory, data, regions=[0, 5, 20, 1
 
     z = np.linspace(0, 1, 100)
 
-    ax[0].plot(time, h, 'x')
+    ax[0].plot(time, h, '-')
     ax[0].fill_between(time[regions[0]:regions[1]+1], h[regions[0]:regions[1]+1], color=ccc[0], alpha=0.3)
     ax[0].fill_between(time[regions[1]:regions[2]+1], h[regions[1]:regions[2]+1], color=ccc[1], alpha=0.3)
     ax[0].fill_between(time[regions[2]:regions[3]+1], h[regions[2]:regions[3]+1], color=ccc[2], alpha=0.3)
@@ -169,9 +173,11 @@ def plot_reconstructed_VP(ax, data, time, levels=[0, 1, 2, 4, 6, 8]):
     return ax, u, z
 
 
-def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
+def setup_smm(data_inflow, level, dir='output', name='ShallowMoments', Q_steadystate=None):
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 1.0), 100)
+    # mesh = petscMesh.Mesh.create_1d((0.5, 1.0), 100)
+    dx = 2.5 / 100
+    mesh = petscMesh.Mesh.create_1d((0.5, 3.0), 300)
 
     h_inflow = data_inflow['h']
     moments_inflow = data_inflow['moments']
@@ -197,9 +203,13 @@ def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
         )
     )
 
+    if Q_steadystate is not None:
+        steady_state = {f'Q_ss{k}': q_ss for k, q_ss in enumerate(Q_steadystate)} 
+    else:
+        steady_state = {}
     settings = Settings(
         name=name,
-        parameters={"g": 9.81, "C": 10.0, "nu": 1.034*10**(-6), "rho": 1, "lamda": 3, "beta": 0.0100},
+        parameters={"g": 9.91, "C": 10.0, "nu": 1.034*10**(-6), "rho": 1, "lamda": 3, "beta": 0.0000, "A": 0. , "S": 0.0, **steady_state, "ns_1":0.1, "ns_2":0.001},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
@@ -223,15 +233,17 @@ def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
         # settings={"friction": ["shear"]},
         # settings={"friction": ["shear_crazy"]},
         # settings={"friction": ["shear", "newtonian"]},
-        settings={"friction": ["chezy", "newtonian"]},
+        # settings={"friction": ["chezy", "newtonian", "shear_new", "slip"]},
+        # settings={"friction": ['newtonian', 'steady_state', 'manning_mean']},
+        settings={"friction": ['newtonian', 'no_slip', 'manning_mean']},
         # settings={"friction": ["chezy"]},
         basis=Basis(basis=Legendre_shifted(order=level)),
+        # basis=Basis(basis=Spline()),
     )
 
     return model, settings, mesh
 
-def load_and_align_SMM_with_OF(path, pos, experiments):
-    pos = 0.75
+def load_and_align_smm_with_of(path, pos, experiments):
     data = experiments[str(pos)]
     Q_OF = data['Q']
     timeline_OF = data['timeline']
@@ -244,12 +256,17 @@ def load_and_align_SMM_with_OF(path, pos, experiments):
 
     T, Q_smm_synced, Q_OF = sync_timelines(Q, timeline_smm, Q_OF, timeline_OF, fixed_order=True)
     shear_smm = shear_at_bottom_moments(Q_smm_synced)
-    return {'Q': Q_smm_synced, 'timeline': T, 'shear': shear_smm}
+    shear_smm_001 = shear_at_bottom_moments_FD(Q_smm_synced, dz=0.001)
+    shear_smm_01 = shear_at_bottom_moments_FD(Q_smm_synced, dz=0.01)
+    shear_smm_05 = shear_at_bottom_moments_FD(Q_smm_synced, dz=0.05)
+    shear_smm_1 = shear_at_bottom_moments_FD(Q_smm_synced, dz=0.1)
+    shear_smm_15 = shear_at_bottom_moments_FD(Q_smm_synced, dz=0.15)
+    return {'Q': Q_smm_synced, 'timeline': T, 'shear': shear_smm, 'shear_fd_001': shear_smm_001, 'shear_fd_01': shear_smm_01, 'shear_fd_05': shear_smm_05, 'shear_fd_1': shear_smm_1, 'shear_fd_15': shear_smm_15 }
 
 
 
 
-def run_SMM(mesh, model, settings):
+def run_smm(mesh, model, settings):
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
@@ -317,7 +334,7 @@ if __name__=='__main__':
     ## extract data
     # stride = 1
     # experiments = {}
-    experiments['0.3'] = extract_data_from_openfoam(pos=[0.3, 0, 0], stride=stride)
+    # experiments['0.3'] = extract_data_from_openfoam(pos=[0.3, 0, 0], stride=stride)
     # experiments['0.4'] = extract_data_from_openfoam(pos=[0.4, 0, 0], stride=stride)
     # experiments['0.5'] = extract_data_from_openfoam(pos=[0.5, 0, 0], stride=stride)
     # experiments['0.75'] = extract_data_from_openfoam(pos=[0.75, 0, 0], stride=stride)
@@ -334,13 +351,41 @@ if __name__=='__main__':
 
     ### simulation
 
-    # data_inflow = {'h': experiments['0.5']['h'], 'moments': experiments['0.5']['moments'], 'timeline': experiments['0.5']['timeline']}
-    # model_0, settings_0, mesh_0 = setup_smm(data_inflow, 0, dir='lvl0', name='chezy10')
-    # model_1, settings_1, mesh_1 = setup_smm(data_inflow, 1, dir='lvl1', name='chezy10')
-    # model_2, settings_2, mesh_2 = setup_smm(data_inflow, 2, dir='lvl2', name='chezy10')
-    # model_4, settings_4, mesh_4 = setup_smm(data_inflow, 4, dir='lvl4', name='chezy10')
+    print('construct models')
+    data_inflow = {'h': experiments['0.5']['h'], 'moments': experiments['0.5']['moments'], 'timeline': experiments['0.5']['timeline']}
+    model_0, settings_0, mesh_0 = setup_smm(data_inflow, 0, dir='lvl0', name='chezy10')
+    model_1, settings_1, mesh_1 = setup_smm(data_inflow, 1, dir='lvl1', name='chezy10')
+    model_2, settings_2, mesh_2 = setup_smm(data_inflow, 2, dir='lvl2', name='chezy10')
+    model_4, settings_4, mesh_4 = setup_smm(data_inflow, 4, dir='lvl4', name='chezy10')
     # model_6, settings_6, mesh_6 = setup_smm(data_inflow, 6, dir='lvl6', name='chezy10')
     # model_8, settings_8, mesh_8 = setup_smm(data_inflow, 8, dir='lvl8', name='chezy10')
+    def setup_smm_unpack(args):
+        return setup_smm(*args)
+
+    # data_inflow = {'h': experiments['0.5']['h'], 'moments': experiments['0.5']['moments'], 'timeline': experiments['0.5']['timeline']}
+    # args = [(data_inflow, 0, 'lvl0', 'chezy10'),
+    #         (data_inflow, 1, 'lvl1', 'chezy10'),
+    #         (data_inflow, 2, 'lvl2', 'chezy10'),
+    #         (data_inflow, 4, 'lvl4', 'chezy10')]
+
+    # with ProcessPoolExecutor() as executor:
+    #     results = list(executor.map(setup_smm_unpack, args))
+
+    # model_0, settings_0, mesh_0 = results[0]
+    # model_1, settings_1, mesh_1 = results[1]
+    # model_2, settings_2, mesh_2 = results[2]
+    # model_4, settings_4, mesh_4 = results[3]
+    print('end construct models')
+
+    args = [(mesh_0, model_0, settings_0), 
+            (mesh_1, model_1, settings_1), 
+            (mesh_2, model_2, settings_2), 
+            (mesh_4, model_4, settings_4)]
+    
+    print('run simulation')
+    with ProcessPoolExecutor() as executor:
+        executor.map(run_smm, args)
+    print('ended run simulation')
 
     # run_smm(mesh_0, model_0, settings_0)
     # run_smm(mesh_1, model_1, settings_1)
@@ -354,33 +399,51 @@ if __name__=='__main__':
     # ### align of and smm datag
     simulations = {}
     def load_and_align(pos, simulations):
+        def unpack_and_call(args):
+            return load_and_align_smm_with_of(*args)
+
         # new = load_and_align_smm_with_of(os.path.join('outputs/lvl0', "chezy10.h5" ), pos, experiments)
+        args = [(os.path.join('outputs/lvl0', "chezy10.h5" ), pos, experiments),
+                (os.path.join('outputs/lvl1', "chezy10.h5" ), pos, experiments),
+                (os.path.join('outputs/lvl2', "chezy10.h5" ), pos, experiments),
+                (os.path.join('outputs/lvl4', "chezy10.h5" ), pos, experiments)]
+        # with ProcessPoolExecutor() as executor:
+        #     # results = list(executor.map(lambda p: load_and_align_smm_with_of(*p), args))
+        #     results = list(executor.map(unpack_and_call, args))
+        # lvl0, lvl1, lvl2, lvl4 = results
+
         lvl0 = load_and_align_smm_with_of(os.path.join('outputs/lvl0', "chezy10.h5" ), pos, experiments)
         lvl1 = load_and_align_smm_with_of(os.path.join('outputs/lvl1', "chezy10.h5" ), pos, experiments)
         lvl2 = load_and_align_smm_with_of(os.path.join('outputs/lvl2', "chezy10.h5" ), pos, experiments)
         lvl4 = load_and_align_smm_with_of(os.path.join('outputs/lvl4', "chezy10.h5" ), pos, experiments)
-        lvl6 = load_and_align_smm_with_of(os.path.join('outputs/lvl6', "chezy10.h5" ), pos, experiments)
-        lvl8 = load_and_align_smm_with_of(os.path.join('outputs/lvl8', "chezy10.h5" ), pos, experiments)
+        # lvl6 = load_and_align_smm_with_of(os.path.join('outputs/lvl6', "chezy10.h5" ), pos, experiments)
+        # lvl8 = load_and_align_smm_with_of(os.path.join('outputs/lvl8', "chezy10.h5" ), pos, experiments)
+
         # lvl0 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl0_chezy10.h5" ), pos, experiments)
         # lvl1 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl1_chezy10.h5" ), pos, experiments)
         # lvl2 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl2_chezy10.h5" ), pos, experiments)
         # lvl4 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl4_chezy10.h5" ), pos, experiments)
         # lvl6 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl6_chezy30.h5" ), pos, experiments)
         # lvl8 = load_and_align_smm_with_of(os.path.join('outputs/save_ijshs', "lvl8_chezy10.h5" ), pos, experiments)
-        simulations[str(pos)] = {'0': lvl0, '1': lvl1, '2': lvl2, '4': lvl4, '6': lvl6, '8': lvl8}
+        simulations[str(pos)] = {'0': lvl0, '1': lvl1, '2': lvl2, '4': lvl4}
+        # simulations[str(pos)] = {'0': lvl0, '1': lvl1, '2': lvl2, '4': lvl4, '6': lvl6, '8': lvl8}
         return simulations
     
-    # simulations = load_and_align(0.75, simulations)
-    # simulations = load_and_align(0.5, simulations)
-    # simulations = load_and_align(0.9, simulations)
+    print('load and align')
+
+    simulations = load_and_align(0.75, simulations)
+    simulations = load_and_align(0.5, simulations)
+    simulations = load_and_align(0.9, simulations)
+
+    print('ended load and align')
 
 
     # with open('simulations.pkl', 'wb')  as f:
     #     pickle.dump(simulations, f)
 
 
-    with open('simulations.pkl', 'rb')  as f:
-        simulations = pickle.load(f)
+    # with open('simulations.pkl', 'rb')  as f:
+    #     simulations = pickle.load(f)
 
     print('loaded simulations')
 
@@ -414,18 +477,18 @@ if __name__=='__main__':
 
     # ### reconstructions
 
-    fig, ax = plt.subplots()
-    time = 3.
-    ax = plot_reconstructed_vp(ax, experiments['0.3'], time, levels=[0, 1, 2, 4, 8])
-    fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow03.png'))
+    # fig, ax = plt.subplots()
+    # time = 3.
+    # ax = plot_reconstructed_vp(ax, experiments['0.3'], time, levels=[0, 1, 2, 4, 8])
+    # fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow03.png'))
 
-    fig, ax = plt.subplots()
-    ax = plot_reconstructed_vp(ax, experiments['0.4'], time,  levels=[0, 1, 2, 4, 8])
-    fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow04.png'))
+    # fig, ax = plt.subplots()
+    # ax = plot_reconstructed_vp(ax, experiments['0.4'], time,  levels=[0, 1, 2, 4, 8])
+    # fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow04.png'))
 
-    fig, ax = plt.subplots()
-    ax = plot_reconstructed_vp(ax, experiments['0.5'], time, levels=[0, 1, 2, 4, 8])
-    fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow05.png'))
+    # fig, ax = plt.subplots()
+    # ax = plot_reconstructed_vp(ax, experiments['0.5'], time, levels=[0, 1, 2, 4, 8])
+    # fig.savefig(os.path.join(main_dir, 'docs/problems/images/projectioninflow05.png'))
 
 
 
@@ -434,16 +497,22 @@ if __name__=='__main__':
     # ### timeline summary
     fig, ax = create_timeline_summary()
     add_timeline_summary(ax, experiments['0.75'], 'openfoam')
-    add_timeline_summary(ax, simulations['0.75']['8'], 'lvl8')
+    add_timeline_summary(ax, simulations['0.75']['0'], 'lvl0')
+    add_timeline_summary(ax, simulations['0.75']['1'], 'lvl1')
+    add_timeline_summary(ax, simulations['0.75']['2'], 'lvl2')
+    add_timeline_summary(ax, simulations['0.75']['4'], 'lvl4')
+    # add_timeline_summary(ax, simulations['0.75']['8'], 'lvl8')
+    fig.savefig(os.path.join(main_dir, 'docs/problems/images/summary_wip.png'))
 
 
     # ### shear plot
     fig, ax = plt.subplots()
     ax.plot(experiments['0.75']['timeline'], experiments['0.75']['shear'], '*', label='openfoam')
-    ax.plot(simulations['0.75']['8']['timeline'], simulations['0.75']['8']['shear'], label='lvl8')
-    plt.suptitle(f"shear at x = {0.75}")
+    ax.plot(simulations['0.75']['2']['timeline'], simulations['0.75']['2']['shear'], label='lvl2')
+    ax.plot(simulations['0.75']['4']['timeline'], simulations['0.75']['4']['shear'], label='lvl4')
+    plt.suptitle(f"shear at x = {0.75} m")
     plt.legend()
-    fig.savefig(os.path.join(main_dir, 'docs/problems/images/shear_075.png'))
+    fig.savefig(os.path.join(main_dir, 'docs/problems/images/shear_wip.png'))
 
 
 

@@ -79,6 +79,23 @@ class FromData(BoundaryCondition):
         for k, v in self.prescribe_fields.items():
             # interp_func = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
             interp_func = _sympy_interpolate_data(time, self.timeline, v)
+            Qout[k] = 2*interp_func-Q[k]
+        return Qout
+
+@define(slots=True, frozen=False, kw_only=True)
+class FromDataGhost(BoundaryCondition):
+    prescribe_fields: dict[int, np.ndarray]
+    timeline: np.ndarray
+
+    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+        # Extrapolate all fields
+        Qout = Matrix(Q)
+
+        # Set the fields which are prescribed in boundary condition dict
+        time_start = get_time()
+        for k, v in self.prescribe_fields.items():
+            # interp_func = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
+            interp_func = _sympy_interpolate_data(time, self.timeline, v)
             Qout[k] = interp_func
         return Qout
             

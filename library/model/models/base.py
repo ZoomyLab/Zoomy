@@ -559,7 +559,7 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_quasilinear_matrix[d],
+            vectorize_constant_sympy_expressions(self.sympy_quasilinear_matrix[d], self.variables, self.aux_variables),
             printer,
         ) for d in range(self.dimension)]
         quasilinear_matrix = l_quasilinear_matrix

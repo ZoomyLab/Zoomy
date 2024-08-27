@@ -148,7 +148,8 @@ def plot_reconstructed_VP(ax, data, time, levels=[0, 1, 2, 4, 6, 8]):
 
 def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
 
-    mesh = petscMesh.Mesh.from_gmsh('meshes/channel_junction/mesh_2d_finest.msh')
+    # mesh = petscMesh.Mesh.from_gmsh('meshes/channel_junction/mesh_2d_coarse.msh')
+    mesh = petscMesh.Mesh.from_gmsh('meshes/channel_junction/mesh_2d_finer.msh')
     # mesh = petscMesh.Mesh.from_gmsh('meshes/channel_junction/mesh_2d.msh')
 
     # h_inflow = data_inflow['h']
@@ -159,8 +160,8 @@ def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
 
     data_dict = {}
     h_inflow = 0.03
-    u_inflow = 0.01
-    data_dict[0] = f"{h_inflow}"
+    u_inflow = 0.4
+    data_dict[0] = f"{h_inflow*1.1}"
     for i in range(2*level+2):
         if i == 0:
             data_dict[1+i] = f"{h_inflow * u_inflow}"
@@ -217,7 +218,6 @@ def setup_SMM(data_inflow, level, dir='output', name='ShallowMoments'):
     return model, settings, mesh
 
 def load_and_align_SMM_with_OF(path, pos, experiments):
-    pos = 0.75
     data = experiments[str(pos)]
     Q_OF = data['Q']
     timeline_OF = data['timeline']
@@ -318,16 +318,16 @@ if __name__=='__main__':
     ### Simulation
 
     # data_inflow = {'h': experiments['0.5']['h'], 'moments': experiments['0.5']['moments'], 'timeline': experiments['0.5']['timeline']}
-    # model_0, settings_0, mesh_0 = setup_SMM(None, 0, dir='lvl0', name='chezy10')
-    # model_1, settings_1, mesh_1 = setup_SMM(data_inflow, 1, dir='lvl1', name='chezy10')
-    model_2, settings_2, mesh_2 = setup_SMM(None, 2, dir='lvl2', name='chezy10')
-    # model_4, settings_4, mesh_4 = setup_SMM(None, 4, dir='lvl4', name='chezy10')
-    # model_6, settings_6, mesh_6 = setup_SMM(data_inflow, 6, dir='lvl6', name='chezy10')
-    # model_8, settings_8, mesh_8 = setup_SMM(data_inflow, 8, dir='lvl8', name='chezy10')
+    # model_0, settings_0, mesh_0 = setup_SMM(None, 0, dir='lvl_2d_0', name='chezy10')
+    model_1, settings_1, mesh_1 = setup_SMM(None, 1, dir='lvl_2d_1', name='chezy10')
+    # model_2, settings_2, mesh_2 = setup_SMM(None, 2, dir='lvl_2d_2', name='chezy10')
+    # model_4, settings_4, mesh_4 = setup_SMM(None, 4, dir='lvl_2d_4', name='chezy10')
+    # model_6, settings_6, mesh_6 = setup_SMM(data_inflow, 6, dir='lvl_2d_6', name='chezy10')
+    # model_8, settings_8, mesh_8 = setup_SMM(data_inflow, 8, dir='lvl_2d_8', name='chezy10')
 
     # run_SMM(mesh_0, model_0, settings_0)
-    # run_SMM(mesh_1, model_1, settings_1)
-    run_SMM(mesh_2, model_2, settings_2)
+    run_SMM(mesh_1, model_1, settings_1)
+    # run_SMM(mesh_2, model_2, settings_2)
     # run_SMM(mesh_4, model_4, settings_4)
     # run_SMM(mesh_6, model_6, settings_6)
     # run_SMM(mesh_8, model_8, settings_8)
@@ -337,20 +337,22 @@ if __name__=='__main__':
     # ### Align OF and SMM dataG
     simulations = {}
     def load_and_align(pos, simulations):
-        # new = load_and_align_SMM_with_OF(os.path.join('outputs/lvl0', "chezy10.h5" ), pos, experiments)
-        lvl0 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl0', "chezy10.h5" ), pos, experiments)
-        lvl1 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl1', "chezy10.h5" ), pos, experiments)
-        lvl2 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl2', "chezy10.h5" ), pos, experiments)
-        lvl4 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl4', "chezy10.h5" ), pos, experiments)
-        lvl6 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl6', "chezy10.h5" ), pos, experiments)
-        lvl8 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl8', "chezy10.h5" ), pos, experiments)
+        # new  = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_0', "chezy10.h5" ), pos, experiments)
+        # lvl0 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_0', "chezy10.h5" ), pos, experiments)
+        lvl1 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_1', "chezy10.h5" ), pos, experiments)
+        # lvl2 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_2', "chezy10.h5" ), pos, experiments)
+        # lvl4 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_4', "chezy10.h5" ), pos, experiments)
+        # lvl6 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_6', "chezy10.h5" ), pos, experiments)
+        # lvl8 = load_and_align_SMM_with_OF(os.path.join('outputs/lvl_2d_8', "chezy10.h5" ), pos, experiments)
+
         # lvl0 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl0_chezy10.h5" ), pos, experiments)
         # lvl1 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl1_chezy10.h5" ), pos, experiments)
         # lvl2 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl2_chezy10.h5" ), pos, experiments)
         # lvl4 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl4_chezy10.h5" ), pos, experiments)
         # lvl6 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl6_chezy30.h5" ), pos, experiments)
         # lvl8 = load_and_align_SMM_with_OF(os.path.join('outputs/save_ijshs', "lvl8_chezy10.h5" ), pos, experiments)
-        simulations[str(pos)] = {'0': lvl0, '1': lvl1, '2': lvl2, '4': lvl4, '6': lvl6, '8': lvl8}
+        # simulations[str(pos)] = {'0': lvl0, '1': lvl1, '2': lvl2, '4': lvl4, '6': lvl6, '8': lvl8}
+        simulations[str(pos)] = {'2': lvl2}
         return simulations
     
     # simulations = load_and_align(0.75, simulations)
