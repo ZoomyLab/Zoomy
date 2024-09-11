@@ -130,9 +130,6 @@ class RuntimeModel:
 class Model:
     """
     Generic (virtual) model implementation.
-
-    :gui:
-    - model
     """
     name: str
     dimension: int = 1
@@ -691,3 +688,9 @@ def eigenvalue_dict_to_matrix(eigenvalues):
 
 
 
+
+class ModelGUI(Model):
+    """
+    :gui:
+    { 'parameters': { 'I': {'type': 'int', 'value': 1, 'step': 1}, 'F': {'type': 'float', 'value': 1., 'step':0.1}, 'S': {'type': 'string', 'value': 'asdf'}, 'Arr':{'type': 'array', 'value': np.array([[1., 2.], [3., 4.]])} },}
+    """

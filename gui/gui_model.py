@@ -4,14 +4,14 @@ from panel.layout.gridstack import GridStack
 from bokeh.plotting import figure
 
 pn.extension('codeeditor', 'mathjax', 'katex')
-
-from gui_elements import MyCard, MyOrganizer, MyControls, MyModel
-from test_model import Base, SWE
+from gui.gui_elements import MyCard, MyOrganizer, MyControls, MyModel
+from library.model.model import *
 
 models = MyOrganizer()
 
-model_1 = MyModel(models, title='# SWE \n 1d', code=Base)
-model_2 = MyModel(models, title='# SWE \n 2d', code=SWE)
+model_0 = MyModel(models, title='# ModelGUI \n 1d', code=ModelGUI)
+model_1 = MyModel(models, title='# SWE \n 1d', code=ShallowWater)
+model_2 = MyModel(models, title='# SWE \n 2d', code=ShallowWater2d)
 model_3 = MyModel(models, title='# SME \n 1d')
 model_4 = MyModel(models, title='# SME \n 2d')
 model_5 = MyModel(models, title='# SFF \n 1d')
@@ -21,6 +21,7 @@ model_8 = MyModel(models, title='# Steffler \n 2d')
 model_9 = MyModel(models, title='# SME Ref. \n 2d')
 model_10 = MyModel(models, title='# SME Ref. \n 3d')
 
+models.add_card(model_0)
 models.add_card(model_1)
 models.add_card(model_2)
 models.add_card(model_3)

@@ -1,6 +1,8 @@
 import re
 import ast
 import numpy as np
+import inspect
+
 
 def print_class_docstring(cls):
     """
@@ -9,8 +11,8 @@ def print_class_docstring(cls):
     if cls is None:
         return
     
-    # Print the docstring of the current class
-    print(extract_gui_dict(cls))
+    # # Print the docstring of the current class
+    # print(extract_gui_dict(cls))
     
     # Get the parent class
     parent_class = cls.__base__
@@ -38,6 +40,70 @@ def get_class_docstring(cls, init_dict={}):
         return get_class_docstring(parent_class, out)
     print(out)
     return out
+
+def get_class_code(cls, func_name=None):
+    """
+    Extracts the code of the given class or a specific function within the class.
+    
+    Parameters:
+    cls (type): The class to extract the code from.
+    func_name (str, optional): The name of the function to extract the code for. Defaults to None.
+    
+    Returns:
+    str: The source code of the class or the specified function.
+    """
+    if cls is None:
+        return ""
+    
+    # If func_name is provided, extract the code for the specified function
+    if func_name:
+        try:
+            func = getattr(cls, func_name)
+            source_code = inspect.getsource(func)
+        except (AttributeError, TypeError):
+            source_code = f"Function '{func_name}' not found in class '{cls.__name__}'"
+    else:
+        # Get the source code of the entire class
+        try:
+            source_code = inspect.getsource(cls)
+        except TypeError:
+            source_code = f"Class '{cls.__name__}' source code not found"
+    
+    return source_code
+
+
+def get_function_names(file_path):
+    """
+    Extracts all function names from a given Python file.
+    
+    Parameters:
+    file_path (str): The path to the Python file.
+    
+    Returns:
+    list: A list of function names defined in the file.
+    """
+    with open(file_path, 'r') as file:
+        tree = ast.parse(file.read(), filename=file_path)
+    
+    function_names = get_function_names(file_path)
+    return function_names
+
+
+def get_class_function_names(cls):
+    """
+    Extracts all function names from a given class.
+    
+    Parameters:
+    cls (type): The class to extract function names from.
+    
+    Returns:
+    list: A list of function names defined in the class.
+    """
+    return [name for name, member in inspect.getmembers(cls, predicate=inspect.isfunction)if not name.startswith('_')]
+
+    
+    
+
 
 def extract_gui_dict(cls):
     """

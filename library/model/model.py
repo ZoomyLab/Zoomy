@@ -2,7 +2,7 @@ import os
 import numpy as np
 from typing import Union, Type
 
-from library.model.models.base import Model
+from library.model.models.base import Model, ModelGUI
 from library.model.models.advection import Advection
 from library.model.models.shallow_water import ShallowWater, ShallowWater2d
 from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d

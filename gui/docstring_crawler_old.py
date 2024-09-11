@@ -8,8 +8,8 @@ def print_class_docstrings(cls):
     if cls is None:
         return
     
-    # Print the docstring of the current class
-    print(extract_gui_dict(cls))
+    # # Print the docstring of the current class
+    # print(extract_gui_dict(cls))
     
     # Get the parent class
     parent_class = cls.__base__

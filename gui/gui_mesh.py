@@ -5,7 +5,7 @@ from bokeh.plotting import figure
 
 pn.extension()
 
-from gui_elements import MyCard, MyOrganizer, MyMesh
+from gui.gui_elements import MyCard, MyOrganizer, MyMesh
 
 meshes = MyOrganizer()
 

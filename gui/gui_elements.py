@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from panel.viewable import Viewer
 import param
 
-from docstring_crawler import get_class_docstring
-from mesh.load_gmsh import load_and_plot_gmsh
+from gui.docstring_crawler import get_class_docstring
+from gui.mesh.load_gmsh import load_and_plot_gmsh
 
 pn.extension('gridstack', 'vtk', 'mathjax', 'katex', 'ipywidgets_bokeh', 'codeeditor', 'terminal', console_output='disable')
 
@@ -19,18 +19,17 @@ class MyControls(param.Parameterized):
         self.parameters = None
         if json is not None:
             parameters = []
-            # parameters.append(param.Integer(default=50))
-            parameters.append(pn.widgets.FloatInput(name='asdf', value=5., step=0.1))
-            for k, v in json['parameters'].items():
-                if v['type'] == 'int':
-                    parameters.append(pn.widgets.IntInput(name=k, value=v['value'], step=v['step']))
-                elif v['type'] == 'float':
-                    parameters.append(pn.widgets.FloatInput(name=k, value=v['value'], step=v['step']))
-                elif v['type'] == 'string':
-                    parameters.append(pn.widgets.TextInput(name=k, value=v['value']))
-                elif v['type'] == 'array':
-                    parameters.append(pn.widgets.ArrayInput(name=k, value=v['value']))
-            self.parameters = parameters
+            if 'parameters' in json:
+                for k, v in json['parameters'].items():
+                    if v['type'] == 'int':
+                        parameters.append(pn.widgets.IntInput(name=k, value=v['value'], step=v['step']))
+                    elif v['type'] == 'float':
+                        parameters.append(pn.widgets.FloatInput(name=k, value=v['value'], step=v['step']))
+                    elif v['type'] == 'string':
+                        parameters.append(pn.widgets.TextInput(name=k, value=v['value']))
+                    elif v['type'] == 'array':
+                        parameters.append(pn.widgets.ArrayInput(name=k, value=v['value']))
+                self.parameters = parameters
 
 
     def get_controls(self):
@@ -66,7 +65,6 @@ class MyBasicOrganizer(Viewer):
 
     def update_organizer_controls(self):
         if self.organizer is not None:
-            print(self.organizer)
             self.organizer[2] = pn.Column(*self.get_controls())
 
 
@@ -107,10 +105,7 @@ class MyOrganizer(Viewer):
 
     def update_organizer_controls(self):
         if self.organizer is not None:
-            print(self.organizer)
-            # self.organizer.clear()
             self.organizer[2] = pn.Column(*self.get_controls())
-            print('--------------------------')
         else:
             print('update_organizer_controls: No organizer found')
 
@@ -139,8 +134,9 @@ class MyCard(Viewer):
         if image is not None:
             self.fig = pn.pane.PNG(image, width=300)
         else:
-            image="./data/sample.png"
-            self.fig = pn.pane.PNG(image, width=300)
+            # image="gui/data/sample.png"
+            # self.fig = pn.pane.PNG(image, width=300)
+            self.fig = None
         self.button = pn.widgets.Button(name='Select', button_type='primary', width=300)
         self.organizer = organizer
         super().__init__(**params)
@@ -190,7 +186,7 @@ class MyMesh(MyCard):
         elif image is not None:
             self.fig = pn.pane.PNG(image, width=300)
         else:
-            image="./data/sample_mesh.png"
+            image="gui/data/sample_mesh.png"
             self.fig = pn.pane.PNG(image, width=300)
             
         self._layout = pn.Column(self.title, self.fig, self.button, styles=self.default_style)

@@ -20,6 +20,10 @@ from library.model.models.base import Model
 
 @define(slots=True, frozen=False, kw_only=True)
 class ShallowWater(Model):
+    """
+    :gui:
+    { 'parameters': { 'g': {'type': 'float', 'value': 9.81, 'step': 0.01}, 'ex': {'type': 'float', 'value': 0., 'step':0.1}, 'ez': {'type': 'float', 'value': 1., 'step': 0.1}, },}
+    """
     def __init__(
         self,
         boundary_conditions,
@@ -102,6 +106,10 @@ class ShallowWater(Model):
 
 
 class ShallowWater2d(ShallowWater):
+    """
+    :gui:
+    { 'parameters': { 'g': {'type': 'float', 'value': 9.81, 'step': 0.01}, 'ex': {'type': 'float', 'value': 0., 'step':0.1}, 'ey': {'type': 'float', 'value': 0., 'step':0.1}, 'ez': {'type': 'float', 'value': 1., 'step': 0.1}, },}
+    """
     def __init__(
         self,
         boundary_conditions,
