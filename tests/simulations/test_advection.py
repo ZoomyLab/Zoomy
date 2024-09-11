@@ -14,7 +14,7 @@ import library.mesh.mesh as petscMesh
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.constant(dt=0.01), time_end = 1., output_snapshots = 10000)
+    settings = Settings(name = "Advection", parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.constant(dt=0.01), time_end = 1., output_snapshots = 10000)
 
 
     bc_tags = ["left", "right"]
