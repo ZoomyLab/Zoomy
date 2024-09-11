@@ -14,7 +14,7 @@ import library.mesh.mesh as petscMesh
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 100)
+    settings = Settings(name = "Advection", parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.constant(dt=0.01), time_end = 1., output_snapshots = 10000)
 
 
     bc_tags = ["left", "right"]
@@ -33,11 +33,14 @@ def test_advection_1d():
         initial_conditions=ic,
         settings={},
     )
-    mesh = Mesh.create_1d((-1, 1), 100)
+    # mesh = Mesh.create_1d((-1, 1), 100)
+    mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
 
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    solver_price_c(mesh, model, settings, RK1)
+    # io.generate_vtk(settings.output_dir)
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -63,13 +66,18 @@ def test_advection_2d(mesh_type):
         settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    # mesh = Mesh.load_gmsh(
+    #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+    #     mesh_type
+    # )
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type
     )
 
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    solver_price_c(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
 @pytest.mark.critical
@@ -243,9 +251,9 @@ def test_reconstruction(mesh_type):
 
 
 if __name__ == "__main__":
-    # test_advection_1d()
+    test_advection_1d()
     # test_advection_2d("quad")
     # test_advection_2d("triangle")
     # test_advection_3d("tetra")
     # test_periodic_bc("quad")
-    test_reconstruction("quad")
+    # test_reconstruction("quad")

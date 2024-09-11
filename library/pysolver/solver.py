@@ -292,56 +292,35 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
 
-        qA = Q[:, iA] 
-        qB = Q[:, iB] 
-        qauxA = Qaux[:, iA]
-        qauxB = Qaux[:, iB]
-        normals = mesh.face_normals
-        face_volumes = mesh.face_volumes
-        cell_volumesA = mesh.cell_volumes[iA]
-        cell_volumesB = mesh.cell_volumes[iB]
-        face_subvolumeA = mesh.face_subvolumes[:, 0]
-        face_subvolumeB = mesh.face_subvolumes[:, 1]
+        for cell in range(mesh.n_inner_cells):
+            qi = Q[:, cell]
+            qauxi = Qaux[:, cell]
+            neighbors = mesh.cell_neighbors[cell]
+            faces  = mesh.cell_faces[:, cell]
+            for neighbor, face in zip(neighbors, faces):
+                # outward pointing normal
+                if mesh.face_cells[0, face] == cell:
+                    normal = mesh.face_normals[:, face]
+                    sv_i = mesh.face_subvolumes[face, 0]
+                    sv_j = mesh.face_subvolumes[face, 1]
+                else:
+                    normal = -mesh.face_normals[:, face]
+                    sv_j = mesh.face_subvolumes[face, 0]
+                    sv_i = mesh.face_subvolumes[face, 1]
+                face_volume = mesh.face_volumes[face]
+                qj = Q[:, neighbor]
+                qauxj = Qaux[:, neighbor]
+                vol = mesh.cell_volumes[cell] 
+                nc_flux, failed = compute_nc_flux(qi, qj, qauxi, qauxj, parameters, normal, sv_i, sv_j, face_volume, dt, pde)
+                # nc_flux, failed = compute_nc_flux(qi, qj, qauxi, qauxj, parameters, normal, sv_i, sv_j, vol, dt, pde)
 
-        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB,  parameters, normals, face_subvolumeA, face_subvolumeB, face_volumes, dt, pde)
-        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA,  parameters, normals, face_subvolumeB, face_subvolumeA, face_volumes, dt, pde)
-        assert not failed
+                dQ[:, cell] -= (
+                    (nc_flux)
+                    * face_volume
+                    / vol
+                )
+                 
 
-        # I add/substract the contributions for the inner cells, based on the faces
-        for faces in mesh.cell_faces:
-            # I need to know if the cell_face is part of A or B and only add that contribution
-            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
-            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
-
-            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
-                (nc_fluxA)
-                * face_volumes
-                / cell_volumesA
-            )[:, faces][:, iA_masked]
-
-            dQ[:, :mesh.n_inner_cells][:, iB_masked] -= (
-                (nc_fluxB)
-                * face_volumes
-                / cell_volumesB
-            )[:, faces][:, iB_masked]
-
-        # I also want to update the ghost cells for higher order methods (otherwise I need bcs in integrator)
-        faces = mesh.boundary_face_face_indices
-        # I need to know if the cell_face is part of A or B and only add that contribution
-        iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
-        iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
-
-        dQ[:, mesh.n_inner_cells:][:, iA_masked] -= (
-            (nc_fluxA)
-            * face_volumes
-            / cell_volumesA
-        )[:, faces][:, iA_masked]
-
-        dQ[:, mesh.n_inner_cells:][:, iB_masked] -= (
-            (nc_fluxA)
-            * face_volumes
-            / cell_volumesB
-        )[:, faces][:, iB_masked]
 
         return dQ
 
@@ -869,9 +848,9 @@ def solver_price_c(
 
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
 
-        Qnew = ode_solver_source(
-            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
-        )
+        # Qnew = ode_solver_source(
+        #     compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        # )
         Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
 
         # Update solution and time
