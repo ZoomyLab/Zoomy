@@ -248,7 +248,7 @@ class Mesh:
         # left neighbor of 0is the first ghost
         cell_neighbors[0, 0] = n_inner_cells
         # right neighbor of n_inner_cell is the second ghost
-        cell_neighbors[n_inner_cells, 1] = n_inner_cells+1
+        cell_neighbors[n_inner_cells-1, 1] = n_inner_cells+1
         # left neighbor of first ghost is empty 
         cell_neighbors[n_inner_cells, 0] = n_cells+1
         # right neighbor of first ghost is first cell
