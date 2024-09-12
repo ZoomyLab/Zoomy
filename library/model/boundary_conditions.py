@@ -194,9 +194,9 @@ class BoundaryConditions:
         periodic_bcs_ghosts = []
         for i_bc, bc in enumerate(self.boundary_conditions):
             dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = bc.get_boundary_condition_function(time, X, dX, Q,  Qaux, parameters, normal)
-            if type(bc) == Periodic:
-                function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
-                periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]
+        #     if type(bc) == Periodic:
+        #         function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
+        #         periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]
         self.boundary_functions = list(dict_index_to_function.values())
         mesh = self.resolve_periodic_bcs(mesh)
         self.initialized=True

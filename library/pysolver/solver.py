@@ -755,6 +755,10 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
 
 # TODO vectorize
 def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
+    """
+    mesh.boundary_face_cell relates to the cell where we retreive information. If not periodic, this is the cell adjacent to the ghost cell.
+    This cells information is fed into the boundary face function and written to the ghost cell.
+    """
     for i_bc_face in range(mesh.n_boundary_faces):
         i_face = mesh.boundary_face_face_indices[i_bc_face]
         i_bc_func = mesh.boundary_face_function_numbers[i_bc_face]
@@ -763,10 +767,15 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         qaux_cell = Qaux[:, mesh.boundary_face_cells[ i_bc_face]]
         normal = mesh.face_normals[:, i_face]
         position = mesh.face_centers[i_face]
-        # I cannot use the mesh.boudnary_face_cells because this is potenntially a periodic ghost cell..
-        position_cell = mesh.cell_centers[:, mesh.boundary_face_cells[i_bc_face]]
-        distance = np.linalg.norm(position - position_cell)
+        # I cannot use the mesh.boudnary_face_cells because this is potenntially a periodic ghost cell. Then the distance is very large, as I go across the grid
+        # position_cell = mesh.cell_centers[:, mesh.boundary_face_cells[i_bc_face]]
+        position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i_bc_face]]
+        # distance = np.linalg.norm(position - position_cell)
+        distance = np.linalg.norm(position - position_ghost)
         q_ghost = bc_func(time, position, distance, q_cell, qaux_cell, parameters, normal)
+        ### DEBUG
+        cells_adjacent_to_ghost = min(mesh.face_cells[:, mesh.boundary_face_face_indices[i_bc_face]])
+        ###
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
