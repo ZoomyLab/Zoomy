@@ -149,6 +149,15 @@ class BoundaryConditions:
 
 
     def resolve_periodic_bcs(self, mesh):
+        """
+        Goal: if 'apply_boundary_condition' is called, the ghost cell value is computed, given an input cell value funtion.
+              In case of a periodic BC, this is NOT the adjacent cell. So I need to change the 'boundary_face_cell' for the periodic 
+              cells to point to the right data location! 
+              This is why we only overwrite the 'mesh.boundary_face_cell' in the end. 
+              Furthermore, I CANNOT alter any ordering! However, I need to sort the two boundaries such that the e.g.
+              left and right border are mapped correctly, as the boundary cells are not ordered.
+              As ghost/inner cells is confusing here, I rather like to use 'from' and 'to', as 'from' data from which bc is copied and 'to' stands for the boundary where it is copied to. As we only change the cells where the data is taken from (from the adjacent to the periodic cell), we only alter the 'boundary_face_cell' in the end.
+        """
         dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
         dict_function_index_to_physical_tag = {i: v for i, v in enumerate(mesh.boundary_conditions_sorted_physical_tags)}
 
@@ -158,33 +167,46 @@ class BoundaryConditions:
             if type(bc) == Periodic:
                 from_physical_tag = dict_function_index_to_physical_tag[dict_physical_name_to_index[bc.periodic_to_physical_tag]]
                 to_physical_tag = dict_function_index_to_physical_tag[dict_physical_name_to_index[bc.physical_tag]]
-                #this is not cells, this is yet the boundary  index -> extract the cell index from here.
-                from_cells_boundary_face_index = mesh.boundary_face_physical_tags == from_physical_tag
-                to_cells_boundary_face_index = mesh.boundary_face_physical_tags == to_physical_tag
 
-                from_cells = mesh.boundary_face_cells[from_cells_boundary_face_index]
-                to_cells = mesh.boundary_face_ghosts[to_cells_boundary_face_index]
+                mask_face_from = mesh.boundary_face_physical_tags == from_physical_tag
+                mask_face_to = mesh.boundary_face_physical_tags == to_physical_tag
+
+                # I want to copy from boundary_face_cells to boundary_face_ghosts!
+                from_cells = mesh.boundary_face_cells[mask_face_from]
+                to_cells = mesh.boundary_face_ghosts[mask_face_to]
 
                 from_coords = mesh.cell_centers[:, from_cells]
                 to_coords = mesh.cell_centers[:, to_cells]
 
 
-                sort_order_from = np.lexsort([from_coords[d, :] for d in range(mesh.dimension)])
-                sort_order_to = np.lexsort([to_coords[d, :] for d in range(mesh.dimension)])
+                # sort not dimension by dimension, but most significant dimension to least significant dimension
+                # determine significance by max difference
+                significance_per_dimension = [from_coords[d, :].max() - from_coords[d, :].min() for d in range(mesh.dimension)]
+                # reverse the order of lexsort such that the most important is first IS NOT NEEDED, since lexsort starts sorting by the last entry in the list
+                sort_order_significance = np.lexsort([significance_per_dimension])
+
+                
+
+                # sort_order_from = np.lexsort([from_coords[d, :] for d in range(mesh.dimension)])
+                # sort_order_to = np.lexsort([to_coords[d, :] for d in range(mesh.dimension)])
+                from_cells_sort_order = np.lexsort([from_coords[d, :] for d in sort_order_significance])
+                to_cells_sort_order = np.lexsort([to_coords[d, :] for d in sort_order_significance])
+
 
                 # advanded indexing creates copies. So I need to construct indexing sets to overwrite the content of 
                 # mesh.boundary_face_ghosts[to_cells_boundary_face_index][sort_order_to]
 
-                indices_ghosts = np.array(list(range(to_cells_boundary_face_index.shape[0])))
-                indices_ghosts = indices_ghosts[to_cells_boundary_face_index] 
-                indices_ghosts = indices_ghosts[sort_order_to] 
+                # generates indices from 0 to number of ghost_cells (total)
+                indices = np.array(list(range(mask_face_to.shape[0])))
+                # masks away all cells that do not belong to this tag
+                indices_to = indices[mask_face_to] 
+                # sort the indices
+                indices_to_sort = indices_to[to_cells_sort_order] 
 
-                indices_cells = np.array(list(range(to_cells_boundary_face_index.shape[0])))
-                indices_cells = indices_cells[from_cells_boundary_face_index] 
-                indices_cells = indices_cells[sort_order_from] 
+                indices_from = indices[mask_face_from] 
+                indices_from_sort = indices_from[from_cells_sort_order] 
 
-                # mesh.boundary_face_ghosts[indices_ghosts] = mesh.boundary_face_cells[indices_cells]
-                mesh.boundary_face_cells[indices_cells] = mesh_copy.boundary_face_cells[indices_ghosts]
+                mesh.boundary_face_cells[indices_to_sort] = mesh_copy.boundary_face_cells[indices_from_sort]
         return mesh
 
     def initialize(self, mesh, time, X, dX, Q, Qaux, parameters, normal):

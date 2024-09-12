@@ -52,8 +52,20 @@ def test_advection_2d(mesh_type):
     bc_tags = ["left", "right", "top", "bottom"]
     bc_tags_periodic_to = ["right", "left", "bottom", "top"]
 
+    # bcs = BC.BoundaryConditions(
+    #     [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+    # )
     bcs = BC.BoundaryConditions(
-        [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+        [
+            BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
+            # BC.Extrapolation(physical_tag='left'),
+            BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
+            # BC.Extrapolation(physical_tag='right'),
+            BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
+            # BC.Extrapolation(physical_tag='bottom'),
+            BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
+            # BC.Extrapolation(physical_tag='top'),
+        ]
     )
     ic = IC.RP2d()
     model = Advection(
@@ -74,7 +86,7 @@ def test_advection_2d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_coarse.msh")
 
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
