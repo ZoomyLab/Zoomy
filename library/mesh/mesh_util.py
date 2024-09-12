@@ -345,4 +345,31 @@ def find_edge_index(element, edge_vertices, element_type):
 
 
     
+def compute_subvolume(face_vertices, cell_center, dim):
+    """
+    Computes the subvolume of a face given its vertices and the cell center.
     
+    Parameters:
+    face_vertices (np.ndarray): The coordinates of the vertices of the face.
+    cell_center (np.ndarray): The coordinates of the cell center.
+    dim (int): The dimensionality of the problem (1, 2, or 3).
+    
+    Returns:
+    float: The subvolume of the face.
+    """
+    if dim == 1:
+        # 1D: Length of the line segment
+        return np.abs(face_vertices[1] - face_vertices[0])
+    
+    elif dim == 2:
+        # 2D: Area of the triangle
+        v0, v1 = face_vertices
+        return 0.5 * np.abs(np.cross(v1 - v0, cell_center - v0))
+    
+    elif dim == 3:
+        # 3D: Volume of the tetrahedron
+        v0, v1, v2 = face_vertices
+        return np.abs(np.dot(np.cross(v1 - v0, v2 - v0), cell_center - v0)) / 6.0
+    
+    else:
+        raise ValueError("Unsupported dimensionality")
