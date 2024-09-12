@@ -298,12 +298,14 @@ class Mesh:
         boundary_dict = get_physical_boundary_labels(filepath)
         (cStart, cEnd) = dm.getHeightStratum(0)
         (vStart, vEnd) = dm.getDepthStratum(0)
-        (eStart, eEnd) = dm.getDepthStratum(1)
+        # (eStart, eEnd) = dm.getDepthStratum(1)
+        (eStart, eEnd) = dm.getHeightStratum(1)
         gdm = dm.clone()
         gdm.constructGhostCells()
         (cgStart, cgEnd) = gdm.getHeightStratum(0)
         (vgStart, vgEnd) = gdm.getDepthStratum(0)
-        (egStart, egEnd) = gdm.getDepthStratum(1)
+        # (egStart, egEnd) = gdm.getDepthStratum(1)
+        (egStart, egEnd) = gdm.getHeightStratum(1)
 
         n_faces_per_cell = len(gdm.getCone(cgStart))
         dim = dm.getDimension()
@@ -340,20 +342,34 @@ class Mesh:
         n_faces = egEnd-egStart
         allowed_keys = []
         vertex_coordinates = np.array(dm.getCoordinates()).reshape((-1, dim))
+
+        def get_face_vertices(dim, gdm, vgStart, e):
+            if dim == 2:
+                return gdm.getCone(e) - vgStart
+            elif dim == 3:
+                face_vertices = set()
+                face_edges = gdm.getCone(e)
+                for edge in face_edges:
+                    face_vertices.update(gdm.getCone(edge))
+                return np.array(list(face_vertices), dtype=int) - vgStart
+            else:
+                assert False
+
         for e in range(egStart, egEnd):
             label = gdm.getLabelValue("Face Sets", e)
             face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(e)
             face_center = gdm.computeCellGeometryFVM(e)[1]
 
-            face_vertices = gdm.getCone(e) - vgStart
+            face_vertices = get_face_vertices(dim, gdm, vgStart, e)
             face_vertices_coords = vertex_coordinates[face_vertices]
             _face_cells = gdm.getSupport(e)
 
             _, _cell_center, _ = gdm.computeCellGeometryFVM(_face_cells[0])
             _face_subvolume = np.zeros(2, dtype=float)
             _face_subvolume[0] = compute_subvolume(face_vertices_coords, _cell_center, dim)
-            _, _cell_center, _ = gdm.computeCellGeometryFVM(_face_cells[1])
-            _face_subvolume[1] = compute_subvolume(face_vertices_coords, _cell_center, dim)
+            if _face_cells[1] < n_inner_cells:
+                _, _cell_center, _ = gdm.computeCellGeometryFVM(_face_cells[1])
+                _face_subvolume[1] = compute_subvolume(face_vertices_coords, _cell_center, dim)
 
 
             # 2 cells support an face. Ghost cell is the one with the higher number
@@ -444,32 +460,32 @@ class Mesh:
 
         ### VECTORIZED CASE
         cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
-        lsq_A = []
-        lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
-        for i_c, c in enumerate(range(cgStart, cgEnd )):
-            neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
-            assert not (i_c == neighbors).any()
-            n_neighbors = neighbors.shape[0]
-            if n_neighbors == 1:
-                neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
-                assert len(neighbors_of_neighbor) == n_faces_per_cell
-                neighbors = np.union1d(neighbors_of_neighbor, neighbors)
-                n_neighbors = neighbors.shape[0]
-            cell_neighbors[i_c, :n_neighbors]= neighbors
-            # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
-            dX = np.zeros((n_neighbors, dim), dtype=float)
-            mat = np.zeros((dim , n_faces_per_cell+1), dtype=float)
-            for i_neighbor, neighbor in enumerate(neighbors):
-                lsq_D[i_c, i_neighbor, i_c] = -1.
-                lsq_D[i_c, i_neighbor, neighbor] = 1.
-                # lsq_D[neighbor, i_neighbor, i_c] = 1.
-                for d in range(dim):
-                    dX[i_neighbor, d ] = cell_centers[neighbor][d] - cell_centers[i_c][d]
-            mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
-            lsq_A.append(mat)
-        lsq_A = np.array(lsq_A, dtype=float)
-        # TODO: sparse matrix.
-        lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
+        # lsq_A = []
+        # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
+        # for i_c, c in enumerate(range(cgStart, cgEnd )):
+        #     neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
+        #     assert not (i_c == neighbors).any()
+        #     n_neighbors = neighbors.shape[0]
+        #     if n_neighbors == 1:
+        #         neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
+        #         assert len(neighbors_of_neighbor) == n_faces_per_cell
+        #         neighbors = np.union1d(neighbors_of_neighbor, neighbors)
+        #         n_neighbors = neighbors.shape[0]
+        #     cell_neighbors[i_c, :n_neighbors]= neighbors
+        #     # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
+        #     dX = np.zeros((n_neighbors, dim), dtype=float)
+        #     mat = np.zeros((dim , n_faces_per_cell+1), dtype=float)
+        #     for i_neighbor, neighbor in enumerate(neighbors):
+        #         lsq_D[i_c, i_neighbor, i_c] = -1.
+        #         lsq_D[i_c, i_neighbor, neighbor] = 1.
+        #         # lsq_D[neighbor, i_neighbor, i_c] = 1.
+        #         for d in range(dim):
+        #             dX[i_neighbor, d ] = cell_centers[neighbor][d] - cell_centers[i_c][d]
+        #     mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
+        #     lsq_A.append(mat)
+        # lsq_A = np.array(lsq_A, dtype=float)
+        # # TODO: sparse matrix.
+        # lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
 
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
