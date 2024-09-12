@@ -61,6 +61,25 @@ class RP2d(InitialConditions):
             else:
                 Q[:,i] = self.low(n_fields)
         return Q
+        
+
+@define(slots=True, frozen=False)
+class RP3d(InitialConditions):
+    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
+    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    jump_position_x: float = 0.0
+    jump_position_y: float = 0.0
+    jump_position_z: float = 0.0
+
+    def apply(self, X, Q):
+        assert X.shape[1] == Q.shape[1]
+        n_fields = Q.shape[0]
+        for i in range(Q.shape[1]):
+            if X[0, i] < self.jump_position_x and X[1,i] < self.jump_position_y and X[2, i] < self.jump_position_z:
+                Q[:,i] = self.high(n_fields)
+            else:
+                Q[:,i] = self.low(n_fields)
+        return Q
 
 @define(slots=True, frozen=False)
 class RadialDambreak(InitialConditions):

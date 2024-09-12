@@ -46,7 +46,7 @@ def test_advection_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
+    settings = Settings(name = "Advection",  parameters = {'px':-1.0, 'py':-1.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -86,7 +86,7 @@ def test_advection_2d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_coarse.msh")
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_finer.msh")
 
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
@@ -98,16 +98,31 @@ def test_advection_2d(mesh_type):
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_advection_3d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':0.0, 'py':0.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.constant(dt=0.01), time_end = .1, output_snapshots = 10)
+    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':0.0, 'pz':0.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.3), time_end = 1.0, output_snapshots = 300)
 
 
-    bc_tags = ["left", "right", "top", "bottom", "front", "back"]
-    bc_tags_periodic_to = ["right", "left", "bottom", "top", "back", "front"]
+    # bc_tags = ["left", "right", "top", "bottom", "front", "back"]
+    # bc_tags_periodic_to = ["right", "left", "bottom", "top", "back", "front"]
+    bc_tags = ["left", "right", "top", "bottom"]
+    bc_tags_periodic_to = ["right", "left", "bottom", "top"]
 
     bcs = BC.BoundaryConditions(
-        [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+        [
+        #  BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
+         BC.Extrapolation(physical_tag='left'),
+        #  BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
+         BC.Extrapolation(physical_tag='right'),
+        #  BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
+         BC.Extrapolation(physical_tag='top'),
+        #  BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
+         BC.Extrapolation(physical_tag='bottom'),
+         BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
+        #  BC.Extrapolation(physical_tag='front'),
+         BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
+        #  BC.Extrapolation(physical_tag='back'),
+        ]
     )
-    ic = IC.RP()
+    ic = IC.RP3d()
     model = Advection(
         dimension=3,
         fields=2,
@@ -118,14 +133,17 @@ def test_advection_3d(mesh_type):
         settings={},
     )
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
-        os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
-        mesh_type
-    )
+    # mesh = Mesh.load_gmsh(
+    #     os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
+    #     mesh_type
+    # )
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_finest.msh")
 
+    solver_price_c(mesh, model, settings, RK1)
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
-    fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
+    # io.generate_vtk(settings.output_dir)
 
 
 @pytest.mark.critical
@@ -266,8 +284,8 @@ def test_reconstruction(mesh_type):
 
 if __name__ == "__main__":
     # test_advection_1d()
-    test_advection_2d("quad")
+    # test_advection_2d("quad")
     # test_advection_2d("triangle")
-    # test_advection_3d("tetra")
+    test_advection_3d("tetra")
     # test_periodic_bc("quad")
     # test_reconstruction("quad")

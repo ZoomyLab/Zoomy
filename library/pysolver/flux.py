@@ -1,6 +1,15 @@
 import numpy as np
 
 """
+Dummy flux
+"""
+def NoFlux():
+    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props = None):
+        Qout = np.zeros_like(Qi)
+        return Qout, False
+    return flux
+
+"""
 Lax-Friedrichs flux implementation
 """
 def LF():

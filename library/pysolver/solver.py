@@ -287,7 +287,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             )
         return dQ, flux_check, nc_flux_check, iA, iB, dQ_face_check_m, dQ_face_check_p
 
-    def operator_price_c(dt, Q, Qaux, parameters, dQ):
+
+    def operator_price_c_cellwise(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
@@ -319,8 +320,46 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
                     * face_volume
                     / vol
                 )
-                 
+        return dQ
 
+    def operator_price_c(dt, Q, Qaux, parameters, dQ):
+        dQ = np.zeros_like(dQ)
+        iA = mesh.face_cells[0]
+        iB = mesh.face_cells[1]
+
+        qA = Q[:, iA] 
+        qB = Q[:, iB] 
+        qauxA = Qaux[:, iA]
+        qauxB = Qaux[:, iB]
+        normals = mesh.face_normals
+        face_volumes = mesh.face_volumes
+        cell_volumesA = mesh.cell_volumes[iA]
+        cell_volumesB = mesh.cell_volumes[iB]
+        svA = mesh.face_subvolumes[:, 0]
+        svB = mesh.face_subvolumes[:, 1]
+
+        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde)
+        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde)
+        # nc_flux = np.zeros_like(flux)
+        assert not failed
+
+        # I add/substract the contributions for the inner cells, based on the faces
+        for faces in mesh.cell_faces:
+            # I need to know if the cell_face is part of A or B and only add that contribution
+            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
+            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
+
+            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
+                (nc_fluxA)
+                * face_volumes
+                / cell_volumesA
+            )[:, faces][:, iA_masked]
+
+            dQ[:, :mesh.n_inner_cells][:, iB_masked] -= (
+                (nc_fluxB)
+                * face_volumes
+                / cell_volumesB
+            )[:, faces][:, iB_masked]
 
         return dQ
 
