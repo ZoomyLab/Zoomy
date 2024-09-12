@@ -46,7 +46,7 @@ def test_advection_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = flux.LF(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
+    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -70,15 +70,17 @@ def test_advection_2d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = Mesh.from_gmsh(
-        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
-        mesh_type
-    )
+    # mesh = Mesh.from_gmsh(
+    #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+    #     mesh_type
+    # )
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
 
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output_dir)
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -251,8 +253,8 @@ def test_reconstruction(mesh_type):
 
 
 if __name__ == "__main__":
-    test_advection_1d()
-    # test_advection_2d("quad")
+    # test_advection_1d()
+    test_advection_2d("quad")
     # test_advection_2d("triangle")
     # test_advection_3d("tetra")
     # test_periodic_bc("quad")

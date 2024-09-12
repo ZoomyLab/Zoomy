@@ -114,7 +114,7 @@ def segmentpath(integration_order=3):
             tmp = np.zeros_like(out)
             for d in range(dim):
                 tmp = model.quasilinear_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
-                out += tmp * normal[d]
+                out[:,:,0] += tmp * normal[d]
             return out
 
         Bint = np.zeros((n_fields, n_fields, n_cells))
