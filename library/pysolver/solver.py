@@ -17,6 +17,7 @@ from library.model.models.shallow_moments import reconstruct_uvw
 import library.pysolver.reconstruction as recon
 import library.pysolver.flux as flux
 import library.pysolver.nonconservative_flux as nonconservative_flux
+import library.pysolver.ader_flux as ader_flux
 import library.pysolver.timestepping as timestepping
 import library.misc.io as io
 import library.mesh.fvm_mesh as fvm_mesh
@@ -327,8 +328,68 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
 
-        qA = Q[:, iA] 
-        qB = Q[:, iB] 
+        ##########################
+        # reconstruction
+        ##########################
+        limiter = get_limiter(name='Venkatakrishnan')
+        n_fields = Q.shape[0]
+        # gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
+        phi = np.zeros_like(Q)
+        gradQ = np.einsum('...dn, kn ->k...d', mesh.lsq_lin_recon_matrix, Q)
+        # gradQ = np.zeros_like(gradQ)
+
+        # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
+        # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
+        # delta_Q_max = np.max(delta_Q, axis=2)
+        # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
+        # delta_Q_min = np.min(delta_Q, axis=2)
+        # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
+
+        ## DEBUG COPY GRADIENT
+        # delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
+        # delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
+
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
+        # grad_Q_rij = np.einsum('kmd, md->km', gradQ_face_cell, rij)
+        # phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
+        # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        # phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        # phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
+
+        # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
+        # for i in range(model.n_fields):
+        #     Qaux[i_aux_recon+mesh.dimension+i, :] = phi[i]
+
+        iA = mesh.face_cells[0]
+        iB = mesh.face_cells[1]
+
+        rA = mesh.face_centers - mesh.cell_centers[:, iA].T
+        rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+        dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
+        dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+        qA = Q[:, iA] + dQA
+        qB = Q[:, iB] + dQB
+        ##########################
+
+
+        # qA = Q[:, iA] 
+        # qB = Q[:, iB] 
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -338,10 +399,19 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         svA = mesh.face_subvolumes[:, 0]
         svB = mesh.face_subvolumes[:, 1]
 
-        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde)
-        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde)
+        ### TODO CHECK!!
+        # for some reason, I need to flip the normal to make it work... is it inward pointing??
+
+        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, -normals, svA, svB, face_volumes, dt, pde)
+        assert not failed
+        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, normals, svB, svA, face_volumes, dt, pde)
         # nc_flux = np.zeros_like(flux)
         assert not failed
+
+        compute_ader_flux = ader_flux.quadrature()
+        ader_flux_Q, failed = compute_ader_flux(Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde)
+        assert not failed
+        
 
         # I add/substract the contributions for the inner cells, based on the faces
         for faces in mesh.cell_faces:
@@ -361,7 +431,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
                 / cell_volumesB
             )[:, faces][:, iB_masked]
 
-        return dQ
+        return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q 
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
@@ -893,6 +963,8 @@ def solver_price_c(
         if settings.truncate_last_time_step:
             if time + dt * 1.001 > settings.time_end:
                 dt = settings.time_end - time + 10 ** (-10)
+
+
 
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
 
