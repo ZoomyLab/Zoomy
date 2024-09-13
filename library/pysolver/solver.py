@@ -335,8 +335,10 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         n_fields = Q.shape[0]
         # gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
         phi = np.zeros_like(Q)
-        gradQ = np.einsum('...dn, kn ->k...d', mesh.lsq_lin_recon_matrix, Q)
+        gradQ = np.einsum('...dn, kn ->k...d', mesh.lsq_gradQ, Q)
+        deltaQ = np.einsum('...hn, kn->kh...', mesh.deltaQ, Q)
         # gradQ = np.zeros_like(gradQ)
+
 
         # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
         # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
@@ -383,8 +385,37 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
         dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
         dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+
+        qAm = Q[:, iA]
+        qBm= Q[:, iB]
         qA = Q[:, iA] + dQA
         qB = Q[:, iB] + dQB
+
+        qmin = np.min(np.array([qAm, qBm]), axis=0)
+        qmax = np.max(np.array([qAm, qBm]), axis=0)
+
+        def phi(q):
+            return (q + np.abs(q)) / (1 + np.abs(q))
+
+        def compute_gamma(umin,umax, uface, ucell, eps=0.1):
+           theta_min = (umin-ucell)/(uface-ucell)
+           theta_max = (umax-ucell)/(uface-ucell)
+           out = np.ones_like(theta_min)
+           out = np.where(uface < ucell - eps, phi(theta_min), out)
+           out = np.where(uface > ucell - eps, phi(theta_max), out)
+           return out
+
+        gammaA = compute_gamma(qmin, qmax, qA, qAm)
+        gammaB = compute_gamma(qmin, qmax, qB, qBm)
+
+        gamma_cells = np.zeros_like(mesh.cell_faces)
+        for n in range(mesh.cell_faces.shape[0]):
+            gamma_cells[n] = gammaA[mesh.cell_faces[n]]
+        gamma_cells[mesh.face_cells[1]] = gammaB
+
+        gamma_cell = np.min(gamma_cells, axis=1)
+
+
         ##########################
 
 
@@ -505,7 +536,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         n_fields = Q.shape[0]
         gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
         phi = np.zeros_like(Q)
-        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
+        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_gradQ, Q)
         delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
         delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
         # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
@@ -1109,7 +1140,7 @@ def jax_fvm_unsteady_semidiscrete(
         # reconstruction
         # gradQ = np.zeros((model.n_fields, mesh.dimension, mesh.n_cells), dtype=float)
         # phi = np.zeros_like(Q)
-        # gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_lin_recon_matrix, Q)
+        # gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_gradQ, Q)
         # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
         # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
         # # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
