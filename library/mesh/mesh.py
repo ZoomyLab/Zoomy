@@ -206,7 +206,8 @@ class Mesh:
     face_subvolumes: FArray
     boundary_conditions_sorted_physical_tags: IArray
     boundary_conditions_sorted_names: CArray
-    lsq_lin_recon_matrix: FArray
+    lsq_gradQ: FArray
+    deltaQ: FArray
 
     @classmethod
     def create_1d(cls, domain: tuple[float, float], n_inner_cells: int):
@@ -286,11 +287,11 @@ class Mesh:
         boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
         boundary_conditions_sorted_names = np.array(['left', 'right'])
 
-        lsq_lin_recon_matrix = np.zeros((n_cells, dimension, n_cells), dtype=float)
+        lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
 
 
         # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
-        return cls(dimension, 'line', n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_lin_recon_matrix)
+        return cls(dimension, 'line', n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_gradQ, deltaQ)
 
     @classmethod
     def from_gmsh(cls, filepath):
@@ -468,9 +469,9 @@ class Mesh:
             # lsq_A.append(mat.copy())
         # lsq_A = np.array(lsq_A, dtype=float)
         # TODO: sparse matrix.
-        # lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
+        # lsq_gradQ = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
         lsq_gradQ = A_glob
-        lsq_deltaQ = R_glob
+        deltaQ = R_glob
 
         ### VECTORIZED CASE
         # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
@@ -499,7 +500,7 @@ class Mesh:
         #     lsq_A.append(mat)
         # lsq_A = np.array(lsq_A, dtype=float)
         # # TODO: sparse matrix.
-        # lsq_lin_recon_matrix = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
+        # lsq_gradQ = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
 
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
@@ -533,7 +534,7 @@ class Mesh:
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_gradQ)
+        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_gradQ, deltaQ)
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -566,7 +567,8 @@ class Mesh:
             mesh.create_dataset("face_subvolumes", data=self.face_subvolumes)
             mesh.create_dataset("boundary_conditions_sorted_physical_tags", data=np.array(self.boundary_conditions_sorted_physical_tags))
             mesh.create_dataset("boundary_conditions_sorted_names", data=np.array(self.boundary_conditions_sorted_names, dtype='S'))
-            mesh.create_dataset("lsq_lin_recon_matrix", data=np.array(self.lsq_lin_recon_matrix))
+            mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
+            mesh.create_dataset("deltaQ", data=np.array(self.deltaQ))
 
     @classmethod
     def from_hdf5(cls, filepath: str):
@@ -600,7 +602,8 @@ class Mesh:
                 file["mesh"]["face_subvolumes"][()],
                 file["mesh"]["boundary_conditions_sorted_physical_tags"][()],
                 np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str'),
-                file["mesh"]["lsq_lin_recon_matrix"][()],
+                file["mesh"]["lsq_gradQ"][()],
+                file["mesh"]["deltaQ"][()],
             )
         return mesh
 
