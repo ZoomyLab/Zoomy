@@ -182,6 +182,7 @@ class BoundaryConditions:
                 # sort not dimension by dimension, but most significant dimension to least significant dimension
                 # determine significance by max difference
                 significance_per_dimension = [from_coords[d, :].max() - from_coords[d, :].min() for d in range(mesh.dimension)]
+                _significance_per_dimension = [to_coords[d, :].max() - to_coords[d, :].min() for d in range(mesh.dimension)]
                 # reverse the order of lexsort such that the most important is first IS NOT NEEDED, since lexsort starts sorting by the last entry in the list
                 sort_order_significance = np.lexsort([significance_per_dimension])
 
@@ -207,6 +208,9 @@ class BoundaryConditions:
                 indices_from_sort = indices_from[from_cells_sort_order] 
 
                 mesh.boundary_face_cells[indices_to_sort] = mesh_copy.boundary_face_cells[indices_from_sort]
+
+                if not np.allclose(from_coords[sort_order_significance[-1], from_cells_sort_order], to_coords[sort_order_significance[-1], to_cells_sort_order]):
+                    print('WARNING: Periodic boundary condition detected for incompatible mesh. The periodic sides of the mesh does not have the same face layout.')
         return mesh
 
     def initialize(self, mesh, time, X, dX, Q, Qaux, parameters, normal):
