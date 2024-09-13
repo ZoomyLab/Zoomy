@@ -98,7 +98,7 @@ def test_advection_2d(mesh_type):
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_advection_3d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':0.0, 'pz':0.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.3), time_end = 1.0, output_snapshots = 300)
+    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.3), time_end = 1.0, output_snapshots = 300)
 
 
     # bc_tags = ["left", "right", "top", "bottom", "front", "back"]
@@ -116,10 +116,10 @@ def test_advection_3d(mesh_type):
          BC.Extrapolation(physical_tag='top'),
         #  BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
          BC.Extrapolation(physical_tag='bottom'),
-         BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
-        #  BC.Extrapolation(physical_tag='front'),
-         BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
-        #  BC.Extrapolation(physical_tag='back'),
+        #  BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
+         BC.Extrapolation(physical_tag='front'),
+        #  BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
+         BC.Extrapolation(physical_tag='back'),
         ]
     )
     ic = IC.RP3d()
@@ -137,7 +137,8 @@ def test_advection_3d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_finest.msh")
+    # mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_finest.msh")
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_mid.msh")
 
     solver_price_c(mesh, model, settings, RK1)
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
