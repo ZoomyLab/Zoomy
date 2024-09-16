@@ -200,6 +200,7 @@ class Mesh:
     boundary_face_physical_tags: IArray
     boundary_face_face_indices: IArray
     face_cells: IArray
+    # face_cell_face_index: IArray
     face_normals: FArray
     face_volumes: FArray
     face_centers: FArray
@@ -272,12 +273,19 @@ class Mesh:
         boundary_face_face_indices = np.array([0, n_faces-1], dtype=int)
 
         face_cells = np.empty((n_faces, 2), dtype=int)
+        # face_cell_face_index = (n_faces + 1)*np.ones((n_faces, 2), dtype=int)
         face_cells[1:n_faces-1, 0] = list(range(0,n_inner_cells-1))
         face_cells[1:n_faces-1, 1] = list(range(1,n_inner_cells))
+        # face_cell_face_index[1:n_faces-1, 0] = 1
+        # face_cell_face_index[1:n_faces-1, 1] = 0
         face_cells[0, 0] = n_inner_cells
+        # face_cell_face_index[0, 0] = 0
         face_cells[0, 1] = 0
+        # face_cell_face_index[0, 1] = 0
         face_cells[-1, 0] = n_inner_cells-1
-        face_cells[-1, 1] = n_inner_cells+1
+        # face_cell_face_index[-1, 0] = 1 
+        face_cells[-1, 1] = n_inner_cells
+        # face_cell_face_index[-1, 1] = 0
         face_centers = 0.5*(cell_centers[face_cells[:,0]] + cell_centers[face_cells[:,1]])
 
         face_subvolumes = np.empty((n_faces, 2), dtype=float)
@@ -312,6 +320,7 @@ class Mesh:
         dim = dm.getDimension()
         n_cells = cgEnd-cgStart
         n_inner_cells = cEnd-cStart
+        n_faces = egEnd-egStart
         n_vertices = vEnd-vStart
         cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
@@ -336,11 +345,11 @@ class Mesh:
         boundary_face_face_indices = {k: [] for k in boundary_dict.values()}
         boundary_face_physical_tags = {k: [] for k in boundary_dict.values()}
         face_cells = []
+        # face_cell_face_index = np.zeros((n_faces, 2), dtype=int)
         face_normals = []
         face_volumes = []
         face_centers = []
         face_subvolumes = []
-        n_faces = egEnd-egStart
         allowed_keys = []
         vertex_coordinates = np.array(dm.getCoordinates()).reshape((-1, dim))
 
@@ -407,6 +416,7 @@ class Mesh:
             cell_faces[i_c,:] = faces
 
 
+
         #least squares liner reconstruction
         # Consider 2d, three points, scalar field, then the reconstruction is for a quad mesh
         # DU = [u_{i+1, j} - u_{i,j}, u_{i-1, j} - u_{i,j}, u_{i, j+1} - u_{i,j}, u_{i, j-1} - u_{i,j}]  \in \mathbb{R}^{4}
@@ -467,6 +477,32 @@ class Mesh:
             # else:
             #     mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
             # lsq_A.append(mat.copy())
+
+
+### FACE CELL FACE INDEX
+
+        # for e in range(egStart, egEnd):
+        #     _e = e - egStart
+        #     left_cell = np.array(face_cells)[_e, 0]
+        #     right_cell = np.array(face_cells)[_e, 1]
+        #     if left_cell < n_inner_cells:
+        #         for i_f, f in enumerate(cell_faces[left_cell]):
+        #             if _e == f:
+        #                 face_cell_face_index[_e, 0] = i_f
+        #     else:
+        #         face_cell_face_index[_e, 0] = 0
+        #     if right_cell < n_inner_cells:
+        #         for i_f, f in enumerate(cell_faces[right_cell]):
+        #             if _e == f:
+        #                 face_cell_face_index[_e, 1] = i_f
+        #     else:
+        #         face_cell_face_index[_e, 1] = 0
+####
+
+        # for e, (cs, f) in enumerate(zip(boundary_face_cells, boundary_face_face_indices)):
+        #     for c in cs:
+        #         for i_f, f in enumerate(c)
+
         # lsq_A = np.array(lsq_A, dtype=float)
         # TODO: sparse matrix.
         # lsq_gradQ = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
@@ -510,6 +546,7 @@ class Mesh:
 
 
         face_cells = np.array(face_cells, dtype=int)
+        # face_cell_face_index = np.array(face_cell_face_index, dtype=int)
         boundary_face_function_numbers = _boundary_dict_indices(boundary_face_cells)
 
         # get rid of empty keys in the boundary_dict (e.g. no surface values in 2d)
@@ -561,6 +598,7 @@ class Mesh:
             mesh.create_dataset("boundary_face_physical_tags", data=self.boundary_face_physical_tags)
             mesh.create_dataset("boundary_face_face_indices", data=self.boundary_face_face_indices)
             mesh.create_dataset("face_cells", data=self.face_cells)
+            # mesh.create_dataset("face_cell_face_index", data=self.face_cell_face_index)
             mesh.create_dataset("face_normals", data=self.face_normals)
             mesh.create_dataset("face_volumes", data=self.face_volumes)
             mesh.create_dataset("face_centers", data=self.face_centers)
@@ -596,6 +634,7 @@ class Mesh:
                 file["mesh"]["boundary_face_physical_tags"][()],
                 file["mesh"]["boundary_face_face_indices"][()],
                 file["mesh"]["face_cells"][()],
+                # file["mesh"]["face_cell_face_index"][()],
                 file["mesh"]["face_normals"][()],
                 file["mesh"]["face_volumes"][()],
                 file["mesh"]["face_centers"][()],

@@ -383,6 +383,25 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         rA = mesh.face_centers - mesh.cell_centers[:, iA].T
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+        # rN = np.empty((Q.shape[1], mesh.n_faces_per_cell))
+
+        # for i_c in range(mesh.n_inner_cells):
+        #     for i_f in range(mesh.n_faces_per_cell):
+        #         cell_face = mesh.cell_faces[i_f, i_c]
+        #         dist = mesh.face_centers[cell_face] - mesh.cell_centers[:, i_c].T
+        #         dqdn = gradQ[:, i_c, :] @ dist
+        #         q_const = Q[:, i_c]
+        #         q_recon = q_const + dqdn
+
+        # i_cell_faces_flat = np.zeros((mesh.n_faces * 2), dtype=int)
+        # i_cell_cells_flat = np.zeros((mesh.n_faces * 2), dtype=int)
+        # i_cell_cells_flat[::mesh.n_faces_per_cell] = list(range(mesh.n_cells))
+        # i_cell_faces_flat[:mesh.face_cells.shape[1]] = mesh.face_cells[0, :]
+        # i_cell_faces_flat[mesh.face_cells.shape[1]:] = mesh.face_cells[1, :]
+
+        # for j in range(mesh.n_faces_per_cell):
+        #     rN[:, j] = mesh.face_centers[mesh.cell_faces[:, j]] - mesh.cell_centers[:].T
+
         dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
         dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
 
@@ -397,7 +416,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         def phi(q):
             return (q + np.abs(q)) / (1 + np.abs(q))
 
-        def compute_gamma(umin,umax, uface, ucell, eps=0.1):
+        def compute_gamma(umin,umax, uface, ucell, eps=0.0):
            theta_min = (umin-ucell)/(uface-ucell)
            theta_max = (umax-ucell)/(uface-ucell)
            out = np.ones_like(theta_min)
@@ -408,19 +427,22 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         gammaA = compute_gamma(qmin, qmax, qA, qAm)
         gammaB = compute_gamma(qmin, qmax, qB, qBm)
 
-        gamma_cells = np.zeros_like(mesh.cell_faces)
-        for n in range(mesh.cell_faces.shape[0]):
-            gamma_cells[n] = gammaA[mesh.cell_faces[n]]
-        gamma_cells[mesh.face_cells[1]] = gammaB
-
-        gamma_cell = np.min(gamma_cells, axis=1)
-
+        gamma_cell = np.infty * np.ones((Q.shape[0], mesh.n_cells), dtype=int)
+        #TODO vectorize
+        for c, gamma in zip(iA, gammaA.T):
+            gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
+        for c, gamma in zip(iB, gammaB.T):
+            gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
 
         ##########################
 
 
         # qA = Q[:, iA] 
         # qB = Q[:, iB] 
+        qA = Q[:, iA] + gamma_cell[:, iA] * dQA
+        qB = Q[:, iB] + gamma_cell[:, iB] * dQB
+        # qA = Q[:, iA] + dQA
+        # qB = Q[:, iB] + dQB
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
