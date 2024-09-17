@@ -102,7 +102,8 @@ def test_advection_2d(mesh_type):
     def custom_ic(x):
         Q = np.zeros(2, dtype=float)
         Q[0] = np.sin(np.pi * 2 * x[0])
-        Q[1] = np.sin(np.pi * 2 * x[1])
+        # Q[1] = np.sin(np.pi * 2 * x[1])
+        Q[1] = 1.
         # Q[0] =  0.1*x[0] + 1.
         # Q[1] =  0.1*x[1] + 2.
         return Q

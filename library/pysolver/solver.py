@@ -383,6 +383,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         rA = mesh.face_centers - mesh.cell_centers[:, iA].T
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+
         # rN = np.empty((Q.shape[1], mesh.n_faces_per_cell))
 
         # for i_c in range(mesh.n_inner_cells):
@@ -402,45 +403,68 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # for j in range(mesh.n_faces_per_cell):
         #     rN[:, j] = mesh.face_centers[mesh.cell_faces[:, j]] - mesh.cell_centers[:].T
 
+        # dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
+        # dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+
+        # qAm = Q[:, iA]
+        # qBm= Q[:, iB]
+        # qA = Q[:, iA] + dQA
+        # qB = Q[:, iB] + dQB
+
+        # qmin = np.min(np.array([qAm, qBm]), axis=0)
+        # qmax = np.max(np.array([qAm, qBm]), axis=0)
+
+        def phi(q):
+            # return (q + np.abs(q)) / (1 + np.abs(q))
+            return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
+
+        # def compute_gamma(umin,umax, uface, ucell, eps=0.0):
+        #    theta_min = (umin-ucell)/(uface-ucell)
+        #    theta_max = (umax-ucell)/(uface-ucell)
+        #    out = np.ones_like(theta_min)
+        #    out = np.where(uface < ucell - eps, phi(theta_min), out)
+        #    out = np.where(uface > ucell - eps, phi(theta_max), out)
+        #    return out
+
+        # gammaA = compute_gamma(qmin, qmax, qA, qAm)
+        # gammaB = compute_gamma(qmin, qmax, qB, qBm)
+
+        # gamma_cell = np.infty * np.ones((Q.shape[0], mesh.n_cells), dtype=int)
+        # #TODO vectorize
+        # for c, gamma in zip(iA, gammaA.T):
+        #     gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
+        # for c, gamma in zip(iB, gammaB.T):
+        #     gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
+
+        ##########################
+
+        ### Reconstruction ala 10.1016/S0017-9310(02)00330-7
+
+        qA = Q[:, iA]
+        qB = Q[:, iB]
+        rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
+        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
+        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
         dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
         dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
 
-        qAm = Q[:, iA]
-        qBm= Q[:, iB]
-        qA = Q[:, iA] + dQA
-        qB = Q[:, iB] + dQB
+        eps = 10**(-14)
+        rA = (2*dQA_dn)/(qB - qA + eps) - 1
+        rB = (2*dQB_dn)/(qA - qB + eps) - 1
 
-        qmin = np.min(np.array([qAm, qBm]), axis=0)
-        qmax = np.max(np.array([qAm, qBm]), axis=0)
-
-        def phi(q):
-            return (q + np.abs(q)) / (1 + np.abs(q))
-
-        def compute_gamma(umin,umax, uface, ucell, eps=0.0):
-           theta_min = (umin-ucell)/(uface-ucell)
-           theta_max = (umax-ucell)/(uface-ucell)
-           out = np.ones_like(theta_min)
-           out = np.where(uface < ucell - eps, phi(theta_min), out)
-           out = np.where(uface > ucell - eps, phi(theta_max), out)
-           return out
-
-        gammaA = compute_gamma(qmin, qmax, qA, qAm)
-        gammaB = compute_gamma(qmin, qmax, qB, qBm)
-
-        gamma_cell = np.infty * np.ones((Q.shape[0], mesh.n_cells), dtype=int)
-        #TODO vectorize
-        for c, gamma in zip(iA, gammaA.T):
-            gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
-        for c, gamma in zip(iB, gammaB.T):
-            gamma_cell[:, c] = np.min([gamma_cell[:, c], gamma], axis=0)
-
-        ##########################
+        # qA = Q[:, iA] + 0.5*phi(rA) * (Q[:, iB] - Q[:, iA])
+        # qB = Q[:, iB] + 0.5*phi(rB) * (Q[:, iA] - Q[:, iB])
+        qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
+        qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
+        # assert (qA <= Q[:, iA]).all() and (qA <= Q[:, iB]).all()
+        # assert (qB <= Q[:, iB]).all() and (qB <= Q[:, iB]).all()
+        ###
 
 
         # qA = Q[:, iA] 
         # qB = Q[:, iB] 
-        qA = Q[:, iA] + gamma_cell[:, iA] * dQA
-        qB = Q[:, iB] + gamma_cell[:, iB] * dQB
+        # qA = Q[:, iA] + gamma_cell[:, iA] * dQA
+        # qB = Q[:, iB] + gamma_cell[:, iB] * dQB
         # qA = Q[:, iA] + dQA
         # qB = Q[:, iB] + dQB
         qauxA = Qaux[:, iA]
