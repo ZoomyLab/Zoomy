@@ -296,6 +296,7 @@ class Mesh:
         boundary_conditions_sorted_names = np.array(['left', 'right'])
 
         lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
+        deltaQ = np.zeros((n_cells, n_faces_per_cell, n_cells), dtype=float)
 
 
         # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)

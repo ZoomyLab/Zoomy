@@ -381,8 +381,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
 
-        rA = mesh.face_centers - mesh.cell_centers[:, iA].T
-        rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+        # rA = mesh.face_centers - mesh.cell_centers[:, iA].T
+        # rB = mesh.face_centers - mesh.cell_centers[:, iB].T
 
         # rN = np.empty((Q.shape[1], mesh.n_faces_per_cell))
 
@@ -414,9 +414,9 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # qmin = np.min(np.array([qAm, qBm]), axis=0)
         # qmax = np.max(np.array([qAm, qBm]), axis=0)
 
-        def phi(q):
-            # return (q + np.abs(q)) / (1 + np.abs(q))
-            return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
+        # def phi(q):
+        #     # return (q + np.abs(q)) / (1 + np.abs(q))
+        #     return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
 
         # def compute_gamma(umin,umax, uface, ucell, eps=0.0):
         #    theta_min = (umin-ucell)/(uface-ucell)
@@ -439,25 +439,27 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ##########################
 
         ### Reconstruction ala 10.1016/S0017-9310(02)00330-7
+        # def phi(q):
+        #     # return (q + np.abs(q)) / (1 + np.abs(q))
+        #     return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
+
+        # rA = mesh.face_centers - mesh.cell_centers[:, iA].T
+        # rB = mesh.face_centers - mesh.cell_centers[:, iB].T
 
         qA = Q[:, iA]
         qB = Q[:, iB]
-        rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
-        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
-        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
-        dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
-        dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+        # rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
+        # dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
+        # dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
+        # dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
+        # dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
 
-        eps = 10**(-14)
-        rA = (2*dQA_dn)/(qB - qA + eps) - 1
-        rB = (2*dQB_dn)/(qA - qB + eps) - 1
+        # eps = 10**(-14)
+        # rA = (2*dQA_dn)/(qB - qA + eps) - 1
+        # rB = (2*dQB_dn)/(qA - qB + eps) - 1
 
-        # qA = Q[:, iA] + 0.5*phi(rA) * (Q[:, iB] - Q[:, iA])
-        # qB = Q[:, iB] + 0.5*phi(rB) * (Q[:, iA] - Q[:, iB])
-        qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
-        qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
-        # assert (qA <= Q[:, iA]).all() and (qA <= Q[:, iB]).all()
-        # assert (qB <= Q[:, iB]).all() and (qB <= Q[:, iB]).all()
+        # qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
+        # qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
         ###
 
 

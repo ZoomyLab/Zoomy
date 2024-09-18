@@ -3,7 +3,7 @@ import numpy as np
 """
 Dummy flux
 """
-def NoFlux():
+def Zero():
     def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props = None):
         Qout = np.zeros_like(Qi)
         return Qout, False
