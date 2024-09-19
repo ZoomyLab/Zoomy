@@ -284,7 +284,7 @@ class Mesh:
         # face_cell_face_index[0, 1] = 0
         face_cells[-1, 0] = n_inner_cells-1
         # face_cell_face_index[-1, 0] = 1 
-        face_cells[-1, 1] = n_inner_cells
+        face_cells[-1, 1] = n_inner_cells+1
         # face_cell_face_index[-1, 1] = 0
         face_centers = 0.5*(cell_centers[face_cells[:,0]] + cell_centers[face_cells[:,1]])
 
