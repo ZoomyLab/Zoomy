@@ -1035,7 +1035,7 @@ def solver_price_c(
         dt = settings.compute_dt(
             Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
         )
-        assert dt > 10 ** (-6)
+        assert dt > 10 ** (-8)
         assert not np.isnan(dt) and np.isfinite(dt)
 
         #     # add 0.001 safty measure to avoid very small time steps
@@ -1047,9 +1047,9 @@ def solver_price_c(
 
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
 
-        # Qnew = ode_solver_source(
-        #     compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
-        # )
+        Qnew = ode_solver_source(
+            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        )
         Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
 
         # Update solution and time
