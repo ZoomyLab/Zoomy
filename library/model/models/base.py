@@ -230,14 +230,14 @@ class Model:
         else:
             self.sympy_source_jacobian = self.source_jacobian()
         self.sympy_nonconservative_matrix = self.nonconservative_matrix()
-        # if self.quasilinear_matrix() is None:
-        #     self.sympy_quasilinear_matrix = [
-        #         self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
-        #         for d in range(self.dimension)
-        #     ]
-        # else:
-        #     self.sympy_quasilinear_matrix = self.quasilinear_matrix()
-        self.sympy_quasilinear_matrix = self.quasilinear_matrix()
+        if self.quasilinear_matrix() is None:
+            self.sympy_quasilinear_matrix = [
+                self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
+                for d in range(self.dimension)
+            ]
+        else:
+            self.sympy_quasilinear_matrix = self.quasilinear_matrix()
+        # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         # TODO check case imaginary
         # TODO check case not computable
         if self.settings.eigenvalue_mode == 'symbolic':
@@ -637,7 +637,7 @@ class Model:
         return None
 
     def quasilinear_matrix(self):
-        return []
+        return None
 
     def source_jacobian(self):
         return None

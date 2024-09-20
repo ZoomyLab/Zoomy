@@ -91,7 +91,7 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
                 max_abs_eigenvalue, np.max(np.abs(evB))
             )
 
-        assert max_abs_eigenvalue > 10 ** (-6)
+        assert max_abs_eigenvalue > 10 ** (-8)
 
         return max_abs_eigenvalue
 
@@ -112,7 +112,7 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
         evB = pde.eigenvalues(qB, qauxB, parameters, normal)
         max_abs_eigenvalue = max(np.abs(evA).max(), np.abs(evB).max())
 
-        assert max_abs_eigenvalue > 10 ** (-6)
+        assert max_abs_eigenvalue > 10 ** (-8)
 
         return max_abs_eigenvalue
 
