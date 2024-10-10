@@ -439,28 +439,28 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ##########################
 
         ### Reconstruction ala 10.1016/S0017-9310(02)00330-7
-        # def phi(q):
-        #     # return (q + np.abs(q)) / (1 + np.abs(q))
-        #     return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
+        def phi(q):
+            # return (q + np.abs(q)) / (1 + np.abs(q))
+            return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
 
-        # rA = mesh.face_centers - mesh.cell_centers[:, iA].T
-        # rB = mesh.face_centers - mesh.cell_centers[:, iB].T
+        rA = mesh.face_centers - mesh.cell_centers[:, iA].T
+        rB = mesh.face_centers - mesh.cell_centers[:, iB].T
 
         qA = Q[:, iA]
         qB = Q[:, iB]
-        # rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
-        # dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
-        # dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
-        # dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
-        # dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+        rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
+        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
+        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
+        dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
+        dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
 
-        # eps = 10**(-14)
-        # rA = (2*dQA_dn)/(qB - qA + eps) - 1
-        # rB = (2*dQB_dn)/(qA - qB + eps) - 1
+        eps = 10**(-14)
+        rA = (2*dQA_dn)/(qB - qA + eps) - 1
+        rB = (2*dQB_dn)/(qA - qB + eps) - 1
 
-        # qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
-        # qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
-        ###
+        qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
+        qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
+        ##
 
 
         # qA = Q[:, iA] 
@@ -511,6 +511,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             )[:, faces][:, iB_masked]
 
         return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q 
+        # return dQ 
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)

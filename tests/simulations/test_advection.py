@@ -77,7 +77,7 @@ def test_reconstruction_1d():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 1.0, output_snapshots = 100)
+    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.Zero(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 2.0, output_snapshots = 100)
 
 
     bc_tags = ["left", "right", "top", "bottom"]
@@ -101,7 +101,10 @@ def test_advection_2d(mesh_type):
     # ic = IC.RP2d()
     def custom_ic(x):
         Q = np.zeros(2, dtype=float)
-        Q[0] = np.sin(np.pi * 2 * x[0])
+        # Q[0] = np.sin(np.pi * 2 * x[0])
+        # Q[0] = np.where(x[0] < 0, 1, 2)
+        # Q[0] = np.where(x[0] < 0, 1+x[0], 1-x[0])
+        Q[0] = 2 + x[0]
         # Q[1] = np.sin(np.pi * 2 * x[1])
         Q[1] = 1.
         # Q[0] =  0.1*x[0] + 1.
@@ -127,7 +130,7 @@ def test_advection_2d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_finer.msh")
+    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
 
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
