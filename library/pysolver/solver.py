@@ -449,17 +449,43 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         qA = Q[:, iA]
         qB = Q[:, iB]
         rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
-        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], -rBA)
-        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rBA)        
+        rAB = -rBA
+        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rBA)
+        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rAB)        
         dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
         dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+        
+        dBA = qB - qA
+        dAB = qA - qB
 
         eps = 10**(-14)
-        rA = (2*dQA_dn)/(qB - qA + eps) - 1
-        rB = (2*dQB_dn)/(qA - qB + eps) - 1
+        slopeA = (2*dQA_dn)/(dBA + eps) - 1
+        slopeB = (2*dQB_dn)/(dAB + eps) - 1
 
-        qA = Q[:, iA] + 0.5*phi(rA) * (dQA)
-        qB = Q[:, iB] + 0.5*phi(rB) * (dQB)
+        # qA = Q[:, iA] + 0.5*phi(slopeA) * (dQA)
+        # qB = Q[:, iB] + 0.5*phi(slopeB) * (dQB)
+
+        # qA = qA + 0.5*phi(slopeA) * (dBA)
+        # qB = qB + 0.5*phi(slopeB) * (dAB)
+        
+        _qA = qA + dQA
+        _qB = qB + dQB 
+        
+        def limiter(q, qA, qB):
+            qmax = np.max([qA, qB], axis=0)
+            qmin = np.min([qA, qB], axis=0)
+            phi = np.ones(qA.shape[1])
+            phi = np.where(q > qmax, 0., phi)
+            phi = np.where(q < qmin, 0., phi)
+            # q = np.max([q, qmin], axis=0)
+            return phi
+        phiA = limiter(_qA, qA, qB)
+        phiB = limiter(_qB, qA, qB)
+        phi = np.min([phiA, phiB], axis=0)
+        qA = qA + phi * dQA
+        qB = qB + phi * dQB
+
+
         ##
 
 
@@ -468,7 +494,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # qA = Q[:, iA] + gamma_cell[:, iA] * dQA
         # qB = Q[:, iB] + gamma_cell[:, iB] * dQB
         # qA = Q[:, iA] + dQA
-        # qB = Q[:, iB] + dQB
+        # qB = Q[:, iB] + d        
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -481,11 +507,17 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ### TODO CHECK!!
         # for some reason, I need to flip the normal to make it work... is it inward pointing??
 
-        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, -normals, svA, svB, face_volumes, dt, pde)
+        fluxA, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        fluxB, failed = compute_num_flux(qB, qA, qauxB, qauxA, parameters, -normals, pde)
+        
+        assert np.allclose(fluxA, -fluxB)
+
+        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde)
         assert not failed
-        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, normals, svB, svA, face_volumes, dt, pde)
+        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde)
         # nc_flux = np.zeros_like(flux)
         assert not failed
+        
 
         compute_ader_flux = ader_flux.quadrature()
         ader_flux_Q, failed = compute_ader_flux(Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde)
@@ -499,19 +531,21 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
 
             dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
-                (nc_fluxA)
+                # (nc_fluxA)
+                (fluxA)
                 * face_volumes
                 / cell_volumesA
             )[:, faces][:, iA_masked]
 
             dQ[:, :mesh.n_inner_cells][:, iB_masked] -= (
-                (nc_fluxB)
+                # (nc_fluxB)
+                (fluxB)
                 * face_volumes
                 / cell_volumesB
             )[:, faces][:, iB_masked]
 
-        return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q 
-        # return dQ 
+        # return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q 
+        return dQ 
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)

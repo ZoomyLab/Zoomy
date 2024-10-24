@@ -15,6 +15,25 @@ from library.mesh.mesh_util import compute_subvolume
 
 # petsc4py.init(sys.argv)
 
+def least_squares_reconstruction(n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1):
+    A_glob = np.zeros((n_cells, dim, n_cells), dtype=float)
+    R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
+    for i_c in range(n_cells):
+        # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
+        dX = np.zeros((n_neighbors, dim), dtype=float)
+        R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
+        A_loc = np.zeros((dim , n_neighbors), dtype=float)
+        R_loc[:, i_c] = -1.
+        for i_neighbor, neighbor in enumerate(neighbors[i_c]):
+            R_loc[i_neighbor, neighbor] = 1.
+            assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
+            for d in range(dim):
+                dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
+        A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
+        A_glob[i_c, :, :] = np.einsum('ij, jk->ik', A_loc, R_loc)
+        R_glob[i_c, :, :]  = R_loc
+    return A_glob, R_glob
+
 def get_physical_boundary_labels(filepath):
     mesh = meshio.read(filepath)
     boundary_dict = {key: value[0] for key, value in mesh.field_data.items()}
@@ -252,14 +271,14 @@ class Mesh:
         cell_neighbors[0, 0] = n_inner_cells
         # right neighbor of n_inner_cell is the second ghost
         cell_neighbors[n_inner_cells-1, 1] = n_inner_cells+1
-        # left neighbor of first ghost is empty 
-        cell_neighbors[n_inner_cells, 0] = n_cells+1
+        # left neighbor of first ghost is empty, but we add the neighbor of the neighbor
+        cell_neighbors[n_inner_cells, 0] = 1
         # right neighbor of first ghost is first cell
         cell_neighbors[n_inner_cells, 1] = 0
         # left neighbor of second ghost is last inner 
         cell_neighbors[n_inner_cells+1, 0] = n_inner_cells-1
-        # right neighbor of second ghost is empty
-        cell_neighbors[n_inner_cells+1, 1] = n_cells+1
+        # right neighbor of second ghost is empty, but we add the neighbor of the neighbor
+        cell_neighbors[n_inner_cells+1, 1] = n_inner_cells-2
 
         for i_face in range(0, n_faces):
             face_normals[i_face, 0] = 1.
@@ -297,6 +316,11 @@ class Mesh:
 
         lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
         deltaQ = np.zeros((n_cells, n_faces_per_cell, n_cells), dtype=float)
+        
+        polynomial_degree = 1
+        n_neighbors = (n_faces_per_cell*polynomial_degree)
+        dim = 1
+        lsq_gradQ, deltaQ = least_squares_reconstruction(n_cells, dim, n_neighbors, cell_neighbors, cell_centers)
 
 
         # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
@@ -436,13 +460,6 @@ class Mesh:
         polynomial_degree = 1
         n_neighbors = (n_faces_per_cell*polynomial_degree)
         cell_neighbors = (n_cells+1)*np.ones((n_cells, n_neighbors), dtype=int)
-        # cell_neigbors 
-        A_glob = np.zeros((n_cells, dim, n_cells), dtype=float)
-        R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
-        # A_loc = np.empty((dim, ))
-        # lsq_A = []
-        # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
-
 
         for i_c, c in enumerate(range(cgStart, cgEnd )):
 
@@ -456,59 +473,7 @@ class Mesh:
                 neighbors = np.setdiff1d(np.union1d(neighbors_of_neighbor, neighbors), [c])
             cell_neighbors[i_c, :]= neighbors
 
-            # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
-            dX = np.zeros((n_neighbors, dim), dtype=float)
-            R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
-            A_loc = np.zeros((dim , n_neighbors), dtype=float)
-            R_loc[:, i_c] = -1.
-            for i_neighbor, neighbor in enumerate(neighbors):
-                R_loc[i_neighbor, neighbor] = 1.
-                # i_data_point = i_neighbor
-                # lsq_D[i_c, i_data_point, i_c] = -1.
-                # lsq_D[i_c, i_data_point, neighbor] = 1.
-                # lsq_D[neighbor, i_neighbor, i_c] = 1.
-                assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
-                for d in range(dim):
-                    dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
-            A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
-            A_glob[i_c, :, :] = np.einsum('ij, jk->ik', A_loc, R_loc)
-            R_glob[i_c, :, :]  = R_loc
-            # if n_neighbors == 1:
-            #     mat[:, :n_neighbors] =  dX.T
-            # else:
-            #     mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
-            # lsq_A.append(mat.copy())
-
-
-### FACE CELL FACE INDEX
-
-        # for e in range(egStart, egEnd):
-        #     _e = e - egStart
-        #     left_cell = np.array(face_cells)[_e, 0]
-        #     right_cell = np.array(face_cells)[_e, 1]
-        #     if left_cell < n_inner_cells:
-        #         for i_f, f in enumerate(cell_faces[left_cell]):
-        #             if _e == f:
-        #                 face_cell_face_index[_e, 0] = i_f
-        #     else:
-        #         face_cell_face_index[_e, 0] = 0
-        #     if right_cell < n_inner_cells:
-        #         for i_f, f in enumerate(cell_faces[right_cell]):
-        #             if _e == f:
-        #                 face_cell_face_index[_e, 1] = i_f
-        #     else:
-        #         face_cell_face_index[_e, 1] = 0
-####
-
-        # for e, (cs, f) in enumerate(zip(boundary_face_cells, boundary_face_face_indices)):
-        #     for c in cs:
-        #         for i_f, f in enumerate(c)
-
-        # lsq_A = np.array(lsq_A, dtype=float)
-        # TODO: sparse matrix.
-        # lsq_gradQ = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
-        lsq_gradQ = A_glob
-        deltaQ = R_glob
+        lsq_gradQ, deltaQ = least_squares_reconstruction(n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1)
 
         ### VECTORIZED CASE
         # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)

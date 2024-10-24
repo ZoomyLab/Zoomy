@@ -45,7 +45,7 @@ def test_advection_1d():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_reconstruction_1d():
-    settings = Settings(name = "Advection", parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.9), time_end = 1., output_snapshots = 10000)
+    settings = Settings(name = "Advection", parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=1.0), time_end = 2., output_snapshots = 10000)
 
 
     bc_tags = ["left", "right"]
@@ -53,8 +53,15 @@ def test_reconstruction_1d():
 
     bcs = BC.BoundaryConditions(
         [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+        # [BC.Extrapolation(physical_tag=tag) for tag in bc_tags]
     )
     ic = IC.RP()
+    # def custom_ic(x):
+    #     Q = np.zeros(1, dtype=float)
+    #     Q[0] = 2 +  x[0]
+    #     return Q
+    # ic = IC.UserFunction(custom_ic)
+
     model = Advection(
         dimension=1,
         fields=1,
@@ -64,13 +71,10 @@ def test_reconstruction_1d():
         initial_conditions=ic,
         settings={},
     )
-    # mesh = Mesh.create_1d((-1, 1), 100)
-    mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
+    mesh = petscMesh.Mesh.create_1d((-1, 1), 10)
 
 
-    # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
-    # io.generate_vtk(settings.output_dir)
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 @pytest.mark.critical
@@ -329,8 +333,8 @@ def test_reconstruction_2d(mesh_type):
 
 if __name__ == "__main__":
     # test_advection_1d()
-    # test_reconstruction_1d()
-    test_advection_2d("quad")
+    test_reconstruction_1d()
+    # test_advection_2d("quad")
     # test_advection_2d("triangle")
     # test_advection_3d("tetra")
     # test_periodic_bc("quad")
