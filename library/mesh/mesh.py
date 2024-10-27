@@ -640,6 +640,82 @@ class Mesh:
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
 
+class MeshLayered():
+    n_layers: int
+    mesh: Mesh
+
+    def get_n_cells_total(self):
+        n_cells_loc = mesh.n_cells
+        n_layers = self.n_layers
+        return n_cells_loc * n_layers
+
+    def get_layer(self, Q_glob, layer):
+        n_cells = self.mesh.n_cells
+        i_start = layer * n_cells
+        i_end = i_start + n_cells
+        return  Q_glob[:, i_start:i_end]
+
+    def write_layer(self, Q_glob, Q_loc, layer):
+        n_cells = self.mesh.n_cells
+        i_start = layer * n_cells
+        i_end = i_start + n_cells
+        Q_glob[:, i_start:i_end] = Q_loc
+        return Q_glob
+
+    def get_column(self, Q_glob, idx):
+        n_cells = self.mesh.n_cells
+        n_fields = Q_glob.shape[0]
+        n_layers = self.n_layers
+        assert (idx < n_cells)
+        Qcol = np.zeros((n_fields, n_layers), dtype=float)
+        i_offset = 0
+        for layer in range(n_layers):
+            i_offset += layer * n_cells
+            Qcol[:, layer] = Q_glob[:, i_offset + idx]
+        return Qcol
+
+    def integrate_column(self, Qcol): 
+        Qint = np.zeros_like(Qcol)
+        n_layers = self.n_layers
+        dz = 1./n_layers
+        Qint[0] = Qcol[0] * dz/2
+        for layer in range(1, n_layers):
+            Qint[layer] = Qcol[layer-1] + Qcol[layer] * dz/2
+        return Qint
+
+    def averaging_operator(self, Q):
+        #WARNING:  not vectorized!
+        Qout = np.zeros_like(Q)
+        n_inner_cells = self.mesh.n_inner_cells
+        for i in range(n_inner_cells):
+            Qout[:, i] = self.integrate_column(self.get_column(Q, i))
+        return Qout
+
+    def update_omega(self, Q, Qaux, Qinfo):
+        i_dhu_dx = Qinfo['grad'][1][0]
+        dhu_dx = Qaux[i_dhu_dx] 
+        h = Q[0]
+        avg = self.averaging_operator(dhu_dx)
+        omega = 1/h * avg
+        i_omega = Qinfo['omega']
+        Qaux[i_omega] = omega
+        return Qaux
+
+    def update_gradient(self, Q, Qaux, Qinfo):
+        #TODO finish
+        #do for each layer and write to Qaux
+        i_dQdx = Qinfo['grad'][:][0]
+        i_dQdy = Qinfo['grad'][:][1]
+        lsq_gradQ = self.mesh.lsq_gradQ
+        n_cells = self.mesh.n_cells
+        n_layers = self.n_layers
+        for layer in range(n_layers):
+            gradQ = np.einsum('ij..., j... -> i...', lsq_gradQ, Q)
+            i_offset = n_cells * layer
+            Qaux[i_dQdx, i_offset:i_offset+n_cells] = gradQ[0]
+            Qaux[i_dQdy, i_offset:i_offset+n_cells] = gradQ[1]
+        return Qaux
+
 
 if __name__ == "__main__":
     path = '/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_coarse.msh'
