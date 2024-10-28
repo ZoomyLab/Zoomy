@@ -15,24 +15,28 @@ from library.mesh.mesh_util import compute_subvolume
 
 # petsc4py.init(sys.argv)
 
-def least_squares_reconstruction(n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1):
+
+def least_squares_reconstruction(
+    n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
+):
     A_glob = np.zeros((n_cells, dim, n_cells), dtype=float)
     R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
     for i_c in range(n_cells):
         # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
         dX = np.zeros((n_neighbors, dim), dtype=float)
         R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
-        A_loc = np.zeros((dim , n_neighbors), dtype=float)
-        R_loc[:, i_c] = -1.
+        A_loc = np.zeros((dim, n_neighbors), dtype=float)
+        R_loc[:, i_c] = -1.0
         for i_neighbor, neighbor in enumerate(neighbors[i_c]):
-            R_loc[i_neighbor, neighbor] = 1.
+            R_loc[i_neighbor, neighbor] = 1.0
             assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
             for d in range(dim):
                 dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
         A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
-        A_glob[i_c, :, :] = np.einsum('ij, jk->ik', A_loc, R_loc)
-        R_glob[i_c, :, :]  = R_loc
+        A_glob[i_c, :, :] = np.einsum("ij, jk->ik", A_loc, R_loc)
+        R_glob[i_c, :, :] = R_loc
     return A_glob, R_glob
+
 
 def get_physical_boundary_labels(filepath):
     mesh = meshio.read(filepath)
@@ -50,8 +54,8 @@ def _compute_inradius_generic(cell_center, face_centers, face_normals):
     for center, normal in zip(face_centers, face_normals):
         distance = np.abs(np.dot(center - cell_center, normal))
         inradius = min(inradius, distance)
-    if inradius  <= 0:
-       inradius = np.array(face_centers - cell_center).min() 
+    if inradius <= 0:
+        inradius = np.array(face_centers - cell_center).min()
     return inradius
 
 
@@ -63,7 +67,7 @@ def compute_cell_inradius(dm):
     """
     (cStart, cEnd) = dm.getHeightStratum(0)
     (vStart, vEnd) = dm.getDepthStratum(0)
-    (eStart, eEnd) = dm.getDepthStratum(1) 
+    (eStart, eEnd) = dm.getDepthStratum(1)
     inradius = []
     for c in range(cStart, cEnd):
         _, cell_center, _ = dm.computeCellGeometryFVM(c)
@@ -74,7 +78,9 @@ def compute_cell_inradius(dm):
             _, center, normal = dm.computeCellGeometryFVM(f)
             face_normals.append(normal)
             face_centers.append(center)
-        inradius.append(_compute_inradius_generic(cell_center, face_centers, face_normals))
+        inradius.append(
+            _compute_inradius_generic(cell_center, face_centers, face_normals)
+        )
     return np.array(inradius, dtype=float)
 
 
@@ -89,6 +95,7 @@ def compute_cell_inradius(dm):
 #         if label > -1:
 #             ghost_cells[label].append(ghost_cell)
 #     return dm, ghost_cells
+
 
 def get_mesh_type_from_dm(num_faces_per_cell, dim):
     if dim == 1:
@@ -112,7 +119,8 @@ def get_mesh_type_from_dm(num_faces_per_cell, dim):
             return "hexahedron"
         else:
             assert False
-    assert(False)
+    assert False
+
 
 # def compute_edge_data(dm, boundary_dict):
 #     gdm = dm.clone()
@@ -131,18 +139,20 @@ def get_mesh_type_from_dm(num_faces_per_cell, dim):
 #             boundary_face_vertices[label].append(gdm.getCone(e)-vStart)
 #     return dm, boundary_cells, boundary_face_vertices
 
+
 def _boundary_dict_to_list(d):
     l = []
     for i, vs in enumerate(d.values()):
         l += vs
     return l
 
+
 def _boundary_dict_indices(d):
     indices = []
     index = 0
     for values in d.values():
-        indices +=  [index for v in values]
-        index +=1
+        indices += [index for v in values]
+        index += 1
     return np.array(indices, dtype=int)
 
 
@@ -152,17 +162,21 @@ def _boundary_dict_indices(d):
 #     dm, ghost_cells_dict = construct_ghost_cells(dm, boundary_dict)
 #     return dm, boundary_dict, ghost_cells_dict
 
+
 def load_gmsh_to_fvm(filepath):
-    dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD) 
+    dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
     boundary_dict = get_physical_boundary_labels(filepath)
-    dm, boundary_cells_dict, boundary_face_vertices_dict = compute_boundary_data(dm, boundary_dict)
+    dm, boundary_cells_dict, boundary_face_vertices_dict = compute_boundary_data(
+        dm, boundary_dict
+    )
     boundary_face_corresponding_element = boundary_dict_to_list(boundary_cells_dict)
     boundary_face_vertices = boundary_dict_to_list(boundary_face_vertices_dict)
     return dm, boundary_dict, ghost_cells_dict
 
 
 def _get_mesh_type(dm):
-    return 'quad'
+    return "quad"
+
 
 def convert_to_fvm_mesh(dm, boundary_dict, ghost_cells_dict):
     dimension = dm.getDimension()
@@ -172,8 +186,8 @@ def convert_to_fvm_mesh(dm, boundary_dict, ghost_cells_dict):
     (vStart, vEnd) = dm.getDepthStratum(0)
     (eStart, eEnd) = dm.getDepthStratum(1)
 
-    n_elements = cEnd-cStart
-    n_vertices = vEnd-vStart
+    n_elements = cEnd - cStart
+    n_vertices = vEnd - vStart
     n_boundary_elements = []
     boundary_face_corresponding_element = []
     boundary_face_vertices = []
@@ -187,12 +201,13 @@ def convert_to_fvm_mesh(dm, boundary_dict, ghost_cells_dict):
 
 
 def _get_neighberhood(dm, cell, cStart=0):
-    neighbors = np.array(
-        [
-            dm.getSupport(f)[dm.getSupport(f) != cell][0]
-            for f in dm.getCone(cell)
-        ]
-    , dtype=int) - cStart
+    neighbors = (
+        np.array(
+            [dm.getSupport(f)[dm.getSupport(f) != cell][0] for f in dm.getCone(cell)],
+            dtype=int,
+        )
+        - cStart
+    )
     return neighbors
 
 
@@ -238,97 +253,128 @@ class Mesh:
         n_vertices = n_inner_cells + 1
         dimension = 1
         n_faces_per_cell = 2
-        n_faces = n_inner_cells+1
-        n_boundary_faces=2
+        n_faces = n_inner_cells + 1
+        n_boundary_faces = 2
         dx = (xR - xL) / n_inner_cells
         vertex_coordinates = np.zeros((n_vertices, 1))
-        vertex_coordinates[:, 0] = np.linspace(
-            xL, xR, n_vertices, dtype=float
-        )
+        vertex_coordinates[:, 0] = np.linspace(xL, xR, n_vertices, dtype=float)
         cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
-        cell_vertices[:, 0] = list(range(0, n_vertices-1))
+        cell_vertices[:, 0] = list(range(0, n_vertices - 1))
         cell_vertices[:, 1] = list(range(1, n_vertices))
         cell_volumes = dx * np.ones(n_cells, dtype=float)
-        cell_inradius = dx/2 * np.ones(n_cells, dtype=float)
+        cell_inradius = dx / 2 * np.ones(n_cells, dtype=float)
 
         face_normals = np.zeros((n_faces, dimension), dtype=float)
         face_volumes = np.ones((n_faces), dtype=float)
 
         cell_centers = np.zeros((n_cells, dimension), dtype=float)
         cell_centers[:n_inner_cells, 0] = np.arange(xL + dx / 2, xR, dx)
-        cell_centers[n_inner_cells, 0] = xL - dx/2
-        cell_centers[n_inner_cells+1, 0] = xR + dx/2
-        cell_neighbors = (n_cells+1) * np.ones((n_cells, n_faces_per_cell), dtype=int)
+        cell_centers[n_inner_cells, 0] = xL - dx / 2
+        cell_centers[n_inner_cells + 1, 0] = xR + dx / 2
+        cell_neighbors = (n_cells + 1) * np.ones((n_cells, n_faces_per_cell), dtype=int)
 
         cell_faces = np.empty((n_inner_cells, n_faces_per_cell), dtype=int)
-        cell_faces[:, 0] = list(range(0, n_faces-1))
+        cell_faces[:, 0] = list(range(0, n_faces - 1))
         cell_faces[:, 1] = list(range(1, n_faces))
 
-        #inner cells
+        # inner cells
         for i_cell in range(0, n_cells):
-            cell_neighbors[i_cell, :] = [i_cell-1, i_cell+1]
+            cell_neighbors[i_cell, :] = [i_cell - 1, i_cell + 1]
         # left neighbor of 0is the first ghost
         cell_neighbors[0, 0] = n_inner_cells
         # right neighbor of n_inner_cell is the second ghost
-        cell_neighbors[n_inner_cells-1, 1] = n_inner_cells+1
+        cell_neighbors[n_inner_cells - 1, 1] = n_inner_cells + 1
         # left neighbor of first ghost is empty, but we add the neighbor of the neighbor
         cell_neighbors[n_inner_cells, 0] = 1
         # right neighbor of first ghost is first cell
         cell_neighbors[n_inner_cells, 1] = 0
-        # left neighbor of second ghost is last inner 
-        cell_neighbors[n_inner_cells+1, 0] = n_inner_cells-1
+        # left neighbor of second ghost is last inner
+        cell_neighbors[n_inner_cells + 1, 0] = n_inner_cells - 1
         # right neighbor of second ghost is empty, but we add the neighbor of the neighbor
-        cell_neighbors[n_inner_cells+1, 1] = n_inner_cells-2
+        cell_neighbors[n_inner_cells + 1, 1] = n_inner_cells - 2
 
         for i_face in range(0, n_faces):
-            face_normals[i_face, 0] = 1.
+            face_normals[i_face, 0] = 1.0
 
-        boundary_face_cells = np.array([0, n_inner_cells-1], dtype=int)
-        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells+1], dtype=int)
+        boundary_face_cells = np.array([0, n_inner_cells - 1], dtype=int)
+        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells + 1], dtype=int)
         boundary_face_function_numbers = np.empty((n_boundary_faces), dtype=int)
         boundary_face_function_numbers[0] = 0
         boundary_face_function_numbers[1] = 1
         boundary_face_physical_tags = np.array([0, 1], dtype=int)
-        boundary_face_face_indices = np.array([0, n_faces-1], dtype=int)
+        boundary_face_face_indices = np.array([0, n_faces - 1], dtype=int)
 
         face_cells = np.empty((n_faces, 2), dtype=int)
         # face_cell_face_index = (n_faces + 1)*np.ones((n_faces, 2), dtype=int)
-        face_cells[1:n_faces-1, 0] = list(range(0,n_inner_cells-1))
-        face_cells[1:n_faces-1, 1] = list(range(1,n_inner_cells))
+        face_cells[1 : n_faces - 1, 0] = list(range(0, n_inner_cells - 1))
+        face_cells[1 : n_faces - 1, 1] = list(range(1, n_inner_cells))
         # face_cell_face_index[1:n_faces-1, 0] = 1
         # face_cell_face_index[1:n_faces-1, 1] = 0
         face_cells[0, 0] = n_inner_cells
         # face_cell_face_index[0, 0] = 0
         face_cells[0, 1] = 0
         # face_cell_face_index[0, 1] = 0
-        face_cells[-1, 0] = n_inner_cells-1
-        # face_cell_face_index[-1, 0] = 1 
-        face_cells[-1, 1] = n_inner_cells+1
+        face_cells[-1, 0] = n_inner_cells - 1
+        # face_cell_face_index[-1, 0] = 1
+        face_cells[-1, 1] = n_inner_cells + 1
         # face_cell_face_index[-1, 1] = 0
-        face_centers = 0.5*(cell_centers[face_cells[:,0]] + cell_centers[face_cells[:,1]])
+        face_centers = 0.5 * (
+            cell_centers[face_cells[:, 0]] + cell_centers[face_cells[:, 1]]
+        )
 
         face_subvolumes = np.empty((n_faces, 2), dtype=float)
-        face_subvolumes[:, 0] = dx/2
-        face_subvolumes[:, 1] = dx/2
+        face_subvolumes[:, 0] = dx / 2
+        face_subvolumes[:, 1] = dx / 2
 
         boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
-        boundary_conditions_sorted_names = np.array(['left', 'right'])
+        boundary_conditions_sorted_names = np.array(["left", "right"])
 
         lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
         deltaQ = np.zeros((n_cells, n_faces_per_cell, n_cells), dtype=float)
-        
-        polynomial_degree = 1
-        n_neighbors = (n_faces_per_cell*polynomial_degree)
-        dim = 1
-        lsq_gradQ, deltaQ = least_squares_reconstruction(n_cells, dim, n_neighbors, cell_neighbors, cell_centers)
 
+        polynomial_degree = 1
+        n_neighbors = n_faces_per_cell * polynomial_degree
+        dim = 1
+        lsq_gradQ, deltaQ = least_squares_reconstruction(
+            n_cells, dim, n_neighbors, cell_neighbors, cell_centers
+        )
 
         # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
-        return cls(dimension, 'line', n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_gradQ, deltaQ)
+        return cls(
+            dimension,
+            "line",
+            n_cells,
+            n_inner_cells,
+            n_faces,
+            n_vertices,
+            n_boundary_faces,
+            n_faces_per_cell,
+            vertex_coordinates.T,
+            cell_vertices.T,
+            cell_faces.T,
+            cell_volumes,
+            cell_centers.T,
+            cell_inradius,
+            cell_neighbors,
+            boundary_face_cells.T,
+            boundary_face_ghosts.T,
+            boundary_face_function_numbers,
+            boundary_face_physical_tags,
+            boundary_face_face_indices.T,
+            face_cells.T,
+            face_normals.T,
+            face_volumes,
+            face_centers,
+            face_subvolumes,
+            boundary_conditions_sorted_physical_tags,
+            boundary_conditions_sorted_names,
+            lsq_gradQ,
+            deltaQ,
+        )
 
     @classmethod
     def from_gmsh(cls, filepath):
-        dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD) 
+        dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
         boundary_dict = get_physical_boundary_labels(filepath)
         (cStart, cEnd) = dm.getHeightStratum(0)
         (vStart, vEnd) = dm.getDepthStratum(0)
@@ -343,10 +389,10 @@ class Mesh:
 
         n_faces_per_cell = len(gdm.getCone(cgStart))
         dim = dm.getDimension()
-        n_cells = cgEnd-cgStart
-        n_inner_cells = cEnd-cStart
-        n_faces = egEnd-egStart
-        n_vertices = vEnd-vStart
+        n_cells = cgEnd - cgStart
+        n_inner_cells = cEnd - cStart
+        n_faces = egEnd - egStart
+        n_vertices = vEnd - vStart
         cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_centers = np.zeros((n_cells, dim), dtype=float)
@@ -355,12 +401,19 @@ class Mesh:
         cell_inradius = compute_cell_inradius(dm)
         for i_c, c in enumerate(range(cStart, cEnd)):
             cell_volume, cell_center, cell_normal = dm.computeCellGeometryFVM(c)
-            transitive_closure_points, transitive_closure_orientation = dm.getTransitiveClosure(c, useCone=True)
-            _cell_vertices = transitive_closure_points[np.logical_and(transitive_closure_points >= vStart, transitive_closure_points <vEnd)]
+            transitive_closure_points, transitive_closure_orientation = (
+                dm.getTransitiveClosure(c, useCone=True)
+            )
+            _cell_vertices = transitive_closure_points[
+                np.logical_and(
+                    transitive_closure_points >= vStart,
+                    transitive_closure_points < vEnd,
+                )
+            ]
             # _cell_vertices_orientation = transitive_closure_orientation[np.logical_and(transitive_closure_points >= vStart, transitive_closure_points <vEnd)]
             assert _cell_vertices.shape[0] == cell_vertices.shape[1]
             # assert (_cell_vertices_orientation == 0).all()
-            cell_vertices[i_c,: ] = _cell_vertices - vStart
+            cell_vertices[i_c, :] = _cell_vertices - vStart
             cell_centers[i_c, :] = cell_center
             cell_volumes[i_c] = cell_volume
 
@@ -401,11 +454,14 @@ class Mesh:
 
             _, _cell_center, _ = gdm.computeCellGeometryFVM(_face_cells[0])
             _face_subvolume = np.zeros(2, dtype=float)
-            _face_subvolume[0] = compute_subvolume(face_vertices_coords, _cell_center, dim)
+            _face_subvolume[0] = compute_subvolume(
+                face_vertices_coords, _cell_center, dim
+            )
             if _face_cells[1] < n_inner_cells:
                 _, _cell_center, _ = gdm.computeCellGeometryFVM(_face_cells[1])
-                _face_subvolume[1] = compute_subvolume(face_vertices_coords, _cell_center, dim)
-
+                _face_subvolume[1] = compute_subvolume(
+                    face_vertices_coords, _cell_center, dim
+                )
 
             # 2 cells support an face. Ghost cell is the one with the higher number
             if label > -1:
@@ -414,19 +470,23 @@ class Mesh:
                 boundary_ghost = gdm.getSupport(e).max() - cStart
                 boundary_face_cells[label].append(boundary_cell)
                 boundary_face_ghosts[label].append(boundary_ghost)
-                boundary_face_face_indices[label].append(e-egStart)
+                boundary_face_face_indices[label].append(e - egStart)
                 boundary_face_physical_tags[label].append(label)
                 # boundary_face_vertices[label].append(gdm.getCone(e)-vStart)
                 # for periodic boudnary conditions, I need the ghost cell to have a cell_center. I copy the one from the related inner cell.
                 _face_cell = gdm.getSupport(e).min()
                 _face_ghost = gdm.getSupport(e).max()
-                cell_centers[_face_ghost] = cell_centers[_face_cell] + 2* ((face_center-cell_centers[_face_cell]) @ face_normal) * face_normal
+                cell_centers[_face_ghost] = (
+                    cell_centers[_face_cell]
+                    + 2
+                    * ((face_center - cell_centers[_face_cell]) @ face_normal)
+                    * face_normal
+                )
                 # subvolumes of the ghost cell are computes wrongly. In this case, copy the value from the inner cell.
                 if _face_cells[0] > _face_cells[1]:
                     _face_subvolume[0] = _face_subvolume[1]
                 else:
                     _face_subvolume[1] = _face_subvolume[0]
-                    
 
             face_centers.append(face_center)
             _face_cells = gdm.getSupport(e) - cStart
@@ -438,14 +498,12 @@ class Mesh:
         # I only want to iterate over the inner cells, but in the ghosted mesh
         for i_c, c in enumerate(range(cgStart, cgStart + n_inner_cells)):
             faces = gdm.getCone(c) - egStart
-            cell_faces[i_c,:] = faces
+            cell_faces[i_c, :] = faces
 
-
-
-        #least squares liner reconstruction
+        # least squares liner reconstruction
         # Consider 2d, three points, scalar field, then the reconstruction is for a quad mesh
         # DU = [u_{i+1, j} - u_{i,j}, u_{i-1, j} - u_{i,j}, u_{i, j+1} - u_{i,j}, u_{i, j-1} - u_{i,j}]  \in \mathbb{R}^{4}
-        # DX = [[x_{i+1, j} - x_{i,j}, x_{i-1, j} - x_{i,j}, x_{i, j+1} - x_{i,j}, x_{i, j-1} - x_{i,j}], 
+        # DX = [[x_{i+1, j} - x_{i,j}, x_{i-1, j} - x_{i,j}, x_{i, j+1} - x_{i,j}, x_{i, j-1} - x_{i,j}],
         #       [y_{i+1, j} - y_{i,j}, y_{i-1, j} - y_{i,j}, y_{i, j+1} - y_{i,j}, y_{i, j-1} - y_{i,j}]]  \in \mathbb{R}^{4x2}
         # S = [S_x, S_y] \mathbb{R}^{2}
         # solve DU = DX \dot S via normal equation
@@ -458,29 +516,34 @@ class Mesh:
         lsq_gradQ = np.zeros(1)
         ### NON_VECTORIZED CASE
         polynomial_degree = 1
-        n_neighbors = (n_faces_per_cell*polynomial_degree)
-        cell_neighbors = (n_cells+1)*np.ones((n_cells, n_neighbors), dtype=int)
+        n_neighbors = n_faces_per_cell * polynomial_degree
+        cell_neighbors = (n_cells + 1) * np.ones((n_cells, n_neighbors), dtype=int)
 
-        for i_c, c in enumerate(range(cgStart, cgEnd )):
-
+        for i_c, c in enumerate(range(cgStart, cgEnd)):
             ### GET NEIGHBORHOOD
-            neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
+            neighbors = _get_neighberhood(gdm, c, cStart=cgStart)
             assert not (i_c == neighbors).any()
             _n_neighbors = neighbors.shape[0]
             if _n_neighbors == 1:
-                neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
+                neighbors_of_neighbor = _get_neighberhood(
+                    gdm, neighbors[0] + cgStart, cStart=cgStart
+                )
                 assert len(neighbors_of_neighbor) == n_faces_per_cell
-                neighbors = np.setdiff1d(np.union1d(neighbors_of_neighbor, neighbors), [c])
-            cell_neighbors[i_c, :]= neighbors
+                neighbors = np.setdiff1d(
+                    np.union1d(neighbors_of_neighbor, neighbors), [c]
+                )
+            cell_neighbors[i_c, :] = neighbors
 
-        lsq_gradQ, deltaQ = least_squares_reconstruction(n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1)
+        lsq_gradQ, deltaQ = least_squares_reconstruction(
+            n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1
+        )
 
         ### VECTORIZED CASE
         # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
         # lsq_A = []
         # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
         # for i_c, c in enumerate(range(cgStart, cgEnd )):
-        #     neighbors = _get_neighberhood(gdm, c, cStart=cgStart) 
+        #     neighbors = _get_neighberhood(gdm, c, cStart=cgStart)
         #     assert not (i_c == neighbors).any()
         #     n_neighbors = neighbors.shape[0]
         #     if n_neighbors == 1:
@@ -509,8 +572,6 @@ class Mesh:
         face_normals = np.array(face_normals, dtype=float)
         face_subvolumes = np.array(face_subvolumes, dtype=float)
 
-
-
         face_cells = np.array(face_cells, dtype=int)
         # face_cell_face_index = np.array(face_cell_face_index, dtype=int)
         boundary_face_function_numbers = _boundary_dict_indices(boundary_face_cells)
@@ -525,19 +586,63 @@ class Mesh:
         boundary_dict = {k: boundary_dict_reduced[k] for k in sorted_keys}
         boundary_face_cells = {k: boundary_face_cells[k] for k in sorted_keys}
         boundary_face_ghosts = {k: boundary_face_ghosts[k] for k in sorted_keys}
-        boundary_face_face_indices = {k: boundary_face_face_indices[k] for k in sorted_keys}
+        boundary_face_face_indices = {
+            k: boundary_face_face_indices[k] for k in sorted_keys
+        }
 
-        boundary_conditions_sorted_physical_tags = np.array(list(boundary_dict.keys()), dtype=int)
-        boundary_conditions_sorted_names = np.array(list(boundary_dict.values()), dtype='str')
-        boundary_face_cells = np.array(_boundary_dict_to_list(boundary_face_cells), dtype=int)
-        boundary_face_ghosts = np.array(_boundary_dict_to_list(boundary_face_ghosts), dtype=int)
-        boundary_face_physical_tags = np.array(_boundary_dict_to_list(boundary_face_physical_tags), dtype=int)
-        boundary_face_face_indices = np.array(_boundary_dict_to_list(boundary_face_face_indices), dtype=int)
-        n_boundary_faces =  boundary_face_cells.shape[0]
+        boundary_conditions_sorted_physical_tags = np.array(
+            list(boundary_dict.keys()), dtype=int
+        )
+        boundary_conditions_sorted_names = np.array(
+            list(boundary_dict.values()), dtype="str"
+        )
+        boundary_face_cells = np.array(
+            _boundary_dict_to_list(boundary_face_cells), dtype=int
+        )
+        boundary_face_ghosts = np.array(
+            _boundary_dict_to_list(boundary_face_ghosts), dtype=int
+        )
+        boundary_face_physical_tags = np.array(
+            _boundary_dict_to_list(boundary_face_physical_tags), dtype=int
+        )
+        boundary_face_face_indices = np.array(
+            _boundary_dict_to_list(boundary_face_face_indices), dtype=int
+        )
+        n_boundary_faces = boundary_face_cells.shape[0]
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(dim, mesh_type, n_cells, n_inner_cells, n_faces, n_vertices, n_boundary_faces, n_faces_per_cell, vertex_coordinates.T, cell_vertices.T, cell_faces.T, cell_volumes, cell_centers.T, cell_inradius, cell_neighbors, boundary_face_cells.T, boundary_face_ghosts.T, boundary_face_function_numbers, boundary_face_physical_tags, boundary_face_face_indices.T, face_cells.T, face_normals.T, face_volumes, face_centers, face_subvolumes, boundary_conditions_sorted_physical_tags, boundary_conditions_sorted_names, lsq_gradQ, deltaQ)
+        return cls(
+            dim,
+            mesh_type,
+            n_cells,
+            n_inner_cells,
+            n_faces,
+            n_vertices,
+            n_boundary_faces,
+            n_faces_per_cell,
+            vertex_coordinates.T,
+            cell_vertices.T,
+            cell_faces.T,
+            cell_volumes,
+            cell_centers.T,
+            cell_inradius,
+            cell_neighbors,
+            boundary_face_cells.T,
+            boundary_face_ghosts.T,
+            boundary_face_function_numbers,
+            boundary_face_physical_tags,
+            boundary_face_face_indices.T,
+            face_cells.T,
+            face_normals.T,
+            face_volumes,
+            face_centers,
+            face_subvolumes,
+            boundary_conditions_sorted_physical_tags,
+            boundary_conditions_sorted_names,
+            lsq_gradQ,
+            deltaQ,
+        )
 
     def write_to_hdf5(self, filepath: str):
         main_dir = os.getenv("SMS")
@@ -560,17 +665,30 @@ class Mesh:
             mesh.create_dataset("cell_neighbors", data=self.cell_neighbors)
             mesh.create_dataset("boundary_face_cells", data=self.boundary_face_cells)
             mesh.create_dataset("boundary_face_ghosts", data=self.boundary_face_ghosts)
-            mesh.create_dataset("boundary_face_function_numbers", data=self.boundary_face_function_numbers)
-            mesh.create_dataset("boundary_face_physical_tags", data=self.boundary_face_physical_tags)
-            mesh.create_dataset("boundary_face_face_indices", data=self.boundary_face_face_indices)
+            mesh.create_dataset(
+                "boundary_face_function_numbers",
+                data=self.boundary_face_function_numbers,
+            )
+            mesh.create_dataset(
+                "boundary_face_physical_tags", data=self.boundary_face_physical_tags
+            )
+            mesh.create_dataset(
+                "boundary_face_face_indices", data=self.boundary_face_face_indices
+            )
             mesh.create_dataset("face_cells", data=self.face_cells)
             # mesh.create_dataset("face_cell_face_index", data=self.face_cell_face_index)
             mesh.create_dataset("face_normals", data=self.face_normals)
             mesh.create_dataset("face_volumes", data=self.face_volumes)
             mesh.create_dataset("face_centers", data=self.face_centers)
             mesh.create_dataset("face_subvolumes", data=self.face_subvolumes)
-            mesh.create_dataset("boundary_conditions_sorted_physical_tags", data=np.array(self.boundary_conditions_sorted_physical_tags))
-            mesh.create_dataset("boundary_conditions_sorted_names", data=np.array(self.boundary_conditions_sorted_names, dtype='S'))
+            mesh.create_dataset(
+                "boundary_conditions_sorted_physical_tags",
+                data=np.array(self.boundary_conditions_sorted_physical_tags),
+            )
+            mesh.create_dataset(
+                "boundary_conditions_sorted_names",
+                data=np.array(self.boundary_conditions_sorted_names, dtype="S"),
+            )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
             mesh.create_dataset("deltaQ", data=np.array(self.deltaQ))
 
@@ -606,7 +724,9 @@ class Mesh:
                 file["mesh"]["face_centers"][()],
                 file["mesh"]["face_subvolumes"][()],
                 file["mesh"]["boundary_conditions_sorted_physical_tags"][()],
-                np.array(file["mesh"]["boundary_conditions_sorted_names"][()], dtype='str'),
+                np.array(
+                    file["mesh"]["boundary_conditions_sorted_names"][()], dtype="str"
+                ),
                 file["mesh"]["lsq_gradQ"][()],
                 file["mesh"]["deltaQ"][()],
             )
@@ -621,7 +741,9 @@ class Mesh:
     ):
         d_fields = {}
         vertex_coords_3d = np.zeros((3, self.vertex_coordinates.shape[1]))
-        vertex_coords_3d[:self.vertex_coordinates.shape[0], :] = self.vertex_coordinates
+        vertex_coords_3d[: self.vertex_coordinates.shape[0], :] = (
+            self.vertex_coordinates
+        )
         if fields is not None:
             if field_names is None:
                 field_names = [str(i) for i in range(fields.shape[0])]
@@ -640,88 +762,16 @@ class Mesh:
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
 
-class MeshLayered():
-    n_layers: int
-    mesh: Mesh
-
-    def get_n_cells_total(self):
-        n_cells_loc = mesh.n_cells
-        n_layers = self.n_layers
-        return n_cells_loc * n_layers
-
-    def get_layer(self, Q_glob, layer):
-        n_cells = self.mesh.n_cells
-        i_start = layer * n_cells
-        i_end = i_start + n_cells
-        return  Q_glob[:, i_start:i_end]
-
-    def write_layer(self, Q_glob, Q_loc, layer):
-        n_cells = self.mesh.n_cells
-        i_start = layer * n_cells
-        i_end = i_start + n_cells
-        Q_glob[:, i_start:i_end] = Q_loc
-        return Q_glob
-
-    def get_column(self, Q_glob, idx):
-        n_cells = self.mesh.n_cells
-        n_fields = Q_glob.shape[0]
-        n_layers = self.n_layers
-        assert (idx < n_cells)
-        Qcol = np.zeros((n_fields, n_layers), dtype=float)
-        i_offset = 0
-        for layer in range(n_layers):
-            i_offset += layer * n_cells
-            Qcol[:, layer] = Q_glob[:, i_offset + idx]
-        return Qcol
-
-    def integrate_column(self, Qcol): 
-        Qint = np.zeros_like(Qcol)
-        n_layers = self.n_layers
-        dz = 1./n_layers
-        Qint[0] = Qcol[0] * dz/2
-        for layer in range(1, n_layers):
-            Qint[layer] = Qcol[layer-1] + Qcol[layer] * dz/2
-        return Qint
-
-    def averaging_operator(self, Q):
-        #WARNING:  not vectorized!
-        Qout = np.zeros_like(Q)
-        n_inner_cells = self.mesh.n_inner_cells
-        for i in range(n_inner_cells):
-            Qout[:, i] = self.integrate_column(self.get_column(Q, i))
-        return Qout
-
-    def update_omega(self, Q, Qaux, Qinfo):
-        i_dhu_dx = Qinfo['grad'][1][0]
-        dhu_dx = Qaux[i_dhu_dx] 
-        h = Q[0]
-        avg = self.averaging_operator(dhu_dx)
-        omega = 1/h * avg
-        i_omega = Qinfo['omega']
-        Qaux[i_omega] = omega
-        return Qaux
-
-    def update_gradient(self, Q, Qaux, Qinfo):
-        #TODO finish
-        #do for each layer and write to Qaux
-        i_dQdx = Qinfo['grad'][:][0]
-        i_dQdy = Qinfo['grad'][:][1]
-        lsq_gradQ = self.mesh.lsq_gradQ
-        n_cells = self.mesh.n_cells
-        n_layers = self.n_layers
-        for layer in range(n_layers):
-            gradQ = np.einsum('ij..., j... -> i...', lsq_gradQ, Q)
-            i_offset = n_cells * layer
-            Qaux[i_dQdx, i_offset:i_offset+n_cells] = gradQ[0]
-            Qaux[i_dQdy, i_offset:i_offset+n_cells] = gradQ[1]
-        return Qaux
-
 
 if __name__ == "__main__":
-    path = '/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_coarse.msh'
-    path2 = '/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_fine.msh'
-    path3 = '/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_finest.msh'
-    path4 = '/home/ingo/Git/SMM/shallow-moments-simulation/meshes/triangle_2d/mesh_coarse.msh'
+    path = (
+        "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_coarse.msh"
+    )
+    path2 = "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_fine.msh"
+    path3 = (
+        "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_finest.msh"
+    )
+    path4 = "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/triangle_2d/mesh_coarse.msh"
     labels = get_physical_boundary_labels(path)
     # print(labels)
 
@@ -729,14 +779,18 @@ if __name__ == "__main__":
     # print(ghost_cells_dict)
 
     mesh = Mesh.from_gmsh(path)
-    assert mesh.cell_faces.max() == mesh.n_faces -1
+    assert mesh.cell_faces.max() == mesh.n_faces - 1
     assert mesh.cell_faces.min() == 0
-    assert mesh.face_cells.max() == mesh.n_cells -1
+    assert mesh.face_cells.max() == mesh.n_cells - 1
     assert mesh.face_cells.min() == 0
-    assert mesh.cell_vertices.max() == mesh.n_vertices-1
+    assert mesh.cell_vertices.max() == mesh.n_vertices - 1
     assert mesh.cell_vertices.min() == 0
 
-    mesh.write_to_hdf5('./test.h5')
-    mesh = Mesh.from_hdf5('./test.h5')
+    mesh.write_to_hdf5("./test.h5")
+    mesh = Mesh.from_hdf5("./test.h5")
     # mesh.write_to_vtk('./test.vtk')
-    mesh.write_to_vtk('./test.vtk', fields=np.ones((2, mesh.n_inner_cells), dtype=float), field_names=['A', 'B'])
+    mesh.write_to_vtk(
+        "./test.vtk",
+        fields=np.ones((2, mesh.n_inner_cells), dtype=float),
+        field_names=["A", "B"],
+    )
