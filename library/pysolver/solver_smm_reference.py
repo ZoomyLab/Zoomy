@@ -123,6 +123,14 @@ class MeshLayered:
         return Q
 
 
+## TODO
+# refactor existing solver for Qinfo (availability(default, user input), setup (gradient first))
+# copy main solver object
+# use MeshLayered instead of mesh
+# classical code for each layer
+# FD for vertical? or FVM? -> Test
+
+
 def _initialize_test_fields():
     main_dir = os.getenv("SMS")
     path = os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
