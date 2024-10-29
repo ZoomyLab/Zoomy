@@ -10,7 +10,9 @@ from attr import define
 from typing import Union
 
 from library.misc.custom_types import IArray, FArray, CArray
-from library.mesh.mesh_util import compute_subvolume
+from library.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
+import library.mesh.mesh_extrude as extrude
+import library.mesh.mesh_util as mesh_util
 
 
 # petsc4py.init(sys.argv)
@@ -614,6 +616,128 @@ class Mesh:
 
         return cls(
             dim,
+            mesh_type,
+            n_cells,
+            n_inner_cells,
+            n_faces,
+            n_vertices,
+            n_boundary_faces,
+            n_faces_per_cell,
+            vertex_coordinates.T,
+            cell_vertices.T,
+            cell_faces.T,
+            cell_volumes,
+            cell_centers.T,
+            cell_inradius,
+            cell_neighbors,
+            boundary_face_cells.T,
+            boundary_face_ghosts.T,
+            boundary_face_function_numbers,
+            boundary_face_physical_tags,
+            boundary_face_face_indices.T,
+            face_cells.T,
+            face_normals.T,
+            face_volumes,
+            face_centers,
+            face_subvolumes,
+            boundary_conditions_sorted_physical_tags,
+            boundary_conditions_sorted_names,
+            lsq_gradQ,
+            deltaQ,
+        )
+
+    @classmethod
+    def extrude_mesh(cls, msh, n_layers=10):
+        Z = np.linspace(0, 1, n_layers + 1)
+        dimension = msh.dimension + 1
+        mesh_type = get_extruded_mesh_type(msh.type)
+        n_cells = msh.n_cells * n_layers
+        n_inner_cells = msh.n_inner_cells * n_layers
+        n_vertices = msh.n_cells * (n_layers + 1)
+        n_boundary_faces = msh.n_boundary_faces * n_layers + 2 * msh.n_cells
+        n_faces_per_cell = mesh_util._get_faces_per_element(mesh_type)
+        n_faces = n_inner_cells * n_faces_per_cell
+        vertex_coordinates = extrude.extrude_points(msh.vertex_coordinates.T, Z).T
+        cell_vertices = extrude.extrude_element_vertices(
+            msh.cell_vertices.T, msh.n_vertices, n_layers
+        ).T
+
+        cell_centers = np.empty((n_cells, 3), dtype=float)
+        cell_volumes = np.empty((n_cells), dtype=float)
+        cell_inradius = np.empty((n_cells), dtype=float)
+        cell_face_areas = np.empty((n_cells, n_faces_per_cell), dtype=float)
+        cell_face_normals = np.empty((n_cells, n_faces_per_cell, 3), dtype=float)
+        cell_n_neighbors = np.empty((n_cells), dtype=int)
+        cell_neighbors = np.empty((n_cells, n_faces_per_cell), dtype=int)
+        cell_neighbors_face_index = np.empty((n_cells, n_faces_per_cell), dtype=int)
+        for i_elem, elem in enumerate(cell_vertices.T):
+            # cell_inradius[i_elem] = mesh_util.inradius(
+            #    vertex_coordinates, elem, mesh_type
+            # )
+            # cell_volumes[i_elem] = mesh_util.volume(vertex_coordinates, elem, mesh_type)
+            cell_centers[i_elem] = mesh_util.center(vertex_coordinates.T, elem)
+            # cell_face_areas[i_elem, :] = mesh_util.face_areas(
+            #    vertex_coordinates, elem, mesh_type
+            # )
+            # cell_face_normals[i_elem, :] = mesh_util.face_normals(
+            #    vertex_coordinates, elem, mesh_type
+            # )
+            # (
+            #    cell_n_neighbors[i_elem],
+            #    cell_neighbors[i_elem, :],
+            #    cell_neighbors_face_index[i_elem, :],
+            # ) = mesh_util.get_element_neighbors(cell_vertices, elem, mesh_type)
+
+        # boundaries
+        # convenction: 1. bottom 2. sides 3. top
+        # boundary_face_vertices = extrude.extrude_boundary_face_vertices(msh, n_layers)
+        # boundary_face_corresponding_cell = (
+        #    extrude.extrude_boundary_face_corresponding_element(msh, n_layers)
+        # )
+
+        # boundary_face_cell_face_index = np.empty((n_boundary_faces), dtype=int)
+        # boundary_face_tag = np.empty((n_boundary_faces), dtype=int)
+        ## get a unique list of tags
+        # boundary_tag_names = np.array(
+        #    list(msh.boundary_tag_names) + [b"bottom", b"top"]
+        # )
+        # boundary_tags = extrude.extrude_boundary_face_tags(msh, n_layers)
+        # for i_boundary_face, boundary_tag in enumerate(boundary_tags):
+        #    for i_tag, tag in enumerate(boundary_tag_names):
+        #        if tag == boundary_tag:
+        #            boundary_face_tag[i_boundary_face] = i_tag
+        # for i_face, face in enumerate(boundary_face_vertices):
+        #    boundary_face_cell_face_index[i_face] = mesh_util.find_edge_index(
+        #        cell_vertices[boundary_face_corresponding_cell[i_face]],
+        #        face,
+        #        mesh_type,
+        #    )
+
+        # truncate normals and positions from 3d to dimendion-d
+        vertex_coordinates = vertex_coordinates.T[:, :dimension].T
+        cell_centers = cell_centers[:, :dimension]
+        # cell_face_normals = cell_face_normals[:, :, :dimension]
+
+        # TODO
+        # empty fields
+        cell_faces = np.empty((n_inner_cells, n_faces_per_cell), dtype=int)
+        boundary_face_cells = np.array([0, n_inner_cells - 1], dtype=int)
+        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells + 1], dtype=int)
+        boundary_face_function_numbers = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_physical_tags = np.array([0, 1], dtype=int)
+        boundary_face_face_indices = np.array([0, n_faces - 1], dtype=int)
+        face_cells = np.empty((n_faces, 2), dtype=int)
+        face_subvolumes = np.empty((n_faces, 2), dtype=float)
+        boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
+        boundary_conditions_sorted_names = np.array(["left", "right"])
+        lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
+        deltaQ = np.zeros((n_cells, n_faces_per_cell, n_cells), dtype=float)
+        face_normals = np.zeros((n_faces, dimension + 1), dtype=float)
+        face_volumes = np.zeros((n_faces), dtype=float)
+        face_centers = np.zeros((n_faces, dimension + 1), dtype=float)
+
+        return cls(
+            msh.dimension + 1,
             mesh_type,
             n_cells,
             n_inner_cells,

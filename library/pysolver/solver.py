@@ -45,16 +45,27 @@ class Settings:
     callbacks: [str] = []
     debug: bool = False
     profiling: bool = False
+    compute_gradient: bool = False
 
 
-def _initialize_problem(model, mesh):
+def _initialize_problem(model, mesh, settings=None):
     model.boundary_conditions.initialize(
-        mesh, model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.sympy_normal
+        mesh,
+        model.time,
+        model.position,
+        model.distance,
+        model.variables,
+        model.aux_variables,
+        model.parameters,
+        model.sympy_normal,
     )
 
     n_fields = model.n_fields
     n_cells = mesh.n_cells
     n_aux_fields = model.aux_variables.length()
+    if settings:
+        if settings.compute_gradient:
+            n_aux_fields += n_fields * mesh.dimension
 
     Q = np.empty((n_fields, n_cells), dtype=float)
     Qaux = np.zeros((n_aux_fields, n_cells), dtype=float)
@@ -84,12 +95,8 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
 
             evA = pde.eigenvalues(qA, qauxA, parameters, normal)
             evB = pde.eigenvalues(qB, qauxB, parameters, normal)
-            max_abs_eigenvalue = max(
-                max_abs_eigenvalue, np.max(np.abs(evA))
-            )
-            max_abs_eigenvalue = max(
-                max_abs_eigenvalue, np.max(np.abs(evB))
-            )
+            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(evA)))
+            max_abs_eigenvalue = max(max_abs_eigenvalue, np.max(np.abs(evB)))
 
         assert max_abs_eigenvalue > 10 ** (-8)
 
@@ -116,7 +123,6 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
 
         return max_abs_eigenvalue
 
-
     return compute_max_abs_eigenvalue_vectorized
 
 
@@ -127,10 +133,11 @@ def _get_source(mesh, pde, settings):
             dQ[:, i_cell] = pde.source(Q[:, i_cell], Qaux[:, i_cell], parameters)
         return dQ
 
-
     def source_vectorized(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
-        dQ[:, :mesh.n_inner_cells] = pde.source(Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], parameters)
+        dQ[:, : mesh.n_inner_cells] = pde.source(
+            Q[:, : mesh.n_inner_cells], Qaux[:, : mesh.n_inner_cells], parameters
+        )
         return dQ
 
     return source_vectorized
@@ -140,10 +147,13 @@ def _get_source_jac(mesh, pde, settings):
     def source_jac(dt, Q, Qaux, parameters, dQ):
         # Loop over the inner elements
         for i_cell in range(mesh.n_inner_cells):
-            dQ[:, :,i_cell] = pde.source_jacobian(Q[:,i_cell], Qaux[:, i_cell], parameters)
+            dQ[:, :, i_cell] = pde.source_jacobian(
+                Q[:, i_cell], Qaux[:, i_cell], parameters
+            )
         return dQ
 
     return source_jac
+
 
 def _get_semidiscrete_solution_operator_1d(mesh, pde, bcs, settings):
     compute_num_flux = settings.num_flux
@@ -152,49 +162,48 @@ def _get_semidiscrete_solution_operator_1d(mesh, pde, bcs, settings):
     def operator(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
         for i_face in range(mesh.n_faces):
-            #reconstruct
+            # reconstruct
             i_cellA, i_cellB = mesh.face_cells[:, i_face]
             qA = Q[:, i_cellA]
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
             qauxB = Qaux[:, i_cellB]
-            
+
             normal = mesh.face_normals[:, i_face]
-            flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            flux, failed = compute_num_flux(
+                qA, qB, qauxA, qauxB, parameters, normal, pde
+            )
             assert not failed
             if normal[0] > 0:
-                nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+                nc_flux, failed = compute_nc_flux(
+                    qA, qB, qauxA, qauxB, parameters, normal, pde
+                )
             else:
-                nc_flux, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, -normal, pde)
+                nc_flux, failed = compute_nc_flux(
+                    qB, qA, qauxB, qauxA, parameters, -normal, pde
+                )
             assert not failed
 
-
             dQ[:, i_cellA] -= (
-                (flux)
-                * mesh.face_volumes[i_face]
-                / mesh.cell_volumes[i_cellA]
+                (flux) * mesh.face_volumes[i_face] / mesh.cell_volumes[i_cellA]
             )
 
             dQ[:, i_cellB] += (
-                (flux)
-                * mesh.face_volumes[i_face]
-                / mesh.cell_volumes[i_cellB]
+                (flux) * mesh.face_volumes[i_face] / mesh.cell_volumes[i_cellB]
             )
 
             dQ[:, i_cellA] += (
-                (nc_flux)
-                * mesh.face_volumes[i_face]
-                / mesh.cell_volumes[i_cellA]
+                (nc_flux) * mesh.face_volumes[i_face] / mesh.cell_volumes[i_cellA]
             )
 
             dQ[:, i_cellB] += (
-                (nc_flux)
-                * mesh.face_volumes[i_face]
-                / mesh.cell_volumes[i_cellB]
+                (nc_flux) * mesh.face_volumes[i_face] / mesh.cell_volumes[i_cellB]
             )
 
         return dQ
+
     return operator
+
 
 def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
     compute_num_flux = settings.num_flux
@@ -205,7 +214,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
         for i_face in range(mesh.n_faces):
-            #reconstruct
+            # reconstruct
             i_cellA, i_cellB = mesh.face_cells[:, i_face]
             rA = mesh.face_centers[i_face] - mesh.cell_centers[i_cellA]
             rB = mesh.face_centers[i_face] - mesh.cell_centers[i_cellA]
@@ -213,14 +222,17 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
             qauxB = Qaux[:, i_cellB]
-            
+
             normal = mesh.face_normals[:, i_face]
-            flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            flux, failed = compute_num_flux(
+                qA, qB, qauxA, qauxB, parameters, normal, pde
+            )
             assert not failed
-            nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            nc_flux, failed = compute_nc_flux(
+                qA, qB, qauxA, qauxB, parameters, normal, pde
+            )
             # nc_flux = np.zeros_like(flux)
             assert not failed
-
 
             dQ[:, i_cellA] -= (
                 (flux + nc_flux)
@@ -245,20 +257,21 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         iA = np.zeros((mesh.n_faces), dtype=int)
         iB = np.zeros((mesh.n_faces), dtype=int)
         for i_face in range(mesh.n_faces):
-            #reconstruct
+            # reconstruct
             i_cellA, i_cellB = mesh.face_cells[:, i_face]
             qA = Q[:, i_cellA]
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
             qauxB = Qaux[:, i_cellB]
-            
+
             normal = mesh.face_normals[:, i_face]
-            flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
+            flux, failed = compute_num_flux(
+                qA, qB, qauxA, qauxB, parameters, normal, pde
+            )
             assert not failed
             # nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normal, pde)
             nc_flux = np.zeros_like(flux)
             assert not failed
-
 
             dQ[:, i_cellA] -= (
                 (flux + nc_flux)
@@ -276,7 +289,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             iA[i_face] = i_cellA
             iB[i_face] = i_cellB
 
-            dQ_face_check_m[:, i_face] -= ( 
+            dQ_face_check_m[:, i_face] -= (
                 (flux + nc_flux)
                 * mesh.face_volumes[i_face]
                 / mesh.cell_volumes[i_cellA]
@@ -288,7 +301,6 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             )
         return dQ, flux_check, nc_flux_check, iA, iB, dQ_face_check_m, dQ_face_check_p
 
-
     def operator_price_c_cellwise(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
         iA = mesh.face_cells[0]
@@ -298,7 +310,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             qi = Q[:, cell]
             qauxi = Qaux[:, cell]
             neighbors = mesh.cell_neighbors[cell]
-            faces  = mesh.cell_faces[:, cell]
+            faces = mesh.cell_faces[:, cell]
             for neighbor, face in zip(neighbors, faces):
                 # outward pointing normal
                 if mesh.face_cells[0, face] == cell:
@@ -312,15 +324,23 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
                 face_volume = mesh.face_volumes[face]
                 qj = Q[:, neighbor]
                 qauxj = Qaux[:, neighbor]
-                vol = mesh.cell_volumes[cell] 
-                nc_flux, failed = compute_nc_flux(qi, qj, qauxi, qauxj, parameters, normal, sv_i, sv_j, face_volume, dt, pde)
+                vol = mesh.cell_volumes[cell]
+                nc_flux, failed = compute_nc_flux(
+                    qi,
+                    qj,
+                    qauxi,
+                    qauxj,
+                    parameters,
+                    normal,
+                    sv_i,
+                    sv_j,
+                    face_volume,
+                    dt,
+                    pde,
+                )
                 # nc_flux, failed = compute_nc_flux(qi, qj, qauxi, qauxj, parameters, normal, sv_i, sv_j, vol, dt, pde)
 
-                dQ[:, cell] -= (
-                    (nc_flux)
-                    * face_volume
-                    / vol
-                )
+                dQ[:, cell] -= (nc_flux) * face_volume / vol
         return dQ
 
     def operator_price_c(dt, Q, Qaux, parameters, dQ):
@@ -331,14 +351,13 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ##########################
         # reconstruction
         ##########################
-        limiter = get_limiter(name='Venkatakrishnan')
+        limiter = get_limiter(name="Venkatakrishnan")
         n_fields = Q.shape[0]
         # gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
         phi = np.zeros_like(Q)
-        gradQ = np.einsum('...dn, kn ->k...d', mesh.lsq_gradQ, Q)
-        deltaQ = np.einsum('...hn, kn->kh...', mesh.deltaQ, Q)
+        gradQ = np.einsum("...dn, kn ->k...d", mesh.lsq_gradQ, Q)
+        deltaQ = np.einsum("...hn, kn->kh...", mesh.deltaQ, Q)
         # gradQ = np.zeros_like(gradQ)
-
 
         # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
         # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
@@ -356,8 +375,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
         # grad_Q_rij = np.einsum('kmd, md->km', gradQ_face_cell, rij)
         # phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij)
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij)
         # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
         # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
         # phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
@@ -366,8 +385,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
         # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
         # phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
         # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
         # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
         # phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
@@ -404,7 +423,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         #     rN[:, j] = mesh.face_centers[mesh.cell_faces[:, j]] - mesh.cell_centers[:].T
 
         # dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
-        # dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
+        # dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)
 
         # qAm = Q[:, iA]
         # qBm= Q[:, iB]
@@ -441,7 +460,9 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ### Reconstruction ala 10.1016/S0017-9310(02)00330-7
         def phi(q):
             # return (q + np.abs(q)) / (1 + np.abs(q))
-            return np.max([ np.zeros_like(q), np.min([np.ones_like(q), q], axis=0) ], axis=0)
+            return np.max(
+                [np.zeros_like(q), np.min([np.ones_like(q), q], axis=0)], axis=0
+            )
 
         rA = mesh.face_centers - mesh.cell_centers[:, iA].T
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
@@ -450,51 +471,50 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         qB = Q[:, iB]
         rBA = mesh.cell_centers[:, iB].T - mesh.cell_centers[:, iA].T
         rAB = -rBA
-        dQA_dn = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rBA)
-        dQB_dn = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rAB)        
-        dQA = np.einsum('k...d, ...d->k...', gradQ[:, iA, :], rA)
-        dQB = np.einsum('k...d, ...d->k...', gradQ[:, iB, :], rB)        
-        
+        dQA_dn = np.einsum("k...d, ...d->k...", gradQ[:, iA, :], rBA)
+        dQB_dn = np.einsum("k...d, ...d->k...", gradQ[:, iB, :], rAB)
+        dQA = np.einsum("k...d, ...d->k...", gradQ[:, iA, :], rA)
+        dQB = np.einsum("k...d, ...d->k...", gradQ[:, iB, :], rB)
+
         dBA = qB - qA
         dAB = qA - qB
 
-        eps = 10**(-14)
-        slopeA = (2*dQA_dn)/(dBA + eps) - 1
-        slopeB = (2*dQB_dn)/(dAB + eps) - 1
+        eps = 10 ** (-14)
+        slopeA = (2 * dQA_dn) / (dBA + eps) - 1
+        slopeB = (2 * dQB_dn) / (dAB + eps) - 1
 
         # qA = Q[:, iA] + 0.5*phi(slopeA) * (dQA)
         # qB = Q[:, iB] + 0.5*phi(slopeB) * (dQB)
 
         # qA = qA + 0.5*phi(slopeA) * (dBA)
         # qB = qB + 0.5*phi(slopeB) * (dAB)
-        
+
         _qA = qA + dQA
-        _qB = qB + dQB 
-        
+        _qB = qB + dQB
+
         def limiter(q, qA, qB):
             qmax = np.max([qA, qB], axis=0)
             qmin = np.min([qA, qB], axis=0)
             phi = np.ones(qA.shape[1])
-            phi = np.where(q > qmax, 0., phi)
-            phi = np.where(q < qmin, 0., phi)
+            phi = np.where(q > qmax, 0.0, phi)
+            phi = np.where(q < qmin, 0.0, phi)
             # q = np.max([q, qmin], axis=0)
             return phi
+
         phiA = limiter(_qA, qA, qB)
         phiB = limiter(_qB, qA, qB)
         phi = np.min([phiA, phiB], axis=0)
         qA = qA + phi * dQA
         qB = qB + phi * dQB
 
-
         ##
 
-
-        # qA = Q[:, iA] 
-        # qB = Q[:, iB] 
+        # qA = Q[:, iA]
+        # qB = Q[:, iB]
         # qA = Q[:, iA] + gamma_cell[:, iA] * dQA
         # qB = Q[:, iB] + gamma_cell[:, iB] * dQB
         # qA = Q[:, iA] + dQA
-        # qB = Q[:, iB] + d        
+        # qB = Q[:, iB] + d
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -508,52 +528,54 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # for some reason, I need to flip the normal to make it work... is it inward pointing??
 
         fluxA, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
-        fluxB, failed = compute_num_flux(qB, qA, qauxB, qauxA, parameters, -normals, pde)
-        
+        fluxB, failed = compute_num_flux(
+            qB, qA, qauxB, qauxA, parameters, -normals, pde
+        )
+
         assert np.allclose(fluxA, -fluxB)
 
-        nc_fluxA, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde)
+        nc_fluxA, failed = compute_nc_flux(
+            qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde
+        )
         assert not failed
-        nc_fluxB, failed = compute_nc_flux(qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde)
+        nc_fluxB, failed = compute_nc_flux(
+            qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde
+        )
         # nc_flux = np.zeros_like(flux)
         assert not failed
-        
 
         compute_ader_flux = ader_flux.quadrature()
-        ader_flux_Q, failed = compute_ader_flux(Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde)
+        ader_flux_Q, failed = compute_ader_flux(
+            Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde
+        )
         assert not failed
-        
 
         # I add/substract the contributions for the inner cells, based on the faces
         for faces in mesh.cell_faces:
             # I need to know if the cell_face is part of A or B and only add that contribution
-            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
-            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
+            iA_masked = iA[faces] == np.array(list(range(mesh.n_inner_cells)))
+            iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells)))
 
-            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
+            dQ[:, : mesh.n_inner_cells][:, iA_masked] -= (
                 # (nc_fluxA)
-                (fluxA)
-                * face_volumes
-                / cell_volumesA
+                (fluxA) * face_volumes / cell_volumesA
             )[:, faces][:, iA_masked]
 
-            dQ[:, :mesh.n_inner_cells][:, iB_masked] -= (
+            dQ[:, : mesh.n_inner_cells][:, iB_masked] -= (
                 # (nc_fluxB)
-                (fluxB)
-                * face_volumes
-                / cell_volumesB
+                (fluxB) * face_volumes / cell_volumesB
             )[:, faces][:, iB_masked]
 
-        # return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q 
-        return dQ 
+        # return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q
+        return dQ
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
         dQ = np.zeros_like(dQ)
         iA = mesh.face_cells[0]
         iB = mesh.face_cells[1]
 
-        qA = Q[:, iA] 
-        qB = Q[:, iB] 
+        qA = Q[:, iA]
+        qB = Q[:, iB]
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -563,44 +585,38 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
         assert not failed
-        nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        nc_flux, failed = compute_nc_flux(
+            qA, qB, qauxA, qauxB, parameters, normals, pde
+        )
         # nc_flux = np.zeros_like(flux)
         assert not failed
 
         # I add/substract the contributions for the inner cells, based on the faces
         for faces in mesh.cell_faces:
             # I need to know if the cell_face is part of A or B and only add that contribution
-            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
-            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
+            iA_masked = iA[faces] == np.array(list(range(mesh.n_inner_cells)))
+            iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells)))
 
-            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
-                (flux + nc_flux)
-                * face_volumes
-                / cell_volumesA
+            dQ[:, : mesh.n_inner_cells][:, iA_masked] -= (
+                (flux + nc_flux) * face_volumes / cell_volumesA
             )[:, faces][:, iA_masked]
 
-            dQ[:, :mesh.n_inner_cells][:, iB_masked] += (
-                (flux - nc_flux)
-                * face_volumes
-                / cell_volumesB
+            dQ[:, : mesh.n_inner_cells][:, iB_masked] += (
+                (flux - nc_flux) * face_volumes / cell_volumesB
             )[:, faces][:, iB_masked]
 
         # I also want to update the ghost cells for higher order methods (otherwise I need bcs in integrator)
         faces = mesh.boundary_face_face_indices
         # I need to know if the cell_face is part of A or B and only add that contribution
-        iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
-        iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
+        iA_masked = iA[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells)))
+        iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells)))
 
-        dQ[:, mesh.n_inner_cells:][:, iA_masked] -= (
-            (flux + nc_flux)
-            * face_volumes
-            / cell_volumesA
+        dQ[:, mesh.n_inner_cells :][:, iA_masked] -= (
+            (flux + nc_flux) * face_volumes / cell_volumesA
         )[:, faces][:, iA_masked]
 
-        dQ[:, mesh.n_inner_cells:][:, iB_masked] += (
-            (flux - nc_flux)
-            * face_volumes
-            / cell_volumesB
+        dQ[:, mesh.n_inner_cells :][:, iB_masked] += (
+            (flux - nc_flux) * face_volumes / cell_volumesB
         )[:, faces][:, iB_masked]
 
         return dQ
@@ -613,15 +629,21 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # gradQ = np.zeros((Q.shape[0], Q.shape[1], 2), dtype=float)
         # gradQ[:,:,:] = Qaux[i_recon_start:i_recon_start+mesh.dimension]
 
-        limiter = get_limiter(name='Venkatakrishnan')
+        limiter = get_limiter(name="Venkatakrishnan")
 
         # reconstruction
         n_fields = Q.shape[0]
         gradQ = np.zeros((n_fields, mesh.dimension, mesh.n_cells), dtype=float)
         phi = np.zeros_like(Q)
-        gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_gradQ, Q)
-        delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
-        delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        gradQ = np.einsum("...dj, kj ->kd...", mesh.lsq_gradQ, Q)
+        delta_Q = np.zeros(
+            (Q.shape[0], Q.shape[1], mesh.n_faces_per_cell + 1), dtype=float
+        )
+        delta_Q[:, : mesh.n_inner_cells, : mesh.n_faces_per_cell] = Q[
+            :, mesh.cell_neighbors[: mesh.n_inner_cells, : mesh.n_faces_per_cell]
+        ] - np.repeat(
+            Q[:, : mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2
+        )
         # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
         delta_Q_max = np.max(delta_Q, axis=2)
         # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
@@ -629,30 +651,46 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
 
         ## DEBUG COPY GRADIENT
-        delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
-        delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
+        delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[
+            :, mesh.boundary_face_cells
+        ]
+        delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[
+            :, mesh.boundary_face_cells
+        ]
 
         rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
         gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
-        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        grad_Q_rij = np.einsum("ij..., ...j->i...", gradQ_face_cell, rij)
         phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
-        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
-        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij)
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij)
+        phi_ij[grad_Q_rij > 0] = limiter(
+            (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0]
+            / (grad_Q_rij)[grad_Q_rij > 0]
+        )
+        phi_ij[grad_Q_rij < 0] = limiter(
+            (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0]
+            / (grad_Q_rij)[grad_Q_rij < 0]
+        )
         phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
 
         rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
         gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
-        grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        grad_Q_rij = np.einsum("ij..., ...j->i...", gradQ_face_cell, rij)
         phi_ij = np.ones((n_fields, mesh.n_faces), dtype=float)
-        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
-        phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        phi_ij[grad_Q_rij > 0] = limiter(
+            (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0]
+            / (grad_Q_rij)[grad_Q_rij > 0]
+        )
+        phi_ij[grad_Q_rij < 0] = limiter(
+            (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0]
+            / (grad_Q_rij)[grad_Q_rij < 0]
+        )
         phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
 
-        phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
+        phi[:, : mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
 
         # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
         # for i in range(model.n_fields):
@@ -664,8 +702,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         rA = mesh.face_centers - mesh.cell_centers[:, iA].T
         rB = mesh.face_centers - mesh.cell_centers[:, iB].T
 
-        qA = Q[:, iA] + phi[:, iA] * np.einsum('kd..., ...d->k...', gradQ[:, :, iA], rA)
-        qB = Q[:, iB] + phi[:, iB] * np.einsum('kd..., ...d->k...', gradQ[:, :, iB], rB)
+        qA = Q[:, iA] + phi[:, iA] * np.einsum("kd..., ...d->k...", gradQ[:, :, iA], rA)
+        qB = Q[:, iB] + phi[:, iB] * np.einsum("kd..., ...d->k...", gradQ[:, :, iB], rB)
         qauxA = Qaux[:, iA]
         qauxB = Qaux[:, iB]
         normals = mesh.face_normals
@@ -675,7 +713,9 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         flux, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
         assert not failed
-        nc_flux, failed = compute_nc_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        nc_flux, failed = compute_nc_flux(
+            qA, qB, qauxA, qauxB, parameters, normals, pde
+        )
         # nc_flux = np.zeros_like(flux)
         assert not failed
 
@@ -697,45 +737,33 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         #         / mesh.cell_volumes[i_cellB]
         #     )
 
-
-
         # I add/substract the contributions for the inner cells, based on the faces
         for faces in mesh.cell_faces:
             # I need to know if the cell_face is part of A or B and only add that contribution
-            iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells))))
-            iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells))))
+            iA_masked = iA[faces] == np.array(list(range(mesh.n_inner_cells)))
+            iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells)))
 
-            dQ[:, :mesh.n_inner_cells][:, iA_masked] -= (
-                (flux + nc_flux)
-                * face_volumes
-                / cell_volumesA
+            dQ[:, : mesh.n_inner_cells][:, iA_masked] -= (
+                (flux + nc_flux) * face_volumes / cell_volumesA
             )[:, faces][:, iA_masked]
 
-            dQ[:, :mesh.n_inner_cells][:, iB_masked] += (
-                (flux - nc_flux)
-                * face_volumes
-                / cell_volumesB
+            dQ[:, : mesh.n_inner_cells][:, iB_masked] += (
+                (flux - nc_flux) * face_volumes / cell_volumesB
             )[:, faces][:, iB_masked]
 
         # I also want to update the ghost cells for higher order methods (otherwise I need bcs in integrator)
         faces = mesh.boundary_face_face_indices
         # I need to know if the cell_face is part of A or B and only add that contribution
-        iA_masked = (iA[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
-        iB_masked = (iB[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells))))
+        iA_masked = iA[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells)))
+        iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells, mesh.n_cells)))
 
-        dQ[:, mesh.n_inner_cells:][:, iA_masked] -= (
-            (flux + nc_flux)
-            * face_volumes
-            / cell_volumesA
+        dQ[:, mesh.n_inner_cells :][:, iA_masked] -= (
+            (flux + nc_flux) * face_volumes / cell_volumesA
         )[:, faces][:, iA_masked]
 
-        dQ[:, mesh.n_inner_cells:][:, iB_masked] += (
-            (flux - nc_flux)
-            * face_volumes
-            / cell_volumesB
+        dQ[:, mesh.n_inner_cells :][:, iB_masked] += (
+            (flux - nc_flux) * face_volumes / cell_volumesB
         )[:, faces][:, iB_masked]
-
-
 
         # for faces in mesh.cell_faces:
         #     cellsA = iA[faces]
@@ -778,124 +806,120 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         #     )[:, facesB2]
         # dQ = 0.5*(dQm + dQp)
 
-
-        
-
         return dQ
-            
+
     return operator_price_c
     # return operator_1d_cell_centered
     # return operator_rhs_split_vectorized
 
+    # def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
+    #     compute_num_flux = settings.num_flux
+    #     compute_nc_flux = settings.nc_flux
+    #     reconstruction = settings.reconstruction
+    #     reconstruction_edge = settings.reconstruction_edge
 
-# def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
-#     compute_num_flux = settings.num_flux
-#     compute_nc_flux = settings.nc_flux
-#     reconstruction = settings.reconstruction
-#     reconstruction_edge = settings.reconstruction_edge
+    #     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
+    #         # Loop over the inner elements
+    #         for i_elem in range(mesh.n_elements):
+    #             for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
+    #                 i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
+    #                 if i_elem > i_neighbor:
+    #                     continue
+    #                 i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
+    #                 # reconstruct
+    #                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(
+    #                     mesh, [Q, Qaux], i_elem, i_th_neighbor
+    #                 )
 
-#     def operator_rhs_split(dt, Q, Qaux, parameters, dQ):
-#         # Loop over the inner elements
-#         for i_elem in range(mesh.n_elements):
-#             for i_th_neighbor in range(mesh.element_n_neighbors[i_elem]):
-#                 i_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
-#                 if i_elem > i_neighbor:
-#                     continue
-#                 i_face = mesh.element_neighbors_face_index[i_elem, i_th_neighbor]
-#                 # reconstruct
-#                 [Qi, Qauxi], [Qj, Qauxj] = reconstruction(
-#                     mesh, [Q, Qaux], i_elem, i_th_neighbor
-#                 )
+    #                 # TODO callout to a requirement of the flux
+    #                 mesh_props = SimpleNamespace(
+    #                     dt_dx=dt / (2 * mesh.element_inradius[i_elem])
+    #                 )
+    #                 flux, failed = compute_num_flux(
+    #                     Qi,
+    #                     Qj,
+    #                     Qauxi,
+    #                     Qauxj,
+    #                     parameters,
+    #                     mesh.element_face_normals[i_elem, i_face],
+    #                     pde,
+    #                     mesh_props=mesh_props,
+    #                 )
+    #                 assert not failed
+    #                 nc_flux, failed = compute_nc_flux(
+    #                     Qi,
+    #                     Qj,
+    #                     Qauxi,
+    #                     Qauxj,
+    #                     parameters,
+    #                     mesh.element_face_normals[i_elem, i_face],
+    #                     pde,
+    #                 )
+    #                 assert not failed
 
-#                 # TODO callout to a requirement of the flux
-#                 mesh_props = SimpleNamespace(
-#                     dt_dx=dt / (2 * mesh.element_inradius[i_elem])
-#                 )
-#                 flux, failed = compute_num_flux(
-#                     Qi,
-#                     Qj,
-#                     Qauxi,
-#                     Qauxj,
-#                     parameters,
-#                     mesh.element_face_normals[i_elem, i_face],
-#                     pde,
-#                     mesh_props=mesh_props,
-#                 )
-#                 assert not failed
-#                 nc_flux, failed = compute_nc_flux(
-#                     Qi,
-#                     Qj,
-#                     Qauxi,
-#                     Qauxj,
-#                     parameters,
-#                     mesh.element_face_normals[i_elem, i_face],
-#                     pde,
-#                 )
-#                 assert not failed
+    #                 # TODO index map (elem_edge_index) such that I do not need:
+    #                 # and if statement to avoid double edge computation (as I do now)
+    #                 # avoid double edge computation
+    #                 dQ[i_elem] -= (
+    #                     (flux + nc_flux)
+    #                     * mesh.element_face_areas[i_elem, i_face]
+    #                     / mesh.element_volume[i_elem]
+    #                 )
 
-#                 # TODO index map (elem_edge_index) such that I do not need:
-#                 # and if statement to avoid double edge computation (as I do now)
-#                 # avoid double edge computation
-#                 dQ[i_elem] -= (
-#                     (flux + nc_flux)
-#                     * mesh.element_face_areas[i_elem, i_face]
-#                     / mesh.element_volume[i_elem]
-#                 )
+    #                 dQ[i_neighbor] += (
+    #                     (flux - nc_flux)
+    #                     * mesh.element_face_areas[i_elem, i_face]
+    #                     / mesh.element_volume[i_neighbor]
+    #                 )
 
-#                 dQ[i_neighbor] += (
-#                     (flux - nc_flux)
-#                     * mesh.element_face_areas[i_elem, i_face]
-#                     / mesh.element_volume[i_neighbor]
-#                 )
+    #         # Loop over boundary faces
+    #         for i in range(mesh.n_boundary_elements):
+    #             i_elem = mesh.boundary_face_corresponding_element[i]
+    #             i_face = mesh.boundary_face_element_face_index[i]
+    #             Q_ghost = boundary_conditions.apply(
+    #                 i,
+    #                 i_elem,
+    #                 Q,
+    #                 Qaux,
+    #                 parameters,
+    #                 mesh.element_face_normals[i_elem, i_face],
+    #             )
+    #             # i_neighbor = mesh.element_neighbors[i_elem, i_face]
+    #             # reconstruct
+    #             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(
+    #                 mesh, [Q, Qaux], Q_ghost, i_elem
+    #             )
 
-#         # Loop over boundary faces
-#         for i in range(mesh.n_boundary_elements):
-#             i_elem = mesh.boundary_face_corresponding_element[i]
-#             i_face = mesh.boundary_face_element_face_index[i]
-#             Q_ghost = boundary_conditions.apply(
-#                 i,
-#                 i_elem,
-#                 Q,
-#                 Qaux,
-#                 parameters,
-#                 mesh.element_face_normals[i_elem, i_face],
-#             )
-#             # i_neighbor = mesh.element_neighbors[i_elem, i_face]
-#             # reconstruct
-#             [Qi, Qauxi], [Qj, Qauxj] = reconstruction_edge(
-#                 mesh, [Q, Qaux], Q_ghost, i_elem
-#             )
+    #             # callout to a requirement of the flux
+    #             mesh_props = SimpleNamespace(dt_dx=dt / (2 * mesh.element_inradius[i_elem]))
+    #             flux, failed = compute_num_flux(
+    #                 Qi,
+    #                 Qj,
+    #                 Qauxi,
+    #                 Qauxj,
+    #                 parameters,
+    #                 mesh.element_face_normals[i_elem, i_face],
+    #                 pde,
+    #                 mesh_props=mesh_props,
+    #             )
+    #             assert not failed
+    #             nc_flux, failed = compute_nc_flux(
+    #                 Qi,
+    #                 Qj,
+    #                 Qauxi,
+    #                 Qauxj,
+    #                 parameters,
+    #                 mesh.element_face_normals[i_elem, i_face],
+    #                 pde,
+    #             )
+    #             assert not failed
 
-#             # callout to a requirement of the flux
-#             mesh_props = SimpleNamespace(dt_dx=dt / (2 * mesh.element_inradius[i_elem]))
-#             flux, failed = compute_num_flux(
-#                 Qi,
-#                 Qj,
-#                 Qauxi,
-#                 Qauxj,
-#                 parameters,
-#                 mesh.element_face_normals[i_elem, i_face],
-#                 pde,
-#                 mesh_props=mesh_props,
-#             )
-#             assert not failed
-#             nc_flux, failed = compute_nc_flux(
-#                 Qi,
-#                 Qj,
-#                 Qauxi,
-#                 Qauxj,
-#                 parameters,
-#                 mesh.element_face_normals[i_elem, i_face],
-#                 pde,
-#             )
-#             assert not failed
-
-#             dQ[i_elem] -= (
-#                 (flux + nc_flux)
-#                 * mesh.element_face_areas[i_elem, i_face]
-#                 / mesh.element_volume[i_elem]
-#             )
-#         return dQ
+    #             dQ[i_elem] -= (
+    #                 (flux + nc_flux)
+    #                 * mesh.element_face_areas[i_elem, i_face]
+    #                 / mesh.element_volume[i_elem]
+    #             )
+    #         return dQ
 
     return operator_rhs_split
 
@@ -959,9 +983,9 @@ def fvm_c_unsteady_semidiscete(
             path_settings=os.path.join(settings.output_dir, "settings.hdf5"),
             path_mesh=os.path.join(settings.output_dir, "mesh.hdf5"),
             path_fields=os.path.join(settings.output_dir, "fields.hdf5"),
-            model_path = os.path.join(settings.output_dir, "c_interface/Model"),
-            debug = settings.debug,
-            profiling = settings.profiling,
+            model_path=os.path.join(settings.output_dir, "c_interface/Model"),
+            debug=settings.debug,
+            profiling=settings.profiling,
         )
 
     c_interface.run_driver()
@@ -976,6 +1000,7 @@ def write_field_to_hdf5(filepath: str, time, Q, Qaux):
         iteration.create_dataset("Q", time)
         iteration.create_dataset("Qaux", time)
 
+
 # TODO vectorize
 def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
     """
@@ -987,7 +1012,7 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         i_bc_func = mesh.boundary_face_function_numbers[i_bc_face]
         bc_func = runtime_bcs[i_bc_func]
         q_cell = Q[:, mesh.boundary_face_cells[i_bc_face]]
-        qaux_cell = Qaux[:, mesh.boundary_face_cells[ i_bc_face]]
+        qaux_cell = Qaux[:1, mesh.boundary_face_cells[i_bc_face]]
         normal = mesh.face_normals[:, i_face]
         position = mesh.face_centers[i_face]
         # I cannot use the mesh.boudnary_face_cells because this is potenntially a periodic ghost cell. Then the distance is very large, as I go across the grid
@@ -995,36 +1020,46 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i_bc_face]]
         # distance = np.linalg.norm(position - position_cell)
         distance = np.linalg.norm(position - position_ghost)
-        q_ghost = bc_func(time, position, distance, q_cell, qaux_cell, parameters, normal)
+        q_ghost = bc_func(
+            time, position, distance, q_cell, qaux_cell, parameters, normal
+        )
         ### DEBUG
-        cells_adjacent_to_ghost = min(mesh.face_cells[:, mesh.boundary_face_face_indices[i_bc_face]])
+        cells_adjacent_to_ghost = min(
+            mesh.face_cells[:, mesh.boundary_face_face_indices[i_bc_face]]
+        )
         ###
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
-def get_limiter(name='min'):
-    if name == 'min':
+
+def get_limiter(name="min"):
+    if name == "min":
+
         def f(x):
             return np.min((np.ones_like(x), x), axis=0)
+
         return f
     elif name == "Venkatakrishnan":
+
         def f(x):
-            return (x**2 + 2*x)/(x**2 + x + 2.*np.ones_like(x))
+            return (x**2 + 2 * x) / (x**2 + x + 2.0 * np.ones_like(x))
+
         return f
     elif name == "zero":
+
         def f(x):
             return np.zeros_like(x)
+
         return f
     else:
         assert False
 
-def solver_price_c(
-    mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
-):
+
+def solver_price_c(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1):
     iteration = 0
     time = 0.0
 
-    output_hdf5_path = os.path.join(settings.output_dir, f'{settings.name}.h5')
+    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
 
     assert model.dimension == mesh.dimension
 
@@ -1054,13 +1089,13 @@ def solver_price_c(
 
     Qnew = deepcopy(Q)
 
-    space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, bcs, settings)
+    space_solution_operator = _get_semidiscrete_solution_operator(
+        mesh, pde, bcs, settings
+    )
     compute_source = _get_source(mesh, pde, settings)
     compute_source_jac = _get_source_jac(mesh, pde, settings)
 
-    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(
-        mesh, pde, settings
-    )
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, settings)
     min_inradius = np.min(mesh.cell_inradius)
 
     time_start = gettime()
@@ -1077,8 +1112,6 @@ def solver_price_c(
         if settings.truncate_last_time_step:
             if time + dt * 1.001 > settings.time_end:
                 dt = settings.time_end - time + 10 ** (-10)
-
-
 
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
 
@@ -1102,7 +1135,7 @@ def solver_price_c(
             settings.output_write_all,
         )
 
-    print(f'Runtime: {gettime() - time_start}')
+    print(f"Runtime: {gettime() - time_start}")
 
     progressbar.end()
     return settings
@@ -1114,7 +1147,7 @@ def jax_fvm_unsteady_semidiscrete(
     iteration = 0
     time = 0.0
 
-    output_hdf5_path = os.path.join(settings.output_dir, f'{settings.name}.h5')
+    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
 
     assert model.dimension == mesh.dimension
 
@@ -1133,7 +1166,6 @@ def jax_fvm_unsteady_semidiscrete(
     # recon_variables = [f'dQdx_{i}' for i in range(mesh.dimension)] + [f'phi_{f}' for f in range(model.n_fields)]
     # model.aux_variables = register_sympy_attribute(model.aux_variables.get_list() + recon_variables)
     # model.n_aux_fields = model.aux_variables.length()
-
 
     Q, Qaux = _initialize_problem(model, mesh)
 
@@ -1161,16 +1193,16 @@ def jax_fvm_unsteady_semidiscrete(
 
     Qnew = deepcopy(Q)
 
-    space_solution_operator = _get_semidiscrete_solution_operator(mesh, pde, bcs, settings)
+    space_solution_operator = _get_semidiscrete_solution_operator(
+        mesh, pde, bcs, settings
+    )
     # space_solution_operator = _get_semidiscrete_solution_operator(
     #     mesh, pde, model.boundary_conditions, settings
     # )
     compute_source = _get_source(mesh, pde, settings)
     compute_source_jac = _get_source_jac(mesh, pde, settings)
 
-    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(
-        mesh, pde, settings
-    )
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, settings)
     min_inradius = np.min(mesh.cell_inradius)
 
     # if model.levels > 1:
@@ -1178,7 +1210,7 @@ def jax_fvm_unsteady_semidiscrete(
     #     enforce_boundary_conditions = model.basis.enforce_boundary_conditions_lsq2(dim=mesh.dimension)
     # else:
     #     enforce_boundary_conditions  = lambda Q: Q
-    enforce_boundary_conditions  = lambda Q: Q
+    enforce_boundary_conditions = lambda Q: Q
 
     # limiter = get_limiter(name='Venkatakrishnan')
     # limiter = get_limiter(name='zero')
@@ -1189,25 +1221,26 @@ def jax_fvm_unsteady_semidiscrete(
         #     # print(f'in loop from process {os.getpid()}')
         Q = deepcopy(Qnew)
         if model.name == "ShearShallowFlowPathconservative":
-            h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = model.get_primitives(Q)
+            h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = model.get_primitives(
+                Q
+            )
             assert (P11 > 0).all
             assert (P12 > 0).all
             assert (P22 > 0).all
-            P11 = np.where(P11 <= 10**(-15), 10**(-15), P11)
-            P12 = np.where(P12 <= 10**(-15), 10**(-15), P12)
-            P22 = np.where(P22 <= 10**(-15), 10**(-15), P22)
+            P11 = np.where(P11 <= 10 ** (-15), 10 ** (-15), P11)
+            P12 = np.where(P12 <= 10 ** (-15), 10 ** (-15), P12)
+            P22 = np.where(P22 <= 10 ** (-15), 10 ** (-15), P22)
             R11 = Q[0] * P11
             R12 = Q[0] * P12
             R22 = Q[0] * P22
-            u = Q[1]/Q[0]
-            v = Q[2]/Q[0]
-            Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
-            Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
-            Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+            u = Q[1] / Q[0]
+            v = Q[2] / Q[0]
+            Q[3] = 1 / 2 * R11 + 1 / 2 * Q[0] * u * u
+            Q[4] = 1 / 2 * R12 + 1 / 2 * Q[0] * u * v
+            Q[5] = 1 / 2 * R22 + 1 / 2 * Q[0] * v * v
 
         if model.name == "ShearShallowFlow":
-            Q[2] = np.where(Q[2] <= 10**(-15), 10**(-15), Q[2])
-
+            Q[2] = np.where(Q[2] <= 10 ** (-15), 10 ** (-15), Q[2])
 
         dt = settings.compute_dt(
             Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
@@ -1240,8 +1273,8 @@ def jax_fvm_unsteady_semidiscrete(
         # gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
         # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
         # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
-        # # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij) 
-        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij) 
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij)
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij)
         # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
         # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
         # phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
@@ -1250,20 +1283,17 @@ def jax_fvm_unsteady_semidiscrete(
         # gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
         # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
         # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
-        # # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
-        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij) 
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
         # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
         # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
         # phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
-
 
         # phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
 
         # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
         # for i in range(model.n_fields):
         #     Qaux[i_aux_recon+mesh.dimension+i, :] = phi[i]
-
-
 
         #     # add 0.001 safty measure to avoid very small time steps
         if settings.truncate_last_time_step:
@@ -1320,7 +1350,7 @@ def jax_fvm_unsteady_semidiscrete(
     #     # print(f'finished timestep: {os.getpid()}')
     # progressbar.set_stat(min(time, settings.time_end))
     # progressbar.update()
-    print(f'Runtime: {gettime() - time_start}')
+    print(f"Runtime: {gettime() - time_start}")
 
     progressbar.end()
     return settings
@@ -1380,7 +1410,6 @@ def fvm_unsteady_semidiscrete(
 
     pde, bc = load_runtime_model(model)
 
-
     # map_elements_to_edges = recon.create_map_elements_to_edges(mesh)
     # on_edges_normal, on_edges_length = recon.get_edge_geometry_data(mesh)
     # space_solution_operator = get_semidiscrete_solution_operator(mesh, pde, settings, on_edges_normal, on_edges_length, map_elements_to_edges)
@@ -1419,8 +1448,8 @@ def fvm_unsteady_semidiscrete(
         Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
         # Qnew = enforce_boundary_conditions(Qnew)
 
-        hb = lambda t, x : np.cos(x[:, 0] -t)
-        Qaux[:,0] = hb(time, mesh.element_center)
+        hb = lambda t, x: np.cos(x[:, 0] - t)
+        Qaux[:, 0] = hb(time, mesh.element_center)
         Qaux = Qaux.reshape((Q.shape[0], 1))
 
         Qnew = ode_solver_source(
