@@ -245,6 +245,7 @@ class Mesh:
     boundary_conditions_sorted_names: CArray
     lsq_gradQ: FArray
     deltaQ: FArray
+    z_ordering: IArray
 
     @classmethod
     def create_1d(cls, domain: tuple[float, float], n_inner_cells: int):
@@ -341,6 +342,8 @@ class Mesh:
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers
         )
 
+        z_ordering = np.array([-1], dtype=float)
+
         # return cls(dimension, 'line', n_cells, n_cells + 1, 2, n_faces_per_element, vertex_coordinates, element_vertices, element_face_areas, element_centers, element_volume, element_inradius, element_face_normals, element_n_neighbors, element_neighbors, element_neighbors_face_index, boundary_face_vertices, boundary_face_corresponding_element, boundary_face_element_face_index, boundary_face_tag, boundary_tag_names)
         return cls(
             dimension,
@@ -372,10 +375,51 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             deltaQ,
+            z_ordering,
         )
 
+    def _compute_ascending_order_structured_axis(self):
+        cell_centers = self.cell_centers
+        dimension = self.dimension
+        if dimension == 1:
+            order = np.lexsort((cell_centers[:, 0],))
+        elif dimension == 2:
+            order = np.lexsort(
+                (
+                    cell_centers[:, 0],
+                    cell_centers[:, 1],
+                )
+            )
+        elif dimension == 3:
+            order = np.lexsort(
+                (
+                    cell_centers[:, 0],
+                    cell_centers[:, 1],
+                    cell_centers[:, 2],
+                )
+            )
+        else:
+            assert False
+
+        ## find number of cells in z (Nz) from first column
+        Nz = 1
+        while cell_centers[order[Nz], 2] > cell_centers[order[Nz - 1], 2]:
+            Nz += 1
+        Nz += 1
+
+        ## partition order into [(Nx x Ny) , (Nz)]
+        N = int(cell_centers.shape[0] / Nz)
+        assert cell_centers.shape[0] == N * Nz
+        order = order.reshape((N, Nz))
+
+        coords_z = order[0]
+        for o in order:
+            assert o == coords_z
+
+        return order
+
     @classmethod
-    def from_gmsh(cls, filepath):
+    def from_gmsh(cls, filepath, allow_z_integration=False):
         dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
         boundary_dict = get_physical_boundary_labels(filepath)
         (cStart, cEnd) = dm.getHeightStratum(0)
@@ -389,13 +433,24 @@ class Mesh:
         # (egStart, egEnd) = gdm.getDepthStratum(1)
         (egStart, egEnd) = gdm.getHeightStratum(1)
 
-        n_faces_per_cell = len(gdm.getCone(cgStart))
         dim = dm.getDimension()
+        n_faces_per_cell = len(gdm.getCone(cgStart))
+        n_vertices_per_cell = n_faces_per_cell
+        if dim > 2:
+            transitive_closure_points, transitive_closure_orientation = (
+                dm.getTransitiveClosure(cStart, useCone=True)
+            )
+            n_vertices_per_cell = transitive_closure_points[
+                np.logical_and(
+                    transitive_closure_points >= vStart,
+                    transitive_closure_points < vEnd,
+                )
+            ].shape[0]
         n_cells = cgEnd - cgStart
         n_inner_cells = cEnd - cStart
         n_faces = egEnd - egStart
         n_vertices = vEnd - vStart
-        cell_vertices = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
+        cell_vertices = np.zeros((n_inner_cells, n_vertices_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_centers = np.zeros((n_cells, dim), dtype=float)
         # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
@@ -614,7 +669,9 @@ class Mesh:
 
         mesh_type = get_mesh_type_from_dm(n_faces_per_cell, dim)
 
-        return cls(
+        z_ordering = np.array([-1], dtype=float)
+
+        obj = cls(
             dim,
             mesh_type,
             n_cells,
@@ -644,7 +701,13 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             deltaQ,
+            z_ordering,
         )
+
+        if allow_z_integration:
+            obj._compute_ascending_order_structured_axis()
+
+        return obj
 
     @classmethod
     def extrude_mesh(cls, msh, n_layers=10):
@@ -815,6 +878,7 @@ class Mesh:
             )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
             mesh.create_dataset("deltaQ", data=np.array(self.deltaQ))
+            mesh.create_dataset("z_ordering", data=np.array(self.z_ordering))
 
     @classmethod
     def from_hdf5(cls, filepath: str):
@@ -853,6 +917,7 @@ class Mesh:
                 ),
                 file["mesh"]["lsq_gradQ"][()],
                 file["mesh"]["deltaQ"][()],
+                file["mesh"]["z_ordering"][()],
             )
         return mesh
 

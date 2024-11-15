@@ -440,9 +440,17 @@ def compute_subvolume(face_vertices, cell_center, dim):
         return 0.5 * np.abs(np.cross(v1 - v0, cell_center - v0))
 
     elif dim == 3:
-        # 3D: Volume of the tetrahedron
-        v0, v1, v2 = face_vertices
-        return np.abs(np.dot(np.cross(v1 - v0, v2 - v0), cell_center - v0)) / 6.0
+        if face_vertices.shape[0] == 3:
+            # 3D: Volume of the tetrahedron
+            v0, v1, v2 = face_vertices
+            return np.abs(np.dot(np.cross(v1 - v0, v2 - v0), cell_center - v0)) / 6.0
+        elif face_vertices.shape[0] == 4:
+            # 3D: Volume of the pyramid
+            # WARNING crude approximation
+            v0, v1, v2 = face_vertices
+            return np.abs(np.dot(np.cross(v1 - v0, v2 - v0), cell_center - v0)) / 6.0
+        else:
+            assert False
 
     else:
         raise ValueError("Unsupported dimensionality")
