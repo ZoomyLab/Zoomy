@@ -7,13 +7,13 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-N = 60
+N = 40
 mesh = UnitSquareMesh(N, N, quadrilateral=True)
 
 V = FunctionSpace(mesh, "DG", 1)
 Vout = FunctionSpace(mesh, "DG", 1)
-W = VectorFunctionSpace(mesh, "DG", 0)
-Wout = VectorFunctionSpace(mesh, "DG", 0)
+W = VectorFunctionSpace(mesh, "DG", 1)
+Wout = VectorFunctionSpace(mesh, "DG", 1)
 
 VW = V * W
 WV = W * V
@@ -116,7 +116,7 @@ solv1 = LinearVariationalSolver(prob1, solver_parameters=params)
 prob2 = LinearVariationalProblem(a, L2, dQ)
 solv2 = LinearVariationalSolver(prob2, solver_parameters=params)
 limiterH = VertexBasedLimiter(V)
-limiterH.compute_bounds(Q.sub(0))
+#limiterH.compute_bounds(Q.sub(1))
 #limiterH.apply(Q.sub(0))
 #limiterH.apply(Q_.sub(0))
 #limiterH.apply_limiter(Q.sub(0))
@@ -137,6 +137,18 @@ while t < T - 0.5 * dt:
     #limiterH.apply_limiter(Q.sub(0))
     #limiterH = VertexBasedLimiter(V)
     limiterH.apply(Q.sub(0))
+    tmp_func = V.get_work_function()
+    #print(W.value_size)
+    for i in range(W.value_size):
+        d = Q.sub(1).dat.data_with_halos
+        dd = tmp_func.dat.data_with_halos
+        #print(d.shape, dd.shape)
+        tmp_func.dat.data_with_halos[:] = d[:, i]
+        limiterH.apply(tmp_func)
+        Q.sub(1).dat.data_with_halos[:, i] = tmp_func.dat.data_with_halos
+
+
+    #limiterH.apply(Q.sub(1))
     #print(np.max(Q.sub(0).dat.data_ro))
     #print(np.min(Q.sub(0).dat.data_ro))
     #limiterH.apply(dQ.sub(0))
