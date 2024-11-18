@@ -124,6 +124,7 @@ limiterH = VertexBasedLimiter(V)
 #print(np.max(Q.sub(0).dat.data_ro))
 #print(np.min(Q.sub(0).dat.data_ro))
 #print('---------------')
+tmp_func = V.get_work_function()
 
 while t < T - 0.5 * dt:
     ev_max = max(project(ev_cell(h, hu), V).vector())
@@ -137,7 +138,6 @@ while t < T - 0.5 * dt:
     #limiterH.apply_limiter(Q.sub(0))
     #limiterH = VertexBasedLimiter(V)
     limiterH.apply(Q.sub(0))
-    tmp_func = V.get_work_function()
     #print(W.value_size)
     for i in range(W.value_size):
         d = Q.sub(1).dat.data_with_halos
