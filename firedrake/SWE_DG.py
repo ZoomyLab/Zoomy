@@ -7,7 +7,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-N = 40
+N = 100
 mesh = UnitSquareMesh(N, N, quadrilateral=True)
 
 V = FunctionSpace(mesh, "DG", 1)
@@ -48,7 +48,7 @@ v, w = TestFunctions(VW)
 v_, w_ = TrialFunctions(VW)
 a = inner(w, w_) * dx + inner(v, v_) * dx
 
-T = 1.0
+T = 3.0
 CFL = 1. / (2 + 2 + 1)
 incircle = (1./N)
 g = 9.81
