@@ -39,3 +39,5 @@ _freeze
 # outputs
 *.h5
 *.pkl
+firedrake/swe
+firedrake/swe.pvd

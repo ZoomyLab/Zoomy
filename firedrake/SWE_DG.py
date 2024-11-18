@@ -7,11 +7,11 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-N = 40
-mesh = UnitSquareMesh(N, N, quadrilateral=False)
+N = 60
+mesh = UnitSquareMesh(N, N, quadrilateral=True)
 
-V = FunctionSpace(mesh, "DG", 0)
-Vout = FunctionSpace(mesh, "DG", 0)
+V = FunctionSpace(mesh, "DG", 1)
+Vout = FunctionSpace(mesh, "DG", 1)
 W = VectorFunctionSpace(mesh, "DG", 0)
 Wout = VectorFunctionSpace(mesh, "DG", 0)
 
@@ -27,7 +27,7 @@ x1 = 0.7
 y1 = 0.5
 
 width = 0.05
-height = conditional(Or(And(And(x < x0+width, x > x0-width), And(y < y0+width, y > y0-width) ), And(And(x < x1+width, x > x1-width), And(y < y1+width, y > y1-width) )), 8.0, 1.0)
+height = conditional(Or(And(And(x < x0+width, x > x0-width), And(y < y0+width, y > y0-width) ), And(And(x < x1+width, x > x1-width), And(y < y1+width, y > y1-width) )), 8.0, 5.0)
 velocity = conditional(Or(And(And(x < x0+width, x > x0-width), And(y < y0+width, y > y0-width) ), And(And(x < x1+width, x > x1-width), And(y < y1+width, y > y1-width) )), as_vector((0.0, 0.0)) , as_vector((0., 0.)))
 
 IC = Function(VW, name="IC")
@@ -48,8 +48,8 @@ v, w = TestFunctions(VW)
 v_, w_ = TrialFunctions(VW)
 a = inner(w, w_) * dx + inner(v, v_) * dx
 
-T = 0.01
-CFL = 0.1
+T = 1.0
+CFL = 1. / (2 + 2 + 1)
 incircle = (1./N)
 g = 9.81
 
@@ -75,8 +75,8 @@ hu_t = hu - hu_n
 hu_g = -hu_n + hu_t
 n_g = -n
 
-DG_H = inner(grad(v), f_h(h, hu)) * ds
-DG_HU = inner(grad(w), f_hu(h, hu)) * ds
+DG_H = inner(grad(v), f_h(h, hu)) * dx
+DG_HU = inner(grad(w), f_hu(h, hu)) * dx
 
 F_H = (v(p)-v(m)) * (dot(0.5*(f_h(h(p), hu(p)) + f_h(h(m), hu(m))), n(m)) - 0.5*avg(ev(h, hu, n))*(h(p) - h(m))) * dS
 F_HU = dot((w(p)-w(m)), (dot(0.5*(f_hu(h(p), hu(p)) + f_hu(h(m), hu(m))), n(m)) - 0.5*avg(ev(h, hu, n))*(hu(p) - hu(m)))) * dS
@@ -105,31 +105,55 @@ h2, hu2 = split(Q2)
 L1 = replace(L, {h: h1, hu: hu1}); 
 L2 = replace(L, {h: h2, hu: hu2}); 
 
-params = {'ksp_type': 'preonly', 'pc_type': 'bjacobi', 'sub_pc_type': 'ilu'}
+#params = {'ksp_type': 'preonly', 'pc_type': 'bjacobi', 'sub_pc_type': 'ilu'}
+params = {'ksp_type': 'cg'}
 dQ = Function(VW)
+# prob = LinearVariationalProblem(a, L, dQ)
 prob = LinearVariationalProblem(a, L, dQ)
 solv = LinearVariationalSolver(prob, solver_parameters=params)
 prob1 = LinearVariationalProblem(a, L1, dQ)
 solv1 = LinearVariationalSolver(prob1, solver_parameters=params)
 prob2 = LinearVariationalProblem(a, L2, dQ)
 solv2 = LinearVariationalSolver(prob2, solver_parameters=params)
+limiterH = VertexBasedLimiter(V)
+limiterH.compute_bounds(Q.sub(0))
+#limiterH.apply(Q.sub(0))
+#limiterH.apply(Q_.sub(0))
+#limiterH.apply_limiter(Q.sub(0))
+#limiterH.apply_limiter(Q_.sub(0))
+#print(np.max(Q.sub(0).dat.data_ro))
+#print(np.min(Q.sub(0).dat.data_ro))
+#print('---------------')
+
 while t < T - 0.5 * dt:
     ev_max = max(project(ev_cell(h, hu), V).vector())
     dt = CFL * incircle / ev_max
 
     # solve(F == 0, Q)
 
-    #solv.solve()
-    #Q.assign(Q_ + dQ)
-    #Q.assign(Q)
-    #Q_.assign(Q)
-
+    #limiterH.compute_bounds(Q.sub(0))
     solv.solve()
-    Q1.assign(Q_ + dQ)
-    solv1.solve()
-    Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
-    Q.assign(Q2)
-    Q_.assign(Q2)
+    Q.assign(Q_ + dQ)
+    #limiterH.apply_limiter(Q.sub(0))
+    #limiterH = VertexBasedLimiter(V)
+    limiterH.apply(Q.sub(0))
+    #print(np.max(Q.sub(0).dat.data_ro))
+    #print(np.min(Q.sub(0).dat.data_ro))
+    #limiterH.apply(dQ.sub(0))
+    #Q.assign(Q)
+    Q_.assign(Q)
+    #limiterH.apply(Q_.sub(0))
+    #limiterH.apply_limiter(Q_.sub(0))
+    #print(np.max(Q.sub(0).dat.data_ro))
+    #print(np.min(Q.sub(0).dat.data_ro))
+    #print('---------------')
+
+    # solv.solve()
+    # Q1.assign(Q_ + dQ)
+    # solv1.solve()
+    # Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
+    # Q.assign(Q2)
+    # Q_.assign(Q2)
 
     #solv.solve()
     #Q.assign(Q_ + dQ)
