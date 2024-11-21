@@ -73,7 +73,6 @@ velocity = conditional(
     as_vector((0.0, 0.0, 0.0)[:dim]),
     as_vector((0.0, 0.0, 0.0)[:dim]),
 )
-h_test = Function(Vv, name="h_test").interpolate(height)
 
 IC = Function(VW, name="IC")
 h0 = Function(VW.sub(0)).interpolate(height)
@@ -172,7 +171,7 @@ step = 0
 output_freq = 1
 
 outfile = VTKFile("swe.pvd")
-outfile.write(project(h, Vout, name="H"), project(hu, Wout, name="HU"), project(h_test, Vout, name="h_test"), time=t)
+outfile.write(project(h, Vout, name="H"), project(hu, Wout, name="HU"), time=t)
 
 ev_cell = lambda h, hu: abs(hu[0]) / h + sqrt(g * h)
 ev_max = max(project(ev_cell(h, hu), V).vector())
@@ -221,27 +220,31 @@ def compute_z_integral(Q):
     v_line = assemble(interpolate(v, Vline))
     phi_line = assemble(interpolate(phi, Vline))
 
-    h_int = assemble(h_line * dx)
-    u_avg = assemble(u_line * dx)
-    v_avg = assemble(v_line * dx)
-    phi_avg = assemble(phi_line * dx)
+
+    # starting userscore denotes values, not functions
+    _h_int = assemble(h_line * dx)
+    _u_avg = assemble(u_line * dx)
+    _v_avg = assemble(v_line * dx)
+    _phi_avg = assemble(phi_line * dx)
+
+    u_avg = Function(V).interpolate(_
 
     dz = 1. / (N+1)
     integration_bound = np.arange(0. + dz/2, 1, dz)
     #integration_bound = np.linspace(0, 1, N)
 
 
-    psi = np.zeros(integration_bound.shape[0], dtype=float)
-    for i in range(psi.shape[0]):
+    _psi = np.zeros(integration_bound.shape[0], dtype=float)
+    for i in range(_psi.shape[0]):
         #w = conditional(zeta <= integration_bound[i], 1., 0.)
         w = conditional(zeta <= integration_bound[i], 1., 0.)
-        psi[i] = assemble((phi_avg - phi_line) * w * dx)
+        _psi[i] = assemble((_phi_avg - phi_line) * w * dx)
 
-    #print(f'h_int: {h_int}')
-    #print(f'u_avg: {u_avg}')
-    #print(f'v_avg: {v_avg}')
-    #print(f'phi_avg: {phi_avg}')
-    #print(f'psi: {psi}')
+    print(f'h_int: {_h_int}')
+    print(f'u_avg: {_u_avg}')
+    print(f'v_avg: {_v_avg}')
+    print(f'phi_avg: {_phi_avg}')
+    print(f'psi: {_psi}')
 
 
 
@@ -272,7 +275,7 @@ while t < T - 0.5 * dt:
         L2_init = sqrt(assemble(h0 * h0 * dx))
         error = L2_err / L2_init
         #outfile.write(project(h, Vout, name="H"), project(hu, Wout, name="HU"), time=t)
-        outfile.write(project(h, Vout, name="H"), project(hu, Wout, name="HU"), project(h_test, Vout, name="h_test"), time=t)
+        outfile.write(project(h, Vout, name="H"), project(hu, Wout, name="HU"), time=t)
         print(
             f"t={t}, dt={dt}, ev_max={ev_max}, |h-h_0|_L2/|h_0|_L2={error}, h_max={max_h}"
         )
