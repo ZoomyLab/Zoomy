@@ -9,9 +9,12 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 N = 10
-Nz = 1
+Nz = 3
 mm = UnitIntervalMesh(N)
 m = ExtrudedMesh(mm, layers=Nz)
+sampling_factor = 1
+mm_sampled = UnitIntervalMesh(sampling_factor*N)
+m_sampled = ExtrudedMesh(mm_sampled, layers=sampling_factor*Nz)
 dim = 2
 
 def compute_cell_centers(_mesh):
@@ -23,6 +26,10 @@ def compute_cell_centers(_mesh):
     cell_centers.interpolate(as_vector(x))
     return cell_centers.dat.data
 
+def compute_vertex_coords(_mesh):
+    vertex_coords = _mesh.coordinates.dat.data_with_halos
+    return vertex_coords
+
 def create_line(a, b, N):
     dim = len(a)
     cells = np.asarray([[i, i + 1] for i in range(N)])
@@ -32,27 +39,43 @@ def create_line(a, b, N):
     line = mesh.Mesh(plex, dim=dim)
     return line, vertex_coords
 
-line, vertex_coords = create_line([0.0, 0.5], [1.0, 0.5], N)
+def create_line_with_subsamples(a, b, N):
+    dim = len(a)
+    cells = np.asarray([[i, i + 1] for i in range(N)])
+    cells_sub = np.asarray([[i, i + 1] for i in range(3*N)])
+    vertex_coords = np.linspace(a, b, N + 1)
+    vc = vertex_coords
+    _dx = vc[1]-vc[0]
+    #TODO does not work this way
+    vertex_coords_sub = np.array([vc[i]-0.99*_dx, vc[i], vc[i+1]-eps] for i in range(vertex_coords.shape[0]))
+    topo_dim = 1
+    plex = mesh.plex_from_cell_list(topo_dim, cells, vertex_coords, comm=m.comm)
+    line = mesh.Mesh(plex, dim=dim)
+    return line, vertex_coords
+
+line, vertex_coords = create_line([0.0, 0.5], [1.0, 0.5], sampling_factor*N)
 Vline = FunctionSpace(line, "DG", 0)
 
-V = FunctionSpace(m, "DG", 0)
-V1 = FunctionSpace(m, "DG", 1)
-Vout1 = FunctionSpace(m, "CG", 1)
+V = FunctionSpace(m, "DG", 1)
+Vout1 = FunctionSpace(m, "DG", 1)
 zeta, _ = SpatialCoordinate(line)
 zeta_coords = line.coordinates.dat.data
 
 cell_centers = compute_cell_centers(m)
-vertex_coords = m.coordinates.dat.data
-m_vom = VertexOnlyMesh(m, cell_centers)
+cell_centers_sampled = compute_cell_centers(m_sampled)
+vertex_coords = compute_vertex_coords(m)
+vertex_coords_sampled = compute_vertex_coords(m_sampled)
+
+m_vom = VertexOnlyMesh(m_sampled, cell_centers_sampled)
+#m_vom = VertexOnlyMesh(m_sampled, vertex_coords_sampled)
+
 VOM = FunctionSpace(m_vom, "DG", 0)
+V0_vom = FunctionSpace(m_sampled, "DG", 0)
 
 x, y = SpatialCoordinate(m)
 q_f = x  + y
 
 q = Function(V, name='q').interpolate(q_f)
-
-#q.assign(q)
-v = TestFunction(V)
 
 phi = ( q.dx(0) + q.dx(1) ) 
 
@@ -65,7 +88,7 @@ _phi_avg = assemble(phi_line * dx)
 
 dz = 1. / (N+1)
 #integration_bound = np.arange(0. + dz/2, 1, dz)
-integration_bound = np.linspace(0, 1, N+1)
+integration_bound = np.linspace(0, 1, 2*Nz+1)
 
 
 _psi = np.zeros(integration_bound.shape[0], dtype=float)
@@ -75,34 +98,20 @@ for i in range(_psi.shape[0]):
     _psi[i] = assemble((_q_avg - q_line) * w * dx)
 
 outfile = VTKFile("swe.pvd")
-q_vom = Function(VOM).interpolate(q)
-print(q_vom.dat.data_ro.shape)
-print(q.dat.data_ro.shape)
-#print(q_vom.dat.data)
-#print(q.dat.data)
-q_vom_v = Function(V)
+
+# project q onto VOM space
+q0 = Function(V0_vom).interpolate(q)
+q_vom = Function(VOM).interpolate(q0)
+
+# now I can e.g. extract data, integrate and do whatever with q_vom
+#TODO do integration here. 
+
+# project back to V0 and then to V
+q_vom_v = Function(V0_vom)
 q_vom_v.dat.data_with_halos[:] = q_vom.dat.data_with_halos[:]
-q_v1 = Function(V1).interpolate(q_vom_v)
-print(q_v1.dat.data.shape)
-#q_vom_v = Function(V).interpolate(q_vom)
-#qnew = Function(V).interpolate(q_vom)
-#qnew = Function(V)
-#q_vom_ip = Interpolator(TestFunction(V1),  V)
+q_v1 = Function(V).interpolate(q_vom_v)
 
-#qnew = project(q_vom, V)
-#print(q_vom.dat.data_ro)
-#q_vom_v = Function(V)
-#project(q_vom, V)
-outfile.write(project(q, V, name="q"), project(q_vom_v, V, name='q_vom'), project(q_v1, Vout1, name='q_v1'), time=0)
-print(vertex_coords.shape)
-#print(q_vom.dat.data_ro.shape)
-#print(_psi.shape)
+print(f'max q: {q.dat.data_with_halos.max()}')
+print(f'max q_v1: {q_v1.dat.data_with_halos.max()}')
 
-
-#print(f'h_avg: {_q_avg}')
-#print(f'phi_avg: {_phi_avg}')
-#print(f'psi: {_psi}')
-#
-#print(vertex_coords)
-#print(_psi)
-
+outfile.write(project(q, V, name="q"), project(q_v1, Vout1, name='q_v1'), time=0)
