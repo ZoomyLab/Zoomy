@@ -14,72 +14,85 @@ DIM_V = 1
 horiz_elt = FiniteElement("DG", quadrilateral, DIM_H)
 vert_elt = FiniteElement("DG", interval, DIM_V)
 elt = TensorProductElement(horiz_elt, vert_elt)
-DG = FunctionSpace(mesh, elt)
+DG = VectorFunctionSpace(mesh, elt)
 
-DG_base = FunctionSpace(base_mesh, "DG", DIM_H)
-print(DG.dim())
+DG_base = VectorFunctionSpace(base_mesh, "DG", DIM_H)
+#print(DG.dim())
 f = Function(DG)
 ff = Function(DG_base)
 x, y, z = SpatialCoordinate(mesh)
 xb, yb = SpatialCoordinate(base_mesh)
-f.interpolate(x + 100 * y +000*z )  # Example definition for f
-ff.interpolate(xb + 100 * yb)
+# sub is for mixed spaces!! Use vector instead!!
+dof_points = Function(DG).interpolate(as_vector([x,y,z]))
+f.interpolate(as_vector([x, y, 1.]))  # Example definition for f
+ff.interpolate(as_vector([xb, yb]))
 
-df = assemble(interpolate(f.dx(0), DG))
-dff = assemble(interpolate(ff.dx(0), DG_base))
+print(f'DG_base dim {DG_base.dim()}')
+print(f'DG dim {DG.dim()}')
+
+
+#df = assemble(interpolate(f.dx(0), DG))
+#dff = assemble(interpolate(ff.dx(0), DG_base))
 
 # Define the output function g
-g = Function(DG)
+g = Function(DG).interpolate(f)
 
-#print(Nz, mesh.layers)
-#print(ff.dat.data.shape)
-#print(f.dat.data.shape)
-#print(DG.dim())
-#print(DG_base.dim())
 
 # Loop through layers
 start = time()
 
-offset = (1+DIM_V) * Nz
+n_dof_base = 4
+
+outfile = VTKFile("out.pvd")
+outfile.write(project(f, DG, name="Q"), time=0)
+
+def base_reshape(field):
+    return field.dat.data_with_halos[:].reshape((n_dof_base, -1))
+
+def extr_reshape(field):
+    return field.dat.data_with_halos[:].reshape((n_dof_base, Nz,-1)).reshape((n_dof_base, Nz, -1, DIM_V+1))
+
 for layer in range(Nz):  # Loop through layers except the top one
-    # Extract f on the current and previous layers
-    current_layer = Function(DG_base)
-    previous_layer = Function(DG_base)
 
-    # Restrict to the current and previous layers
-    if layer == 0 or layer == Nz:
-        current_layer.interpolate(0)
-        previous_layer.interpolate(0)
-    #else:
-    #    current_layer.dat.data[:] = f.dat.data_ro[layer::offset]
-    #    previous_layer.dat.data[:] = f.dat.ata_ro[layer - 1::offset]
-    #1
-    ne_base = 4
-    ne_per_column = ne_base * Nz
-    n_nodes = 4
-    if layer == 1:
-        ne_base = 4
-        #d_2d = (ff.dat.data_ro[:])
-        #d_slice = (f.dat.data_ro[:])
-        d_2d = (ff.dat.data_ro[:].reshape((ne_base, -1)))
-        #d_slice = (f.dat.data_ro[:].reshape((ne_per_column,-1)).reshape((ne_per_column, -1, DIM_V+1)))
-        d_slice = (f.dat.data_ro[:].reshape((ne_base, Nz,-1)).reshape((ne_base, Nz, -1, DIM_V+1)))
+    if layer == 0:
+        z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
+        z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+        z_prev = np.zeros_like(z_low)
+        current_layer_low = extr_reshape(f.sub(2))[:, layer, :, 0]
+        current_layer_high = extr_reshape(f.sub(2))[:, layer, :, 1]
+        previous_layer = np.ones_like(current_layer_low)
+    else:
+        current_layer_low = extr_reshape(f.sub(2))[:, layer, :, 0]
+        current_layer_high = extr_reshape(f.sub(2))[:, layer, :, 1]
+        previous_layer = extr_reshape(g.sub(2))[:, layer - 1, :, 1]
+        z_prev = extr_reshape(dof_points.sub(2))[:, layer-1, :, 1]
+        z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
+        z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+        #print(z_prev)
+        #print(z_low)
+        #print(z_high)
 
-        #(elem, dof_h)
-        print(d_2d[0])
-        #(elem, layer, dof_h, dof_v)
-        print(d_slice[0,2, :, 0])
+    extr_reshape(g.sub(2))[:, layer, :, 0] = previous_layer + (z_low-z_prev) * current_layer_low
+    extr_reshape(g.sub(2))[:, layer, :, 1] = previous_layer + (z_low-z_prev) * current_layer_low + (z_high-z_low) * current_layer_high
 
-        #print(d_2d[0])
-        #print(d_slice[0, :, 0])
 
-        #print(d_slice)
-        #print(d_slice - d_slice2)
-        #print(d_2d-d_slice)
-        #print(d_2d-d_slice2)
-        #print(f.dat.data_ro[::2][:int(ff.dat.data_ro.shape[0]/1)])
-    #g.dat.data[layer::offset] = current_layer.dat.data[:] + previous_layer.dat.data[:]
+    #if layer == 1:
+    #    #d_2d = (ff.dat.data_ro[:])
+    #    #d_slice = (f.dat.data_ro[:])
+
+    #    d_2d = (ff.dat.data_ro[:].reshape((n_dof_base, -1)))
+    #    d_slice = (f.dat.data_ro[:].reshape((n_dof_base, Nz,-1)).reshape((n_dof_base, Nz, -1, DIM_V+1)))
+
+    #    #(elem, dof_h)
+    #    #print(d_2d[0])
+    #    #(elem, layer, dof_h, dof_v)
+    #    #print(d_slice[0,2, :, 0])
+
+    
+
+        
+
 
 print(f'time: {time()-start}')
-#print("Constructed g:", g.dat.data)
 
+outfile.write(project(g, DG, name="Q"), time=1)
