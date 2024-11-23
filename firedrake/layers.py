@@ -4,10 +4,10 @@ from firedrake.__future__ import interpolate
 import numpy as np
 
 # Create the base mesh and extrude it
-base_mesh = UnitSquareMesh(3,2 , quadrilateral=True)
-n_dof_base = 4
+base_mesh = UnitSquareMesh(100,100 , quadrilateral=True)
+Nz = 30
 
-Nz = 2
+n_dof_base = 4
 mesh = ExtrudedMesh(base_mesh, layers=Nz)
 #print(mesh.coordinates.dat.data)
 
@@ -48,7 +48,6 @@ psi = Function(V).interpolate(0)
 
 
 # Loop through layers
-start = time()
 
 outfile = VTKFile("out.pvd")
 outfile2d = VTKFile("out2d.pvd")
@@ -68,8 +67,6 @@ def extr_reshape(field):
 
 hphi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
 
-#base_reshape(Um.sub(0))[:] = range(Vh.dim())
-
 def depth_integration(h, U, Um, hphi, phim, psi):
     """
     We perform the midpoint rule for integration along the extrusion direction. 
@@ -84,10 +81,14 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             h_re = base_reshape(h)
             phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
             phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            phi_pre = np.zeros_like(phi_low)
             psi_pre = np.zeros_like(phi_low)
             u_low = extr_reshape(U.sub(0))[:, layer, :, 0]
             u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
             u_pre = np.zeros_like(u_low)
+            v_low = extr_reshape(U.sub(1))[:, layer, :, 0]
+            v_high = extr_reshape(U.sub(1))[:, layer, :, 1]
+            v_pre = np.zeros_like(u_low)
             z_start = z_prev
             z_mid = 0.5 * (z_low + z_high) 
             z_end = 0.5 * (z_high + z_next)
@@ -99,10 +100,14 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             h_re = base_reshape(h)
             phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
             phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            phi_pre = base_reshape(phim)[:]
             psi_pre = extr_reshape(psi)[:, layer-1, :, 1]
             u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
             u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
             u_pre = base_reshape(Um.sub(0))[:]
+            v_low = extr_reshape(U.sub(1))[:, layer, :, 0] 
+            v_high = extr_reshape(U.sub(1))[:, layer, :, 1]
+            v_pre = base_reshape(Um.sub(1))[:]
             z_start = 0.5 * (z_prev + z_low)
             z_mid = 0.5 * (z_low + z_high) 
             z_end = z_next
@@ -114,10 +119,14 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             h_re = base_reshape(h)
             phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
             phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            phi_pre = base_reshape(phim)[:]
             psi_pre = extr_reshape(psi)[:, layer-1, :, 1]
             u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
             u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
             u_pre = base_reshape(Um.sub(0))[:]
+            v_low = extr_reshape(U.sub(1))[:, layer, :, 0] 
+            v_high = extr_reshape(U.sub(1))[:, layer, :, 1]
+            v_pre = base_reshape(Um.sub(1))[:]
             z_start = 0.5 * (z_prev + z_low)
             z_mid = 0.5 * (z_low + z_high) 
             z_end = 0.5 * (z_high + z_next)
@@ -126,15 +135,22 @@ def depth_integration(h, U, Um, hphi, phim, psi):
         dz_high =  z_end - z_mid
     
         
+        base_reshape(phim)[:] = phi_pre + dz_low * phi_low + dz_high * phi_high
         base_reshape(Um.sub(0))[:] = u_pre + dz_low * u_low + dz_high * u_high
+        base_reshape(Um.sub(1))[:] = v_pre + dz_low * v_low + dz_high * v_high
         extr_reshape(psi)[:, layer, :, 0] = psi_pre + dz_low * phi_low
         extr_reshape(psi)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
 
+    for layer in range(Nz):  # Loop through layers except the top one
+        extr_reshape(psi)[:, layer, :, 0] = base_reshape(phim)[:] - extr_reshape(psi)[:, layer, :, 0]
+        extr_reshape(psi)[:, layer, :, 1] = base_reshape(phim)[:] - extr_reshape(psi)[:, layer, :, 1]
+
+
+start = time()
 depth_integration(h, U, Um, hphi, phim, psi)
-    
+print(f'time for depth integration: {time()-start}')
 
 
-print(f'time: {time()-start}')
 
 _time = 1
 outfile.write(project(U, W, name="U"), project(psi, V, name='psi'), time=_time)
