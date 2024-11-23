@@ -90,6 +90,7 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
             z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
             z_prev = np.zeros_like(z_low)
+            z_next = extr_reshape(dof_points.sub(2))[:, layer+1, :, 0]
             h_re = base_reshape(h)
             phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
             phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
@@ -97,10 +98,14 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             u_low = extr_reshape(U.sub(0))[:, layer, :, 0]
             u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
             u_pre = np.zeros_like(u_low)
-        else:
+            z_start = z_prev
+            z_mid = 0.5 * (z_low + z_high) 
+            z_end = 0.5 * (z_high + z_next)
+        elif layer == Nz-1:
             z_prev = extr_reshape(dof_points.sub(2))[:, layer-1, :, 1]
             z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
             z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+            z_next = np.ones_like(z_low)
             h_re = base_reshape(h)
             phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
             phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
@@ -108,6 +113,27 @@ def depth_integration(h, U, Um, hphi, phim, psi):
             u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
             u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
             u_pre = base_reshape(Um.sub(0))[:]
+            z_start = 0.5 * (z_prev + z_low)
+            z_mid = 0.5 * (z_low + z_high) 
+            z_end = z_next
+        else:
+            z_prev = extr_reshape(dof_points.sub(2))[:, layer-1, :, 1]
+            z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
+            z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+            z_next = extr_reshape(dof_points.sub(2))[:, layer+1, :, 0]
+            h_re = base_reshape(h)
+            phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
+            phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            psi_pre = extr_reshape(psi)[:, layer-1, :, 1]
+            u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
+            u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
+            u_pre = base_reshape(Um.sub(0))[:]
+            z_start = 0.5 * (z_prev + z_low)
+            z_mid = 0.5 * (z_low + z_high) 
+            z_end = 0.5 * (z_high + z_next)
+
+        dz_low =  z_mid - z_start
+        dz_high =  z_end - z_mid
     
         #print(layer)
         #print(base_reshape(Um.sub(0)).shape)
@@ -122,11 +148,10 @@ def depth_integration(h, U, Um, hphi, phim, psi):
         #print(phi_low.shape)
         #print(phi_high.shape)
 
-
-        base_reshape(Um.sub(0))[:] = u_pre + (z_low-z_prev) * u_low + (z_high-z_low) * u_high
-        #base_reshape(Um.sub(0))[:] =  u_high
-        extr_reshape(psi)[:, layer, :, 0] = psi_pre + (z_low-z_prev) * phi_low
-        extr_reshape(psi)[:, layer, :, 1] = psi_pre + (z_low-z_prev) * phi_low + (z_high-z_low) * phi_high
+        
+        base_reshape(Um.sub(0))[:] = u_pre + dz_low * u_low + dz_high * u_high
+        extr_reshape(psi)[:, layer, :, 0] = psi_pre + dz_low * phi_low
+        extr_reshape(psi)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
 
 #print(extr_reshape(U.sub(0)).shape)
 #print(base_reshape(Um.sub(0)).shape)
