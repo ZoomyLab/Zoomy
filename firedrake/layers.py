@@ -78,69 +78,68 @@ hphi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
 
 #base_reshape(Um.sub(0))[:] = range(Vh.dim())
 
-#def depth_integration(h, U, Um, hphi, phim, psi):
-#    """
-#    #    #(elem, dof_h)
-#    #    #print(d_2d[0])
-#    #    #(elem, layer, dof_h, dof_v)
-#    #    #print(d_slice[0,2, :, 0])
-#    """
-#    for layer in range(Nz):  # Loop through layers except the top one
-#        if layer == 0:
-#            z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
-#            z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
-#            z_prev = np.zeros_like(z_low)
-#            h_re = base_reshape(h)
-#            phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
-#            phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
-#            psi_pre = np.zeros_like(phi_low)
-#            u_low = extr_reshape(U.sub(0))[:, layer, :, 0]
-#            u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
-#            u_pre = np.zeros_like(u_low)
-#            base_reshape(Um.sub(0))[:] = u_low
-#        else:
-#            z_prev = extr_reshape(dof_points.sub(2))[:, layer-1, :, 1]
-#            z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
-#            z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
-#            h_re = base_reshape(h)
-#            phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
-#            phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
-#            psi_pre = extr_reshape(psi)[:, layer-1, :, 1]
-#            u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
-#            u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
-#            u_pre = base_reshape(Um.sub(0))[:]
-#    
-#        #print(layer)
-#        #print(base_reshape(Um.sub(0)).shape)
-#        #print(extr_reshape(psi)[:, layer, :, 0].shape)
-#        #print(z_prev.shape)
-#        #print(z_low.shape)
-#        #print(z_high.shape)
-#        #print(u_pre.shape)
-#        #print(u_low.shape)
-#        #print(u_high.shape)
-#        #print(psi_pre.shape)
-#        #print(phi_low.shape)
-#        #print(phi_high.shape)
-#
-#
-#        #base_reshape(Um.sub(0))[:] = u_pre + (z_low-z_prev) * u_low + (z_high-z_low) * u_high
-#        #base_reshape(Um.sub(0))[:] = u_high
-#        extr_reshape(psi)[:, layer, :, 0] = psi_pre + (z_low-z_prev) * phi_low
-#        extr_reshape(psi)[:, layer, :, 1] = psi_pre + (z_low-z_prev) * phi_low + (z_high-z_low) * phi_high
+def depth_integration(h, U, Um, hphi, phim, psi):
+    """
+    #    #(elem, dof_h)
+    #    #print(d_2d[0])
+    #    #(elem, layer, dof_h, dof_v)
+    #    #print(d_slice[0,2, :, 0])
+    """
+    for layer in range(Nz):  # Loop through layers except the top one
+        if layer == 0:
+            z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
+            z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+            z_prev = np.zeros_like(z_low)
+            h_re = base_reshape(h)
+            phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
+            phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            psi_pre = np.zeros_like(phi_low)
+            u_low = extr_reshape(U.sub(0))[:, layer, :, 0]
+            u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
+            u_pre = np.zeros_like(u_low)
+        else:
+            z_prev = extr_reshape(dof_points.sub(2))[:, layer-1, :, 1]
+            z_low = extr_reshape(dof_points.sub(2))[:, layer, :, 0]
+            z_high = extr_reshape(dof_points.sub(2))[:, layer, :, 1]
+            h_re = base_reshape(h)
+            phi_low = extr_reshape(hphi)[:, layer, :, 0] / h_re
+            phi_high = extr_reshape(hphi)[:, layer, :, 1] / h_re
+            psi_pre = extr_reshape(psi)[:, layer-1, :, 1]
+            u_low = extr_reshape(U.sub(0))[:, layer, :, 0] 
+            u_high = extr_reshape(U.sub(0))[:, layer, :, 1]
+            u_pre = base_reshape(Um.sub(0))[:]
+    
+        #print(layer)
+        #print(base_reshape(Um.sub(0)).shape)
+        #print(extr_reshape(psi)[:, layer, :, 0].shape)
+        #print(z_prev.shape)
+        #print(z_low.shape)
+        #print(z_high.shape)
+        #print(u_pre.shape)
+        #print(u_low.shape)
+        #print(u_high.shape)
+        #print(psi_pre.shape)
+        #print(phi_low.shape)
+        #print(phi_high.shape)
 
-print(extr_reshape(U.sub(0)).shape)
-print(base_reshape(Um.sub(0)).shape)
+
+        base_reshape(Um.sub(0))[:] = u_pre + (z_low-z_prev) * u_low + (z_high-z_low) * u_high
+        #base_reshape(Um.sub(0))[:] =  u_high
+        extr_reshape(psi)[:, layer, :, 0] = psi_pre + (z_low-z_prev) * phi_low
+        extr_reshape(psi)[:, layer, :, 1] = psi_pre + (z_low-z_prev) * phi_low + (z_high-z_low) * phi_high
+
+#print(extr_reshape(U.sub(0)).shape)
+#print(base_reshape(Um.sub(0)).shape)
+##print('U')
+##print(U.sub(0).dat.data_with_halos[:])
 #print('U')
-#print(U.sub(0).dat.data_with_halos[:])
-print('U')
-print(extr_reshape(U.sub(0))[:, 0, :, 0])
+#print(extr_reshape(U.sub(0))[:, 0, :, 0])
+##print('Um')
+##print(U.sub(0).dat.data_with_halos[:])
 #print('Um')
-#print(U.sub(0).dat.data_with_halos[:])
-print('Um')
-print(base_reshape(Um.sub(0))[:, :])
+#print(base_reshape(Um.sub(0))[:, :])
 
-#depth_integration(h, U, Um, hphi, phim, psi)
+depth_integration(h, U, Um, hphi, phim, psi)
     
 
 
