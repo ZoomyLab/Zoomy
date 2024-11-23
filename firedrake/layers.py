@@ -39,7 +39,8 @@ dof_points = Function(W).interpolate(as_vector([x,y,z]))
 
 # Define the output function g
 U = Function(W).interpolate(as_vector([x, y, 1.]))  # Example definition for f
-h = Function(Vh).interpolate(1.)
+h = Function(V).interpolate(1.)
+hh = Function(Vh).interpolate(1.)
 Um = Function(Wh).interpolate(as_vector([xh, yh]))  # Example definition for f
 phim = Function(Vh).interpolate(0)
 
@@ -53,7 +54,7 @@ outfile = VTKFile("out.pvd")
 outfile2d = VTKFile("out2d.pvd")
 _time = 0
 outfile.write(project(U, W, name="U"), project(psi, V, name='psi'), time=_time)
-outfile2d.write(project(h, Vh, name="h"), project(Um, Wh, name='Um'), time=_time)
+outfile2d.write(project(hh, Vh, name="h"), project(Um, Wh, name='Um'), project(phim, Vh, name="phi_mean") time=_time)
 
 num_layers = Nz
 num_cells_base = base_mesh.num_cells()  # Number of cells in the base mesh
@@ -67,7 +68,7 @@ def extr_reshape(field):
 
 hphi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
 
-def depth_integration(h, U, Um, hphi, phim, psi):
+def depth_integration(h, U, hphi, psi, hh, Um, phim):
     """
     We perform the midpoint rule for integration along the extrusion direction. 
     As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
@@ -140,6 +141,9 @@ def depth_integration(h, U, Um, hphi, phim, psi):
         base_reshape(Um.sub(1))[:] = v_pre + dz_low * v_low + dz_high * v_high
         extr_reshape(psi)[:, layer, :, 0] = psi_pre + dz_low * phi_low
         extr_reshape(psi)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
+        h_reshaped = base_reshape(hh)[:]
+        extr_reshape(h)[:, layer, :, 0] =  h_reshaped
+        extr_reshape(h)[:, layer, :, 1] = h_reshaped
 
     for layer in range(Nz):  # Loop through layers except the top one
         extr_reshape(psi)[:, layer, :, 0] = base_reshape(phim)[:] - extr_reshape(psi)[:, layer, :, 0]
@@ -147,11 +151,13 @@ def depth_integration(h, U, Um, hphi, phim, psi):
 
 
 start = time()
-depth_integration(h, U, Um, hphi, phim, psi)
+depth_integration(h, U, hphi, psi, hh, Um, phim)
 print(f'time for depth integration: {time()-start}')
+
+
 
 
 
 _time = 1
 outfile.write(project(U, W, name="U"), project(psi, V, name='psi'), time=_time)
-outfile2d.write(project(h, Vh, name="h"), project(Um, Wh, name='Um'), time=_time)
+outfile2d.write(project(hh, Vh, name="h"), project(Um, Wh, name='Um'), time=_time)
