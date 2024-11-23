@@ -61,17 +61,9 @@ num_cells_base = base_mesh.num_cells()  # Number of cells in the base mesh
 num_dofs_per_cell = Vh.finat_element.space_dimension()  # DOFs per cell
 num_cells_extruded = num_cells_base * num_layers
 def base_reshape(field):
-    #return field.dat.data_with_halos[:].reshape((n_dof_base, -1))
-    #return field.dat.data_with_halos[:].reshape((-1, n_dof_base))
-    #return field.dat.data_with_halos[:].reshape((num_cells_base, num_dofs_per_cell))
-    #return field.dat.data[:].reshape((num_dofs_per_cell, -1))
     return field.dat.data[:].reshape((-1, num_dofs_per_cell))
 
 def extr_reshape(field):
-    #return field.dat.data_with_halos[:].reshape((n_dof_base, Nz,-1)).reshape((n_dof_base, Nz, -1, DIM_V+1))
-    #return field.dat.data_with_halos[:].reshape((DIM_V+1, n_dof_base, Nz,-1))
-    #return field.dat.data_with_halos[:].reshape(DIM_V+1, Nz, -1, n_dof_base)
-    #return field.dat.data_with_halos[:].reshape((2, num_layers, num_cells_base, num_dofs_per_cell))
     return field.dat.data[:].reshape((-1, num_layers, num_dofs_per_cell, DIM_V+1))
 
 hphi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
@@ -80,10 +72,8 @@ hphi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
 
 def depth_integration(h, U, Um, hphi, phim, psi):
     """
-    #    #(elem, dof_h)
-    #    #print(d_2d[0])
-    #    #(elem, layer, dof_h, dof_v)
-    #    #print(d_slice[0,2, :, 0])
+    We perform the midpoint rule for integration along the extrusion direction. 
+    As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
     """
     for layer in range(Nz):  # Loop through layers except the top one
         if layer == 0:
@@ -135,34 +125,10 @@ def depth_integration(h, U, Um, hphi, phim, psi):
         dz_low =  z_mid - z_start
         dz_high =  z_end - z_mid
     
-        #print(layer)
-        #print(base_reshape(Um.sub(0)).shape)
-        #print(extr_reshape(psi)[:, layer, :, 0].shape)
-        #print(z_prev.shape)
-        #print(z_low.shape)
-        #print(z_high.shape)
-        #print(u_pre.shape)
-        #print(u_low.shape)
-        #print(u_high.shape)
-        #print(psi_pre.shape)
-        #print(phi_low.shape)
-        #print(phi_high.shape)
-
         
         base_reshape(Um.sub(0))[:] = u_pre + dz_low * u_low + dz_high * u_high
         extr_reshape(psi)[:, layer, :, 0] = psi_pre + dz_low * phi_low
         extr_reshape(psi)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
-
-#print(extr_reshape(U.sub(0)).shape)
-#print(base_reshape(Um.sub(0)).shape)
-##print('U')
-##print(U.sub(0).dat.data_with_halos[:])
-#print('U')
-#print(extr_reshape(U.sub(0))[:, 0, :, 0])
-##print('Um')
-##print(U.sub(0).dat.data_with_halos[:])
-#print('Um')
-#print(base_reshape(Um.sub(0))[:, :])
 
 depth_integration(h, U, Um, hphi, phim, psi)
     
