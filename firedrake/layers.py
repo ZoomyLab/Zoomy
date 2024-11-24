@@ -156,6 +156,66 @@ print(f'time for depth integration: {time()-start}')
 
 
 
+v = TestFunction(Vh)
+w = TestFunction(W)
+v_ = TrialFunction(Vh)
+w_ = TrialFunction(W)
+
+
+a_mass = inner(v, v_) * dx 
+a_mom = inner(w, w_) * dx
+
+
+#CONTINUE HERE
+T = 0.01
+CFL = 0.45
+incircle = (1./N)
+g = 9.81
+
+n = FacetNormal(mesh)
+
+P_hyd = lambda h, U: as_tensor([[0.5*g*h**2, 0., 0.], [0., 0.5*g*h**2, 0.], [0., 0., 0.]])
+convection = lambda h, U: as_tensor([[h*U.sub(0)**2, h*U.sub(0)*U.sub(1), 0. ], [h*U.sub(0)*U.sub(1), h*U.sub(1)**2, 0.], [0., 0., 0.]])
+stress = lambda h, U: as_tensor([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.]])
+
+ev = lambda h, U, n: abs(dot(U, n)) + sqrt(g * h)
+
+h_D = h
+u_D = U - 2 * dot(U, n) * n
+un_D = dot(u_D, n)
+
+p = '+'
+m = '-'
+F_H_l = ((h * Um)(p))
+F_H_r = ((h * Um)(m))
+F_H_n = 0.5*dot((F_H_l + F_H_r), n(m))
+F_dis_H = -0.5  * avg(ev(h, hu, n)) * (h(p)-h(m))
+F_H = (v(p)-v(m)) * (F_H_n + F_dis_H) * dS
+
+#TODO Continue
+F_HU_l = outer(hu(p), hu(p)) / h(p) + 0.5 * g * h(p) * h(p) * I
+F_HU_r = outer(hu(m), hu(m)) / h(m) + 0.5 * g * h(m) * h(m) * I
+F_HU_n = 0.5*dot((F_HU_l + F_HU_r), n(m))
+F_dis_HU = -0.5 * avg(ev(h, hu, n)) * (hu(p)-hu(m))
+F_HU = dot((w(p)-w(m)), (F_HU_n + F_dis_HU)) * dS
+
+h_g = h
+hu_n = dot(hu, n) * n
+hu_t = hu - hu_n
+hu_g = -hu_n + hu_t
+
+BC_H_l = hu
+BC_H_r = hu_g
+BC_H_n = 0.5*dot((BC_H_l + BC_H_r), n)
+BC_dis_H = -0.5 * ev(h, hu, n) * (h_g - h)
+BC_H = -v*(BC_H_n + BC_dis_H) * ds
+
+BC_HU_l = outer(hu, hu) / h + 0.5 * g * h * h * I
+BC_HU_r = outer(hu_g, hu_g) / h_g + 0.5 * g * h_g * h_g * I
+BC_HU_n = 0.5*dot((BC_HU_l + BC_HU_r), n)
+BC_dis_HU = -0.5 * ev(h, hu, n) * (hu_g - hu)
+BC_HU = -dot(w, (BC_HU_n + BC_dis_HU)) * ds
+
 
 
 _time = 1
