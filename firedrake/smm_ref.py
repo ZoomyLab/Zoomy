@@ -98,8 +98,8 @@ ev = abs(norm(HU/H)) + sqrt(g*H)
 p = '+'
 m = '-'
 
-quad_degree_h = 15
-quad_degree_hu = 15
+quad_degree_h = 20
+quad_degree_hu = 20
 
 # MASS BALANCE
 # time / mass matrices
@@ -233,14 +233,14 @@ while t < T - 0.5 * dt:
     #U.project(HU/h)
     #phi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
     #DI.integrate(h, U, phi, omega, hh, Um, phim, dof_points)
-    DI.integrate(H, HU,HUm, omega, dof_points)
-    print(f'integration time = {time() - start}')
+    #print(f'integration time = {time() - start}')
 
     solv_H.solve()
     H.assign(H + dH)
     solv_HU.solve()
     HU.assign(HU + dHU)
     apply_limiter(H, HU)
+    DI.integrate(H, HU,HUm, omega, dof_points)
 
     #solv1.solve()
     #Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
@@ -260,10 +260,10 @@ while t < T - 0.5 * dt:
         #outfile.write(project(U, Wout, name="U"), project(omega, Vout, name='omega'), time=t)
         #outfile2d.write(project(hh, Vhout, name="h"), project(Um, Whout, name='Um'), project(phim, Vhout, name="phi_mean"), time=t)
         outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(omega, Vout, name='omega'), time=t)
-        #if _mesh.comm.rank == 0:
-        #    print(
-        #        f"t={t}, dt={dt}, time for step={time()-start}"
-        #    )
+        if _mesh.comm.rank == 0:
+            print(
+                f"global time: {time()} \t solution time:{t} \t  dt:{dt} \t step time:{time()-start}"
+            )
         
         #print(
         #    f"t={t}, dt={dt}, ev_max={ev_max}, |h-h_0|_L2/|h_0|_L2={error}, h_max={max_h}"
