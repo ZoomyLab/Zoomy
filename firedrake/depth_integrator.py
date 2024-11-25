@@ -10,14 +10,11 @@ class DepthIntegrator():
         self.num_cells_extruded = num_cells_base * num_layers
         self.dim_space_vert=dim_space_vert
     
-    def base_reshape(self, field):
-        return field.dat.data[:].reshape((-1, self.num_dofs_per_cell))
-    
     def extr_reshape(self, field):
         return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
 
 
-    def integrate(self, h, U, hphi, psi, hh, Um, phim, dof_points):
+    def integrate(self, h, U, hphi, omega, hh, Um, phim, dof_points):
         """
         We perform the midpoint rule for integration along the extrusion direction. 
         As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
@@ -51,7 +48,7 @@ class DepthIntegrator():
                 phi_low = self.extr_reshape(hphi)[:, layer, :, 0] / h_re
                 phi_high = self.extr_reshape(hphi)[:, layer, :, 1] / h_re
                 phi_pre = self.base_reshape(phim)[:]
-                psi_pre = self.extr_reshape(psi)[:, layer-1, :, 1]
+                psi_pre = self.extr_reshape(omega)[:, layer-1, :, 1]
                 u_low = self.extr_reshape(U.sub(0))[:, layer, :, 0] 
                 u_high = self.extr_reshape(U.sub(0))[:, layer, :, 1]
                 u_pre = self.base_reshape(Um.sub(0))[:]
@@ -70,7 +67,7 @@ class DepthIntegrator():
                 phi_low = self.extr_reshape(hphi)[:, layer, :, 0] / h_re
                 phi_high = self.extr_reshape(hphi)[:, layer, :, 1] / h_re
                 phi_pre = self.base_reshape(phim)[:]
-                psi_pre = self.extr_reshape(psi)[:, layer-1, :, 1]
+                psi_pre = self.extr_reshape(omega)[:, layer-1, :, 1]
                 u_low = self.extr_reshape(U.sub(0))[:, layer, :, 0] 
                 u_high = self.extr_reshape(U.sub(0))[:, layer, :, 1]
                 u_pre = self.base_reshape(Um.sub(0))[:]
@@ -88,12 +85,16 @@ class DepthIntegrator():
             self.base_reshape(phim)[:] = phi_pre + dz_low * phi_low + dz_high * phi_high
             self.base_reshape(Um.sub(0))[:] = u_pre + dz_low * u_low + dz_high * u_high
             self.base_reshape(Um.sub(1))[:] = v_pre + dz_low * v_low + dz_high * v_high
-            self.extr_reshape(psi)[:, layer, :, 0] = psi_pre + dz_low * phi_low
-            self.extr_reshape(psi)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
+            self.extr_reshape(omega)[:, layer, :, 0] = psi_pre + dz_low * phi_low
+            self.extr_reshape(omega)[:, layer, :, 1] = psi_pre + dz_low * phi_low + dz_high * phi_high
             h_reshaped = self.base_reshape(hh)[:]
             self.extr_reshape(h)[:, layer, :, 0] =  h_reshaped
             self.extr_reshape(h)[:, layer, :, 1] = h_reshaped
     
         for layer in range(self.num_layers):  # Loop through layers except the top one
-            self.extr_reshape(psi)[:, layer, :, 0] = self.base_reshape(phim)[:] - self.extr_reshape(psi)[:, layer, :, 0]
-            self.extr_reshape(psi)[:, layer, :, 1] = self.base_reshape(phim)[:] - self.extr_reshape(psi)[:, layer, :, 1]
+            self.extr_reshape(omega)[:, layer, :, 0] = 1./h_reshaped * (self.base_reshape(phim)[:] - self.extr_reshape(omega)[:, layer, :, 0])
+            self.extr_reshape(omega)[:, layer, :, 1] = 1./h_reshaped * (self.base_reshape(phim)[:] - self.extr_reshape(omega)[:, layer, :, 1])
+
+        for layer in range(self.num_layers):  # Loop through layers except the top one
+            self.extr_reshape(omega)[:, layer, :, 0] = 0.
+            self.extr_reshape(omega)[:, layer, :, 1] = 0.
