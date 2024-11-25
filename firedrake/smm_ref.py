@@ -64,7 +64,7 @@ T = 0.1
 CFL = 1./5.
 incircle = (1./N)
 g = 9.81
-nu = 0.001
+nu = 0.01
 
 n = FacetNormal(_mesh)
 
@@ -86,8 +86,8 @@ def get_max_abs_ev(H, HU):
 # lambdas
 P_hyd = as_tensor([[0.5*g*H**2, 0., 0.], [0., 0.5*g*H**2, 0.], [0., 0., 0.]])
 convection = as_tensor([[HU[0]**2/H, HU[0]*HU[1]/H, HU[0]*omega ], [HU[0]*HU[1]/H, HU[1]**2/H, HU[1]*omega], [0., 0., 0.]])
-#stress = lambda h, U: as_tensor([[0., 0., nu/h*U[0].dx(2)], [0., 0., nu/h*U[1].dx(2)], [0., 0., 0.]])
-stress = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+#stress = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+stress = as_tensor([[0., 0., -nu/H*(HU[0]/H).dx(2)], [0., 0., -nu/H*(HU[1]/H).dx(2)], [0., 0., 0.]])
 
 ev_n = abs(dot(HU/H, n)) + sqrt(g * H)
 ev = abs(norm(HU/H)) + sqrt(g*H)
@@ -98,8 +98,8 @@ ev = abs(norm(HU/H)) + sqrt(g*H)
 p = '+'
 m = '-'
 
-quad_degree_h = 20
-quad_degree_hu = 20
+quad_degree_h = 15
+quad_degree_hu = 15
 
 # MASS BALANCE
 # time / mass matrices
@@ -153,7 +153,8 @@ HU_t = HU - HU_n
 HU_g = -HU_n + HU_t
 P_hyd_g = as_tensor([[0.5*g*H**2, 0., 0.], [0., 0.5*g*H**2, 0.], [0., 0., 0.]])
 convection_g = as_tensor([[HU[0]**2/H, HU[0]*HU[1]/H, HU[0]*omega ], [HU[0]*HU[1]/H, HU[1]**2/H, HU[1]*omega], [0., 0., 0.]])
-stress_g = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+#stress_g = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+stress_g = as_tensor([[0., 0., -nu/H*(HU_g/H)[0].dx(2)], [0., 0., -nu/H*(HU_g/H)[1].dx(2)], [0., 0., 0.]])
 f_HU_g = convection_g + P_hyd_g + stress_g
 BC_HU_r = f_HU_g
 
@@ -219,7 +220,7 @@ def apply_limiter(H, HU):
     apply_limiter_HU(HU)
 
 
-T = 1.0
+T = 0.2
 step = 0
 output_freq = 10
 
