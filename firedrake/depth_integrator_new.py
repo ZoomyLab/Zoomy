@@ -1,20 +1,21 @@
 from firedrake import *
 from firedrake.__future__ import interpolate
+from mpi4py import MPI
+
+#TODO use extr_rshape only in the beginning and at the end!!
 
 class DepthIntegrator():
 
-    def __init__(self, num_layers, num_cells_base, num_dofs_per_cell, dim_space_vert):
+    def __init__(self, num_layers, num_dofs_per_cell, dim_space_vert):
         self.num_layers = num_layers
-        self.num_cells_base = num_cells_base
         self.num_dofs_per_cell = num_dofs_per_cell
-        self.num_cells_extruded = num_cells_base * num_layers
         self.dim_space_vert=dim_space_vert
     
     def extr_reshape(self, field):
-        return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
+        return field.dat.data_with_halos[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
 
 
-    def integrate(self, H, HU, Hb, HUm, omega, dof_points):
+    def integrate(self, H, HU, Hb, HUm, omega, dof_points, _mesh):
         """
         We perform the midpoint rule for integration along the extrusion direction. 
         As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
@@ -113,6 +114,8 @@ class DepthIntegrator():
             self.extr_reshape(HUm.sub(0))[:, layer, :, 1] = tmp_HUm
             self.extr_reshape(HUm.sub(1))[:, layer, :, 0] = tmp_HVm
             self.extr_reshape(HUm.sub(1))[:, layer, :, 1] = tmp_HVm
+
+        omega.interpolate(0.)
         omega.assign(omega)
         HU.assign(HU)
         HUm.assign(HUm)

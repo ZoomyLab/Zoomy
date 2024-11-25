@@ -25,8 +25,13 @@ elt = TensorProductElement(horiz_elt, vert_elt)
 
 W = VectorFunctionSpace(_mesh, elt)
 V = FunctionSpace(_mesh, elt)
-Wout = VectorFunctionSpace(_mesh, "CG", 1) 
-Vout = FunctionSpace(_mesh, "CG", 1) 
+Wout = VectorFunctionSpace(_mesh, "DG", 0) 
+Vout = FunctionSpace(_mesh, "DG", 0) 
+
+V_rank = FunctionSpace(_mesh, "DG", 0)
+rank = MPI.COMM_WORLD.rank
+rank_field = Function(V_rank)
+rank_field.interpolate(Constant(rank))
 
 x, y, z = SpatialCoordinate(_mesh)
 
@@ -35,7 +40,7 @@ dof_points = Function(W).interpolate(as_vector([x,y,z]))
 # Define the output function g
 HU = Function(W).interpolate(as_vector([0., 0., 0.]))
 
-h0 = conditional(And(And(x < 0.66, x > 0.33), And(y < 0.66, y > 0.33)), 2., 1.)
+h0 = conditional(And(And(x <= 0.66, x >= 0.33), And(y <= 0.66, y >= 0.33)), 2., 1.)
 H = Function(V).interpolate(h0)
 
 Hb = Function(V).interpolate(0.)
@@ -50,20 +55,20 @@ num_cells_base = base_mesh.num_cells()
 #num_dofs_per_cell = Vh.finat_element.space_dimension()
 num_dofs_per_cell = 4
 num_cells_extruded = num_cells_base * num_layers
-DI = DepthIntegrator(num_layers, num_cells_base, num_dofs_per_cell, DIM_V)
+DI = DepthIntegrator(num_layers, num_dofs_per_cell, DIM_V)
 
 t = 0.
-DI.integrate(H, HU, Hb, HUm, omega, dof_points)
-outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(omega, Vout, name='omega'), time=t)
+#DI.integrate(H, HU, Hb, HUm, omega, dof_points, _mesh)
+outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(HUm, Wout, name="HU_mean"), project(omega, Vout, name='omega'), project(rank_field, V_rank, name='rank'), time=t)
 
 v = TestFunction(V)
-w = TestFunction(W)
 v_ = TrialFunction(V)
+w = TestFunction(W)
 w_ = TrialFunction(W)
 
 # Setup
 T = 0.1
-CFL = 1./5. * 0.1
+CFL = 1./5. * 0.5
 incircle = (1./N)
 g = 9.81
 nu = 0.0
@@ -187,18 +192,24 @@ L_HU = dt * (DG_HU  + F_HU + BC_HU)
 #L2 = replace(L, {h: h2, hu: hu2})
 #params = {'ksp_type': 'preonly', 'pc_type': 'bjacobi', 'sub_pc_type': 'ilu'}
 #params = {"ksp_type": "cg"}
-params = {
-    "snes_type": "newtonls",
-    "ksp_type": "gmres",
-    "pc_type": "asm",  # Additive Schwarz method
-    "sub_pc_type": "ilu"
-}
+params = {"ksp_type": "cg", "pc_type": "jacobi"}
+#params = {
+#    "snes_type": "newtonls",
+#    "ksp_type": "gmres",
+#    "pc_type": "asm",  # Additive Schwarz method
+#    "sub_pc_type": "ilu"
+#}
+
+
 dH = Function(V)
 dHU = Function(W)
 prob_H = LinearVariationalProblem(a_mass, L_H, dH)
 solv_H = LinearVariationalSolver(prob_H, solver_parameters=params)
 prob_HU = LinearVariationalProblem(a_mom, L_HU, dHU)
 solv_HU = LinearVariationalSolver(prob_HU, solver_parameters=params)
+
+ksp_H = solv_H.snes.ksp
+ksp_HU = solv_HU.snes.ksp
 
 #prob1 = LinearVariationalProblem(a, L1, dQ)
 #solv1 = LinearVariationalSolver(prob1, solver_parameters=params)
@@ -219,9 +230,9 @@ def apply_limiter_H(field):
 def apply_limiter_HU(field):
     for i in range(W.value_size):
         #lim_func_HU.dat.data_with_halos[:] = field.dat.data_with_halos[:, i]
-        lim_func.dat.data[:] = field.dat.data[:, i]
+        lim_func.dat.data[:] = field.dat.data_ro[:, i]
         limiter.apply(lim_func)
-        field.dat.data[:, i] = lim_func.dat.data
+        field.dat.data[:, i] = lim_func.dat.data_ro
 
 
 def apply_limiter(H, HU):
@@ -240,18 +251,29 @@ while t < T - 0.5 * dt:
     #dt = CFL * incircle / ev_max(h, U)
     dt = CFL * incircle / get_max_abs_ev(H, HU)
 
-    #U.project(HU/h)
-    #phi = assemble(interpolate((U.sub(0).dx(0) + U.sub(1).dx(1)), V))
-    #DI.integrate(h, U, phi, omega, hh, Um, phim, dof_points)
-    #print(f'integration time = {time() - start}')
-
     solv_H.solve()
-    H.assign(H + dH)
     solv_HU.solve()
-    HU.assign(HU + dHU)
-    apply_limiter(H, HU)
-    DI.integrate(H, HU,Hb, HUm, omega, dof_points)
+    MPI.COMM_WORLD.Barrier()
 
+    #TODO DEBUG
+    HUm.assign(HU)
+
+    H.assign(H + dH)
+    HU.assign(HU + dHU)
+    MPI.COMM_WORLD.Barrier()
+    apply_limiter(H, HU)
+    MPI.COMM_WORLD.Barrier()
+    H.assign(H)
+    HU.assign(HU)
+    #print(f"Time: {t:.3f}, Iterations_H: {ksp_H.getIterationNumber()}")
+    #print(f"Time: {t:.3f}, Iterations_HU: {ksp_H.getIterationNumber()}")
+    MPI.COMM_WORLD.Barrier()
+    #DI.integrate(H, HU,Hb, HUm, omega, dof_points, _mesh)
+    MPI.COMM_WORLD.Barrier()
+    H.assign(H)
+    HU.assign(HU)
+    HUm.assign(HUm)
+    omega.assign(omega)
     #solv1.solve()
     #Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
     #apply_limiter(Q2)
@@ -269,7 +291,7 @@ while t < T - 0.5 * dt:
         #error = L2_err / L2_init
         #outfile.write(project(U, Wout, name="U"), project(omega, Vout, name='omega'), time=t)
         #outfile2d.write(project(hh, Vhout, name="h"), project(Um, Whout, name='Um'), project(phim, Vhout, name="phi_mean"), time=t)
-        outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(omega, Vout, name='omega'), time=t)
+        outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(HUm, Wout, name="HU_mean"), project(omega, Vout, name='omega'), project(rank_field, V_rank, name='rank'), time=t)
         if _mesh.comm.rank == 0:
             print(
                 f"global time: {time()-start0} \t solution time:{t} \t  dt:{dt} \t step time:{time()-start}"
