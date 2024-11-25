@@ -8,9 +8,9 @@ from depth_integrator_new import DepthIntegrator
 
 
 # Create the base mesh and extrude it
-N = 40
+N = 20
 base_mesh = UnitSquareMesh(N,N , quadrilateral=True)
-Nz = 20
+Nz = 10
 
 n_dof_base = 4
 _mesh = ExtrudedMesh(base_mesh, layers=Nz)
@@ -38,6 +38,8 @@ HU = Function(W).interpolate(as_vector([0., 0., 0.]))
 h0 = conditional(And(And(x < 0.66, x > 0.33), And(y < 0.66, y > 0.33)), 2., 1.)
 H = Function(V).interpolate(h0)
 
+Hb = Function(V).interpolate(0.)
+
 HUm = Function(W).interpolate(as_vector([0., 0., 0.]))
 omega = Function(V).interpolate(0.)
 
@@ -51,7 +53,7 @@ num_cells_extruded = num_cells_base * num_layers
 DI = DepthIntegrator(num_layers, num_cells_base, num_dofs_per_cell, DIM_V)
 
 t = 0.
-DI.integrate(H, HU, HUm, omega, dof_points)
+DI.integrate(H, HU, Hb, HUm, omega, dof_points)
 outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(omega, Vout, name='omega'), time=t)
 
 v = TestFunction(V)
@@ -61,10 +63,10 @@ w_ = TrialFunction(W)
 
 # Setup
 T = 0.1
-CFL = 1./5.
+CFL = 1./5. * 0.1
 incircle = (1./N)
 g = 9.81
-nu = 0.01
+nu = 0.0
 
 n = FacetNormal(_mesh)
 
@@ -98,8 +100,8 @@ ev = abs(norm(HU/H)) + sqrt(g*H)
 p = '+'
 m = '-'
 
-quad_degree_h = 20
-quad_degree_hu = 20
+quad_degree_h = 2
+quad_degree_hu = 2
 
 # MASS BALANCE
 # time / mass matrices
@@ -108,6 +110,7 @@ DG_H = inner(grad(v), HUm) * dx(degree=quad_degree_h)
 
 
 f_H = HUm
+
 #flux
 F_H_l = f_H(p)
 F_H_r = f_H(m)
@@ -183,7 +186,13 @@ L_HU = dt * (DG_HU  + F_HU + BC_HU)
 #L_H_1 = replace(L, {h: h1, hu: hu1})
 #L2 = replace(L, {h: h2, hu: hu2})
 #params = {'ksp_type': 'preonly', 'pc_type': 'bjacobi', 'sub_pc_type': 'ilu'}
-params = {"ksp_type": "cg"}
+#params = {"ksp_type": "cg"}
+params = {
+    "snes_type": "newtonls",
+    "ksp_type": "gmres",
+    "pc_type": "asm",  # Additive Schwarz method
+    "sub_pc_type": "ilu"
+}
 dH = Function(V)
 dHU = Function(W)
 prob_H = LinearVariationalProblem(a_mass, L_H, dH)
@@ -222,9 +231,10 @@ def apply_limiter(H, HU):
 
 T = 0.2
 step = 0
-output_freq = 10
+output_freq = 1
 
 
+start0 = time()
 while t < T - 0.5 * dt:
     start = time()
     #dt = CFL * incircle / ev_max(h, U)
@@ -240,7 +250,7 @@ while t < T - 0.5 * dt:
     solv_HU.solve()
     HU.assign(HU + dHU)
     apply_limiter(H, HU)
-    DI.integrate(H, HU,HUm, omega, dof_points)
+    DI.integrate(H, HU,Hb, HUm, omega, dof_points)
 
     #solv1.solve()
     #Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
@@ -262,7 +272,7 @@ while t < T - 0.5 * dt:
         outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(omega, Vout, name='omega'), time=t)
         if _mesh.comm.rank == 0:
             print(
-                f"global time: {time()} \t solution time:{t} \t  dt:{dt} \t step time:{time()-start}"
+                f"global time: {time()-start0} \t solution time:{t} \t  dt:{dt} \t step time:{time()-start}"
             )
         
         #print(

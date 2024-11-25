@@ -14,7 +14,7 @@ class DepthIntegrator():
         return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
 
 
-    def integrate(self, H, HU, HUm, omega, dof_points):
+    def integrate(self, H, HU, Hb, HUm, omega, dof_points):
         """
         We perform the midpoint rule for integration along the extrusion direction. 
         As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
@@ -24,10 +24,16 @@ class DepthIntegrator():
         tmp_HVm = np.zeros(layer_shape, dtype=float)
         tmp_phim = np.zeros(layer_shape, dtype=float)
         tmp_psi = np.zeros(layer_shape, dtype=float)
+
+        h_layer = self.extr_reshape(H)[:, 0, :, 0]
         #V = HU.split()[0].function_space()
         V = H.function_space()
         phi_symbolic = HU.sub(0).dx(0) + HU.sub(1).dx(1)
         phi = Function(V).interpolate(phi_symbolic)
+        dxh = self.extr_reshape(Function(V).interpolate(H.dx(0)))[:, 0, :, 0]
+        dyh = self.extr_reshape(Function(V).interpolate(H.dx(1)))[:, 0, :, 0]
+        dxhb = self.extr_reshape(Function(V).interpolate(Hb.dx(0)))[:, 0, :, 0]
+        dyhb = self.extr_reshape(Function(V).interpolate(Hb.dx(1)))[:, 0, :, 0]
         for layer in range(self.num_layers):  # Loop through layers except the top one
             if layer == 0:
                 z_low = self.extr_reshape(dof_points.sub(2))[:, layer, :, 0]
@@ -77,18 +83,37 @@ class DepthIntegrator():
             dz_high =  z_end - z_mid
         
             
+            self.extr_reshape(omega)[:, layer, :, 0] = tmp_psi + dz_low * phi_low
+            self.extr_reshape(omega)[:, layer, :, 1] = tmp_psi + dz_low * phi_low + dz_high * phi_high
+
+            # vertical velocity (3.12)
+            #NOTE: omega is currently still psi!
+            w_term1 = -(tmp_psi + dz_low * phi_low)
+            u_tilde = tmp_HUm + dz_low * HU_low
+            w_term2 = u_tilde*(z_low * dxh + dxhb)
+            v_tilde = tmp_HVm + dz_low * HV_low
+            w_term3 = v_tilde*(z_low * dyh + dyhb)
+            #self.extr_reshape(HU.sub(2))[:, layer, :, 0] =  h_layer * (w_term1 + w_term2  + w_term3)
+            w_term1 = -(tmp_psi + dz_low * phi_low + dz_high * phi_high)
+            u_tilde = tmp_HUm + dz_low * HU_low + dz_high * HU_high
+            w_term2 = u_tilde*(z_low * dxh + dxhb)
+            v_tilde = tmp_HVm + dz_low * HV_low + dz_high * HV_high
+            w_term3 = v_tilde*(z_low * dyh + dyhb)
+            #self.extr_reshape(HU.sub(2))[:, layer, :, 1] =  h_layer * (w_term1 +w_term2 + w_term3)
+
             tmp_phim +=  dz_low * phi_low + dz_high * phi_high
             tmp_HUm += dz_low * HU_low + dz_high * HU_high
             tmp_HVm += dz_low * HV_low + dz_high * HV_high
-            self.extr_reshape(omega)[:, layer, :, 0] = tmp_psi + dz_low * phi_low
             tmp_psi += dz_low * phi_low + dz_high * phi_high
-            self.extr_reshape(omega)[:, layer, :, 1] = tmp_psi
     
         for layer in range(self.num_layers):  # Loop through layers except the top one
-            self.extr_reshape(omega)[:, layer, :, 0] =  1./self.extr_reshape(H)[:, 0, :, 0] * (tmp_phim - self.extr_reshape(omega)[:, layer, :, 0]) 
-            self.extr_reshape(omega)[:, layer, :, 1] =  1./self.extr_reshape(H)[:, 0, :, 0] * (tmp_phim - self.extr_reshape(omega)[:, layer, :, 1]) 
+            self.extr_reshape(omega)[:, layer, :, 0] =  1./h_layer * (tmp_phim - self.extr_reshape(omega)[:, layer, :, 0]) 
+            self.extr_reshape(omega)[:, layer, :, 1] =  1./h_layer * (tmp_phim - self.extr_reshape(omega)[:, layer, :, 1]) 
             self.extr_reshape(HUm.sub(0))[:, layer, :, 0] = tmp_HUm
             self.extr_reshape(HUm.sub(0))[:, layer, :, 1] = tmp_HUm
             self.extr_reshape(HUm.sub(1))[:, layer, :, 0] = tmp_HVm
             self.extr_reshape(HUm.sub(1))[:, layer, :, 1] = tmp_HVm
+        omega.assign(omega)
+        HU.assign(HU)
+        HUm.assign(HUm)
 
