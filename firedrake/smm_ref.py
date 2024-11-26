@@ -65,11 +65,7 @@ num_cells_extruded = num_cells_base * num_layers
 DI = DepthIntegrator(num_layers, num_dofs_per_cell, DIM_V)
 
 t = 0.
-_HUm, _omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points, _mesh, rank_field, phi, dxh, dyh, dxhb, dyhb)
-HUm.assign(_HUm)
-omega.assign(_omega)
-#HUm.assign(HU)
-#MPI.COMM_WORLD.Barrier()
+DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
 outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(HUm, Wout, name="HU_mean"), project(omega, Vout, name='omega'), project(rank_field, V_rank, name='rank'), time=t)
 
 v = TestFunction(V)
@@ -90,14 +86,11 @@ def get_max_abs_ev(H, HU):
     # Compute the local maximum
     sqrt_g_H = sqrt(g*H)
     eigenvalues = Function(W).interpolate(abs(HU)/H + as_vector([sqrt_g_H, sqrt_g_H, 0.]))
-    #local_max = as_vector([abs(HU.sub(0)/H) + sqrt(g * H), abs(HU.sub(1)/H) + sqrt(g*H)]).dat.data_ro.max()
     local_max = eigenvalues.dat.data_ro.max()
     
     # Perform a global reduction to get the global maximum
     comm = _mesh.comm
     global_max = comm.allreduce(local_max, op=MPI.MAX)
-    #if _mesh.comm.rank == 0:
-    #    print(f"Global maximum: {global_max}")
     return global_max
 
 
@@ -109,7 +102,6 @@ stress = as_tensor([[0., 0., -nu/H*(HU[0]/H).dx(2)], [0., 0., -nu/H*(HU[1]/H).dx
 
 ev_n = abs(dot(HU/H, n)) + sqrt(g * H)
 ev = abs(norm(HU/H)) + sqrt(g*H)
-#evh = lambda h, U, n: abs(dot(U, n)) + sqrt(g * h)
 
 
 
@@ -185,12 +177,8 @@ BC_HU = -dot(w, (BC_HU_n + BC_dis_HU)) * (ds_v(degree=quad_degree_hu) + ds_b(deg
 
 
 
-#ev_cell = lambda h, U: sqrt(U.sub(0)**2 + U.sub(1)**2 + U.sub(2)**2) + sqrt(g * h)
-#ev_cell = lambda h, U:  norm(U) + sqrt(g * h)
-#ev_max = lambda h, U: max(project(ev_cell(h, U), V).vector())
 
 dt = CFL * incircle / get_max_abs_ev(H, HU)
-#dt = 0.0001
 
 L_H = dt * (DG_H + F_H + BC_H)
 L_HU = dt * (DG_HU  + F_HU + BC_HU)
@@ -233,10 +221,7 @@ limiter = VertexBasedLimiter(V)
 lim_func = V.get_work_function()
 
 def apply_limiter_H(field):
-    #field_P1 = project(field, Vh)
     limiter.apply(field)
-    #field = project
-    #return field_P1
 
 def apply_limiter_HU(field):
     for i in range(W.value_size):
@@ -259,41 +244,16 @@ output_freq = 1
 start0 = time()
 while t < T - 0.5 * dt:
     start = time()
-    #dt = CFL * incircle / ev_max(h, U)
     dt = CFL * incircle / get_max_abs_ev(H, HU)
 
     solv_H.solve()
     solv_HU.solve()
     MPI.COMM_WORLD.Barrier()
 
-    #TODO DEBUG
-    #HUm.assign(HU)
-
     H.assign(H + dH)
     HU.assign(HU + dHU)
-    #MPI.COMM_WORLD.Barrier()
     apply_limiter(H, HU)
-    #MPI.COMM_WORLD.Barrier()
-    #H.assign(H)
-    #HU.assign(HU)
-    #print(f"Time: {t:.3f}, Iterations_H: {ksp_H.getIterationNumber()}")
-    #print(f"Time: {t:.3f}, Iterations_HU: {ksp_H.getIterationNumber()}")
-    #MPI.COMM_WORLD.Barrier()
-    #_HUm, _omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points, _mesh, rank_field)
-    _HUm, _omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points, _mesh, rank_field, phi, dxh, dyh, dxhb, dyhb)
-    HUm.assign(_HUm)
-    omega.assign(_omega)
-    #HUm.assign(HU)
-    #MPI.COMM_WORLD.Barrier()
-    #H.assign(H)
-    #HU.assign(HU)
-    #HUm.assign(HUm)
-    #omega.assign(omega)
-    #solv1.solve()
-    #Q2.assign(0.5 * Q_ + 0.5 * (Q1+ dQ))
-    #apply_limiter(Q2)
-    #Q.assign(Q2)
-    #Q_.assign(Q2)
+    DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
 
     step += 1
     t += dt
