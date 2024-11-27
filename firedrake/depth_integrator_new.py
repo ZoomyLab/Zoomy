@@ -21,6 +21,9 @@ class DepthIntegrator():
         As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
         """
 
+        #return Function(HU.function_space()).interpolate(HU), Function(HU.function_space()).interpolate(HU), Function(omega.function_space()).interpolate(omega)
+        return Function(HU.function_space()).interpolate(HU), HU.copy(), Function(omega.function_space()).interpolate(omega)
+
 
         layer_shape = self.extr_reshape(H)[:, 0, :, 0].shape
         tmp_HUm = np.zeros(layer_shape, dtype=float)
@@ -43,6 +46,7 @@ class DepthIntegrator():
         _omega = self.extr_reshape(omega)
 
         for layer in range(self.num_layers):  # Loop through layers except the top one
+            #print(_phi[:, layer, :, 0], flush=True)
             if layer == 0:
                 z_low = _z[:, layer, :, 0]
                 z_high = _z[:, layer, :, 1]
@@ -65,7 +69,7 @@ class DepthIntegrator():
                 z_next = np.ones_like(z_low)
                 phi_low =  _phi[:, layer, :, 0] 
                 phi_high = _phi[:, layer, :, 1]
-                HU_low =  _HU[:, layer, :, 0] 
+                HU_low =  _HU[:, layer, :, 0]
                 HU_high = _HU[:, layer, :, 1]
                 HV_low =  _HV[:, layer, :, 0] 
                 HV_high = _HV[:, layer, :, 1]
@@ -101,13 +105,13 @@ class DepthIntegrator():
             w_term2 = u_tilde*(z_low * _dxh + _dxhb)
             v_tilde = tmp_HVm + dz_low * HV_low
             w_term3 = v_tilde*(z_low *_dyh + _dyhb)
-            _HW[:, layer, :, 0] =  h_layer * (w_term1 + w_term2  + w_term3)
+            #_HW[:, layer, :, 0] =  h_layer * (w_term1 + w_term2  + w_term3)
             w_term1 = -(tmp_psi + dz_low * phi_low + dz_high * phi_high)
             u_tilde = tmp_HUm + dz_low * HU_low + dz_high * HU_high
             w_term2 = u_tilde*(z_low * _dxh + _dxhb)
             v_tilde = tmp_HVm + dz_low * HV_low + dz_high * HV_high
             w_term3 = v_tilde*(z_low *_dyh + _dyhb)
-            _HW[:, layer, :, 1] =  h_layer * (w_term1 +w_term2 + w_term3)
+            #_HW[:, layer, :, 1] =  h_layer * (w_term1 +w_term2 + w_term3)
 
             tmp_HUm += dz_low * HU_low + dz_high * HU_high
             tmp_HVm += dz_low * HV_low + dz_high * HV_high
@@ -123,6 +127,9 @@ class DepthIntegrator():
         #HUm.sub(0).dat.data[:] = _HUm.flatten()
         #HUm.sub(1).dat.data[:] = _HVm.flatten()
         #omega.dat.data[:] = _omega.flatten()
+
+        return HU, HUm, omega
+
 
 
 

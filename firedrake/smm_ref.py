@@ -8,9 +8,9 @@ from depth_integrator_new import DepthIntegrator
 
 
 # Create the base mesh and extrude it
-N = 20
+N = 10
 base_mesh = UnitSquareMesh(N,N , quadrilateral=True)
-Nz = 10
+Nz = 5
 
 n_dof_base = 4
 _mesh = ExtrudedMesh(base_mesh, layers=Nz)
@@ -65,7 +65,10 @@ num_cells_extruded = num_cells_base * num_layers
 DI = DepthIntegrator(num_layers, num_dofs_per_cell, DIM_V)
 
 t = 0.
-DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
+HU, HUm, omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
+#HU.assign(HU)
+#HUm.assign(HU)
+omega.assign(omega)
 outfile.write(project(H, Vout, name="H"),  project(HU, Wout, name="HU"), project(HUm, Wout, name="HU_mean"), project(omega, Vout, name='omega'), project(rank_field, V_rank, name='rank'), time=t)
 
 v = TestFunction(V)
@@ -83,6 +86,7 @@ nu = 0.0
 n = FacetNormal(_mesh)
 
 def get_max_abs_ev(H, HU):
+    return 10;
     # Compute the local maximum
     sqrt_g_H = sqrt(g*H)
     eigenvalues = Function(W).interpolate(abs(HU)/H + as_vector([sqrt_g_H, sqrt_g_H, 0.]))
@@ -248,12 +252,29 @@ while t < T - 0.5 * dt:
 
     solv_H.solve()
     solv_HU.solve()
-    MPI.COMM_WORLD.Barrier()
 
     H.assign(H + dH)
-    HU.assign(HU + dHU)
+    HU.assign(HU+dHU)
     apply_limiter(H, HU)
-    DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
+    #DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
+    HU, HUm, omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
+    #HU.assign(HU)
+    #HUm.assign(HUm)
+    #HUm.assign(HU.copy())
+    #HUm.assign(Function(W).interpolate(HU))
+    #omega.assign(omega)
+    #HU.assign(HU)
+    #HUm.assign(HUm)
+    #HUm.assign(Function(W).interpolate(HU))
+    #omega.assign(omega)
+
+    # Update field
+    #phi.assign(Function(V).interpolate(phi_symbolic))
+    #dxh.assign(Function(V).interpolate(H.dx(0)))
+    #dyh.assign(Function(V).interpolate(H.dx(1)))
+    #dxhb.assign(Function(V).interpolate(Hb.dx(0)))
+    #dyhb.assign(Function(V).interpolate(Hb.dx(1)))
+
 
     step += 1
     t += dt
