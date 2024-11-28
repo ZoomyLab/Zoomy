@@ -12,7 +12,8 @@ class DepthIntegrator():
         self.dim_space_vert=dim_space_vert
     
     def extr_reshape(self, field):
-        return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
+        #return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
+        return field.dat.data_with_halos[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
 
 
     def integrate(self, H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb):
@@ -22,7 +23,17 @@ class DepthIntegrator():
         """
 
         #return Function(HU.function_space()).interpolate(HU), Function(HU.function_space()).interpolate(HU), Function(omega.function_space()).interpolate(omega)
-        return Function(HU.function_space()).interpolate(HU), HU.copy(), Function(omega.function_space()).interpolate(omega)
+
+        _omega = self.extr_reshape(omega)
+        #phi = dxh
+        _phi = self.extr_reshape(phi)
+        #phi is zero??
+        #print(_phi.max())
+        for layer in range(self.num_layers):
+            _omega[:, layer, :, 1] = _phi[:, layer, :, 0]
+            _omega[:, layer, :, 0] = _phi[:, layer, :, 1]
+        omega.dat.data_with_halos[:] = _omega.flatten()
+        return Function(HU.function_space()).interpolate(HU), HU.copy(), omega
 
 
         layer_shape = self.extr_reshape(H)[:, 0, :, 0].shape
@@ -127,6 +138,9 @@ class DepthIntegrator():
         #HUm.sub(0).dat.data[:] = _HUm.flatten()
         #HUm.sub(1).dat.data[:] = _HVm.flatten()
         #omega.dat.data[:] = _omega.flatten()
+        HUm.sub(0).dat.data_with_halos[:] = _HUm.flatten()
+        HUm.sub(1).dat.data_with_halos[:] = _HVm.flatten()
+        omega.dat.data_with_halos[:] = _omega.flatten()
 
         return HU, HUm, omega
 

@@ -229,10 +229,12 @@ def apply_limiter_H(field):
 
 def apply_limiter_HU(field):
     for i in range(W.value_size):
-        #lim_func_HU.dat.data_with_halos[:] = field.dat.data_with_halos[:, i]
-        lim_func.dat.data[:] = field.dat.data_ro[:, i]
+        lim_func.dat.data_with_halos[:] = field.dat.data_with_halos[:, i]
+        #lim_func.dat.data[:] = field.dat.data_ro[:, i]
         limiter.apply(lim_func)
-        field.dat.data[:, i] = lim_func.dat.data_ro
+        #field.dat.data_with_halos[:, i] = lim_func.dat.data_ro[:]
+        field.dat.data_with_halos[:, i] = lim_func.dat.data_with_halos[:]
+        #field.dat.data[:, i] = lim_func.dat.data_ro
 
 
 def apply_limiter(H, HU):
@@ -257,6 +259,13 @@ while t < T - 0.5 * dt:
     HU.assign(HU+dHU)
     apply_limiter(H, HU)
     #DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
+
+    phi_symbolic = HU.sub(0).dx(0) + HU.sub(1).dx(1)
+    phi = Function(V).interpolate(phi_symbolic)
+    dxh = Function(V).interpolate(H.dx(0))
+    dyh =  Function(V).interpolate(H.dx(1))
+    dxhb = Function(V).interpolate(Hb.dx(0))
+    dyhb = Function(V).interpolate(Hb.dx(1))
     HU, HUm, omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
     #HU.assign(HU)
     #HUm.assign(HUm)
