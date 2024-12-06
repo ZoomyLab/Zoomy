@@ -954,13 +954,13 @@ class Mesh:
 
 if __name__ == "__main__":
     path = (
-        "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_coarse.msh"
+        "/home/ingo/Git/sms/meshes/quad_2d/mesh_coarse.msh"
     )
-    path2 = "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_fine.msh"
+    path2 = "/home/ingo/Git/sms/meshes/quad_2d/mesh_fine.msh"
     path3 = (
-        "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/quad_2d/mesh_finest.msh"
+        "/home/ingo/Git/sms/meshes/quad_2d/mesh_finest.msh"
     )
-    path4 = "/home/ingo/Git/SMM/shallow-moments-simulation/meshes/triangle_2d/mesh_coarse.msh"
+    path4 = "/home/ingo/Git/sms/meshes/triangle_2d/mesh_coarse.msh"
     labels = get_physical_boundary_labels(path)
     # print(labels)
 
