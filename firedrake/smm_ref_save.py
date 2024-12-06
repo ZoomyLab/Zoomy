@@ -1,4 +1,3 @@
-import sys
 from firedrake import *
 from mpi4py import MPI  # Import MPI explicitlyfrom mpi4py import MPI  # Import MPI explicitla
 from time import time
@@ -9,9 +8,10 @@ from depth_integrator_new import DepthIntegrator
 
 
 # Create the base mesh and extrude it
-N = 20
+N = 10
+#base_mesh = Mesh('./../meshes/quad_2d/mesh_fine.msh')
 base_mesh = UnitSquareMesh(N,N , quadrilateral=True)
-Nz = 2
+Nz = 5
 
 n_dof_base = 4
 _mesh = ExtrudedMesh(base_mesh, layers=Nz)
@@ -41,22 +41,17 @@ dof_points = Function(W).interpolate(as_vector([x,y,z]))
 # Define the output function g
 HU = Function(W).interpolate(as_vector([0., 0., 0.]))
 
-h0 = conditional(And(And(x <= 0.66, x >= 0.33), And(y <= 0.66, y >= 0.33)), 2., 1.)
+
+h0 = conditional(And(And(x <= 0.33, x >= -0.33), And(y <= 0.33, y >= -0.33)), 2., 1.)
 H = Function(V).interpolate(h0)
 
 Hb = Function(V).interpolate(0.)
+
 
 HUm = Function(W).interpolate(as_vector([0., 0., 0.]))
 omega = Function(V).interpolate(0.)
 
 phi_symbolic = HU.sub(0).dx(0) + HU.sub(1).dx(1)
-#phi = phi_symbolic
-#dxh = H.dx(0)
-#dyh = H.dx(1)
-#dxhb = Hb.dx(0)
-#dyhb = Hb.dx(1)
-
-
 phi = Function(V).interpolate(phi_symbolic)
 dxh = Function(V).interpolate(H.dx(0))
 dyh =  Function(V).interpolate(H.dx(1))
@@ -137,18 +132,41 @@ F_H_n = 0.5*dot((F_H_l + F_H_r), n(m))
 F_dis_H = -0.5  * avg(ev_n) * (H(p)-H(m))
 F_H = (v(p)-v(m)) * (F_H_n + F_dis_H) * (dS_h(degree=quad_degree_h) + dS_v(degree=quad_degree_h))
 
-#Ghost cells
-H_g =H 
-HUm_n = dot(HUm, n) * n
-HUm_t = HUm - HUm_n
-HUm_g = -HUm_n + HUm_t
+
+def wall_H():
+    #Ghost cells
+    H_g =H 
+    HUm_n = dot(HUm, n) * n
+    HUm_t = HUm - HUm_n
+    HUm_g = -HUm_n + HUm_t
+    BC_H_l = HUm 
+    BC_H_r = HUm_g
+    BC_H_n = 0.5*dot((BC_H_l + BC_H_r), n)
+    BC_dis_H = -0.5 * ev_n * (H_g - H)
+    return BC_H_n + BC_dis_H
+
+def inflow_H():
+    #Ghost cells
+    H_BC = Function(V).interpolate(2.)
+    #H_g = Function(V).interpolate(conditional(And(y > -0.3, y < 0.3), H_BC, H))
+    H_g = H_BC
+    HU_BC = Function(W).interpolate(as_vector([0.1, 0., 0.]))
+    #HUm_g = Function(W).interpolate(conditional(And(y > -0.3, y < 0.3), HUm, HU_BC))
+    HUm_g = HU_BC
+    BC_H_l = HUm 
+    BC_H_r = HUm_g
+    BC_H_n = 0.5*dot((BC_H_l + BC_H_r), n)
+    BC_dis_H = -0.5 * ev_n * (H_g - H)
+    return BC_H_n + BC_dis_H
+
 
 #BC 
-BC_H_l = HUm 
-BC_H_r = HUm_g
-BC_H_n = 0.5*dot((BC_H_l + BC_H_r), n)
-BC_dis_H = -0.5 * ev_n * (H_g - H)
-BC_H = -v*(BC_H_n + BC_dis_H) * (ds_v(degree=quad_degree_h) + ds_t(degree=quad_degree_h) + ds_b(degree=quad_degree_h))
+#BC_H = -v*(wall_H()) * (ds_v(degree=quad_degree_h) + ds_t(degree=quad_degree_h) + ds_b(degree=quad_degree_h))
+#BC_H  = -v*(wall_H()) * (ds_v(1000, degree=quad_degree_h))
+#BC_H += -v*(wall_H()) * (ds_v(1001, degree=quad_degree_h))
+#BC_H += -v*(wall_H()) * (ds_v(1002, degree=quad_degree_h))
+#BC_H += -v*(wall_H()) * (ds_v(1003, degree=quad_degree_h))
+#BC_H += -v*(wall_H()) * (ds_t(degree=quad_degree_h) + ds_b(degree=quad_degree_h))
 
 
 
@@ -168,31 +186,74 @@ F_HU = dot((w(p)-w(m)), (F_HU_n + F_dis_HU)) * (dS_h(degree=quad_degree_hu) + dS
 
 
 # BC
-BC_HU_l = f_HU
+def wall_HU():
+    BC_HU_l = f_HU
+    
+    HU_n = dot(HU, n) * n
+    HU_t = HU - HU_n
+    HU_g = -HU_n + HU_t
+    P_hyd_g = as_tensor([[0.5*g*H**2, 0., 0.], [0., 0.5*g*H**2, 0.], [0., 0., 0.]])
+    convection_g = as_tensor([[HU[0]**2/H, HU[0]*HU[1]/H, HU[0]*omega ], [HU[0]*HU[1]/H, HU[1]**2/H, HU[1]*omega], [0., 0., 0.]])
+    #stress_g = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+    stress_g = as_tensor([[0., 0., -nu/H*(HU_g/H)[0].dx(2)], [0., 0., -nu/H*(HU_g/H)[1].dx(2)], [0., 0., 0.]])
+    f_HU_g = convection_g + P_hyd_g + stress_g
+    BC_HU_r = f_HU_g
+    
+    BC_HU_n = 0.5*dot((BC_HU_l + BC_HU_r), n)
+    BC_dis_HU = -0.5 * ev_n * (HU_g - HU)
+    return BC_HU_n + BC_dis_HU
 
-HU_n = dot(HU, n) * n
-HU_t = HU - HU_n
-HU_g = -HU_n + HU_t
-P_hyd_g = as_tensor([[0.5*g*H**2, 0., 0.], [0., 0.5*g*H**2, 0.], [0., 0., 0.]])
-convection_g = as_tensor([[HU[0]**2/H, HU[0]*HU[1]/H, HU[0]*omega ], [HU[0]*HU[1]/H, HU[1]**2/H, HU[1]*omega], [0., 0., 0.]])
-#stress_g = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
-stress_g = as_tensor([[0., 0., -nu/H*(HU_g/H)[0].dx(2)], [0., 0., -nu/H*(HU_g/H)[1].dx(2)], [0., 0., 0.]])
-f_HU_g = convection_g + P_hyd_g + stress_g
-BC_HU_r = f_HU_g
+def inflow_HU():
+    BC_HU_l = f_HU
 
-BC_HU_n = 0.5*dot((BC_HU_l + BC_HU_r), n)
-BC_dis_HU = -0.5 * ev_n * (HU_g - HU)
-BC_HU = -dot(w, (BC_HU_n + BC_dis_HU)) * (ds_v(degree=quad_degree_hu) + ds_b(degree=quad_degree_hu) + ds_t(degree=quad_degree_hu))
+    H_BC = Function(V).interpolate(2.)
+    #H_g = Function(V).interpolate(conditional(And(y > -0.3, y < 0.3), H_BC, H))
+    H_g = H_BC
+
+    
+    HU_n = dot(HU, n) * n
+    HU_t = HU - HU_n
+    HU_wall = -HU_n + HU_t
+
+    #HU_in = HU 
+    HU_in = Function(W).interpolate(as_vector([0.1, 0., 0.]))
+    #HU_g = Function(W).interpolate(conditional(And(y > -0.3, y < 0.3), HU_in, HU_walll))
+    #HU_g = conditional(-2* dot(HU, n) * n + HU)
+    #HU_g = conditional(And(y > -0.3, y < 0.3), HU_in, HU_wall)
+    HU_g = HU_in
+    #HU_g =HU_wall
+
+    P_hyd_g = as_tensor([[0.5*g*H_g**2, 0., 0.], [0., 0.5*g*H_g**2, 0.], [0., 0., 0.]])
+    convection_g = as_tensor([[HU_g[0]**2/H_g, HU_g[0]*HU_g[1]/H_g, HU_g[0]*omega ], [HU_g[0]*HU_g[1]/H_g, HU_g[1]**2/H_g, HU_g[1]*omega], [0., 0., 0.]])
+    #stress_g = as_tensor([[0., 0., 0], [0., 0., 0], [0., 0., 0.]])
+    stress_g = as_tensor([[0., 0., -nu/H_g*(HU_g/H_g)[0].dx(2)], [0., 0., -nu/H_g*(HU_g/H_g)[1].dx(2)], [0., 0., 0.]])
+    f_HU_g = convection_g + P_hyd_g + stress_g
+    BC_HU_r = f_HU_g
+    
+    BC_HU_n = 0.5*dot((BC_HU_l + BC_HU_r), n)
+    BC_dis_HU = -0.5 * ev_n * (HU_g - HU)
+    return BC_HU_n + BC_dis_HU
+
+#BC_HU = -dot(w, (wall_HU())) * (ds_v(degree=quad_degree_hu) + ds_b(degree=quad_degree_hu) + ds_t(degree=quad_degree_hu))
+#BC_HU  = -dot(w, (wall_HU())) * (ds_v(1000, degree=quad_degree_hu))
+#BC_HU += -dot(w, (wall_HU())) * (ds_v(1001, degree=quad_degree_hu))
+#BC_HU += -dot(w, (wall_HU())) * (ds_v(1002, degree=quad_degree_hu))
+#BC_HU += -dot(w, (wall_HU())) * (ds_v(1003, degree=quad_degree_hu))
+#BC_HU += -dot(w, (wall_HU())) * (ds_b(degree=quad_degree_hu) + ds_t(degree=quad_degree_hu))
                                         
 
 
 
 
 
-dt = CFL * incircle / get_max_abs_ev(H, HU)
+#dt = CFL * incircle / get_max_abs_ev(H, HU)
+dt = 0.001
 
-L_H = dt * (DG_H + F_H + BC_H)
-L_HU = dt * (DG_HU  + F_HU + BC_HU)
+# L_H = dt * (DG_H + F_H + BC_H)
+# L_HU = dt * (DG_HU  + F_HU + BC_HU)
+
+L_H = dt * (DG_H + F_H)
+L_HU = dt * (DG_HU  + F_HU)
 
 #hh1 = Function(Vh)
 #hh2 = Function(Vh)
@@ -245,12 +306,11 @@ def apply_limiter_HU(field):
 
 
 def apply_limiter(H, HU):
-    pass
     apply_limiter_H(H)
     apply_limiter_HU(HU)
 
 
-T = 0.07
+T = 3.
 step = 0
 output_freq = 1
 
@@ -258,7 +318,7 @@ output_freq = 1
 start0 = time()
 while t < T - 0.5 * dt:
     start = time()
-    dt = CFL * incircle / get_max_abs_ev(H, HU)
+    #dt = CFL * incircle / get_max_abs_ev(H, HU)
 
     solv_H.solve()
     solv_HU.solve()
@@ -266,24 +326,17 @@ while t < T - 0.5 * dt:
     H.assign(H + dH)
     HU.assign(HU+dHU)
     apply_limiter(H, HU)
-    #phi.interpolate(phi_symbolic)
-    #dxh.interpolate(H.dx(0))
-    #dyh.interpolate(H.dx(1))
-    #dxhb.interpolate(Hb.dx(0))
-    #dyhb.interpolate(Hb.dx(1))
+    #DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
 
-    DI.integrate(H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb)
-
-    #phi_symbolic = HU.sub(0).dx(0) + HU.sub(1).dx(1)
-    #phi = Function(V).interpolate(phi_symbolic)
-    #dxh = Function(V).interpolate(H.dx(0))
-    #dyh =  Function(V).interpolate(H.dx(1))
-    #dxhb = Function(V).interpolate(Hb.dx(0))
-    #dyhb = Function(V).interpolate(Hb.dx(1))
-
-    #HU, HUm, omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
+    phi_symbolic = HU.sub(0).dx(0) + HU.sub(1).dx(1)
+    phi = Function(V).interpolate(phi_symbolic)
+    dxh = Function(V).interpolate(H.dx(0))
+    dyh =  Function(V).interpolate(H.dx(1))
+    dxhb = Function(V).interpolate(Hb.dx(0))
+    dyhb = Function(V).interpolate(Hb.dx(1))
+    HU, HUm, omega = DI.integrate(H, HU, Hb, HUm, omega, dof_points,  phi, dxh, dyh, dxhb, dyhb)
     #HU.assign(HU)
-    #HUm.assign(HU)
+    #HUm.assign(HUm)
     #HUm.assign(HU.copy())
     #HUm.assign(Function(W).interpolate(HU))
     #omega.assign(omega)

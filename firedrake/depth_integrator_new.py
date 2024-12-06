@@ -15,7 +15,6 @@ class DepthIntegrator():
         #return field.dat.data[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
         return field.dat.data_with_halos[:].reshape((-1, self.num_layers, self.num_dofs_per_cell, self.dim_space_vert+1))
 
-
     def integrate(self, H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb):
         """
         We perform the midpoint rule for integration along the extrusion direction. 
@@ -24,16 +23,16 @@ class DepthIntegrator():
 
         #return Function(HU.function_space()).interpolate(HU), Function(HU.function_space()).interpolate(HU), Function(omega.function_space()).interpolate(omega)
 
-        _omega = self.extr_reshape(omega)
+        #_omega = self.extr_reshape(omega)
         #phi = dxh
-        _phi = self.extr_reshape(phi)
+        #_phi = self.extr_reshape(phi)
         #phi is zero??
         #print(_phi.max())
-        for layer in range(self.num_layers):
-            _omega[:, layer, :, 1] = _phi[:, layer, :, 0]
-            _omega[:, layer, :, 0] = _phi[:, layer, :, 1]
-        omega.dat.data_with_halos[:] = _omega.flatten()
-        return Function(HU.function_space()).interpolate(HU), HU.copy(), omega
+        #for layer in range(self.num_layers):
+        #    _omega[:, layer, :, 1] = _phi[:, layer, :, 0]
+        #    _omega[:, layer, :, 0] = _phi[:, layer, :, 1]
+        #omega.dat.data_with_halos[:] = _omega.flatten()
+        #return Function(HU.function_space()).interpolate(HU), HU.copy(), omega
 
 
         layer_shape = self.extr_reshape(H)[:, 0, :, 0].shape
@@ -42,8 +41,8 @@ class DepthIntegrator():
         tmp_psi = np.zeros(layer_shape, dtype=float)
 
         h_layer = self.extr_reshape(H)[:, 0, :, 0]
-        _dxh = self.extr_reshape (dxh)[:, 0, :, 0]
-        _dyh = self.extr_reshape (dyh)[:, 0, :, 0]
+        _dxh = self.extr_reshape(dxh)[:, 0, :, 0]
+        _dyh = self.extr_reshape(dyh)[:, 0, :, 0]
         _dxhb = self.extr_reshape(dxhb)[:, 0, :, 0]
         _dyhb = self.extr_reshape(dyhb)[:, 0, :, 0]
 
@@ -141,6 +140,46 @@ class DepthIntegrator():
         HUm.sub(0).dat.data_with_halos[:] = _HUm.flatten()
         HUm.sub(1).dat.data_with_halos[:] = _HVm.flatten()
         omega.dat.data_with_halos[:] = _omega.flatten()
+
+        #return Function(HU.function_space()).interpolate(HU), Function(HUm.function_space()).interpolate(HUm), Function(omega.function_space()).interpolate(omega)
+        return HU, HUm, omega
+
+
+    def integrate_new(self, H, HU, Hb, HUm, omega, dof_points, phi, dxh, dyh, dxhb, dyhb):
+        """
+        We perform the midpoint rule for integration along the extrusion direction. 
+        As the DG-1 element has two dof in z-direction (legendre-integration points inside the cells (at z_low, z_high), we need to compute the exact integration points. The midpoints of the fields are already the location of the dof. 
+        """
+
+        #return Function(HU.function_space()).interpolate(HU), HU.copy(), omega
+
+
+        layer_shape = self.extr_reshape(H)[:, 0, :, 0].shape
+        tmp_HUm = np.zeros(layer_shape, dtype=float)
+        tmp_HVm = np.zeros(layer_shape, dtype=float)
+
+        _z = self.extr_reshape(dof_points.sub(2))
+        _HUm = self.extr_reshape(HUm.sub(0))
+        _HVm = self.extr_reshape(HUm.sub(1))
+        _HU = self.extr_reshape(HU.sub(0))
+        _HV = self.extr_reshape(HU.sub(1))
+
+        for cell in range(_HUm.shape[0]):
+            for dof_cell in range(4):
+                tmp_HUm[cell, dof_cell] = np.mean(_HU[cell, :, dof_cell, :].flatten())
+                tmp_HVm[cell, dof_cell] = np.mean(_HV[cell, :, dof_cell, :].flatten())
+                _HUm[cell, :, dof_cell, :] = tmp_HUm[cell, dof_cell]
+                _HVm[cell, :, dof_cell, :] = tmp_HVm[cell, dof_cell]
+
+        for layer in range(self.num_layers):  # Loop through layers except the top one
+            _HUm[:, layer, :, 0] = tmp_HUm
+            _HUm[:, layer, :, 1] = tmp_HUm
+            _HVm[:, layer, :, 0] = tmp_HVm
+            _HVm[:, layer, :, 1] = tmp_HVm
+        #HUm.sub(0).dat.data_with_halos[:] = _HUm.flatten()
+        #HUm.sub(1).dat.data_with_halos[:] = _HVm.flatten()
+        HUm.sub(0).dat.data[:] = _HUm.flatten()
+        HUm.sub(1).dat.data[:] = _HVm.flatten()
 
         return HU, HUm, omega
 
