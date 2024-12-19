@@ -26,7 +26,7 @@ dependencies:
 variables:
   PETSC_DIR: '/home/ingo/petsc'
   PETSC_ARCH: 'linux-gnu'
-  SMS: '/home/ingo/Git/SMM/shallow-moments-simulation'
-  PYTHONPATH: ':/home/ingo/Git/SMM/shallow-moments-simulation'
+  SMS: '/home/ingo/Git/sms'
+  PYTHONPATH: ':/home/ingo/Git/sms'
 
 

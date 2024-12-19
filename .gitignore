@@ -43,3 +43,4 @@ firedrake/swe
 firedrake/swe.pvd
 firedrake/solution
 firedrake/solution.pvd
+conda-env
