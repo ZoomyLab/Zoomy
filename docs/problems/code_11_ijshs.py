@@ -208,11 +208,13 @@ def shear_at_bottom_moments_FD(Q, dz=0.05):
 
 def sync_timelines(Q1, T1, Q2, T2, fixed_order = False):
     if (T1.shape[0] > T2.shape[0]) or (fixed_order):
+        b_first=True
         Tlarge = T1
         Tsmall = T2
         Qlarge = Q1
         Qsmall = Q2
     else:
+        b_first=False
         Tlarge = T2
         Tsmall = T1
         Qlarge = Q2
@@ -228,7 +230,7 @@ def sync_timelines(Q1, T1, Q2, T2, fixed_order = False):
                 Qinterp[:, i, j] = np.interp(Tsmall, Tlarge, Qlarge[:, i, j])
     else:
         assert False
-    return Tsmall, Qinterp, Qsmall
+    return Tsmall, Qinterp, Qsmall, b_first
 
 def compute_error_over_h_and_u(Q1, Q2, T1, T2 , z, dx):
     """
@@ -236,7 +238,7 @@ def compute_error_over_h_and_u(Q1, Q2, T1, T2 , z, dx):
     ERROR: Does not work. I do not have openfoam data at each spatial position
     ATTENTION: I assume Q are primary variables
     """
-    T, q1, q2, b_first = sync_timelines(Q1, Q2, T1, T2, swap=False)
+    T, q1, q2, b_first = sync_timelines(Q1, Q2, T1, T2, fixed_order=False)
     level = q1.shape[1]-1
     basis_analytical =Legendre_shifted(order=level)
     basis = np.zeros((level+1, z.shape[0]), dtype=float)
@@ -263,7 +265,7 @@ def compute_error_over_h_and_u(Q1, Q2, T1, T2 , z, dx):
         
 
 def compute_error(m_smm, t_smm, m_of, t_of, z):
-    T, M1, M2, b_first = sync_timelines(m_of, t_of, m_smm, t_smm, swap=True)
+    T, M1, M2, b_first = sync_timelines(m_of, t_of, m_smm, t_smm, fixed_order=True)
     if b_first:
         m_of = M1
         m_smm = M2

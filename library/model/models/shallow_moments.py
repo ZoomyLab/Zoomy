@@ -702,6 +702,22 @@ class ShallowMoments(Model):
                 out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
         return out
 
+    def newtonian_boundary_layer(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        phi_0 = [self.basis.basis.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basis.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        z_boundary_layer = 0.1
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                #out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] * phi_0[k] * dphidx_0[i]
+                out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] / z_boundary_layer
+        return out
+
     def slip(self):
         """
         :gui:
@@ -1148,6 +1164,23 @@ class ShallowMoments2d(Model):
             for i in range(1+self.levels):
                 out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
                 out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+        return out
+
+    def newtonian_boundary_layer(self):
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        hb = self.variables[1+offset:1+self.levels+1+offset]
+        p = self.parameters
+        phi_0 = [self.basis.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] * phi_0[k] * dphidx_0[i]
+                out[1+k+offset] += -p.nu / h  * hb[i]  / h / self.basis.M[k, k]* phi_0[k] * dphidx_0[i]
         return out
 
 
