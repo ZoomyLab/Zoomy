@@ -83,8 +83,8 @@ def extract_1d_data_foam11(directory, pos = [15, 0, 0], stride=10):
     file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
     def sorting_key(name):
         numbers = re.findall(r'\d+', name)
-        assert len(numbers) == 1
-        return int(numbers[0])
+        # assert len(numbers) == 1
+        return int(numbers[-1])
     file_names = sorted(file_names, key=sorting_key)
     file_names = file_names[::stride]
     l_h = []

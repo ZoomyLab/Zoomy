@@ -44,7 +44,7 @@ def extract_from_openfoam(experiments, x = 0.3, stride=10):
     time = dt * iteration
     experiments[str(x)] = {"x": pos.copy(), "h": h.copy(), "u":u.copy(), "w": w.copy(), "time":time}
     
-def plot_reconstruct_moments_from_of(u, z, level=8):
+def plot_reconstruct_moments_from_of(u, z, lGevel=8):
     basis_analytical =Legendre_shifted(order=level+1)
     basis_readable = [basis_analytical.get(k) for k in range(level+1)]
     basis = [basis_analytical.get_lambda(k) for k in range(level+1)]
@@ -204,7 +204,6 @@ def plot_h(ax, x, experiments, openfoam_projected, simulation_data):
         h_smm = simulation_data[level]['Q'][:, 0, x_smm]
         time_smm = simulation_data[level]['time']
         ax.plot(time_smm, h_smm, '--', label=f'level {level}')
-    # ax.legend()
     
 def plot_u_mean(ax, x, experiments, openfoam_projected, simulation_data):
     h_of = openfoam_projected[str(x)]['h']
@@ -218,14 +217,35 @@ def plot_u_mean(ax, x, experiments, openfoam_projected, simulation_data):
         u_smm = simulation_data[level]['Q'][:,1, x_smm] / h_smm
         time_smm = simulation_data[level]['time']
         ax.plot(time_smm, u_smm, '--', label=f'level {level}')
-    # ax.legend()
-
-if __name__ == '__main__':
-    stride=10
-    compute_exp = False
-    compute_proj = False
-    compute_sim = False
     
+def plot_moment(ax, x, field, experiments, openfoam_projected, simulation_data):
+    h_of = openfoam_projected[str(x)]['h']
+    u_of = openfoam_projected[str(x)]['moments'][:, field] / h_of
+    time_of = openfoam_projected[str(x)]['time']
+    
+    ax.plot(time_of, u_of, '*', label=f'openfoam')
+    for level in simulation_data.keys():
+        if int(level) < field:
+            continue
+        x_smm = get_x(x, simulation_data[level]['x'])
+        h_smm = simulation_data[level]['Q'][:,0, x_smm]
+        u_smm = simulation_data[level]['Q'][:,field+1, x_smm] / h_smm
+        time_smm = simulation_data[level]['time']
+        ax.plot(time_smm, u_smm, '--', label=f'level {level}')
+    
+def plot_bottom_velocity(ax, x, experiments, openfoam_projected, simulation_data):
+    for i in range(3):
+        u_of = experiments[str(x)]['u'][:, i]
+        time_of = openfoam_projected[str(x)]['time']
+        ax.plot(time_of, u_of, '*', label=f'openfoam_{i}')
+    for level in simulation_data.keys():
+        x_smm = get_x(x, simulation_data[level]['x'])
+        h_smm = simulation_data[level]['Q'][:,0, x_smm]
+        u_smm = np.sum(simulation_data[level]['Q'][:,1:, x_smm], axis=1) / h_smm
+        time_smm = simulation_data[level]['time']
+        ax.plot(time_smm, u_smm, '--', label=f'level {level}')
+        
+def get_experiments(compute_exp, stride):
     if compute_exp:
         experiments={}
         for x in [0.3, 0.5, 0.7, 0.95, 1.3, 2, 2.5, 2.8]:
@@ -234,10 +254,13 @@ if __name__ == '__main__':
         with open('of_experiments.pkl', 'wb') as f:
             pickle.dump(experiments, f)
         print('Extract openfoam data')
-    
+
     with open('of_experiments.pkl', 'rb') as f:
         experiments = pickle.load(f)
-            
+    return experiments
+    
+    
+def get_of_projected(compute_proj):
     if compute_proj:
         openfoam_projected = {}
         for x in [0.3, 0.5, 0.7, 0.95, 1.3, 2, 2.5, 2.8]:
@@ -249,35 +272,52 @@ if __name__ == '__main__':
     
     with open('openfoam_projected.pkl', 'rb') as f:
         openfoam_projected = pickle.load(f)
-    
-    print('LOAD OF complete')
-    
+    return openfoam_projected
+
+
+def get_simulation(compute_sim, stride):
     if compute_sim:
         simulation_data = {}
-        for level in [0, 2]:
+        for level in [0, 2,6]:
             print(level)
-            simulate(level=level, inflow_bc = openfoam_projected['0.5'], friction=[])
+            simulate(level=level, inflow_bc = openfoam_projected['0.5'], friction=['newtonian', 'newtonian_boundary_layer'], param={"g": 9.81, "nu": 1.034*10**(-6), "rho": 1, "eta": 2.5})
             simulation_data = load_simulation_data(simulation_data, level)
         with open('simulation_data.pkl', 'wb') as f:
             pickle.dump(simulation_data, f)
-        
-    print('SIMULATION COMPLETE')
+        print('SIMULATION COMPLETE')
     with open('simulation_data.pkl', 'rb') as f:
         simulation_data = pickle.load(f)
-   
-    print('LOAD SMM complete')
-    
+    return simulation_data
 
+if __name__ == '__main__':
+    stride=1
+    compute_exp = False
+    compute_proj = False
+    compute_sim = False
     
+    experiments = get_experiments(compute_exp, stride)
+    openfoam_projected = get_of_projected(compute_proj)
+    print('LOAD OpenFOAM complete')
+    simulation_data = get_simulation(compute_sim, stride)
+    print('LOAD SMM complete')
+
+    #--------------------------------------------------------------------------------------------------------
+    #----------------------------------------------Inflow----------------------------------------------------
+    #--------------------------------------------------------------------------------------------------------
     # fig, ax, errors, rel_errors = plot_reconstruct_moments_from_of(experiments['0.5']['u'][-1], z, level=8)
     # plt.show()
     # fig.savefig('images/ProjectionInflow.png')
     
-    fig, ax = plt.subplots(3,2)
-    
-    for i, x in enumerate([0.5, 0.7]):
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Bottom velocities----------------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+    fig, ax = plt.subplots(4,3)
+    for i, x in enumerate([0.5, 0.7, 1.3, 2]):
         plot_h(ax[i,0], x, experiments, openfoam_projected, simulation_data)
         plot_u_mean(ax[i,1], x, experiments, openfoam_projected, simulation_data)
-
-    # ax[0].legend()
+        plot_bottom_velocity(ax[i,2], x, experiments, openfoam_projected, simulation_data)
     plt.show()
+    
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Velocity profiles----------------------------------------------
+    #--------------------------------------------------------------------------------------------------------

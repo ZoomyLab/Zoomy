@@ -715,7 +715,7 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for i in range(1+self.levels):
                 #out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] * phi_0[k] * dphidx_0[i]
-                out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] / z_boundary_layer
+                out[1+k] += -p.eta * p.nu / h * ha[i] / h / self.basis.M[k, k] / z_boundary_layer
         return out
 
     def slip(self):
