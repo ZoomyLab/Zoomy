@@ -699,7 +699,7 @@ class ShallowMoments(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
         return out
 
     def newtonian_boundary_layer(self):

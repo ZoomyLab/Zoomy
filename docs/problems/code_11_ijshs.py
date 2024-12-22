@@ -52,7 +52,46 @@ def extract_smm_data_1d(directory, filename='internal.vtu', pos = [2.2, 0, 0], s
         iteration.append(sorting_key(file))
     return x, np.array(l_q), np.array(iteration)
 
-12
+def extract_1d_line(mesh, pos=[15, 0, 0]):
+
+    mesh2d = mesh.slice(normal = [0,0,1], origin=[0, 0, mesh.cell_centers().points[0,2]])
+    line = mesh2d.slice(normal=[1,0,0], origin=pos)
+    # pos0 = np.array(pos)
+    # pos1 = np.array(pos) + np.array([0., 1., 0])
+    # samples = np.linspace(pos0, pos1, num=300)
+    # sample_line = pv.PolyData(samples)
+    # line = mesh.interpolate(sample_line)
+    # x = np.array(slice1d.cell_centers().points)[:, 1]
+    # alpha = np.array(slice1d.cell_data['alpha.water'])
+    # U = np.array(slice1d.cell_data['U'])
+    x = np.array(line.points)[:, 1]
+    alpha = np.array(line.point_data['alpha.water'])
+    U = np.array(line.point_data['U'])
+    sort_order = np.argsort(x)
+    x = x[sort_order]
+    alpha = alpha[sort_order]
+    U = U[sort_order]
+    h = get_interface_position(alpha, x)
+
+    # cut away the air and resample
+    indices_water = np.array(list(range(x.shape[0])))[x <= h]
+    offset_extraction =5
+    x = x[indices_water][offset_extraction:]
+    U = U[indices_water][offset_extraction:]
+    u = U[:, 0]
+    w = U[:, 1]
+    x_unitheight = np.linspace(0,1,100)
+    xmin = x.min()
+    xmax = x.max()
+    x_scaled = (x-xmin)/(xmax-xmin) + xmin
+    # map
+    u = np.interp(x_unitheight,x_scaled, u)
+    w = np.interp(x_unitheight,x_scaled, w)
+
+    
+    return x, alpha, h, u, w
+
+
 def extract_1d_slice(mesh, pos=[15, 0, 0]):
     """
     extract the data at pos 15
@@ -78,6 +117,30 @@ def extract_1d_slice(mesh, pos=[15, 0, 0]):
     u = np.interp(h*x_unitheight,x[indices_water],  u[indices_water])
     w = np.interp(h*x_unitheight,x[indices_water],  w[indices_water])
     return x, alpha, h, u, w
+
+def extract_1d_data_fast(directory, pos = [15, 0, 0], stride=10):
+    file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
+    def sorting_key(name):
+        numbers = re.findall(r'\d+', name)
+        # assert len(numbers) == 1
+        return int(numbers[-1])
+    file_names = sorted(file_names, key=sorting_key)
+    file_names = file_names[::stride]
+    l_h = []
+    l_u = []
+    l_w = []
+    iteration = []
+    for i, file in enumerate(file_names):
+        path = os.path.join(directory,file)
+        mesh, _ = read_vtk(path)
+        x, alpha, h, u, w = extract_1d_line(mesh, pos)
+        l_h.append(h)
+        l_u.append(u)
+        l_w.append(w)
+        iteration.append(i * stride)
+    return x, np.array(l_h), np.array(l_u), np.array(l_w), np.array(iteration)
+
+
 
 def extract_1d_data_foam11(directory, pos = [15, 0, 0], stride=10):
     file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]

@@ -31,18 +31,15 @@ from library.model.model import *
 
 
 
-## Folder
-main_dir = os.getenv("SMS")
-folder = 'outputs/openfoam_nozzle_2d'
-directory = os.path.join(main_dir, folder)
-z = np.linspace(0, 1, 100)
+
 
 
 def extract_from_openfoam(experiments, x = 0.3, stride=10):
-    pos, h, u, w, iteration = extract_1d_data(directory, pos=[x, 0, 0], stride=stride)
+    pos, h, u, w, iteration = extract_1d_data_fast(directory, pos=[x, 0, 0], stride=stride)
     dt = 0.01
     time = dt * iteration
     experiments[str(x)] = {"x": pos.copy(), "h": h.copy(), "u":u.copy(), "w": w.copy(), "time":time}
+    
     
 def plot_reconstruct_moments_from_of(u, z, lGevel=8):
     basis_analytical =Legendre_shifted(order=level+1)
@@ -193,6 +190,10 @@ def load_simulation_data(simulation_data, level):
 def get_x(x, X):
     i = np.argmin((X-x)**2)
     return i
+
+def get_t(t, T):
+    i = np.argmin((T-t)**2)
+    return i
     
 
 def plot_h(ax, x, experiments, openfoam_projected, simulation_data):
@@ -234,7 +235,7 @@ def plot_moment(ax, x, field, experiments, openfoam_projected, simulation_data):
         ax.plot(time_smm, u_smm, '--', label=f'level {level}')
     
 def plot_bottom_velocity(ax, x, experiments, openfoam_projected, simulation_data):
-    for i in range(3):
+    for i in range(2,5):
         u_of = experiments[str(x)]['u'][:, i]
         time_of = openfoam_projected[str(x)]['time']
         ax.plot(time_of, u_of, '*', label=f'openfoam_{i}')
@@ -244,18 +245,89 @@ def plot_bottom_velocity(ax, x, experiments, openfoam_projected, simulation_data
         u_smm = np.sum(simulation_data[level]['Q'][:,1:, x_smm], axis=1) / h_smm
         time_smm = simulation_data[level]['time']
         ax.plot(time_smm, u_smm, '--', label=f'level {level}')
+
+def error_bottom_velocity(x, experiments, openfoam_projected, simulation_data):
+    bottom_values = [0]
+    errors = np.zeros((len(simulation_data.keys()), len(bottom_values)))
+    U_of = []
+    T_of = []
+    def compute_error(u_of, t_of, u_smm, t_smm):
+        u_of_sampled = np.interp(t_smm, t_of, u_of)
+        dt = t_smm[1:] - t_smm[:-1]
+        return np.sqrt(np.sum(dt * (u_of_sampled[1:] - u_smm[1:])**2))
+    for i in bottom_values:
+        u_of = experiments[str(x)]['u'][:, i]
+        time_of = openfoam_projected[str(x)]['time']
+        # ax.plot(time_of, u_of, '*', label=f'openfoam_{i}')
+        U_of.append(u_of)
+        T_of.append(time_of)
+    for il, level in enumerate(simulation_data.keys()):
+        x_smm = get_x(x, simulation_data[level]['x'])
+        h_smm = simulation_data[level]['Q'][:,0, x_smm]
+        u_smm = np.sum(simulation_data[level]['Q'][:,1:, x_smm], axis=1) / h_smm
+        time_smm = simulation_data[level]['time']
+        # ax.plot(time_smm, u_smm, '--', label=f'level {level}')
+        for i_of, (u_of, t_of) in enumerate(zip(U_of, T_of)):
+            errors[il, i_of] = compute_error(u_of, t_of, u_smm, time_smm)
+    return errors
+
+
+
+def plot_velocity_profile(ax, x, t, experiments, openfoam_projected, simulation_data):
+    lvl = np.array(list(simulation_data.keys()), dtype=int).max()
+    basis_analytical =Legendre_shifted(order=lvl+1)
+    basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
+    basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
+    
+    t_of = get_t(t, experiments[str(x)]['time'])
+    u_of = experiments[str(x)]['u'][t_of, :]
+    time_of = openfoam_projected[str(x)]['time']
+    ax.plot(u_of, z, '*', label=f'openfoam')
+    
+    for level in simulation_data.keys():
+        x_smm = get_x(x, simulation_data[level]['x'])
+        t_smm = get_t(t, simulation_data[level]['time'])
+        h_smm = simulation_data[level]['Q'][t_smm,0, x_smm]
+        moments = simulation_data[level]['Q'][t_smm,1:, x_smm] / h_smm
+        u_smm = moments[0] * basis[0](z)
+        for i in range(1,int(level)+1):
+            u_smm += moments[i] * basis[i](z)
+        ax.plot(u_smm.copy(), z, '--', label=f'level {level}')
+        
+def compute_error_at_x_t(error, x, t, experiments, openfoam_projected, simulation_data):
+    lvl = np.array(list(simulation_data.keys()), dtype=int).max()
+    basis_analytical =Legendre_shifted(order=lvl+1)
+    basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
+    basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
+    
+    t_of = get_t(t, experiments[str(x)]['time'])
+    u_of = experiments[str(x)]['u'][t_of, :]
+    dz = z[1]-z[0]
+    time_of = openfoam_projected[str(x)]['time']    
+    for il, level in enumerate(simulation_data.keys()):
+        x_smm = get_x(x, simulation_data[level]['x'])
+        t_smm = get_t(t, simulation_data[level]['time'])
+        h_smm = simulation_data[level]['Q'][t_smm,0, x_smm]
+        moments = simulation_data[level]['Q'][t_smm,1:, x_smm] / h_smm
+        u_smm = moments[0] * basis[0](z)
+        for i in range(1,int(level)+1):
+            u_smm += moments[i] * basis[i](z)
+        
+        error[il] = np.sqrt(np.sum(dz * (u_of - u_smm)**2))
+        
+
         
 def get_experiments(compute_exp, stride):
     if compute_exp:
         experiments={}
-        for x in [0.3, 0.5, 0.7, 0.95, 1.3, 2, 2.5, 2.8]:
+        for x in samples_experiments:
             print(x)
             extract_from_openfoam(experiments, x=x, stride=stride)
-        with open('of_experiments.pkl', 'wb') as f:
+        with open(f'of_experiments_{folder}.pkl', 'wb') as f:
             pickle.dump(experiments, f)
         print('Extract openfoam data')
 
-    with open('of_experiments.pkl', 'rb') as f:
+    with open(f'of_experiments_{folder}.pkl', 'rb') as f:
         experiments = pickle.load(f)
     return experiments
     
@@ -263,14 +335,14 @@ def get_experiments(compute_exp, stride):
 def get_of_projected(compute_proj):
     if compute_proj:
         openfoam_projected = {}
-        for x in [0.3, 0.5, 0.7, 0.95, 1.3, 2, 2.5, 2.8]:
+        for x in samples_experiments:
             print(x)
             openfoam_projected = project_openfoam(openfoam_projected, experiments, x=x)
-        with open('openfoam_projected.pkl', 'wb') as f:
+        with open(f'openfoam_projected_{folder}.pkl', 'wb') as f:
             pickle.dump(openfoam_projected, f)
         print('Project OF to moments')
     
-    with open('openfoam_projected.pkl', 'rb') as f:
+    with open(f'openfoam_projected_{folder}.pkl', 'rb') as f:
         openfoam_projected = pickle.load(f)
     return openfoam_projected
 
@@ -278,22 +350,39 @@ def get_of_projected(compute_proj):
 def get_simulation(compute_sim, stride):
     if compute_sim:
         simulation_data = {}
-        for level in [0, 2,6]:
+        for level in sim_levels:
             print(level)
-            simulate(level=level, inflow_bc = openfoam_projected['0.5'], friction=['newtonian', 'newtonian_boundary_layer'], param={"g": 9.81, "nu": 1.034*10**(-6), "rho": 1, "eta": 2.5})
+            simulate(level=level, inflow_bc = openfoam_projected['0.5'], friction=['newtonian', 'newtonian_boundary_layer'], param={"g": 9.81, "nu": 1.034*10**(-6), "rho": 1, "eta": 0., "eta_bulk": 0.})
             simulation_data = load_simulation_data(simulation_data, level)
-        with open('simulation_data.pkl', 'wb') as f:
+        with open(f'simulation_data_{folder}.pkl', 'wb') as f:
             pickle.dump(simulation_data, f)
         print('SIMULATION COMPLETE')
-    with open('simulation_data.pkl', 'rb') as f:
+    with open(f'simulation_data_{folder}.pkl', 'rb') as f:
         simulation_data = pickle.load(f)
     return simulation_data
 
 if __name__ == '__main__':
-    stride=1
+    ## Folder
+    main_dir = os.getenv("SMS")
+    folder_base = 'outputs/openfoam'
+    # folder = 'openfoam_nozzle_2d'
+    # folder = 'VTK_laminar'
+    # folder = 'VTK_turbulent'
+    folder = 'VTK_bottom'
+    stride=10
     compute_exp = False
     compute_proj = False
-    compute_sim = False
+    compute_sim = True
+    #offset_extraction = 5
+    samples_experiments = [0.5, 1., 1.5, 2., 2.5]
+    VP_time = [2., 3., 4., 5.]
+    VP_pos = samples_experiments
+    sim_levels = [0, 1, 2, 3, 4]
+    
+
+    directory = os.path.join(main_dir, os.path.join(folder_base, folder))
+    z = np.linspace(0, 1, 100)
+
     
     experiments = get_experiments(compute_exp, stride)
     openfoam_projected = get_of_projected(compute_proj)
@@ -311,13 +400,42 @@ if __name__ == '__main__':
     #--------------------------------------------------------------------------------------------------------
     #-----------------------------------------Bottom velocities----------------------------------------------
     #--------------------------------------------------------------------------------------------------------
-    fig, ax = plt.subplots(4,3)
-    for i, x in enumerate([0.5, 0.7, 1.3, 2]):
+    fig, ax = plt.subplots(len(VP_pos), 3)
+    for i, x in enumerate(VP_pos):
         plot_h(ax[i,0], x, experiments, openfoam_projected, simulation_data)
         plot_u_mean(ax[i,1], x, experiments, openfoam_projected, simulation_data)
         plot_bottom_velocity(ax[i,2], x, experiments, openfoam_projected, simulation_data)
     plt.show()
     
     #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Errors Bottom velocities---------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+    # for i, x in enumerate(VP_pos):
+    
+    # errors = error_bottom_velocity(0.5, experiments, openfoam_projected, simulation_data)
+    # print(errors)
+    
+    #--------------------------------------------------------------------------------------------------------
     #-----------------------------------------Velocity profiles----------------------------------------------
     #--------------------------------------------------------------------------------------------------------
+
+    fig, ax = plt.subplots(len(VP_time),len(VP_pos))
+    for it, t in enumerate(VP_time):
+        for ix, x in enumerate(VP_pos):
+            ax[it, ix].set_xlim(0., 0.3)
+            plot_velocity_profile(ax[it, ix], x, t, experiments, openfoam_projected, simulation_data)
+    plt.show()
+    
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Errors in velocity profiles------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+    # levels = simulation_data.keys()
+    # error = np.zeros((len(levels), len(VP_time),len(VP_pos)), dtype=float)
+    # for it, t in enumerate(VP_time):
+    #     for ix, x in enumerate(VP_pos):
+    #        compute_error_at_x_t(error[:, it, ix], x, t, experiments, openfoam_projected, simulation_data)
+    # for il, lvl in enumerate(levels):
+    #     print(f'Level: {lvl}')
+    #     print(error[il, :, :])
+    
+    
