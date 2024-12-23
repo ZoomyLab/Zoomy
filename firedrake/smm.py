@@ -23,6 +23,8 @@ WV = W * V
 
 x = SpatialCoordinate(mesh)
 
+n_scalar = 1
+n_vector = 1
 
 IC = Function(VW, name="IC")
 # ht = Function(Vl).interpolate(height)
@@ -66,12 +68,13 @@ n = FacetNormal(mesh)
 I = Identity(1)
 P = lambda h, hu: sqrt(0.5 * g * h * h) 
 ev = lambda q, n: abs((q.sub(1)/q.sub(0)* n)) + sqrt(g * q.sub(0))
-ev_n = lambda q, pm, n: abs((dot(q.sub(1)(pm), n(pm))/q.sub(0)(pm))) + sqrt(g * q.sub(0)(pm))
+ev_n = lambda q, n: abs((dot(q.sub(1), n)/q.sub(0))) + sqrt(g * q.sub(0))
 
 f_h = lambda h, hu: hu
 f_hu = lambda h, hu: (hu* hu) / h + P(h, hu)
 
-f_q = lambda q, pm: [q.sub(1)(pm), outer(q.sub(1)(pm), q.sub(1)(pm)) / q.sub(0)(pm) + 0.5 * g * q.sub(0)(pm)**2 * I]
+# f_q = lambda q, pm: [q.sub(1)(pm), outer(q.sub(1)(pm), q.sub(1)(pm)) / q.sub(0)(pm) + 0.5 * g * q.sub(0)(pm)**2 * I]
+f_q = lambda q: [q.sub(1), outer(q.sub(1), q.sub(1)) / q.sub(0) + 0.5 * g * q.sub(0)**2 * I]
 
 q = [v, w]
 
@@ -80,19 +83,21 @@ m = "-"
 
 i = 0 
 # scalar
-F_Q = ((q[i](p) - q[i](m)) * (
-        dot(0.5 * (f_q(Q, p)[i] + f_q(Q, m)[i]), n(m)) 
-        - 0.5 * (0.5*(ev_n(Q, p, n) + ev_n(Q, m, n))) * (Q.sub(i)(p) - Q.sub(i)(m))
-        )) * dS
+F_Q = 0
+for i in range(n_scalar):
+    F_Q += ((q[i](p) - q[i](m)) * (
+            dot(0.5 * (f_q(Q)[i](p) + f_q(Q)[i](m)), n(m)) 
+            - 0.5 * (0.5*(ev_n(Q, n)(p) + ev_n(Q, n)(m))) * (Q.sub(i)(p) - Q.sub(i)(m))
+            )) * dS
 # F_Q = ((v(p) - v(m)) * (dot(0.5 * (hu(p) + hu(m)), n(m)) - 0.5 * (0.5* (h(p)-h(m))))) * dS
 
 # vector
 i = 1
-F_Q += dot((q[i](p) - q[i](m)),(
-    dot((0.5 * (f_q(Q, p)[i] + f_q(Q, m)[i])), n(m)) 
-    - 0.5 * (0.5 * (ev_n(Q, p, n) + ev_n(Q, m, n)) * (Q.sub(i)(p) - Q.sub(i)(m)))
-    )) * dS
-
+for i in range(n_scalar, n_scalar + n_vector):
+    F_Q += dot((q[i](p) - q[i](m)),(
+        dot((0.5 * (f_q(Q)[i](p) + f_q(Q)[i](m))), n(m)) 
+        - 0.5 * (0.5 * (ev_n(Q, n)(p) + ev_n(Q, n)(m)) * (Q.sub(i)(p) - Q.sub(i)(m)))
+        )) * dS
 
 # h_D = h
 # hu_D = hu - 2 * dot(hu, n) * n
