@@ -47,3 +47,5 @@ conda-env
 openfoam
 swe.pvd
 swe/swe_0.vtu
+precice-profiling
+precice-Fluid2-convergence.log

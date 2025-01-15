@@ -94,6 +94,20 @@ class Legendre_shifted:
             u[:] += alpha[i] * b(Z)
         return u
 
+    def reconstruct_alpha(self, velocities, z):
+        n_basis = len(self.basis)
+        alpha = np.zeros(n_basis)
+        for i in range(n_basis):
+            b = lambdify(x, self.get(i)) 
+            nom = np.trapz(velocities * b(z), z) 
+            if type(b(z)) == int:
+                den = b(z)**2
+            else:
+                den = np.trapz((b(z) * b(z)).reshape(z.shape), z)
+            res = nom/den
+            alpha[i] = res
+        return alpha
+
     def get_diff_basis(self):
         db = [diff(b, x) for i, b in enumerate(self.basis)]
         self.basis = db
@@ -600,10 +614,11 @@ class ShallowMoments(Model):
         settings_default={"topography": False, "friction": []},
         basis=Basis()
     ):
-        self.basis = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 2
+        self.basis = basis
+        self.basis.basis = type(self.basis.basis)(order=self.levels)
         self.basis.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
@@ -699,7 +714,8 @@ class ShallowMoments(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                out[1+k] += -p.nu/h *  ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
         return out
 
     def newtonian_boundary_layer(self):

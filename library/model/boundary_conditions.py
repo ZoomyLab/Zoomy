@@ -48,6 +48,8 @@ class InflowOutflow(BoundaryCondition):
         Qout = Matrix(Q)
 
         # Set the fields which are prescribed in boundary condition dict
+    def get_boundary_condition_function(self, time, X, dX,  Q, Qaux, parameters, normal):
+        return Matrix(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = eval(v)
         return Qout
@@ -81,6 +83,15 @@ class FromData(BoundaryCondition):
             interp_func = _sympy_interpolate_data(time, self.timeline, v)
             Qout[k] = 2*interp_func-Q[k]
         return Qout
+
+@define(slots=True, frozen=False, kw_only=True)
+class PreciceCoupling(BoundaryCondition):
+    dirichlet_fields: dict[str, int]
+    dirichlet_vector_fields: dict[str, int]
+
+    def get_boundary_condition_function(self, time, X, dX,  Q, Qaux, parameters, normal):
+        return Matrix(Q)
+
 
 @define(slots=True, frozen=False, kw_only=True)
 class FromDataGhost(BoundaryCondition):
@@ -227,6 +238,16 @@ class BoundaryConditions:
         mesh = self.resolve_periodic_bcs(mesh)
         self.initialized=True
         return mesh
+
+    def get_precice_boundary_indices_to_bc_name(self, mesh):
+        dict_physical_name_to_index = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
+        dict_index_to_physical_name = {v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)}
+        out = {}
+        for i_bc, bc in enumerate(self.boundary_conditions):
+            if type(bc) == PreciceCoupling:
+                out = {**out, dict_physical_name_to_index[bc] : bc}
+        return out
+
 
     def get_boundary_function_list(self):
         assert self.initialized

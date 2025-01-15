@@ -1466,13 +1466,13 @@ if __name__ == "__main__":
 
     ### TESTED
 
-    # test_smm_1d()
+    test_smm_1d()
     # test_smm_2d("quad")
     # test_smm_2d("triangle")
     # test_steffler()
 
     # test_ijshs24()
-    test_eccomas_hyperbolicity()
+    #test_eccomas_hyperbolicity()
 
 
     ### UNTESTED

@@ -126,8 +126,8 @@ def segmentpath(integration_order=3):
         for i in range(n_fields):
             I[i, i, :] = 1.
 
-        # Am = 0.5* Bint - (svA * svB)/(svA + svB) * 1./(dt * vol_face) *I  - 1/4 * (dt * vol_face)/(svA + svB) * Bint_sq
-        Am = 0.5* Bint - np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 1./(dt * vol_face) ,I)  - 1/4 * np.einsum('..., ij...->ij...', (dt * vol_face)/(svA + svB) , Bint_sq)
+        Am = 0.5* Bint - (svA * svB)/(svA + svB) * 1./(dt * vol_face) *I  - 1/4 * (dt * vol_face)/(svA + svB) * Bint_sq
+        # Am = 0.5* Bint - np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 1./(dt * vol_face) ,I)  - 1/4 * np.einsum('..., ij...->ij...', (dt * vol_face)/(svA + svB) , Bint_sq)
 
         return np.einsum('ij..., j...->i...', Am, (Qj-Qi)), False
 

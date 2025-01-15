@@ -1,3 +1,6 @@
+
+#from __future__ import division, print_function
+
 import numpy as np
 from types import SimpleNamespace
 import pyprog
@@ -6,7 +9,14 @@ from typing import Callable, Optional, Type
 from copy import deepcopy
 from time import time as gettime
 import os
+import sys
+import argparse
 import shutil
+
+
+#WARNING: I get a segmentation fault if I do not include petsc4py before precice
+from petsc4py import PETSc
+import precice
 
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -357,7 +367,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         phi = np.zeros_like(Q)
         gradQ = np.einsum("...dn, kn ->k...d", mesh.lsq_gradQ, Q)
         deltaQ = np.einsum("...hn, kn->kh...", mesh.deltaQ, Q)
-        # gradQ = np.zeros_like(gradQ)
+        gradQ = np.zeros_like(gradQ)
 
         # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
         # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
@@ -509,8 +519,8 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
         ##
 
-        # qA = Q[:, iA]
-        # qB = Q[:, iB]
+        qA = Q[:, iA]
+        qB = Q[:, iB]
         # qA = Q[:, iA] + gamma_cell[:, iA] * dQA
         # qB = Q[:, iB] + gamma_cell[:, iB] * dQB
         # qA = Q[:, iA] + dQA
@@ -527,12 +537,12 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         ### TODO CHECK!!
         # for some reason, I need to flip the normal to make it work... is it inward pointing??
 
-        fluxA, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
-        fluxB, failed = compute_num_flux(
-            qB, qA, qauxB, qauxA, parameters, -normals, pde
-        )
+        #fluxA, failed = compute_num_flux(qA, qB, qauxA, qauxB, parameters, normals, pde)
+        #fluxB, failed = compute_num_flux(
+        #    qB, qA, qauxB, qauxA, parameters, -normals, pde
+        #)
 
-        assert np.allclose(fluxA, -fluxB)
+        #assert np.allclose(fluxA, -fluxB)
 
         nc_fluxA, failed = compute_nc_flux(
             qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde
@@ -544,10 +554,10 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
         # nc_flux = np.zeros_like(flux)
         assert not failed
 
-        compute_ader_flux = ader_flux.quadrature()
-        ader_flux_Q, failed = compute_ader_flux(
-            Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde
-        )
+        #compute_ader_flux = ader_flux.quadrature()
+        #ader_flux_Q, failed = compute_ader_flux(
+        #    Q, gradQ, Qaux, parameters, mesh.cell_volumes, dt, pde
+        #)
         assert not failed
 
         # I add/substract the contributions for the inner cells, based on the faces
@@ -557,16 +567,16 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
             iB_masked = iB[faces] == np.array(list(range(mesh.n_inner_cells)))
 
             dQ[:, : mesh.n_inner_cells][:, iA_masked] -= (
-                # (nc_fluxA)
-                (fluxA) * face_volumes / cell_volumesA
+                #(nc_fluxA)
+                (nc_fluxA) * face_volumes / cell_volumesA
             )[:, faces][:, iA_masked]
 
             dQ[:, : mesh.n_inner_cells][:, iB_masked] -= (
-                # (nc_fluxB)
-                (fluxB) * face_volumes / cell_volumesB
+                #(nc_fluxB)
+                (nc_fluxB) * face_volumes / cell_volumesB
             )[:, faces][:, iB_masked]
 
-        # return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q
+        #return dQ - 1./(dt*mesh.cell_volumes) * ader_flux_Q
         return dQ
 
     def operator_rhs_split_vectorized(dt, Q, Qaux, parameters, dQ):
@@ -810,7 +820,7 @@ def _get_semidiscrete_solution_operator(mesh, pde, bcs, settings):
 
     return operator_price_c
     # return operator_1d_cell_centered
-    # return operator_rhs_split_vectorized
+    #return operator_rhs_split_vectorized
 
     # def _get_semidiscrete_solution_operator(mesh, pde, boundary_conditions, settings):
     #     compute_num_flux = settings.num_flux
@@ -1031,6 +1041,113 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
+def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
+    idx = Qnew.shape[1]-2
+    q_ghost = Qnew[:, idx]
+    h = q_ghost[0]
+
+    #print(f'pressure: {ve}')
+    #print(f'Qold: {q_ghost}')
+    # hydrostatic pressure
+    p_hyd_sms = 1000 * 9.81 * (h-z) * (z<=h)
+
+    # filter water velocities
+    threshold = 0.2
+    sort_order = z.argsort()
+    al_sorted = al[sort_order]
+    i_water = 0
+    for i, alpha in enumerate(al_sorted):
+        if alpha < threshold:
+            i_water = i
+            break
+    assert i_water > 0
+    #i_water = (z*(al > threshold)).argmax()
+
+    h_a = z[i_water]
+    h_b = z[i_water-1]
+    a_a = al[i_water]
+    a_b = al[i_water-1]
+
+    h_lin = h_b + (h_a - h_b)/(a_a - a_b) * (threshold - a_b)
+    h_of = h_lin
+    #print('--------------------')
+    #print(h_lin, h_a, h_b)
+    #print('--------------------')
+
+    ve_water = ve[:i_water, 0]
+    ve_of_water = np.zeros_like(pr)
+    ve_of_water[:i_water] = ve_water
+    #print('---------------alpha--------------------')
+    #print(al)
+    #print(al[:i_water])
+    #print('-----------------z---------------------')
+    #print(z)
+    z_water = z[:i_water]
+    #print(z_water)
+    h_of = z_water.max()
+    z_water = (z_water-z_water.min()) / (z_water.max()-z_water.min())
+    # project velocities to moments
+    alpha = model.basis.basis.reconstruct_alpha(ve_water, z_water)
+    levels = model.levels
+    q_ghost[1:2+levels] = h_of*alpha[:levels+1]
+    Qnew[:, idx] = q_ghost
+
+    #print('-----------------h---------------------')
+    #print(h_of)
+    #print(h)
+
+    #p_hyd_of = 1000 * 9.81 * (h_of-z) * (z<=h_of)
+    #p_hyd_of = 1000 * 9.81 * (h-z) * (z<=h)
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    p_hyd_of = 1000 * 9.81 * h_of * al
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    # WORKING WORKING WORKING
+    #p_hyd_of = 1000 * 9.81 * (h-z) * (h>=z) * al
+
+    p_hyd_of = 1000 * 9.81 * h * al
+
+
+    p_hyd = 1000 * 9.81 * h_lin * al 
+    p_dyn = 1/2 * 995.21 *ve_of_water**2
+ 
+    #pressure = 1.0 * p_hyd
+    pressure = p_hyd_of
+    #pressure = np.where(pressure < 2., 1.2, pressure)
+    # pressure[:i_water] = 1000 * 9.81 * h
+    #pressure = 0 * np.ones_like(p_hyd_sms) 
+    #pressure[:i_water] = -300
+    #pressure = 0.*np.ones_like(pressure)
+    #print('-----------------p---------------------')
+    #print(h)
+    #print(z)
+    #print(pressure)
+
+    dx = (5-0.5)/(Qnew.shape[1]-2)
+    h0 = Qnew[0, 0]
+    alphaGradientTop = (h0-h_of)/dx
+    alphaGradient = np.where(al < 0.1 , 0., np.where(al > 0.9, 0., alphaGradientTop))
+    alphaGradient *= 0.
+
+
+
+    velocityGradient = np.zeros_like(ve)
+    uG = model.basis.basis.reconstruct_velocity_profile(Qnew[1:,idx]/Qnew[0, idx])
+    u0 = model.basis.basis.reconstruct_velocity_profile(Qnew[1:,0 ]/Qnew[0, 0])
+    dudx = (u0-uG)/dx
+    velocityGradient[:i_water, 0] = np.interp(z_water, np.linspace(0, 1, 100), dudx)
+
+    velocityGradient *= 0.
+    alphaGradient *= 0.
+
+    #pressuregradient = 1000 * 9.81 * (h0-h_of)/dx
+    #pressure = pressuregradient
+    return Qnew, pressure, alphaGradient, velocityGradient
+
 
 def get_limiter(name="min"):
     if name == "min":
@@ -1134,6 +1251,186 @@ def solver_price_c(mesh, model, settings, ode_solver_flux=RK1, ode_solver_source
             Qaux,
             settings.output_write_all,
         )
+
+    print(f"Runtime: {gettime() - time_start}")
+
+    progressbar.end()
+    return settings
+
+def precice_read_checkpoint(output_path):
+    Q, Qaux, time = io.load_fields_from_hdf5(output_path, 0)
+    return Q, Qaux, time
+
+
+def precice_fvm(
+    mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+):
+    iteration = 0
+    time = 0.0
+
+    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    output_checkpoint_path = os.path.join(settings.output_dir, "precice_checkpoints.h5")
+
+    assert model.dimension == mesh.dimension
+
+    progressbar = pyprog.ProgressBar(
+        "{}: ".format(settings.name),
+        "\r",
+        settings.time_end,
+        complete_symbol="█",
+        not_complete_symbol="-",
+    )
+    progressbar.progress_explain = ""
+    progressbar.update()
+
+    parser = argparse.ArgumentParser()
+    #parser.add_argument("configurationFileName", help="Name of the xml precice configuration file.", nargs='?', type=str, default=f"{os.path.join(main_dir, 'tests/simulations/precice_configurations/precice-config.xml')}")
+    parser.add_argument("configurationFileName", help="Name of the xml precice configuration file.", nargs='?', type=str, default="/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml")
+
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        print("")
+        print("Did you forget adding the precice configuration file as an argument?")
+        print("Try '$ python FluidSolver.py precice-config.xml'")
+        quit()
+    
+    print("Configure preCICE...")
+    interface = precice.Participant("Fluid2", args.configurationFileName, 0, 1)
+    
+    meshName = "Fluid2-Mesh"
+    velocityName = "Velocity"
+    pressureName = "Pressure"
+    alphaName = "Alpha"
+    alphaGradientName = "AlphaGradient"
+    velocityGradientName = "VelocityGradient"
+    
+    dimensions = interface.get_mesh_dimensions(meshName)
+    
+    N = 100
+    velocity = 0.* np.ones((N + 1, 3))
+    z = np.linspace(0, 0.12, N+1)
+    alpha = np.where(z <= 0.02, 1., 0.)
+    pressure = 995.21 * 9.81 * 0.02 * alpha
+    alphaGradient = 0. * np.ones(N+1)
+    velocityGradient = 0. * np.ones((N+1, 3))
+    
+    grid = np.zeros([N + 1, dimensions])
+    grid[:, 0] = 0.5
+    grid[:, 1] = np.linspace(0.0, 0.12, N + 1)  # x component
+    grid[:, 2] = 0.
+    
+    vertexIDs = interface.set_mesh_vertices(meshName, grid)
+    
+    if interface.requires_initial_data():
+        interface.write_data(meshName, pressureName, vertexIDs, pressure)
+        interface.write_data(meshName, alphaGradientName, vertexIDs, alphaGradient)
+        interface.write_data(meshName, velocityGradientName, vertexIDs, velocityGradient)
+    
+    # preCICE defines timestep size of solver via precice-config.xml
+    interface.initialize()
+    
+    velocity = interface.read_data(
+        meshName, velocityName, vertexIDs, 0)
+    
+    #velocity_old = np.copy(velocity)
+
+    Q, Qaux = _initialize_problem(model, mesh)
+
+    parameters = model.parameter_values
+    pde, bcs = load_runtime_model(model)
+    Q = apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+    Qnew, pressure, alphaGradient, velocityGradient = apply_boundary_conditions_precice(model, Q, z, velocity, alpha, pressure)
+
+    i_snapshot = 0
+    dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    mesh.write_to_hdf5(output_hdf5_path)
+    mesh.write_to_hdf5(output_checkpoint_path)
+    i_snapshot = io.save_fields(
+        output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
+    )
+
+    Qnew = deepcopy(Q)
+
+    space_solution_operator = _get_semidiscrete_solution_operator(
+        mesh, pde, bcs, settings
+    )
+    compute_source = _get_source(mesh, pde, settings)
+    compute_source_jac = _get_source_jac(mesh, pde, settings)
+
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, settings)
+    min_inradius = np.min(mesh.cell_inradius)
+
+    time_start = gettime()
+
+    
+    time_it = 0
+    while interface.is_coupling_ongoing():
+        # When an implicit coupling scheme is used, checkpointing is required
+        if interface.requires_writing_checkpoint():
+            io._save_fields_to_hdf5(output_checkpoint_path, 0, time, Qnew, Qaux)
+    
+        precice_dt = interface.get_max_time_step_size()
+    
+
+        solver_dt = settings.compute_dt(
+            Qnew, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
+        )
+
+        #if settings.truncate_last_time_step:
+        #    if time + solver_dt * 1.001 > settings.time_end:
+        #        solver_dt = settings.time_end - time + 10 ** (-10)
+
+        assert solver_dt > 10 ** (-6)
+        assert not np.isnan(solver_dt) and np.isfinite(solver_dt)
+
+        dt = min(solver_dt, precice_dt)
+
+
+        velocity = interface.read_data(
+            meshName, velocityName, vertexIDs, dt)
+
+        alpha = interface.read_data(
+            meshName, alphaName, vertexIDs, dt)
+    
+        Q = deepcopy(Qnew)
+        Q, pressure, alphaGradient, velocityGradient = apply_boundary_conditions_precice(model, Q, z, velocity, alpha, pressure)
+
+
+        Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+
+        Qnew = ode_solver_source(
+            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        )
+
+        Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
+
+        interface.write_data(meshName, pressureName, vertexIDs, pressure)
+        interface.write_data(meshName, alphaGradientName, vertexIDs, alphaGradient)
+        interface.write_data(meshName, velocityGradientName, vertexIDs, velocityGradient)
+    # 
+        interface.advance(dt)
+    
+        # i.e. not yet converged
+        if interface.requires_reading_checkpoint():
+            Qnew, Qaux, time  = precice_read_checkpoint(output_checkpoint_path)
+
+        else:  # converged, timestep complete
+            # Update solution and time
+            time += dt
+            iteration += 1
+            print(iteration, time, dt)
+
+            i_snapshot = io.save_fields(
+                output_hdf5_path,
+                time,
+                (i_snapshot + 1) * dt_snapshot,
+                i_snapshot,
+                Qnew,
+                Qaux,
+                settings.output_write_all,
+            )
 
     print(f"Runtime: {gettime() - time_start}")
 

@@ -82,7 +82,7 @@ def _save_fields_to_hdf5(
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "a") as f:
-        if i_snapshot == 0:
+        if i_snapshot == 0 and not 'fields' in f.keys():
             fields = f.create_group('fields')
         else:
             fields = f['fields']
@@ -108,7 +108,8 @@ def load_fields_from_hdf5(filepath, i_snapshot=-1):
         else:
             i_snapshot = i_snapshot
         # group = f[str(i_snapshot)]
-        group = f[f"iteration_{i_snapshot}"]
+        fields = f['fields']
+        group = fields[f"iteration_{i_snapshot}"]
         time = group["time"][()]
         Q = group["Q"][()]
         Qaux = group["Qaux"][()]
