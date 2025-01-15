@@ -29,6 +29,25 @@ def read_vtk(filepath):
     scalar_field_names = mesh.cell_data.keys()
     return mesh, scalar_field_names
 
+def read_precice_vtu(filepath):
+    reader = pv.get_reader(filepath)
+    mesh = reader.read()
+    y = np.array(mesh.points[:, 1])
+    U = np.array(mesh.point_data['Velocity'])
+    alpha = np.array(mesh.point_data['Alpha'])
+    # i_interface = ((alpha-0.5)**2).argmin()
+    for i, a in enumerate(alpha):
+        if a < 0.9:
+            break
+    i_interface = i-1
+    assert i_interface > 0
+    y = y[:i_interface]
+    U = U[:i_interface, 0]
+    y = (y-y.min())/(y.max()-y.min())
+    z = np.linspace(0, 1, 100)
+    U = np.interp(z, y, U)
+    return z, U
+
 def extract_smm_data_1d(directory, filename='internal.vtu', pos = [2.2, 0, 0], stride=10):
     file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
     def sorting_key(name):
@@ -140,6 +159,25 @@ def extract_1d_data_fast(directory, pos = [15, 0, 0], stride=10):
         iteration.append(i * stride)
     return x, np.array(l_h), np.array(l_u), np.array(l_w), np.array(iteration)
 
+def read_precice_vtus(directory, stride=10):
+    file_names = [name for name in os.listdir(directory) if name.endswith('.vtu')]
+    def sorting_key(name):
+        numbers = re.findall(r'\d+', name)
+        # assert len(numbers) == 1
+        return int(numbers[-1])
+    file_names = sorted(file_names, key=sorting_key)
+    file_names = file_names[::stride]
+    l_y = []
+    l_u = []
+    iteration = []
+    for i, file in enumerate(file_names):
+        path = os.path.join(directory,file)
+        y, U = read_precice_vtu(path)
+        l_y.append(y)
+        l_u.append(U)
+        iteration.append(i * stride)
+    return np.array(l_y), np.array(l_u),  np.array(iteration)
+
 
 
 def extract_1d_data_foam11(directory, pos = [15, 0, 0], stride=10):
@@ -222,6 +260,15 @@ def test_project_to_smm():
     # u = 1. * np.ones_like(z)
     u = 1. * np.ones_like(z) + 0.5 * (1-2*z)
     moments = project_to_smm(u, z)
+  
+def project_velocity_profile(u,z,  level):
+    basis_analytical =Legendre_shifted(order=level+1)
+    basis = [basis_analytical.get_lambda(k) for k in range(level+1)]
+
+    z = np.linspace(0, 1, u.shape[0])
+    moments = project_to_smm(u, z, basis=basis)
+    return moments
+
 
 def project_openfoam_to_smm(directory, pos=[0.5, 0, 0], stride=60, dt=0.01, level=10, output_uw=False, weights='uniform'):
     pos, h, u, w, iteration = extract_1d_data(directory, pos=pos, stride=stride)
