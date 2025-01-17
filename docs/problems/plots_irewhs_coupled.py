@@ -38,7 +38,7 @@ from library.model.model import *
 
 def extract_from_openfoam(experiments, x = 0.3, stride=10):
     pos, h, u, w, iteration = extract_1d_data_fast(directory, pos=[x, 0, 0], stride=stride)
-    dt = 0.005
+    dt = 0.01
     time = dt * iteration
     experiments[str(x)] = {"x": pos.copy(), "h": h.copy(), "u":u.copy(), "w": w.copy(), "time":time}
     
@@ -289,9 +289,9 @@ def plot_velocity_profile(ax, x, t, experiments, openfoam_projected, simulation_
     basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
     basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
     
-    t_of = get_t(t, interface['time'])
+    t_of = get_t(t, experiments[str(x)]['time'])
     u_of = experiments[str(x)]['u'][t_of, :]
-    time_of = openfoam_projected[str(x)]['time']
+    # time_of = openfoam_projected[str(x)]['time']
     ax.plot(u_of, z, '*', label=f'openfoam')
     
     for level in simulation_data.keys():
@@ -299,6 +299,29 @@ def plot_velocity_profile(ax, x, t, experiments, openfoam_projected, simulation_
         t_smm = get_t(t, simulation_data[level]['time'])
         h_smm = simulation_data[level]['Q'][t_smm,0, x_smm]
         moments = simulation_data[level]['Q'][t_smm,1:, x_smm] / h_smm
+        u_smm = moments[0] * basis[0](z)
+        for i in range(1,int(level)+1):
+            u_smm += moments[i] * basis[i](z)
+        ax.plot(u_smm.copy(), z, '--', label=f'level {level}')
+        
+def plot_velocity_profile_projected(ax, x, t, experiments, openfoam_projected, simulation_data):
+    lvl = 10
+    basis_analytical =Legendre_shifted(order=lvl+1)
+    basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
+    basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
+    
+    t_of = get_t(t, experiments[str(x)]['time'])
+    u_of = experiments[str(x)]['u'][t_of, :]
+    # time_of = openfoam_projected[str(x)]['time']
+    
+    ax.plot(u_of, z, '*', label=f'OF')
+    
+    for level in list(range(6,lvl)):
+        # x_smm = get_x(x, openfoam_projected['x'])
+        print(openfoam_projected.keys())
+        t_smm = get_t(t, openfoam_projected[str(x)]['time'])
+        h_smm = openfoam_projected[str(x)]['h'][t_smm]
+        moments = openfoam_projected[str(x)]['moments'][t_smm,:] / h_smm
         u_smm = moments[0] * basis[0](z)
         for i in range(1,int(level)+1):
             u_smm += moments[i] * basis[i](z)
@@ -335,7 +358,7 @@ def plot_velocity_profile_interface(ax, t, interface, simulation_data):
         
     ax.plot(u_of, z_of, '*', label=f'openfoam')
     
-    levels = [0, 2, 8]
+    levels = [0, 2, 4, 8]
     for level in levels:
         u_smm = moments[0] * basis[0](z)
         for i in range(1,int(level)+1):
@@ -439,6 +462,8 @@ def get_interface(path, compute_exp, stride):
     
     
 def get_of_projected(compute_proj):
+    openfoam_projected = {}
+
     if compute_proj:
         openfoam_projected = {}
         for x in samples_experiments:
@@ -471,19 +496,22 @@ def get_simulation(compute_sim, stride):
 if __name__ == '__main__':
     ## Folder
     main_dir = os.getenv("SMS")
-    folder_base = 'outputs/openfoam'
+    folder_base = 'outputs'
     # folder = 'openfoam_nozzle_2d'
     # folder = 'VTK_laminar'
     # folder = 'VTK_turbulent'
-    folder = 'VTK_bottom'
-    stride=10
+    # folder = 'VTK_bottom'
+    folder = 'exp_reference'
+    stride=50
     compute_exp = False
     compute_proj = False
     compute_sim = True
-    compute_interface = True
+    compute_interface = False
     #offset_extraction = 5
     samples_experiments = [0.5, 1., 1.5, 2., 2.5]
     VP_time = [2., 3., 4., 5.]
+    # VP_time = [0.5, 1.5, 2.5, 3.5, 4.5]
+
     VP_pos = samples_experiments
     sim_levels = [4]
     
@@ -497,8 +525,14 @@ if __name__ == '__main__':
     print('LOAD OpenFOAM complete')
     simulation_data = get_simulation(compute_sim, stride)
     print('LOAD SMM complete')
-    interface_data = get_interface('exp_4', compute_interface, stride)
+    interface_data = get_interface('export2', compute_interface, stride)
     print('LOAD interface complete')
+    
+    # timeline_exp = experiments['0.5']['time']
+    # timeline_dat = simulation_data['4']['time']
+    # print(timeline_exp)
+    # print(timeline_dat)
+    # print(np.intersect1d(timeline_exp, timeline_dat))
 
     #--------------------------------------------------------------------------------------------------------
     #----------------------------------------------Inflow----------------------------------------------------
@@ -529,13 +563,36 @@ if __name__ == '__main__':
     #-----------------------------------------Velocity profiles----------------------------------------------
     #--------------------------------------------------------------------------------------------------------
 
-    # fig, ax = plt.subplots(len(VP_time),len(VP_pos))
-    # for it, t in enumerate(VP_time):
-    #     for ix, x in enumerate(VP_pos):
-    #         ax[it, ix].set_xlim(0., 0.3)
-    #         plot_velocity_profile(ax[it, ix], x, t, experiments, openfoam_projected, simulation_data)
+    fig, ax = plt.subplots(len(VP_time),len(VP_pos))
+    for it, t in enumerate(VP_time):
+        for ix, x in enumerate(VP_pos):
+            ax[it, ix].set_xlim(0., 0.3)
+            plot_velocity_profile(ax[it, ix], x, t, experiments, openfoam_projected, simulation_data)
+    plt.show()
+    
+    # fig, ax = plt.subplots()
+    # plot_velocity_profile(ax, 1., 2., experiments, openfoam_projected, simulation_data)
     # plt.show()
     
+    #--------------------------------------------------------------------------------------------------------
+    #---------------------------------STEADY STATE Velocity profiles-----------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+    
+    # fig, ax = plt.subplots(len(VP_time))
+    # x = 0.5
+    # for it, t in enumerate(VP_time):
+    #     ax[it].set_xlim(0., 0.3)
+    #     plot_velocity_profile_projected(ax[it], x, t, experiments, openfoam_projected, simulation_data)
+    # plt.show()
+    
+    # x = 0.5
+    # for it, t_ in enumerate(VP_time):
+    #     t = get_t(t_, openfoam_projected[str(x)]['time'])
+    #     h = openfoam_projected[str(x)]['h'][t]
+    #     moments = openfoam_projected[str(x)]['moments'][t, :] / h
+    #     print(f'{t_}: {moments}')
+
+
     #--------------------------------------------------------------------------------------------------------
     #-----------------------------------------Errors in velocity profiles------------------------------------
     #--------------------------------------------------------------------------------------------------------
@@ -554,15 +611,24 @@ if __name__ == '__main__':
     #-----------------------------------------Velocity at interface----------------------------------------------
     #--------------------------------------------------------------------------------------------------------
 
-    fig, ax = plt.subplots(len(VP_time))
-    for it, t in enumerate(VP_time):
-        ax[it].set_xlim(0., 0.3)
-        plot_velocity_profile_interface(ax[it], t, interface_data , simulation_data)
-        error_U, error_UU = error_velocity_profile_interface(t, interface_data, simulation_data)
-        print(t)
-        print(error_U)
-        print(error_U[0]/error_U)
-        print(error_UU)
-        print(error_UU[0]/error_UU)
-        print('=========================')
-    plt.show()
+    # fig, ax = plt.subplots(len(VP_time))
+    # for it, t in enumerate(VP_time):
+    #     ax[it].set_xlim(0., 0.3)
+    #     plot_velocity_profile_interface(ax[it], t, interface_data , simulation_data)
+    #     error_U, error_UU = error_velocity_profile_interface(t, interface_data, simulation_data)
+    #     print(t)
+    #     print(error_U)
+    #     print(error_U[0]/error_U)
+    #     print(error_UU)
+    #     print(error_UU[0]/error_UU)
+    #     print('=========================')
+    # plt.show()
+
+# TODO
+# compare interface and reference VP at 0.5 for OF
+# Find out why the projection does not to look properly? Before, I assumed that the pressue was 
+# bad -> inflow that distored the VP in the coupled simulation -> bad VP at the interface BUT
+# a correct projection. 
+# Now, the VP still looks bad (as if I miss a coeff. But I already checked that). 
+# disable source terms ?
+# plot coupling VP as well, maybe they match that and the issue is on the coupling?

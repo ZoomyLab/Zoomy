@@ -26,6 +26,12 @@ def get_interface_position(data, pos):
 def read_vtk(filepath):
     reader = pv.get_reader(filepath)
     mesh = reader.read()
+    try:
+        mesh = mesh[0]
+    except:
+        pass
+    # if mesh.n_blocks > 1:
+    #     mesh = mesh[0]
     scalar_field_names = mesh.cell_data.keys()
     return mesh, scalar_field_names
 
@@ -94,7 +100,7 @@ def extract_1d_line(mesh, pos=[15, 0, 0]):
 
     # cut away the air and resample
     indices_water = np.array(list(range(x.shape[0])))[x <= h]
-    offset_extraction =5
+    offset_extraction = 0
     x = x[indices_water][offset_extraction:]
     U = U[indices_water][offset_extraction:]
     u = U[:, 0]
@@ -138,7 +144,9 @@ def extract_1d_slice(mesh, pos=[15, 0, 0]):
     return x, alpha, h, u, w
 
 def extract_1d_data_fast(directory, pos = [15, 0, 0], stride=10):
-    file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
+    file_names = [name for name in os.listdir(directory) if name.endswith('.vtm')]
+    if len(file_names) == 0:
+        file_names = [name for name in os.listdir(directory) if name.endswith('.vtk')]
     def sorting_key(name):
         numbers = re.findall(r'\d+', name)
         # assert len(numbers) == 1
@@ -152,6 +160,7 @@ def extract_1d_data_fast(directory, pos = [15, 0, 0], stride=10):
     for i, file in enumerate(file_names):
         path = os.path.join(directory,file)
         mesh, _ = read_vtk(path)
+        # get internal
         x, alpha, h, u, w = extract_1d_line(mesh, pos)
         l_h.append(h)
         l_u.append(u)
