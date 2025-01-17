@@ -129,7 +129,14 @@ def _get_compute_max_abs_eigenvalue(mesh, pde, settings):
         evB = pde.eigenvalues(qB, qauxB, parameters, normal)
         max_abs_eigenvalue = max(np.abs(evA).max(), np.abs(evB).max())
 
-        assert max_abs_eigenvalue > 10 ** (-8)
+
+
+        if not max_abs_eigenvalue > 10 ** (-8):
+            iA = np.abs(evA).argmax()
+            iB = np.abs(evB).argmax()
+            print(Q[:, iA])
+            print(Q[:, iB])
+            assert False
 
         return max_abs_eigenvalue
 
@@ -1041,6 +1048,64 @@ def apply_boundary_conditions(mesh, time, Q, Qaux, parameters, runtime_bcs):
         Q[:, mesh.boundary_face_ghosts[i_bc_face]] = q_ghost
     return Q
 
+def strong_bc(model, Q):
+    return Q
+    ## slooooowwwwww
+    H = Q[0, :]
+    HA = Q[1:, :]
+    zp = np.linspace(0.005, 1, 100)             
+    z = np.zeros((101))
+    z[1:] = zp
+    for i in range(Q.shape[1]):
+        U = np.zeros((101))
+        U[1:] = model.basis.basis.reconstruct_velocity_profile(HA[:, i] / H[i])
+        alpha = model.basis.basis.reconstruct_alpha(U, z)
+        Q[1:, i] = alpha * H[i]
+
+
+    # ??
+    #H = Q[0, :]
+    #A = Q[1:, :] / H
+    #N = A.shape[1]
+    #M = A.shape[0]
+    #Ub = np.zeros((N))
+    #for i in range(M):
+    #    Ub += A[i]
+    #for i in range(1, M):
+    #    A[i] -= Ub/(M-1)
+    #for i in range(M):
+    #    Q[1+i, :] = A[i] * H
+
+    # breaks
+    #H = Q[0, :]
+    #A = Q[1:, :] / H
+    #N = A.shape[1]
+    #M = A.shape[0]
+    #Ub = np.zeros((N))
+    #W = np.zeros((N))
+    #Wi = np.zeros((M, N))
+    #for i in range(M):
+    #    Ub += A[i]
+    #for i in range(1, M):
+    #    W += np.abs(A[i])
+    #for i in range(1, M):
+    #    Wi[i, :] = np.abs(A[i, :]) / W
+    #for i in range(1, M):
+    #    A[i] -= Wi[i] * Ub
+    #for i in range(M):
+    #    Q[1+i, :] = A[i] * H
+
+    ## looks bad
+    #H = Q[0, :]
+    #A = Q[1:, :] / H
+    #N = A.shape[1]
+    #M = A.shape[0]
+    #Ub = np.zeros((N))
+    #for i in range(M):
+    #    Ub += A[i]
+    #Q[2, : ] -= Ub * H
+    return Q
+
 def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
     idx = Qnew.shape[1]-2
     q_ghost = Qnew[:, idx]
@@ -1060,7 +1125,9 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
         if alpha < threshold:
             i_water = i
             break
-    assert i_water > 0
+    if not i_water > 0:
+        print(al)
+        assert False
     #i_water = (z*(al > threshold)).argmax()
 
     h_a = z[i_water]
@@ -1109,7 +1176,10 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
     # WORKING WORKING WORKING
     #p_hyd_of = 1000 * 9.81 * (h-z) * (h>=z) * al
 
-    p_hyd_of = 1000 * 9.81 * h * al
+    #p_hyd_of = 1000 * 9.81 * h * al + (1-al) * (al < 0.3) * (-10.)
+    al_bin = np.where(al > 0.2, 1., 0.)
+    p_hyd_of = np.zeros_like(al)
+    p_hyd_of[:i_water] = 1000 * 9.81 * h
 
 
     p_hyd = 1000 * 9.81 * h_lin * al 
@@ -1144,8 +1214,16 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
     velocityGradient *= 0.
     alphaGradient *= 0.
 
+
+
     #pressuregradient = 1000 * 9.81 * (h0-h_of)/dx
     #pressure = pressuregradient
+
+    #print('--------------------')
+    #print(i_water, h_of)
+    #print(pressure)
+    #print(al)
+    #print('--------------------')
     return Qnew, pressure, alphaGradient, velocityGradient
 
 
@@ -1311,7 +1389,8 @@ def precice_fvm(
     velocity = 0.* np.ones((N + 1, 3))
     z = np.linspace(0, 0.12, N+1)
     alpha = np.where(z <= 0.02, 1., 0.)
-    pressure = 995.21 * 9.81 * 0.02 * alpha
+    alpha0 = alpha.copy()
+    pressure = 995.21 * 9.81 * 0.02 * alpha + (alpha < 0.3) * (1-alpha) * (-10.)
     alphaGradient = 0. * np.ones(N+1)
     velocityGradient = 0. * np.ones((N+1, 3))
     
@@ -1393,6 +1472,9 @@ def precice_fvm(
 
         alpha = interface.read_data(
             meshName, alphaName, vertexIDs, dt)
+        if alpha[0] == 0:
+            alpha = alpha0
+
     
         Q = deepcopy(Qnew)
         Q, pressure, alphaGradient, velocityGradient = apply_boundary_conditions_precice(model, Q, z, velocity, alpha, pressure)
@@ -1405,6 +1487,8 @@ def precice_fvm(
         )
 
         Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
+
+        Qnew = strong_bc(model, Qnew)
 
         interface.write_data(meshName, pressureName, vertexIDs, pressure)
         interface.write_data(meshName, alphaGradientName, vertexIDs, alphaGradient)

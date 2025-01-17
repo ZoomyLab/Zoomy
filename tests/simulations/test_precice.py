@@ -19,7 +19,7 @@ def test_smm_1d():
     level = 4
     settings = Settings(
         name="ShallowMoments",
-        parameters={"g": 9.81, "C": 30.0, "nu": 0.000001, "eta": 1.},
+        parameters={"g": 9.81, "C": 30.0, "nu": 0.000001, "eta": 0., "eta_ss": 0.000},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
@@ -48,21 +48,21 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": []},
+        settings={"eigenvalue_mode": "symbolic", "friction": ['newtonian', 'newtonian_boundary_layer', 'steady_state_channel']},
     )
 
     mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
 
     precice_fvm(
-        mesh, model, settings
+        mesh, model, settings, ode_solver_source=RK1
     )
     #io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 def test_generate_output():
-    level = 0
+    level = 6
     settings = Settings(
         name="ShallowMoments",
-        parameters={"g": 9.81, "C": 30.0, "nu": 0.000001, "eta": 1.},
+        parameters={"g": 9.81, "C": 30.0, "nu": 0.000001, "eta": 0.01},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),

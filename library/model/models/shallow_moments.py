@@ -106,6 +106,20 @@ class Legendre_shifted:
                 den = np.trapz((b(z) * b(z)).reshape(z.shape), z)
             res = nom/den
             alpha[i] = res
+
+        #mean = np.mean(velocities)
+        #print('----------------------------')
+        #U = np.zeros_like(z)
+        #for i in range(n_basis):
+        #    print(i)
+        #    b = lambdify(x, self.get(i)) 
+        #    U += alpha[i] * b(z)
+        #    print(np.sum((U - velocities))**2)
+        #print(mean)
+        #print(alpha)
+        #print(velocities)
+        #print(U)
+        #print('----------------------------')
         return alpha
 
     def get_diff_basis(self):
@@ -727,11 +741,24 @@ class ShallowMoments(Model):
         p = self.parameters
         phi_0 = [self.basis.basis.eval(i, 0.) for i in range(self.levels+1)]
         dphidx_0 = [(diff(self.basis.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
-        z_boundary_layer = 0.1
+        dz_boundary_layer = 0.005
+        u_bot = 0
+        for i in range(1+self.levels):
+            u_bot += ha[i] / h / self.basis.M[i, i] 
+        tau_bot = p.nu * (u_bot - 0.)/dz_boundary_layer
         for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                #out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] * phi_0[k] * dphidx_0[i]
-                out[1+k] += -p.eta * p.nu / h * ha[i] / h / self.basis.M[k, k] / z_boundary_layer
+            out[k+1] = - p.eta * tau_bot / h
+        return out
+
+    def steady_state_channel(self):
+        assert "eta_ss" in vars(self.parameters)
+        moments_ss = np.array([0.21923893, -0.04171894, -0.05129916, -0.04913612, -0.03863209, -0.02533469, -0.0144186, -0.00746847, -0.0031811, -0.00067986, 0.0021782])[:self.levels+1]
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        for i in range(1,self.levels+1):
+            out[1+i] =  - p.eta_ss * h * (ha[i]/h - moments_ss[i])
         return out
 
     def slip(self):
