@@ -168,14 +168,20 @@ class Basis():
         self.A = np.empty((level+1, level+1, level+1), dtype=float)
         self.B = np.empty((level+1, level+1, level+1), dtype=float)
         self.D = np.empty((level+1, level+1), dtype=float)
+        self.DD = np.empty((level+1, level+1), dtype=float)
+        self.D1 = np.empty((level+1, level+1), dtype=float)
+        self.DT = np.empty((level+1, level+1, level+1), dtype=float)
 
         for k in range(level+1):
             for i in range(level+1):
                 self.M[k, i] = self._M(k, i)
                 self.D[k, i] = self._D(k, i)
+                self.DD[k, i] = self._DD(k, i)
+                self.D1[k, i] = self._D1(k, i)
                 for j in range(level+1):
                     self.A[k, i, j] = self._A(k, i, j)
                     self.B[k, i, j] = self._B(k, i, j)
+                    self.DT[k, i, j] = self._DT(k, i, j)
 
     def enforce_boundary_conditions_lsq(self, rhs=np.zeros(2), dim=1):
         level = len(self.basis.basis)-1
@@ -330,6 +336,24 @@ class Basis():
     """
     def _D(self, k, i):
         return integrate(diff(self.basis.eval(k, x), x) * diff(self.basis.eval(i, x), x), (x, 0, 1))
+
+    """ 
+    Compute <(phi)_k, (phi')_j>
+    """
+    def _D1(self, k, i):
+        return integrate(self.basis.eval(k, x) * diff(self.basis.eval(i, x), x), (x, 0, 1))
+
+    """ 
+    Compute <(phi)_k, (phi'')_j>
+    """
+    def _DD(self, k, i):
+        return integrate(self.basis.eval(k, x) * diff(diff(self.basis.eval(i, x), x), x), (x, 0, 1))
+    """ 
+
+    Compute <(phi')_k, (phi')_j>
+    """
+    def _DT(self, k, i, j):
+        return integrate(diff(self.basis.eval(k, x), x) * diff(self.basis.eval(i, x), x) * self.basis.eval(j, x), (x, 0, 1))
 
 class BasisNoHOM(Basis):
     def _A(self, k, i, j):
@@ -732,6 +756,62 @@ class ShallowMoments(Model):
                 out[1+k] += -p.nu/h *  ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
         return out
 
+    def newtonian_no_ibp(self):
+        """
+        :gui:
+            - requires_parameter: ('nu', 0.0)
+        """
+        assert "nu" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                out[1+k] += -p.nu/h *  ha[i]  / h * self.basis.DD[k, i]/ self.basis.M[k, k]
+        return out
+
+    def newtonian_turbulent(self):
+        """
+        :gui:
+            - requires_parameter: ('nu', 0.0)
+        """
+        p = self.parameters
+        nut1 = [1.06245397e-05,-8.64966128e-06,-4.24655215e-06,1.51861028e-06,2.25140517e-06, 1.81867029e-06,-1.02154323e-06,-1.78795289e-06,-5.07515843e-07]
+        nut2 = np.array([0.21923893, -0.04171894, -0.05129916, -0.04913612, -0.03863209, -0.02533469, -0.0144186, -0.00746847, -0.0031811, -0.00067986, 0.0021782])
+        nut2 = nut2 / nut2[0] * 1.06245397*10**(-5)
+        nut3 = [1.45934315e-05,-1.91969629e-05, 5.80456268e-06,-5.13207491e-07,2.29489571e-06,-1.24361978e-06,-2.78720732e-06,-2.01469118e-07,1.24957663e-06]
+        nut4 = [1.45934315e-05, -1.45934315e-05*3/4, -1.45934315e-05*1/4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        nut5 = [p.nut, -p.nut*3/4, -p.nut*1/4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        nut = nut5
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        for k in range(1+self.levels):
+            for i in range(1+self.levels):
+                for j in range(1+self.levels):
+                    out[1+k] += -p.c_nut * nut[j]/h *  ha[i]  / h  * self.basis.DT[k, i, j]/ self.basis.M[k, k]
+        return out
+
+    def newtonian_boundary_layer_classic(self):
+        assert "nu" in vars(self.parameters)
+        assert "eta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        phi_0 = [self.basis.basis.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basis.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        tau_bot = 0
+        for i in range(1+self.levels):
+            tau_bot +=  ha[i] / h  * dphidx_0[i]
+        for k in range(1+self.levels):
+            out[k+1] = - p.c_bl * p.eta * (p.nu + p.nut_bl) / h * tau_bot * phi_0[k] / self.basis.M[k, k]
+        return out
+
+
     def newtonian_boundary_layer(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
@@ -756,10 +836,14 @@ class ShallowMoments(Model):
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         ha = self.variables[1:1+self.levels+1]
+        mean = ha[0]/h
+        mean_ss = moments_ss[0]
+        scaling = mean / mean_ss
         p = self.parameters
         for i in range(1,self.levels+1):
-            out[1+i] =  - p.eta_ss * h * (ha[i]/h - moments_ss[i])
+            out[1+i] =  - p.eta_ss * h * (ha[i]/h - scaling*moments_ss[i])
         return out
+
 
     def slip(self):
         """
@@ -776,6 +860,25 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for i in range(1+self.levels):
                 out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
+        return out
+
+    def slip_mod(self):
+        """
+        :gui:
+            - requires_parameter: ('lamda', 0.0)
+            - requires_parameter: ('rho', 1.0)
+        """
+        assert "lamda" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        ub = 0
+        for i in range(1+self.levels):
+            ub += ha[i]  / h 
+        for k in range(1, 1+self.levels):
+            out[1+k] += -1.*p.c_slipmod/p.lamda/p.rho * ub / self.basis.M[k, k]
         return out
 
     def no_slip(self):
@@ -822,6 +925,22 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for l in range(1+self.levels):
                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+        return out
+
+    def chezy_mean(self):
+        """
+        :gui:
+            - requires_parameter: ('C', 1000.0)
+        """
+        assert "C" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        h = self.variables[0]
+        ha = self.variables[1:1+self.levels+1]
+        p = self.parameters
+        tmp = 0
+        u = ha[0] / h 
+        for k in range(1+self.levels):
+            out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * u**2
         return out
 
     def chezy_ssf(self):
@@ -886,9 +1005,9 @@ class ShallowMoments(Model):
             phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
         friction_factor = 0.
         for k in range(self.levels+1):
-            friction_factor -= p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
-        for k in range(1+self.levels):
-            out[1+k] += friction_factor /(self.basis.M[k,k]) 
+            friction_factor -= p.beta * d_phi_0[k]  * ha[k]/h
+        for k in range(self.levels+1):
+            out[1+k] += friction_factor * phi_0[k] /(self.basis.M[k,k])  / h
         return out
 
     def shear_crazy(self):
@@ -916,17 +1035,15 @@ class ShallowMoments(Model):
         :gui:
             - requires_parameter: ('C', 1000.0)
         """
-        assert "C" in vars(self.parameters)
+        assert "kst" in vars(self.parameters)
+        assert "g" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         ha = self.variables[1:1+self.levels+1]
         p = self.parameters
-        tmp = 0
-        tmp += ha[0] * ha[0] / h / h
-        sqrt = sympy.sqrt(tmp)
-        k = 0
-        l = 0
-        out[1+k] += -1.*p.C * (self.basis.M[k,k]) * ha[l] * sqrt / h 
+        u = ha[0] / h 
+        for k in range(1+self.levels):
+            out[1+k] += -1./p.kst**2 * p.g / h**(1/3) * u**2 * (self.basis.M[k,k])
         return out
 
     def steady_state(self):
@@ -1020,7 +1137,7 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
         sqrt = sympy.sqrt(tmp)
         for k in range(1+self.levels):
             for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+                out[1+k] += -1./(p.C**2) * ha[l]/h * sqrt
 
         for k in range(1+self.levels):
             out[1+k] += out[1] / self.basis.M[k, k]
@@ -1371,10 +1488,10 @@ if __name__ == "__main__":
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
     # basis.plot()
 
-    basis = Basis(basis=Legendre_shifted(order=4))
-    f = basis.enforce_boundary_conditions()
-    q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
-    print(f(q))
+    #basis = Basis(basis=Legendre_shifted(order=8))
+    #f = basis.enforce_boundary_conditions()
+    #q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
+    #print(f(q))
 
 
     # basis =Legendre_shifted(order=8)
@@ -1386,8 +1503,42 @@ if __name__ == "__main__":
     # print(f(z))
 
 
-    # X = np.linspace(0,1,100)
-    # U = basis.reconstruct_velocity_profile([0, 0.0, 0., 0, 1], Z=X)
-    # plt.plot(U, X)
-    # plt.show()
+    #X = np.linspace(0,1,100)
+    #coef = np.array([0.2, -0.01, -0.1, -0.05, -0.04])
+    #U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    #coef2 = coef*2
+    #factor = 1.0 / 0.2
+    #coef3  = coef * factor
+    #U2 = basis.basis.reconstruct_velocity_profile(coef2, Z=X)
+    #U3 = basis.basis.reconstruct_velocity_profile(coef3, Z=X)
+    #fig, ax = plt.subplots()
+    #ax.plot(U, X)
+    #ax.plot(U2, X)
+    #ax.plot(U3, X)
+    #plt.show()
+
+    #X = np.linspace(0,1,100)
+    #nut = 10**(-5)
+    #coef = np.array([nut, -nut, 0, 0, 0, 0, 0 ])
+    #U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    #fig, ax = plt.subplots()
+    #ax.plot(U, X)
+    #plt.show()
+
+    #nut = np.load('/home/ingo/Git/sms/nut_nut2.npy')
+    #y = np.load('/home/ingo/Git/sms/nut_y2.npy')
+    #coef = basis.basis.reconstruct_alpha(nut, y)
+    #coef_offset = np.sum(coef)
+    #coef[0] -= coef_offset
+    #print(coef)
+    #X = np.linspace(0,1,100)
+    #_nut = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    #fig, ax = plt.subplots()
+    #ax.plot(_nut, X)
+    #plt.show()
+
+
+    basis = Basis(basis=Legendre_shifted(order=2))
+    basis.compute_matrices(2)
+    print(basis.D)
 
