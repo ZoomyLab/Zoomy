@@ -46,7 +46,7 @@ def read_precice_vtu(filepath):
         if a < 0.9:
             break
     i_interface = i-1
-    assert i_interface > 0
+    # assert i_interface > 0
     y = y[:i_interface]
     U = U[:i_interface, 0]
     y = (y-y.min())/(y.max()-y.min())

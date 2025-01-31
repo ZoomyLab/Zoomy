@@ -11,6 +11,8 @@ import seaborn
 import pickle
 seaborn.set_context('talk')
 from scipy.integrate import quad, simpson
+import re
+
 
 
 import pytest
@@ -32,13 +34,49 @@ from code_11_ijshs import *
 from library.model.model import *
 
 
+def create_mosaic_plot():
+    fig = plt.figure(constrained_layout=True, figsize=(12, 6))
+    ax = fig.subplot_mosaic(
+        [[0, 1], ["legend", "legend"]],
+        height_ratios=[1.3, 0.3],
+    )
+    ax["legend"].axis("off")
+    return fig, ax
 
+def create_mosaic_3x1_plot():
+    fig = plt.figure(constrained_layout=True, figsize=(12, 6))
+    ax = fig.subplot_mosaic(
+        [[0, 1, 2], ["legend", "legend", "legend"]],
+        height_ratios=[1.3, 0.3],
+    )
+    ax["legend"].axis("off")
+    return fig, ax
+    
+def update_mosaic_legend(ax, legend=None):
+    handles, labels = ax[0].get_legend_handles_labels()
+    if legend is not None:
+        labels = legend
+    ax['legend'].legend(handles, labels, ncol=6, mode="expand", loc='lower left')
+    return ax
 
+def split_string(s):
+    match = re.match(r'(\d+)(.*)', s)
+    if match:
+        integer_part = int(match.group(1))
+        string_part = match.group(2) if match.group(2) else ''
+        return integer_part, string_part
+    else:
+        raise Value
 
+def extract_lvls_and_cases(simulation_data):
+    d = [split_string(k) for k in simulation_data.keys()]
+    lvls = np.array([di[0] for di in d], dtype=int)
+    cases = [di[1] for di in d]
+    return lvls, cases
 
 def extract_from_openfoam(experiments, x = 0.3, stride=10):
     pos, h, u, w, iteration = extract_1d_data_fast(directory, pos=[x, 0, 0], stride=stride)
-    dt = 0.01
+    dt = 0.005
     time = dt * iteration
     experiments[str(x)] = {"x": pos.copy(), "h": h.copy(), "u":u.copy(), "w": w.copy(), "time":time}
     
@@ -192,9 +230,10 @@ def shear_at_bottom_moments(moments):
 #     )
 #     io.generate_vtk(os.path.join(settings.output_dir, 'ShallowMoments.h5'))
 
-def load_simulation_data(simulation_data, level):
-    x_smm, Q_smm, Qaux_smm, timeline_smm = io.load_timeline_of_fields_from_hdf5(os.path.join(f'outputs/ijrewhs_cpl_{level}', "ShallowMoments.h5" ))
-    simulation_data[str(level)] = {'x': x_smm, 'Q': Q_smm, 'Qaux': Qaux_smm, 'time': timeline_smm}
+def load_simulation_data(simulation_data, level, case):
+    x_smm, Q_smm, Qaux_smm, timeline_smm = io.load_timeline_of_fields_from_hdf5(os.path.join(f'outputs/ijrewhs_cpl_{level}{case}', "ShallowMoments.h5" ))
+    # print(f'TIMELINE max {timeline_smm.max()}')
+    simulation_data[f'{level}{case}'] = {'x': x_smm, 'Q': Q_smm, 'Qaux': Qaux_smm, 'time': timeline_smm}
     return simulation_data
 
 def get_x(x, X):
@@ -209,25 +248,41 @@ def get_t(t, T):
 def plot_h(ax, x, experiments, openfoam_projected, simulation_data):
     h_of = experiments[str(x)]['h']
     time_of = experiments[str(x)]['time']
-    ax.plot(time_of, h_of, '*', label=f'openfoam')
-    for level in simulation_data.keys():
+    ax.plot(time_of[::10], h_of[::10], 'k+',  label=f'openfoam')
+    colors = ['b--', 'g-.', 'r', 'c.', 'm', 'y--']
+    for il, level in enumerate(simulation_data.keys()):
         x_smm = get_x(x, simulation_data[level]['x'])
         h_smm = simulation_data[level]['Q'][:, 0, x_smm]
         time_smm = simulation_data[level]['time']
-        ax.plot(time_smm, h_smm, '--', label=f'level {level}')
+        ax.plot(time_smm, h_smm, colors[il], label=f'level {level}')
     
 def plot_u_mean(ax, x, experiments, openfoam_projected, simulation_data):
     h_of = openfoam_projected[str(x)]['h']
     u_of = openfoam_projected[str(x)]['moments'][:, 0] / h_of
     time_of = openfoam_projected[str(x)]['time']
     
-    ax.plot(time_of, u_of, '*', label=f'openfoam')
-    for level in simulation_data.keys():
+    ax.plot(time_of[::10], u_of[::10], 'k+', label=f'openfoam')
+    colors = ['b--', 'g-.', 'r', 'c.', 'm', 'y--']
+    for il, level in enumerate(simulation_data.keys()):
         x_smm = get_x(x, simulation_data[level]['x'])
         h_smm = simulation_data[level]['Q'][:,0, x_smm]
         u_smm = simulation_data[level]['Q'][:,1, x_smm] / h_smm
         time_smm = simulation_data[level]['time']
-        ax.plot(time_smm, u_smm, '--', label=f'level {level}')
+        ax.plot(time_smm, u_smm, colors[il], label=f'level {level}')
+        
+def plot_discharge(ax, x, experiments, openfoam_projected, simulation_data):
+    h_of = openfoam_projected[str(x)]['h']
+    u_of = openfoam_projected[str(x)]['moments'][:, 0] / h_of
+    time_of = openfoam_projected[str(x)]['time']
+    colors = ['b--', 'g-.', 'r', 'c.', 'm', 'y--']
+    ax.plot(time_of[::10], h_of[::10] * u_of[::10], 'k+', label=f'openfoam')
+    for il, level in enumerate(simulation_data.keys()):
+
+        x_smm = get_x(x, simulation_data[level]['x'])
+        h_smm = simulation_data[level]['Q'][:,0, x_smm]
+        u_smm = simulation_data[level]['Q'][:,1, x_smm] / h_smm
+        time_smm = simulation_data[level]['time']
+        ax.plot(time_smm, h_smm * u_smm, colors[il], label=f'level {level}')
     
 def plot_moment(ax, x, field, experiments, openfoam_projected, simulation_data):
     h_of = openfoam_projected[str(x)]['h']
@@ -284,7 +339,8 @@ def error_bottom_velocity(x, experiments, openfoam_projected, simulation_data):
 
 
 def plot_velocity_profile(ax, x, t, experiments, openfoam_projected, simulation_data):
-    lvl = np.array(list(simulation_data.keys()), dtype=int).max()
+    lvls, cases = extract_lvls_and_cases(simulation_data)
+    lvl = lvls.max()
     basis_analytical =Legendre_shifted(order=lvl+1)
     basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
     basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
@@ -292,17 +348,24 @@ def plot_velocity_profile(ax, x, t, experiments, openfoam_projected, simulation_
     t_of = get_t(t, experiments[str(x)]['time'])
     u_of = experiments[str(x)]['u'][t_of, :]
     # time_of = openfoam_projected[str(x)]['time']
-    ax.plot(u_of, z, '*', label=f'openfoam')
+    ax.plot(u_of, z, 'k+', label=f'openfoam')
+    ax.plot(np.mean(u_of) * np.ones_like(u_of), z, 'k', label=f'of-mean')
     
-    for level in simulation_data.keys():
+    colors = ['b--', 'g-.', 'r', 'c.', 'm', 'y--']
+
+    
+    for il, level in enumerate(simulation_data.keys()):
         x_smm = get_x(x, simulation_data[level]['x'])
         t_smm = get_t(t, simulation_data[level]['time'])
         h_smm = simulation_data[level]['Q'][t_smm,0, x_smm]
         moments = simulation_data[level]['Q'][t_smm,1:, x_smm] / h_smm
         u_smm = moments[0] * basis[0](z)
-        for i in range(1,int(level)+1):
+        for i in range(1,lvls[il]+1):
             u_smm += moments[i] * basis[i](z)
-        ax.plot(u_smm.copy(), z, '--', label=f'level {level}')
+        ax.plot(u_smm.copy(), z, colors[il%len(colors)], label=f'level {level}')
+        # ax.plot(np.mean(u_smm) * np.ones_like(u_smm)[::5], z[::5], colors[il%len(colors)]+'.', label=f'lvl-mean {level}')
+        
+        # print(f'mean-of - mean_smm_{level}: {np.mean(u_of) - np.mean(u_smm)}')
         
 def plot_velocity_profile_projected(ax, x, t, experiments, openfoam_projected, simulation_data):
     lvl = 10
@@ -356,17 +419,18 @@ def plot_velocity_profile_interface(ax, t, interface, simulation_data):
     u_of = u_if
     z_of = z
         
-    ax.plot(u_of, z_of, '*', label=f'openfoam')
-    
-    levels = [0, 2, 4, 8]
-    for level in levels:
+    ax.plot(u_of, z_of, 'k+', label=f'openfoam')
+    colors = ['b--', 'g-.', 'r', 'c.', 'm', 'y--']
+
+    levels = [0, 1, 4, 8]
+    for il, level in enumerate(levels):
         u_smm = moments[0] * basis[0](z)
         for i in range(1,int(level)+1):
             u_smm += moments[i] * basis[i](z)
         # z_smm , u_smm = interpolate_noslip(u_smm, z)
         # up = np.zeros_like(zp)
         # up[1:] = u_smm
-        ax.plot(u_smm.copy(), z, '--', label=f'level {level}')
+        ax.plot(u_smm.copy(), z, colors[il], label=f'level {level}')
         
 def error_velocity_profile_interface(t, interface, simulation_data):
     lvl = 10
@@ -387,7 +451,7 @@ def error_velocity_profile_interface(t, interface, simulation_data):
         
     dz = z_of[1]-z_of[0]
 
-    levels = list(range(lvl))
+    levels, = list(range(lvl))
     for il, level in enumerate(levels):
         u_smm = moments[0] * basis[0](z)
         for i in range(1,int(level)+1):
@@ -405,7 +469,8 @@ def error_velocity_profile_interface(t, interface, simulation_data):
         
         
 def compute_error_at_x_t(error, x, t, experiments, openfoam_projected, simulation_data):
-    lvl = np.array(list(simulation_data.keys()), dtype=int).max()
+    lvls, cases = extract_lvls_and_cases(simulation_data)
+    lvl= lvls.max()
     basis_analytical =Legendre_shifted(order=lvl+1)
     basis_readable = [basis_analytical.get(k) for k in range(lvl+1)]
     basis = [basis_analytical.get_lambda(k) for k in range(lvl+1)]
@@ -414,13 +479,13 @@ def compute_error_at_x_t(error, x, t, experiments, openfoam_projected, simulatio
     u_of = experiments[str(x)]['u'][t_of, :]
     dz = z[1]-z[0]
     time_of = openfoam_projected[str(x)]['time']    
-    for il, level in enumerate(simulation_data.keys()):
-        x_smm = get_x(x, simulation_data[level]['x'])
-        t_smm = get_t(t, simulation_data[level]['time'])
-        h_smm = simulation_data[level]['Q'][t_smm,0, x_smm]
-        moments = simulation_data[level]['Q'][t_smm,1:, x_smm] / h_smm
+    for il, case in enumerate(simulation_data.keys()):
+        x_smm = get_x(x, simulation_data[case]['x'])
+        t_smm = get_t(t, simulation_data[case]['time'])
+        h_smm = simulation_data[case]['Q'][t_smm,0, x_smm]
+        moments = simulation_data[case]['Q'][t_smm,1:, x_smm] / h_smm
         u_smm = moments[0] * basis[0](z)
-        for i in range(1,int(level)+1):
+        for i in range(1,lvls[il]+1):
             u_smm += moments[i] * basis[i](z)
         
         error[il] = np.sqrt(np.sum(dz * (u_of - u_smm)**2))
@@ -481,10 +546,10 @@ def get_of_projected(compute_proj):
 def get_simulation(compute_sim, stride):
     if compute_sim:
         simulation_data = {}
-        for level in sim_levels:
+        for level, case in zip(sim_levels, sim_case):
             # print(level)
             # simulate(level=level, inflow_bc = openfoam_projected['0.5'], friction=['newtonian', 'newtonian_boundary_layer'], param={"g": 9.81, "nu": 1.034*10**(-6), "rho": 1, "eta": 0., "eta_bulk": 0.})
-            simulation_data = load_simulation_data(simulation_data, level)
+            simulation_data = load_simulation_data(simulation_data, level, case)
         with open(f'simulation_data_{folder}.pkl', 'wb') as f:
             pickle.dump(simulation_data, f)
         print('SIMULATION COMPLETE')
@@ -502,20 +567,35 @@ if __name__ == '__main__':
     # folder = 'VTK_turbulent'
     # folder = 'VTK_bottom'
     folder = 'exp_reference'
-    stride=50
+    stride=1
     compute_exp = False
     compute_proj = False
     compute_sim = True
     compute_interface = False
     #offset_extraction = 5
-    samples_experiments = [0.5, 1., 1.5, 2., 2.5]
-    VP_time = [2., 3., 4., 5.]
+    samples_experiments = [0.5, 1.0, 1.5, 2.5, 3.5, 4.5]
+    VP_time = [1.0, 1.5, 2.0, 2.5, 3.0, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5]
     # VP_time = [0.5, 1.5, 2.5, 3.5, 4.5]
 
     VP_pos = samples_experiments
-    sim_levels = [4]
+    # sim_levels = [0, 2, 4, 6, 8]
+    # sim_case = ['_result', '_result', '_result', '_result', '_result']
     
-
+    # sim_levels = [0, 8, 8]
+    # sim_case = ['_r_chezy30', '_r_nonut', '_r_nut', '_r_nonut', '_r_nut']
+    
+    # sim_levels = [6, 6, 6, 6]
+    # sim_case = ['_test_slipmod_7', '_bl_lambda1', '_lambda1_nu2_1', '_lambda7_nu2_2']
+    # sim_case = ['_00070_manning80', '_11170_h_of_integrated', '_11170_', '_11170_nut_bl_low']
+    # sim_case = ['_00070_manning80', '_00070_manning100', '_11170_nut_bl', '_11170_nut_bl', '_11170_nut_bl', '_11170_lvl8', '_11170_lvl8-2']
+    # sim_levels = [0, 0, 1, 4, 8, 8, 8]
+    
+    sim_case = ['_00070_manning100', '_11170_r', '_11170_r', '_11170_r-no', '_11170_r-no2', '_11170_r-no3']
+    sim_levels = [0, 6, 8, 6, 6, 6]  
+    
+    # sim_case = ['_00070_manning80', '_11170_nut_bl']
+    # sim_levels = [0,8]
+    
     directory = os.path.join(main_dir, os.path.join(folder_base, folder))
     z = np.linspace(0, 1, 100)
 
@@ -528,11 +608,103 @@ if __name__ == '__main__':
     interface_data = get_interface('export2', compute_interface, stride)
     print('LOAD interface complete')
     
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Height----------------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+
+    
+    fig, ax = create_mosaic_3x1_plot()
+    x = VP_pos[2]
+    plot_h(ax[0], x, experiments, openfoam_projected, simulation_data)
+    plot_u_mean(ax[1], x, experiments, openfoam_projected, simulation_data)
+    plot_discharge(ax[2], x, experiments, openfoam_projected, simulation_data)
+    ax = update_mosaic_legend(ax, legend=['OF', 'SWE', 'SMM-1', 'SMM-4','SMM-8'])
+    # ax = update_mosaic_legend(ax, legend=['OF', '80', '100', '8.0','8.1', '8.2'])
+    fig.suptitle(f'flow characteristics over time at $x=1.5m$')
+    ax[0].set_ylabel(r'$h(t,x=1.5)$ (m)')
+    ax[1].set_ylabel(r'$\bar{u}(t,x=1.5)$ (m/s)')
+    ax[2].set_ylabel(r'$q=h\bar{u}(t,x=1.5)$ (m^2/s)')
+    ax[0].set_xlabel(r'$t$ (s)')
+    ax[1].set_xlabel(r'$t$ (s)')
+    ax[2].set_xlabel(r'$t$ (s)')
+    ax[0].set_title(f'a) \n water height')
+    ax[1].set_title(f'b) \n mean velocity')
+    ax[2].set_title(f'c) \n discharge')
+    ax[0].grid(True)
+    ax[1].grid(True)
+    ax[2].grid(True)
+    fig.savefig(os.path.join(main_dir, 'images_ijrewhs/timeline'))
+    plt.show()
+    
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Velocity profiles (PLOT)----------------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+    
+    fig, ax = create_mosaic_3x1_plot()
+    t = 6.5
+    x = 1.5
+    ax[0].set_title(f'a) \n $x=1.5m, t=6.5s$')
+    plot_velocity_profile(ax[0], x, t, experiments, openfoam_projected, simulation_data)
+    t = 4.5
+    x = 2.5
+    ax[1].set_title(f'b) \n $x=2.5m, t=4.5s$')
+    plot_velocity_profile(ax[1], x, t, experiments, openfoam_projected, simulation_data)
+    t = 9.5
+    x = 4.5
+    ax[2].set_title(f'c) \n $x=4.5m, t=9.5s$')
+    plot_velocity_profile(ax[2], x, t, experiments, openfoam_projected, simulation_data)
+    ax = update_mosaic_legend(ax, legend=['OF', 'OF (mean)', 'SWE', 'SMM-1', 'SMM-4', 'SMM-8'])
+    # ax = update_mosaic_legend(ax, legend=['OF', 'OF(mean)', '80', '100', '8.0','8.1', '8.2'])
+
+    
+    
+    #--------------------------------------------------------------------------------------------------------
+    #-----------------------------------------Velocity at interface----------------------------------------------
+    #--------------------------------------------------------------------------------------------------------
+
+    fig, ax = create_mosaic_plot()
+    for it, t in enumerate([1.5, 5.5]):
+        # ax[it].set_xlim(0., 0.3)
+        plot_velocity_profile_interface(ax[it], t, interface_data , simulation_data)
+        # ax = update_mosaic_legend(ax, legend=['OF', 'SWE', 'SMM-1','SMM-4', 'SMM-8'])
+        ax = update_mosaic_legend(ax, legend=['OF', 'SWE', 'SMM-1', 'SMM-4','SMM-8'])
+
+    
+        fig.suptitle(f'vertical velocity profiles at coupling interface')
+        ax[0].set_xlabel(r'$u(t=1.5s,z/h)$ (m/s)')
+        ax[1].set_xlabel(r'$u(t=5.5s,z/h)$ (m/s)')
+        ax[0].set_ylabel(r'$z/h$ (-)')
+        ax[1].set_ylabel(None)
+        ax[0].set_title(f'a) \n t=1.5s')
+        ax[1].set_title(f'b) \n t=5.5s')
+        ax[0].grid(True)
+        ax[1].grid(True)
+        ax[1].set_yticklabels([])
+        fig.savefig(os.path.join(main_dir, 'images_ijrewhs/interface'))
+        
+        # error_U, error_UU = error_velocity_profile_interface(t, interface_data, simulation_data)
+        # print(t)
+        # print(error_U)
+        # print(error_U[0]/error_U)
+        # print(error_UU)
+        # print(error_UU[0]/error_UU)
+        # print('=========================')
+    plt.show()
+    
     # timeline_exp = experiments['0.5']['time']
     # timeline_dat = simulation_data['4']['time']
     # print(timeline_exp)
     # print(timeline_dat)
     # print(np.intersect1d(timeline_exp, timeline_dat))
+    
+   
+    
+
+    # for i, x in enumerate([VP_pos[-2], VP_pos[-1]]):
+    #     plot_h(ax[i], x, experiments, openfoam_projected, simulation_data)
+        # plot_u_mean(ax[1, i], x, experiments, openfoam_projected, simulation_data)
+
+        
 
     #--------------------------------------------------------------------------------------------------------
     #----------------------------------------------Inflow----------------------------------------------------
@@ -563,15 +735,31 @@ if __name__ == '__main__':
     #-----------------------------------------Velocity profiles----------------------------------------------
     #--------------------------------------------------------------------------------------------------------
 
-    fig, ax = plt.subplots(len(VP_time),len(VP_pos))
-    for it, t in enumerate(VP_time):
-        for ix, x in enumerate(VP_pos):
-            ax[it, ix].set_xlim(0., 0.3)
-            plot_velocity_profile(ax[it, ix], x, t, experiments, openfoam_projected, simulation_data)
-    plt.show()
+    # fig, ax = plt.subplots(len(VP_pos),len(VP_time))
+    # for it, t in enumerate(VP_time):
+    #     for ix, x in enumerate(VP_pos):
+    #         ax[ix, it].set_xlim(0., 0.3)
+    #         plot_velocity_profile(ax[ix, it], x, t, experiments, openfoam_projected, simulation_data)
+    #         ax[ix, 0].set_ylabel(f'{x}')
+    # plt.legend()
+    # plt.show()
     
-    # fig, ax = plt.subplots()
-    # plot_velocity_profile(ax, 1., 2., experiments, openfoam_projected, simulation_data)
+    
+    
+    # fig.suptitle(f'vertical velocity profiles')
+    # ax[0].set_xlabel(r'$u(t,z/h)$ (m/s)')
+    # ax[1].set_xlabel(r'$u(t,z/h)$ (m/s)')
+    # ax[2].set_xlabel(r'$u(t,z/h)$ (m/s)')
+    # ax[0].set_ylabel(r'$z/h$ (-)')
+    # ax[1].set_ylabel(None)
+    # ax[2].set_ylabel(None)
+    # ax[0].grid(True)
+    # ax[1].grid(True)
+    # ax[2].grid(True)
+    # ax[1].set_yticklabels([])
+    # ax[2].set_yticklabels([])
+    # fig.savefig(os.path.join(main_dir, 'images_ijrewhs/VP'))
+    
     # plt.show()
     
     #--------------------------------------------------------------------------------------------------------
@@ -604,25 +792,10 @@ if __name__ == '__main__':
     #     for ix, x in enumerate(VP_pos):
     #        compute_error_at_x_t(error[:, it, ix], x, t, experiments, openfoam_projected, simulation_data)
     # for il, lvl in enumerate(levels):
-    #     print(f'Level: {lvl}')
-    #     print(error[il, :, 0])
+    #     print(f'Level: {lvl} @ x: {x}')
+    #     print(error[il, -1, 1])
     
-    #--------------------------------------------------------------------------------------------------------
-    #-----------------------------------------Velocity at interface----------------------------------------------
-    #--------------------------------------------------------------------------------------------------------
 
-    # fig, ax = plt.subplots(len(VP_time))
-    # for it, t in enumerate(VP_time):
-    #     ax[it].set_xlim(0., 0.3)
-    #     plot_velocity_profile_interface(ax[it], t, interface_data , simulation_data)
-    #     error_U, error_UU = error_velocity_profile_interface(t, interface_data, simulation_data)
-    #     print(t)
-    #     print(error_U)
-    #     print(error_U[0]/error_U)
-    #     print(error_UU)
-    #     print(error_UU[0]/error_UU)
-    #     print('=========================')
-    # plt.show()
 
 # TODO
 # compare interface and reference VP at 0.5 for OF
