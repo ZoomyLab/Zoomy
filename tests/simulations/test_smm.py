@@ -117,16 +117,16 @@ def test_smm_analytical():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d():
-    level = 0
+    level = 4
     settings = Settings(
         name="ShallowMoments",
-        parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+        parameters={"g": 9.81, "C": 1.0, "nu": 0.000001, "lamda": 7, "rho":1, "eta":1},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.constant(dt = 0.01),
-        time_end=1.0,
+        time_end=5.0,
         output_snapshots=100,
-        output_dir = 'outputs/output_smm_1d'
+        output_dir = 'outputs/output_test'
     )
 
     bc_tags = ["left", "right"]
@@ -134,13 +134,13 @@ def test_smm_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Wall(physical_tag=tag, momentum_field_indices=[[i] for i in range(1, level+1)])
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
     ic = IC.RP(
-        high=lambda n_field: np.array([2.0, 0.0] + [0.0 for l in range(level)]),
-        low=lambda n_field: np.array([1.0, 0.0] + [0.0 for l in range(level)]),
+        high=lambda n_field: np.array([0.2, 0.0] + [0.0 for l in range(level)]),
+        low=lambda n_field: np.array([0.1, 0.0] + [0.0 for l in range(level)]),
     )
     model = ShallowMoments(
         fields=2 + level,
@@ -148,10 +148,10 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["chezy", "newtonian"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "newtonian_boundary_layer_classic", "slip_mod", "newtonian_turbulent"]},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
+    mesh = petscMesh.Mesh.create_1d((-1, 30), 1000)
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings
