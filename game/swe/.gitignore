@@ -1,0 +1,9 @@
+public
+__pycache__
+/.quarto/
+*.quarto*
+.venv
+_output
+_output*
+_freeze
+*.vscode*
