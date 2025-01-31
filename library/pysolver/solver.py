@@ -56,6 +56,7 @@ class Settings:
     debug: bool = False
     profiling: bool = False
     compute_gradient: bool = False
+    precice_config_path: str = "/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml"
 
 
 def _initialize_problem(model, mesh, settings=None):
@@ -1111,13 +1112,11 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
     q_ghost = Qnew[:, idx]
     h = q_ghost[0]
 
-    #print(f'pressure: {ve}')
-    #print(f'Qold: {q_ghost}')
     # hydrostatic pressure
-    p_hyd_sms = 1000 * 9.81 * (h-z) * (z<=h)
+    #p_hyd_sms = 1000 * 9.81 * (h-z) * (z<=h)
 
     # filter water velocities
-    threshold = 0.2
+    threshold = 0.55
     sort_order = z.argsort()
     al_sorted = al[sort_order]
     i_water = 0
@@ -1130,72 +1129,48 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
         assert False
     #i_water = (z*(al > threshold)).argmax()
 
+
+
     h_a = z[i_water]
     h_b = z[i_water-1]
     a_a = al[i_water]
     a_b = al[i_water-1]
-
     h_lin = h_b + (h_a - h_b)/(a_a - a_b) * (threshold - a_b)
     h_of = h_lin
-    #print('--------------------')
-    #print(h_lin, h_a, h_b)
-    #print('--------------------')
+
+    h_of = np.trapz(al, z)
 
     ve_water = ve[:i_water, 0]
     ve_of_water = np.zeros_like(pr)
     ve_of_water[:i_water] = ve_water
-    #print('---------------alpha--------------------')
-    #print(al)
-    #print(al[:i_water])
-    #print('-----------------z---------------------')
-    #print(z)
     z_water = z[:i_water]
-    #print(z_water)
-    h_of = z_water.max()
     z_water = (z_water-z_water.min()) / (z_water.max()-z_water.min())
+
+
+
     # project velocities to moments
     alpha = model.basis.basis.reconstruct_alpha(ve_water, z_water)
+
+    # factor for mass conservation
+    #discharge_3d = np.trapz(al * ve[:, 0], z)
+    #discharge_2d =  h*alpha[0]
+    #if discharge_2d <= 0.:
+    #    beta = 1.
+    #else:
+    #    beta = discharge_3d/discharge_2d
+    #alpha[0] *= beta
+    #levels = model.levels
+    #q_ghost[1:2+levels] = h*alpha[:levels+1]
     levels = model.levels
     q_ghost[1:2+levels] = h_of*alpha[:levels+1]
     Qnew[:, idx] = q_ghost
 
-    #print('-----------------h---------------------')
-    #print(h_of)
-    #print(h)
-
-    #p_hyd_of = 1000 * 9.81 * (h_of-z) * (z<=h_of)
-    #p_hyd_of = 1000 * 9.81 * (h-z) * (z<=h)
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    p_hyd_of = 1000 * 9.81 * h_of * al
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    # WORKING WORKING WORKING
-    #p_hyd_of = 1000 * 9.81 * (h-z) * (h>=z) * al
-
-    #p_hyd_of = 1000 * 9.81 * h * al + (1-al) * (al < 0.3) * (-10.)
-    al_bin = np.where(al > 0.2, 1., 0.)
-    p_hyd_of = np.zeros_like(al)
-    p_hyd_of[:i_water] = 1000 * 9.81 * h
-
-
-    p_hyd = 1000 * 9.81 * h_lin * al 
-    p_dyn = 1/2 * 995.21 *ve_of_water**2
+    rho = 1000. * al + 1. * (1-al)
+    p_hyd_of_abs = rho * 9.81 * h
+    #p_hyd = 1000 * 9.81 * h_lin * al 
+    #p_dyn = 1/2 * 1000 *ve_of_water**2
  
-    #pressure = 1.0 * p_hyd
-    pressure = p_hyd_of
-    #pressure = np.where(pressure < 2., 1.2, pressure)
-    # pressure[:i_water] = 1000 * 9.81 * h
-    #pressure = 0 * np.ones_like(p_hyd_sms) 
-    #pressure[:i_water] = -300
-    #pressure = 0.*np.ones_like(pressure)
-    #print('-----------------p---------------------')
-    #print(h)
-    #print(z)
-    #print(pressure)
+    pressure = p_hyd_of_abs
 
     dx = (5-0.5)/(Qnew.shape[1]-2)
     h0 = Qnew[0, 0]
@@ -1363,7 +1338,7 @@ def precice_fvm(
 
     parser = argparse.ArgumentParser()
     #parser.add_argument("configurationFileName", help="Name of the xml precice configuration file.", nargs='?', type=str, default=f"{os.path.join(main_dir, 'tests/simulations/precice_configurations/precice-config.xml')}")
-    parser.add_argument("configurationFileName", help="Name of the xml precice configuration file.", nargs='?', type=str, default="/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml")
+    parser.add_argument("configurationFileName", help="Name of the xml precice configuration file.", nargs='?', type=str, default=settings.precice_config_path)
 
     try:
         args = parser.parse_args()
