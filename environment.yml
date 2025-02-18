@@ -1,7 +1,6 @@
-name: sms
+name: sms-new
 channels:
   - conda-forge
-  # - defaults
 dependencies:
   - python=3.9
   - pip
@@ -23,8 +22,11 @@ dependencies:
     - trame-vtk
     - trame-vuetify
     - seaborn
+    - jax
+    - jaxlib
+    - pyprecice
 variables:
-  PETSC_DIR: '/home/ingo/petsc'
+  PETSC_DIR: '/home/ingo/Git/petsc'
   PETSC_ARCH: 'linux-gnu'
   SMS: '/home/ingo/Git/sms'
   PYTHONPATH: ':/home/ingo/Git/sms'

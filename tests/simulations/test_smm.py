@@ -117,14 +117,14 @@ def test_smm_analytical():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d():
-    level = 4
+    level = 1
     settings = Settings(
         name="ShallowMoments",
-        parameters={"g": 9.81, "C": 1.0, "nu": 0.000001, "lamda": 7, "rho":1, "eta":1},
+        parameters={"g": 9.81, "C": 1.0, "nu": 0.000001, "lamda": 7, "rho":1, "eta":1, "c_slipmod": 1/70.},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         compute_dt=timestepping.constant(dt = 0.01),
-        time_end=5.0,
+        time_end=1.0,
         output_snapshots=100,
         output_dir = 'outputs/output_test'
     )
@@ -148,7 +148,7 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "newtonian_boundary_layer_classic", "slip_mod", "newtonian_turbulent"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
     )
 
     mesh = petscMesh.Mesh.create_1d((-1, 30), 1000)

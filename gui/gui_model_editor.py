@@ -5,7 +5,7 @@ from bokeh.plotting import figure
 
 pn.extension('codeeditor', 'mathjax', 'katex')
 
-import gui.test as test_code
+import gui.test_eqn as test_code
 from gui.docstring_crawler import get_class_code, get_class_function_names
 from gui.gui_elements import MyBasicOrganizer
 from library.model.model import ShallowWater

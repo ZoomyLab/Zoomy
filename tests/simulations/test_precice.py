@@ -72,12 +72,19 @@ if __name__ == "__main__":
     nut = 0.0000145934315
     #nut = 0.0000125934315
 
+    #test_smm_1d(level=6, process='_1', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
+    #test_smm_1d(level=4, process='_2', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
+    #test_smm_1d(level=2, process='_3', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
+    #test_smm_1d(level=1, process='_4', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
+    #test_smm_1d(level=8, process='_5', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
+
+
     #nut = 0.0000155934315
     #test_smm_1d(level=6, process='_1', case='r-no', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.0000001)
     #nut = 0.0000165934315
     #test_smm_1d(level=6, process='_2', case='r-no2', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.0000012)
     #nut = 0.0000175934315
-    test_smm_1d(level=6, process='_3', case='r-no3', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.0000014)
+    #test_smm_1d(level=6, process='_3', case='r-no3', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.0000014)
 
     #test_smm_1d(level=8, process='_2', case='nut_bl-r', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
     #test_smm_1d(level=4, process='_3', case='nut_bl-r', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
