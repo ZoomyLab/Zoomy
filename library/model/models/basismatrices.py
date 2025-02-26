@@ -1,13 +1,50 @@
+import os
 import numpy as np
+from sympy import integrate, diff
+from sympy.abc import x
+from time import time as get_time
+
 from library.pysolver.solver import *
 from library.model.model import *
 from library.model.models.basisfunctions import Legendre_shifted
 
 class Basismatrices():
-    def __init__(self, basis=Legendre_shifted()):
+    def __init__(self, basis=Legendre_shifted(), use_cache=True, cache_path='.cache'):
         self.basisfunctions = basis
-    
-    def compute_matrices(self, level):
+        self.use_cache = use_cache
+        self.cache_dir = cache_path
+        self.cache_subdir = f'basismatrices/{basis.name}/{basis.order}'
+
+    def load_cached_matrices(self):
+        main_dir = os.getenv("SMS")
+        path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
+        failed = False
+        try:
+            self.M = np.load(os.path.join(path, 'M.npy'))
+            self.A = np.load(os.path.join(path, 'A.npy'))
+            self.B = np.load(os.path.join(path, 'B.npy'))
+            self.D = np.load(os.path.join(path, 'D.npy'))
+            self.DD = np.load(os.path.join(path, 'DD.npy'))
+            self.D1 = np.load(os.path.join(path, 'D1.npy'))
+            self.DT = np.load(os.path.join(path, 'DT.npy'))
+        except:
+            failed = True
+        return failed
+
+    def save_cached_matrices(self):
+        main_dir = os.getenv("SMS")
+        path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
+        os.makedirs(path, exist_ok=True)
+        np.save(os.path.join(path, 'M'),  self.M )
+        np.save(os.path.join(path, 'A'),  self.A )
+        np.save(os.path.join(path, 'B'),  self.B )
+        np.save(os.path.join(path, 'D'),  self.D )
+        np.save(os.path.join(path, 'DD'), self.DD)
+        np.save(os.path.join(path, 'D1'), self.D1)
+        np.save(os.path.join(path, 'DT'), self.DT)
+
+    def _compute_matrices(self, level):
+        start = get_time()
         self.M = np.empty((level+1, level+1), dtype=float)
         self.A = np.empty((level+1, level+1, level+1), dtype=float)
         self.B = np.empty((level+1, level+1, level+1), dtype=float)
@@ -26,6 +63,15 @@ class Basismatrices():
                     self.A[k, i, j] = self._A(k, i, j)
                     self.B[k, i, j] = self._B(k, i, j)
                     self.DT[k, i, j] = self._DT(k, i, j)
+        print(f'Time compute matrices: {get_time() - start}')
+
+    
+    def compute_matrices(self, level):
+        if self.use_cache:
+            failed = self.load_cached_matrices()
+            if failed:
+                self._compute_matrices(level)
+                self.save_cached_matrices()
 
     def enforce_boundary_conditions_lsq(self, rhs=np.zeros(2), dim=1):
         level = len(self.basisfunctions.basis)-1
@@ -199,7 +245,7 @@ class Basismatrices():
     def _DT(self, k, i, j):
         return integrate(diff(self.basisfunctions.eval(k, x), x) * diff(self.basisfunctions.eval(i, x), x) * self.basisfunctions.eval(j, x), (x, 0, 1))
 
-class BasisNoHOM(Basis):
+class BasisNoHOM(Basismatrices):
     def _A(self, k, i, j):
         count = 0
         # count += float(k > 0)

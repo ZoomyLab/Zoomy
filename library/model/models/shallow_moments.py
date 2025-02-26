@@ -15,6 +15,7 @@ from library.model.models.base import register_sympy_attribute, eigenvalue_dict_
 from library.model.models.base import Model
 import library.model.initial_conditions as IC
 from library.model.models.basisfunctions import *
+from library.model.models.basismatrices import *
 
 
 
@@ -31,13 +32,13 @@ class HybridSFFSMM(Model):
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basis()
+        basismatrices=Basismatrices()
     ):
-        self.basis = basis
+        self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 3
-        self.basis.compute_matrices(self.levels)
+        self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -74,18 +75,18 @@ class HybridSFFSMM(Model):
         # flux_x[1] = 0
         # for i in range(self.levels+1):
         #     for j in range(self.levels+1):
-        #         flux_x[1] += ha[i] * ha[j] / h * self.basis.A[0, i, j] / self.basis.M[ 0, 0 ]
+        #         flux_x[1] += ha[i] * ha[j] / h * self.basismatrices.A[0, i, j] / self.basismatrices.M[ 0, 0 ]
         # higher order moments (SMM)
         for k in range(1, self.levels+1):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
-                    flux_x[k+1] += h * a[i] * a[j] * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux_x[k+1] += h * a[i] * a[j] * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         # P
         flux_x[-1] = 2* P11 * u
         for k in range(1, self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    flux_x[-1] += a[i] * a[j] * a[k] * self.basis.A[k, i, j] 
+                    flux_x[-1] += a[i] * a[j] * a[k] * self.basismatrices.A[k, i, j] 
         return [flux_x]
 
     def nonconservative_matrix(self):
@@ -108,7 +109,7 @@ class HybridSFFSMM(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
         nc[-1, -1] = u
         return [nc]
 
@@ -168,13 +169,13 @@ class ShallowMomentsAugmentedSSF(Model):
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basis()
+        basis=Legendre_shifted()
     ):
-        self.basis = basis
+        self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 2
-        self.basis.compute_matrices(self.levels)
+        self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -196,9 +197,9 @@ class ShallowMomentsAugmentedSSF(Model):
         sum_aiMii = 0
         N = self.levels
         for i, hai in enumerate(ha):
-            sum_aiMii += hai * self.basis.M[i+1, i+1] / h
+            sum_aiMii += hai * self.basismatrices.M[i+1, i+1] / h
         
-        aN = sympy.sqrt((P - h * sum_aiMii) / (h * self.basis.M[N, N]))
+        aN = sympy.sqrt((P - h * sum_aiMii) / (h * self.basismatrices.M[N, N]))
         # now I want to include u0
         ha = Q[1:]
         ha[-1] = aN * h
@@ -217,7 +218,7 @@ class ShallowMomentsAugmentedSSF(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         flux[-1] = 2* P11 * ha[0] / h
         return [flux]
 
@@ -234,7 +235,7 @@ class ShallowMomentsAugmentedSSF(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
         for k in range(nc.shape[1]):
             nc[-1, k] = 0
         nc[-1, 1] = - P11
@@ -290,14 +291,14 @@ class ShallowMoments(Model):
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basis()
+        basis=Basismatrices()
     ):
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 2
-        self.basis = basis
-        self.basis.basis = type(self.basis.basis)(order=self.levels)
-        self.basis.compute_matrices(self.levels)
+        self.basismatrices = basis
+        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(order=self.levels)
+        self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -321,7 +322,7 @@ class ShallowMoments(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux[k+1] +=  ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux[k+1] +=  ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         return [flux]
 
     def nonconservative_matrix(self):
@@ -336,7 +337,7 @@ class ShallowMoments(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -=  ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc[k+1, i+1] -=  ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
         return [nc]
 
     def eigenvalues(self):
@@ -392,8 +393,8 @@ class ShallowMoments(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
-                out[1+k] += -p.nu/h *  ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                out[1+k] += -p.nu/h *  ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
         return out
 
     def newtonian_no_ibp(self):
@@ -408,8 +409,8 @@ class ShallowMoments(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
-                out[1+k] += -p.nu/h *  ha[i]  / h * self.basis.DD[k, i]/ self.basis.M[k, k]
+                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                out[1+k] += -p.nu/h *  ha[i]  / h * self.basismatrices.DD[k, i]/ self.basismatrices.M[k, k]
         return out
 
     def newtonian_turbulent(self):
@@ -432,7 +433,7 @@ class ShallowMoments(Model):
         for k in range(1+self.levels):
             for i in range(1+self.levels):
                 for j in range(1+self.levels):
-                    out[1+k] += -p.c_nut * nut[j]/h *  ha[i]  / h  * self.basis.DT[k, i, j]/ self.basis.M[k, k]
+                    out[1+k] += -p.c_nut * nut[j]/h *  ha[i]  / h  * self.basismatrices.DT[k, i, j]/ self.basismatrices.M[k, k]
         return out
 
     def newtonian_boundary_layer_classic(self):
@@ -442,13 +443,13 @@ class ShallowMoments(Model):
         h = self.variables[0]
         ha = self.variables[1:1+self.levels+1]
         p = self.parameters
-        phi_0 = [self.basis.basis.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basis.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [self.basismatrices.basis.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basismatrices.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
         tau_bot = 0
         for i in range(1+self.levels):
             tau_bot +=  ha[i] / h  * dphidx_0[i]
         for k in range(1+self.levels):
-            out[k+1] = - p.c_bl * p.eta * (p.nu + p.nut_bl) / h * tau_bot * phi_0[k] / self.basis.M[k, k]
+            out[k+1] = - p.c_bl * p.eta * (p.nu + p.nut_bl) / h * tau_bot * phi_0[k] / self.basismatrices.M[k, k]
         return out
 
 
@@ -459,12 +460,12 @@ class ShallowMoments(Model):
         h = self.variables[0]
         ha = self.variables[1:1+self.levels+1]
         p = self.parameters
-        phi_0 = [self.basis.basis.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basis.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [self.basismatrices.basis.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basismatrices.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
         dz_boundary_layer = 0.005
         u_bot = 0
         for i in range(1+self.levels):
-            u_bot += ha[i] / h / self.basis.M[i, i] 
+            u_bot += ha[i] / h / self.basismatrices.M[i, i] 
         tau_bot = p.nu * (u_bot - 0.)/dz_boundary_layer
         for k in range(1+self.levels):
             out[k+1] = - p.eta * tau_bot / h
@@ -499,7 +500,7 @@ class ShallowMoments(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
+                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basismatrices.M[k, k]
         return out
 
     def slip_mod(self):
@@ -518,7 +519,7 @@ class ShallowMoments(Model):
         for i in range(1+self.levels):
             ub += ha[i]  / h 
         for k in range(1, 1+self.levels):
-            out[1+k] += -1.*p.c_slipmod/p.lamda/p.rho * ub / self.basis.M[k, k]
+            out[1+k] += -1.*p.c_slipmod/p.lamda/p.rho * ub / self.basismatrices.M[k, k]
         return out
 
     def no_slip(self):
@@ -533,7 +534,7 @@ class ShallowMoments(Model):
         phi_0 = np.zeros(self.levels+1)
         ns_iterations = 2
         for k in range(self.levels+1):
-            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
         def f(j, a, a0, basis_0):
             out = 0
             for i in range(self.levels+1):
@@ -564,7 +565,7 @@ class ShallowMoments(Model):
         sqrt = sympy.sqrt(tmp)
         for k in range(1+self.levels):
             for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
+                out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
         return out
 
     def chezy_mean(self):
@@ -580,7 +581,7 @@ class ShallowMoments(Model):
         tmp = 0
         u = ha[0] / h 
         for k in range(1+self.levels):
-            out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * u**2
+            out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * u**2
         return out
 
     def chezy_ssf(self):
@@ -600,7 +601,7 @@ class ShallowMoments(Model):
         sqrt = sympy.sqrt(tmp)
         for k in range(1+self.levels):
             for l in range(1+self.levels):
-                out[1+k] += -(p.Cf * self.basis.M[k,k]) * ha[l] * sqrt / h 
+                out[1+k] += -(p.Cf * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
         return out
 
     def shear_new(self):
@@ -617,14 +618,14 @@ class ShallowMoments(Model):
         d_phi_0 = np.zeros(self.levels+1)
         phi_0 = np.zeros(self.levels+1)
         for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
         friction_factor = 0.
         for k in range(self.levels+1):
             friction_factor -= p.beta * d_phi_0[k] * ha[k]/h/h
         k = 0
         # for k in range(1+self.levels):
-        out[1+k] += friction_factor * phi_0[k] /(self.basis.M[k,k]) 
+        out[1+k] += friction_factor * phi_0[k] /(self.basismatrices.M[k,k]) 
         return out
 
     def shear(self):
@@ -641,13 +642,13 @@ class ShallowMoments(Model):
         d_phi_0 = np.zeros(self.levels+1)
         phi_0 = np.zeros(self.levels+1)
         for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
         friction_factor = 0.
         for k in range(self.levels+1):
             friction_factor -= p.beta * d_phi_0[k]  * ha[k]/h
         for k in range(self.levels+1):
-            out[1+k] += friction_factor * phi_0[k] /(self.basis.M[k,k])  / h
+            out[1+k] += friction_factor * phi_0[k] /(self.basismatrices.M[k,k])  / h
         return out
 
     def shear_crazy(self):
@@ -664,8 +665,8 @@ class ShallowMoments(Model):
         d_phi_0 = np.zeros(self.levels+1)
         phi_0 = np.zeros(self.levels+1)
         for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
         for k in range(self.levels+1):
             out[1+k] += -p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
         return out
@@ -683,7 +684,7 @@ class ShallowMoments(Model):
         p = self.parameters
         u = ha[0] / h 
         for k in range(1+self.levels):
-            out[1+k] += -1./p.kst**2 * p.g / h**(1/3) * u**2 * (self.basis.M[k,k])
+            out[1+k] += -1./p.kst**2 * p.g / h**(1/3) * u**2 * (self.basismatrices.M[k,k])
         return out
 
     def steady_state(self):
@@ -695,8 +696,8 @@ class ShallowMoments(Model):
         d_phi_0 = np.zeros(self.levels+1)
         phi_0 = np.zeros(self.levels+1)
         for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basis.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basis.basis.eval(k, x).subs(x, 0.)
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
         shear_factor = 0.
         u_bottom = 0.
         u_diff = ha[0]/h
@@ -705,7 +706,7 @@ class ShallowMoments(Model):
         for k in range(self.levels+1):
             shear_factor +=  d_phi_0[k] *  (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
         # for k in range(1, self.levels+1):
-        #     out[1+k] += - shear_factor *  np.abs(u_diff) * p.S *  phi_0[k] /(self.basis.M[k,k]) 
+        #     out[1+k] += - shear_factor *  np.abs(u_diff) * p.S *  phi_0[k] /(self.basismatrices.M[k,k]) 
         for k in range(1, self.levels+1):
             # out[1+k] += - p.A * np.abs(u_diff)* (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
             out[1+k] += - p.A * np.abs(ha[0]/h) * (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
@@ -726,8 +727,8 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
     def flux(self):
         flux = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basis.M)
-        ha[1:] -= self.variables[1] * np.diag(self.basis.M)[1:]
+        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
         flux[0] = ha[0]
         flux[1] = p.g * p.ez * h * h / 2
@@ -735,19 +736,19 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
 
         flux_hu = flux[1]
 
         for k in range(1,self.levels+1):
-            flux[k+1] += flux_hu / self.basis.M[k, k]
+            flux[k+1] += flux_hu / self.basismatrices.M[k, k]
         return [flux]
 
     def nonconservative_matrix(self):
         nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basis.M)
-        ha[1:] -= self.variables[1] * np.diag(self.basis.M)[1:]
+        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
         um = ha[0]/h
         # nc[1, 0] = - p.g * p.ez * h 
@@ -756,7 +757,7 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
         return [nc]
 
     def chezy(self):
@@ -767,8 +768,8 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basis.M)
-        ha[1:] -= self.variables[1] * np.diag(self.basis.M)[1:]
+        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
         tmp = 0
         for i in range(1+self.levels):
@@ -780,7 +781,7 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
                 out[1+k] += -1./(p.C**2) * ha[l]/h * sqrt
 
         for k in range(1+self.levels):
-            out[1+k] += out[1] / self.basis.M[k, k]
+            out[1+k] += out[1] / self.basismatrices.M[k, k]
 
         return out
 
@@ -804,7 +805,7 @@ class ShallowMomentsTurbulenceSimple(ShallowMoments):
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basis()
+        basis=Legendre_shifted()
     ):
         super().__init__(
             dimension=dimension,
@@ -833,13 +834,13 @@ class ShallowMoments2d(Model):
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basis()
+        basis=Legendre_shifted()
     ):
-        self.basis = basis
+        self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = int((self.n_fields - 1)/2)-1
-        self.basis.compute_matrices(self.levels)
+        self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
@@ -865,12 +866,12 @@ class ShallowMoments2d(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux_x[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux_x[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         for k in range(self.levels+1):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux_x[k+1+offset] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux_x[k+1+offset] += hb[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
 
         flux_y[0] = hb[0]
         flux_y[1+offset] = p.g * p.ez * h * h / 2
@@ -878,12 +879,12 @@ class ShallowMoments2d(Model):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux_y[k+1] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux_y[k+1] += hb[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         for k in range(self.levels+1):
             for i in range(self.levels+1):
                 for j in range(self.levels+1):
                     # TODO avoid devision by zero 
-                    flux_y[k+1+offset] += hb[i] * hb[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
+                    flux_y[k+1+offset] += hb[i] * hb[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
         return [flux_x, flux_y]
 
     def nonconservative_matrix(self):
@@ -902,8 +903,8 @@ class ShallowMoments2d(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc_x[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
-                    nc_y[k+1, i+1+offset] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc_x[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+                    nc_y[k+1, i+1+offset] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
 
         for k in range(1, self.levels+1):
             nc_x[k+1+offset, k+1] += vm
@@ -911,8 +912,8 @@ class ShallowMoments2d(Model):
         for k in range(self.levels+1):
             for i in range(1, self.levels+1):
                 for j in range(1, self.levels+1):
-                    nc_x[k+1+offset, i+1] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
-                    nc_y[k+1+offset, i+1+offset] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
+                    nc_x[k+1+offset, i+1] -= hb[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+                    nc_y[k+1+offset, i+1+offset] -= hb[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
         return [nc_x, nc_y]
 
     def eigenvalues(self):
@@ -962,8 +963,8 @@ class ShallowMoments2d(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
-                out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
+                out[1+k] += -p.nu/h * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
         return out
 
     def newtonian_boundary_layer(self):
@@ -975,12 +976,12 @@ class ShallowMoments2d(Model):
         ha = self.variables[1:1+self.levels+1]
         hb = self.variables[1+offset:1+self.levels+1+offset]
         p = self.parameters
-        phi_0 = [self.basis.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [self.basismatrices.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basismatrices.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -p.nu / h * ha[i] / h / self.basis.M[k, k] * phi_0[k] * dphidx_0[i]
-                out[1+k+offset] += -p.nu / h  * hb[i]  / h / self.basis.M[k, k]* phi_0[k] * dphidx_0[i]
+                out[1+k] += -p.nu / h * ha[i] / h / self.basismatrices.M[k, k] * phi_0[k] * dphidx_0[i]
+                out[1+k+offset] += -p.nu / h  * hb[i]  / h / self.basismatrices.M[k, k]* phi_0[k] * dphidx_0[i]
         return out
 
 
@@ -1010,8 +1011,8 @@ class ShallowMoments2d(Model):
         p = self.parameters
         for k in range(1+self.levels):
             for i in range(1+self.levels):
-                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
-                out[1+k+offset] += -1./p.lamda/p.rho * hb[i]  / h / self.basis.M[k, k]
+                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basismatrices.M[k, k]
+                out[1+k+offset] += -1./p.lamda/p.rho * hb[i]  / h / self.basismatrices.M[k, k]
         return out
 
     def chezy(self):
@@ -1029,8 +1030,8 @@ class ShallowMoments2d(Model):
         sqrt = sympy.sqrt(tmp)
         for k in range(1+self.levels):
             for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h 
-                out[1+k+offset] += -1./(p.C**2 * self.basis.M[k,k]) * hb[l] * sqrt / h 
+                out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
+                out[1+k+offset] += -1./(p.C**2 * self.basismatrices.M[k,k]) * hb[l] * sqrt / h 
         return out
 
 
@@ -1128,7 +1129,7 @@ if __name__ == "__main__":
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
     # basis.plot()
 
-    #basis = Basis(basis=Legendre_shifted(order=8))
+    #basis = Legendre_shifted(basis=Legendre_shifted(order=8))
     #f = basis.enforce_boundary_conditions()
     #q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
     #print(f(q))
@@ -1178,7 +1179,7 @@ if __name__ == "__main__":
     #plt.show()
 
 
-    basis = Basis(basis=Legendre_shifted(order=2))
+    basis = Legendre_shifted(basis=Legendre_shifted(order=2))
     basis.compute_matrices(2)
     print(basis.D)
 

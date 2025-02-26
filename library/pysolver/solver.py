@@ -15,8 +15,16 @@ import shutil
 
 
 #WARNING: I get a segmentation fault if I do not include petsc4py before precice
-from petsc4py import PETSc
-import precice
+try:
+    from petsc4py import PETSc
+except ModuleNotFoundError as err:
+    print(err)
+
+try:
+    import precice
+except ModuleNotFoundError as err:
+    print(err)
+
 
 # import logging
 # logging.basicConfig(level=logging.DEBUG)

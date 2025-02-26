@@ -9,6 +9,8 @@ from sympy import legendre
 from sympy import lambdify
 
 class Basisfunction():
+    name='Basisfunction'
+
     def basis_definition(self):
         x = Symbol('x')
         b = lambda k, x: x**k
@@ -67,21 +69,29 @@ class Basisfunction():
         db = [diff(b, x) for i, b in enumerate(self.basis)]
         self.basis = db
 
-class Monomials(Basisfunction): pass
+class Monomials(Basisfunction):
+    name = "Monomials"
+
 
 class Legendre_shifted(Basisfunction):
+    name = "Legendre_shifted"
+
     def basis_definition(self):
         x = Symbol('x')
         b = lambda k, x: legendre(k, 2*x-1) * (-1)**(k)
         return [b(k, x) for k in range(self.order+1)]
 
 class Spline(Basisfunction):
+    name = "Spline"
+
     def basis_definition(self, degree=1, knots = [0, 0, 0.001, 1, 1]):
         x = Symbol('x')
         basis = bspline_basis_set(degree, knots, x)
         return basis
 
 class OrthogonalSplineWithConstant(Basisfunction):
+    name='OrthogonalSplineWithConstant'
+
     def basis_definition(self, degree=1, knots = [0, 0, 0.5, 1, 1]):
         x = Symbol('x')
         def prod(u, v):
