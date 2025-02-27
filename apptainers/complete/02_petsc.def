@@ -1,0 +1,14 @@
+Bootstrap: localimage
+From: ./01_of.sif
+
+
+%post -c /bin/bash
+    yes | apt-get install pkg-config cmake git
+
+    git clone -b release https://gitlab.com/petsc/petsc.git petsc
+    ls
+    cd petsc
+    ./configure --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-mpich --download-fblaslapack
+    make all check
+
+

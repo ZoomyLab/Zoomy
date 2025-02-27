@@ -1,0 +1,13 @@
+Bootstrap: localimage
+From: ./03_precice.sif
+
+%environment
+    export PETSC_DIR=/petsc 
+    export PETSC_ARCH=arch-linux-c-debug check
+    export SMS=/home/ingo/Git/sms
+    export PYTHONPATH=$PYTHONPATH:/home/ingo/Git/sms
+
+
+%post -c /bin/bash
+    python3 -m pip install attrs ipython ipykernel pytest meshio scipy h5py pyprog pyvista seaborn trame trame-vtk trame-vuetify
+
