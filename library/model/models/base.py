@@ -1,3 +1,4 @@
+import jax.numpy as jnp
 import numpy as np
 import numpy.ctypeslib as npct
 from scipy.linalg import eigvals
@@ -505,9 +506,9 @@ class Model:
             ],
             # vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
             self.boundary_conditions.boundary_functions[i],
-            printer)
+                modules={"jax.numpy": jnp})
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-            f = lambda time, position, distance, q, qaux, p, n, func=func: np.squeeze(np.array(func(time, position, distance, q, qaux, p, n) ), axis=-1)
+            f = lambda time, position, distance, q, qaux, p, n, func=func: jnp.squeeze(func(time, position, distance, q, qaux, p, n ), axis=-1)
             bcs.append(f)
         return bcs
 

@@ -1,6 +1,4 @@
 import numpy as np
-import os
-import h5py
 from time import time as get_time
 
 from copy import deepcopy

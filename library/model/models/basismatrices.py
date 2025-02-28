@@ -4,7 +4,6 @@ from sympy import integrate, diff
 from sympy.abc import x
 from time import time as get_time
 
-from library.pysolver.solver import *
 from library.model.model import *
 from library.model.models.basisfunctions import Legendre_shifted
 

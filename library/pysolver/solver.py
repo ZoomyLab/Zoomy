@@ -2,6 +2,7 @@
 #from __future__ import division, print_function
 
 import numpy as np
+import jax.numpy as jnp
 from types import SimpleNamespace
 import pyprog
 from attr import define, field
@@ -1504,8 +1505,222 @@ def precice_fvm(
     progressbar.end()
     return settings
 
-
 def jax_fvm_unsteady_semidiscrete(
+    mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+):
+    iteration = 0
+    time = 0.0
+
+    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+
+    assert model.dimension == mesh.dimension
+
+    progressbar = pyprog.ProgressBar(
+        "{}: ".format(settings.name),
+        "\r",
+        settings.time_end,
+        complete_symbol="█",
+        not_complete_symbol="-",
+    )
+    progressbar.progress_explain = ""
+    progressbar.update()
+
+    # reconstruction
+    # i_aux_recon = model.aux_variables.length()
+    # recon_variables = [f'dQdx_{i}' for i in range(mesh.dimension)] + [f'phi_{f}' for f in range(model.n_fields)]
+    # model.aux_variables = register_sympy_attribute(model.aux_variables.get_list() + recon_variables)
+    # model.n_aux_fields = model.aux_variables.length()
+
+    Q, Qaux = _initialize_problem(model, mesh)
+
+    # runtime_bcs = model.create_python_boundary_interface(printer='numpy')
+
+    parameters = model.parameter_values
+    pde, bcs = load_runtime_model(model)
+    Q = apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+
+    # for callback in self.callback_function_list_init:
+    #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+
+    i_snapshot = 0
+    dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
+    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    mesh.write_to_hdf5(output_hdf5_path)
+    i_snapshot = io.save_fields(
+        output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
+    )
+
+    # settings.parameters = model.parameters.to_value_dict(model.parameter_values)
+    # io.save_settings(settings.output_dir, settings)
+    # limiter = get_limiter(name='Venkatakrishnan')
+    # limiter = get_limiter(name='zero')
+
+    Qnew = deepcopy(Q)
+
+    space_solution_operator = _get_semidiscrete_solution_operator(
+        mesh, pde, bcs, settings
+    )
+    # space_solution_operator = _get_semidiscrete_solution_operator(
+    #     mesh, pde, model.boundary_conditions, settings
+    # )
+    compute_source = _get_source(mesh, pde, settings)
+    compute_source_jac = _get_source_jac(mesh, pde, settings)
+
+    compute_max_abs_eigenvalue = _get_compute_max_abs_eigenvalue(mesh, pde, settings)
+    min_inradius = np.min(mesh.cell_inradius)
+
+    # if model.levels > 1:
+    #     # enforce_boundary_conditions = model.basis.enforce_boundary_conditions(dim=mesh.dimension, enforced_basis=[2], rhs=np.zeros(1),)
+    #     enforce_boundary_conditions = model.basis.enforce_boundary_conditions_lsq2(dim=mesh.dimension)
+    # else:
+    #     enforce_boundary_conditions  = lambda Q: Q
+    enforce_boundary_conditions = lambda Q: Q
+
+    # limiter = get_limiter(name='Venkatakrishnan')
+    # limiter = get_limiter(name='zero')
+
+    # print(f'hi from process {os.getpid()}')
+    time_start = gettime()
+    while time < settings.time_end:
+        #     # print(f'in loop from process {os.getpid()}')
+        Q = deepcopy(Qnew)
+        if model.name == "ShearShallowFlowPathconservative":
+            h, u, v, R11, R12, R22, E11, E12, E22, P11, P12, P22 = model.get_primitives(
+                Q
+            )
+            assert (P11 > 0).all
+            assert (P12 > 0).all
+            assert (P22 > 0).all
+            P11 = np.where(P11 <= 10 ** (-15), 10 ** (-15), P11)
+            P12 = np.where(P12 <= 10 ** (-15), 10 ** (-15), P12)
+            P22 = np.where(P22 <= 10 ** (-15), 10 ** (-15), P22)
+            R11 = Q[0] * P11
+            R12 = Q[0] * P12
+            R22 = Q[0] * P22
+            u = Q[1] / Q[0]
+            v = Q[2] / Q[0]
+            Q[3] = 1 / 2 * R11 + 1 / 2 * Q[0] * u * u
+            Q[4] = 1 / 2 * R12 + 1 / 2 * Q[0] * u * v
+            Q[5] = 1 / 2 * R22 + 1 / 2 * Q[0] * v * v
+
+        if model.name == "ShearShallowFlow":
+            Q[2] = np.where(Q[2] <= 10 ** (-15), 10 ** (-15), Q[2])
+
+        dt = settings.compute_dt(
+            Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
+        )
+        assert dt > 10 ** (-6)
+        assert not np.isnan(dt) and np.isfinite(dt)
+
+        # if iteration < self.warmup_interations:
+        #     dt *= self.dt_relaxation_factor
+        # if dt < self.dtmin:
+        #     dt = self.dtmin
+
+        # reconstruction
+        # gradQ = np.zeros((model.n_fields, mesh.dimension, mesh.n_cells), dtype=float)
+        # phi = np.zeros_like(Q)
+        # gradQ = np.einsum('...dj, kj ->kd...', mesh.lsq_gradQ, Q)
+        # delta_Q = np.zeros((Q.shape[0], Q.shape[1], mesh.n_faces_per_cell+1), dtype=float)
+        # delta_Q[:, :mesh.n_inner_cells, :mesh.n_faces_per_cell] = Q[:, mesh.cell_neighbors[:mesh.n_inner_cells, :mesh.n_faces_per_cell]] - np.repeat(Q[:, :mesh.n_inner_cells, np.newaxis], mesh.n_faces_per_cell, axis=2)
+        # # delta_Q[:, mesh.n_inner_cells:, :] = Q[:, mesh.cell_neighbors[mesh.n_inner_cells:, :mesh.n_faces_per_cell+1]] - np.repeat(Q[:, mesh.n_inner_cells:, np.newaxis], mesh.n_faces_per_cell+1, axis=2)
+        # delta_Q_max = np.max(delta_Q, axis=2)
+        # # delta_Q_max = np.where(delta_Q_max < 0, 0, delta_Q_max)
+        # delta_Q_min = np.min(delta_Q, axis=2)
+        # # delta_Q_min = np.where(delta_Q_min > 0, 0, delta_Q_min)
+
+        # ## DEBUG COPY GRADIENT
+        # delta_Q_max[:, mesh.boundary_face_ghosts] = delta_Q_max[:, mesh.boundary_face_cells]
+        # delta_Q_min[:, mesh.boundary_face_ghosts] = delta_Q_min[:, mesh.boundary_face_cells]
+
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[0].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[0]]
+        # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((), phi_ij)
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[0]])/(grad_Q_rij)), phi_ij)
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[0]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[0]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi0 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        # rij = mesh.face_centers - mesh.cell_centers[:, mesh.face_cells[1].T].T
+        # gradQ_face_cell = gradQ[:, :, mesh.face_cells[1]]
+        # grad_Q_rij = np.einsum('ij..., ...j->i...', gradQ_face_cell, rij)
+        # phi_ij = np.ones((model.n_fields, mesh.n_faces), dtype=float)
+        # # phi_ij = np.where(grad_Q_rij > 0, limiter((delta_Q_max[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        # # phi_ij = np.where(grad_Q_rij < 0, limiter((delta_Q_min[:, mesh.face_cells[1]])/(grad_Q_rij)), phi_ij)
+        # phi_ij[grad_Q_rij > 0] = limiter( (delta_Q_max[:, mesh.face_cells[1]])[grad_Q_rij > 0] /(grad_Q_rij)[grad_Q_rij > 0])
+        # phi_ij[grad_Q_rij < 0] = limiter( (delta_Q_min[:, mesh.face_cells[1]])[grad_Q_rij < 0] /(grad_Q_rij)[grad_Q_rij < 0])
+        # phi1 = np.min(phi_ij[:, mesh.cell_faces], axis=1)
+
+        # phi[:, :mesh.n_inner_cells] = np.min((phi0, phi1), axis=0)
+
+        # Qaux[i_aux_recon:i_aux_recon+mesh.dimension] = gradQ[0][:]
+        # for i in range(model.n_fields):
+        #     Qaux[i_aux_recon+mesh.dimension+i, :] = phi[i]
+
+        #     # add 0.001 safty measure to avoid very small time steps
+        if settings.truncate_last_time_step:
+            if time + dt * 1.001 > settings.time_end:
+                dt = settings.time_end - time + 10 ** (-10)
+
+        #     # TODO this two things should be 'callouts'!!
+        # Qnew = enforce_boundary_conditions(Qnew)
+        Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+        # Qnew = enforce_boundary_conditions(Qnew)
+
+        ### SSF Energy  DEBUG
+        # h = Q[0]
+        # u = Q[1] / h
+        # P11 = Q[2np.zeros(1)
+        # hE = h*(u**2 + settings.parameters['g'] * h + P11)
+        # Q[3] = hE
+
+        Qnew = ode_solver_source(
+            compute_source, Qnew, Qaux, parameters, dt, func_jac=compute_source_jac
+        )
+
+        Qnew = apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
+        Qnew = enforce_boundary_conditions(Qnew)
+        #     )
+        #     # Qnew  += -Q+ode_solver_source(
+        #     #     compute_source, Q, Qaux, parameters, dt, func_jac=compute_source_jac
+        #     # )
+        #     # Qnew = enforce_boundary_conditions(Qnew)
+
+        # Update solution and time
+        time += dt
+        iteration += 1
+        print(iteration, time, dt)
+
+        #     # for callback in self.callback_function_list_post_solvestep:
+        #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+
+        i_snapshot = io.save_fields(
+            output_hdf5_path,
+            time,
+            (i_snapshot + 1) * dt_snapshot,
+            i_snapshot,
+            Qnew,
+            Qaux,
+            settings.output_write_all,
+        )
+
+    #     # logger.info(
+    #     #     "Iteration: {:6.0f}, Runtime: {:6.2f}, Time: {:2.4f}, dt: {:2.4f}, error: {}".format(
+    #     #         iteration, gettime() - time_start, time, dt, error
+    #     #     )
+    #     # )
+    #     # print(f'finished timestep: {os.getpid()}')
+    # progressbar.set_stat(min(time, settings.time_end))
+    # progressbar.update()
+    print(f"Runtime: {gettime() - time_start}")
+
+    progressbar.end()
+    return settings
+
+
+def numpy_fvm_unsteady_semidiscrete(
     mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
 ):
     iteration = 0

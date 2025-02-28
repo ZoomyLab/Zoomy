@@ -5,9 +5,11 @@ import petsc4py
 from petsc4py import PETSc
 import numpy as np
 import meshio
+import jax.numpy as jnp
 
+import attr
 from attr import define
-from typing import Union
+from typing import Union, Any
 
 from library.misc.custom_types import IArray, FArray, CArray
 from library.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
@@ -950,6 +952,77 @@ class Mesh:
         if not os.path.exists(path) and path != "":
             os.mkdir(path)
         meshout.write(filepath + ".vtk")
+
+
+
+@define(frozen=True, slots=True)
+class MeshJAX:
+    dimension: int = attr.ib()
+    type: str = attr.ib()
+    n_cells: int = attr.ib()
+    n_inner_cells: int = attr.ib()
+    n_faces: int = attr.ib()
+    n_vertices: int = attr.ib()
+    n_boundary_faces: int = attr.ib()
+    n_faces_per_cell: int = attr.ib()
+    vertex_coordinates: jnp.ndarray = attr.ib()
+    cell_vertices: jnp.ndarray = attr.ib()
+    cell_faces: jnp.ndarray = attr.ib()
+    cell_volumes: jnp.ndarray = attr.ib()
+    cell_centers: jnp.ndarray = attr.ib()
+    cell_inradius: jnp.ndarray = attr.ib()
+    cell_neighbors: jnp.ndarray = attr.ib()
+    boundary_face_cells: jnp.ndarray = attr.ib()
+    boundary_face_ghosts: jnp.ndarray = attr.ib()
+    boundary_face_function_numbers: jnp.ndarray = attr.ib()
+    boundary_face_physical_tags: jnp.ndarray = attr.ib()
+    boundary_face_face_indices: jnp.ndarray = attr.ib()
+    face_cells: jnp.ndarray = attr.ib()
+    # face_cell_face_index: jnp.ndarray = attr.ib()  # If needed
+    face_normals: jnp.ndarray = attr.ib()
+    face_volumes: jnp.ndarray = attr.ib()
+    face_centers: jnp.ndarray = attr.ib()
+    face_subvolumes: jnp.ndarray = attr.ib()
+    boundary_conditions_sorted_physical_tags: jnp.ndarray = attr.ib()
+    boundary_conditions_sorted_names: Any = attr.ib()  # Keeping as NumPy char array
+    lsq_gradQ: jnp.ndarray = attr.ib()
+    deltaQ: jnp.ndarray = attr.ib()
+    z_ordering: jnp.ndarray = attr.ib()
+
+def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
+    return MeshJAX(
+        dimension=mesh.dimension,
+        type=mesh.type,
+        n_cells=mesh.n_cells,
+        n_inner_cells=mesh.n_inner_cells,
+        n_faces=mesh.n_faces,
+        n_vertices=mesh.n_vertices,
+        n_boundary_faces=mesh.n_boundary_faces,
+        n_faces_per_cell=mesh.n_faces_per_cell,
+        vertex_coordinates=jnp.array(mesh.vertex_coordinates),
+        cell_vertices=jnp.array(mesh.cell_vertices),
+        cell_faces=jnp.array(mesh.cell_faces),
+        cell_volumes=jnp.array(mesh.cell_volumes),
+        cell_centers=jnp.array(mesh.cell_centers),
+        cell_inradius=jnp.array(mesh.cell_inradius),
+        cell_neighbors=jnp.array(mesh.cell_neighbors),
+        boundary_face_cells=jnp.array(mesh.boundary_face_cells),
+        boundary_face_ghosts=jnp.array(mesh.boundary_face_ghosts),
+        boundary_face_function_numbers=np.array(mesh.boundary_face_function_numbers),
+        boundary_face_physical_tags=jnp.array(mesh.boundary_face_physical_tags),
+        boundary_face_face_indices=jnp.array(mesh.boundary_face_face_indices),
+        face_cells=jnp.array(mesh.face_cells),
+        # face_cell_face_index=jnp.array(mesh.face_cell_face_index),  # If needed
+        face_normals=jnp.array(mesh.face_normals),
+        face_volumes=jnp.array(mesh.face_volumes),
+        face_centers=jnp.array(mesh.face_centers),
+        face_subvolumes=jnp.array(mesh.face_subvolumes),
+        boundary_conditions_sorted_physical_tags=jnp.array(mesh.boundary_conditions_sorted_physical_tags),
+        boundary_conditions_sorted_names=mesh.boundary_conditions_sorted_names,  # Kept as NumPy array
+        lsq_gradQ=jnp.array(mesh.lsq_gradQ),
+        deltaQ=jnp.array(mesh.deltaQ),
+        z_ordering=jnp.array(mesh.z_ordering),
+    )
 
 
 if __name__ == "__main__":

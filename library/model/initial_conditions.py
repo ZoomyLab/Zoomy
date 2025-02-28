@@ -1,4 +1,5 @@
 import numpy as np
+import jax.numpy as jnp
 import sys
 import attr
 from attr import define
