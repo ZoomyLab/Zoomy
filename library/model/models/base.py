@@ -494,7 +494,7 @@ class Model:
         # l_bcs = []
         bcs = []
         for i in range(n_boundary_functions):
-            func =lambdify(
+            func_bc =lambdify(
             [
                 self.time,
                 self.position.get_list(),
@@ -504,11 +504,12 @@ class Model:
                 self.parameters.get_list(),
                 self.sympy_normal.get_list(),
             ],
-            # vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
+            #vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
             self.boundary_conditions.boundary_functions[i],
-                modules={"jax.numpy": jnp})
+                #modules={"jax.numpy": jnp})
+                printer)
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-            f = lambda time, position, distance, q, qaux, p, n, func=func: jnp.squeeze(func(time, position, distance, q, qaux, p, n ), axis=-1)
+            f = lambda time, position, distance, q, qaux, p, n, func=func_bc: jnp.squeeze(jnp.array(func(time, position, distance, q, qaux, p, n )), axis=-1)
             bcs.append(f)
         return bcs
 
@@ -526,7 +527,7 @@ class Model:
         ) for d in range(self.dimension)]
         # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
         # flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
-        flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=1) for d in range(self.dimension)]
+        flux = [lambda Q, Qaux, param, f=l_flux[d]:  jnp.squeeze(np.array(f(Q, Qaux, param)), axis=1) for d in range(self.dimension)]
         # flux = [lambda Q, Qaux, param, f=l_flux[d]:  jnp.squeeze(jnp.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
         # flux = l_flux
         l_flux_jacobian = lambdify(
@@ -593,7 +594,7 @@ class Model:
             vectorize_constant_sympy_expressions(self.sympy_source, self.variables, self.aux_variables),
             printer,
         )
-        source = lambda Q, Qaux, param:  np.squeeze(np.array(l_source(Q, Qaux, param)), axis=1)
+        source = lambda Q, Qaux, param:  jnp.squeeze(jnp.array(l_source(Q, Qaux, param)), axis=1)
         # source = vectorize(l_source)
 
         l_source_jacobian = lambdify(

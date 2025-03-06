@@ -1,4 +1,5 @@
 import numpy as np
+import jax.numpy as jnp
 from numpy.polynomial.legendre import leggauss
 
 def zero():
@@ -109,27 +110,29 @@ def segmentpath(integration_order=3):
         n_fields = Qi.shape[0]
         n_cells = Qi.shape[1]
         def B(s):
-            out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
-            tmp = np.zeros_like(out)
+            out = jnp.zeros((n_fields, n_fields, n_cells), dtype=float)
+            tmp = jnp.zeros_like(out)
             for d in range(dim):
                 tmp = model.quasilinear_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters) 
-                out[:,:,:] += tmp * normal[d]
+                out = out + tmp * normal[d]
+                #out[:,:,:] += tmp * normal[d]
             return out
 
-        Bint = np.zeros((n_fields, n_fields, n_cells))
+        Bint = jnp.zeros((n_fields, n_fields, n_cells))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
 
 
-        Bint_sq = np.einsum('ij..., jk...->ik...', Bint, Bint)
-        I = np.zeros_like(Bint)
+        Bint_sq = jnp.einsum('ij..., jk...->ik...', Bint, Bint)
+        I = jnp.zeros_like(Bint)
         for i in range(n_fields):
-            I[i, i, :] = 1.
+            #I[i, i, :] = 1.
+            I = I.at[i, i, :].set(1.)
 
         Am = 0.5* Bint - (svA * svB)/(svA + svB) * 1./(dt * vol_face) *I  - 1/4 * (dt * vol_face)/(svA + svB) * Bint_sq
-        # Am = 0.5* Bint - np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 1./(dt * vol_face) ,I)  - 1/4 * np.einsum('..., ij...->ij...', (dt * vol_face)/(svA + svB) , Bint_sq)
+        # Am = 0.5* Bint - jnp.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 1./(dt * vol_face) ,I)  - 1/4 * jnp.einsum('..., ij...->ij...', (dt * vol_face)/(svA + svB) , Bint_sq)
 
-        return np.einsum('ij..., j...->i...', Am, (Qj-Qi)), False
+        return jnp.einsum('ij..., j...->i...', Am, (Qj-Qi)), False
 
     def nc_flux_quasilinear_componentwise(Qi, Qj, Qauxi, Qauxj, parameters, normal, svA, svB, vol_face, dt, model):
         dim = normal.shape[0]

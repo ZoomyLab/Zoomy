@@ -15,7 +15,6 @@ import sys
 import argparse
 import shutil
 from functools import partial
-from jax import jit
 
 
 #WARNING: I get a segmentation fault if I do not include petsc4py before precice
@@ -34,18 +33,21 @@ except ModuleNotFoundError as err:
 from library.model.model import *
 from library.model.models.base import register_parameter_defaults
 from library.model.models.shallow_moments import reconstruct_uvw
-import library.pysolver.reconstruction as recon
-import library.pysolver.flux as flux
-import library.pysolver.nonconservative_flux as nonconservative_flux
-import library.pysolver.ader_flux as ader_flux
-import library.pysolver.timestepping as timestepping
+import library.fvm.reconstruction as recon
+import library.fvm.flux as flux
+import library.fvm.nonconservative_flux as nonconservative_flux
+import library.fvm.ader_flux as ader_flux
+import library.fvm.timestepping as timestepping
 import library.misc.io as io
 from library.mesh.mesh import convert_mesh_to_jax
-from library.pysolver.ode import *
+from library.fvm.ode import *
 from library.solver import python_c_interface as c_interface
 from library.solver import modify_sympy_c_code as modify_sympy_c_code
+from library.misc.static_class import register_static_pytree
 
 
+
+@register_static_pytree
 @define(slots=True, frozen=True, kw_only=True)
 class Settings:
     name: str = "Simulation"
@@ -99,7 +101,7 @@ class Solver():
     
     
     
-    @partial(jit, static_argnums=(0, 3, 4, 5, 6))
+    @partial(jax.jit, static_argnames=['self'])
     def compute_max_abs_eigenvalue(self, Q, Qaux, parameters, mesh, pde, settings):
         max_abs_eigenvalue = -jnp.inf
         eigenvalues_i = jnp.empty(Q.shape[1], dtype=float)
@@ -130,16 +132,18 @@ class Solver():
     
     
     
-    @partial(jit, static_argnums=(0, 4, 5, 6, 7))
-    def compute_source(self, dt, Q, Qaux, parameters, dQ, mesh, pde, settings):
-        dQ[:, : mesh.n_inner_cells] = pde.source(
-            Q[:, : mesh.n_inner_cells], Qaux[:, : mesh.n_inner_cells], parameters
-        )
-        return dQ
+    def get_compute_source(self, mesh, pde, settings):
+        @jax.jit
+        def compute_source(dt, Q, Qaux, parameters, dQ):
+            dQ = dQ.at[:, : mesh.n_inner_cells].set(pde.source(
+                Q[:, : mesh.n_inner_cells], Qaux[:, : mesh.n_inner_cells], parameters
+            ))
+            return dQ
+        return compute_source
     
     
     
-    @partial(jit, static_argnums=(0, 5, 6, 7, 8))
+    @partial(jax.jit, static_argnames=['self'])
     def compute_source_jac(self, dt, Q, Qaux, dQ, parameters, mesh, pde, settings):
         # Loop over the inner elements
         for i_cell in range(mesh.n_inner_cells):
@@ -150,89 +154,89 @@ class Solver():
     
         return source_jac
     
-    @partial(jit, static_argnums=(0, 5, 6, 7, 8, 9))
-    def space_solution_operator(self, dt, Q, Qaux, dQ, parameters, mesh, pde, bcs, settings):
-        compute_num_flux = settings.num_flux
-        compute_nc_flux = settings.nc_flux
-        # Initialize dQ as zeros using jax.numpy
-        dQ = jnp.zeros_like(dQ)
+    def get_space_solution_operator(self, mesh, pde, bcs, settings):
 
-        iA = mesh.face_cells[0]
-        iB = mesh.face_cells[1]
+        @jax.jit
+        def space_solution_operator(dt, Q, Qaux, parameters, dQ):
+            compute_num_flux = settings.num_flux
+            compute_nc_flux = settings.nc_flux
+            # Initialize dQ as zeros using jax.numpy
+            dQ = jnp.zeros_like(dQ)
 
-        qA = Q[:, iA]
-        qB = Q[:, iB]
-        qauxA = Qaux[:, iA]
-        qauxB = Qaux[:, iB]
-        normals = mesh.face_normals
-        face_volumes = mesh.face_volumes
-        cell_volumesA = mesh.cell_volumes[iA]
-        cell_volumesB = mesh.cell_volumes[iB]
-        svA = mesh.face_subvolumes[:, 0]
-        svB = mesh.face_subvolumes[:, 1]
+            iA = mesh.face_cells[0]
+            iB = mesh.face_cells[1]
 
-        # Compute non-conservative fluxes
-        nc_fluxA, failedA = compute_nc_flux(
-            qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde
-        )
-        # Ensure no failure
-        assert not failedA
+            qA = Q[:, iA]
+            qB = Q[:, iB]
+            qauxA = Qaux[:, iA]
+            qauxB = Qaux[:, iB]
+            normals = mesh.face_normals
+            face_volumes = mesh.face_volumes
+            cell_volumesA = mesh.cell_volumes[iA]
+            cell_volumesB = mesh.cell_volumes[iB]
+            svA = mesh.face_subvolumes[:, 0]
+            svB = mesh.face_subvolumes[:, 1]
 
-        nc_fluxB, failedB = compute_nc_flux(
-            qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde
-        )
-        assert not failedB
+            # Compute non-conservative fluxes
+            nc_fluxA, failedA = compute_nc_flux(
+                qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde
+            )
+            # Ensure no failure
+            assert not failedA
 
-        # Vectorized operations to handle cell_faces
-        # Assuming mesh.cell_faces is a 2D array where each row corresponds to a cell and contains its face indices
-        # Example shape: (n_cells, faces_per_cell)
+            nc_fluxB, failedB = compute_nc_flux(
+                qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde
+            )
+            assert not failedB
 
-        # Create a mask for inner cells
-        inner_cells = jnp.arange(mesh.n_inner_cells)
+            # Vectorized operations to handle cell_faces
+            # Assuming mesh.cell_faces is a 2D array where each row corresponds to a cell and contains its face indices
+            # Example shape: (n_cells, faces_per_cell)
 
-        # Extract faces for inner cells
-        # Shape of faces: (n_cells, faces_per_cell)
-        faces = mesh.cell_faces  # Assuming mesh.cell_faces is a JAX array
+            # Create a mask for inner cells
+            inner_cells = jnp.arange(mesh.n_inner_cells)
 
-        # Gather iA and iB for all faces
-        iA_faces = iA[faces]  # Shape: (n_cells, faces_per_cell)
-        iB_faces = iB[faces]  # Shape: (n_cells, faces_per_cell)
+            # Extract faces for inner cells
+            # Shape of faces: (n_cells, faces_per_cell)
+            faces = mesh.cell_faces  # Assuming mesh.cell_faces is a JAX array
 
-        # Create masks where iA or iB is an inner cell
-        # Broadcasting inner_cells over faces
-        # Compare each iA_face and iB_face with inner_cells
-        # This results in boolean masks
-        iA_masked = (iA_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
-        iB_masked = (iB_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
+            # Gather iA and iB for all faces
+            iA_faces = iA[faces]  # Shape: (n_cells, faces_per_cell)
+            iB_faces = iB[faces]  # Shape: (n_cells, faces_per_cell)
 
-        # Compute the contributions for all cells and faces at once
-        # Compute flux contributions
-        fluxA_contribution = (nc_fluxA * face_volumes / cell_volumesA)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
-        fluxB_contribution = (nc_fluxB * face_volumes / cell_volumesB)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
+            # Create masks where iA or iB is an inner cell
+            # Broadcasting inner_cells over faces
+            # Compare each iA_face and iB_face with inner_cells
+            # This results in boolean masks
+            iA_masked = (iA_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
+            iB_masked = (iB_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
 
-        # Apply masks and sum contributions
-        # We need to sum over faces, but only where masks are True
-        # Reshape masks to match flux dimensions
-        # Expand dims to align with flux coordinates
-        iA_masked_expanded = iA_masked[jnp.newaxis, :, :]  # Shape: (1, n_cells, n_faces_per_cell)
-        iB_masked_expanded = iB_masked[jnp.newaxis, :, :]  # Sh
+            # Compute the contributions for all cells and faces at once
+            # Compute flux contributions
+            fluxA_contribution = (nc_fluxA * face_volumes / cell_volumesA)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
+            fluxB_contribution = (nc_fluxB * face_volumes / cell_volumesB)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
 
-        # Apply masks
-        fluxA_masked = jnp.where(iA_masked_expanded, fluxA_contribution, 0.0)
-        fluxB_masked = jnp.where(iB_masked_expanded, fluxB_contribution, 0.0)
+            # Apply masks and sum contributions
+            # We need to sum over faces, but only where masks are True
+            # Reshape masks to match flux dimensions
+            # Expand dims to align with flux coordinates
+            iA_masked_expanded = iA_masked[jnp.newaxis, :, :]  # Shape: (1, n_cells, n_faces_per_cell)
+            iB_masked_expanded = iB_masked[jnp.newaxis, :, :]  # Sh
 
-        # Sum over faces
-        total_fluxA = jnp.sum(fluxA_masked, axis=1)  # Shape: (Q_dim, n_cells)
-        total_fluxB = jnp.sum(fluxB_masked, axis=1)  # Shape: (Q_dim, n_cells)
+            # Apply masks
+            fluxA_masked = jnp.where(iA_masked_expanded, fluxA_contribution, 0.0)
+            fluxB_masked = jnp.where(iB_masked_expanded, fluxB_contribution, 0.0)
 
-        # Update dQ
-        total_flux = total_fluxA + total_fluxB
-        print(type(total_flux))
-        print(type(dQ))
-        print(dQ.shape)
-        dQ = dQ.at[:, :mesh.n_inner_cells].subtract()
+            # Sum over faces
+            total_fluxA = jnp.sum(fluxA_masked, axis=1)  # Shape: (Q_dim, n_cells)
+            total_fluxB = jnp.sum(fluxB_masked, axis=1)  # Shape: (Q_dim, n_cells)
 
-        return dQ
+            # Update dQ
+            total_flux = total_fluxA + total_fluxB
+            dQ = dQ.at[:, :mesh.n_inner_cells].subtract(total_flux)
+
+            return dQ
+        return space_solution_operator
 
 
     def _load_runtime_model(self, model):
@@ -250,78 +254,89 @@ class Solver():
             path=os.path.join(settings.output_dir, "c_interface")
         )
 
-    @partial(jit, static_argnums=(0, 1, 5, 6))
-    def _apply_boundary_conditions(self, _mesh, time, Q, Qaux, parameters, _runtime_bcs):
-        """
-        Applies boundary conditions to the solution arrays Q and Qaux using JAX's functional updates.
-
-        Parameters:
-            mesh: Mesh object containing boundary face information.
-            time: Current simulation time.
-            Q: JAX array of shape (Q_dim, n_cells), solution variables.
-            Qaux: JAX array of auxiliary solution variables.
-            parameters: Dictionary of simulation parameters.
-            runtime_bcs: List of JAX-compatible boundary condition functions.
-
-        Returns:
-            Updated Q array with boundary conditions applied to ghost cells.
-        """
-
-        #mesh = convert_mesh_to_jax(_mesh)
-        mesh = _mesh
-        #mesh = jnp.array(_mesh)
+    #@partial(jax.jit, static_argnames=['self'])
+    def get_apply_boundary_conditions(self, _mesh, _runtime_bcs):
+        mesh = convert_mesh_to_jax(_mesh)
+        #mesh = _mesh
+        #mesh = _mesh
+        #mesh = jax.tree_map(jnp.array, _mesh)
         runtime_bcs = tuple(_runtime_bcs)
 
-        def loop_body(i, Q):
+
+        @jax.jit
+        def apply_boundary_conditions(time, Q, Qaux, parameters):
             """
-            Body function for jax.lax.fori_loop to apply boundary conditions iteratively.
+            Applies boundary conditions to the solution arrays Q and Qaux using JAX's functional updates.
 
             Parameters:
-                i: Current index in the loop.
-                Q: Current state of the solution array.
+                mesh: Mesh object containing boundary face information.
+                time: Current simulation time.
+                Q: JAX array of shape (Q_dim, n_cells), solution variables.
+                Qaux: JAX array of auxiliary solution variables.
+                parameters: Dictionary of simulation parameters.
+                runtime_bcs: List of JAX-compatible boundary condition functions.
 
             Returns:
-                Updated Q after applying the boundary condition for face i.
+                Updated Q array with boundary conditions applied to ghost cells.
             """
-            # Extract boundary face index and corresponding BC function
-            i_face = mesh.boundary_face_face_indices[i]                          # Shape: ()
-            #TODO make this numpy indiced!
-            i_bc_func = mesh.boundary_face_function_numbers[i]                    # Shape: ()
-            print(i_bc_func)
-            bc_func = runtime_bcs[i_bc_func]                                      # Callable
 
-            # Extract solution variables for the boundary cell
-            q_cell = Q[:, mesh.boundary_face_cells[i]]                            # Shape: (Q_dim,)
-            qaux_cell = Qaux[:1, mesh.boundary_face_cells[i]]                    # Shape: (1,)
+            #mesh = _mesh
+            #mesh = jnp.array(_mesh)
 
-            # Get geometric information
-            normal = mesh.face_normals[:, i_face]                                # Shape: (dim,)
-            position = mesh.face_centers[:, i_face]                              # Shape: (dim,)
-            position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]  # Shape: (dim,)
+            def loop_body(i, Q):
+                """
+                Body function for jax.lax.fori_loop to apply boundary conditions iteratively.
 
-            # Compute distance between face and ghost cell
-            distance = jnp.linalg.norm(position - position_ghost)                # Scalar
+                Parameters:
+                    i: Current index in the loop.
+                    Q: Current state of the solution array.
 
-            # Apply boundary condition function to compute ghost cell values
-            # Ensure bc_func returns a JAX-compatible array with shape (Q_dim,)
-            q_ghost = bc_func(
-                time, position, distance, q_cell, qaux_cell, parameters, normal
-            )
+                Returns:
+                    Updated Q after applying the boundary condition for face i.
+                """
+                # Extract boundary face index and corresponding BC function
+                i = jnp.asarray(i, dtype=jnp.int32)
+                i_face = mesh.boundary_face_face_indices[i]
+                #TODO make this numpy indiced!
+                i_bc_func = mesh.boundary_face_function_numbers[i]
+                #bc_func = runtime_bcs[i_bc_func]
 
-            # Update Q at ghost cell using functional update
-            # mesh.boundary_face_ghosts[i] is the index of the ghost cell
-            Q = Q.at[:, mesh.boundary_face_ghosts[i]].set(q_ghost)
+                # Extract solution variables for the boundary cell
+                q_cell = Q[:, mesh.boundary_face_cells[i]]                            # Shape: (Q_dim,)
+                qaux_cell = Qaux[:1, mesh.boundary_face_cells[i]]                    # Shape: (1,)
 
-            return Q
+                # Get geometric information
+                normal = mesh.face_normals[:, i_face]
+                position = mesh.face_centers[i_face, :]
+                position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]
 
-        # Initialize Q_updated as Q and apply boundary conditions using fori_loop
-        Q_updated = jax.lax.fori_loop(0, mesh.n_boundary_faces, loop_body, Q)
+                # Compute distance between face and ghost cell
+                distance = jnp.linalg.norm(position - position_ghost)                # Scalar
 
-        return Q_updated
+                # Apply boundary condition function to compute ghost cell values
+                # Ensure bc_func returns a JAX-compatible array with shape (Q_dim,)
+                # q_ghost = bc_func(
+                #     time, position, distance, q_cell, qaux_cell, parameters, normal
+                # )
+                #q_ghost = runtime_bcs[0](time, position, distance, q_cell, qaux_cell, parameters, normal)
+                q_ghost = jax.lax.switch(i_bc_func, runtime_bcs, time, position, distance, q_cell, qaux_cell, parameters, normal)
+
+                # Update Q at ghost cell using functional update
+                # mesh.boundary_face_ghosts[i] is the index of the ghost cell
+                Q = Q.at[:, mesh.boundary_face_ghosts[i]].set(q_ghost)
+
+                return Q
+
+            # Initialize Q_updated as Q and apply boundary conditions using fori_loop
+            Q_updated = jax.lax.fori_loop(0, mesh.n_boundary_faces, loop_body, Q)
+
+            return Q_updated
+        return apply_boundary_conditions
 
     def jax_fvm_unsteady_semidiscrete(
         self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     ):
+
         iteration = 0
         time = 0.0
     
@@ -333,8 +348,12 @@ class Solver():
         Q, Qaux = self.initialize(model, mesh)
     
         parameters = model.parameter_values
+
+        #mesh = convert_mesh_to_jax(mesh)
+        parameters = jnp.asarray(parameters)
+
         pde, bcs = self._load_runtime_model(model)
-        Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+        #Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
     
     
         i_snapshot = 0
@@ -352,6 +371,10 @@ class Solver():
         min_inradius = jnp.min(mesh.cell_inradius)
     
         enforce_boundary_conditions = lambda Q: Q
+
+        space_solution_operator = self.get_space_solution_operator(mesh, pde, bcs, settings)
+        source_operator = self.get_compute_source(mesh, pde, settings)
+        boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
     
         time_start = gettime()
         while time < settings.time_end:
@@ -368,15 +391,16 @@ class Solver():
             if settings.truncate_last_time_step:
                 if time + dt * 1.001 > settings.time_end:
                     dt = settings.time_end - time + 10 ** (-10)
+
     
-            Qnew = ode_solver_flux(self.space_solution_operator, Q, Qaux, parameters, dt)
+            Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
 
             Qnew = ode_solver_source(
-                self.compute_source, Qnew, Qaux, parameters, dt, func_jac=self.compute_source_jac
+                source_operator, Qnew, Qaux, parameters, dt, func_jac=self.compute_source_jac
             )
     
-            Qnew = self._apply_boundary_conditions(mesh, time, Qnew, Qaux, parameters, bcs)
-            Qnew = enforce_boundary_conditions(Qnew)
+            Qnew = boundary_operator(time, Qnew, Qaux, parameters)
+            #Qnew = enforce_boundary_conditions(Qnew)
             # Update solution and time
             time += dt
             iteration += 1

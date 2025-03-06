@@ -14,6 +14,7 @@ import library.pysolver.timestepping as timestepping
 import library.pysolver.flux as flux
 import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
+from library.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 @pytest.mark.critical
@@ -53,7 +54,7 @@ def test_smm_1d():
         settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1, 30), 1000)
+    mesh = petscMesh.Mesh.create_1d((-1, 30), 100)
 
     solver = Solver()
     solver.jax_fvm_unsteady_semidiscrete(

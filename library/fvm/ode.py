@@ -1,7 +1,8 @@
 import numpy as np
+import jax.numpy as jnp
 
 def RK1(func, Q, Qaux, param, dt, func_jac=None, func_bc=None):
-    dQ = np.zeros_like(Q)
+    dQ = jnp.zeros_like(Q)
     dQ = func(dt, Q, Qaux, param, dQ)
     return Q + dt * dQ
 

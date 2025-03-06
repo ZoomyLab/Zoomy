@@ -15,6 +15,7 @@ from library.misc.custom_types import IArray, FArray, CArray
 from library.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
 import library.mesh.mesh_extrude as extrude
 import library.mesh.mesh_util as mesh_util
+from library.misc.static_class import register_static_pytree
 
 
 # petsc4py.init(sys.argv)
@@ -215,6 +216,7 @@ def _get_neighberhood(dm, cell, cStart=0):
     return neighbors
 
 
+@register_static_pytree
 @define(slots=True, frozen=True)
 class Mesh:
     dimension: int
@@ -956,7 +958,7 @@ class Mesh:
 
 
 @define(frozen=True, slots=True)
-class MeshJAX:
+class MeshJAX(Mesh):
     dimension: int = attr.ib()
     type: str = attr.ib()
     n_cells: int = attr.ib()
@@ -1008,7 +1010,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         cell_neighbors=jnp.array(mesh.cell_neighbors),
         boundary_face_cells=jnp.array(mesh.boundary_face_cells),
         boundary_face_ghosts=jnp.array(mesh.boundary_face_ghosts),
-        boundary_face_function_numbers=np.array(mesh.boundary_face_function_numbers),
+        boundary_face_function_numbers=jnp.array(mesh.boundary_face_function_numbers),
         boundary_face_physical_tags=jnp.array(mesh.boundary_face_physical_tags),
         boundary_face_face_indices=jnp.array(mesh.boundary_face_face_indices),
         face_cells=jnp.array(mesh.face_cells),
@@ -1018,7 +1020,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         face_centers=jnp.array(mesh.face_centers),
         face_subvolumes=jnp.array(mesh.face_subvolumes),
         boundary_conditions_sorted_physical_tags=jnp.array(mesh.boundary_conditions_sorted_physical_tags),
-        boundary_conditions_sorted_names=mesh.boundary_conditions_sorted_names,  # Kept as NumPy array
+        boundary_conditions_sorted_names=list(mesh.boundary_conditions_sorted_names),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
         deltaQ=jnp.array(mesh.deltaQ),
         z_ordering=jnp.array(mesh.z_ordering),
