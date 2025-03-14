@@ -333,18 +333,11 @@ class Solver():
             return Q_updated
         return apply_boundary_conditions
 
+    
     def jax_fvm_unsteady_semidiscrete(
         self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     ):
 
-        iteration = 0
-        time = 0.0
-    
-        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
-    
-        assert model.dimension == mesh.dimension
-    
-    
         Q, Qaux = self.initialize(model, mesh)
     
         parameters = model.parameter_values
@@ -354,72 +347,101 @@ class Solver():
 
         pde, bcs = self._load_runtime_model(model)
         #Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
-    
-    
-        i_snapshot = 0
-        dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
-        mesh.write_to_hdf5(output_hdf5_path)
-        i_snapshot = io.save_fields(
-            output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
-        )
-    
-        #Qnew = deepcopy(Q)
-        Qnew = Q
-    
-    
-        min_inradius = jnp.min(mesh.cell_inradius)
-    
-        enforce_boundary_conditions = lambda Q: Q
 
-        space_solution_operator = self.get_space_solution_operator(mesh, pde, bcs, settings)
-        source_operator = self.get_compute_source(mesh, pde, settings)
-        boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+        def run(Q, Qaux, parameters, pde, bcs):
     
-        time_start = gettime()
-        while time < settings.time_end:
-            #     # print(f'in loop from process {os.getpid()}')
-            #Q = deepcopy(Qnew)
-            Q = Qnew
 
-            dt = settings.compute_dt(
-                Q, Qaux, parameters, min_inradius, self.compute_max_abs_eigenvalue
-            )
-            assert dt > 10 ** (-6)
-            assert not jnp.isnan(dt) and jnp.isfinite(dt)
+            iteration = 0
+            time = 0.0
     
-            if settings.truncate_last_time_step:
-                if time + dt * 1.001 > settings.time_end:
-                    dt = settings.time_end - time + 10 ** (-10)
-
+            output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
     
-            Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
-
-            Qnew = ode_solver_source(
-                source_operator, Qnew, Qaux, parameters, dt, func_jac=self.compute_source_jac
-            )
+            assert model.dimension == mesh.dimension
     
-            Qnew = boundary_operator(time, Qnew, Qaux, parameters)
-            #Qnew = enforce_boundary_conditions(Qnew)
-            # Update solution and time
-            time += dt
-            iteration += 1
-            print(iteration, time, dt)
     
-            #     # for callback in self.callback_function_list_post_solvestep:
-            #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
     
+            i_snapshot = 0
+            dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
+            io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+            mesh.write_to_hdf5(output_hdf5_path)
             i_snapshot = io.save_fields(
-                output_hdf5_path,
-                time,
-                (i_snapshot + 1) * dt_snapshot,
-                i_snapshot,
-                Qnew,
-                Qaux,
-                settings.output_write_all,
+                output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
             )
     
-        print(f"Runtime: {gettime() - time_start}")
+            #Qnew = deepcopy(Q)
+            Qnew = Q
+    
+    
+            min_inradius = jnp.min(mesh.cell_inradius)
+    
+            enforce_boundary_conditions = lambda Q: Q
+
+            space_solution_operator = self.get_space_solution_operator(mesh, pde, bcs, settings)
+            source_operator = self.get_compute_source(mesh, pde, settings)
+            boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+    
+            time_start = gettime()
+            while time < settings.time_end:
+                #     # print(f'in loop from process {os.getpid()}')
+                #Q = deepcopy(Qnew)
+                Q = Qnew
+
+                dt = settings.compute_dt(
+                    Q, Qaux, parameters, min_inradius, self.compute_max_abs_eigenvalue
+                )
+                assert dt > 10 ** (-6)
+                assert not jnp.isnan(dt) and jnp.isfinite(dt)
+    
+                if settings.truncate_last_time_step:
+                    if time + dt * 1.001 > settings.time_end:
+                        dt = settings.time_end - time + 10 ** (-10)
+
+    
+                Qnew = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+
+                Qnew = ode_solver_source(
+                    source_operator, Qnew, Qaux, parameters, dt, func_jac=self.compute_source_jac
+                )
+    
+                Qnew = boundary_operator(time, Qnew, Qaux, parameters)
+                #Qnew = enforce_boundary_conditions(Qnew)
+                # Update solution and time
+                time += dt
+                iteration += 1
+                print(iteration, time, dt)
+
+                ## AD EXAMPLE
+                #dQ = jnp.zeros_like(Qnew)
+                #def f(parameters):
+                #    return jnp.sum(source_operator(dt, Qnew, Qaux, parameters, dQ))
+
+                #source_jac =  jax.grad(f)
+                #gradient = source_jac(parameters)  
+                #print(settings.parameters)
+                #print(gradient)
+    
+                #     # for callback in self.callback_function_list_post_solvestep:
+                #     #     Qnew, kwargs = callback(self, Qnew, **kwargs)
+    
+                i_snapshot = io.save_fields(
+                    output_hdf5_path,
+                    time,
+                    (i_snapshot + 1) * dt_snapshot,
+                    i_snapshot,
+                    Qnew,
+                    Qaux,
+                    settings.output_write_all,
+                )
+            return Qnew
+    
+        def f(parameters):
+            return jnp.sum(run(Q, Qaux, parameters, pde, bcs))
+
+        time_loop_jac =  jax.grad(f)
+        gradient = time_loop_jac(parameters)  
+        print(settings.parameters)
+        print(gradient)
+        #print(f"Runtime: {gettime() - time_start}")
     
         return settings
     

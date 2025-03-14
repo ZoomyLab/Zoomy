@@ -37,7 +37,8 @@ def test_smm_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag=tag, momentum_field_indices=[[i] for i in range(1, level+1)])
+            #BC.Wall(physical_tag=tag, momentum_field_indices=[[i] for i in range(1, level+1)])
+            BC.Extrapolation(physical_tag=tag)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
