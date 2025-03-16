@@ -38,7 +38,6 @@ def get_class_docstring(cls, init_dict={}):
     # If the parent class is not 'object', recursively print its docstring
     if parent_class is not object:
         return get_class_docstring(parent_class, out)
-    print(out)
     return out
 
 def get_class_code(cls, func_name=None):
@@ -89,7 +88,7 @@ def get_function_names(file_path):
     return function_names
 
 
-def get_class_function_names(cls):
+def get_class_function_names(cls, blacklist=['create_', 'get_', 'load_', 'init_']):
     """
     Extracts all function names from a given class.
     
@@ -99,7 +98,7 @@ def get_class_function_names(cls):
     Returns:
     list: A list of function names defined in the class.
     """
-    return [name for name, member in inspect.getmembers(cls, predicate=inspect.isfunction)if not name.startswith('_')]
+    return [name for name, member in inspect.getmembers(cls, predicate=inspect.isfunction) if not name.startswith('_') and not any(blacklisted in name for blacklisted in blacklist)]
 
     
     

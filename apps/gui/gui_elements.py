@@ -7,9 +7,14 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 from panel.viewable import Viewer
 import param
+import os
 
-from gui.docstring_crawler import get_class_docstring
-from gui.mesh.load_gmsh import load_and_plot_gmsh
+import library.mesh.mesh as petscMesh
+
+from apps.gui.docstring_crawler import get_class_docstring
+from apps.gui.mesh.load_gmsh import load_gmsh
+
+main_dir = os.getenv("SMS")
 
 pn.extension('gridstack', 'vtk', 'mathjax', 'katex', 'ipywidgets_bokeh', 'codeeditor', 'terminal', console_output='disable')
 
@@ -72,7 +77,8 @@ class MyBasicOrganizer(Viewer):
         self.general_controls = controls
     
     def get_controls(self):
-        return pn.Column(*self.general_controls)
+        return pn.Column(*self.general_controls)    
+
 
 
 class MyOrganizer(Viewer):
@@ -123,10 +129,10 @@ class MyOrganizer(Viewer):
 
 class MyCard(Viewer):
 
-    default_style =  {}
+    default_style = {'border': '1px solid white', 'border-radius': '10px'}
     selected_style = {'border': '1px solid black', 'border-radius': '10px'}
 
-    def __init__(self, organizer, title='# Card', image=None, code=None, **params):
+    def __init__(self, organizer, title='# Card', image=None, code=None, wip=False, **params):
         self.title = title
         self._code=code
         self._doc= get_class_docstring(self._code)
@@ -134,10 +140,13 @@ class MyCard(Viewer):
         if image is not None:
             self.fig = pn.pane.PNG(image, width=300)
         else:
-            # image="gui/data/sample.png"
+            # image=os.path.join(main_dir, "apps/gui/data/sample.png")
             # self.fig = pn.pane.PNG(image, width=300)
             self.fig = None
-        self.button = pn.widgets.Button(name='Select', button_type='primary', width=300)
+        if not wip:
+            self.button = pn.widgets.Button(name='Select', button_type='primary', width=300)
+        else:
+            self.button = pn.widgets.Button(name='WIP', button_type='danger', width=300)
         self.organizer = organizer
         super().__init__(**params)
         self._layout = pn.Column(self.title, self.fig, self.button, styles=self.default_style)
@@ -177,19 +186,31 @@ class MyModel(MyCard):
 
         self._layout = pn.Column(self.title, self.fig, self.button, styles=self.default_style)
 
+    def get_model(self):
+        return self._code
+
 class MyMesh(MyCard):
 
     def __init__(self, organizer, title='# Card', image=None, code=None, path=None, **params):
         super().__init__(organizer, title, image, code,**params)
         if path is not None:
-            self.fig = load_and_plot_gmsh(path)
+            plots, cells = load_gmsh(path)
+            self.fig = plots[0]
+            self.path = path
         elif image is not None:
             self.fig = pn.pane.PNG(image, width=300)
         else:
-            image="gui/data/sample_mesh.png"
+            image=os.path.join(main_dir, "apps/gui/data/sample_mesh.png")
             self.fig = pn.pane.PNG(image, width=300)
             
         self._layout = pn.Column(self.title, self.fig, self.button, styles=self.default_style)
+
+
+    def get_mesh(self):
+        mesh = petscMesh.Mesh.from_gmsh(
+            os.path.join(main_dir, self.path),
+        )
+        return mesh
 
 
 ### Terminal ###############################################################

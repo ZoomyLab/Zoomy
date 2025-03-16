@@ -9,7 +9,7 @@ from ctypes import cdll
 from functools import partial
 
 import sympy
-from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol, fraction, cancel
+from sympy import Symbol, Matrix, lambdify, transpose, powsimp, MatrixSymbol, fraction, cancel, latex, init_printing
 from sympy import zeros, ones
 from sympy.utilities.autowrap import autowrap, ufuncify, make_routine
 from sympy.abc import x, y 
@@ -25,6 +25,8 @@ from library.misc.custom_types import FArray
 from library.misc.misc import vectorize  # type: ignore
 from library.misc.misc import IterableNamespace
 from library.model.sympy2c import create_module
+
+init_printing()
 
 def vectorize_constant_sympy_expressions(expr, Q, Qaux):
     symbol_list = Q.get_list() + Qaux.get_list()
@@ -205,6 +207,10 @@ class Model:
         self.n_parameters = self.parameters.length()
 
         self.init_sympy_functions()
+
+    def get_latex(self):
+        return latex(self.flux)
+
 
 
     def init_sympy_functions(self):
@@ -636,12 +642,15 @@ class Model:
         return zeros(self.n_fields, 1)
 
     def flux_jacobian(self):
+        # generated automatically unless explicitly provided
         return None
 
     def quasilinear_matrix(self):
+        # generated automatically unless explicitly provided
         return None
 
     def source_jacobian(self):
+        # generated automatically unless explicitly provided
         return None
 
     def eigenvalues(self):
@@ -649,6 +658,41 @@ class Model:
         for d in range(1, self.dimension):
             A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
         return eigenvalue_dict_to_matrix(A.eigenvals())
+
+    def get_default_setup(self):
+        text = """
+        def setup():
+            level = 0
+            settings = Settings(
+                name="ShallowMoments2d",
+                parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
+                reconstruction=recon.constant,
+                num_flux=flux.LLF(),
+                compute_dt=timestepping.adaptive(CFL=0.45),
+                time_end=1.0,
+                output_snapshots=100, output_dir='outputs/test')
+            
+            inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
+            inflow_dict[1] = 0.36
+            outflow_dict = {0: 1.0}
+            
+            bcs = BC.BoundaryConditions(
+                [
+                    BC.Wall(physical_tag="top"),
+                    BC.Wall(physical_tag="bottom"),
+                    BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+                    BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
+                ]
+            )
+            ic = IC.Constant(
+                constants=lambda n_fields: np.array(
+                    [1.0, 0.1, 0.1] + [0.0 for i in range(n_fields - 3)]
+                )
+            )
+        
+            return ic, bcs, settings
+        """
+        return text
 
 
 

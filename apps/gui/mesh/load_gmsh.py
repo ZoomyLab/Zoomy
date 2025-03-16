@@ -1,46 +1,42 @@
+import numpy as np
+import os
 import meshio
 import matplotlib.pyplot as plt
 import panel as pn
 from mpl_toolkits.mplot3d import Axes3D
 
-# def load_and_plot_gmsh(file_path):
-#     # Load the Gmsh file
-#     mesh = meshio.read(file_path)
+def load_gmsh(path, depr=True):
+    if depr:
+        (n_cells, plot) = _load_and_plot_gmsh(path)
+        return [plot], [n_cells]
+
+
+    plots = []
+    cells = []
+    for file in os.listdir(path):
+        if file.lower().endswith('.msh'):
+            full_path = os.path.join(path, file)
+            
+            if os.path.isfile(full_path):
+                try:
+                    (n_cells, plot) = _load_and_plot_gmsh(full_path)
+                    plots.append(plot)
+                    cells.append(n_cells)
+
+                except Exception as e:
+                    print(f"Failed to load {full_path}: {e}")
+    order = list(np.argsort(np.array(cells, dtype=int)))
+    oplots = [plots[o] for o in order]
+    ocells = [cells[o] for o in order]
+    return oplots, ocells
+
+def _load_and_plot_gmsh(file_path):
     
-#     # Extract points and cells
-#     points = mesh.points
-#     triangles = mesh.cells_dict.get("triangle", [])
-#     quads = mesh.cells_dict.get("quad", [])
-
-#     # Create a plot
-#     fig, ax = plt.subplots()
-    
-#     # Plot triangles
-#     for cell in triangles:
-#         triangle = points[cell]
-#         polygon = plt.Polygon(triangle[:, :2], edgecolor='k', facecolor='none')
-#         ax.add_patch(polygon)
-    
-#     # Plot quads
-#     for cell in quads:
-#         quad = points[cell]
-#         polygon = plt.Polygon(quad[:, :2], edgecolor='k', facecolor='none')
-#         ax.add_patch(polygon)
-
-#     ax.set_xlim(points[:, 0].min(), points[:, 0].max())
-#     ax.set_ylim(points[:, 1].min(), points[:, 1].max())
-
-#     ax.set_aspect('equal')
-#     ax.set_xticks([])
-#     ax.set_yticks([])
-#     return pn.pane.Matplotlib(fig, width=300)
-
-def load_and_plot_gmsh(file_path):
-    # Load the Gmsh file
     mesh = meshio.read(file_path)
     
     # Extract points and cells
     points = mesh.points
+    lines = mesh.cells_dict.get("line", [])
     triangles = mesh.cells_dict.get("triangle", [])
     quads = mesh.cells_dict.get("quad", [])
     tetrahedrons = mesh.cells_dict.get("tetra", [])
@@ -49,6 +45,7 @@ def load_and_plot_gmsh(file_path):
     # Determine if the mesh is 2D or 3D
     # is_3d = points.shape[1] == 3
     is_3d = len(tetrahedrons) > 0 or len(hexahedrons) > 0
+    is_2d = len(quads) > 0 or len(triangles) > 0
 
     # Create a plot
     if is_3d:
@@ -77,7 +74,8 @@ def load_and_plot_gmsh(file_path):
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_zticks([])
-    else:
+        cells = len(hexahedrons) + len(tetrahedrons)
+    elif is_2d:
         fig, ax = plt.subplots()
         
         # Plot triangles
@@ -92,11 +90,30 @@ def load_and_plot_gmsh(file_path):
             polygon = plt.Polygon(quad[:, :2], edgecolor='k', facecolor='none')
             ax.add_patch(polygon)
 
+
         # Adjust the viewpoint to fit the entire mesh
         ax.set_xlim(points[:, 0].min(), points[:, 0].max())
         ax.set_ylim(points[:, 1].min(), points[:, 1].max())
         ax.set_aspect('equal')
         ax.set_xticks([])
         ax.set_yticks([])
+        cells = len(triangles) + len(quads)
+    else:
+        fig, ax = plt.subplots()
+        
+        # Plot triangles
+        for cell in lines:
+            line = points[cell]
+            ax.plot(line[:, 0], line[:, 1], color='k')
+            #polygon = plt.Polygon(line[:, :2], edgecolor='k', facecolor='none')
+            #ax.add_patch(polygon)
+        
+        # Adjust the viewpoint to fit the entire mesh
+        #ax.set_xlim(points[:, 0].min(), points[:, 0].max()) ax.set_ylim(points[:, 1].min(), points[:, 1].max())
+        #ax.set_aspect('equal')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        cells = len(lines)
 
-    return pn.pane.Matplotlib(fig, width=300)
+
+    return (cells, pn.pane.Matplotlib(fig, width=300))

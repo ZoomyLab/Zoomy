@@ -434,14 +434,16 @@ class Solver():
                 )
             return Qnew
     
-        def f(parameters):
-            return jnp.sum(run(Q, Qaux, parameters, pde, bcs))
+        #def f(parameters):
+        #    return jnp.sum(run(Q, Qaux, parameters, pde, bcs))
+        time_start = gettime()
+        Qnew = run(Q, Qaux, parameters, pde, bcs)
 
-        time_loop_jac =  jax.grad(f)
-        gradient = time_loop_jac(parameters)  
-        print(settings.parameters)
-        print(gradient)
-        #print(f"Runtime: {gettime() - time_start}")
+        #time_loop_jac =  jax.grad(f)
+        #gradient = time_loop_jac(parameters)  
+        #print(settings.parameters)
+        #print(gradient)
+        print(f"Runtime: {gettime() - time_start}")
     
         return settings
     

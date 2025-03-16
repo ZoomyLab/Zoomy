@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pytest
 from types import SimpleNamespace
@@ -63,8 +64,57 @@ def test_smm_1d():
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
+def test_smm_2d():
+    level = 1
+    n_fields = 3 + 2*level
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={"g": 9.81, "C": 1.0, "nu": 0.000001, "lamda": 7, "rho":1, "eta":1, "c_slipmod": 1/70.},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.constant(dt = 0.001),
+        time_end=1.0,
+        output_snapshots=100,
+        output_dir = 'outputs/test'
+    )
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Wall(physical_tag="top"),
+            BC.Wall(physical_tag="bottom"),
+            BC.Wall(physical_tag="left"),
+            BC.Wall(physical_tag="right"),
+        ]
+    )
+
+    def custom_ic(x):
+        Q = np.zeros(3+2*level, dtype=float)
+        Q[0] = np.where(x[0]< 0.5, 1.0, 1.2) + np.where(x[1]< 0.5, 1.0, 1.2)
+        return Q
+
+    ic = IC.UserFunction(custom_ic)
+
+    model = ShallowMoments2d(
+        fields= 3 + 2*level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+    )
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"))
+
+    solver = Solver()
+    solver.jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
 
 if __name__ == "__main__":
 
 
-    test_smm_1d()
+    #test_smm_1d()
+    test_smm_2d()

@@ -834,12 +834,13 @@ class ShallowMoments2d(Model):
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Legendre_shifted()
+        basis=Basismatrices()
     ):
-        self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = int((self.n_fields - 1)/2)-1
+        self.basismatrices = basis
+        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(order=self.levels)
         self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,

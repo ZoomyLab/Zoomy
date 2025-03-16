@@ -366,6 +366,65 @@ def test_steffler():
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
+def test_steffler_small():
+    level = 2
+    offset = level+1
+    settings = Settings(
+        name="ShallowMoments2d",
+        parameters={"g": 9.81, "C": 16.0, "nu": 0.0016},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=5.0,
+        output_snapshots=100,
+        output_dir = 'outputs/test',
+    )
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/curved_open_channel/mesh_coarse.msh")
+    )
+
+    h0 = 0.061
+    vin = -0.36
+    inflow_dict = {i: "0.0" for i in range(0, 2 * (1 + level) + 1)}
+    inflow_dict[0] = f"{h0}"
+    inflow_dict[1] = f"{h0 * vin}"
+    outflow_dict = {}
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Wall(physical_tag="wall", momentum_field_indices=[[1 + i, 1+offset+i] for i in range(level+1)], wall_slip=0.),
+            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+        ]
+    )
+    ic = IC.Constant(constants=lambda n_fields:np.array([h0, 0.0] + [0. for i in range(n_fields-2)]))
+    # folder = "./output_lvl1_friction"
+    # map_fields = {0: 0, 1: 1, 2: 2, 3: 4, 4: 5}
+    # ic = IC.RestartFromHdf5(
+    #     path_to_old_mesh=folder + "/mesh.hdf5",
+    #     path_to_fields=folder + "/fields.hdf5",
+    #     mesh_new=mesh,
+    #     mesh_identical=True,
+    #     map_fields=map_fields,
+    # )
+    model = ShallowMoments2d(
+        dimension=2,
+        fields=3 + 2 * level,
+        aux_fields=0,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ["chezy"]},
+        basis=Basis(basis=Legendre_shifted(order=level)),
+    )
+
+    jax_fvm_unsteady_semidiscrete(
+        mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    )
+    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
