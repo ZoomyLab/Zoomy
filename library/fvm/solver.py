@@ -4,6 +4,7 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
+
 from types import SimpleNamespace
 import pyprog
 from attr import define, field
@@ -101,34 +102,38 @@ class Solver():
     
     
     
-    @partial(jax.jit, static_argnames=['self'])
-    def compute_max_abs_eigenvalue(self, Q, Qaux, parameters, mesh, pde, settings):
-        max_abs_eigenvalue = -jnp.inf
-        eigenvalues_i = jnp.empty(Q.shape[1], dtype=float)
-        eigenvalues_j = jnp.empty(Q.shape[1], dtype=float)
-        i_cellA = mesh.face_cells[0]
-        i_cellB = mesh.face_cells[1]
-        qA = Q[:, i_cellA]
-        qB = Q[:, i_cellB]
-        qauxA = Qaux[:, i_cellA]
-        qauxB = Qaux[:, i_cellB]
-    
-        normal = mesh.face_normals
-    
-        evA = pde.eigenvalues(qA, qauxA, parameters, normal)
-        evB = pde.eigenvalues(qB, qauxB, parameters, normal)
-        max_abs_eigenvalue = max(jnp.abs(evA).max(), jnp.abs(evB).max())
-    
-    
-    
-        if not max_abs_eigenvalue > 10 ** (-8):
-            iA = jnp.abs(evA).argmax()
-            iB = jnp.abs(evB).argmax()
-            print(Q[:, iA])
-            print(Q[:, iB])
-            assert False
-    
-        return max_abs_eigenvalue
+    # @partial(jax.jit, static_argnames=['self'])
+    def get_compute_max_abs_eigenvalue(self, mesh, pde, settings):
+        @jax.jit
+        def compute_max_abs_eigenvalue(Q, Qaux, parameters):
+            max_abs_eigenvalue = -jnp.inf
+            eigenvalues_i = jnp.empty(Q.shape[1], dtype=float)
+            eigenvalues_j = jnp.empty(Q.shape[1], dtype=float)
+            i_cellA = mesh.face_cells[0]
+            i_cellB = mesh.face_cells[1]
+            qA = Q[:, i_cellA]
+            qB = Q[:, i_cellB]
+            qauxA = Qaux[:, i_cellA]
+            qauxB = Qaux[:, i_cellB]
+        
+            normal = mesh.face_normals
+        
+            evA = pde.eigenvalues(qA, qauxA, parameters, normal)
+            evB = pde.eigenvalues(qB, qauxB, parameters, normal)
+            # max_abs_eigenvalue = max(jnp.abs(evA).max(), jnp.abs(evB).max())
+            max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
+        
+        
+        
+            # if not max_abs_eigenvalue > 10 ** (-8):
+            #     iA = jnp.abs(evA).argmax()
+            #     iB = jnp.abs(evB).argmax()
+            #     print(Q[:, iA])
+            #     print(Q[:, iB])
+            #     assert False
+        
+            return max_abs_eigenvalue
+        return compute_max_abs_eigenvalue
     
     
     
@@ -198,42 +203,93 @@ class Solver():
 
             # Extract faces for inner cells
             # Shape of faces: (n_cells, faces_per_cell)
-            faces = mesh.cell_faces  # Assuming mesh.cell_faces is a JAX array
+            # faces = mesh.cell_faces  # Assuming mesh.cell_faces is a JAX array
+            
+            
+            def update_dQ_body(loop_idx, dQ, mesh, iA, iB, nc_fluxA, nc_fluxB, face_volumes, cell_volumesA, cell_volumesB):
+                faces = mesh.cell_faces[loop_idx]
+                inner_range = jnp.arange(mesh.n_inner_cells)  
 
-            # Gather iA and iB for all faces
-            iA_faces = iA[faces]  # Shape: (n_cells, faces_per_cell)
-            iB_faces = iB[faces]  # Shape: (n_cells, faces_per_cell)
+                iA_faces = iA[faces]
+                iB_faces = iB[faces] 
 
-            # Create masks where iA or iB is an inner cell
-            # Broadcasting inner_cells over faces
-            # Compare each iA_face and iB_face with inner_cells
-            # This results in boolean masks
-            iA_masked = (iA_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
-            iB_masked = (iB_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
+                iA_masked = (iA_faces == inner_range) 
+                iB_masked = (iB_faces == inner_range) 
 
-            # Compute the contributions for all cells and faces at once
-            # Compute flux contributions
-            fluxA_contribution = (nc_fluxA * face_volumes / cell_volumesA)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
-            fluxB_contribution = (nc_fluxB * face_volumes / cell_volumesB)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
+                fluxA_contribution = (nc_fluxA * face_volumes / cell_volumesA)[:, faces] 
+                fluxB_contribution = (nc_fluxB * face_volumes / cell_volumesB)[:, faces]  
+                
+                # slice_mask = jnp.arange(mesh.n_cells) < mesh.n_inner_cells
+                
+                # iA_slice_masked = slice_mask & iA_masked
+                # iB_slice_masked = slice_mask & iB_masked
 
-            # Apply masks and sum contributions
-            # We need to sum over faces, but only where masks are True
-            # Reshape masks to match flux dimensions
-            # Expand dims to align with flux coordinates
-            iA_masked_expanded = iA_masked[jnp.newaxis, :, :]  # Shape: (1, n_cells, n_faces_per_cell)
-            iB_masked_expanded = iB_masked[jnp.newaxis, :, :]  # Sh
+                
+                # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(0.5*(fluxA_contribution + fluxB_contribution))
+                
+                fA = fluxA_contribution[:, iA_masked]
+                fB = fluxB_contribution[:, iB_masked]
+                dQ = dQ.at[:, iA_masked].subtract(fA)
+                dQ = dQ.at[:, iA_masked].subtract(fB)
 
-            # Apply masks
-            fluxA_masked = jnp.where(iA_masked_expanded, fluxA_contribution, 0.0)
-            fluxB_masked = jnp.where(iB_masked_expanded, fluxB_contribution, 0.0)
 
-            # Sum over faces
-            total_fluxA = jnp.sum(fluxA_masked, axis=1)  # Shape: (Q_dim, n_cells)
-            total_fluxB = jnp.sum(fluxB_masked, axis=1)  # Shape: (Q_dim, n_cells)
 
-            # Update dQ
-            total_flux = total_fluxA + total_fluxB
-            dQ = dQ.at[:, :mesh.n_inner_cells].subtract(total_flux)
+                # fluxA_contribution_exp = fluxA_contribution[:, jnp.newaxis, :] 
+                # fluxB_contribution_exp = fluxB_contribution[:, jnp.newaxis, :] 
+
+                # iA_masked_exp = iA_masked[jnp.newaxis, :, :] 
+                # iB_masked_exp = iB_masked[jnp.newaxis, :, :]  
+
+  
+                # masked_fluxA = fluxA_contribution_exp * iA_masked_exp 
+                # masked_fluxB = fluxB_contribution_exp * iB_masked_exp  
+
+
+                # summed_fluxA = jnp.sum(masked_fluxA, axis=2)  
+                # summed_fluxB = jnp.sum(masked_fluxB, axis=2) 
+
+                # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(summed_fluxA + summed_fluxB)
+
+                return dQ
+            
+            def loop_body(loop_idx, dQ):
+                return update_dQ_body(loop_idx, dQ, mesh, iA, iB, nc_fluxA, nc_fluxB, face_volumes, cell_volumesA, cell_volumesB)
+
+            dQ = jax.lax.fori_loop(0, mesh.cell_faces.shape[0], loop_body, dQ)
+            # # Gather iA and iB for all faces
+            # iA_faces = iA[faces]  # Shape: (n_cells, faces_per_cell)
+            # iB_faces = iB[faces]  # Shape: (n_cells, faces_per_cell)
+
+            # # Create masks where iA or iB is an inner cell
+            # # Broadcasting inner_cells over faces
+            # # Compare each iA_face and iB_face with inner_cells
+            # # This results in boolean masks
+            # iA_masked = (iA_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
+            # iB_masked = (iB_faces[..., None] == inner_cells).any(axis=-1)  # Shape: (n_cells, faces_per_cell)
+
+            # # Compute the contributions for all cells and faces at once
+            # # Compute flux contributions
+            # fluxA_contribution = (nc_fluxA * face_volumes / cell_volumesA)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
+            # fluxB_contribution = (nc_fluxB * face_volumes / cell_volumesB)[:, faces]  # Shape: (Q_dim, n_cells, faces_per_cell)
+
+            # # Apply masks and sum contributions
+            # # We need to sum over faces, but only where masks are True
+            # # Reshape masks to match flux dimensions
+            # # Expand dims to align with flux coordinates
+            # iA_masked_expanded = iA_masked[jnp.newaxis, :, :]  # Shape: (1, n_cells, n_faces_per_cell)
+            # iB_masked_expanded = iB_masked[jnp.newaxis, :, :]  # Sh
+
+            # # Apply masks
+            # fluxA_masked = jnp.where(iA_masked_expanded, fluxA_contribution, 0.0)
+            # fluxB_masked = jnp.where(iB_masked_expanded, fluxB_contribution, 0.0)
+
+            # # Sum over faces
+            # total_fluxA = jnp.sum(fluxA_masked, axis=1)  # Shape: (Q_dim, n_cells)
+            # total_fluxB = jnp.sum(fluxB_masked, axis=1)  # Shape: (Q_dim, n_cells)
+
+            # # Update dQ
+            # total_flux = total_fluxA + total_fluxB
+            # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(total_flux)
 
             return dQ
         return space_solution_operator
@@ -256,8 +312,8 @@ class Solver():
 
     #@partial(jax.jit, static_argnames=['self'])
     def get_apply_boundary_conditions(self, _mesh, _runtime_bcs):
-        mesh = convert_mesh_to_jax(_mesh)
-        #mesh = _mesh
+        # mesh = convert_mesh_to_jax(_mesh)
+        mesh = _mesh
         #mesh = _mesh
         #mesh = jax.tree_map(jnp.array, _mesh)
         runtime_bcs = tuple(_runtime_bcs)
@@ -376,6 +432,7 @@ class Solver():
     
             enforce_boundary_conditions = lambda Q: Q
 
+            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, pde, settings)
             space_solution_operator = self.get_space_solution_operator(mesh, pde, bcs, settings)
             source_operator = self.get_compute_source(mesh, pde, settings)
             boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
@@ -387,7 +444,7 @@ class Solver():
                 Q = Qnew
 
                 dt = settings.compute_dt(
-                    Q, Qaux, parameters, min_inradius, self.compute_max_abs_eigenvalue
+                    Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
                 )
                 assert dt > 10 ** (-6)
                 assert not jnp.isnan(dt) and jnp.isfinite(dt)

@@ -586,7 +586,8 @@ class Model:
                 printer,
             )
             # eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=-1)
-            eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1)
+            
+            eigenvalues = lambda Q, Qaux, param, normal :  jnp.squeeze(jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1)
             # eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
         elif self.settings.eigenvalue_mode == 'numerical':
             eigenvalues = None

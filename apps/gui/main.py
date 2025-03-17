@@ -37,7 +37,7 @@ main_dir = os.getenv("SMS")
 
 ###  General Controls ##########################################################
 button_simulate = pn.widgets.Button(name='Start simulation', button_type='primary')
-# progress_bar = Tqdm(total=100, desc="Progress", unit="%")
+#progress_bar = Tqdm(total=100, desc="Progress", unit="%")
 button_session_save = pn.widgets.Button(name='Save session (WIP)', button_type='danger')
 button_session_load = pn.widgets.Button(name='Load session (WIP)', button_type='danger')
 
