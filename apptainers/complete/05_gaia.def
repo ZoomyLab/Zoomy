@@ -1,0 +1,17 @@
+Bootstrap: localimage
+From: ./04_sms.sif
+
+
+%post -c /bin/bash
+    apt-get install libxrender1
+
+%environment
+    export PETSC_DIR=/petsc 
+    export PETSC_ARCH=arch-linux-c-debug check
+    export SMS=/home/ingo/Git/sms
+    export PYTHONPATH=$PYTHONPATH:/home/ingo/Git/sms
+
+
+%post -c /bin/bash
+    python3 -m pip install attrs ipython ipykernel pytest meshio scipy h5py pyprog pyvista seaborn trame trame-vtk trame-vuetify panel holoviews jax jaxlib petsc4py
+
