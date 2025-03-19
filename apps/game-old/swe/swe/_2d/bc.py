@@ -38,8 +38,8 @@ def inflow(Q):
 
     # west boundary
     Q = Q.at[0, :,  0].set(0.1)
-    Q = Q.at[1, :,  0].set(0.05)
-    Q = Q.at[2, :,  0].set(0.05)
+    Q = Q.at[1, :,  0].set(0.25)
+    Q = Q.at[2, :,  0].set(0.25)
     Q = Q.at[3, :,  0].set(0)
 
     # north boundary

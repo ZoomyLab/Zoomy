@@ -1,12 +1,11 @@
 import jax.numpy as np
-from time import time as get_time
 
-import apps.game.swe.swe._2d.model as model
-import apps.game.swe.swe._2d.bc as bc
-import apps.game.swe.swe._2d.initial_conditions as ic
-import apps.game.swe.swe._2d.reconstruction as reconstruction
-import apps.game.swe.swe._2d.numerics as numerics
-import apps.game.swe.swe._2d.solver as solver
+import game.swe.swe._2d.model as model
+import game.swe.swe._2d.bc as bc
+import game.swe.swe._2d.initial_conditions as ic
+import game.swe.swe._2d.reconstruction as reconstruction
+import game.swe.swe._2d.numerics as numerics
+import game.swe.swe._2d.solver as solver
 
 # dimension of the problem
 n_dim = 4
@@ -49,16 +48,16 @@ bottom_gradient = np.gradient(ic.bottom_constant(X), dx)[1:-1]
 
 
 def apply_boundary_conditions(Q):
-    return bc.periodic(Q)
-    #return bc.inflow(Q)
+    #return bc.periodic(Q)
+    return bc.inflow(Q)
 
 
 def apply_initial_conditions(x):
     # return ic.rarefaction_shock(x)
     # return ic.rarefaction_rarefaction(x)
     #return ic.shock_shock(x)
-    return ic.dam_break(x)
-    #return ic.flat(x)
+    #return ic.dam_break(x)
+    return ic.flat(x)
 
 
 
@@ -80,16 +79,5 @@ def compute_numerical_flux(Ql, Qr, Fl, Fr, max_speed):
 
 def compute_max_abs_eigenvalue(Q):
     return model.max_abs_eigenvalue(Q, g)
-
-if __name__ == "__main__":
-
-
-    Q, step  = solver.setup()
-    for i in range(1000):
-        start = get_time()
-        Q = step(Q)
-        print(f'time elapsed: {get_time()-start}')
-
-
 
 

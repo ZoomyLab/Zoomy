@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as np
 
-import apps.game.swe.tc_simple_2d as tc
+import game.swe.tc_simple_2d as tc
 
 def wet_dry_fix(Q):
     h = Q[0]
@@ -77,9 +77,9 @@ def step_fvm_conservative(Q):
     # Rusanov
     max_speed = tc.compute_max_abs_eigenvalue(Q)
     dt = (np.max(np.array([np.min(np.array([tc.CFL *  dx / max_speed, tc.dtmax])), tc.dtmin])))
-    #if max_speed * dt / dx > tc.CFL * 1.001:
-    #    print(f"CFL condition violated with value {max_speed * dt / dx}")
-    #    assert False
+    if max_speed * dt / dx > tc.CFL * 1.001:
+        print(f"CFL condition violated with value {max_speed * dt / dx}")
+        assert False
 
     #I_w = Ii * Iw 
     #I_n = Ii * In 
@@ -114,7 +114,7 @@ def setup():
     Q = tc.apply_initial_conditions(X)
     Q = tc.apply_boundary_conditions(Q)
 
-    step = jax.jit(step_fvm_conservative)
-    #step = step_fvm_conservative
+    # step = jax.jit(step_fvm_conservative)
+    step = step_fvm_conservative
     return Q, step
 
