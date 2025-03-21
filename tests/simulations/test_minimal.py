@@ -3,19 +3,19 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.pysolver.solver import *
-import library.pysolver.flux as flux
-import library.pysolver.nonconservative_flux as nc_flux
-from library.pysolver.ode import RK1
-import library.pysolver.reconstruction as recon
-import library.pysolver.timestepping as timestepping
+#from library.pysolver.solver import *
+#import library.pysolver.flux as flux
+#import library.pysolver.nonconservative_flux as nc_flux
+#from library.pysolver.ode import RK1
+#import library.pysolver.reconstruction as recon
+#import library.pysolver.timestepping as timestepping
 
-# from library.fvm.solver import Solver, Settings
-# from library.fvm.ode import RK1
-# import library.fvm.reconstruction as recon
-# import library.fvm.timestepping as timestepping
-# import library.fvm.flux as flux
-# import library.fvm.nonconservative_flux as nc_flux
+from library.fvm.solver import Solver, Settings
+from library.fvm.ode import RK1
+import library.fvm.reconstruction as recon
+import library.fvm.timestepping as timestepping
+import library.fvm.flux as flux
+import library.fvm.nonconservative_flux as nc_flux
 
 from library.model.model import *
 import library.model.initial_conditions as IC
@@ -118,15 +118,16 @@ def test_smm_2d():
 
     main_dir = os.getenv("SMS")
     mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"))
+    print(settings.parameters)
     
-    # mesh = convert_mesh_to_jax(mesh)
-    # solver = Solver()
-    # solver.jax_fvm_unsteady_semidiscrete(
-    #     mesh, model, settings
-    # )
-    jax_fvm_unsteady_semidiscrete(
+    mesh = convert_mesh_to_jax(mesh)
+    solver = Solver()
+    solver.jax_fvm_unsteady_semidiscrete(
         mesh, model, settings
     )
+    #jax_fvm_unsteady_semidiscrete(
+    #    mesh, model, settings
+    #)
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
