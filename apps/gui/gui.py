@@ -119,3 +119,6 @@ def gui():
     #info = pn.state.notifications.info('This GUI is WIP. Many functions are not implemented yet.', duration=10)
     
     return template
+
+gui = gui()
+gui.servable()

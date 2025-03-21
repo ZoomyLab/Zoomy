@@ -1,6 +1,9 @@
 import panel as pn
 
-from apps.gui.main import gui
-from apps.test_multiapp import app1
+from apps.gui.gui import gui
+#from apps.game.stream.swegame import start_game
+#from apps.test_multiapp import app1
 
-pn.serve({'gui': gui, 'test': app1})
+gui = gui()
+gui.servable()
+#pn.serve({'gui': gui})
