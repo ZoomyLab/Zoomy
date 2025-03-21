@@ -1,21 +1,22 @@
 import os
 import numpy as np
+import jax
 import pytest
 from types import SimpleNamespace
 
-from library.pysolver.solver import *
-import library.pysolver.flux as flux
-import library.pysolver.nonconservative_flux as nc_flux
-from library.pysolver.ode import RK1
-import library.pysolver.reconstruction as recon
-import library.pysolver.timestepping as timestepping
+#from library.pysolver.solver import *
+#import library.pysolver.flux as flux
+#import library.pysolver.nonconservative_flux as nc_flux
+#from library.pysolver.ode import RK1
+#import library.pysolver.reconstruction as recon
+#import library.pysolver.timestepping as timestepping
 
-# from library.fvm.solver import Solver, Settings
-# from library.fvm.ode import RK1
-# import library.fvm.reconstruction as recon
-# import library.fvm.timestepping as timestepping
-# import library.fvm.flux as flux
-# import library.fvm.nonconservative_flux as nc_flux
+from library.fvm.solver import Solver, Settings
+from library.fvm.ode import RK1
+import library.fvm.reconstruction as recon
+import library.fvm.timestepping as timestepping
+import library.fvm.flux as flux
+import library.fvm.nonconservative_flux as nc_flux
 
 from library.model.model import *
 import library.model.initial_conditions as IC
@@ -74,8 +75,8 @@ def test_smm_1d():
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
-def test_smm_2d():
-    level = 0
+def test_jax_jit_grad():
+    level = 1
     n_fields = 3 + 2*level
     settings = Settings(
         name="ShallowMoments",
@@ -111,22 +112,66 @@ def test_smm_2d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        # settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
-        settings={"eigenvalue_mode": "symbolic", "friction": []},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        # settings={"eigenvalue_mode": "symbolic", "friction": []},
 
     )
 
     main_dir = os.getenv("SMS")
     mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"))
+    print(settings.parameters)
     
-    # mesh = convert_mesh_to_jax(mesh)
-    # solver = Solver()
-    # solver.jax_fvm_unsteady_semidiscrete(
+    mesh = convert_mesh_to_jax(mesh)
+    solver = Solver()
+    # Qaux, Qnew = solver.jax_fvm_unsteady_semidiscrete(
     #     mesh, model, settings
     # )
-    jax_fvm_unsteady_semidiscrete(
+    
+    ## Automatic differentiation example
+    def full(params):
+        model.parameter_values = params
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
         mesh, model, settings
     )
+        return jax.numpy.sum(Qnew)
+    def single(g):
+        print(model.parameter_values)
+        param = jax.numpy.array(model.parameter_values)
+        param = param.at[0].set(g)
+        model.parameter_values = param
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings
+        )   
+        return jax.numpy.sum(Qnew)
+    def no_ad():
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings
+        )   
+        return jax.numpy.sum(Qnew)
+    
+    # jax.config.update("jax_enable_compilation_cache", False)
+    
+    params_orig = model.parameter_values.copy()
+    
+    params = model.parameter_values
+    gradient =  jax.jacfwd(full)(params)
+    jax.debug.print("param: {params}", params=params)
+    jax.debug.print("grad: {gradient}", gradient=gradient)
+    # jax.clear_caches() 
+    
+    model.parameter_values = params_orig
+    g = 9.81
+    gradient =  jax.jacfwd(single)(g)
+    jax.debug.print("param: {g}", g=g)
+    jax.debug.print("grad: {gradient}", gradient=gradient)
+    # jax.clear_caches() 
+    model.parameter_values = params_orig
+    no_ad()
+
+
+    #jax_fvm_unsteady_semidiscrete(
+    #    mesh, model, settings
+    #)
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
 
@@ -134,4 +179,4 @@ if __name__ == "__main__":
 
 
     #test_smm_1d()
-    test_smm_2d()
+    test_jax_jit_grad()
