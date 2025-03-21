@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import jax
 import pytest
 from types import SimpleNamespace
 
@@ -74,8 +75,8 @@ def test_smm_1d():
     )
     io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
 
-def test_smm_2d():
-    level = 0
+def test_jax_jit_grad():
+    level = 1
     n_fields = 3 + 2*level
     settings = Settings(
         name="ShallowMoments",
@@ -111,8 +112,8 @@ def test_smm_2d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        # settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
-        settings={"eigenvalue_mode": "symbolic", "friction": []},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        # settings={"eigenvalue_mode": "symbolic", "friction": []},
 
     )
 
@@ -122,9 +123,52 @@ def test_smm_2d():
     
     mesh = convert_mesh_to_jax(mesh)
     solver = Solver()
-    solver.jax_fvm_unsteady_semidiscrete(
-        mesh, model, settings
-    )
+    # Qaux, Qnew = solver.jax_fvm_unsteady_semidiscrete(
+    #     mesh, model, settings
+    # )
+    
+    ## Automatic differentiation example
+    def full(params):
+        model.parameter_values = params
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings
+        )   
+        return jax.numpy.sum(Qnew)
+    def single(g):
+        print(model.parameter_values)
+        param = jax.numpy.array(model.parameter_values)
+        param = param.at[0].set(g)
+        model.parameter_values = param
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings
+        )   
+        return jax.numpy.sum(Qnew)
+    def no_ad():
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings
+        )   
+        return jax.numpy.sum(Qnew)
+    
+    # jax.config.update("jax_enable_compilation_cache", False)
+    
+    params_orig = model.parameter_values.copy()
+    
+    params = model.parameter_values
+    gradient =  jax.jacfwd(full)(params)
+    jax.debug.print("param: {params}", params=params)
+    jax.debug.print("grad: {gradient}", gradient=gradient)
+    # jax.clear_caches() 
+    
+    model.parameter_values = params_orig
+    g = 9.81
+    gradient =  jax.jacfwd(single)(g)
+    jax.debug.print("param: {g}", g=g)
+    jax.debug.print("grad: {gradient}", gradient=gradient)
+    # jax.clear_caches() 
+    model.parameter_values = params_orig
+    no_ad()
+
+
     #jax_fvm_unsteady_semidiscrete(
     #    mesh, model, settings
     #)
@@ -135,4 +179,4 @@ if __name__ == "__main__":
 
 
     #test_smm_1d()
-    test_smm_2d()
+    test_jax_jit_grad()

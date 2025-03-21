@@ -473,18 +473,7 @@ class Solver():
                     time += dt
                     iteration += 1
                     
-                    ## WARNING: I currently need to use i_snapshot somewhere, otherwise the save_fields routine gets optimized away => no output written
-                    jax.debug.print("iteration: {iteration}, time: {time}, dt: {dt}, output_snapshot:{i_snapshot}", iteration=iteration, time=time, dt=dt, i_snapshot=i_snapshot)
-
-                    ## AD EXAMPLE
-                    #dQ = jnp.zeros_like(Qnew)
-                    #def f(parameters):
-                    #    return jnp.sum(source_operator(dt, Qnew, Qaux, parameters, dQ))
-
-                    #source_jac =  jax.grad(f)
-                    #gradient = source_jac(parameters)  
-                    #print(settings.parameters)
-                    #print(gradient)
+                    jax.debug.print("iteration: {iteration}, time: {time}, dt: {dt}", iteration=iteration, time=time, dt=dt)
 
                     time_stamp = (i_snapshot + 1)*dt_snapshot
 
@@ -505,23 +494,14 @@ class Solver():
     
                 return Qnew
             Qnew = time_loop(time, iteration, i_snapshot, Qnew, Qaux)
-            return Qnew
+            return Qnew, Qaux
     
-        def f(parameters):
-           Qnew = run(Q, Qaux, parameters, pde, bcs)
-           sum =  jnp.sum(Qnew)
-           return sum
-        time_start = gettime()
-        # Qnew = run(Q, Qaux, parameters, pde, bcs)
 
-        # run_grad =  jax.grad(f)
-        # run_grad = f
-        gradient =  jax.jacfwd(f)(parameters)
-        jax.debug.print("{parameters}", parameters=parameters)
-        jax.debug.print("{gradient}", gradient=gradient)
+        time_start = gettime()
+        Qnew, Qaux = run(Q, Qaux, parameters, pde, bcs)
+
 
         print(f"Runtime: {gettime() - time_start}")
     
-        return settings
-    
+        return Qnew, Qaux
     
