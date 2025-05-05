@@ -230,7 +230,7 @@ class Solver():
                 fA = fluxA_contribution[:, iA_masked]
                 fB = fluxB_contribution[:, iB_masked]
                 dQ = dQ.at[:, iA_masked].subtract(fA)
-                dQ = dQ.at[:, iA_masked].subtract(fB)
+                dQ = dQ.at[:, iB_masked].subtract(fB)
 
 
 
