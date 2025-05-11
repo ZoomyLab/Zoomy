@@ -7,13 +7,14 @@ import apps.game.swe.swe._2d.initial_conditions as ic
 import apps.game.swe.swe._2d.reconstruction as reconstruction
 import apps.game.swe.swe._2d.numerics as numerics
 import apps.game.swe.swe._2d.solver as solver
+from apps.game.stream.parameters import Nx
 
 # dimension of the problem
 n_dim = 4
 
 # discretization
 # we assume 2 ghost points
-n_elements = 200 + 2
+n_elements = Nx + 2
 xL = -10.
 xR = 10.
 dx = (xR-xL)/n_elements
@@ -49,16 +50,16 @@ bottom_gradient = np.gradient(ic.bottom_constant(X), dx)[1:-1]
 
 
 def apply_boundary_conditions(Q):
-    return bc.periodic(Q)
-    #return bc.inflow(Q)
+    #return bc.periodic(Q)
+    return bc.inflow(Q)
 
 
 def apply_initial_conditions(x):
     # return ic.rarefaction_shock(x)
     # return ic.rarefaction_rarefaction(x)
     #return ic.shock_shock(x)
-    return ic.dam_break(x)
-    #return ic.flat(x)
+    #return ic.dam_break(x)
+    return ic.flat(x)
 
 
 

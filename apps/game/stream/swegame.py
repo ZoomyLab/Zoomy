@@ -32,6 +32,7 @@ def start_game():
     rect_renderer = ge.add_rect(p)
     draw_stream = flow.add_freehand_draw_stream()
     renderer_image = flow.add_raster_image(p)
+
     
     button_rasterize = pn.widgets.Button(name='Apply geometry', button_type="primary")
     def rasterize(event):
@@ -62,7 +63,7 @@ def start_game():
     
     # Update the app layout to include the button
     app = pn.Column(p , pn.Row(button_start, button_rasterize, button_clear, button_reset))
-    return app
+    return app, freehand_renderer, rect_renderer, draw_stream, renderer_image
 
 # Serve the app
 #app.servable()

@@ -2,6 +2,8 @@ import jax
 import jax.numpy as np
 
 import apps.game.swe.tc_simple_2d as tc
+import apps.game.stream.parameters as param
+
 
 def wet_dry_fix(Q):
     h = Q[0]
@@ -14,7 +16,24 @@ def wet_dry_fix(Q):
     Q = np.array([h, hu, hv, b])
     return Q
 
-def step_fvm_conservative(Q):
+def update_outflow_register(outflow_register, flux):
+    
+    i_gauge = 0 
+    # for i, [o0, o1] in enumerate(param.o_top):
+    #     # print((np.sum(flux[0, -2, o0:o1])))
+    #         # outflow_register = outflow_register[i_gauge + i] = (np.sum(Qnew[2, -1, o0:o1] - Q[2, -1, o0:o1 ]) * dt)
+    #     i_gauge += 1
+    # for i in range(len(param.o_out)):
+    #     for [o0, o1] in param.o_out:
+    #         outflow_register.at(i_gauge + i).add(np.sum(Qnew[1, o0:o1, -1] - Q[1, o0:o1, -1]) * dt)
+    #     i_gauge += 1
+    # for i in range(len(param.o_bot)):
+    #     for [o0, o1] in param.o_bot:
+    #         outflow_register = outflow_register.at(i_gauge+i).add( np.sum(Qnew[2, 0, o0:o1] - Q[2, 0, o0:o1]) * dt)
+    return outflow_register
+
+
+def step_fvm_conservative(Q, outflow_register):
 
 
     # aliases
@@ -96,14 +115,19 @@ def step_fvm_conservative(Q):
     source_contribution = dt * tc.compute_source(Qi)
 
     Qnew = Q[:, 1:-1, 1:-1] + flux_contribution + source_contribution
+    
+    # outflow_register = update_outflow_register(outflow_register, dt* flux_contribution)
+
 
     Q = Q.at[:, 1:-1, 1:-1].set(Qnew)
 
     Q = wet_dry_fix(Q)
 
     Q = tc.apply_boundary_conditions(Q)
+    
+    
 
-    return Q
+    return Q, dt
 
 
 def setup():

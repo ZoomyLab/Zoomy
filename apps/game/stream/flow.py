@@ -22,11 +22,19 @@ global raster
 global flow
 global Q
 global sim_step
+global outflow_register
+
+
+
+n = len(param.o_out) + len(param.o_top) + len(param.o_bot)
+outflow_register = [0.] * n
 
 b_start = False
 
 path = hv.Path([])
-raster = np.zeros((param.Nx, param.Ny), dtype=np.uint8)
+raster = np.zeros((param.Nx+2*param.n_ghosts, param.Ny+2*param.n_ghosts), dtype=np.uint8)
+
+
 
 def setup():
     global Q
@@ -38,12 +46,46 @@ setup()
 def generate_image():
     global raster
     flow = Q[0, 1:-1, 1:-1]
+    #flow = Q[0, :, :]
     flow = flow / flow.max() * 255
-    flow = np.where(raster > 0, np.nan, flow)
+    ng = param.n_ghosts
+
+    flow = np.where(raster[ng:-ng, ng:-ng] > 0, np.nan, flow)
+    
+    for o0, o1 in param.convert_to_wall(param.o_in):
+        flow[o0:o1, 0:ng] = np.nan
+    for o0, o1 in param.convert_to_wall(param.o_out):
+        flow[o0:o1, -ng:] = np.nan  
+    for o0, o1 in param.convert_to_wall(param.o_top):
+        flow[-ng:, o0:o1] = np.nan
+    for o0, o1 in param.convert_to_wall(param.o_bot):
+        flow[0:ng, o0:o1] = np.nan
+        
+        
     #flow = flow / 0.5  * 255
     #flow = np.where(flow >= 250, np.nan, flow)
     #flow = np.roll(flow, 1, axis=0)
-    return flow + np.where(raster > 0, np.nan, 0)
+
+    out = np.zeros((param.Nx+2*ng, param.Ny+2*ng), dtype=np.uint8)
+    out[ng:-ng, ng:-ng] = flow
+    out = np.where(raster > 0, np.nan, out)
+    for o0, o1 in param.o_in:
+        for i in range(ng):
+            out[ng+o0:ng+o1, i] = flow[o0:o1, 0]
+    for o0, o1 in param.o_out:
+        for i in range(ng):
+            out[ng+o0:ng+o1, -i-1] = flow[o0:o1, -1]
+    for o0, o1 in param.o_top:  
+        for i in range(ng):
+            out[-i-1, ng+o0:ng+o1] = flow[-1, o0:o1]
+    for o0, o1 in param.o_bot:
+        for i in range(ng):
+            out[i, ng+o0:ng+o1] = flow[0, o0:o1]
+            
+    
+
+    # return flow + np.where(raster > 0, np.nan, 0)
+    return out
 
 
 def update_image():
@@ -52,17 +94,30 @@ def update_image():
     global Q
     global raster
     global sim_step
+    global outflow_register
     #I = np.where(raster > 0, 0., 1.)
     #Q = Q.at[0, 1:-1, 1:-1].multiply(I)
     #Q = Q.at[1, 1:-1, 1:-1].multiply(I)
     #Q = Q.at[2, 1:-1, 1:-1].multiply(I)
     tstart = get_time()
+    ng  = param.n_ghosts
     if b_start:
-        N = 10
-        for i in range(N):
-            Q = sim_step(Q)
-        Q = Q.at[3,1:-1,1:-1].set(raster)
-        print(f'TIME FOR {N} STEPS: {get_time()-tstart}')
+        for i in range(param.n_timesteps):
+            Q, dt = sim_step(Q, outflow_register)
+            i_gauge = 0
+            for i, [o0, o1] in enumerate(param.o_top):
+                outflow_register[i_gauge] += float(np.sum(Q[2, -2, o0:o1]) * dt)
+                i_gauge += 1
+            for i, [o0, o1] in enumerate(param.o_out):
+                outflow_register[i_gauge] += float(np.sum(Q[1, o0:o1, -2]) * dt)
+                i_gauge += 1
+            for i, [o0, o1] in enumerate(param.o_bot):
+                outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt)
+                i_gauge += 1
+        print(outflow_register)
+
+        Q = Q.at[3,1:-1,1:-1].set(raster[ng:-ng, ng:-ng])
+        print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
 
 image_source = ColumnDataSource(data=dict(image=[generate_image()]))
 color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')

@@ -4,7 +4,7 @@ from bokeh.models import FreehandDrawTool, ColumnDataSource, BoxEditTool
 # Create a data source for the freehand drawings
 
 global freehand_source
-global rect_source 
+# global rect_source 
 
 
 freehand_source = ColumnDataSource(data=dict(xs=[], ys=[]))
