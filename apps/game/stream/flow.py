@@ -23,11 +23,33 @@ global flow
 global Q
 global sim_step
 global outflow_register
+global b_finished
+global time
+global highscore
+global b_submitted
 
+highscore = []
 
+b_submitted = False
+time=0
+b_finished = False
 
 n = len(param.o_out) + len(param.o_top) + len(param.o_bot)
 outflow_register = [0.] * n
+progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50) for i in range(n)]
+
+
+sim_time = pn.indicators.Number(
+    name='Time', value=param.end_time, format='{value:.1f}')   
+
+local_score = pn.indicators.Number(
+    name='Your score', value=0,
+    colors=[(200, 'red'), (400, 'gold'), (450, 'green')]       )    
+
+md_highscore = pn.pane.Markdown(
+    """
+    # Highscore
+    """)   
 
 b_start = False
 
@@ -39,6 +61,22 @@ raster = np.zeros((param.Nx+2*param.n_ghosts, param.Ny+2*param.n_ghosts), dtype=
 def setup():
     global Q
     global sim_step
+    global outflow_register
+    global b_finished
+    global b_start
+    global time
+    global b_submitted
+    b_submitted = False
+    outflow_register = [0.] * n
+    b_finished = False
+    b_start = False
+    time = 0.
+    for bar in progressbars:
+        bar.value = 0
+    sim_time.value = param.end_time
+    
+    
+    
     Q, sim_step = sim.setup()
 
 setup()
@@ -92,11 +130,37 @@ def value_to_score(value):
         out =  value/3 * 100
     else:
         out =  max(0, 6 - value) / 3 * 100
-    return int(out+0.5)
+    return min(100, max(0, int(out+0.5)))
     # return min(int(((min(value, 6.)-3)/3)**2 ** 100 +0.5), 100)
 
 
-progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50) for i in range(n)]
+
+def sum_values(event):
+    local_score.value = sum(bar.value for bar in progressbars)
+
+
+for bar in progressbars:
+    bar.param.watch(sum_values, 'value')  
+    
+def submit_highscore(event):
+    global b_finished
+    global b_submitted
+    if b_finished == True and b_submitted == False:
+        b_submitted = True
+        local_score.value = sum(bar.value for bar in progressbars)
+        print('submit highscore')
+        global highscore
+        highscore.append(local_score.value)
+        
+        highscore.sort(reverse=True)
+        highscore = highscore[:10]
+        highscore_text = "# Highscore\n"
+        highscore_text += "\n".join([f"{i+1}. {s}" for i, s in enumerate(highscore)])
+        print(highscore_text)
+        md_highscore.object = highscore_text
+
+    
+sim_time.param.watch(submit_highscore, 'value')
 
 def update_progress():
     global outflow_register
@@ -104,8 +168,11 @@ def update_progress():
     # print([value_to_score(reg) for reg in outflow_register])
     for i, reg in enumerate(outflow_register):
         progressbars[i].value = value_to_score(reg)
+        
+    sim_time.value=param.end_time - time
 
 
+    
 
 def update_image():
     new_image = generate_image()
@@ -114,6 +181,9 @@ def update_image():
     global raster
     global sim_step
     global outflow_register
+    global b_finished
+    global b_start
+    global time
     #I = np.where(raster > 0, 0., 1.)
     #Q = Q.at[0, 1:-1, 1:-1].multiply(I)
     #Q = Q.at[1, 1:-1, 1:-1].multiply(I)
@@ -123,6 +193,11 @@ def update_image():
     if b_start:
         for i in range(param.n_timesteps):
             Q, dt = sim_step(Q, outflow_register)
+            time += dt
+            if time > param.end_time:
+                b_start = False
+                b_finished = True
+                time = param.end_time
             i_gauge = 0
             for i, [o0, o1] in enumerate(param.o_top):
                 outflow_register[i_gauge] += float(np.sum(Q[2, -2, o0:o1]) * dt)
@@ -141,7 +216,8 @@ def update_image():
         # print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
 
 image_source = ColumnDataSource(data=dict(image=[generate_image()]))
-color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')
+# color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')
+color_mapper = LinearColorMapper(palette=Blues256, low=0, high=255, nan_color='black')
 
 def add_raster_image(p):
     renderer_image = p.image(

@@ -11,7 +11,7 @@ def segment_to_pixel(segment,  width=3):
         x1 = segment[i, 0]
         y1 = segment[i, 1]
         d = np.sqrt((x1-x0)**2 + (y1-y0)**2)
-        N = max(param.Nx+2*param.n_ghosts, param.Ny+2*param.n_ghosts)
+        N = max(param.Nx+2*param.n_ghosts + 2*width, param.Ny+2*param.n_ghosts +2* width)
         line_x += list(np.linspace(x0, x1, int(N*d+1), dtype=float))
         line_y += list(np.linspace(y0, y1, int(N*d+1), dtype=float))
     line_x = np.array(line_x).flatten()
@@ -20,10 +20,10 @@ def segment_to_pixel(segment,  width=3):
     line_x_t = line_x
     line_y_t = line_y
 
-    idx_x = np.array(line_x_t * param.Ny, dtype=int)
-    idx_y = np.array(line_y_t * param.Nx, dtype=int)
-    idx_x = np.clip(idx_x, a_min=0,  a_max=param.Ny-1)
-    idx_y = np.clip(idx_y, a_min=0,  a_max=param.Nx-1)
+    idx_x = np.array(line_x_t * (param.Ny + param.n_ghosts + width), dtype=int)
+    idx_y = np.array(line_y_t * (param.Nx + param.n_ghosts + width), dtype=int)
+    idx_x = np.clip(idx_x, a_min=0,  a_max=param.Ny-1 + 2*param.n_ghosts + 2*width)
+    idx_y = np.clip(idx_y, a_min=0,  a_max=param.Nx-1 + 2*param.n_ghosts + 2*width)
 
     raster = np.zeros((param.Nx+2*param.n_ghosts+2*width, param.Ny+2*param.n_ghosts+2*width), dtype=np.uint8)
     offset = int(width)

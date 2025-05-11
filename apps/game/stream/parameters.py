@@ -1,19 +1,23 @@
 
-
-Nx = 600
-Ny = 600
+scale = 5
+Nx = 60*scale
+Ny = 60*scale
 n_ghosts = 5
 
-n_timesteps = 10
+q_in = 0.2
+h_in = 0.1
 
-o_in = [[300, 400]]
+n_timesteps = 10
+end_time = 15
+
+o_in = [[int(scale*30), int(scale*40)]]
 
 n_gauges_out = 2
-o_out = [[200, 300], [400, 500]]
+o_out = [[int(scale*20), int(scale*30)], [int(scale*40), int(scale*50)]]
 n_gauges_top = 2
-o_top = [[200, 300], [400, 450]]
+o_top = [[int(scale*20), int(scale*30)], [int(scale*40), int(scale*45)]]
 n_gauges_bot = 1
-o_bot = [[300, 400]]
+o_bot = [[int(scale*30), int(scale*40)]]
 
 def convert_to_wall(l):
     out = []

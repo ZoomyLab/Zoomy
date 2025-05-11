@@ -45,7 +45,7 @@ def flat(x):
     n_y = x.shape[2]
     n_dofs = 4
     Q = np.zeros((n_dofs, n_x, n_y))
-    h = np.where(x[0] < 0, 0.1, 0.1)
+    h = np.where(x[0] < 0, 0.01, 0.01)
     u = np.where(x[0] < 0, 0, 0)
     Q = Q.at[0, :, :].set(h)
     Q = Q.at[1, :, :].set(h*u)

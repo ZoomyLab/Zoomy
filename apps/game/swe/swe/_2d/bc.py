@@ -1,5 +1,5 @@
 import jax.numpy as np
-from apps.game.stream.parameters import o_in, o_top, o_out, o_bot
+from apps.game.stream.parameters import o_in, o_top, o_out, o_bot, q_in, h_in
 
 
 def periodic(Q):
@@ -49,12 +49,15 @@ def inflow(Q):
 
     # west boundary
     Q = Q.at[0, :,  0].set(Q[0, :, 1])
+    #inflow
+    for [o0, o1] in o_in:
+        Q = Q.at[0, o0:o1,  0].set(np.where(Q[0, o0:o1, 1] >= h_in, Q[0, o0:o1, 1], h_in))
     
     #wall
     Q = Q.at[1, :,  0].set(-Q[1, :, 1])
     #inflow
     for [o0, o1] in o_in:
-        Q = Q.at[1, o0:o1,  0].set(np.where(Q[1, o0:o1, 1] >= 0, 0.05, Q[1, o0:o1, 1]))
+        Q = Q.at[1, o0:o1,  0].set(np.where(Q[1, o0:o1, 1] >= 0, q_in, Q[1, o0:o1, 1]))
     
     Q = Q.at[2, :,  0].set(Q[2, :, 1])
     Q = Q.at[3, :,  0].set(Q[3, :, 1])
