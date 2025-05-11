@@ -87,6 +87,25 @@ def generate_image():
     # return flow + np.where(raster > 0, np.nan, 0)
     return out
 
+def value_to_score(value):
+    if value < 3:
+        out =  value/3 * 100
+    else:
+        out =  max(0, 6 - value) / 3 * 100
+    return int(out+0.5)
+    # return min(int(((min(value, 6.)-3)/3)**2 ** 100 +0.5), 100)
+
+
+progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50) for i in range(n)]
+
+def update_progress():
+    global outflow_register
+    # print(outflow_register)
+    # print([value_to_score(reg) for reg in outflow_register])
+    for i, reg in enumerate(outflow_register):
+        progressbars[i].value = value_to_score(reg)
+
+
 
 def update_image():
     new_image = generate_image()
@@ -114,10 +133,12 @@ def update_image():
             for i, [o0, o1] in enumerate(param.o_bot):
                 outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt)
                 i_gauge += 1
-        print(outflow_register)
+        # print(outflow_register)
+        update_progress()
+
 
         Q = Q.at[3,1:-1,1:-1].set(raster[ng:-ng, ng:-ng])
-        print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
+        # print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
 
 image_source = ColumnDataSource(data=dict(image=[generate_image()]))
 color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')

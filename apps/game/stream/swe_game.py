@@ -10,6 +10,8 @@ import apps.game.stream.gui_elements  as ge
 import apps.game.stream.flow as flow
 import apps.game.stream.parameters as param
 
+from apps.game.stream.flow import outflow_register
+
 # Load Panel extension
 pn.extension("echarts", 'gridstack', 'mathjax')
 
@@ -63,17 +65,17 @@ def start_simulation(event):
         flow.b_start = True
 button_start.on_click(start_simulation)
 
-gauges_top = [] 
-for i in range(param.n_gauges_top):
-    gauges_top.append(pn.indicators.Progress(name='', value=20, width=50))
+gauges_top = [flow.progressbars[0], flow.progressbars[1]] 
+# for i in range(param.n_gauges_top):
+#     gauges_top.append(pn.indicators.Progress(name='', value=20, width=50))
 
-gauges_out = [] 
-for i in range(param.n_gauges_out):
-    gauges_out.append(pn.Column(pn.indicators.Progress(name='', value=20, width=50), align='center', margin=0))
+gauges_out = [flow.progressbars[2], flow.progressbars[3]]
+# for i in range(param.n_gauges_out):
+#     gauges_out.append(pn.Column(pn.indicators.Progress(name='', value=20, width=50), align='center', margin=0))
 
-gauges_bot = [] 
-for i in range(param.n_gauges_bot):
-    gauges_bot.append(pn.Column(pn.indicators.Progress(name='', value=20, width=50), align='start', margin=0))
+gauges_bot = [flow.progressbars[4]]
+# for i in range(param.n_gauges_bot):
+#     gauges_bot.append(pn.Column(pn.indicators.Progress(name='', value=20, width=50), align='start', margin=0))
 
 
 
@@ -84,18 +86,49 @@ image_map = {
 }
 
 
+
 # Reactive image function
 def image_from_value(value):
-    if value < 50:
+    score = value
+    if score < 50:
         choice = 'sad'
-    elif value > 75:
+    elif score > 75:
         choice = 'happy'
     else:
         choice = 'neutral'
-    return pn.Column(pn.pane.Image(image_map[choice], sizing_mode='stretch_both',
-    margin=0))
+    return pn.pane.Image(image_map[choice], sizing_mode='stretch_both')
+    
 
-image_gauges_top_0 = pn.bind(image_from_value, gauges_top[0].value)
+
+def update_image(image_pane):
+    def update(value):
+        if value < 50:
+            choice = 'sad'
+        elif value > 75:
+            choice = 'happy'
+        else:
+            choice = 'neutral'
+        image_pane.object = image_map[choice]
+    return update
+
+
+image_gauges_top_0 = image_from_value(0)
+image_gauges_top_1 = image_from_value(0)
+image_gauges_out_0 = image_from_value(0)
+image_gauges_out_1 = image_from_value(0)
+image_gauges_bot_0 = image_from_value(0)
+
+
+# image_gauges_top_0 = pn.bind(update_image(image_gauges_top_0), flow.progressbars[0].param.value)
+# image_gauges_top_1 = pn.bind(update_image(image_gauges_top_1), flow.progressbars[1].param.value)
+# image_gauges_out_0 = pn.bind(update_image(image_gauges_out_0), flow.progressbars[2].param.value)
+# image_gauges_out_1 = pn.bind(update_image(image_gauges_out_1), flow.progressbars[3].param.value) 
+# image_gauges_bot_0 = pn.bind(update_image(image_gauges_bot_0), flow.progressbars[4].param.value)
+         
+         
+local_score = pn.indicators.Number(
+    name='Your score', value=0,
+    colors=[(200, 'red'), (400, 'gold'), (450, 'green')]       )             
 
 
 app = GridStack(sizing_mode='stretch_both', min_height=600, allow_resize=False, allow_drag=False)
@@ -118,12 +151,13 @@ app[0, 3:10] = pn.pane.Markdown(
 # app[1 , 0:2] = pn.Spacer(styles=dict(background='orange'))
 app[1 , 0:2] = pn.Spacer()
 
-app[1 , 2:10] = pn.Row(pn.Spacer(width=80),image_gauges_top_0, pn.Column(gauges_top[0], margin=0), pn.Spacer(width=200), image_gauges_top_0, pn.Column(gauges_top[1], margin=0))
+app[1 , 2:4] = pn.Spacer()
+app[1 , 4:6] = pn.Row(image_gauges_top_0, gauges_top[0])
+app[1 , 6] = pn.Spacer()
+app[1, 7:9]  = pn.Row(image_gauges_top_1, gauges_top[1])
+# app[1 , 10] = pn.Spacer()
 
-app[0:2, 10:12] = number = pn.indicators.Number(
-    name='Your score', value=430,
-    colors=[(200, 'red'), (400, 'gold'), (450, 'green')]
-)
+app[0:2, 10:12] = local_score
 # row 2:10
 app[2:10, 0:2] = pn.pane.Markdown(
     """
@@ -136,13 +170,21 @@ app[2:10, 0:2] = pn.pane.Markdown(
     5. 0
     """)   
 app[2:10, 2:10] = pn.Column(p, margin=5)
-app[2:10, 10] = pn.Column(pn.Spacer(height=80), gauges_out[0], pn.Spacer(height=200), gauges_out[1])
+
+app[2, 10] = pn.Spacer()
+app[3:5, 10] = pn.Column(image_gauges_out_0, gauges_out[0])
+app[5, 10] = pn.Spacer()
+app[6:8, 10] = pn.Column(image_gauges_out_1, gauges_out[1])
+app[8:10, 10] = pn.Spacer()
+
+
 app[2:10, 11] = pn.Spacer()  
 
 # row 10
-# app[10, 0:2] = pn.Spacer(styles=dict(background='blue'))    
-app[10, 0:2] = pn.Spacer()    
-app[10, 2:10] = pn.Row(pn.Spacer(width=200), gauges_bot[0], pn.Spacer(width=10))
+app[10, 0:6] = pn.Spacer()    
+app[10, 6:8] = pn.Row(image_gauges_bot_0, gauges_bot[0])
+app[10, 8:10] = pn.Spacer()    
+
 
 
 # row 11
@@ -151,14 +193,24 @@ app[11, 2:10] = pn.Row(button_start, button_rasterize, button_clear, button_rese
 
 app[10:12, 10:12] = pn.pane.PNG('./apps/game/images/logo.png', fixed_aspect=True)
 
+def sum_values(*vals):
+    local_score.param.value = sum(vals)
+    # return sum(vals)
 
+pn.bind(
+    sum_values, 
+    *[bar.param.value for bar in flow.progressbars]
+)
 
+# 3) For display, we can bind again, returning some text or an indicator
+# score_display = pn.bind(lambda s: pn.pane.Markdown(f"**Total Score**: {s}"), total_score)
 
-# Update the app layout to include the button
-# app = pn.Column(p , pn.Row(button_start, button_rasterize, button_clear, button_reset))
-    #return app
-
-# Serve the app
-#app = start_game()
 app.servable()
 #app.servable(static_dirs={'assets': './assets'})
+
+
+#TODO
+# time as a clock that rotates?
+# submit rating to score after try
+# update score
+# bind images to progress bars (currently disables)  
