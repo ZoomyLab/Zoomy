@@ -10,12 +10,12 @@ h_in = 0.1
 n_timesteps = 10
 end_time = 15
 
-o_in = [[int(scale*30), int(scale*40)]]
+o_in = [[int(scale*35), int(scale*45)]]
 
 n_gauges_out = 2
-o_out = [[int(scale*20), int(scale*30)], [int(scale*40), int(scale*50)]]
+o_out = [[int(scale*20), int(scale*30)], [int(scale*45), int(scale*55)]]
 n_gauges_top = 2
-o_top = [[int(scale*20), int(scale*30)], [int(scale*40), int(scale*45)]]
+o_top = [[int(scale*15), int(scale*25)], [int(scale*40), int(scale*45)]]
 n_gauges_bot = 1
 o_bot = [[int(scale*30), int(scale*40)]]
 

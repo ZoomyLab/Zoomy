@@ -1,0 +1,18 @@
+name: sms-game
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - attrs
+    - numpy
+    - jax[cuda12]
+    - jaxlib
+    - panel
+    - holoviews
+variables:
+  SMS: '/home/ingo/Git/sms'
+  PYTHONPATH: ':/home/ingo/Git/sms'
+
+

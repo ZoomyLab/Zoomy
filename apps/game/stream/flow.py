@@ -125,11 +125,11 @@ def generate_image():
     # return flow + np.where(raster > 0, np.nan, 0)
     return out
 
-def value_to_score(value):
-    if value < 3:
-        out =  value/3 * 100
+def value_to_score(value, goal=3.):
+    if value < goal:
+        out =  value/goal * 100
     else:
-        out =  max(0, 6 - value) / 3 * 100
+        out =  max(0, 2*goal - value) / goal * 100
     return min(100, max(0, int(out+0.5)))
     # return min(int(((min(value, 6.)-3)/3)**2 ** 100 +0.5), 100)
 
@@ -148,7 +148,7 @@ def submit_highscore(event):
     if b_finished == True and b_submitted == False:
         b_submitted = True
         local_score.value = sum(bar.value for bar in progressbars)
-        print('submit highscore')
+        # print('submit highscore')
         global highscore
         highscore.append(local_score.value)
         
@@ -156,7 +156,7 @@ def submit_highscore(event):
         highscore = highscore[:10]
         highscore_text = "# Highscore\n"
         highscore_text += "\n".join([f"{i+1}. {s}" for i, s in enumerate(highscore)])
-        print(highscore_text)
+        # print(highscore_text)
         md_highscore.object = highscore_text
 
     

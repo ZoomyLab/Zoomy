@@ -47,7 +47,7 @@ def rasterize(event):
     ge.freehand_source.data = dict(xs=[], ys=[])
 button_rasterize.on_click(rasterize)
 
-button_clear = pn.widgets.Button(name='Clear irregation', button_type="primary")
+button_clear = pn.widgets.Button(name='Clear drawing', button_type="primary")
 def clear_canvas(event):
     flow.raster[:, :] = 0.
 button_clear.on_click(clear_canvas)
@@ -60,7 +60,7 @@ def reset_simulation(event):
 button_reset.on_click(reset_simulation)
 
 
-button_start = pn.widgets.Button(name='Start/Stop', button_type="primary")
+button_start = pn.widgets.Button(name='Start irregation', button_type="primary")
 def start_simulation(event):
     if flow.b_start == False:
          flow.b_start = True
@@ -168,13 +168,19 @@ app[1, 7:9]  = pn.Row(image_gauges_top_1, gauges_top[1])
 
 app[0:2, 10:12] = flow.local_score
 # row 2:10
-app[2:10, 0:2] = flow.md_highscore
+app[2:4, 0:2] = pn.Spacer()
+app[4:6, 0:2] = pn.Row(pn.Spacer(height=50), pn.pane.PNG('./apps/game/images/inflow.png', fixed_aspect=True, sizing_mode='stretch_both'), sizing_mode='stretch_both')
+app[6:10, 0:2] = flow.md_highscore
+
 app[2:10, 2:10] = pn.Column(p, margin=5)
 
 app[2, 10] = pn.Spacer()
-app[3:5, 10] = pn.Column(image_gauges_out_0, gauges_out[0])
-app[5, 10] = pn.Spacer()
-app[6:8, 10] = pn.Column(image_gauges_out_1, gauges_out[1])
+app[3, 10] = pn.Column(image_gauges_out_0)
+app[4, 10] = pn.Column(gauges_out[0])
+app[5:6, 10] = pn.Row()
+app[6, 10] = pn.Column(image_gauges_out_1)
+app[7, 10] = pn.Column(gauges_out[1])
+
 app[8:10, 10] = pn.Spacer()
 
 
