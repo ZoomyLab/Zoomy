@@ -2,6 +2,7 @@ import panel as pn
 import numpy as np
 from bokeh.plotting import figure
 from bokeh.models import FreehandDrawTool, ColumnDataSource, BoxEditTool
+from time import time as gettime
 
 from panel.layout.gridstack import GridStack
 
@@ -15,6 +16,9 @@ from apps.game.stream.flow import outflow_register
 # Load Panel extension
 pn.extension("echarts", 'gridstack', 'mathjax')
 
+global b_help_state
+
+b_help_state = False
 
 
 # Create a Bokeh figure with explicit ranges and no default tools
@@ -134,6 +138,32 @@ image_gauges_bot_0 = pn.bind(update_image(image_gauges_bot_0), flow.progressbars
          
          
 
+question_mark_button = pn.widgets.Button(name="?", button_type="primary", width=40)
+
+gif_overlay = pn.pane.GIF(
+    'apps/game/images/tutorial.gif',
+    visible=False,
+    sizing_mode='stretch_both',
+)
+
+def hide_gif():
+    gif_overlay.visible = False
+
+def show_gif(event):
+    global b_help_state
+    if b_help_state == False:
+        b_help_state = True
+        gif_overlay.object = None
+        gif_overlay.object = 'apps/game/images/tutorial.gif'
+        gif_overlay.visible = True
+        p.visible=False
+
+    else:
+        b_help_state = False
+        gif_overlay.visible = False
+        p.visible=True
+
+question_mark_button.on_click(show_gif)
     
   
 
@@ -172,7 +202,7 @@ app[2:4, 0:2] = pn.Spacer()
 app[4:6, 0:2] = pn.Row(pn.Spacer(height=50), pn.pane.PNG('./apps/game/images/inflow.png', fixed_aspect=True, sizing_mode='stretch_both'), sizing_mode='stretch_both')
 app[6:10, 0:2] = flow.md_highscore
 
-app[2:10, 2:10] = pn.Column(p, margin=5)
+app[2:10, 2:10] = pn.Column(p, gif_overlay, margin=5)
 
 app[2, 10] = pn.Spacer()
 app[3, 10] = pn.Column(image_gauges_out_0)
@@ -194,7 +224,8 @@ app[10, 8:10] = pn.Spacer()
 
 
 # row 11
-app[11, 0:2] = pn.Spacer()
+# app[11, 0:2] = pn.Spacer()    
+app[11, 0:2] = pn.Row(question_mark_button)
 # app[11, 2:10] = pn.Row(button_start, button_rasterize, button_clear, button_reset)
 app[11, 2:10] = pn.Row(button_start, button_clear, button_reset)
 
