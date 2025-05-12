@@ -51,24 +51,26 @@ def rasterize(event):
     ge.freehand_source.data = dict(xs=[], ys=[])
 button_rasterize.on_click(rasterize)
 
-button_clear = pn.widgets.Button(name='Clear drawing', button_type="primary")
+button_clear = pn.widgets.Button(name='Skizze löschen', button_type="primary")
 def clear_canvas(event):
     flow.raster[:, :] = 0.
 button_clear.on_click(clear_canvas)
 
-button_reset = pn.widgets.Button(name='Reset simulation', button_type="primary")
+button_reset = pn.widgets.Button(name='Zurücksetzen', button_type="primary")
 def reset_simulation(event):
     flow.setup()  
     button_start.disabled=False
+    button_clear.disabled=False
 
 button_reset.on_click(reset_simulation)
 
 
-button_start = pn.widgets.Button(name='Start irregation', button_type="primary")
+button_start = pn.widgets.Button(name='Schleuse öffnen', button_type="primary")
 def start_simulation(event):
     if flow.b_start == False:
          flow.b_start = True
          button_start.disabled=True
+         button_clear.disabled=True
     # else:
     #     flow.b_start = True
     rasterize(event)
@@ -177,18 +179,20 @@ app = GridStack(sizing_mode='stretch_both', min_height=600, allow_resize=False, 
 #     """
 # )
 
-app[0:2, 0:2] = pn.Column(flow.sim_time)
+app[2:4, 0:2] = pn.Column(flow.sim_time)
 
-app[0, 3:10] = pn.pane.Markdown(
+app[0, 3:12] = pn.pane.Markdown(
     """
-    # Supersonic irregation
+    # antike Bewässerung 
     
-    Draw an irregation system and make the farmers happy. Make sure you do not flood their fields.   
+    Male dein Bewässerungssystem und öffne das Schleuse. Aber vorsicht, die Bauern mögen keine Überschwemmung!
+ 
     """
     )
+
 # row 1
 # app[1 , 0:2] = pn.Spacer(styles=dict(background='orange'))
-# app[1 , 0:2] = pn.Spacer()
+app[1 , 10:12] = pn.Spacer()
 
 app[1 , 2:4] = pn.Spacer()
 app[1 , 4:6] = pn.Row(image_gauges_top_0, gauges_top[0])
@@ -196,9 +200,10 @@ app[1 , 6] = pn.Spacer()
 app[1, 7:9]  = pn.Row(image_gauges_top_1, gauges_top[1])
 # app[1 , 10] = pn.Spacer()
 
-app[0:2, 10:12] = flow.local_score
+app[0:2, 0:2] = flow.local_score
+# app[0:2, 10:12] = flow.local_score
 # row 2:10
-app[2:4, 0:2] = pn.Spacer()
+# app[2:4, 0:2] = pn.Spacer()
 app[4:6, 0:2] = pn.Row(pn.Spacer(height=50), pn.pane.PNG('./apps/game/images/inflow.png', fixed_aspect=True, sizing_mode='stretch_both'), sizing_mode='stretch_both')
 app[6:10, 0:2] = flow.md_highscore
 
@@ -230,9 +235,11 @@ app[11, 0:2] = pn.Row(question_mark_button)
 app[11, 2:10] = pn.Row(button_start, button_clear, button_reset)
 
 
-app[10:12, 10:12] = pn.pane.PNG('./apps/game/images/logo.png', fixed_aspect=True)
+# app[10:12, 10:12] = pn.pane.PNG('./apps/game/images/logo.png', fixed_aspect=True)
 
 
+
+app[10:12, 10:12] = pn.Spacer()
 
 # 3) For display, we can bind again, returning some text or an indicator
 # score_display = pn.bind(lambda s: pn.pane.Markdown(f"**Total Score**: {s}"), total_score)

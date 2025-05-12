@@ -36,14 +36,14 @@ b_finished = False
 
 n = len(param.o_out) + len(param.o_top) + len(param.o_bot)
 outflow_register = [0.] * n
-progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50) for i in range(n)]
+progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50, bar_color = 'success') for i in range(n)]
 
 
 sim_time = pn.indicators.Number(
-    name='Time', value=param.end_time, format='{value:.1f}')   
+    name='Zeit', value=param.end_time, format='{value:.1f}')   
 
 local_score = pn.indicators.Number(
-    name='Your score', value=0,
+    name='Punkte', value=0,
     colors=[(200, 'red'), (400, 'gold'), (450, 'green')]       )    
 
 md_highscore = pn.pane.Markdown(
@@ -55,6 +55,11 @@ b_start = False
 
 path = hv.Path([])
 raster = np.zeros((param.Nx+2*param.n_ghosts, param.Ny+2*param.n_ghosts), dtype=np.uint8)
+
+global color_mapper
+# color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')
+color_mapper = LinearColorMapper(palette=Blues256, low=0, high=255, nan_color='black')
+global image_source
 
 
 
@@ -125,13 +130,20 @@ def generate_image():
     # return flow + np.where(raster > 0, np.nan, 0)
     return out
 
+image_source = ColumnDataSource(data=dict(image=[generate_image()]))
+
 def value_to_score(value, goal=3.):
     if value < goal:
         out =  value/goal * 100
     else:
         out =  max(0, 2*goal - value) / goal * 100
     return min(100, max(0, int(out+0.5)))
-    # return min(int(((min(value, 6.)-3)/3)**2 ** 100 +0.5), 100)
+
+def value_to_color(value, goal=3.):
+    if value < goal:
+        return 'success'
+    else:
+        return 'danger'
 
 
 
@@ -168,13 +180,17 @@ def update_progress():
     # print([value_to_score(reg) for reg in outflow_register])
     for i, reg in enumerate(outflow_register):
         progressbars[i].value = value_to_score(reg)
+        progressbars[i].bar_color = value_to_color(reg)
         
     sim_time.value=param.end_time - time
+
+
 
 
     
 
 def update_image():
+    global image_source
     new_image = generate_image()
     image_source.data = dict(image=[new_image])
     global Q
@@ -215,11 +231,10 @@ def update_image():
         Q = Q.at[3,1:-1,1:-1].set(raster[ng:-ng, ng:-ng])
         # print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
 
-image_source = ColumnDataSource(data=dict(image=[generate_image()]))
-# color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=255, nan_color='black')
-color_mapper = LinearColorMapper(palette=Blues256, low=0, high=255, nan_color='black')
+
 
 def add_raster_image(p):
+    global color_mapper
     renderer_image = p.image(
     'image',
     x=0,
