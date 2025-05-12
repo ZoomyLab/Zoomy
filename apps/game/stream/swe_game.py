@@ -3,6 +3,8 @@ import numpy as np
 from bokeh.plotting import figure
 from bokeh.models import FreehandDrawTool, ColumnDataSource, BoxEditTool
 from time import time as gettime
+import holoviews as hv
+
 
 from panel.layout.gridstack import GridStack
 
@@ -53,6 +55,7 @@ button_rasterize.on_click(rasterize)
 
 button_clear = pn.widgets.Button(name='Skizze löschen', button_type="primary")
 def clear_canvas(event):
+    ge.freehand_source.data = dict(xs=[], ys=[])
     flow.raster[:, :] = 0.
 button_clear.on_click(clear_canvas)
 
@@ -60,7 +63,7 @@ button_reset = pn.widgets.Button(name='Zurücksetzen', button_type="primary")
 def reset_simulation(event):
     flow.setup()  
     button_start.disabled=False
-    button_clear.disabled=False
+    # button_clear.disabled=False
 
 button_reset.on_click(reset_simulation)
 
@@ -70,7 +73,7 @@ def start_simulation(event):
     if flow.b_start == False:
          flow.b_start = True
          button_start.disabled=True
-         button_clear.disabled=True
+        #  button_clear.disabled=True
     # else:
     #     flow.b_start = True
     rasterize(event)
