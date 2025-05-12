@@ -40,15 +40,17 @@ progressbars = [pn.indicators.Progress(name='', value=0, max=100, width=50, bar_
 
 
 sim_time = pn.indicators.Number(
-    name='Zeit', value=param.end_time, format='{value:.1f}')   
+    name='Zeit', value=param.end_time,font_size='36pt',  format='{value:.1f}')   
 
 local_score = pn.indicators.Number(
-    name='Punkte', value=0,
+    name='Punkte', value=0, font_size='36pt',
     colors=[(200, 'red'), (400, 'gold'), (450, 'green')]       )    
 
 md_highscore = pn.pane.Markdown(
     """
-    # Highscore
+    ## Highscore
+
+
     """)   
 
 b_start = False

@@ -184,14 +184,14 @@ app = GridStack(sizing_mode='stretch_both', min_height=600, allow_resize=False, 
 
 app[2:4, 0:2] = pn.Column(flow.sim_time)
 
-app[0, 3:12] = pn.pane.Markdown(
+app[0, 2:12] = pn.Row(pn.pane.Markdown(
     """
-    # antike Bewässerung 
+    # Gesucht: Ingenieur für antike Bewässerungssysteme
     
     Male dein Bewässerungssystem und öffne das Schleuse. Aber vorsicht, die Bauern mögen keine Überschwemmung!
  
     """
-    )
+    ))
 
 # row 1
 # app[1 , 0:2] = pn.Spacer(styles=dict(background='orange'))
@@ -208,7 +208,7 @@ app[0:2, 0:2] = flow.local_score
 # row 2:10
 # app[2:4, 0:2] = pn.Spacer()
 app[4:6, 0:2] = pn.Row(pn.Spacer(height=50), pn.pane.PNG('./apps/game/images/inflow.png', fixed_aspect=True, sizing_mode='stretch_both'), sizing_mode='stretch_both')
-app[6:10, 0:2] = flow.md_highscore
+app[6:11, 0:2] = pn.Row(flow.md_highscore)
 
 app[2:10, 2:10] = pn.Column(p, gif_overlay, margin=5)
 
@@ -225,7 +225,7 @@ app[8:10, 10] = pn.Spacer()
 app[2:10, 11] = pn.Spacer()  
 
 # row 10
-app[10, 0:6] = pn.Spacer()    
+app[10, 2:6] = pn.Spacer()    
 app[10, 6:8] = pn.Row(image_gauges_bot_0, gauges_bot[0])
 app[10, 8:10] = pn.Spacer()    
 

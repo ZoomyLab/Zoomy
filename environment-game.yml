@@ -3,16 +3,14 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
+  - attrs
+  - numpy
+  - panel
+  - holoviews
   - pip
-  - pip:
-    - attrs
-    - numpy
-    - jax[cuda12]
-    - jaxlib
-    - panel
-    - holoviews
+
 variables:
-  SMS: '/home/ingo/Git/sms'
-  PYTHONPATH: ':/home/ingo/Git/sms'
+  SMS: '/home/mbd/Maschinenbautag/shallow-moments-simulation'
+  PYTHONPATH: ':/home/mbd/Maschinenbautag/shallow-moments-simulation'
 
 
