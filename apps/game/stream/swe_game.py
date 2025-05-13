@@ -186,10 +186,9 @@ app[2:4, 0:2] = pn.Column(flow.sim_time)
 
 app[0, 2:12] = pn.Row(pn.pane.Markdown(
     """
-    # Gesucht: Ingenieur für antike Bewässerungssysteme
+    ## Gesucht: Ingenieur für antike Bewässerungssysteme
     
     Male dein Bewässerungssystem und öffne das Schleuse. Aber vorsicht, die Bauern mögen keine Überschwemmung!
- 
     """
     ))
 

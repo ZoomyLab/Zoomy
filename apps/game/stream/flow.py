@@ -209,29 +209,31 @@ def update_image():
     tstart = get_time()
     ng  = param.n_ghosts
     if b_start:
+        dt_acc = 0.
         for i in range(param.n_timesteps):
             Q, dt = sim_step(Q, outflow_register)
             time += dt
+            dt_acc += dt
             if time > param.end_time:
                 b_start = False
                 b_finished = True
                 time = param.end_time
-            i_gauge = 0
-            for i, [o0, o1] in enumerate(param.o_top):
-                outflow_register[i_gauge] += float(np.sum(Q[2, -2, o0:o1]) * dt)
-                i_gauge += 1
-            for i, [o0, o1] in enumerate(param.o_out):
-                outflow_register[i_gauge] += float(np.sum(Q[1, o0:o1, -2]) * dt)
-                i_gauge += 1
-            for i, [o0, o1] in enumerate(param.o_bot):
-                outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt)
-                i_gauge += 1
+        i_gauge = 0
+        for i, [o0, o1] in enumerate(param.o_top):
+            outflow_register[i_gauge] += float(np.sum(Q[2, -2, o0:o1]) * dt_acc)
+            i_gauge += 1
+        for i, [o0, o1] in enumerate(param.o_out):
+            outflow_register[i_gauge] += float(np.sum(Q[1, o0:o1, -2]) * dt_acc)
+            i_gauge += 1
+        for i, [o0, o1] in enumerate(param.o_bot):
+            outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt)
+            i_gauge += 1
         # print(outflow_register)
         update_progress()
 
 
         Q = Q.at[3,1:-1,1:-1].set(raster[ng:-ng, ng:-ng])
-        # print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
+        print(f'TIME FOR {param.n_timesteps} STEPS: {get_time()-tstart}')
 
 
 

@@ -1,5 +1,5 @@
 
-scale = 5
+scale = 10
 Nx = 60*scale
 Ny = 60*scale
 n_ghosts = 5
@@ -7,7 +7,7 @@ n_ghosts = 5
 q_in = 0.2
 h_in = 0.1
 
-n_timesteps = 10
+n_timesteps = 20
 end_time = 15
 
 o_in = [[int(scale*35), int(scale*45)]]
