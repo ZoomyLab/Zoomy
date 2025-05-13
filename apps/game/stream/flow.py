@@ -162,9 +162,13 @@ def sum_values(event):
     score = int(sum(bar.value for bar in progressbars))
     if score == 500:
         score = int(score * time_factor(time) + 0.4)
+        global b_finished
+        b_finished = True
+        global b_start
+        b_start = False
     else:
         score = score
-
+    local_score.value = score
 
 for bar in progressbars:
     bar.param.watch(sum_values, 'value')  
@@ -174,7 +178,7 @@ def submit_highscore(event):
     global b_submitted
     if b_finished == True and b_submitted == False:
         b_submitted = True
-        local_score.value = sum(bar.value for bar in progressbars)
+        # local_score.value = sum(bar.value for bar in progressbars)
         # print('submit highscore')
         global highscore
         highscore.append(local_score.value)
@@ -236,7 +240,7 @@ def update_image():
             outflow_register[i_gauge] += float(np.sum(Q[2, -2, o0:o1]) * dt_acc)
             i_gauge += 1
         for i, [o0, o1] in enumerate(param.o_out):
-            outflow_register[i_gauge] += float(np.sum(Q[1, o0:o1, -2]) * dt_acc)
+            outflow_register[3-i] += float(np.sum(Q[1, o0:o1, -2]) * dt_acc)
             i_gauge += 1
         for i, [o0, o1] in enumerate(param.o_bot):
             outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt_acc)

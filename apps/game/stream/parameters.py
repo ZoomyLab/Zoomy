@@ -1,5 +1,5 @@
 
-scale = 3
+scale = 5
 Nx = 60*scale
 Ny = 60*scale
 n_ghosts = 5

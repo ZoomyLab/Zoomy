@@ -188,7 +188,7 @@ app[0, 2:12] = pn.Row(pn.pane.Markdown(
     """
     ## Gesucht: Ingenieur für antike Bewässerungssysteme
     
-    Male dein Bewässerungssystem und öffne das Schleuse. 
+    Male dein Bewässerungssystem und öffne das Schleuse. **Ziel**: Fülle die Gärten - so schnell wie möglich!
     """
     ))
 
