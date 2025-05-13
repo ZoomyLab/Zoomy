@@ -76,7 +76,9 @@ def inflow(Q):
     Q = Q.at[1, 0, :].set(Q[1, 1, :])
     Q = Q.at[2, 0, :].set(-Q[2, 1, :])
     for [o0, o1] in o_bot:
-        Q = Q.at[2, 0, o0:o1].set(np.where(Q[2, 1, o0:o1] > 0, 0, Q[2, 1,  o0:o1]))
+        # Q = Q.at[2, 0, o0:o1].set(np.where(Q[2, 1, o0:o1] > 0, 0, Q[2, 1,  o0:o1]))
+        Q = Q.at[2, 0, o0:o1].set(Q[2, 1, o0:o1])
+
     Q = Q.at[3, 0, :].set(Q[3, 1, :])
 
     return Q

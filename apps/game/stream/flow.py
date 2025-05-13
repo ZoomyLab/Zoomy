@@ -4,7 +4,7 @@ import holoviews as hv
 from holoviews import streams
 import panel as pn
 from bokeh.models import ColumnDataSource, FreehandDrawTool, LinearColorMapper
-from bokeh.palettes import Viridis256, Blues256
+from bokeh.palettes import Viridis256, Blues256, Plasma256
 
 from time import time as get_time
 
@@ -88,11 +88,17 @@ def setup():
 
 setup()
 
+def scale_flow(flow):
+    # return flow / flow.max() * 255
+    return np.minimum(flow * 5 * 255, 255.)
+
+
+
 def generate_image():
     global raster
     flow = Q[0, 1:-1, 1:-1]
     #flow = Q[0, :, :]
-    flow = flow / flow.max() * 255
+    flow = scale_flow(flow)
     ng = param.n_ghosts
 
     flow = np.where(raster[ng:-ng, ng:-ng] > 0, np.nan, flow)
@@ -135,22 +141,29 @@ def generate_image():
 image_source = ColumnDataSource(data=dict(image=[generate_image()]))
 
 def value_to_score(value, goal=3.):
-    if value < goal:
-        out =  value/goal * 100
-    else:
-        out =  max(0, 2*goal - value) / goal * 100
-    return min(100, max(0, int(out+0.5)))
+    # if value < goal:
+    #     out =  value/goal * 100
+    # else:
+    #     out =  max(0, 2*goal - value) / goal * 100
+    # return min(100, max(0, int(out+0.5)))
+    return  min(100, max(0, int((value/goal * 100))))
 
 def value_to_color(value, goal=3.):
-    if value < goal:
-        return 'success'
-    else:
-        return 'danger'
+    return 'success'
+    # if value <= goal:
+    #     return 'success'
+    # else:
+    #     return 'danger'
 
 
 
 def sum_values(event):
-    local_score.value = sum(bar.value for bar in progressbars)
+    time_factor = lambda t: 1+(1-np.exp(-(param.end_time-t)/param.end_time))
+    score = int(sum(bar.value for bar in progressbars))
+    if score == 500:
+        score = int(score * time_factor(time) + 0.4)
+    else:
+        score = score
 
 
 for bar in progressbars:
@@ -226,9 +239,9 @@ def update_image():
             outflow_register[i_gauge] += float(np.sum(Q[1, o0:o1, -2]) * dt_acc)
             i_gauge += 1
         for i, [o0, o1] in enumerate(param.o_bot):
-            outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt)
+            outflow_register[i_gauge] += float(np.sum(-Q[2, 1, o0:o1]) * dt_acc)
             i_gauge += 1
-        # print(outflow_register)
+
         update_progress()
 
 

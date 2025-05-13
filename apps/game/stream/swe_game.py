@@ -188,7 +188,7 @@ app[0, 2:12] = pn.Row(pn.pane.Markdown(
     """
     ## Gesucht: Ingenieur für antike Bewässerungssysteme
     
-    Male dein Bewässerungssystem und öffne das Schleuse. Aber vorsicht, die Bauern mögen keine Überschwemmung!
+    Male dein Bewässerungssystem und öffne das Schleuse. 
     """
     ))
 
@@ -241,7 +241,9 @@ app[11, 2:10] = pn.Row(button_start, button_clear, button_reset)
 
 
 
-app[10:12, 10:12] = pn.Spacer()
+app[10, 10:12] = pn.Spacer()
+app[11, 10:12] = pn.Row(pn.pane.PNG('./apps/game/images/logo_mbd.png', fixed_aspect=True, sizing_mode='stretch_both'), sizing_mode='stretch_both')
+
 
 # 3) For display, we can bind again, returning some text or an indicator
 # score_display = pn.bind(lambda s: pn.pane.Markdown(f"**Total Score**: {s}"), total_score)
