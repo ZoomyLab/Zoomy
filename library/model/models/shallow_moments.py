@@ -443,8 +443,8 @@ class ShallowMoments(Model):
         h = self.variables[0]
         ha = self.variables[1:1+self.levels+1]
         p = self.parameters
-        phi_0 = [self.basismatrices.basis.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basismatrices.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [self.basismatrices.basisfunctions.eval(i, 0.) for i in range(self.levels+1)]
+        dphidx_0 = [(diff(self.basismatrices.basisfunctions.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
         tau_bot = 0
         for i in range(1+self.levels):
             tau_bot +=  ha[i] / h  * dphidx_0[i]

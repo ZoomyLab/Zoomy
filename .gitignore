@@ -56,3 +56,5 @@ library/model/models/\
 .cache
 
 meshes
+of_coupling/of-original/dynamicCode
+of_coupling/of-original/export1

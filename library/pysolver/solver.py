@@ -2,7 +2,6 @@
 #from __future__ import division, print_function
 
 import numpy as np
-import jax.numpy as jnp
 from types import SimpleNamespace
 import pyprog
 from attr import define, field
@@ -44,6 +43,7 @@ from library.pysolver.ode import *
 from library.solver import python_c_interface as c_interface
 from library.solver import modify_sympy_c_code as modify_sympy_c_code
 
+main_dir = os.getenv("SMS")
 
 @define(slots=True, frozen=False, kw_only=True)
 class Settings:
@@ -65,7 +65,7 @@ class Settings:
     debug: bool = False
     profiling: bool = False
     compute_gradient: bool = False
-    precice_config_path: str = "/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml"
+    precice_config_path: str = os.path.join(main_dir, "of_coupling/precice-config.xml")
 
 
 def _initialize_problem(model, mesh, settings=None):
@@ -1135,7 +1135,8 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
             break
     if not i_water > 0:
         print(al)
-        assert False
+        return Qnew, pr, np.zeros_like(al), np.zeros_like(ve)
+        #assert False
     #i_water = (z*(al > threshold)).argmax()
 
 
@@ -1158,7 +1159,7 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
 
 
     # project velocities to moments
-    alpha = model.basis.basis.reconstruct_alpha(ve_water, z_water)
+    alpha = model.basismatrices.basisfunctions.reconstruct_alpha(ve_water, z_water)
 
     # factor for mass conservation
     #discharge_3d = np.trapz(al * ve[:, 0], z)
@@ -1190,8 +1191,8 @@ def apply_boundary_conditions_precice(model, Qnew, z, ve, al, pr):
 
 
     velocityGradient = np.zeros_like(ve)
-    uG = model.basis.basis.reconstruct_velocity_profile(Qnew[1:,idx]/Qnew[0, idx])
-    u0 = model.basis.basis.reconstruct_velocity_profile(Qnew[1:,0 ]/Qnew[0, 0])
+    uG = model.basismatrices.basisfunctions.reconstruct_velocity_profile(Qnew[1:,idx]/Qnew[0, idx])
+    u0 = model.basismatrices.basisfunctions.reconstruct_velocity_profile(Qnew[1:,0 ]/Qnew[0, 0])
     dudx = (u0-uG)/dx
     velocityGradient[:i_water, 0] = np.interp(z_water, np.linspace(0, 1, 100), dudx)
 
@@ -1364,8 +1365,6 @@ def precice_fvm(
     velocityName = "Velocity"
     pressureName = "Pressure"
     alphaName = "Alpha"
-    alphaGradientName = "AlphaGradient"
-    velocityGradientName = "VelocityGradient"
     
     dimensions = interface.get_mesh_dimensions(meshName)
     
@@ -1386,15 +1385,19 @@ def precice_fvm(
     vertexIDs = interface.set_mesh_vertices(meshName, grid)
     
     if interface.requires_initial_data():
-        interface.write_data(meshName, pressureName, vertexIDs, pressure)
-        interface.write_data(meshName, alphaGradientName, vertexIDs, alphaGradient)
-        interface.write_data(meshName, velocityGradientName, vertexIDs, velocityGradient)
+        interface.write_data(meshName, pressureName + "In", vertexIDs, pressure)
+        #interface.write_data(meshName, alphaName+ "In", vertexIDs, alpha)
+        interface.write_data(meshName, velocityName+ "In", vertexIDs, velocity)
     
     # preCICE defines timestep size of solver via precice-config.xml
     interface.initialize()
     
     velocity = interface.read_data(
-        meshName, velocityName, vertexIDs, 0)
+        meshName, velocityName+"Out", vertexIDs, 0)
+    pressure = interface.read_data(
+        meshName, pressureName+"Out", vertexIDs, 0)
+    alpha = interface.read_data(
+        meshName, alphaName+"Out", vertexIDs, 0)
     
     #velocity_old = np.copy(velocity)
 
@@ -1452,10 +1455,12 @@ def precice_fvm(
 
 
         velocity = interface.read_data(
-            meshName, velocityName, vertexIDs, dt)
-
+            meshName, velocityName+"Out", vertexIDs, dt)
+        pressure = interface.read_data(
+            meshName, pressureName+"Out", vertexIDs, dt)
         alpha = interface.read_data(
-            meshName, alphaName, vertexIDs, dt)
+        meshName, alphaName+"Out", vertexIDs, dt)
+
         if alpha[0] == 0:
             alpha = alpha0
 
@@ -1474,9 +1479,9 @@ def precice_fvm(
 
         Qnew = strong_bc(model, Qnew)
 
-        interface.write_data(meshName, pressureName, vertexIDs, pressure)
-        interface.write_data(meshName, alphaGradientName, vertexIDs, alphaGradient)
-        interface.write_data(meshName, velocityGradientName, vertexIDs, velocityGradient)
+        interface.write_data(meshName, pressureName + "In", vertexIDs, pressure)
+        #interface.write_data(meshName, alphaName+ "In", vertexIDs, alpha)
+        interface.write_data(meshName, velocityName+ "In", vertexIDs, velocity)
     # 
         interface.advance(dt)
     
