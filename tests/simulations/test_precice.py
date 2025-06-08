@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from types import SimpleNamespace
+import os
 
 from library.pysolver.solver import *
 from library.model.model import *
@@ -13,10 +14,10 @@ import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 
+main_dir = os.getenv("SMS")
+
 @pytest.mark.critical
 @pytest.mark.unfinished
-
-
 def test_smm_1d(level = 0, process='', case='', c_nut=1.0, c_bl=1.0, c_slipmod=1.0, lamda=7., nut = 0.0000145934315, nut_bl =0.0000145934315):
     print('==============================================')
     print('==============================================')
@@ -36,7 +37,7 @@ def test_smm_1d(level = 0, process='', case='', c_nut=1.0, c_bl=1.0, c_slipmod=1
         time_end=10.0,
         output_snapshots=100,
         output_dir = f'outputs/ijrewhs_cpl_{level}_{int(c_nut)}{int(c_bl)}{int(c_slipmod)}{int(lamda)}_{case}',
-        precice_config_path=f"/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config{process}.xml"
+        precice_config_path=os.path.join(main_dir, f"of_coupling/precice-config{process}.xml")
     )
 
     bcs = BC.BoundaryConditions(
@@ -71,6 +72,7 @@ def test_smm_1d(level = 0, process='', case='', c_nut=1.0, c_bl=1.0, c_slipmod=1
 if __name__ == "__main__":
     nut = 0.0000145934315
     #nut = 0.0000125934315
+    test_smm_1d(level=0, process='', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
 
     #test_smm_1d(level=6, process='_1', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
     #test_smm_1d(level=4, process='_2', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
