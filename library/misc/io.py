@@ -13,7 +13,7 @@ from library.mesh.mesh import *
 
 def init_output_directory(path, clean):
     main_dir = os.getenv("SMS")
-    path = os.path.join(main_dir, path) 
+    path = os.path.join(main_dir, path)
     os.makedirs(path, exist_ok=True)
     if clean:
         filelist = [f for f in os.listdir(path)]
@@ -62,20 +62,16 @@ def clean_files(filepath, filename=".vtk"):
                 os.remove(os.path.join(abs_filepath, file))
 
 
-
-
-def _save_fields_to_hdf5(
-    filepath, i_snapshot, time, Q, Qaux=None, overwrite=True
-):
+def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=True):
     i_snap = int(i_snapshot)
-    jax.debug.print('SAVING')
+    jax.debug.print("SAVING")
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "a") as f:
-        if i_snap == 0 and not 'fields' in f.keys():
-            fields = f.create_group('fields')
+        if i_snap == 0 and not "fields" in f.keys():
+            fields = f.create_group("fields")
         else:
-            fields = f['fields']
+            fields = f["fields"]
         group_name = "iteration_" + str(i_snap)
         if group_name in fields:
             if overwrite:
@@ -87,22 +83,20 @@ def _save_fields_to_hdf5(
         attrs.create_dataset("Q", data=Q)
         if Qaux is not None:
             attrs.create_dataset("Qaux", data=Qaux)
-    return i_snapshot + 1.
+    return i_snapshot + 1.0
 
 
 def get_save_fields(_filepath, write_all):
-    def _save_hdf5(
-    i_snapshot, time, Q, Qaux
-    ):
+    def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
         main_dir = os.getenv("SMS")
         filepath = os.path.join(main_dir, _filepath)
 
         with h5py.File(filepath, "a") as f:
-            if i_snap == 0 and not 'fields' in f.keys():
-                fields = f.create_group('fields')
+            if i_snap == 0 and not "fields" in f.keys():
+                fields = f.create_group("fields")
             else:
-                fields = f['fields']
+                fields = f["fields"]
             group_name = "iteration_" + str(i_snap)
             if group_name in fields:
                 if overwrite:
@@ -114,10 +108,11 @@ def get_save_fields(_filepath, write_all):
             attrs.create_dataset("Q", data=Q)
             if Qaux is not None:
                 attrs.create_dataset("Qaux", data=Qaux)
-        return i_snapshot + 1.
-    
+        return i_snapshot + 1.0
+
     def save_fields(time, next_write_at, i_snapshot, Q, Qaux):
         condition = jnp.logical_and(not write_all, time < next_write_at)
+
         def do_nothing(_):
             return i_snapshot
 
@@ -125,7 +120,14 @@ def get_save_fields(_filepath, write_all):
             # We define a small custom_jvp function that does the side effect
             @jax.custom_jvp
             def _save(i_snapshot, time, Q, Qaux):
-                return jax.pure_callback(_save_hdf5, jax.ShapeDtypeStruct((), jnp.float32), i_snapshot, time, Q, Qaux)
+                return jax.pure_callback(
+                    _save_hdf5,
+                    jax.ShapeDtypeStruct((), jnp.float32),
+                    i_snapshot,
+                    time,
+                    Q,
+                    Qaux,
+                )
                 # return i_snapshot + 1.
 
             @_save.defjvp
@@ -142,6 +144,7 @@ def get_save_fields(_filepath, write_all):
         return jax.lax.cond(condition, do_nothing, do_save, operand=None)
 
     return save_fields
+
 
 def save_fields_test(a):
     filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all = a
@@ -161,12 +164,13 @@ def load_fields_from_hdf5(filepath, i_snapshot=-1):
         else:
             i_snapshot = i_snapshot
         # group = f[str(i_snapshot)]
-        fields = f['fields']
+        fields = f["fields"]
         group = fields[f"iteration_{i_snapshot}"]
         time = group["time"][()]
         Q = group["Q"][()]
         Qaux = group["Qaux"][()]
     return Q, Qaux, time
+
 
 def load_timeline_of_fields_from_hdf5(filepath):
     main_dir = os.getenv("SMS")
@@ -176,7 +180,7 @@ def load_timeline_of_fields_from_hdf5(filepath):
     l_Qaux = []
     mesh = Mesh.from_hdf5(filepath)
     with h5py.File(filepath, "r") as f:
-        fields = f['fields']
+        fields = f["fields"]
         n_snapshots = len(fields.keys())
         for i in range(n_snapshots):
             group = fields[f"iteration_{i}"]
@@ -241,12 +245,12 @@ def generate_vtk(
     main_dir = os.getenv("SMS")
     abs_filepath = os.path.join(main_dir, filepath)
     path = os.path.dirname(abs_filepath)
-    filename_out = 'out'
+    filename_out = "out"
     full_filepath_out = os.path.join(path, filename_out)
     # abs_filepath = os.path.join(main_dir, filepath)
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
     file = h5py.File(os.path.join(main_dir, filepath), "r")
-    file_fields = file['fields']
+    file_fields = file["fields"]
     mesh = Mesh.from_hdf5(abs_filepath)
     snapshots = list(file_fields.keys())
     # init timestamp file
@@ -264,22 +268,21 @@ def generate_vtk(
         else:
             Qaux = np.empty((Q.shape[0], 0))
         output_vtk = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
- 
 
         # TODO callout to compute pointwise data?
         point_fields = None
         point_field_names = None
 
         if field_names is None:
-            field_names = [str(i) for i in range(Q.shape[1])]
+            field_names = [str(i) for i in range(Q.shape[0])]
         if aux_field_names is None:
-            aux_field_names = ["aux_{}".format(str(i)) for i in range(Qaux.shape[1])]
+            aux_field_names = ["aux_{}".format(str(i)) for i in range(Qaux.shape[0])]
 
         fields = np.concatenate((Q, Qaux), axis=0)
         field_names = field_names + aux_field_names
 
         vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[1], 3))
-        vertex_coordinates_3d[:, :mesh.dimension] = mesh.vertex_coordinates.T
+        vertex_coordinates_3d[:, : mesh.dimension] = mesh.vertex_coordinates.T
 
         _write_to_vtk_from_vertices_edges(
             os.path.join(path, output_vtk),

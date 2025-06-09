@@ -6,6 +6,7 @@ from petsc4py import PETSc
 import numpy as np
 import meshio
 import jax.numpy as jnp
+import jax
 
 import attr
 from attr import define
@@ -19,6 +20,20 @@ from library.misc.static_class import register_static_pytree
 
 
 # petsc4py.init(sys.argv)
+
+
+def compute_gradient(u, A_glob, neighbors):
+    def grad_single_cell(A_loc, neighbor_idx, u_i):
+        u_neighbors = u[neighbor_idx]  # shape (n_neighbors,)
+        delta_u = u_neighbors - u_i  # shape (n_neighbors,)
+        return A_loc @ delta_u  # shape (dim,)
+
+    # returns (n_cells, dim)
+    return jax.vmap(grad_single_cell)(
+        A_glob,  # shape (n_cells, dim, n_neighbors)
+        neighbors,  # shape (n_cells, n_neighbors)
+        u,  # shape (n_cells,)
+    )
 
 
 def least_squares_reconstruction(
@@ -41,6 +56,29 @@ def least_squares_reconstruction(
         A_glob[i_c, :, :] = np.einsum("ij, jk->ik", A_loc, R_loc)
         R_glob[i_c, :, :] = R_loc
     return A_glob, R_glob
+
+
+def least_squares_reconstruction_local(
+    n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
+):
+    A_glob = np.zeros((n_cells, dim, n_neighbors), dtype=float)
+    # R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
+    for i_c in range(n_cells):
+        # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
+        dX = np.zeros((n_neighbors, dim), dtype=float)
+        R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
+        A_loc = np.zeros((dim, n_neighbors), dtype=float)
+        R_loc[:, i_c] = -1.0
+        for i_neighbor, neighbor in enumerate(neighbors[i_c]):
+            R_loc[i_neighbor, neighbor] = 1.0
+            assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
+            for d in range(dim):
+                dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
+        # A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
+        A_loc = np.linalg.pinv(dX)
+        A_glob[i_c, :, :] = A_loc
+        # R_glob[i_c, :, :] = R_loc
+    return A_glob, A_glob
 
 
 def get_physical_boundary_labels(filepath):
@@ -342,7 +380,7 @@ class Mesh:
         polynomial_degree = 1
         n_neighbors = n_faces_per_cell * polynomial_degree
         dim = 1
-        lsq_gradQ, deltaQ = least_squares_reconstruction(
+        lsq_gradQ, deltaQ = least_squares_reconstruction_local(
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers
         )
 
@@ -595,7 +633,7 @@ class Mesh:
                 )
             cell_neighbors[i_c, :] = neighbors
 
-        lsq_gradQ, deltaQ = least_squares_reconstruction(
+        lsq_gradQ, deltaQ = least_squares_reconstruction_local(
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1
         )
 
@@ -956,7 +994,6 @@ class Mesh:
         meshout.write(filepath + ".vtk")
 
 
-
 @define(frozen=True, slots=True)
 class MeshJAX(Mesh):
     dimension: int = attr.ib()
@@ -991,6 +1028,7 @@ class MeshJAX(Mesh):
     deltaQ: jnp.ndarray = attr.ib()
     z_ordering: jnp.ndarray = attr.ib()
 
+
 def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
     return MeshJAX(
         dimension=mesh.dimension,
@@ -1019,8 +1057,12 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         face_volumes=jnp.array(mesh.face_volumes),
         face_centers=jnp.array(mesh.face_centers),
         face_subvolumes=jnp.array(mesh.face_subvolumes),
-        boundary_conditions_sorted_physical_tags=jnp.array(mesh.boundary_conditions_sorted_physical_tags),
-        boundary_conditions_sorted_names=list(mesh.boundary_conditions_sorted_names),  # Kept as NumPy array
+        boundary_conditions_sorted_physical_tags=jnp.array(
+            mesh.boundary_conditions_sorted_physical_tags
+        ),
+        boundary_conditions_sorted_names=list(
+            mesh.boundary_conditions_sorted_names
+        ),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
         deltaQ=jnp.array(mesh.deltaQ),
         z_ordering=jnp.array(mesh.z_ordering),
@@ -1028,13 +1070,9 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
 
 
 if __name__ == "__main__":
-    path = (
-        "/home/ingo/Git/sms/meshes/quad_2d/mesh_coarse.msh"
-    )
+    path = "/home/ingo/Git/sms/meshes/quad_2d/mesh_coarse.msh"
     path2 = "/home/ingo/Git/sms/meshes/quad_2d/mesh_fine.msh"
-    path3 = (
-        "/home/ingo/Git/sms/meshes/quad_2d/mesh_finest.msh"
-    )
+    path3 = "/home/ingo/Git/sms/meshes/quad_2d/mesh_finest.msh"
     path4 = "/home/ingo/Git/sms/meshes/triangle_2d/mesh_coarse.msh"
     labels = get_physical_boundary_labels(path)
     # print(labels)

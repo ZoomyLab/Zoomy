@@ -39,7 +39,7 @@ import library.fvm.nonconservative_flux as nonconservative_flux
 import library.fvm.ader_flux as ader_flux
 import library.fvm.timestepping as timestepping
 import library.misc.io as io
-from library.mesh.mesh import convert_mesh_to_jax
+from library.mesh.mesh import convert_mesh_to_jax, compute_gradient
 from library.fvm.ode import *
 from library.misc.static_class import register_static_pytree
 
@@ -561,3 +561,37 @@ class Solver:
         print(f"Runtime: {gettime() - time_start}")
 
         return Qnew, Qaux
+
+    def jax_reconstruction(
+        self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    ):
+        Q, Qaux = self.initialize(model, mesh)
+
+        parameters = model.parameter_values
+
+        # mesh = convert_mesh_to_jax(mesh)
+        parameters = jnp.asarray(parameters)
+
+        pde, bcs = self._load_runtime_model(model)
+        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
+
+        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        mesh.write_to_hdf5(output_hdf5_path)
+        time = 0.0
+        i_snapshot = 0.0
+        time_stamp = 0.0
+
+        jax.debug.print("Reconstruction")
+
+        time_start = gettime()
+
+        grad = compute_gradient(Q[0], mesh.lsq_gradQ, mesh.cell_neighbors)
+        Qaux = Qaux.at[0].set(grad[:, 0])
+        Qaux = Qaux.at[1].set(grad[:, 1])
+        i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
+
+        print(f"Runtime: {gettime() - time_start}")
+
+        return Q, Qaux

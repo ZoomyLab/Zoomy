@@ -101,7 +101,7 @@ def test_jax_jit_grad():
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=1.0,
+        time_end=0.1,
         output_snapshots=100,
         output_dir="outputs/test",
     )
@@ -134,9 +134,9 @@ def test_jax_jit_grad():
 
     main_dir = os.getenv("SMS")
     mesh = petscMesh.Mesh.from_gmsh(
-        os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
+        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
-    print(settings.parameters)
+    # print(settings.parameters)
 
     mesh = convert_mesh_to_jax(mesh)
     solver = Solver()
@@ -151,7 +151,7 @@ def test_jax_jit_grad():
         return jax.numpy.sum(Qnew)
 
     def single(g):
-        print(model.parameter_values)
+        # print(model.parameter_values)
         param = jax.numpy.array(model.parameter_values)
         param = param.at[0].set(g)
         model.parameter_values = param
@@ -165,7 +165,6 @@ def test_jax_jit_grad():
     # jax.config.update("jax_enable_compilation_cache", False)
 
     params_orig = model.parameter_values.copy()
-
     params = model.parameter_values
     gradient = jax.jacfwd(full)(params)
     jax.debug.print("param: {params}", params=params)
@@ -177,13 +176,10 @@ def test_jax_jit_grad():
     gradient = jax.jacfwd(single)(g)
     jax.debug.print("param: {g}", g=g)
     jax.debug.print("grad: {gradient}", gradient=gradient)
-    # jax.clear_caches()
+    ## jax.clear_caches()
     model.parameter_values = params_orig
     no_ad()
 
-    # jax_fvm_unsteady_semidiscrete(
-    #    mesh, model, settings
-    # )
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 
@@ -287,7 +283,69 @@ def test_jax_jit_grad_minimal():
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 
+def test_reconstruction():
+    level = 0
+    n_fields = 3 + 2 * level
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={
+            "g": 9.81,
+            "C": 1.0,
+            "nu": 0.000001,
+            "lamda": 7,
+            "rho": 1,
+            "eta": 1,
+            "c_slipmod": 1 / 70.0,
+        },
+        reconstruction=recon.constant,
+        num_flux=flux.Zero(),
+        nc_flux=nc_flux.segmentpath(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=0.1,
+        output_snapshots=10,
+        output_dir="outputs/test/reconstruction",
+    )
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Wall(physical_tag="top"),
+            BC.Extrapolation(physical_tag="bottom"),
+            BC.Extrapolation(physical_tag="left"),
+            BC.Wall(physical_tag="right"),
+        ]
+    )
+
+    def custom_ic(x):
+        Q = np.zeros(3 + 2 * level, dtype=float)
+        Q[0] = x[0] * 2 - x[1] * 1.0 + 10.0
+        return Q
+
+    ic = IC.UserFunction(custom_ic)
+
+    model = ShallowMoments2d(
+        fields=3 + 2 * level,
+        aux_fields=2,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        # settings={"eigenvalue_mode": "symbolic", "friction": []},
+    )
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
+    )
+
+    mesh = convert_mesh_to_jax(mesh)
+    solver = Solver()
+    Qaux, Qnew = solver.jax_reconstruction(mesh, model, settings)
+
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
+
 if __name__ == "__main__":
     # test_smm_1d()
     # test_jax_jit_grad()
-    test_jax_jit_grad_minimal()
+    # test_jax_jit_grad_minimal()
+    test_reconstruction()
