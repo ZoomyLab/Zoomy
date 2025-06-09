@@ -184,4 +184,3 @@ def write_to_calibration_dataformat(
 #         fin.close()
 
 #     f.close()
-

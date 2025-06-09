@@ -1,7 +1,5 @@
-import sys
 import os
 import h5py
-import petsc4py
 from petsc4py import PETSc
 import numpy as np
 import meshio
@@ -443,13 +441,13 @@ class Mesh:
         else:
             assert False
 
-        ## find number of cells in z (Nz) from first column
+        # find number of cells in z (Nz) from first column
         Nz = 1
         while cell_centers[order[Nz], 2] > cell_centers[order[Nz - 1], 2]:
             Nz += 1
         Nz += 1
 
-        ## partition order into [(Nx x Ny) , (Nz)]
+        # partition order into [(Nx x Ny) , (Nz)]
         N = int(cell_centers.shape[0] / Nz)
         assert cell_centers.shape[0] == N * Nz
         order = order.reshape((N, Nz))
@@ -613,13 +611,13 @@ class Mesh:
 
         # cell_neighbors = np.zeros(1)
         lsq_gradQ = np.zeros(1)
-        ### NON_VECTORIZED CASE
+        # NON_VECTORIZED CASE
         polynomial_degree = 1
         n_neighbors = n_faces_per_cell * polynomial_degree
         cell_neighbors = (n_cells + 1) * np.ones((n_cells, n_neighbors), dtype=int)
 
         for i_c, c in enumerate(range(cgStart, cgEnd)):
-            ### GET NEIGHBORHOOD
+            # GET NEIGHBORHOOD
             neighbors = _get_neighberhood(gdm, c, cStart=cgStart)
             assert not (i_c == neighbors).any()
             _n_neighbors = neighbors.shape[0]
@@ -637,7 +635,10 @@ class Mesh:
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1
         )
 
-        ### VECTORIZED CASE
+        n_face_neighbors = (2 * n_faces_per_cell - 1) * polynomial_degree
+        face_neighbors = (n_cells + 1) * np.ones((n_cells, n_face_neighbors), dtype=int)
+
+        # VECTORIZED CASE
         # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
         # lsq_A = []
         # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
@@ -802,7 +803,7 @@ class Mesh:
 
         # boundary_face_cell_face_index = np.empty((n_boundary_faces), dtype=int)
         # boundary_face_tag = np.empty((n_boundary_faces), dtype=int)
-        ## get a unique list of tags
+        # get a unique list of tags
         # boundary_tag_names = np.array(
         #    list(msh.boundary_tag_names) + [b"bottom", b"top"]
         # )

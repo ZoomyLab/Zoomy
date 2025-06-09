@@ -15,7 +15,12 @@ main_dir = os.getenv("SMPYTHON")
 
 @pytest.mark.critical
 @pytest.mark.parametrize(
-    "numerical_flux_func", ["rusanov", "lax_friedrichs", pytest.param("price_alphaC", marks=pytest.mark.broken)]
+    "numerical_flux_func",
+    [
+        "rusanov",
+        "lax_friedrichs",
+        pytest.param("price_alphaC", marks=pytest.mark.broken),
+    ],
 )
 def test_advection_1d(numerical_flux_func):
     ic = {"scheme": "func", "name": "riemann_offset"}
@@ -43,7 +48,12 @@ def test_advection_1d(numerical_flux_func):
         ("rusanov", "meshes/quad_2d/mesh_coarse.msh", "quad"),
         ("lax_friedrichs", "meshes/quad_2d/mesh_coarse.msh", "quad"),
         ("rusanov", "meshes/tri_2d/mesh_coarse.msh", "triangle"),
-        pytest.param("price_alphaC", "meshes/quad_2d/mesh_coarse.msh", "quad", marks=pytest.mark.broken),
+        pytest.param(
+            "price_alphaC",
+            "meshes/quad_2d/mesh_coarse.msh",
+            "quad",
+            marks=pytest.mark.broken,
+        ),
     ],
 )
 def test_advection_2d(numerical_flux_func, mesh_filename, mesh_type):

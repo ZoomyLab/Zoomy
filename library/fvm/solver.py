@@ -115,8 +115,7 @@ class Solver:
             evA = pde.eigenvalues(qA, qauxA, parameters, normal)
             evB = pde.eigenvalues(qB, qauxB, parameters, normal)
             # max_abs_eigenvalue = max(jnp.abs(evA).max(), jnp.abs(evB).max())
-            max_abs_eigenvalue = jnp.maximum(
-                jnp.abs(evA).max(), jnp.abs(evB).max())
+            max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
 
             # if not max_abs_eigenvalue > 10 ** (-8):
             #     iA = jnp.abs(evA).argmax()
@@ -242,11 +241,9 @@ class Solver:
                 zeros = jnp.zeros(mesh.n_inner_cells)
 
                 iA_masked = iA_faces == inner_range
-                iA_masked = jnp.repeat(
-                    iA_masked[jnp.newaxis], repeats=dim, axis=0)
+                iA_masked = jnp.repeat(iA_masked[jnp.newaxis], repeats=dim, axis=0)
                 iB_masked = iB_faces == inner_range
-                iB_masked = jnp.repeat(
-                    iB_masked[jnp.newaxis], repeats=dim, axis=0)
+                iB_masked = jnp.repeat(iB_masked[jnp.newaxis], repeats=dim, axis=0)
 
                 fluxA_contribution = jnp.where(
                     iA_masked,
@@ -415,8 +412,7 @@ class Solver:
                 # Get geometric information
                 normal = mesh.face_normals[:, i_face]
                 position = mesh.face_centers[i_face, :]
-                position_ghost = mesh.cell_centers[:,
-                                                   mesh.boundary_face_ghosts[i]]
+                position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]
 
                 # Compute distance between face and ghost cell
                 distance = jnp.linalg.norm(position - position_ghost)  # Scalar
@@ -446,8 +442,7 @@ class Solver:
                 return Q
 
             # Initialize Q_updated as Q and apply boundary conditions using fori_loop
-            Q_updated = jax.lax.fori_loop(
-                0, mesh.n_boundary_faces, loop_body, Q)
+            Q_updated = jax.lax.fori_loop(0, mesh.n_boundary_faces, loop_body, Q)
 
             return Q_updated
 
@@ -465,10 +460,8 @@ class Solver:
 
         pde, bcs = self._load_runtime_model(model)
         # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
-        output_hdf5_path = os.path.join(
-            settings.output_dir, f"{settings.name}.h5")
-        save_fields = io.get_save_fields(
-            output_hdf5_path, settings.output_write_all)
+        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
         def run(Q, Qaux, parameters, pde, bcs):
             iteration = 0.0
@@ -477,8 +470,7 @@ class Solver:
 
             i_snapshot = 0.0
             dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-            io.init_output_directory(
-                settings.output_dir, settings.output_clean_dir)
+            io.init_output_directory(settings.output_dir, settings.output_clean_dir)
             mesh.write_to_hdf5(output_hdf5_path)
             i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
@@ -548,8 +540,7 @@ class Solver:
                     time_stamp = (i_snapshot + 1) * dt_snapshot
 
                     # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
-                    i_snapshot = save_fields(
-                        time, time_stamp, i_snapshot, Qnew, Qaux)
+                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
 
                     return (time, iteration, i_snapshot, Q3, Qaux)
 
@@ -585,13 +576,10 @@ class Solver:
 
         pde, bcs = self._load_runtime_model(model)
         # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
-        output_hdf5_path = os.path.join(
-            settings.output_dir, f"{settings.name}.h5")
-        save_fields = io.get_save_fields(
-            output_hdf5_path, settings.output_write_all)
+        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
-        io.init_output_directory(
-            settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         time = 0.0
         i_snapshot = 0.0

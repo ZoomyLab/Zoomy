@@ -11,12 +11,14 @@ from sympy import legendre
 from sympy import lambdify
 
 from library.model import *
-from library.model.models.base import register_sympy_attribute, eigenvalue_dict_to_matrix
+from library.model.models.base import (
+    register_sympy_attribute,
+    eigenvalue_dict_to_matrix,
+)
 from library.model.models.base import Model
 import library.model.initial_conditions as IC
 from library.model.models.basisfunctions import *
 from library.model.models.basismatrices import *
-
 
 
 class HybridSFFSMM(Model):
@@ -28,11 +30,11 @@ class HybridSFFSMM(Model):
         dimension=1,
         fields=3,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basismatrices=Basismatrices()
+        basismatrices=Basismatrices(),
     ):
         self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
@@ -44,20 +46,19 @@ class HybridSFFSMM(Model):
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             aux_initial_conditions=aux_initial_conditions,
             settings={**settings_default, **settings},
         )
-   
-    def get_alphas(self): 
+
+    def get_alphas(self):
         Q = self.variables
         h = Q[0]
         # exlude h and P
         ha = Q[1:-1]
         return ha
-
 
     def flux(self):
         flux_x = Matrix([0 for i in range(self.n_fields)])
@@ -77,16 +78,22 @@ class HybridSFFSMM(Model):
         #     for j in range(self.levels+1):
         #         flux_x[1] += ha[i] * ha[j] / h * self.basismatrices.A[0, i, j] / self.basismatrices.M[ 0, 0 ]
         # higher order moments (SMM)
-        for k in range(1, self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    flux_x[k+1] += h * a[i] * a[j] * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
+        for k in range(1, self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    flux_x[k + 1] += (
+                        h
+                        * a[i]
+                        * a[j]
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         # P
-        flux_x[-1] = 2* P11 * u
-        for k in range(1, self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    flux_x[-1] += a[i] * a[j] * a[k] * self.basismatrices.A[k, i, j] 
+        flux_x[-1] = 2 * P11 * u
+        for k in range(1, self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    flux_x[-1] += a[i] * a[j] * a[k] * self.basismatrices.A[k, i, j]
         return [flux_x]
 
     def nonconservative_matrix(self):
@@ -98,18 +105,23 @@ class HybridSFFSMM(Model):
         a = [_ha / h for _ha in ha]
         P11 = self.variables[-1]
         p = self.parameters
-        um = ha[0]/h
+        um = ha[0] / h
 
-        # mean momentum 
-        # nc[1, 0] = - p.g * p.ez * h 
+        # mean momentum
+        # nc[1, 0] = - p.g * p.ez * h
         nc[1, 0] = 0
         # higher order momennts (SMM)
-        for k in range(1, self.levels+1):
-            nc[k+1, k+1] += um
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        for k in range(1, self.levels + 1):
+            nc[k + 1, k + 1] += um
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc[k + 1, i + 1] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         nc[-1, -1] = u
         return [nc]
 
@@ -124,19 +136,18 @@ class HybridSFFSMM(Model):
         evs = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         hu = self.variables[1]
-        u = hu/h
+        u = hu / h
         P11 = self.variables[2]
         p = self.parameters
 
         b = sympy.sqrt(P11)
-        a = sympy.sqrt(p.g * h + 3*P11)
+        a = sympy.sqrt(p.g * h + 3 * P11)
 
         evs[0] = u
         evs[1] = u + a
         evs[2] = u - a
 
         return evs
-
 
     def source(self):
         out = Matrix([0 for i in range(self.n_fields)])
@@ -156,6 +167,7 @@ class HybridSFFSMM(Model):
         out[1] = h * p.g * (p.ex - p.ez * dhdx)
         return out
 
+
 class ShallowMomentsAugmentedSSF(Model):
     def __init__(
         self,
@@ -165,11 +177,11 @@ class ShallowMomentsAugmentedSSF(Model):
         dimension=1,
         fields=3,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Legendre_shifted()
+        basis=Legendre_shifted(),
     ):
         self.basismatrices = basis
         self.variables = register_sympy_attribute(fields, "q")
@@ -181,14 +193,14 @@ class ShallowMomentsAugmentedSSF(Model):
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             aux_initial_conditions=aux_initial_conditions,
             settings={**settings_default, **settings},
         )
-   
-    def get_alphas(self): 
+
+    def get_alphas(self):
         Q = self.variables
         h = Q[0]
         # exlude u0 and P
@@ -197,14 +209,13 @@ class ShallowMomentsAugmentedSSF(Model):
         sum_aiMii = 0
         N = self.levels
         for i, hai in enumerate(ha):
-            sum_aiMii += hai * self.basismatrices.M[i+1, i+1] / h
-        
+            sum_aiMii += hai * self.basismatrices.M[i + 1, i + 1] / h
+
         aN = sympy.sqrt((P - h * sum_aiMii) / (h * self.basismatrices.M[N, N]))
         # now I want to include u0
         ha = Q[1:]
         ha[-1] = aN * h
         return ha
-
 
     def flux(self):
         flux = Matrix([0 for i in range(self.n_fields)])
@@ -214,12 +225,18 @@ class ShallowMomentsAugmentedSSF(Model):
         p = self.parameters
         flux[0] = ha[0]
         flux[1] = p.g * p.ez * h * h / 2
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
-        flux[-1] = 2* P11 * ha[0] / h
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux[k + 1] += (
+                        ha[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+        flux[-1] = 2 * P11 * ha[0] / h
         return [flux]
 
     def nonconservative_matrix(self):
@@ -228,18 +245,23 @@ class ShallowMomentsAugmentedSSF(Model):
         ha = self.get_alphas()
         P11 = self.variables[-1]
         p = self.parameters
-        um = ha[0]/h
-        # nc[1, 0] = - p.g * p.ez * h 
-        for k in range(1, self.levels+1):
-            nc[k+1, k+1] += um
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        um = ha[0] / h
+        # nc[1, 0] = - p.g * p.ez * h
+        for k in range(1, self.levels + 1):
+            nc[k + 1, k + 1] += um
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc[k + 1, i + 1] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         for k in range(nc.shape[1]):
             nc[-1, k] = 0
-        nc[-1, 1] = - P11
-        nc[-1, -1] = + P11
+        nc[-1, 1] = -P11
+        nc[-1, -1] = +P11
         return [nc]
 
     def eigenvalues(self):
@@ -274,11 +296,12 @@ class ShallowMoments(Model):
     """
     Shallow Moments 1d
 
-    :gui: 
+    :gui:
     - tab: model
     - requires: [ 'mesh.dimension': 1 ]
 
     """
+
     def __init__(
         self,
         boundary_conditions,
@@ -287,24 +310,26 @@ class ShallowMoments(Model):
         dimension=1,
         fields=2,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basismatrices()
+        basis=Basismatrices(),
     ):
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
         self.levels = self.n_fields - 2
         self.basismatrices = basis
-        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(order=self.levels)
+        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(
+            order=self.levels
+        )
         self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             aux_initial_conditions=aux_initial_conditions,
@@ -314,30 +339,41 @@ class ShallowMoments(Model):
     def flux(self):
         flux = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         flux[0] = ha[0]
         flux[1] = p.g * p.ez * h * h / 2
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux[k+1] +=  ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux[k + 1] += (
+                        ha[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return [flux]
 
     def nonconservative_matrix(self):
         nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        um = ha[0]/h
-        # nc[1, 0] = - p.g * p.ez * h 
-        for k in range(1, self.levels+1):
-            nc[k+1, k+1] += um
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -=  ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        um = ha[0] / h
+        # nc[1, 0] = - p.g * p.ez * h
+        for k in range(1, self.levels + 1):
+            nc[k + 1, k + 1] += um
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc[k + 1, i + 1] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return [nc]
 
     def eigenvalues(self):
@@ -379,7 +415,6 @@ class ShallowMoments(Model):
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         return out
-        
 
     def newtonian(self):
         """
@@ -389,12 +424,19 @@ class ShallowMoments(Model):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
-                out[1+k] += -p.nu/h *  ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                # out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                out[1 + k] += (
+                    -p.nu
+                    / h
+                    * ha[i]
+                    / h
+                    * self.basismatrices.D[i, k]
+                    / self.basismatrices.M[k, k]
+                )
         return out
 
     def newtonian_no_ibp(self):
@@ -405,12 +447,19 @@ class ShallowMoments(Model):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                #out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
-                out[1+k] += -p.nu/h *  ha[i]  / h * self.basismatrices.DD[k, i]/ self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                # out[1+k] += -p.nu/h * p.eta_bulk * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                out[1 + k] += (
+                    -p.nu
+                    / h
+                    * ha[i]
+                    / h
+                    * self.basismatrices.DD[k, i]
+                    / self.basismatrices.M[k, k]
+                )
         return out
 
     def newtonian_turbulent(self):
@@ -419,21 +468,76 @@ class ShallowMoments(Model):
             - requires_parameter: ('nu', 0.0)
         """
         p = self.parameters
-        nut1 = [1.06245397e-05,-8.64966128e-06,-4.24655215e-06,1.51861028e-06,2.25140517e-06, 1.81867029e-06,-1.02154323e-06,-1.78795289e-06,-5.07515843e-07]
-        nut2 = np.array([0.21923893, -0.04171894, -0.05129916, -0.04913612, -0.03863209, -0.02533469, -0.0144186, -0.00746847, -0.0031811, -0.00067986, 0.0021782])
-        nut2 = nut2 / nut2[0] * 1.06245397*10**(-5)
-        nut3 = [1.45934315e-05,-1.91969629e-05, 5.80456268e-06,-5.13207491e-07,2.29489571e-06,-1.24361978e-06,-2.78720732e-06,-2.01469118e-07,1.24957663e-06]
-        nut4 = [1.45934315e-05, -1.45934315e-05*3/4, -1.45934315e-05*1/4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        nut5 = [p.nut, -p.nut*3/4, -p.nut*1/4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        nut1 = [
+            1.06245397e-05,
+            -8.64966128e-06,
+            -4.24655215e-06,
+            1.51861028e-06,
+            2.25140517e-06,
+            1.81867029e-06,
+            -1.02154323e-06,
+            -1.78795289e-06,
+            -5.07515843e-07,
+        ]
+        nut2 = np.array(
+            [
+                0.21923893,
+                -0.04171894,
+                -0.05129916,
+                -0.04913612,
+                -0.03863209,
+                -0.02533469,
+                -0.0144186,
+                -0.00746847,
+                -0.0031811,
+                -0.00067986,
+                0.0021782,
+            ]
+        )
+        nut2 = nut2 / nut2[0] * 1.06245397 * 10 ** (-5)
+        nut3 = [
+            1.45934315e-05,
+            -1.91969629e-05,
+            5.80456268e-06,
+            -5.13207491e-07,
+            2.29489571e-06,
+            -1.24361978e-06,
+            -2.78720732e-06,
+            -2.01469118e-07,
+            1.24957663e-06,
+        ]
+        nut4 = [
+            1.45934315e-05,
+            -1.45934315e-05 * 3 / 4,
+            -1.45934315e-05 * 1 / 4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        nut5 = [p.nut, -p.nut * 3 / 4, -p.nut * 1 / 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         nut = nut5
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                for j in range(1+self.levels):
-                    out[1+k] += -p.c_nut * nut[j]/h *  ha[i]  / h  * self.basismatrices.DT[k, i, j]/ self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                for j in range(1 + self.levels):
+                    out[1 + k] += (
+                        -p.c_nut
+                        * nut[j]
+                        / h
+                        * ha[i]
+                        / h
+                        * self.basismatrices.DT[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return out
 
     def newtonian_boundary_layer_classic(self):
@@ -441,50 +545,79 @@ class ShallowMoments(Model):
         assert "eta" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        phi_0 = [self.basismatrices.basisfunctions.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basismatrices.basisfunctions.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [
+            self.basismatrices.basisfunctions.eval(i, 0.0)
+            for i in range(self.levels + 1)
+        ]
+        dphidx_0 = [
+            (diff(self.basismatrices.basisfunctions.eval(i, x), x)).subs(x, 0.0)
+            for i in range(self.levels + 1)
+        ]
         tau_bot = 0
-        for i in range(1+self.levels):
-            tau_bot +=  ha[i] / h  * dphidx_0[i]
-        for k in range(1+self.levels):
-            out[k+1] = - p.c_bl * p.eta * (p.nu + p.nut_bl) / h * tau_bot * phi_0[k] / self.basismatrices.M[k, k]
+        for i in range(1 + self.levels):
+            tau_bot += ha[i] / h * dphidx_0[i]
+        for k in range(1 + self.levels):
+            out[k + 1] = (
+                -p.c_bl
+                * p.eta
+                * (p.nu + p.nut_bl)
+                / h
+                * tau_bot
+                * phi_0[k]
+                / self.basismatrices.M[k, k]
+            )
         return out
-
 
     def newtonian_boundary_layer(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        phi_0 = [self.basismatrices.basis.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basismatrices.basis.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
+        phi_0 = [self.basismatrices.basis.eval(i, 0.0) for i in range(self.levels + 1)]
+        dphidx_0 = [
+            (diff(self.basismatrices.basis.eval(i, x), x)).subs(x, 0.0)
+            for i in range(self.levels + 1)
+        ]
         dz_boundary_layer = 0.005
         u_bot = 0
-        for i in range(1+self.levels):
-            u_bot += ha[i] / h / self.basismatrices.M[i, i] 
-        tau_bot = p.nu * (u_bot - 0.)/dz_boundary_layer
-        for k in range(1+self.levels):
-            out[k+1] = - p.eta * tau_bot / h
+        for i in range(1 + self.levels):
+            u_bot += ha[i] / h / self.basismatrices.M[i, i]
+        tau_bot = p.nu * (u_bot - 0.0) / dz_boundary_layer
+        for k in range(1 + self.levels):
+            out[k + 1] = -p.eta * tau_bot / h
         return out
 
     def steady_state_channel(self):
         assert "eta_ss" in vars(self.parameters)
-        moments_ss = np.array([0.21923893, -0.04171894, -0.05129916, -0.04913612, -0.03863209, -0.02533469, -0.0144186, -0.00746847, -0.0031811, -0.00067986, 0.0021782])[:self.levels+1]
+        moments_ss = np.array(
+            [
+                0.21923893,
+                -0.04171894,
+                -0.05129916,
+                -0.04913612,
+                -0.03863209,
+                -0.02533469,
+                -0.0144186,
+                -0.00746847,
+                -0.0031811,
+                -0.00067986,
+                0.0021782,
+            ]
+        )[: self.levels + 1]
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        mean = ha[0]/h
+        ha = self.variables[1 : 1 + self.levels + 1]
+        mean = ha[0] / h
         mean_ss = moments_ss[0]
         scaling = mean / mean_ss
         p = self.parameters
-        for i in range(1,self.levels+1):
-            out[1+i] =  - p.eta_ss * h * (ha[i]/h - scaling*moments_ss[i])
+        for i in range(1, self.levels + 1):
+            out[1 + i] = -p.eta_ss * h * (ha[i] / h - scaling * moments_ss[i])
         return out
-
 
     def slip(self):
         """
@@ -496,11 +629,13 @@ class ShallowMoments(Model):
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                out[1 + k] += (
+                    -1.0 / p.lamda / p.rho * ha[i] / h / self.basismatrices.M[k, k]
+                )
         return out
 
     def slip_mod(self):
@@ -513,38 +648,42 @@ class ShallowMoments(Model):
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         ub = 0
-        for i in range(1+self.levels):
-            ub += ha[i]  / h 
-        for k in range(1, 1+self.levels):
-            out[1+k] += -1.*p.c_slipmod/p.lamda/p.rho * ub / self.basismatrices.M[k, k]
+        for i in range(1 + self.levels):
+            ub += ha[i] / h
+        for k in range(1, 1 + self.levels):
+            out[1 + k] += (
+                -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
+            )
         return out
 
     def no_slip(self):
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        a0 = [ha[i] / h for i in range(self.levels+1)]
-        a = [ha[i] / h for i in range(self.levels+1)]
+        a0 = [ha[i] / h for i in range(self.levels + 1)]
+        a = [ha[i] / h for i in range(self.levels + 1)]
         # for i in range(self.levels+1):
         #     out[i+1] = ha[i]
-        phi_0 = np.zeros(self.levels+1)
+        phi_0 = np.zeros(self.levels + 1)
         ns_iterations = 2
-        for k in range(self.levels+1):
-            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
+        for k in range(self.levels + 1):
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.0)
+
         def f(j, a, a0, basis_0):
             out = 0
-            for i in range(self.levels+1):
+            for i in range(self.levels + 1):
                 # out += -2*p.ns_1*(a[i] - a0[i]) -2*p.ns_2*basis_0[j] * a[i] * basis_0[i]
-                out += -2*p.ns_2*basis_0[j] * a[i] * basis_0[i]
+                out += -2 * p.ns_2 * basis_0[j] * a[i] * basis_0[i]
             return out
+
         for i in range(ns_iterations):
-            for k in range(1, 1+self.levels):
-                out[1+k] += h*(f(k, a, a0, phi_0))
-            a = [a[k] + out[k] / h for k in range(self.levels+1)]
+            for k in range(1, 1 + self.levels):
+                out[1 + k] += h * (f(k, a, a0, phi_0))
+            a = [a[k] + out[k] / h for k in range(self.levels + 1)]
         # return sympy.simplify(out)
         return out
 
@@ -556,16 +695,18 @@ class ShallowMoments(Model):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        for i in range(1+self.levels):
-            for j in range(1+self.levels):
+        for i in range(1 + self.levels):
+            for j in range(1 + self.levels):
                 tmp += ha[i] * ha[j] / h / h
         sqrt = sympy.sqrt(tmp)
-        for k in range(1+self.levels):
-            for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
+        for k in range(1 + self.levels):
+            for l in range(1 + self.levels):
+                out[1 + k] += (
+                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * ha[l] * sqrt / h
+                )
         return out
 
     def chezy_mean(self):
@@ -576,12 +717,12 @@ class ShallowMoments(Model):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        u = ha[0] / h 
-        for k in range(1+self.levels):
-            out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * u**2
+        u = ha[0] / h
+        for k in range(1 + self.levels):
+            out[1 + k] += -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * u**2
         return out
 
     def chezy_ssf(self):
@@ -592,16 +733,16 @@ class ShallowMoments(Model):
         assert "Cf" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        for i in range(1+self.levels):
-            for j in range(1+self.levels):
+        for i in range(1 + self.levels):
+            for j in range(1 + self.levels):
                 tmp += ha[i] * ha[j] / h / h
         sqrt = sympy.sqrt(tmp)
-        for k in range(1+self.levels):
-            for l in range(1+self.levels):
-                out[1+k] += -(p.Cf * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
+        for k in range(1 + self.levels):
+            for l in range(1 + self.levels):
+                out[1 + k] += -(p.Cf * self.basismatrices.M[k, k]) * ha[l] * sqrt / h
         return out
 
     def shear_new(self):
@@ -612,20 +753,20 @@ class ShallowMoments(Model):
         assert "beta" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        d_phi_0 = np.zeros(self.levels+1)
-        phi_0 = np.zeros(self.levels+1)
-        for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
-        friction_factor = 0.
-        for k in range(self.levels+1):
-            friction_factor -= p.beta * d_phi_0[k] * ha[k]/h/h
+        d_phi_0 = np.zeros(self.levels + 1)
+        phi_0 = np.zeros(self.levels + 1)
+        for k in range(self.levels + 1):
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.0)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.0)
+        friction_factor = 0.0
+        for k in range(self.levels + 1):
+            friction_factor -= p.beta * d_phi_0[k] * ha[k] / h / h
         k = 0
         # for k in range(1+self.levels):
-        out[1+k] += friction_factor * phi_0[k] /(self.basismatrices.M[k,k]) 
+        out[1 + k] += friction_factor * phi_0[k] / (self.basismatrices.M[k, k])
         return out
 
     def shear(self):
@@ -636,19 +777,19 @@ class ShallowMoments(Model):
         assert "beta" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        d_phi_0 = np.zeros(self.levels+1)
-        phi_0 = np.zeros(self.levels+1)
-        for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
-        friction_factor = 0.
-        for k in range(self.levels+1):
-            friction_factor -= p.beta * d_phi_0[k]  * ha[k]/h
-        for k in range(self.levels+1):
-            out[1+k] += friction_factor * phi_0[k] /(self.basismatrices.M[k,k])  / h
+        d_phi_0 = np.zeros(self.levels + 1)
+        phi_0 = np.zeros(self.levels + 1)
+        for k in range(self.levels + 1):
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.0)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.0)
+        friction_factor = 0.0
+        for k in range(self.levels + 1):
+            friction_factor -= p.beta * d_phi_0[k] * ha[k] / h
+        for k in range(self.levels + 1):
+            out[1 + k] += friction_factor * phi_0[k] / (self.basismatrices.M[k, k]) / h
         return out
 
     def shear_crazy(self):
@@ -659,16 +800,16 @@ class ShallowMoments(Model):
         assert "beta" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        d_phi_0 = np.zeros(self.levels+1)
-        phi_0 = np.zeros(self.levels+1)
-        for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
-        for k in range(self.levels+1):
-            out[1+k] += -p.beta * d_phi_0[k] * phi_0[k] * ha[k]/h
+        d_phi_0 = np.zeros(self.levels + 1)
+        phi_0 = np.zeros(self.levels + 1)
+        for k in range(self.levels + 1):
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.0)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.0)
+        for k in range(self.levels + 1):
+            out[1 + k] += -p.beta * d_phi_0[k] * phi_0[k] * ha[k] / h
         return out
 
     def manning_mean(self):
@@ -680,40 +821,53 @@ class ShallowMoments(Model):
         assert "g" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
-        u = ha[0] / h 
-        for k in range(1+self.levels):
-            out[1+k] += -1./p.kst**2 * p.g / h**(1/3) * u**2 * (self.basismatrices.M[k,k])
+        u = ha[0] / h
+        for k in range(1 + self.levels):
+            out[1 + k] += (
+                -1.0
+                / p.kst**2
+                * p.g
+                / h ** (1 / 3)
+                * u**2
+                * (self.basismatrices.M[k, k])
+            )
         return out
 
     def steady_state(self):
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
         p = self.parameters
         tmp = 0
-        d_phi_0 = np.zeros(self.levels+1)
-        phi_0 = np.zeros(self.levels+1)
-        for k in range(self.levels+1):
-            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.)
-            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.)
-        shear_factor = 0.
-        u_bottom = 0.
-        u_diff = ha[0]/h
-        for k in range(self.levels+1):
-            u_diff +=  (phi_0[k] * ha[k]/h) 
-        for k in range(self.levels+1):
-            shear_factor +=  d_phi_0[k] *  (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
+        d_phi_0 = np.zeros(self.levels + 1)
+        phi_0 = np.zeros(self.levels + 1)
+        for k in range(self.levels + 1):
+            d_phi_0[k] = diff(self.basismatrices.basis.eval(k, x), x).subs(x, 0.0)
+            phi_0[k] = self.basismatrices.basis.eval(k, x).subs(x, 0.0)
+        shear_factor = 0.0
+        u_bottom = 0.0
+        u_diff = ha[0] / h
+        for k in range(self.levels + 1):
+            u_diff += phi_0[k] * ha[k] / h
+        for k in range(self.levels + 1):
+            shear_factor += d_phi_0[k] * (
+                ha[k] / h - eval(f"p.Q_ss{k + 1}") / eval(f"p.Q_ss{0}")
+            )
         # for k in range(1, self.levels+1):
-        #     out[1+k] += - shear_factor *  np.abs(u_diff) * p.S *  phi_0[k] /(self.basismatrices.M[k,k]) 
-        for k in range(1, self.levels+1):
+        #     out[1+k] += - shear_factor *  np.abs(u_diff) * p.S *  phi_0[k] /(self.basismatrices.M[k,k])
+        for k in range(1, self.levels + 1):
             # out[1+k] += - p.A * np.abs(u_diff)* (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
-            out[1+k] += - p.A * np.abs(ha[0]/h) * (ha[k]/h - eval(f'p.Q_ss{k+1}')/eval(f'p.Q_ss{0}'))
+            out[1 + k] += (
+                -p.A
+                * np.abs(ha[0] / h)
+                * (ha[k] / h - eval(f"p.Q_ss{k + 1}") / eval(f"p.Q_ss{0}"))
+            )
         return out
 
-class ShallowMomentsSSF(ShallowMoments):
 
+class ShallowMomentsSSF(ShallowMoments):
     def eigenvalues(self):
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
         for d in range(1, self.dimension):
@@ -723,41 +877,57 @@ class ShallowMomentsSSF(ShallowMoments):
         #     A = A.subs(alpha_i, 0)
         return eigenvalue_dict_to_matrix(sympy.simplify(A).eigenvals())
 
+
 class ShallowMomentsSSFEnergy(ShallowMoments):
     def flux(self):
         flux = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha = self.variables[1 : 1 + self.levels + 1] - self.variables[1] / np.diag(
+            self.basismatrices.M
+        )
         ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
         flux[0] = ha[0]
         flux[1] = p.g * p.ez * h * h / 2
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux[k + 1] += (
+                        ha[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
 
         flux_hu = flux[1]
 
-        for k in range(1,self.levels+1):
-            flux[k+1] += flux_hu / self.basismatrices.M[k, k]
+        for k in range(1, self.levels + 1):
+            flux[k + 1] += flux_hu / self.basismatrices.M[k, k]
         return [flux]
 
     def nonconservative_matrix(self):
         nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha = self.variables[1 : 1 + self.levels + 1] - self.variables[1] / np.diag(
+            self.basismatrices.M
+        )
         ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
-        um = ha[0]/h
-        # nc[1, 0] = - p.g * p.ez * h 
-        for k in range(1, self.levels+1):
-            nc[k+1, k+1] += um
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        um = ha[0] / h
+        # nc[1, 0] = - p.g * p.ez * h
+        for k in range(1, self.levels + 1):
+            nc[k + 1, k + 1] += um
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc[k + 1, i + 1] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return [nc]
 
     def chezy(self):
@@ -768,30 +938,31 @@ class ShallowMomentsSSFEnergy(ShallowMoments):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1] - self.variables[1] / np.diag(self.basismatrices.M)
+        ha = self.variables[1 : 1 + self.levels + 1] - self.variables[1] / np.diag(
+            self.basismatrices.M
+        )
         ha[1:] -= self.variables[1] * np.diag(self.basismatrices.M)[1:]
         p = self.parameters
         tmp = 0
-        for i in range(1+self.levels):
-            for j in range(1+self.levels):
+        for i in range(1 + self.levels):
+            for j in range(1 + self.levels):
                 tmp += ha[i] * ha[j] / h / h
         sqrt = sympy.sqrt(tmp)
-        for k in range(1+self.levels):
-            for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2) * ha[l]/h * sqrt
+        for k in range(1 + self.levels):
+            for l in range(1 + self.levels):
+                out[1 + k] += -1.0 / (p.C**2) * ha[l] / h * sqrt
 
-        for k in range(1+self.levels):
-            out[1+k] += out[1] / self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            out[1 + k] += out[1] / self.basismatrices.M[k, k]
 
         return out
-
-
 
     def eigenvalues(self):
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
         for d in range(1, self.dimension):
             A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
         return eigenvalue_dict_to_matrix(sympy.simplify(A).eigenvals())
+
 
 class ShallowMomentsTurbulenceSimple(ShallowMoments):
     def __init__(
@@ -801,26 +972,27 @@ class ShallowMomentsTurbulenceSimple(ShallowMoments):
         dimension=1,
         fields=4,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Legendre_shifted()
+        basis=Legendre_shifted(),
     ):
         super().__init__(
             dimension=dimension,
-            fields=fields-2,
+            fields=fields - 2,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
-            basis = basis,
+            basis=basis,
         )
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = variables.length()
         assert n_fields >= 4
+
 
 class ShallowMoments2d(Model):
     def __init__(
@@ -830,104 +1002,150 @@ class ShallowMoments2d(Model):
         dimension=2,
         fields=3,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
-        basis=Basismatrices()
+        basis=Basismatrices(),
     ):
         self.variables = register_sympy_attribute(fields, "q")
         self.n_fields = self.variables.length()
-        self.levels = int((self.n_fields - 1)/2)-1
+        self.levels = int((self.n_fields - 1) / 2) - 1
         self.basismatrices = basis
-        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(order=self.levels)
+        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(
+            order=self.levels
+        )
         self.basismatrices.compute_matrices(self.levels)
         super().__init__(
             dimension=dimension,
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
 
     def flux(self):
-        offset = self.levels+1
+        offset = self.levels + 1
         flux_x = Matrix([0 for i in range(self.n_fields)])
         flux_y = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+self.levels+1:1+2*(self.levels+1)]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + self.levels + 1 : 1 + 2 * (self.levels + 1)]
         p = self.parameters
         flux_x[0] = ha[0]
         flux_x[1] = p.g * p.ez * h * h / 2
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux_x[k+1] += ha[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux_x[k+1+offset] += hb[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux_x[k + 1] += (
+                        ha[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux_x[k + 1 + offset] += (
+                        hb[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
 
         flux_y[0] = hb[0]
-        flux_y[1+offset] = p.g * p.ez * h * h / 2
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux_y[k+1] += hb[i] * ha[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
-        for k in range(self.levels+1):
-            for i in range(self.levels+1):
-                for j in range(self.levels+1):
-                    # TODO avoid devision by zero 
-                    flux_y[k+1+offset] += hb[i] * hb[j] / h * self.basismatrices.A[k, i, j] / self.basismatrices.M[ k, k ]
+        flux_y[1 + offset] = p.g * p.ez * h * h / 2
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux_y[k + 1] += (
+                        hb[i]
+                        * ha[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+        for k in range(self.levels + 1):
+            for i in range(self.levels + 1):
+                for j in range(self.levels + 1):
+                    # TODO avoid devision by zero
+                    flux_y[k + 1 + offset] += (
+                        hb[i]
+                        * hb[j]
+                        / h
+                        * self.basismatrices.A[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return [flux_x, flux_y]
 
     def nonconservative_matrix(self):
-        offset = self.levels+1
+        offset = self.levels + 1
         nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         nc_y = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+offset+self.levels+1]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + offset + self.levels + 1]
         p = self.parameters
-        um = ha[0]/h
-        vm = hb[0]/h
-        for k in range(1, self.levels+1):
-            nc_x[k+1, k+1] += um
-            nc_y[k+1, k+1+offset] += um
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc_x[k+1, i+1] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
-                    nc_y[k+1, i+1+offset] -= ha[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        um = ha[0] / h
+        vm = hb[0] / h
+        for k in range(1, self.levels + 1):
+            nc_x[k + 1, k + 1] += um
+            nc_y[k + 1, k + 1 + offset] += um
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc_x[k + 1, i + 1] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+                    nc_y[k + 1, i + 1 + offset] -= (
+                        ha[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
 
-        for k in range(1, self.levels+1):
-            nc_x[k+1+offset, k+1] += vm
-            nc_y[k+1+offset, k+1+offset] += vm
-        for k in range(self.levels+1):
-            for i in range(1, self.levels+1):
-                for j in range(1, self.levels+1):
-                    nc_x[k+1+offset, i+1] -= hb[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
-                    nc_y[k+1+offset, i+1+offset] -= hb[j]/h*self.basismatrices.B[k, i, j]/self.basismatrices.M[k, k]
+        for k in range(1, self.levels + 1):
+            nc_x[k + 1 + offset, k + 1] += vm
+            nc_y[k + 1 + offset, k + 1 + offset] += vm
+        for k in range(self.levels + 1):
+            for i in range(1, self.levels + 1):
+                for j in range(1, self.levels + 1):
+                    nc_x[k + 1 + offset, i + 1] -= (
+                        hb[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+                    nc_y[k + 1 + offset, i + 1 + offset] -= (
+                        hb[j]
+                        / h
+                        * self.basismatrices.B[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
         return [nc_x, nc_y]
 
     def eigenvalues(self):
         # we delete heigher order moments (level >= 2) for analytical eigenvalues
-        offset = self.levels+1
+        offset = self.levels + 1
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
         for d in range(1, self.dimension):
             A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
-        alpha_erase = self.variables[2:2+self.levels]
-        beta_erase = self.variables[2+offset : 2+offset+self.levels]
+        alpha_erase = self.variables[2 : 2 + self.levels]
+        beta_erase = self.variables[2 + offset : 2 + offset + self.levels]
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
-        for beta_i in beta_erase:        
+        for beta_i in beta_erase:
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
@@ -943,96 +1161,155 @@ class ShallowMoments2d(Model):
     def topography(self):
         assert "dhdx" in vars(self.aux_variables)
         assert "dhdy" in vars(self.aux_variables)
-        offset = self.levels+1
+        offset = self.levels + 1
         out = Matrix([0 for i in range(self.n_fields)])
         h = self.variables[0]
         p = self.parameters
         dhdx = self.aux_variables.dhdx
         dhdy = self.aux_variables.dhdy
         out[1] = h * p.g * (p.ex - p.ez * dhdx)
-        out[1+offset] = h * p.g * (p.ey - p.ez * dhdy)
+        out[1 + offset] = h * p.g * (p.ey - p.ez * dhdy)
         return out
-
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        offset = self.levels+1
+        offset = self.levels + 1
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+self.levels+1+offset]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + self.levels + 1 + offset]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                out[1+k] += -p.nu/h * ha[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
-                out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                out[1 + k] += (
+                    -p.nu
+                    / h
+                    * ha[i]
+                    / h
+                    * self.basismatrices.D[i, k]
+                    / self.basismatrices.M[k, k]
+                )
+                out[1 + k + offset] += (
+                    -p.nu
+                    / h
+                    * hb[i]
+                    / h
+                    * self.basismatrices.D[i, k]
+                    / self.basismatrices.M[k, k]
+                )
         return out
 
     def newtonian_boundary_layer(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        offset = self.levels+1
+        offset = self.levels + 1
         h = self.variables[0]
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+self.levels+1+offset]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + self.levels + 1 + offset]
         p = self.parameters
-        phi_0 = [self.basismatrices.eval(i, 0.) for i in range(self.levels+1)]
-        dphidx_0 = [(diff(self.basismatrices.eval(i, x), x)).subs(x, 0.) for i in range(self.levels+1)]
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                out[1+k] += -p.nu / h * ha[i] / h / self.basismatrices.M[k, k] * phi_0[k] * dphidx_0[i]
-                out[1+k+offset] += -p.nu / h  * hb[i]  / h / self.basismatrices.M[k, k]* phi_0[k] * dphidx_0[i]
+        phi_0 = [self.basismatrices.eval(i, 0.0) for i in range(self.levels + 1)]
+        dphidx_0 = [
+            (diff(self.basismatrices.eval(i, x), x)).subs(x, 0.0)
+            for i in range(self.levels + 1)
+        ]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                out[1 + k] += (
+                    -p.nu
+                    / h
+                    * ha[i]
+                    / h
+                    / self.basismatrices.M[k, k]
+                    * phi_0[k]
+                    * dphidx_0[i]
+                )
+                out[1 + k + offset] += (
+                    -p.nu
+                    / h
+                    * hb[i]
+                    / h
+                    / self.basismatrices.M[k, k]
+                    * phi_0[k]
+                    * dphidx_0[i]
+                )
         return out
-
 
     def sindy(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        offset = self.levels+1
+        offset = self.levels + 1
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+self.levels+1+offset]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + self.levels + 1 + offset]
         p = self.parameters
-        out[1] += p.C1 * sympy.Abs(ha[0]/h) + p.C2 * sympy.Abs(ha[1]/h) + p.C3 * sympy.Abs(ha[0]/h)**(7/3)+ p.C4 * sympy.Abs(ha[1]/h)**(7/3)
-        out[2] += p.C5 * sympy.Abs(ha[0]/h) + p.C6 * sympy.Abs(ha[1]/h) + p.C7 * sympy.Abs(ha[0]/h)**(7/3)+ p.C8 * sympy.Abs(ha[1]/h)**(7/3)
-        out[3] += p.C1 * sympy.Abs(ha[0]/h) + p.C2 * sympy.Abs(ha[1]/h) + p.C3 * sympy.Abs(ha[0]/h)**(7/3)+ p.C4 * sympy.Abs(ha[1]/h)**(7/3)
-        out[4] += p.C5 * sympy.Abs(ha[0]/h) + p.C6 * sympy.Abs(ha[1]/h) + p.C7 * sympy.Abs(ha[0]/h)**(7/3)+ p.C8 * sympy.Abs(ha[1]/h)**(7/3)
+        out[1] += (
+            p.C1 * sympy.Abs(ha[0] / h)
+            + p.C2 * sympy.Abs(ha[1] / h)
+            + p.C3 * sympy.Abs(ha[0] / h) ** (7 / 3)
+            + p.C4 * sympy.Abs(ha[1] / h) ** (7 / 3)
+        )
+        out[2] += (
+            p.C5 * sympy.Abs(ha[0] / h)
+            + p.C6 * sympy.Abs(ha[1] / h)
+            + p.C7 * sympy.Abs(ha[0] / h) ** (7 / 3)
+            + p.C8 * sympy.Abs(ha[1] / h) ** (7 / 3)
+        )
+        out[3] += (
+            p.C1 * sympy.Abs(ha[0] / h)
+            + p.C2 * sympy.Abs(ha[1] / h)
+            + p.C3 * sympy.Abs(ha[0] / h) ** (7 / 3)
+            + p.C4 * sympy.Abs(ha[1] / h) ** (7 / 3)
+        )
+        out[4] += (
+            p.C5 * sympy.Abs(ha[0] / h)
+            + p.C6 * sympy.Abs(ha[1] / h)
+            + p.C7 * sympy.Abs(ha[0] / h) ** (7 / 3)
+            + p.C8 * sympy.Abs(ha[1] / h) ** (7 / 3)
+        )
         return out
 
     def slip(self):
         assert "lamda" in vars(self.parameters)
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        offset = self.levels+1
+        offset = self.levels + 1
         h = self.variables[0]
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+self.levels+1+offset]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + self.levels + 1 + offset]
         p = self.parameters
-        for k in range(1+self.levels):
-            for i in range(1+self.levels):
-                out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basismatrices.M[k, k]
-                out[1+k+offset] += -1./p.lamda/p.rho * hb[i]  / h / self.basismatrices.M[k, k]
+        for k in range(1 + self.levels):
+            for i in range(1 + self.levels):
+                out[1 + k] += (
+                    -1.0 / p.lamda / p.rho * ha[i] / h / self.basismatrices.M[k, k]
+                )
+                out[1 + k + offset] += (
+                    -1.0 / p.lamda / p.rho * hb[i] / h / self.basismatrices.M[k, k]
+                )
         return out
 
     def chezy(self):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])
-        offset = self.levels+1
+        offset = self.levels + 1
         h = self.variables[0]
-        ha = self.variables[1:1+self.levels+1]
-        hb = self.variables[1+offset:1+self.levels+1+offset]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1 + offset : 1 + self.levels + 1 + offset]
         p = self.parameters
         tmp = 0
-        for i in range(1+self.levels):
-            for j in range(1+self.levels):
+        for i in range(1 + self.levels):
+            for j in range(1 + self.levels):
                 tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
         sqrt = sympy.sqrt(tmp)
-        for k in range(1+self.levels):
-            for l in range(1+self.levels):
-                out[1+k] += -1./(p.C**2 * self.basismatrices.M[k,k]) * ha[l] * sqrt / h 
-                out[1+k+offset] += -1./(p.C**2 * self.basismatrices.M[k,k]) * hb[l] * sqrt / h 
+        for k in range(1 + self.levels):
+            for l in range(1 + self.levels):
+                out[1 + k] += (
+                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * ha[l] * sqrt / h
+                )
+                out[1 + k + offset] += (
+                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * hb[l] * sqrt / h
+                )
         return out
 
 
@@ -1066,7 +1343,7 @@ def reconstruct_uvw(Q, grad, lvl, phi, psi):
         v_z = 0
         grad_h = grad[0, :]
         # grad_hb = grad[-1, :]
-        grad_hb = np.zeros(grad[0,:].shape)
+        grad_hb = np.zeros(grad[0, :].shape)
         result = 0
         for i in range(lvl + 1):
             u_z += alpha[i] * basis_z[i]
@@ -1078,7 +1355,9 @@ def reconstruct_uvw(Q, grad, lvl, phi, psi):
         result += u_z * (z * grad_h[0] + grad_hb[0])
         result += v_z * (z * grad_h[1] + grad_hb[1])
         return result
+
     return u, v, w
+
 
 def generate_velocity_profiles(
     Q,
@@ -1096,10 +1375,10 @@ def generate_velocity_profiles(
         vertex = find_closest_element(centers, pos)
         vertices.append(vertex)
 
-    Z = np.linspace(0,1,100)
+    Z = np.linspace(0, 1, 100)
     list_profiles = []
     list_means = []
-    level = int((model.n_fields-1)/model.dimension)-1
+    level = int((model.n_fields - 1) / model.dimension) - 1
     offset = level + 1
     list_h = []
     for vertex in vertices:
@@ -1108,7 +1387,7 @@ def generate_velocity_profiles(
         for d in range(model.dimension):
             q = Q[vertex, :]
             h = q[0]
-            coefs = q[1+d*offset:1+(d+1)*offset]/h
+            coefs = q[1 + d * offset : 1 + (d + 1) * offset] / h
             profile = model.basis.basis.reconstruct_velocity_profile(coefs, Z=Z)
             mean = coefs[0]
             profiles.append(profile)
@@ -1118,10 +1397,7 @@ def generate_velocity_profiles(
         list_h.append(h)
     return list_profiles, list_means, list_of_positions, Z, list_h
 
-            
 
-
-    
 if __name__ == "__main__":
     # basis = Legendre_shifted(1)
     # basis = Spline()
@@ -1130,11 +1406,10 @@ if __name__ == "__main__":
     # basis=OrthogonalSplineWithConstant(degree=1, knots=[0,0, 0.1, 1])
     # basis.plot()
 
-    #basis = Legendre_shifted(basis=Legendre_shifted(order=8))
-    #f = basis.enforce_boundary_conditions()
-    #q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
-    #print(f(q))
-
+    # basis = Legendre_shifted(basis=Legendre_shifted(order=8))
+    # f = basis.enforce_boundary_conditions()
+    # q = np.array([[1., 0.1, 0., 0., 0., 0.], [1., 0.1, 0., 0., 3., 0.]])
+    # print(f(q))
 
     # basis =Legendre_shifted(order=8)
     # basis.plot()
@@ -1144,43 +1419,40 @@ if __name__ == "__main__":
     # f = basis.get_lambda(1)
     # print(f(z))
 
+    # X = np.linspace(0,1,100)
+    # coef = np.array([0.2, -0.01, -0.1, -0.05, -0.04])
+    # U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    # coef2 = coef*2
+    # factor = 1.0 / 0.2
+    # coef3  = coef * factor
+    # U2 = basis.basis.reconstruct_velocity_profile(coef2, Z=X)
+    # U3 = basis.basis.reconstruct_velocity_profile(coef3, Z=X)
+    # fig, ax = plt.subplots()
+    # ax.plot(U, X)
+    # ax.plot(U2, X)
+    # ax.plot(U3, X)
+    # plt.show()
 
-    #X = np.linspace(0,1,100)
-    #coef = np.array([0.2, -0.01, -0.1, -0.05, -0.04])
-    #U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
-    #coef2 = coef*2
-    #factor = 1.0 / 0.2
-    #coef3  = coef * factor
-    #U2 = basis.basis.reconstruct_velocity_profile(coef2, Z=X)
-    #U3 = basis.basis.reconstruct_velocity_profile(coef3, Z=X)
-    #fig, ax = plt.subplots()
-    #ax.plot(U, X)
-    #ax.plot(U2, X)
-    #ax.plot(U3, X)
-    #plt.show()
+    # X = np.linspace(0,1,100)
+    # nut = 10**(-5)
+    # coef = np.array([nut, -nut, 0, 0, 0, 0, 0 ])
+    # U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    # fig, ax = plt.subplots()
+    # ax.plot(U, X)
+    # plt.show()
 
-    #X = np.linspace(0,1,100)
-    #nut = 10**(-5)
-    #coef = np.array([nut, -nut, 0, 0, 0, 0, 0 ])
-    #U = basis.basis.reconstruct_velocity_profile(coef, Z=X)
-    #fig, ax = plt.subplots()
-    #ax.plot(U, X)
-    #plt.show()
-
-    #nut = np.load('/home/ingo/Git/sms/nut_nut2.npy')
-    #y = np.load('/home/ingo/Git/sms/nut_y2.npy')
-    #coef = basis.basis.reconstruct_alpha(nut, y)
-    #coef_offset = np.sum(coef)
-    #coef[0] -= coef_offset
-    #print(coef)
-    #X = np.linspace(0,1,100)
-    #_nut = basis.basis.reconstruct_velocity_profile(coef, Z=X)
-    #fig, ax = plt.subplots()
-    #ax.plot(_nut, X)
-    #plt.show()
-
+    # nut = np.load('/home/ingo/Git/sms/nut_nut2.npy')
+    # y = np.load('/home/ingo/Git/sms/nut_y2.npy')
+    # coef = basis.basis.reconstruct_alpha(nut, y)
+    # coef_offset = np.sum(coef)
+    # coef[0] -= coef_offset
+    # print(coef)
+    # X = np.linspace(0,1,100)
+    # _nut = basis.basis.reconstruct_velocity_profile(coef, Z=X)
+    # fig, ax = plt.subplots()
+    # ax.plot(_nut, X)
+    # plt.show()
 
     basis = Legendre_shifted(basis=Legendre_shifted(order=2))
     basis.compute_matrices(2)
     print(basis.D)
-

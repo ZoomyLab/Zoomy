@@ -53,7 +53,12 @@ def test_default(dimension):
     for i, elem in enumerate(map_elements_to_edges_minus):
         Qnew[elem] -= flux[i]
     if dimension == 1:
-        assert(np.allclose(Qnew.flatten(), np.array([-1.5,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,9.5,0.0,0.0])))
+        assert np.allclose(
+            Qnew.flatten(),
+            np.array(
+                [-1.5, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 9.5, 0.0, 0.0]
+            ),
+        )
     else:
         pass
 

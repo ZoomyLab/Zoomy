@@ -21,7 +21,7 @@ def test_RP():
         return np.ones(n, dtype=float)
 
     def fr(n: int) -> FArray:
-        return 2*np.ones(n, dtype=float)
+        return 2 * np.ones(n, dtype=float)
 
     Q = np.zeros((10, 3))
     x = np.linspace(-1, 1, 10)

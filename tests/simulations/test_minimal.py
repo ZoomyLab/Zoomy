@@ -64,8 +64,7 @@ def test_smm_1d():
         ]
     )
     ic = IC.RP(
-        high=lambda n_field: np.array(
-            [0.2, 0.0] + [0.0 for l in range(level)]),
+        high=lambda n_field: np.array([0.2, 0.0] + [0.0 for l in range(level)]),
         low=lambda n_field: np.array([0.1, 0.0] + [0.0 for l in range(level)]),
     )
     model = ShallowMoments(
@@ -74,8 +73,7 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic",
-                  "friction": ["newtonian", "slip_mod"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
     )
 
     mesh = petscMesh.Mesh.create_1d((-1, 30), 100)
@@ -130,8 +128,7 @@ def test_jax_jit_grad():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic",
-                  "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
@@ -150,8 +147,7 @@ def test_jax_jit_grad():
     # Automatic differentiation example
     def full(params):
         model.parameter_values = params
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def single(g):
@@ -159,13 +155,11 @@ def test_jax_jit_grad():
         param = jax.numpy.array(model.parameter_values)
         param = param.at[0].set(g)
         model.parameter_values = param
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def no_ad():
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     # jax.config.update("jax_enable_compilation_cache", False)
@@ -234,8 +228,7 @@ def test_jax_jit_grad_minimal():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic",
-                  "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
@@ -254,8 +247,7 @@ def test_jax_jit_grad_minimal():
     # Automatic differentiation example
     def full(params):
         model.parameter_values = params
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def single(g):
@@ -263,13 +255,11 @@ def test_jax_jit_grad_minimal():
         param = jax.numpy.array(model.parameter_values)
         param = param.at[0].set(g)
         model.parameter_values = param
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def no_ad():
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
-            mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     # jax.config.update("jax_enable_compilation_cache", False)
@@ -338,8 +328,7 @@ def test_reconstruction():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic",
-                  "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 

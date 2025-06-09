@@ -109,10 +109,11 @@ def test_swetopo_2d(mesh_type):
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     io.generate_vtk(settings.output_dir)
 
+
 def test_calibration_1d(inputs):
-    index=inputs[0]
+    index = inputs[0]
     parameters = {"g": 9.81, "nm": 0.025}
-    parameters['nm'] = inputs[1]
+    parameters["nm"] = inputs[1]
 
     mesh = Mesh.create_1d((-5, 5), 100)
     settings = Settings(
@@ -123,23 +124,23 @@ def test_calibration_1d(inputs):
         compute_dt=timestepping.adaptive(CFL=0.9),
         time_end=100.0,
         output_snapshots=100,
-        output_dir = f'out_{index}'
+        output_dir=f"out_{index}",
     )
 
     hin = 0.2329
     huin = 0.155
 
     def bump(x):
-        return 0.05 * np.exp(-(x[0]**2) * 10)
+        return 0.05 * np.exp(-(x[0] ** 2) * 10)
 
     def slope(x):
-        return 0.
-        return -(x[0]+5.)/100. + 0.1
+        return 0.0
+        return -(x[0] + 5.0) / 100.0 + 0.1
 
     def ic_func(x):
         Q = np.zeros(3, dtype=float)
         Q[0] = 0.10 - bump(x)
-        Q[1] = 0.
+        Q[1] = 0.0
         Q[2] = slope(x) + bump(x)
         return Q
 
@@ -152,13 +153,13 @@ def test_calibration_1d(inputs):
     # outflow_dict = {}
 
     # I want to extrapolate the bottom topography in order to avoid a reconstruction problem (wave generation)
-    dx = 10./100.
+    dx = 10.0 / 100.0
     x_minus = copy(mesh.element_center[0])
     x_minus[0] -= dx
     x_plus = copy(mesh.element_center[-1])
     x_plus[0] += dx
-    inflow_dict = {0: hin,1: huin, 2: slope(x_minus) }
-    outflow_dict = { 2:slope(x_plus) }
+    inflow_dict = {0: hin, 1: huin, 2: slope(x_minus)}
+    outflow_dict = {2: slope(x_plus)}
     bcs = BC.BoundaryConditions(
         [
             BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
@@ -186,29 +187,38 @@ def test_calibration_1d(inputs):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"friction": ['manning']},
+        settings={"friction": ["manning"]},
     )
     # model_functions = model.get_runtime_model()
     # _ = model.create_c_interface()
     runtime_model = model.load_c_model()
-
 
     fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_source=RKimplicit, runtime_model=runtime_model
     )
     logging.debug(f"Process {os.getpid()}: nm {settings.parameters['nm']}")
 
-    #TODO the custom functions should be a individual postprocessing function that appends to Qaux! Then I can use the other tools (e.g. vtk) as well
-    custom_functions = [('u', lambda X, Q, Qaux, param: Q[:,1]/Q[:,0]), ('Fr', lambda X, Q, Qaux, param: Q[:,1]/Q[:,0] / np.sqrt(param['g']*Q[:,0])), ('E', lambda X, Q, Qaux, param: Q[:,1]**2/Q[:,0] + param['g']*Q[:,0]),]
+    # TODO the custom functions should be a individual postprocessing function that appends to Qaux! Then I can use the other tools (e.g. vtk) as well
+    custom_functions = [
+        ("u", lambda X, Q, Qaux, param: Q[:, 1] / Q[:, 0]),
+        (
+            "Fr",
+            lambda X, Q, Qaux, param: Q[:, 1] / Q[:, 0] / np.sqrt(param["g"] * Q[:, 0]),
+        ),
+        ("E", lambda X, Q, Qaux, param: Q[:, 1] ** 2 / Q[:, 0] + param["g"] * Q[:, 0]),
+    ]
 
-    postprocessing.append_custom_fields_to_aux_fields_for_hdf5(settings.output_dir, custom_functions)
+    postprocessing.append_custom_fields_to_aux_fields_for_hdf5(
+        settings.output_dir, custom_functions
+    )
     # io.generate_vtk(settings.output_dir)
 
-    postprocessing.write_to_calibration_dataformat(settings.output_dir, os.path.join(settings.output_dir, 'calibration_data.hdf5'), field_names=['h', 'hu', 'b'], aux_field_names=['u', 'Fr', 'E'])
-
-
-
-
+    postprocessing.write_to_calibration_dataformat(
+        settings.output_dir,
+        os.path.join(settings.output_dir, "calibration_data.hdf5"),
+        field_names=["h", "hu", "b"],
+        aux_field_names=["u", "Fr", "E"],
+    )
 
 
 if __name__ == "__main__":
@@ -228,6 +238,5 @@ if __name__ == "__main__":
     for inputs in list(zip(samples_index, samples_nm)):
         test_calibration_1d(inputs)
     # with concurrent.futures.ProcessPoolExecutor() as executor:
-        # Use executor.map to apply the function to each item in parallel
-        # executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))
-
+    # Use executor.map to apply the function to each item in parallel
+    # executor.map(test_calibration_1d, list(zip(samples_index, samples_nm)))

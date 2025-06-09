@@ -57,16 +57,33 @@ def test_model_initialization_1d():
     evalues = np.zeros((model.n_fields))
     for i_elem in range(mesh.n_elements):
         for i_edge in range(mesh.element_n_neighbors[i_elem]):
-            c_model.eigenvalues(Q[i_elem], Qaux[i_elem], parameters, mesh.element_face_normals[i_elem, i_edge], evalues)
+            c_model.eigenvalues(
+                Q[i_elem],
+                Qaux[i_elem],
+                parameters,
+                mesh.element_face_normals[i_elem, i_edge],
+                evalues,
+            )
             assert np.allclose(
                 evalues,
                 mesh.element_face_normals[i_elem, i_edge] * np.diag(advection_speed),
             )
     for index, i_elem in enumerate(mesh.boundary_face_corresponding_element):
-        c_model.eigenvalues(Q[i_elem], Qaux[i_elem], parameters, mesh.element_face_normals[i_elem, mesh.boundary_face_element_face_index[index]], evalues)
+        c_model.eigenvalues(
+            Q[i_elem],
+            Qaux[i_elem],
+            parameters,
+            mesh.element_face_normals[
+                i_elem, mesh.boundary_face_element_face_index[index]
+            ],
+            evalues,
+        )
         assert np.allclose(
             evalues,
-            np.diag(advection_speed) * mesh.element_face_normals[i_elem, mesh.boundary_face_element_face_index[index]],
+            np.diag(advection_speed)
+            * mesh.element_face_normals[
+                i_elem, mesh.boundary_face_element_face_index[index]
+            ],
         )
 
 
@@ -118,10 +135,25 @@ def test_model_initialization_2d():
     n_inner_elements = mesh.n_elements
     evalues = np.zeros((model.n_fields))
     for i_elem, i_edge in mesh.inner_edge_list:
-        c_model.eigenvalues(Q[i_elem], Qaux[i_elem], parameters, mesh.element_edge_normal[i_elem, i_edge], evalues)
-        assert(np.allclose(evalues, np.dot(np.diag(advection_speed), mesh.element_edge_normal[i_elem, i_edge])))
+        c_model.eigenvalues(
+            Q[i_elem],
+            Qaux[i_elem],
+            parameters,
+            mesh.element_edge_normal[i_elem, i_edge],
+            evalues,
+        )
+        assert np.allclose(
+            evalues,
+            np.dot(np.diag(advection_speed), mesh.element_edge_normal[i_elem, i_edge]),
+        )
     for index, i_elem in enumerate(mesh.boundary_edge_elements):
-        c_model.eigenvalues(Q[i_elem], Qaux[i_elem], parameters, mesh.boundary_edge_normal[index], evalues)
+        c_model.eigenvalues(
+            Q[i_elem],
+            Qaux[i_elem],
+            parameters,
+            mesh.boundary_edge_normal[index],
+            evalues,
+        )
         assert np.allclose(
             evalues,
             np.dot(np.diag(advection_speed), mesh.boundary_edge_normal[index]),

@@ -12,6 +12,7 @@ from library.misc.static_class import register_static_pytree
 N = 1000000
 NT = 1000
 
+
 @register_static_pytree
 @define(slots=True, frozen=True)
 class Mesh:
@@ -22,23 +23,20 @@ class Mesh:
     @classmethod
     def create_1d(cls, y: np.ndarray):
         return cls(4, y, y)
-      
 
 
-class SpaceOperator():
-    @partial(jax.jit, static_argnames=['self'])
+class SpaceOperator:
+    @partial(jax.jit, static_argnames=["self"])
     def solve(self, Q, mesh):
         return Q + mesh.x
 
 
 if __name__ == "__main__":
-
-    mesh = Mesh.create_1d(y=np.linspace(0,1,10))
+    mesh = Mesh.create_1d(y=np.linspace(0, 1, 10))
     Q = jnp.zeros(mesh.n_elements)
     so = SpaceOperator()
     start = timeit.default_timer()
     for i in range(NT):
         Q = so.solve(Q, mesh)
     end = timeit.default_timer()
-    print(f'time: {end-start}')
-
+    print(f"time: {end - start}")

@@ -1,10 +1,11 @@
 import concurrent.futures
 import os
 
+
 def process_item(item):
     # Your processing logic here
     result = item * 2
-    
+
     # Example: Creating a file
     filename = f"result_{item}.txt"
     with open(filename, "w") as file:
@@ -12,10 +13,12 @@ def process_item(item):
 
     # No explicit return needed
 
+
 def parallel_process(items):
     with concurrent.futures.ProcessPoolExecutor() as executor:
         # The map function will return None for each item
         executor.map(process_item, items)
+
 
 if __name__ == "__main__":
     # Example list of items to process

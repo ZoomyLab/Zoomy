@@ -22,18 +22,25 @@ class InitialConditions:
 
 @define(slots=True, frozen=True)
 class Constant(InitialConditions):
-    constants: Callable[[int], FArray] = lambda n_fields: np.array([1.] + [0. for i in range(n_fields-1)])
+    constants: Callable[[int], FArray] = lambda n_fields: np.array(
+        [1.0] + [0.0 for i in range(n_fields - 1)]
+    )
+
     def apply(self, X, Q):
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
-            Q[:,i] = self.constants(n_fields)
+            Q[:, i] = self.constants(n_fields)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RP(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
-    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    low: Callable[[int], FArray] = lambda n_fields: np.array(
+        [1.0 * (i == 0) for i in range(n_fields)]
+    )
+    high: Callable[[int], FArray] = lambda n_fields: np.array(
+        [2.0 * (i == 0) for i in range(n_fields)]
+    )
     jump_position_x: float = 0.0
 
     def apply(self, X, Q):
@@ -41,15 +48,20 @@ class RP(InitialConditions):
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
             if X[0, i] < self.jump_position_x:
-               Q[:,i]  = self.high(n_fields)
+                Q[:, i] = self.high(n_fields)
             else:
-                Q[:,i] = self.low(n_fields)
+                Q[:, i] = self.low(n_fields)
         return Q
+
 
 @define(slots=True, frozen=False)
 class RP2d(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
-    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    low: Callable[[int], FArray] = lambda n_fields: np.array(
+        [1.0 * (i == 0) for i in range(n_fields)]
+    )
+    high: Callable[[int], FArray] = lambda n_fields: np.array(
+        [2.0 * (i == 0) for i in range(n_fields)]
+    )
     jump_position_x: float = 0.0
     jump_position_y: float = 0.0
 
@@ -57,17 +69,21 @@ class RP2d(InitialConditions):
         assert X.shape[1] == Q.shape[1]
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
-            if X[0, i] < self.jump_position_x and X[1,i] < self.jump_position_y:
-                Q[:,i] = self.high(n_fields)
+            if X[0, i] < self.jump_position_x and X[1, i] < self.jump_position_y:
+                Q[:, i] = self.high(n_fields)
             else:
-                Q[:,i] = self.low(n_fields)
+                Q[:, i] = self.low(n_fields)
         return Q
-        
+
 
 @define(slots=True, frozen=False)
 class RP3d(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
-    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    low: Callable[[int], FArray] = lambda n_fields: np.array(
+        [1.0 * (i == 0) for i in range(n_fields)]
+    )
+    high: Callable[[int], FArray] = lambda n_fields: np.array(
+        [2.0 * (i == 0) for i in range(n_fields)]
+    )
     jump_position_x: float = 0.0
     jump_position_y: float = 0.0
     jump_position_z: float = 0.0
@@ -76,16 +92,25 @@ class RP3d(InitialConditions):
         assert X.shape[1] == Q.shape[1]
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
-            if X[0, i] < self.jump_position_x and X[1,i] < self.jump_position_y and X[2, i] < self.jump_position_z:
-                Q[:,i] = self.high(n_fields)
+            if (
+                X[0, i] < self.jump_position_x
+                and X[1, i] < self.jump_position_y
+                and X[2, i] < self.jump_position_z
+            ):
+                Q[:, i] = self.high(n_fields)
             else:
-                Q[:,i] = self.low(n_fields)
+                Q[:, i] = self.low(n_fields)
         return Q
+
 
 @define(slots=True, frozen=False)
 class RadialDambreak(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array([1.0 * (i == 0) for i in range(n_fields)])
-    high: Callable[[int], FArray] = lambda n_fields: np.array([2.0 * (i == 0) for i in range(n_fields)])
+    low: Callable[[int], FArray] = lambda n_fields: np.array(
+        [1.0 * (i == 0) for i in range(n_fields)]
+    )
+    high: Callable[[int], FArray] = lambda n_fields: np.array(
+        [2.0 * (i == 0) for i in range(n_fields)]
+    )
     radius: float = 0.1
 
     def apply(self, X, Q):
@@ -96,10 +121,10 @@ class RadialDambreak(InitialConditions):
         assert X.shape[1] == Q.shape[1]
         n_fields = Q.shape[0]
         for i in range(Q.shape[1]):
-            if np.linalg.norm(X[:, i]-center) <= self.radius:
-                Q[:,i] = self.high(n_fields)
+            if np.linalg.norm(X[:, i] - center) <= self.radius:
+                Q[:, i] = self.high(n_fields)
             else:
-                Q[:,i] = self.low(n_fields)
+                Q[:, i] = self.low(n_fields)
         return Q
 
 
@@ -115,7 +140,8 @@ class UserFunction(InitialConditions):
             Q[:, i] = self.function(x)
         return Q
 
-#TODO do time interpolation
+
+# TODO do time interpolation
 @define(slots=True, frozen=True)
 class RestartFromHdf5(InitialConditions):
     path_to_fields: Optional[str] = None
@@ -124,7 +150,6 @@ class RestartFromHdf5(InitialConditions):
     path_to_old_mesh: Optional[str] = None
     snapshot: Optional[int] = -1
     map_fields: Optional[dict] = None
-
 
     def apply(self, X, Q):
         assert self.mesh_new is not None
@@ -135,12 +160,15 @@ class RestartFromHdf5(InitialConditions):
         else:
             map_fields = self.map_fields
         mesh = Mesh.from_hdf5(self.path_to_old_mesh)
-        _Q, _Qaux, time = io.load_fields_from_hdf5(self.path_to_fields, i_snapshot=self.snapshot)
+        _Q, _Qaux, time = io.load_fields_from_hdf5(
+            self.path_to_fields, i_snapshot=self.snapshot
+        )
         Q = np.zeros_like(Q)
         if self.mesh_identical:
             Q[:, list(map_fields.values())] = _Q[:, list(map_fields.keys())]
         else:
             assert self.path_to_old_mesh is not None
-            Q[:, list(map_fields.values())] = interpolate_mesh.to_new_mesh(_Q, mesh, self.mesh_new)[:, list(map_fields.keys())]
+            Q[:, list(map_fields.values())] = interpolate_mesh.to_new_mesh(
+                _Q, mesh, self.mesh_new
+            )[:, list(map_fields.keys())]
         return Q
-

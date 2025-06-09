@@ -9,8 +9,6 @@ from library.mesh.fvm_mesh import *
 from library.model.model import create_default_mesh_and_model
 
 
-
-
 @pytest.mark.critical
 @pytest.mark.parametrize(
     "dimension",
@@ -26,17 +24,23 @@ def test_model_initialization(dimension):
         parameters,
         num_normals,
         normals,
-    ) = create_default_mesh_and_model(dimension, Model, dimension, 0, 0, momentum_eqns[dimension-1])
+    ) = create_default_mesh_and_model(
+        dimension, Model, dimension, 0, 0, momentum_eqns[dimension - 1]
+    )
 
     functions = model.get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 
     F = [np.zeros_like(Q) for i in range(model.dimension)]
-    dF = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
+    dF = [
+        np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)
+    ]
     S = np.zeros_like(Q)
     dS = np.zeros((Q.shape[0], Q.shape[1], Q.shape[1]))
-    NC = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
+    NC = [
+        np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)
+    ]
     A = [np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])) for i in range(model.dimension)]
     Evalues = np.zeros_like(Q)
 
@@ -51,9 +55,18 @@ def test_model_initialization(dimension):
 
     for d in range(dimension):
         assert np.allclose(F[d], Q)
-        assert np.allclose([dF[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
-        assert np.allclose([NC[d][0] for d in range(dimension)], [np.zeros((dimension, dimension)) for d in range(dimension)])
-        assert np.allclose([A[d][0] for d in range(dimension)], [np.eye(dimension) for d in range(dimension)])
+        assert np.allclose(
+            [dF[d][0] for d in range(dimension)],
+            [np.eye(dimension) for d in range(dimension)],
+        )
+        assert np.allclose(
+            [NC[d][0] for d in range(dimension)],
+            [np.zeros((dimension, dimension)) for d in range(dimension)],
+        )
+        assert np.allclose(
+            [A[d][0] for d in range(dimension)],
+            [np.eye(dimension) for d in range(dimension)],
+        )
     assert np.allclose(S, np.zeros_like(Q))
     assert np.allclose(dS, np.zeros((Q.shape[0], Q.shape[1], Q.shape[1])))
 
@@ -97,7 +110,6 @@ def test_model_initialization(dimension):
         )
     else:
         assert False
-
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ mesh = IntervalMesh(1, 1.0)
 V = FunctionSpace(mesh, "CG", 1)
 
 # Define the function u in V
-u = Function(V, name='u')
+u = Function(V, name="u")
 
 # Define the flux vector f
 f = as_vector([u**2, sin(u), abs(u)])

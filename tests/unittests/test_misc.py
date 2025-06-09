@@ -16,7 +16,9 @@ def test_projection_in_normal_transverse_direction_and_back():
     normals = [compute_normal(angle)[:dim] for angle in angles]
 
     for i, normal in enumerate(normals):
-        Qn, Qt = projection_in_normal_and_transverse_direction(Q[i], momentum_eqns, normal)
+        Qn, Qt = projection_in_normal_and_transverse_direction(
+            Q[i], momentum_eqns, normal
+        )
         Qnew = project_in_x_y_and_recreate_Q(Qn, Qt, Q[i], momentum_eqns, normal)
         assert np.allclose(Q[i], Qnew)
 

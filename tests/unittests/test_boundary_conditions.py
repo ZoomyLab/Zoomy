@@ -32,7 +32,7 @@ from library.mesh.fvm_mesh import Mesh
 #     mesh = Mesh.create_1d((-1, 1), 10)
 #     bc = BoundaryCondition(physical_tag="left")
 #     bc.initialize(mesh)
-    # assert bc.initialized
+# assert bc.initialized
 
 
 @pytest.mark.critical

@@ -1,7 +1,7 @@
 import yaml
 import os
 
-main_dir = os.getenv('SMS')
+main_dir = os.getenv("SMS")
 
 
 class BaseYaml(yaml.YAMLObject):
@@ -99,5 +99,3 @@ class ExampleClassStacked(BaseYaml):
     def set_default_parameters(self):
         self.c1 = ExampleClass(a=2, b=-2)
         self.c2 = ExampleClass2(a=100, b=1000)
-
-

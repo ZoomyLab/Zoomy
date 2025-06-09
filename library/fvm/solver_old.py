@@ -129,10 +129,10 @@
 #     def loop_fluxes_vectorized(self, Q, **kwargs):
 #         dQ = np.zeros_like(Q)
 #         dt = kwargs["dt"]
-        
+
 #         n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element + self.mesh.n_boundary_edges)/2)
 #         n_edges_inner = n_edges - self.mesh.n_boundary_edges
-        
+
 #         # n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element))
 #         Qi = np.zeros((Q.shape[0], n_edges))
 #         Qj = np.zeros((Q.shape[0], n_edges))
@@ -155,7 +155,7 @@
 #                 element_index_inner[i] = i_elem
 #                 element_index_inner_neighbor[i] = i_neighbor
 #                 i += 1
-            
+
 #         i_boundary = 0
 #         for i_bp, i_elem in enumerate(self.mesh.boundary_edge_element):
 #             n_ij[:, i] = self.mesh.boundary_edge_normal[i_bp]
@@ -171,7 +171,7 @@
 #         n_ij = n_ij[:self.mesh.dim, :]
 #         Fn, step_failed = self.flux_func(Qi, Qj, n_ij, **kwargs)
 #         NCn = self.nc_func(Qi, Qj, n_ij, **kwargs)
-        
+
 #         # Reduce edges to cells
 #         for i in range(n_edges_inner):
 #             i_elem = element_index_inner[i]
@@ -187,10 +187,10 @@
 #         print(Q.shape)
 #         dQ = np.zeros_like(Q)
 #         dt = kwargs["dt"]
-        
+
 #         n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element + self.mesh.n_boundary_edges)/2)
 #         n_edges_inner = n_edges - self.mesh.n_boundary_edges
-        
+
 #         # n_edges = int((self.mesh.n_elements * self.mesh.num_nodes_per_element))
 #         Qi = np.zeros((Q.shape[0], n_edges))
 #         Qj = np.zeros((Q.shape[0], n_edges))
@@ -215,7 +215,7 @@
 #                 element_index_inner[i] = i_elem
 #                 element_index_inner_neighbor[i] = i_neighbor
 #                 i += 1
-            
+
 #         i_boundary = 0
 #         for i_bp, i_elem in enumerate(self.mesh.boundary_edge_element):
 #             n_ij[:, i] = self.mesh.boundary_edge_normal[i_bp]
@@ -233,7 +233,7 @@
 #         n_ij_transformed[0, :] = 1.0
 #         Fn, step_failed = self.flux_func(Qi, Qj, n_ij_transformed, **kwargs)
 #         NCn = self.nc_func(Qi, Qj, n_ij_transformed, **kwargs)
-        
+
 #         # Reduce edges to cells
 #         for i in range(n_edges_inner):
 #             i_elem = element_index_inner[i]
@@ -392,12 +392,12 @@
 #             chunksize = int(len(index_list)/n_chunks)+1
 #             indices = index_list[i*chunksize: (i+1)*chunksize]
 #             return indices, Q[:, indices]
-    
+
 #         def write_result(result):
 #             print(result)
 #             dQ = result
 #             Qnew[:, index_list] += dQ
-        
+
 
 #         Qnew = fix_negative_height(Q, self.model.yaml_tag)
 #         n_chunks = 2
@@ -411,14 +411,13 @@
 #             print(r)
 
 #             # Qnew[:, index_list] += write_result()
-        
+
 #         pool.close()
 #         pool.join()
 
-            
-        
+
 #         # with Pool(2) as p:
-#         #     Qchunk = 
+#         #     Qchunk =
 #         #     p.map(work_on_chunk,  index_list, chunksize = int(len(index_list)/2)+1 )
 #         # dQ = self.loop_fluxes_vectorized_coordinate_transform(np.array(Qnew), **kwargs)
 #         Qnew = self.loop_source(Qnew, **kwargs)

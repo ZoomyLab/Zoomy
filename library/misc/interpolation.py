@@ -49,8 +49,6 @@ def to_new_mesh(fields, mesh_old, mesh_new, interp="const", map_fields=None):
         fields_new[i_elem] = fields[i_elem_old]
     return fields_new
 
-    
-
 
 # # comute gradients based on FD using scattered pointwise data
 # def compute_gradient_field_2d(points, fields):

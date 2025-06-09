@@ -19,7 +19,7 @@ for n in range(N):
 A = np.zeros((N, N))
 for i in range(N):
     for j in range(N):
-        A[i, j] = integrate.quad(lambda x: basis[i](x)*basis[j](x), 0, 1)[0]
+        A[i, j] = integrate.quad(lambda x: basis[i](x) * basis[j](x), 0, 1)[0]
 
 print(A)
 Ainv = np.linalg.inv(A)
@@ -29,17 +29,15 @@ print(np.round(np.matmul(Ainv, A), 2))
 # c1 = [[1], [0], [0]]
 # c2 = [[0], [1], [0]]
 # c3 = [[0], [0], [1]]
-# 
+#
 # b1 = BPoly(c1, x)
 # b2 = BPoly(c2, x)
 # b3 = BPoly(c3, x)
 
-#print(integrate.quad(lambda x: b1(x)*b2(x), 0, 1))
+# print(integrate.quad(lambda x: b1(x)*b2(x), 0, 1))
 #
-#fig, ax = plt.subplots()
-#ax.plot(xx, b1(xx), label=('b1'))
-#ax.plot(xx, b2(xx), label=('b2'))
-#ax.plot(xx, b3(xx), label=('b3'))
-#plt.show()
-
-
+# fig, ax = plt.subplots()
+# ax.plot(xx, b1(xx), label=('b1'))
+# ax.plot(xx, b2(xx), label=('b2'))
+# ax.plot(xx, b3(xx), label=('b3'))
+# plt.show()

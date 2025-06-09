@@ -41,17 +41,16 @@ def register(func):
 
     return wrapper
 
+
 def func1():
     """
     TAG: 1
     """
     pass
 
-class A():
-    a = 1    
+
+class A:
+    a = 1
+
     def print(self):
         print(str(self.a))
-
-
-
-

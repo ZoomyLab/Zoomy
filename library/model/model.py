@@ -7,6 +7,7 @@ from library.model.models.advection import Advection
 from library.model.models.shallow_water import ShallowWater, ShallowWater2d
 from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d
 from library.model.models.shallow_moments import *
+
 # from library.model.models.shallow_moments_sediment import *
 from library.model.models.shear_shallow_flow import *
 import library.model.initial_conditions as IC
@@ -27,9 +28,7 @@ def create_default_mesh_and_model(
     ic = IC.Constant()
 
     bc_tags = ["left", "right", "top", "bottom"][: 2 * dimension]
-    bcs = BC.BoundaryConditions(
-        [BC.Wall(physical_tag=tag) for tag in bc_tags]
-    )
+    bcs = BC.BoundaryConditions([BC.Wall(physical_tag=tag) for tag in bc_tags])
     if dimension == 1:
         mesh = Mesh.create_1d((-1, 1), 10)
     elif dimension == 2:

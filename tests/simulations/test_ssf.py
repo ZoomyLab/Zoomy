@@ -13,13 +13,13 @@ import library.postprocessing.postprocessing as postprocessing
 import library.mesh.mesh as petscMesh
 import argparse
 
+
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_ssf():
-
     Lx = 1.3
     Cf = 0.0036
-    h0 = 7.98 * 10**(-3)
+    h0 = 7.98 * 10 ** (-3)
     a = 0.05
     g = 9.81
     theta = 0.05011
@@ -72,14 +72,14 @@ def test_ssf():
         Q = np.zeros(3, dtype=float)
         # Q[0] = height
         Q[0] = h0 * (1 + a * np.sin(2 * np.pi * x[0] / Lx))
-        Q[1] = h0 * np.sqrt( g * h0 * np.tan(theta) / Cf )
+        Q[1] = h0 * np.sqrt(g * h0 * np.tan(theta) / Cf)
         Q[2] = phi * h0**2 / 2
         return Q
 
     ic = IC.UserFunction(ic_func)
 
     model = ShearShallowFlow(
-        dimension = 1,
+        dimension=1,
         fields=3,
         parameters=settings.parameters,
         boundary_conditions=bcs,
@@ -100,13 +100,13 @@ def test_ssf():
     )
 
     # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 def test_ssf_energy():
-
     Lx = 1.3
     Cf = 0.0036
-    h0 = 7.98 * 10**(-3)
+    h0 = 7.98 * 10 ** (-3)
     a = 0.05
     g = 9.81
     theta = 0.05011
@@ -159,10 +159,10 @@ def test_ssf_energy():
         Q = np.zeros(4, dtype=float)
         # Q[0] = height
         Q[0] = h0 * (1 + a * np.sin(2 * np.pi * x[0] / Lx))
-        Q[1] = h0 * np.sqrt( g * h0 * np.tan(theta) / Cf )
+        Q[1] = h0 * np.sqrt(g * h0 * np.tan(theta) / Cf)
         Q[2] = phi * h0**2 / 2
         h = Q[0]
-        u = Q[1]/h
+        u = Q[1] / h
         P11 = Q[2]
         Q[3] = h * (u**2 + g * h + P11)
         return Q
@@ -189,13 +189,13 @@ def test_ssf_energy():
     )
 
     # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 def test_ssf_pathconservative():
-
     Lx = 1.3
     Cf = 0.0036
-    h0 = 7.98 * 10**(-3)
+    h0 = 7.98 * 10 ** (-3)
     a = 0.05
     g = 9.81
     theta = 0.05011
@@ -204,11 +204,11 @@ def test_ssf_pathconservative():
 
     main_dir = os.getenv("SMS")
     settings = Settings(
-        parameters={"g": g, "Cf": Cf, "theta": theta, "phi": phi, "Cr":Cr},
+        parameters={"g": g, "Cf": Cf, "theta": theta, "phi": phi, "Cr": Cr},
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         # nc_flux = nonconservative_flux.zero(),
-        nc_flux = nonconservative_flux.segmentpath(),
+        nc_flux=nonconservative_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.9),
         # compute_dt=timestepping.constant(dt=0.01),
         time_end=26.99,
@@ -249,9 +249,9 @@ def test_ssf_pathconservative():
         Q = np.zeros(6, dtype=float)
         # Q[0] = height
         Q[0] = h0 * (1 + a * np.sin(2 * np.pi * x[0] / Lx))
-        Q[1] = Q[0] * np.sqrt( g * h0 * np.tan(theta) / Cf )
+        Q[1] = Q[0] * np.sqrt(g * h0 * np.tan(theta) / Cf)
         Q[2] = 0
-        P11 = 1/2 * phi * Q[0]**2
+        P11 = 1 / 2 * phi * Q[0] ** 2
         P22 = P11
         P12 = 0
         R11 = Q[0] * P11
@@ -259,26 +259,26 @@ def test_ssf_pathconservative():
         R22 = Q[0] * P22
         u = Q[1] / Q[0]
         v = Q[2] / Q[0]
-        Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
-        Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
-        Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+        Q[3] = 1 / 2 * R11 + 1 / 2 * Q[0] * u * u
+        Q[4] = 1 / 2 * R12 + 1 / 2 * Q[0] * u * v
+        Q[5] = 1 / 2 * R22 + 1 / 2 * Q[0] * v * v
         return Q
 
     def ic_func(x):
         Q = np.zeros(6, dtype=float)
-        Q[0] = np.where(x[0]<0.5, 0.02, 0.01)
+        Q[0] = np.where(x[0] < 0.5, 0.02, 0.01)
         # P11 = 10**(-1)
-        P11 = 0.
+        P11 = 0.0
         P22 = P11
         P12 = 0
         R11 = Q[0] * P11
         R12 = Q[0] * P12
         R22 = Q[0] * P22
-        u = 0.
-        v = 0.
-        Q[3] =  (1/2 * R11 + 1/2 * Q[0] * u * u)
-        Q[4] =  (1/2 * R12 + 1/2 * Q[0] * u * v)
-        Q[5] =  (1/2 * R22 + 1/2 * Q[0] * v * v)
+        u = 0.0
+        v = 0.0
+        Q[3] = 1 / 2 * R11 + 1 / 2 * Q[0] * u * u
+        Q[4] = 1 / 2 * R12 + 1 / 2 * Q[0] * u * v
+        Q[5] = 1 / 2 * R22 + 1 / 2 * Q[0] * v * v
         return Q
 
     ic = IC.UserFunction(ic_func)
@@ -304,12 +304,12 @@ def test_ssf_pathconservative():
     )
 
     # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_ssf_2d():
-
     theta = 0.05011
     phi = 22.76
     Cr = 0.00035
@@ -331,7 +331,7 @@ def test_ssf_2d():
         profiling=False,
     )
 
-    velocity = 36.*1000./3600.
+    velocity = 36.0 * 1000.0 / 3600.0
     height = 0.5
     inflow_dict = {i: "0.0" for i in range(0, 6)}
     inflow_dict[0] = f"{height}"
@@ -359,8 +359,8 @@ def test_ssf_2d():
     def ic_func(x):
         Q = np.zeros(6, dtype=float)
         Q[0] = height
-        Q[1] = 0.
-        Q[2] = 0.
+        Q[1] = 0.0
+        Q[2] = 0.0
         return Q
 
     ic = IC.UserFunction(ic_func)
@@ -399,14 +399,15 @@ def test_ssf_2d():
 
     # io.generate_vtk(settings.output_dir)
 
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh")
+    )
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
-
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 
 if __name__ == "__main__":

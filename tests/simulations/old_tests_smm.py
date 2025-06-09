@@ -38,7 +38,7 @@ def test_smm_basic_1d():
         + "/",
         filename="state.npy",
     )
-    print(np.linalg.norm(Q[-1]-Qref))
+    print(np.linalg.norm(Q[-1] - Qref))
     assert np.allclose(Q[-1], Qref)
     # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
     # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
@@ -278,12 +278,13 @@ def test_hsmm_basic_1d():
     plt.legend()
     plt.show()
 
+
 @pytest.mark.broken
 @pytest.mark.critical
 def test_smmb_basin_wb_simple_1d():
     ic = {"scheme": "func", "name": "basin_lake_at_rest"}
     model = ShallowMomentsWithBottom(initial_conditions=ic)
-    model.n_fields=3
+    model.n_fields = 3
     model.boundary_conditions = [
         Wall(physical_tag="left"),
         Wall(physical_tag="right"),

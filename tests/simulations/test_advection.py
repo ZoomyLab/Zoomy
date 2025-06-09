@@ -14,14 +14,24 @@ import library.mesh.mesh as petscMesh
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_advection_1d():
-    settings = Settings(name = "Advection", parameters = {'p0':-1.0}, reconstruction = recon.constant, num_flux = None, compute_dt = timestepping.constant(dt=0.01), time_end = 1., output_snapshots = 10000)
-
+    settings = Settings(
+        name="Advection",
+        parameters={"p0": -1.0},
+        reconstruction=recon.constant,
+        num_flux=None,
+        compute_dt=timestepping.constant(dt=0.01),
+        time_end=1.0,
+        output_snapshots=10000,
+    )
 
     bc_tags = ["left", "right"]
     bc_tags_periodic_to = ["right", "left"]
 
     bcs = BC.BoundaryConditions(
-        [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
     )
     ic = IC.RP()
     model = Advection(
@@ -36,23 +46,33 @@ def test_advection_1d():
     # mesh = Mesh.create_1d((-1, 1), 100)
     mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
 
-
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
     # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_reconstruction_1d():
-    settings = Settings(name = "Advection", parameters = {'p0':1.0}, reconstruction = recon.constant, num_flux = flux.LLF(), compute_dt = timestepping.adaptive(CFL=1.0), time_end = 2., output_snapshots = 10000)
-
+    settings = Settings(
+        name="Advection",
+        parameters={"p0": 1.0},
+        reconstruction=recon.constant,
+        num_flux=flux.LLF(),
+        compute_dt=timestepping.adaptive(CFL=1.0),
+        time_end=2.0,
+        output_snapshots=10000,
+    )
 
     bc_tags = ["left", "right"]
     bc_tags_periodic_to = ["right", "left"]
 
     bcs = BC.BoundaryConditions(
-        [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+        [
+            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
+        ]
         # [BC.Extrapolation(physical_tag=tag) for tag in bc_tags]
     )
     ic = IC.RP()
@@ -73,16 +93,23 @@ def test_reconstruction_1d():
     )
     mesh = petscMesh.Mesh.create_1d((-1, 1), 10)
 
-
     solver_price_c(mesh, model, settings, RK1)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_advection_2d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':0.0}, reconstruction = recon.constant, num_flux = flux.Zero(), compute_dt = timestepping.adaptive(CFL=0.45), time_end = 2.0, output_snapshots = 100)
-
+    settings = Settings(
+        name="Advection",
+        parameters={"px": 1.0, "py": 0.0},
+        reconstruction=recon.constant,
+        num_flux=flux.Zero(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=2.0,
+        output_snapshots=100,
+    )
 
     bc_tags = ["left", "right", "top", "bottom"]
     bc_tags_periodic_to = ["right", "left", "bottom", "top"]
@@ -96,12 +123,13 @@ def test_advection_2d(mesh_type):
             # BC.Extrapolation(physical_tag='right'),
             # BC.Extrapolation(physical_tag='bottom'),
             # BC.Extrapolation(physical_tag='top'),
-            BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
-            BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
-            BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
-            BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
         ]
     )
+
     # ic = IC.RP2d()
     def custom_ic(x):
         Q = np.zeros(2, dtype=float)
@@ -110,7 +138,7 @@ def test_advection_2d(mesh_type):
         # Q[0] = np.where(x[0] < 0, 1+x[0], 1-x[0])
         Q[0] = 2 + x[0]
         # Q[1] = np.sin(np.pi * 2 * x[1])
-        Q[1] = 1.
+        Q[1] = 1.0
         # Q[0] =  0.1*x[0] + 1.
         # Q[1] =  0.1*x[1] + 2.
         return Q
@@ -136,18 +164,25 @@ def test_advection_2d(mesh_type):
     # )
     mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
 
-
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
     # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_advection_3d(mesh_type):
-    settings = Settings(name = "Advection",  parameters = {'px':1.0, 'py':1.0, 'pz':1.0}, reconstruction = recon.constant, num_flux = flux.NoFlux(), compute_dt = timestepping.adaptive(CFL=0.3), time_end = 1.0, output_snapshots = 300)
-
+    settings = Settings(
+        name="Advection",
+        parameters={"px": 1.0, "py": 1.0, "pz": 1.0},
+        reconstruction=recon.constant,
+        num_flux=flux.NoFlux(),
+        compute_dt=timestepping.adaptive(CFL=0.3),
+        time_end=1.0,
+        output_snapshots=300,
+    )
 
     # bc_tags = ["left", "right", "top", "bottom", "front", "back"]
     # bc_tags_periodic_to = ["right", "left", "bottom", "top", "back", "front"]
@@ -156,18 +191,18 @@ def test_advection_3d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-        #  BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
-         BC.Extrapolation(physical_tag='left'),
-        #  BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
-         BC.Extrapolation(physical_tag='right'),
-        #  BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
-         BC.Extrapolation(physical_tag='top'),
-        #  BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
-         BC.Extrapolation(physical_tag='bottom'),
-        #  BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
-         BC.Extrapolation(physical_tag='front'),
-        #  BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
-         BC.Extrapolation(physical_tag='back'),
+            #  BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
+            BC.Extrapolation(physical_tag="left"),
+            #  BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
+            BC.Extrapolation(physical_tag="right"),
+            #  BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
+            BC.Extrapolation(physical_tag="top"),
+            #  BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
+            BC.Extrapolation(physical_tag="bottom"),
+            #  BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
+            BC.Extrapolation(physical_tag="front"),
+            #  BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
+            BC.Extrapolation(physical_tag="back"),
         ]
     )
     ic = IC.RP3d()
@@ -189,7 +224,7 @@ def test_advection_3d(mesh_type):
     mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_mid.msh")
 
     solver_price_c(mesh, model, settings, RK1)
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     # io.generate_vtk(settings.output_dir)
@@ -201,12 +236,15 @@ def test_advection_3d(mesh_type):
 def test_periodic_bc(mesh_type):
     settings = Settings(
         name="Advection",
-        parameters={"px": -2./8, "py": -0./8.,},
+        parameters={
+            "px": -2.0 / 8,
+            "py": -0.0 / 8.0,
+        },
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
-        compute_dt=timestepping.constant(dt=1.),
-        time_end=10.,
+        compute_dt=timestepping.constant(dt=1.0),
+        time_end=10.0,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir="outputs/output_advection",
@@ -214,22 +252,18 @@ def test_periodic_bc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
         ]
     )
 
     ic = IC.RP2d(
-        low=lambda n_fields: np.array(
-            [0.1] + [0.0 for i in range(n_fields - 3)]
-        ),
-        high=lambda n_fields: np.array(
-            [0.2] + [0.0 for i in range(n_fields - 3)]
-        ),
-        jump_position_x = 0,
-        jump_position_y = 1.
+        low=lambda n_fields: np.array([0.1] + [0.0 for i in range(n_fields - 3)]),
+        high=lambda n_fields: np.array([0.2] + [0.0 for i in range(n_fields - 3)]),
+        jump_position_x=0,
+        jump_position_y=1.0,
     )
 
     model = Advection(
@@ -242,14 +276,16 @@ def test_periodic_bc(mesh_type):
         settings={"friction": []},
     )
 
-
     main_dir = os.getenv("SMS")
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type))
+    )
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -257,12 +293,15 @@ def test_periodic_bc(mesh_type):
 def test_reconstruction_2d(mesh_type):
     settings = Settings(
         name="Advection",
-        parameters={"px": 1./10, "py": 1./10.,},
+        parameters={
+            "px": 1.0 / 10,
+            "py": 1.0 / 10.0,
+        },
         reconstruction=recon.constant,
         num_flux=flux.LLF(),
         nc_flux=nonconservative_flux.segmentpath(1),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=1.,
+        time_end=1.0,
         output_snapshots=100,
         output_clean_dir=True,
         output_dir="outputs/output_advection",
@@ -272,15 +311,14 @@ def test_reconstruction_2d(mesh_type):
         [
             # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
             # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
+            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
+            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
             # BC.Extrapolation(physical_tag="bottom"),
             # BC.Extrapolation(physical_tag="top"),
         ]
     )
-
 
     # ic = IC.RP2d(
     #     low=lambda n_fields: np.array(
@@ -305,7 +343,7 @@ def test_reconstruction_2d(mesh_type):
 
     def custom_ic(x):
         Q = np.zeros(1, dtype=float)
-        Q[0] = 2.*x[1]
+        Q[0] = 2.0 * x[1]
         return Q
 
     ic = IC.UserFunction(custom_ic)
@@ -320,15 +358,19 @@ def test_reconstruction_2d(mesh_type):
         settings={"friction": []},
     )
 
-
     main_dir = os.getenv("SMS")
-    mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type)))
+    mesh = petscMesh.Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type))
+    )
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=['Q'], aux_field_names=['dQdx', 'dQdy', 'phi'])
-
+    io.generate_vtk(
+        os.path.join(settings.output_dir, f"{settings.name}.h5"),
+        field_names=["Q"],
+        aux_field_names=["dQdx", "dQdy", "phi"],
+    )
 
 
 if __name__ == "__main__":

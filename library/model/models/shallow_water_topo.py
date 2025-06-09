@@ -28,7 +28,7 @@ class ShallowWaterTopo(ShallowWater):
         dimension=1,
         fields=3,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
@@ -38,7 +38,7 @@ class ShallowWaterTopo(ShallowWater):
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings=settings,
@@ -51,7 +51,7 @@ class ShallowWaterTopo(ShallowWater):
         hu = self.variables[1]
         p = self.parameters
         flux[0] = hu
-        flux[1] = hu**2 / h 
+        flux[1] = hu**2 / h
         return [flux]
 
     def nonconservative_matrix(self):
@@ -59,10 +59,9 @@ class ShallowWaterTopo(ShallowWater):
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
-        nc[1,0] = -p.g * p.ez * h 
-        nc[1,2] =  -p.g * p.ez * h 
+        nc[1, 0] = -p.g * p.ez * h
+        nc[1, 2] = -p.g * p.ez * h
         return [nc]
-
 
 
 class ShallowWaterTopo2d(ShallowWater2d):
@@ -98,7 +97,7 @@ class ShallowWaterTopo2d(ShallowWater2d):
         hv = self.variables[2]
         p = self.parameters
         fx[0] = hu
-        fx[1] = hu**2 / h 
+        fx[1] = hu**2 / h
         fx[2] = hu * hv / h
         fy[0] = hv
         fy[1] = hu * hv / h
@@ -111,9 +110,8 @@ class ShallowWaterTopo2d(ShallowWater2d):
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
-        nc_x[1,0] = -p.g * p.ez * h 
-        nc_x[1,3] = -p.g * p.ez * h 
-        nc_y[2,0] = -p.g * p.ez * h 
-        nc_y[2,3] = -p.g * p.ez * h 
+        nc_x[1, 0] = -p.g * p.ez * h
+        nc_x[1, 3] = -p.g * p.ez * h
+        nc_y[2, 0] = -p.g * p.ez * h
+        nc_y[2, 3] = -p.g * p.ez * h
         return [nc_x, nc_y]
-

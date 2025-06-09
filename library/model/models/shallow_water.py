@@ -24,6 +24,7 @@ class ShallowWater(Model):
     :gui:
     { 'parameters': { 'g': {'type': 'float', 'value': 9.81, 'step': 0.01}, 'ex': {'type': 'float', 'value': 0., 'step':0.1}, 'ez': {'type': 'float', 'value': 1., 'step': 0.1}, },}
     """
+
     def __init__(
         self,
         boundary_conditions,
@@ -31,7 +32,7 @@ class ShallowWater(Model):
         dimension=1,
         fields=2,
         aux_fields=0,
-        parameters = {},
+        parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
@@ -41,7 +42,7 @@ class ShallowWater(Model):
             fields=fields,
             aux_fields=aux_fields,
             parameters=parameters,
-            parameters_default = parameters_default,
+            parameters_default=parameters_default,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
@@ -91,7 +92,7 @@ class ShallowWater(Model):
         hu = self.variables[1]
         u = hu / h
         p = self.parameters
-        out[1] = -p.g * (p.nm**2) * u * Abs(u) / h**(7/3)
+        out[1] = -p.g * (p.nm**2) * u * Abs(u) / h ** (7 / 3)
         return out
 
     def chezy(self):
@@ -110,6 +111,7 @@ class ShallowWater2d(ShallowWater):
     :gui:
     { 'parameters': { 'g': {'type': 'float', 'value': 9.81, 'step': 0.01}, 'ex': {'type': 'float', 'value': 0., 'step':0.1}, 'ey': {'type': 'float', 'value': 0., 'step':0.1}, 'ez': {'type': 'float', 'value': 1., 'step': 0.1}, },}
     """
+
     def __init__(
         self,
         boundary_conditions,

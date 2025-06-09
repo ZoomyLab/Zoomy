@@ -1,4 +1,4 @@
- # go though all files in curent directory
+# go though all files in curent directory
 # check the docstring of all functions and classes in thhese files
 # parse the docstring using the docstring_parser module and print out all gui tags
 
@@ -9,31 +9,38 @@ import yaml
 
 import importlib.util
 
+
 def import_module_from_path(path):
-    spec = importlib.util.spec_from_file_location(os.path.splitext(os.path.basename(path))[0], path)
+    spec = importlib.util.spec_from_file_location(
+        os.path.splitext(os.path.basename(path))[0], path
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
+
 # Go through all files in library
 # go though all files and files of subdirectories until you find a .py file
-def browse_all_gui_tags(path): 
+def browse_all_gui_tags(path):
     for root, dirs, files in os.walk(path):
         for file in files:
             get_gui_tags(os.path.join(root, file))
         for dir in dirs:
             browse_all_gui_tags(os.path.join(root, dir))
 
+
 def get_gui_tags(path):
     # Import the module
-    if not path.endswith('.py'):
-        return 
+    if not path.endswith(".py"):
+        return
     try:
         module = import_module_from_path(path)
 
         # Check the docstring of all functions and classes in these files
         for name, obj in inspect.getmembers(module):
-            if (inspect.isfunction(obj) or inspect.isclass(obj)) and obj.__module__ == module.__name__:
+            if (
+                inspect.isfunction(obj) or inspect.isclass(obj)
+            ) and obj.__module__ == module.__name__:
                 docstring = inspect.getdoc(obj)
                 if docstring:
                     # Parse the docstring using the docstring_parser module
@@ -41,13 +48,14 @@ def get_gui_tags(path):
 
                     # Print out all 'gui' tags
                     for meta in parsed_docstring.meta:
-                        if meta.args == ['gui']:
-                            yml = yaml.safe_load( meta.description)
+                        if meta.args == ["gui"]:
+                            yml = yaml.safe_load(meta.description)
                             print(os.path.basename(path), obj.__name__, yml)
     except:
         print(f"Could not import module from {path}")
         pass
-    
+
+
 if __name__ == "__main__":
     main_dir = os.getenv("SMS")
-    browse_all_gui_tags(os.path.join(main_dir, 'library'))
+    browse_all_gui_tags(os.path.join(main_dir, "library"))

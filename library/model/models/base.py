@@ -212,8 +212,7 @@ class Model:
         self.sympy_nonconservative_matrix = self.nonconservative_matrix()
         if self.quasilinear_matrix() is None:
             self.sympy_quasilinear_matrix = [
-                self.sympy_flux_jacobian[d] -
-                self.sympy_nonconservative_matrix[d]
+                self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
                 for d in range(self.dimension)
             ]
         else:
@@ -245,8 +244,7 @@ class Model:
             boundary_functions[i] = eval(f"c_bcs.boundary_condition_{i}")
 
         # define array prototypes
-        array_1d_double = npct.ndpointer(
-            dtype=np.double, ndim=1, flags="CONTIGUOUS")
+        array_1d_double = npct.ndpointer(dtype=np.double, ndim=1, flags="CONTIGUOUS")
 
         # define function prototype
         for i in range(n_boundary_functions):
@@ -302,8 +300,7 @@ class Model:
         parameters = MatrixSymbol("parameters", self.n_parameters, 1)
         normal = MatrixSymbol("normal", self.dimension, 1)
 
-        sympy_boundary_functions = deepcopy(
-            self.boundary_conditions.boundary_functions)
+        sympy_boundary_functions = deepcopy(self.boundary_conditions.boundary_functions)
         # TODO create module
         # TODO delete the code below
 
@@ -355,8 +352,7 @@ class Model:
         sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
         sympy_source = deepcopy(self.sympy_source)
         sympy_source_jacobian = deepcopy(self.sympy_source_jacobian)
-        sympy_nonconservative_matrix = deepcopy(
-            self.sympy_nonconservative_matrix)
+        sympy_nonconservative_matrix = deepcopy(self.sympy_nonconservative_matrix)
         sympy_quasilinear_matrix = deepcopy(self.sympy_quasilinear_matrix)
         sympy_eigenvalues = deepcopy(self.sympy_eigenvalues)
         sympy_left_eigenvectors = deepcopy(self.sympy_left_eigenvectors)
@@ -531,10 +527,8 @@ class Model:
         eigenvalues = c_model.eigenvalues
 
         # define array prototypes
-        array_2d_double = npct.ndpointer(
-            dtype=np.double, ndim=2, flags="CONTIGUOUS")
-        array_1d_double = npct.ndpointer(
-            dtype=np.double, ndim=1, flags="CONTIGUOUS")
+        array_2d_double = npct.ndpointer(dtype=np.double, ndim=2, flags="CONTIGUOUS")
+        array_1d_double = npct.ndpointer(dtype=np.double, ndim=1, flags="CONTIGUOUS")
 
         # define function prototype
         for d in range(self.dimension):
@@ -693,8 +687,7 @@ class Model:
             for d in range(self.dimension)
         ]
         nonconservative_matrix = [
-            lambda Q, Qaux, param, f=l_nonconservative_matrix[d]: f(
-                Q, Qaux, param)
+            lambda Q, Qaux, param, f=l_nonconservative_matrix[d]: f(Q, Qaux, param)
             for d in range(self.dimension)
         ]
 
@@ -861,8 +854,7 @@ def register_sympy_attribute(argument, string_identifier="q_"):
             name: sympy.symbols(str(name), real=True) for name in argument.keys()
         }
     elif type(argument) == list:
-        attributes = {name: sympy.symbols(
-            str(name), real=True) for name in argument}
+        attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
     else:
         assert False
     return IterableNamespace(**attributes)

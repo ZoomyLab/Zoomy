@@ -29,7 +29,7 @@ class IterableNamespace(SimpleNamespace):
 
     def get_list(self):
         return self.iterable_obj
-    
+
     def to_value_dict(self, values):
         out = {k: values[i] for i, k in enumerate(vars(self).keys())}
         return out
@@ -76,7 +76,7 @@ def all_class_members_identical(a, b):
                 print(getattr(b, member))
                 assert False
         else:
-            if not ((getattr(a, member) == getattr(b, member))):
+            if not (getattr(a, member) == getattr(b, member)):
                 print(getattr(a, member))
                 print(getattr(b, member))
                 assert False
@@ -105,9 +105,7 @@ def extract_momentum_fields_as_vectors(Q, momentum_fields, dim):
     Qnew = np.empty((num_momentum_eqns, dim))
     for i_eq in range(num_momentum_eqns):
         for i_dim in range(dim):
-            Qnew[ i_eq, i_dim] = Q[
-                momentum_fields[i_dim * num_momentum_eqns + i_eq]
-            ]
+            Qnew[i_eq, i_dim] = Q[momentum_fields[i_dim * num_momentum_eqns + i_eq]]
     return Qnew
 
 
@@ -115,12 +113,8 @@ def projection_in_normal_and_transverse_direction(Q, momentum_fields, normal):
     dim = normal.shape[0]
     transverse_directions = compute_transverse_direction(normal)
     Q_momentum_eqns = extract_momentum_fields_as_vectors(Q, momentum_fields, dim)
-    Q_normal = np.zeros(
-        (Q_momentum_eqns.shape[0]), dtype=float
-    )
-    Q_transverse = np.zeros(
-        (Q_momentum_eqns.shape[0]), dtype=float
-    )
+    Q_normal = np.zeros((Q_momentum_eqns.shape[0]), dtype=float)
+    Q_transverse = np.zeros((Q_momentum_eqns.shape[0]), dtype=float)
     for d in range(dim):
         Q_normal += Q_momentum_eqns[:, d] * normal[d]
         Q_transverse += Q_momentum_eqns[:, d] * transverse_directions[d]
@@ -153,9 +147,8 @@ def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
 def vectorize(
     func: Callable[[list[FArray]], FArray], n_arguments=3
 ) -> Callable[[list[FArray]], FArray]:
-    """ Note that besides vectorization, we also convert the output to a numpy array and erase the trailing 1 in the dimension for vectors (stored in sympy as matrices) """
+    """Note that besides vectorization, we also convert the output to a numpy array and erase the trailing 1 in the dimension for vectors (stored in sympy as matrices)"""
     if n_arguments == 3:
-        
         # probe has format [n_dim, [N, n_fields, 1 or n_fields (Vector or Matrix)]]
         def f(Q, Qaux, param):
             probe = np.array(func(Q[0], Qaux[0], param))
