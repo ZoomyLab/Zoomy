@@ -1,8 +1,0 @@
----
-title: "Task List"
----
-
-## MBD
-
-## Students
-- [ ] Read through milestones and discuss/agree the objectives
