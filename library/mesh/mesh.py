@@ -33,6 +33,20 @@ def compute_gradient(u, A_glob, neighbors):
         u,  # shape (n_cells,)
     )
 
+def compute_face_gradient(u, A_glob, neighbors):
+    u_neighbors = u[neighbors]
+    u_face = 0.5 * (u[neighbors[:, 0]] + u[neighbors[:, 1]])
+    def grad_single_face(A_loc, u_f, u_neighbors):
+        delta_u = u_neighbors - u_f  # shape (n_neighbors,)
+        return A_loc @ delta_u  # shape (dim,)
+
+    # returns (n_faces, dim)
+    return jax.vmap(grad_single_face)(
+        A_glob,  # shape (n_faces, dim, n_neighbors)
+        u_neighbors,  # shape (n_faces, n_neighbors)
+        u_face,  # shape (n_cells,)
+    )
+
 
 def least_squares_reconstruction(
     n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
@@ -49,7 +63,8 @@ def least_squares_reconstruction(
             R_loc[i_neighbor, neighbor] = 1.0
             assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
             for d in range(dim):
-                dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
+                dX[i_neighbor, d] = cell_centers[neighbor][d] - \
+                    cell_centers[i_c][d]
         A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
         A_glob[i_c, :, :] = np.einsum("ij, jk->ik", A_loc, R_loc)
         R_glob[i_c, :, :] = R_loc
@@ -60,23 +75,39 @@ def least_squares_reconstruction_local(
     n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
 ):
     A_glob = np.zeros((n_cells, dim, n_neighbors), dtype=float)
-    # R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
     for i_c in range(n_cells):
-        # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
         dX = np.zeros((n_neighbors, dim), dtype=float)
-        R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
         A_loc = np.zeros((dim, n_neighbors), dtype=float)
-        R_loc[:, i_c] = -1.0
         for i_neighbor, neighbor in enumerate(neighbors[i_c]):
-            R_loc[i_neighbor, neighbor] = 1.0
             assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
             for d in range(dim):
-                dX[i_neighbor, d] = cell_centers[neighbor][d] - cell_centers[i_c][d]
-        # A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
+                dX[i_neighbor, d] = cell_centers[neighbor][d] - \
+                    cell_centers[i_c][d]
         A_loc = np.linalg.pinv(dX)
         A_glob[i_c, :, :] = A_loc
-        # R_glob[i_c, :, :] = R_loc
-    return A_glob, A_glob
+    return A_glob
+
+
+def least_squares_face_reconstruction_local(
+    n_faces,
+    dim,
+    n_neighbors,
+    neighbors,
+    face_centers,
+    cell_centers,
+    polynomial_degree=1,
+):
+    A_glob = np.zeros((n_faces, dim, n_neighbors), dtype=float)
+    for i_f in range(n_faces):
+        dX = np.zeros((n_neighbors, dim), dtype=float)
+        A_loc = np.zeros((dim, n_neighbors), dtype=float)
+        for i_neighbor, neighbor in enumerate(neighbors[i_f]):
+            for d in range(dim):
+                dX[i_neighbor, d] = cell_centers[neighbor][d] - \
+                    face_centers[i_f][d]
+        A_loc = np.linalg.pinv(dX)
+        A_glob[i_f, :, :] = A_loc
+    return A_glob
 
 
 def get_physical_boundary_labels(filepath):
@@ -210,7 +241,8 @@ def load_gmsh_to_fvm(filepath):
     dm, boundary_cells_dict, boundary_face_vertices_dict = compute_boundary_data(
         dm, boundary_dict
     )
-    boundary_face_corresponding_element = boundary_dict_to_list(boundary_cells_dict)
+    boundary_face_corresponding_element = boundary_dict_to_list(
+        boundary_cells_dict)
     boundary_face_vertices = boundary_dict_to_list(boundary_face_vertices_dict)
     return dm, boundary_dict, ghost_cells_dict
 
@@ -244,7 +276,8 @@ def convert_to_fvm_mesh(dm, boundary_dict, ghost_cells_dict):
 def _get_neighberhood(dm, cell, cStart=0):
     neighbors = (
         np.array(
-            [dm.getSupport(f)[dm.getSupport(f) != cell][0] for f in dm.getCone(cell)],
+            [dm.getSupport(f)[dm.getSupport(f) != cell][0]
+             for f in dm.getCone(cell)],
             dtype=int,
         )
         - cStart
@@ -252,8 +285,21 @@ def _get_neighberhood(dm, cell, cStart=0):
     return neighbors
 
 
-@register_static_pytree
-@define(slots=True, frozen=True)
+def _fill_neighborhood(dm, neighbors, max_neighbors, cStart=0):
+    new_potential_neighbors = []
+    for cell in neighbors:
+        new_potential_neighbors += list(_get_neighberhood(dm, cell, cStart=cStart))
+    new_potential_neighbors = np.array(new_potential_neighbors)
+    new_neighbors = np.setdiff1d(new_potential_neighbors, neighbors)
+    neighbors = np.concatenate((neighbors , new_neighbors))[:max_neighbors]
+    if len(neighbors) == max_neighbors:
+        return neighbors
+    else:
+        return _fill_neighborhood(dm, neighbors, max_neighbors, cStart=cStart)
+
+
+@ register_static_pytree
+@ define(slots=True, frozen=True)
 class Mesh:
     dimension: int
     type: str
@@ -281,13 +327,14 @@ class Mesh:
     face_volumes: FArray
     face_centers: FArray
     face_subvolumes: FArray
+    face_neighbors: IArray
     boundary_conditions_sorted_physical_tags: IArray
     boundary_conditions_sorted_names: CArray
     lsq_gradQ: FArray
-    deltaQ: FArray
+    lsq_face_gradQ: FArray
     z_ordering: IArray
 
-    @classmethod
+    @ classmethod
     def create_1d(cls, domain: tuple[float, float], n_inner_cells: int):
         xL = domain[0]
         xR = domain[1]
@@ -314,7 +361,9 @@ class Mesh:
         cell_centers[:n_inner_cells, 0] = np.arange(xL + dx / 2, xR, dx)
         cell_centers[n_inner_cells, 0] = xL - dx / 2
         cell_centers[n_inner_cells + 1, 0] = xR + dx / 2
-        cell_neighbors = (n_cells + 1) * np.ones((n_cells, n_faces_per_cell), dtype=int)
+        cell_neighbors = (
+            (n_cells + 1) * np.ones((n_cells, n_faces_per_cell), dtype=int)
+        )
 
         cell_faces = np.empty((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_faces[:, 0] = list(range(0, n_faces - 1))
@@ -340,8 +389,10 @@ class Mesh:
             face_normals[i_face, 0] = 1.0
 
         boundary_face_cells = np.array([0, n_inner_cells - 1], dtype=int)
-        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells + 1], dtype=int)
-        boundary_face_function_numbers = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_ghosts = np.array(
+            [n_inner_cells, n_inner_cells + 1], dtype=int)
+        boundary_face_function_numbers = np.empty(
+            (n_boundary_faces), dtype=int)
         boundary_face_function_numbers[0] = 0
         boundary_face_function_numbers[1] = 1
         boundary_face_physical_tags = np.array([0, 1], dtype=int)
@@ -349,8 +400,8 @@ class Mesh:
 
         face_cells = np.empty((n_faces, 2), dtype=int)
         # face_cell_face_index = (n_faces + 1)*np.ones((n_faces, 2), dtype=int)
-        face_cells[1 : n_faces - 1, 0] = list(range(0, n_inner_cells - 1))
-        face_cells[1 : n_faces - 1, 1] = list(range(1, n_inner_cells))
+        face_cells[1: n_faces - 1, 0] = list(range(0, n_inner_cells - 1))
+        face_cells[1: n_faces - 1, 1] = list(range(1, n_inner_cells))
         # face_cell_face_index[1:n_faces-1, 0] = 1
         # face_cell_face_index[1:n_faces-1, 1] = 0
         face_cells[0, 0] = n_inner_cells
@@ -378,8 +429,18 @@ class Mesh:
         polynomial_degree = 1
         n_neighbors = n_faces_per_cell * polynomial_degree
         dim = 1
-        lsq_gradQ, deltaQ = least_squares_reconstruction_local(
+        lsq_gradQ = least_squares_reconstruction_local(
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers
+        )
+
+        n_face_neighbors = 2
+        face_neighbors = (n_cells + 1) *  np.ones((n_faces, n_face_neighbors), dtype=int)
+
+        for i_f, neighbors in enumerate(face_cells):
+            face_neighbors[i_f] = neighbors
+
+        lsq_face_gradQ = least_squares_face_reconstruction_local(
+            n_faces, dim, n_face_neighbors, face_neighbors, face_centers, cell_centers
         )
 
         z_ordering = np.array([-1], dtype=float)
@@ -411,10 +472,11 @@ class Mesh:
             face_volumes,
             face_centers,
             face_subvolumes,
+            face_neighbors,
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            deltaQ,
+            lsq_face_gradQ,
             z_ordering,
         )
 
@@ -458,7 +520,7 @@ class Mesh:
 
         return order
 
-    @classmethod
+    @ classmethod
     def from_gmsh(cls, filepath, allow_z_integration=False):
         dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
         boundary_dict = get_physical_boundary_labels(filepath)
@@ -490,14 +552,16 @@ class Mesh:
         n_inner_cells = cEnd - cStart
         n_faces = egEnd - egStart
         n_vertices = vEnd - vStart
-        cell_vertices = np.zeros((n_inner_cells, n_vertices_per_cell), dtype=int)
+        cell_vertices = np.zeros(
+            (n_inner_cells, n_vertices_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
         cell_centers = np.zeros((n_cells, dim), dtype=float)
         # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
         cell_volumes = np.ones((n_cells), dtype=float)
         cell_inradius = compute_cell_inradius(dm)
         for i_c, c in enumerate(range(cStart, cEnd)):
-            cell_volume, cell_center, cell_normal = dm.computeCellGeometryFVM(c)
+            cell_volume, cell_center, cell_normal = dm.computeCellGeometryFVM(
+                c)
             transitive_closure_points, transitive_closure_orientation = (
                 dm.getTransitiveClosure(c, useCone=True)
             )
@@ -542,7 +606,8 @@ class Mesh:
 
         for e in range(egStart, egEnd):
             label = gdm.getLabelValue("Face Sets", e)
-            face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(e)
+            face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(
+                e)
             face_center = gdm.computeCellGeometryFVM(e)[1]
 
             face_vertices = get_face_vertices(dim, gdm, vgStart, e)
@@ -631,41 +696,28 @@ class Mesh:
                 )
             cell_neighbors[i_c, :] = neighbors
 
-        lsq_gradQ, deltaQ = least_squares_reconstruction_local(
+        lsq_gradQ = least_squares_reconstruction_local(
             n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1
         )
 
-        n_face_neighbors = (2 * n_faces_per_cell - 1) * polynomial_degree
-        face_neighbors = (n_cells + 1) * np.ones((n_cells, n_face_neighbors), dtype=int)
+        n_face_neighbors = (2 * (n_faces_per_cell + 1) - 2) * polynomial_degree
+        face_neighbors = (n_cells + 1) * np.ones((n_faces, n_face_neighbors), dtype=int)
 
-        # VECTORIZED CASE
-        # cell_neighbors = (n_cells+1)*np.ones((n_cells, n_faces_per_cell+1), dtype=int)
-        # lsq_A = []
-        # lsq_D = np.zeros((n_cells, n_faces_per_cell+1, n_cells), dtype=float)
-        # for i_c, c in enumerate(range(cgStart, cgEnd )):
-        #     neighbors = _get_neighberhood(gdm, c, cStart=cgStart)
-        #     assert not (i_c == neighbors).any()
-        #     n_neighbors = neighbors.shape[0]
-        #     if n_neighbors == 1:
-        #         neighbors_of_neighbor = _get_neighberhood(gdm, neighbors[0]+cgStart, cStart = cgStart)
-        #         assert len(neighbors_of_neighbor) == n_faces_per_cell
-        #         neighbors = np.union1d(neighbors_of_neighbor, neighbors)
-        #         n_neighbors = neighbors.shape[0]
-        #     cell_neighbors[i_c, :n_neighbors]= neighbors
-        #     # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
-        #     dX = np.zeros((n_neighbors, dim), dtype=float)
-        #     mat = np.zeros((dim , n_faces_per_cell+1), dtype=float)
-        #     for i_neighbor, neighbor in enumerate(neighbors):
-        #         lsq_D[i_c, i_neighbor, i_c] = -1.
-        #         lsq_D[i_c, i_neighbor, neighbor] = 1.
-        #         # lsq_D[neighbor, i_neighbor, i_c] = 1.
-        #         for d in range(dim):
-        #             dX[i_neighbor, d ] = cell_centers[neighbor][d] - cell_centers[i_c][d]
-        #     mat[:, :n_neighbors] = np.linalg.inv(dX.T @ dX) @ dX.T
-        #     lsq_A.append(mat)
-        # lsq_A = np.array(lsq_A, dtype=float)
-        # # TODO: sparse matrix.
-        # lsq_gradQ = np.einsum('...ij, ...jk -> ...ik', lsq_A, lsq_D)
+        for i_f, f in enumerate(range(egStart, egEnd)):
+            # GET NEIGHBORHOOD
+            neighbors = _fill_neighborhood(
+                gdm, gdm.getSupport(f), n_face_neighbors, cgStart)
+            face_neighbors[i_f, :] = neighbors
+
+        lsq_face_gradQ = least_squares_face_reconstruction_local(
+            n_faces,
+            dim,
+            n_face_neighbors,
+            face_neighbors,
+            face_centers,
+            cell_centers,
+            polynomial_degree=1,
+        )
 
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
@@ -674,18 +726,21 @@ class Mesh:
 
         face_cells = np.array(face_cells, dtype=int)
         # face_cell_face_index = np.array(face_cell_face_index, dtype=int)
-        boundary_face_function_numbers = _boundary_dict_indices(boundary_face_cells)
+        boundary_face_function_numbers = _boundary_dict_indices(
+            boundary_face_cells)
 
         # get rid of empty keys in the boundary_dict (e.g. no surface values in 2d)
         boundary_dict_inverted = {v: k for k, v in boundary_dict.items()}
-        boundary_dict_reduced = {k: boundary_dict_inverted[k] for k in allowed_keys}
+        boundary_dict_reduced = {
+            k: boundary_dict_inverted[k] for k in allowed_keys}
 
         # sort the dict by the values
         sorted_keys = np.array(list(boundary_dict_reduced.keys()), dtype=int)
         sorted_keys.sort()
         boundary_dict = {k: boundary_dict_reduced[k] for k in sorted_keys}
         boundary_face_cells = {k: boundary_face_cells[k] for k in sorted_keys}
-        boundary_face_ghosts = {k: boundary_face_ghosts[k] for k in sorted_keys}
+        boundary_face_ghosts = {
+            k: boundary_face_ghosts[k] for k in sorted_keys}
         boundary_face_face_indices = {
             k: boundary_face_face_indices[k] for k in sorted_keys
         }
@@ -740,10 +795,11 @@ class Mesh:
             face_volumes,
             face_centers,
             face_subvolumes,
+            face_neighbors,
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            deltaQ,
+            lsq_face_gradQ,
             z_ordering,
         )
 
@@ -752,7 +808,7 @@ class Mesh:
 
         return obj
 
-    @classmethod
+    @ classmethod
     def extrude_mesh(cls, msh, n_layers=10):
         Z = np.linspace(0, 1, n_layers + 1)
         dimension = msh.dimension + 1
@@ -763,7 +819,8 @@ class Mesh:
         n_boundary_faces = msh.n_boundary_faces * n_layers + 2 * msh.n_cells
         n_faces_per_cell = mesh_util._get_faces_per_element(mesh_type)
         n_faces = n_inner_cells * n_faces_per_cell
-        vertex_coordinates = extrude.extrude_points(msh.vertex_coordinates.T, Z).T
+        vertex_coordinates = extrude.extrude_points(
+            msh.vertex_coordinates.T, Z).T
         cell_vertices = extrude.extrude_element_vertices(
             msh.cell_vertices.T, msh.n_vertices, n_layers
         ).T
@@ -772,10 +829,12 @@ class Mesh:
         cell_volumes = np.empty((n_cells), dtype=float)
         cell_inradius = np.empty((n_cells), dtype=float)
         cell_face_areas = np.empty((n_cells, n_faces_per_cell), dtype=float)
-        cell_face_normals = np.empty((n_cells, n_faces_per_cell, 3), dtype=float)
+        cell_face_normals = np.empty(
+            (n_cells, n_faces_per_cell, 3), dtype=float)
         cell_n_neighbors = np.empty((n_cells), dtype=int)
         cell_neighbors = np.empty((n_cells, n_faces_per_cell), dtype=int)
-        cell_neighbors_face_index = np.empty((n_cells, n_faces_per_cell), dtype=int)
+        cell_neighbors_face_index = np.empty(
+            (n_cells, n_faces_per_cell), dtype=int)
         for i_elem, elem in enumerate(cell_vertices.T):
             # cell_inradius[i_elem] = mesh_util.inradius(
             #    vertex_coordinates, elem, mesh_type
@@ -828,8 +887,10 @@ class Mesh:
         # empty fields
         cell_faces = np.empty((n_inner_cells, n_faces_per_cell), dtype=int)
         boundary_face_cells = np.array([0, n_inner_cells - 1], dtype=int)
-        boundary_face_ghosts = np.array([n_inner_cells, n_inner_cells + 1], dtype=int)
-        boundary_face_function_numbers = np.empty((n_boundary_faces), dtype=int)
+        boundary_face_ghosts = np.array(
+            [n_inner_cells, n_inner_cells + 1], dtype=int)
+        boundary_face_function_numbers = np.empty(
+            (n_boundary_faces), dtype=int)
         boundary_face_physical_tags = np.array([0, 1], dtype=int)
         boundary_face_face_indices = np.array([0, n_faces - 1], dtype=int)
         face_cells = np.empty((n_faces, 2), dtype=int)
@@ -868,10 +929,11 @@ class Mesh:
             face_volumes,
             face_centers,
             face_subvolumes,
+            face_neighbors,
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            deltaQ,
+            lsq_face_gradQ,
         )
 
     def write_to_hdf5(self, filepath: str):
@@ -886,15 +948,18 @@ class Mesh:
             mesh.create_dataset("n_vertices", data=self.n_vertices)
             mesh.create_dataset("n_boundary_faces", data=self.n_boundary_faces)
             mesh.create_dataset("n_faces_per_cell", data=self.n_faces_per_cell)
-            mesh.create_dataset("vertex_coordinates", data=self.vertex_coordinates)
+            mesh.create_dataset("vertex_coordinates",
+                                data=self.vertex_coordinates)
             mesh.create_dataset("cell_vertices", data=self.cell_vertices)
             mesh.create_dataset("cell_faces", data=self.cell_faces)
             mesh.create_dataset("cell_volumes", data=self.cell_volumes)
             mesh.create_dataset("cell_centers", data=self.cell_centers)
             mesh.create_dataset("cell_inradius", data=self.cell_inradius)
             mesh.create_dataset("cell_neighbors", data=self.cell_neighbors)
-            mesh.create_dataset("boundary_face_cells", data=self.boundary_face_cells)
-            mesh.create_dataset("boundary_face_ghosts", data=self.boundary_face_ghosts)
+            mesh.create_dataset("boundary_face_cells",
+                                data=self.boundary_face_cells)
+            mesh.create_dataset("boundary_face_ghosts",
+                                data=self.boundary_face_ghosts)
             mesh.create_dataset(
                 "boundary_face_function_numbers",
                 data=self.boundary_face_function_numbers,
@@ -911,19 +976,21 @@ class Mesh:
             mesh.create_dataset("face_volumes", data=self.face_volumes)
             mesh.create_dataset("face_centers", data=self.face_centers)
             mesh.create_dataset("face_subvolumes", data=self.face_subvolumes)
+            mesh.create_dataset("face_neighbors", data=self.face_neighbors)
             mesh.create_dataset(
                 "boundary_conditions_sorted_physical_tags",
                 data=np.array(self.boundary_conditions_sorted_physical_tags),
             )
             mesh.create_dataset(
                 "boundary_conditions_sorted_names",
-                data=np.array(self.boundary_conditions_sorted_names, dtype="S"),
+                data=np.array(
+                    self.boundary_conditions_sorted_names, dtype="S"),
             )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
-            mesh.create_dataset("deltaQ", data=np.array(self.deltaQ))
+            mesh.create_dataset("lsq_face_gradQ", data=np.array(self.lsq_face_gradQ))
             mesh.create_dataset("z_ordering", data=np.array(self.z_ordering))
 
-    @classmethod
+    @ classmethod
     def from_hdf5(cls, filepath: str):
         with h5py.File(filepath, "r") as file:
             file = file
@@ -954,12 +1021,14 @@ class Mesh:
                 file["mesh"]["face_volumes"][()],
                 file["mesh"]["face_centers"][()],
                 file["mesh"]["face_subvolumes"][()],
+                file["mesh"]["face_neighbors"][()],
                 file["mesh"]["boundary_conditions_sorted_physical_tags"][()],
                 np.array(
-                    file["mesh"]["boundary_conditions_sorted_names"][()], dtype="str"
+                    file["mesh"]["boundary_conditions_sorted_names"][()
+                                                                     ], dtype="str"
                 ),
                 file["mesh"]["lsq_gradQ"][()],
-                file["mesh"]["deltaQ"][()],
+                file["mesh"]["lsq_face_gradQ"][()],
                 file["mesh"]["z_ordering"][()],
             )
         return mesh
@@ -995,7 +1064,7 @@ class Mesh:
         meshout.write(filepath + ".vtk")
 
 
-@define(frozen=True, slots=True)
+@ define(frozen=True, slots=True)
 class MeshJAX(Mesh):
     dimension: int = attr.ib()
     type: str = attr.ib()
@@ -1023,10 +1092,11 @@ class MeshJAX(Mesh):
     face_volumes: jnp.ndarray = attr.ib()
     face_centers: jnp.ndarray = attr.ib()
     face_subvolumes: jnp.ndarray = attr.ib()
+    face_neighbors: jnp.ndarray = attr.ib()
     boundary_conditions_sorted_physical_tags: jnp.ndarray = attr.ib()
     boundary_conditions_sorted_names: Any = attr.ib()  # Keeping as NumPy char array
     lsq_gradQ: jnp.ndarray = attr.ib()
-    deltaQ: jnp.ndarray = attr.ib()
+    lsq_face_gradQ: jnp.ndarray = attr.ib()
     z_ordering: jnp.ndarray = attr.ib()
 
 
@@ -1049,8 +1119,10 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         cell_neighbors=jnp.array(mesh.cell_neighbors),
         boundary_face_cells=jnp.array(mesh.boundary_face_cells),
         boundary_face_ghosts=jnp.array(mesh.boundary_face_ghosts),
-        boundary_face_function_numbers=jnp.array(mesh.boundary_face_function_numbers),
-        boundary_face_physical_tags=jnp.array(mesh.boundary_face_physical_tags),
+        boundary_face_function_numbers=jnp.array(
+            mesh.boundary_face_function_numbers),
+        boundary_face_physical_tags=jnp.array(
+            mesh.boundary_face_physical_tags),
         boundary_face_face_indices=jnp.array(mesh.boundary_face_face_indices),
         face_cells=jnp.array(mesh.face_cells),
         # face_cell_face_index=jnp.array(mesh.face_cell_face_index),  # If needed
@@ -1058,6 +1130,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         face_volumes=jnp.array(mesh.face_volumes),
         face_centers=jnp.array(mesh.face_centers),
         face_subvolumes=jnp.array(mesh.face_subvolumes),
+        face_neighbors=jnp.array(mesh.face_neighbors),
         boundary_conditions_sorted_physical_tags=jnp.array(
             mesh.boundary_conditions_sorted_physical_tags
         ),
@@ -1065,7 +1138,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
             mesh.boundary_conditions_sorted_names
         ),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
-        deltaQ=jnp.array(mesh.deltaQ),
+        lsq_face_gradQ=jnp.array(mesh.lsq_face_gradQ),
         z_ordering=jnp.array(mesh.z_ordering),
     )
 

@@ -13,24 +13,22 @@ def test_create_1d_mesh():
     assert True
 
 
-# @pytest.mark.critical
-# @pytest.mark.parametrize("mesh_type", ["quad", "tri"])
-# def test_load_2d_mesh(mesh_type: str):
-#     main_dir = os.getenv("SMS")
-#     mesh = Mesh.load_gmsh(
-#         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
-#         mesh_type,
-#     )
-#     assert True
+@pytest.mark.critical
+@pytest.mark.parametrize("mesh_type", ["quad", "tri"])
+def test_load_2d_mesh(mesh_type: str):
+    main_dir = os.getenv("SMS")
+    mesh = Mesh.from_gmsh(
+        os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
+    )
+    assert True
 
 
 @pytest.mark.critical
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_load_3d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
-        mesh_type,
     )
     assert True
 
@@ -38,7 +36,7 @@ def test_load_3d_mesh(mesh_type: str):
 @pytest.mark.critical
 def test_write_to_hdf5():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
     )
@@ -51,7 +49,7 @@ def test_write_to_hdf5():
 @pytest.mark.critical
 def test_write_to_file_vtk():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
     )
@@ -74,7 +72,7 @@ def test_write_to_file_vtk():
 @pytest.mark.critical
 def test_from_hdf5():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
     )
@@ -106,7 +104,7 @@ def test_from_hdf5():
 @pytest.mark.critical
 def test_read_vtk_cell_fields():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
     cell_data = np.linspace(1, 2 * mesh.n_elements, 2 * mesh.n_elements).reshape(
@@ -122,7 +120,7 @@ def test_read_vtk_cell_fields():
 @pytest.mark.critical
 def test_extrude_and_write_3d_mesh():
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
     (vertices_3d, elements_3d, mesh_type) = extrude_2d_element_vertices_mesh(
@@ -145,7 +143,7 @@ def test_extrude_and_write_3d_mesh():
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_extrude_2d_as_fvm_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
-    mesh = Mesh.load_gmsh(
+    mesh = Mesh.from_gmsh(
         os.path.join(main_dir, f"meshes/{mesh_type}_2d/mesh_coarse.msh"), f"{mesh_type}"
     )
 
@@ -167,9 +165,9 @@ def test_extract_z_axis_on_extruded_mesh():
 
 
 if __name__ == "__main__":
-    # test_create_1d_mesh()
-    # test_load_2d_mesh("quad")
-    # test_load_2d_mesh("triangle")
+    test_create_1d_mesh()
+    test_load_2d_mesh("quad")
+    test_load_2d_mesh("triangle")
     # test_load_3d_mesh("tetra")
     # test_write_to_hdf5()
     # test_from_hdf5()
@@ -178,4 +176,4 @@ if __name__ == "__main__":
     # test_extrude_and_write_3d_mesh()
     # test_extrude_2d_as_fvm_mesh('quad')
     # test_extrude_2d_as_fvm_mesh('triangle')
-    test_extract_z_axis_on_extruded_mesh()
+    # test_extract_z_axis_on_extruded_mesh()
