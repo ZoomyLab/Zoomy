@@ -64,7 +64,8 @@ def test_smm_1d():
         ]
     )
     ic = IC.RP(
-        high=lambda n_field: np.array([0.2, 0.0] + [0.0 for l in range(level)]),
+        high=lambda n_field: np.array(
+            [0.2, 0.0] + [0.0 for l in range(level)]),
         low=lambda n_field: np.array([0.1, 0.0] + [0.0 for l in range(level)]),
     )
     model = ShallowMoments(
@@ -73,7 +74,8 @@ def test_smm_1d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
+        settings={"eigenvalue_mode": "symbolic",
+                  "friction": ["newtonian", "slip_mod"]},
     )
 
     mesh = petscMesh.Mesh.create_1d((-1, 30), 100)
@@ -128,7 +130,8 @@ def test_jax_jit_grad():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic",
+                  "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
@@ -144,10 +147,11 @@ def test_jax_jit_grad():
     #     mesh, model, settings
     # )
 
-    ## Automatic differentiation example
+    # Automatic differentiation example
     def full(params):
         model.parameter_values = params
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def single(g):
@@ -155,11 +159,13 @@ def test_jax_jit_grad():
         param = jax.numpy.array(model.parameter_values)
         param = param.at[0].set(g)
         model.parameter_values = param
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def no_ad():
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     # jax.config.update("jax_enable_compilation_cache", False)
@@ -176,7 +182,7 @@ def test_jax_jit_grad():
     gradient = jax.jacfwd(single)(g)
     jax.debug.print("param: {g}", g=g)
     jax.debug.print("grad: {gradient}", gradient=gradient)
-    ## jax.clear_caches()
+    # jax.clear_caches()
     model.parameter_values = params_orig
     no_ad()
 
@@ -228,7 +234,8 @@ def test_jax_jit_grad_minimal():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic",
+                  "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
@@ -244,10 +251,11 @@ def test_jax_jit_grad_minimal():
     #     mesh, model, settings
     # )
 
-    ## Automatic differentiation example
+    # Automatic differentiation example
     def full(params):
         model.parameter_values = params
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def single(g):
@@ -255,11 +263,13 @@ def test_jax_jit_grad_minimal():
         param = jax.numpy.array(model.parameter_values)
         param = param.at[0].set(g)
         model.parameter_values = param
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     def no_ad():
-        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+        Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(
+            mesh, model, settings)
         return jax.numpy.sum(Qnew)
 
     # jax.config.update("jax_enable_compilation_cache", False)
@@ -276,7 +286,7 @@ def test_jax_jit_grad_minimal():
     gradient = jax.jacfwd(single)(g)
     # jax.debug.print("param: {g}", g=g)
     # jax.debug.print("grad: {gradient}", gradient=gradient)
-    ## jax.clear_caches()
+    # jax.clear_caches()
     # model.parameter_values = params_orig
     # no_ad()
 
@@ -308,16 +318,16 @@ def test_reconstruction():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="top"),
+            BC.Extrapolation(physical_tag="top"),
             BC.Extrapolation(physical_tag="bottom"),
             BC.Extrapolation(physical_tag="left"),
-            BC.Wall(physical_tag="right"),
+            BC.Extrapolation(physical_tag="right"),
         ]
     )
 
     def custom_ic(x):
         Q = np.zeros(3 + 2 * level, dtype=float)
-        Q[0] = x[0] * 2 - x[1] * 1.0 + 10.0
+        Q[0] = x[0] * x[0] * 2 - x[1] * 1.0 + 10.0
         return Q
 
     ic = IC.UserFunction(custom_ic)
@@ -328,7 +338,8 @@ def test_reconstruction():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        settings={"eigenvalue_mode": "symbolic",
+                  "friction": ["newtonian", "slip"]},
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
