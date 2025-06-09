@@ -1,5 +1,4 @@
-
-#from __future__ import division, print_function
+# from __future__ import division, print_function
 
 import numpy as np
 import jax.numpy as jnp
@@ -9,7 +8,8 @@ from types import SimpleNamespace
 import pyprog
 from attr import define, field
 from typing import Callable, Optional, Type, Any
-#from copy import deepcopy
+
+# from copy import deepcopy
 from time import time as gettime
 import os
 import sys
@@ -18,7 +18,7 @@ import shutil
 from functools import partial
 
 
-#WARNING: I get a segmentation fault if I do not include petsc4py before precice
+# WARNING: I get a segmentation fault if I do not include petsc4py before precice
 try:
     from petsc4py import PETSc
 except ModuleNotFoundError as err:
@@ -28,7 +28,6 @@ try:
     import precice
 except ModuleNotFoundError as err:
     print(err)
-
 
 
 from library.model.model import *
@@ -42,10 +41,7 @@ import library.fvm.timestepping as timestepping
 import library.misc.io as io
 from library.mesh.mesh import convert_mesh_to_jax
 from library.fvm.ode import *
-from library.solver import python_c_interface as c_interface
-from library.solver import modify_sympy_c_code as modify_sympy_c_code
 from library.misc.static_class import register_static_pytree
-
 
 
 @register_static_pytree
@@ -73,7 +69,7 @@ class Settings:
 
 
 @define(frozen=True)
-class Solver():
+class Solver:
     def initialize(self, model, mesh, settings=None):
         model.boundary_conditions.initialize(
             mesh,
@@ -85,23 +81,21 @@ class Solver():
             model.parameters,
             model.sympy_normal,
         )
-    
+
         n_fields = model.n_fields
         n_cells = mesh.n_cells
         n_aux_fields = model.aux_variables.length()
         if settings:
             if settings.compute_gradient:
                 n_aux_fields += n_fields * mesh.dimension
-    
+
         Q = np.empty((n_fields, n_cells), dtype=float)
         Qaux = np.zeros((n_aux_fields, n_cells), dtype=float)
-    
+
         Q = model.initial_conditions.apply(mesh.cell_centers, Q)
         Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
         return jnp.array(Q), jnp.array(Qaux)
-    
-    
-    
+
     # @partial(jax.jit, static_argnames=['self'])
     def get_compute_max_abs_eigenvalue(self, mesh, pde, settings):
         @jax.jit
@@ -115,40 +109,40 @@ class Solver():
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
             qauxB = Qaux[:, i_cellB]
-        
+
             normal = mesh.face_normals
-        
+
             evA = pde.eigenvalues(qA, qauxA, parameters, normal)
             evB = pde.eigenvalues(qB, qauxB, parameters, normal)
             # max_abs_eigenvalue = max(jnp.abs(evA).max(), jnp.abs(evB).max())
             max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
-        
-        
-        
+
             # if not max_abs_eigenvalue > 10 ** (-8):
             #     iA = jnp.abs(evA).argmax()
             #     iB = jnp.abs(evB).argmax()
             #     print(Q[:, iA])
             #     print(Q[:, iB])
             #     assert False
-        
+
             return max_abs_eigenvalue
+
         return compute_max_abs_eigenvalue
-    
-    
-    
+
     def get_compute_source(self, mesh, pde, settings):
         @jax.jit
         def compute_source(dt, Q, Qaux, parameters, dQ):
-            dQ = dQ.at[:, : mesh.n_inner_cells].set(pde.source(
-                Q[:, : mesh.n_inner_cells], Qaux[:, : mesh.n_inner_cells], parameters
-            ))
+            dQ = dQ.at[:, : mesh.n_inner_cells].set(
+                pde.source(
+                    Q[:, : mesh.n_inner_cells],
+                    Qaux[:, : mesh.n_inner_cells],
+                    parameters,
+                )
+            )
             return dQ
+
         return compute_source
-    
-    
-    
-    @partial(jax.jit, static_argnames=['self'])
+
+    @partial(jax.jit, static_argnames=["self"])
     def compute_source_jac(self, dt, Q, Qaux, dQ, parameters, mesh, pde, settings):
         # Loop over the inner elements
         for i_cell in range(mesh.n_inner_cells):
@@ -156,11 +150,10 @@ class Solver():
                 Q[:, i_cell], Qaux[:, i_cell], parameters
             )
         return dQ
-    
-        return source_jac
-    
-    def get_space_solution_operator(self, mesh, pde, bcs, settings):
 
+        return source_jac
+
+    def get_space_solution_operator(self, mesh, pde, bcs, settings):
         @jax.jit
         def space_solution_operator(dt, Q, Qaux, parameters, dQ):
             compute_num_flux = settings.num_flux
@@ -184,13 +177,33 @@ class Solver():
 
             # Compute non-conservative fluxes
             nc_fluxA, failedA = compute_nc_flux(
-                qA, qB, qauxA, qauxB, parameters, normals, svA, svB, face_volumes, dt, pde
+                qA,
+                qB,
+                qauxA,
+                qauxB,
+                parameters,
+                normals,
+                svA,
+                svB,
+                face_volumes,
+                dt,
+                pde,
             )
             # Ensure no failure
             assert not failedA
 
             nc_fluxB, failedB = compute_nc_flux(
-                qB, qA, qauxB, qauxA, parameters, -normals, svB, svA, face_volumes, dt, pde
+                qB,
+                qA,
+                qauxB,
+                qauxA,
+                parameters,
+                -normals,
+                svB,
+                svA,
+                face_volumes,
+                dt,
+                pde,
             )
             assert not failedB
 
@@ -204,67 +217,90 @@ class Solver():
             # Extract faces for inner cells
             # Shape of faces: (n_cells, faces_per_cell)
             # faces = mesh.cell_faces  # Assuming mesh.cell_faces is a JAX array
-            
-            
-            def update_dQ_body(loop_idx, dQ, mesh, iA, iB, nc_fluxA, nc_fluxB, face_volumes, cell_volumesA, cell_volumesB):
+
+            def update_dQ_body(
+                loop_idx,
+                dQ,
+                mesh,
+                iA,
+                iB,
+                nc_fluxA,
+                nc_fluxB,
+                face_volumes,
+                cell_volumesA,
+                cell_volumesB,
+            ):
                 faces = mesh.cell_faces[loop_idx]
-                inner_range = jnp.arange(mesh.n_inner_cells)  
+                inner_range = jnp.arange(mesh.n_inner_cells)
 
                 iA_faces = iA[faces]
-                iB_faces = iB[faces] 
+                iB_faces = iB[faces]
 
                 dim = nc_fluxA.shape[0]
 
-                zeros  = jnp.zeros(mesh.n_inner_cells)
+                zeros = jnp.zeros(mesh.n_inner_cells)
 
-                iA_masked = (iA_faces == inner_range) 
+                iA_masked = iA_faces == inner_range
                 iA_masked = jnp.repeat(iA_masked[jnp.newaxis], repeats=dim, axis=0)
-                iB_masked = (iB_faces == inner_range) 
+                iB_masked = iB_faces == inner_range
                 iB_masked = jnp.repeat(iB_masked[jnp.newaxis], repeats=dim, axis=0)
 
+                fluxA_contribution = jnp.where(
+                    iA_masked,
+                    (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
+                    zeros,
+                )
+                fluxB_contribution = jnp.where(
+                    iB_masked,
+                    (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
+                    zeros,
+                )
 
-                fluxA_contribution = jnp.where(iA_masked, (nc_fluxA * face_volumes / cell_volumesA)[:, faces], zeros)
-                fluxB_contribution = jnp.where(iB_masked, (nc_fluxB * face_volumes / cell_volumesB)[:, faces], zeros)
-                
                 # slice_mask = jnp.arange(mesh.n_cells) < mesh.n_inner_cells
-                
+
                 # iA_slice_masked = slice_mask & iA_masked
                 # iB_slice_masked = slice_mask & iB_masked
 
-                
                 # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(0.5*(fluxA_contribution + fluxB_contribution))
-                
+
                 fA = fluxA_contribution
                 fB = fluxB_contribution
-                #fA = fluxA_contribution[:, iA_masked]
-                #fB = fluxB_contribution[:, iB_masked]
-                #dQ = dQ.at[:, iA_masked].subtract(fA)
-                #dQ = dQ.at[:, iA_masked].subtract(fB)
+                # fA = fluxA_contribution[:, iA_masked]
+                # fB = fluxB_contribution[:, iB_masked]
+                # dQ = dQ.at[:, iA_masked].subtract(fA)
+                # dQ = dQ.at[:, iA_masked].subtract(fB)
                 dQ = dQ.at[:, inner_range].subtract(fA)
                 dQ = dQ.at[:, inner_range].subtract(fB)
 
+                # fluxA_contribution_exp = fluxA_contribution[:, jnp.newaxis, :]
+                # fluxB_contribution_exp = fluxB_contribution[:, jnp.newaxis, :]
 
+                # iA_masked_exp = iA_masked[jnp.newaxis, :, :]
+                # iB_masked_exp = iB_masked[jnp.newaxis, :, :]
 
-                # fluxA_contribution_exp = fluxA_contribution[:, jnp.newaxis, :] 
-                # fluxB_contribution_exp = fluxB_contribution[:, jnp.newaxis, :] 
+                # masked_fluxA = fluxA_contribution_exp * iA_masked_exp
+                # masked_fluxB = fluxB_contribution_exp * iB_masked_exp
 
-                # iA_masked_exp = iA_masked[jnp.newaxis, :, :] 
-                # iB_masked_exp = iB_masked[jnp.newaxis, :, :]  
-
-  
-                # masked_fluxA = fluxA_contribution_exp * iA_masked_exp 
-                # masked_fluxB = fluxB_contribution_exp * iB_masked_exp  
-
-
-                # summed_fluxA = jnp.sum(masked_fluxA, axis=2)  
-                # summed_fluxB = jnp.sum(masked_fluxB, axis=2) 
+                # summed_fluxA = jnp.sum(masked_fluxA, axis=2)
+                # summed_fluxB = jnp.sum(masked_fluxB, axis=2)
 
                 # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(summed_fluxA + summed_fluxB)
 
                 return dQ
-            
+
             def loop_body(loop_idx, dQ):
-                return update_dQ_body(loop_idx, dQ, mesh, iA, iB, nc_fluxA, nc_fluxB, face_volumes, cell_volumesA, cell_volumesB)
+                return update_dQ_body(
+                    loop_idx,
+                    dQ,
+                    mesh,
+                    iA,
+                    iB,
+                    nc_fluxA,
+                    nc_fluxB,
+                    face_volumes,
+                    cell_volumesA,
+                    cell_volumesB,
+                )
 
             dQ = jax.lax.fori_loop(0, mesh.cell_faces.shape[0], loop_body, dQ)
             # # Gather iA and iB for all faces
@@ -303,32 +339,32 @@ class Solver():
             # dQ = dQ.at[:, :mesh.n_inner_cells].subtract(total_flux)
 
             return dQ
+
         return space_solution_operator
 
-
     def _load_runtime_model(self, model):
-        runtime_pde = model.get_pde(printer='jax')
+        runtime_pde = model.get_pde(printer="jax")
         # runtime_bcs = model.create_python_boundary_interface(printer='numpy')
-        runtime_bcs = model.get_boundary_conditions(printer='jax')
+        runtime_bcs = model.get_boundary_conditions(printer="jax")
         # runtime_bc = model.get_boundary_conditions()
         # model.boundary_conditions.runtime_bc = runtime_bcs
         return runtime_pde, runtime_bcs
-    
-    
+
     def save_model_to_C(self, model, settings):
-        _ = model.create_c_interface(path=os.path.join(settings.output_dir, "c_interface"))
+        _ = model.create_c_interface(
+            path=os.path.join(settings.output_dir, "c_interface")
+        )
         _ = model.create_c_boundary_interface(
             path=os.path.join(settings.output_dir, "c_interface")
         )
 
-    #@partial(jax.jit, static_argnames=['self'])
+    # @partial(jax.jit, static_argnames=['self'])
     def get_apply_boundary_conditions(self, _mesh, _runtime_bcs):
         # mesh = convert_mesh_to_jax(_mesh)
         mesh = _mesh
-        #mesh = _mesh
-        #mesh = jax.tree_map(jnp.array, _mesh)
+        # mesh = _mesh
+        # mesh = jax.tree_map(jnp.array, _mesh)
         runtime_bcs = tuple(_runtime_bcs)
-
 
         @jax.jit
         def apply_boundary_conditions(time, Q, Qaux, parameters):
@@ -347,8 +383,8 @@ class Solver():
                 Updated Q array with boundary conditions applied to ghost cells.
             """
 
-            #mesh = _mesh
-            #mesh = jnp.array(_mesh)
+            # mesh = _mesh
+            # mesh = jnp.array(_mesh)
 
             def loop_body(i, Q):
                 """
@@ -364,13 +400,13 @@ class Solver():
                 # Extract boundary face index and corresponding BC function
                 i = jnp.asarray(i, dtype=jnp.int32)
                 i_face = mesh.boundary_face_face_indices[i]
-                #TODO make this numpy indiced!
+                # TODO make this numpy indiced!
                 i_bc_func = mesh.boundary_face_function_numbers[i]
-                #bc_func = runtime_bcs[i_bc_func]
+                # bc_func = runtime_bcs[i_bc_func]
 
                 # Extract solution variables for the boundary cell
-                q_cell = Q[:, mesh.boundary_face_cells[i]]                            # Shape: (Q_dim,)
-                qaux_cell = Qaux[:1, mesh.boundary_face_cells[i]]                    # Shape: (1,)
+                q_cell = Q[:, mesh.boundary_face_cells[i]]  # Shape: (Q_dim,)
+                qaux_cell = Qaux[:1, mesh.boundary_face_cells[i]]  # Shape: (1,)
 
                 # Get geometric information
                 normal = mesh.face_normals[:, i_face]
@@ -378,15 +414,25 @@ class Solver():
                 position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]
 
                 # Compute distance between face and ghost cell
-                distance = jnp.linalg.norm(position - position_ghost)                # Scalar
+                distance = jnp.linalg.norm(position - position_ghost)  # Scalar
 
                 # Apply boundary condition function to compute ghost cell values
                 # Ensure bc_func returns a JAX-compatible array with shape (Q_dim,)
                 # q_ghost = bc_func(
                 #     time, position, distance, q_cell, qaux_cell, parameters, normal
                 # )
-                #q_ghost = runtime_bcs[0](time, position, distance, q_cell, qaux_cell, parameters, normal)
-                q_ghost = jax.lax.switch(i_bc_func, runtime_bcs, time, position, distance, q_cell, qaux_cell, parameters, normal)
+                # q_ghost = runtime_bcs[0](time, position, distance, q_cell, qaux_cell, parameters, normal)
+                q_ghost = jax.lax.switch(
+                    i_bc_func,
+                    runtime_bcs,
+                    time,
+                    position,
+                    distance,
+                    q_cell,
+                    qaux_cell,
+                    parameters,
+                    normal,
+                )
 
                 # Update Q at ghost cell using functional update
                 # mesh.boundary_face_ghosts[i] is the index of the ghost cell
@@ -398,54 +444,57 @@ class Solver():
             Q_updated = jax.lax.fori_loop(0, mesh.n_boundary_faces, loop_body, Q)
 
             return Q_updated
+
         return apply_boundary_conditions
 
-    
     def jax_fvm_unsteady_semidiscrete(
         self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     ):
-
         Q, Qaux = self.initialize(model, mesh)
-    
+
         parameters = model.parameter_values
 
-        #mesh = convert_mesh_to_jax(mesh)
+        # mesh = convert_mesh_to_jax(mesh)
         parameters = jnp.asarray(parameters)
 
         pde, bcs = self._load_runtime_model(model)
-        #Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
         output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
         save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
         def run(Q, Qaux, parameters, pde, bcs):
-            iteration = 0.
+            iteration = 0.0
             time = 0.0
             assert model.dimension == mesh.dimension
-    
-            i_snapshot = 0.
+
+            i_snapshot = 0.0
             dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
             io.init_output_directory(settings.output_dir, settings.output_clean_dir)
             mesh.write_to_hdf5(output_hdf5_path)
-            i_snapshot = save_fields(time, 0., i_snapshot, Q, Qaux)
-    
-            #Qnew = deepcopy(Q)
+            i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
+
+            # Qnew = deepcopy(Q)
             Qnew = Q
-    
-    
+
             min_inradius = jnp.min(mesh.cell_inradius)
-    
+
             enforce_boundary_conditions = lambda Q: Q
 
-            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, pde, settings)
-            space_solution_operator = self.get_space_solution_operator(mesh, pde, bcs, settings)
+            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(
+                mesh, pde, settings
+            )
+            space_solution_operator = self.get_space_solution_operator(
+                mesh, pde, bcs, settings
+            )
             source_operator = self.get_compute_source(mesh, pde, settings)
             boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
-    
+
             time_start = gettime()
-            
+
             @jax.jit
-            def time_loop(time, iteration , i_snapshot, Qnew, Qaux):
+            def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
                 loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
+
                 def loop_body(init_value):
                     time, iteration, i_snapshot, Qnew, Qaux = init_value
                     Q = Qnew
@@ -453,55 +502,62 @@ class Solver():
                     dt = settings.compute_dt(
                         Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
                     )
-                    #assert dt > 10 ** (-6)
-                    #assert not jnp.isnan(dt) and jnp.isfinite(dt)
+                    # assert dt > 10 ** (-6)
+                    # assert not jnp.isnan(dt) and jnp.isfinite(dt)
 
-                    #if settings.truncate_last_time_step:
+                    # if settings.truncate_last_time_step:
                     #    if time + dt * 1.001 > settings.time_end:
                     #        dt = settings.time_end - time + 10 ** (-10)
 
-
-                    Q1 = ode_solver_flux(space_solution_operator, Q, Qaux, parameters, dt)
+                    Q1 = ode_solver_flux(
+                        space_solution_operator, Q, Qaux, parameters, dt
+                    )
 
                     Q2 = ode_solver_source(
-                        source_operator, Q1, Qaux, parameters, dt, func_jac=self.compute_source_jac
+                        source_operator,
+                        Q1,
+                        Qaux,
+                        parameters,
+                        dt,
+                        func_jac=self.compute_source_jac,
                     )
 
                     Q3 = boundary_operator(time, Q2, Qaux, parameters)
-                    
+
                     # Update solution and time
                     time += dt
                     iteration += 1
-                    
-                    jax.debug.print("iteration: {iteration}, time: {time}, dt: {dt}", iteration=iteration, time=time, dt=dt)
 
-                    time_stamp = (i_snapshot + 1)*dt_snapshot
+                    jax.debug.print(
+                        "iteration: {iteration}, time: {time}, dt: {dt}",
+                        iteration=iteration,
+                        time=time,
+                        dt=dt,
+                    )
 
-                   
-                   
+                    time_stamp = (i_snapshot + 1) * dt_snapshot
+
                     # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
-                    i_snapshot = save_fields(time, time_stamp , i_snapshot, Qnew, Qaux)
-
+                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
 
                     return (time, iteration, i_snapshot, Q3, Qaux)
-
 
                 def proceed(loop_val):
                     time, iteration, i_snapshot, Qnew, Qaux = loop_val
                     return time < settings.time_end
 
-                (time, iteration, i_snapshot, Qnew, Qaux) = jax.lax.while_loop(proceed, loop_body, loop_val)
-    
+                (time, iteration, i_snapshot, Qnew, Qaux) = jax.lax.while_loop(
+                    proceed, loop_body, loop_val
+                )
+
                 return Qnew
+
             Qnew = time_loop(time, iteration, i_snapshot, Qnew, Qaux)
             return Qnew, Qaux
-    
+
         time_start = gettime()
         Qnew, Qaux = run(Q, Qaux, parameters, pde, bcs)
 
-
         print(f"Runtime: {gettime() - time_start}")
-    
+
         return Qnew, Qaux
-    
-    
