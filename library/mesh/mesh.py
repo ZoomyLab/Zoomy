@@ -20,7 +20,9 @@ from library.misc.static_class import register_static_pytree
 # petsc4py.init(sys.argv)
 
 
-def compute_gradient(u, A_glob, neighbors):
+def compute_gradient(u, mesh):
+    A_glob = mesh.lsq_gradQ
+    neigbors = mesh.cell_neighbors
     def grad_single_cell(A_loc, neighbor_idx, u_i):
         u_neighbors = u[neighbor_idx]  # shape (n_neighbors,)
         delta_u = u_neighbors - u_i  # shape (n_neighbors,)
@@ -33,7 +35,9 @@ def compute_gradient(u, A_glob, neighbors):
         u,  # shape (n_cells,)
     )
 
-def compute_face_gradient(u, A_glob, neighbors):
+def compute_face_gradient(u, mesh):
+    A_glob = mesh.lsq_face_gradQ
+    neighbors = mesh.face_neighbors
     u_neighbors = u[neighbors]
     u_face = 0.5 * (u[neighbors[:, 0]] + u[neighbors[:, 1]])
     def grad_single_face(A_loc, u_f, u_neighbors):

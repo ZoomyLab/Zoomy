@@ -589,8 +589,8 @@ class Solver:
 
         time_start = gettime()
 
-        grad = compute_gradient(Q[0], mesh.lsq_gradQ, mesh.cell_neighbors)
-        div = compute_gradient(grad[:, 0], mesh.lsq_gradQ, mesh.cell_neighbors)
+        grad = compute_gradient(Q[0], mesh)
+        div = compute_gradient(grad[:, 0], mesh)
         Qaux = Qaux.at[0].set(div[:, 0])
         Qaux = Qaux.at[1].set(grad[:, 1])
         i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
@@ -624,7 +624,7 @@ class Solver:
 
         time_start = gettime()
 
-        grad = compute_face_gradient(Q[0], mesh.lsq_face_gradQ, mesh.face_neighbors)
+        grad = compute_face_gradient(Q[0], mesh)
         jax.debug.print("{}", grad[:, 0])
         jax.debug.print("{}", grad[:, 1])
         i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
