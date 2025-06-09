@@ -22,6 +22,7 @@ from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 import library.misc.io as io
+from library.mesh.mesh import compute_gradient
 
 
 import library.mesh.mesh as petscMesh
@@ -324,7 +325,7 @@ def test_reconstruction():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=2,
+        aux_fields=["dhdx", "dhdy"],
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -403,6 +404,13 @@ def test_reconstruction_faces():
 
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
+class MySolver(Solver):
+    def update_qaux(self, Q, Qaux, mesh, model, parameters):
+        grad_h = compute_gradient(Q[0], mesh)
+        Qaux = Qaux.at[0].set(grad_h[:,0])
+        Qaux = Qaux.at[1].set(grad_h[:,1])
+        return Qaux
+
 def test_implicit():
     level = 0
     n_fields = 3 + 2 * level
@@ -444,7 +452,7 @@ def test_implicit():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=2,
+        aux_fields=["dhdx", "dhdy"],
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -458,7 +466,7 @@ def test_implicit():
     )
 
     mesh = convert_mesh_to_jax(mesh)
-    solver = Solver()
+    solver = MySolver()
     Qaux, Qnew = solver.jax_implicit(mesh, model, settings)
 
     #io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))

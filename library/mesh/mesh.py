@@ -22,7 +22,7 @@ from library.misc.static_class import register_static_pytree
 
 def compute_gradient(u, mesh):
     A_glob = mesh.lsq_gradQ
-    neigbors = mesh.cell_neighbors
+    neighbors = mesh.cell_neighbors
     def grad_single_cell(A_loc, neighbor_idx, u_i):
         u_neighbors = u[neighbor_idx]  # shape (n_neighbors,)
         delta_u = u_neighbors - u_i  # shape (n_neighbors,)

@@ -1149,6 +1149,19 @@ class ShallowMoments2d(Model):
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
+    def constraints_implicit(self):
+        assert "dhdx" in vars(self.aux_variables)
+        assert "dhdy" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(1)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        dhdy = self.aux_variables.dhdy
+        out[0] = dhdx - 2
+        return out
+
     def source(self):
         out = Matrix([0 for i in range(self.n_fields)])
         if self.settings.topography:

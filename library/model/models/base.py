@@ -420,7 +420,7 @@ class Model:
             printer,
         )
         def constraints_implicit(Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
+            return jnp.squeeze(jnp.array(l_constraints_implicit(Q, Qaux, param)), axis=1)
 
         left_eigenvectors = None
         right_eigenvectors = None

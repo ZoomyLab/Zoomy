@@ -646,10 +646,17 @@ class Solver:
         pde, bcs = self._load_runtime_model(model)
         # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
 
+        Qaux = self.update_qaux(Q, Qaux, mesh, model, parameters)
         jax.debug.print("IMPLICIT SOLVER")
 
+        jax.debug.print("{}", Qaux[0])
+        jax.debug.print("{}", Qaux[1])
         jax.debug.print("{}", model.sympy_source_implicit)
         jax.debug.print("{}", model.sympy_constraints_implicit)
+        constraint = pde.constraints_implicit(Q, Qaux, parameters)
+        jax.debug.print("constraint")
+        jax.debug.print("{}", constraint)
+       
 
         time_start = gettime()
 
@@ -661,3 +668,8 @@ class Solver:
         print(f"Runtime: {gettime() - time_start}")
 
         return Q, Qaux
+
+    def update_qaux(self, Q, Qaux, mesh, model, parameters):
+        return Qaux
+
+
