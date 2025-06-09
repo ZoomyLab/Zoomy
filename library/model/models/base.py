@@ -58,6 +58,7 @@ class RuntimeModel:
     dimension: int = 1
     n_fields: int
     n_aux_fields: int
+    n_constraints: int
     n_parameters: int
     parameters: FArray
 
@@ -71,11 +72,8 @@ class RuntimeModel:
     left_eigenvectors: Optional[Callable]
     right_eigenvectors: Optional[Callable]
 
-    diff_flux: list[Callable]
-    diff_flux_jacobian: list[Callable]
-
-    source: Callable
-    source_jacobian: Callable
+    source_imlicit: Callable
+    constraints_implicit: Callable
 
     bcs: list[Callable]
 
@@ -89,6 +87,7 @@ class RuntimeModel:
             model.dimension,
             model.n_fields,
             model.n_aux_fields,
+            model.n_constraints,
             model.n_parameters,
             pde.flux,
             pde.flux_jacobian,
@@ -96,9 +95,12 @@ class RuntimeModel:
             pde.source_jacobian,
             pde.nonconservative_matrix,
             pde.quasilinear_matrix,
+            pde.source,
             pde.eigenvalues,
             pde.left_eigenvectors,
             pde.right_eigenvectors,
+            pde.source_implicit,
+            pde.constraints_implicit,
             bcs,
         )
 
@@ -122,6 +124,7 @@ class Model:
 
     n_fields: int
     n_aux_fields: int
+    n_constraints: int
     n_parameters: int
     variables: IterableNamespace
     aux_variables: IterableNamespace
@@ -142,6 +145,9 @@ class Model:
     sympy_eigenvalues: Matrix
     sympy_left_eigenvectors: Optional[Matrix]
     sympy_right_eigenvectors: Optional[Matrix]
+
+    sympy_source_implicit: Matrix
+    sympy_constraints_implicit: Matrix
 
     def __init__(
         self,
@@ -179,6 +185,7 @@ class Model:
 
         self.n_fields = self.variables.length()
         self.n_aux_fields = self.aux_variables.length()
+        self.n_constraints = self.constraints_implicit().shape[0]
         self.n_parameters = self.parameters.length()
 
         self.init_sympy_functions()
@@ -217,6 +224,8 @@ class Model:
             ]
         else:
             self.sympy_quasilinear_matrix = self.quasilinear_matrix()
+        self.sympy_source_implicit = self.source_implicit()
+        self.sympy_constraints_implicit = self.constraints_implicit()
         # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         # TODO check case imaginary
         # TODO check case not computable
@@ -227,378 +236,10 @@ class Model:
         self.sympy_left_eigenvectors = None
         self.sympy_right_eigenvectors = None
 
-    def load_c_boundary_conditions(self, n_boundary_functions, path="./.tmp"):
-        folder = os.path.join(path, self.name)
-        files_found = []
-        for file in os.listdir(folder):
-            if file.startswith("boundary_conditions") and file.endswith(".so"):
-                files_found.append(os.path.join(folder, file))
-
-        assert len(files_found) == 1
-        library_path = files_found[0]
-
-        c_bcs = cdll.LoadLibrary(library_path)
-
-        boundary_functions = [None for i in range(n_boundary_functions)]
-        for i in range(n_boundary_functions):
-            boundary_functions[i] = eval(f"c_bcs.boundary_condition_{i}")
-
-        # define array prototypes
-        array_1d_double = npct.ndpointer(dtype=np.double, ndim=1, flags="CONTIGUOUS")
-
-        # define function prototype
-        for i in range(n_boundary_functions):
-            boundary_functions[i].argtypes = [
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-            ]
-            boundary_functions[i].restype = None
-
-        return boundary_functions
-
-    # def create_python_boundary_interface(self, printer='numpy'):
-    #     # define matrix symbols that will be used as substitutions for the currelty used symbols in the
-    #     # expressions
-    #     assert self.boundary_conditions.initialized
-    #     Q = MatrixSymbol('Q', self.n_fields, 1)
-    #     Q_ghost = MatrixSymbol('Qg', self.n_fields, 1)
-    #     Qaux = MatrixSymbol('Qaux', self.n_aux_fields, 1)
-    #     parameters = MatrixSymbol('parameters', self.n_parameters, 1)
-    #     normal = MatrixSymbol('normal', self.dimension, 1)
-
-    #     sympy_boundary_functions = deepcopy(self.boundary_conditions.boundary_functions)
-
-    #     # aggregate all expressions that are substituted and converted to C into the right data structure
-    #     list_matrix_symbols = [Q, Qaux, parameters, normal]
-    #     list_attributes = [self.variables, self.aux_variables, self.parameters, self.sympy_normal]
-    #     list_expressions = sympy_boundary_functions
-    #     list_expression_names = [f'boundary_condition_{i}' for i in range(len(sympy_boundary_functions))]
-
-    #     # convert symbols to matrix symbols
-    #     for i in range(len(list_expressions)):
-    #         for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
-    #             list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
-
-    #     # aggregate data structure to be passed to the C converter module
-    #     expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
-
-    #     runtime_bc_functions = []
-    #     for name, expr, [Q, Qaux, parameters, normal] in expression_name_tuples
-    #         runtime_bc_functions.append(sympy.lambdify([Q, Qaux, parameters, normal], expr, modules=printer))
-    #     return runtime_bc_functions
-
-    # TODO create c_boundary_interface similat to create_c_interface
-    def create_c_boundary_interface(self, path=".tmp/"):
-        # define matrix symbols that will be used as substitutions for the currelty used symbols in the
-        # expressions
-        Q = MatrixSymbol("Q", self.n_fields, 1)
-        Q_ghost = MatrixSymbol("Qg", self.n_fields, 1)
-        Qaux = MatrixSymbol("Qaux", self.n_aux_fields, 1)
-        parameters = MatrixSymbol("parameters", self.n_parameters, 1)
-        normal = MatrixSymbol("normal", self.dimension, 1)
-
-        sympy_boundary_functions = deepcopy(self.boundary_conditions.boundary_functions)
-        # TODO create module
-        # TODO delete the code below
-
-        # aggregate all expressions that are substituted and converted to C into the right data structure
-        list_matrix_symbols = [Q, Qaux, parameters, normal]
-        list_attributes = [
-            self.variables,
-            self.aux_variables,
-            self.parameters,
-            self.sympy_normal,
-        ]
-        list_expressions = sympy_boundary_functions
-        list_expression_names = [
-            f"boundary_condition_{i}" for i in range(len(sympy_boundary_functions))
-        ]
-
-        # convert symbols to matrix symbols
-        for i in range(len(list_expressions)):
-            for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
-                list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(
-                    list_expressions[i], attr, matrix_symbol
-                )
-
-        # aggregate data structure to be passed to the C converter module
-        expression_name_tuples = [
-            (expr_name, expr, [Q, Qaux, parameters, normal])
-            for (expr_name, expr) in zip(list_expression_names, list_expressions)
-        ]
-
-        directory = os.path.join(path, self.name)
-        module_name = "boundary_conditions"
-
-        # create c module
-        create_module(module_name, expression_name_tuples, directory)
-
-    # TODO write to output/.tmp
-    # TODO rename to c_model_interface
-    def create_c_interface(self, path="./.tmp/"):
-        # define matrix symbols that will be used as substitutions for the currelty used symbols in the
-        # expressions
-        Q = MatrixSymbol("Q", self.n_fields, 1)
-        Qaux = MatrixSymbol("Qaux", self.n_aux_fields, 1)
-        parameters = MatrixSymbol("parameters", self.n_parameters, 1)
-        normal = MatrixSymbol("normal", self.dimension, 1)
-
-        # copy in order to not mess up the sypy expressions of the class - in case I want to call the
-        # function a second time
-        sympy_flux = deepcopy(self.sympy_flux)
-        sympy_flux_jacobian = deepcopy(self.sympy_flux_jacobian)
-        sympy_source = deepcopy(self.sympy_source)
-        sympy_source_jacobian = deepcopy(self.sympy_source_jacobian)
-        sympy_nonconservative_matrix = deepcopy(self.sympy_nonconservative_matrix)
-        sympy_quasilinear_matrix = deepcopy(self.sympy_quasilinear_matrix)
-        sympy_eigenvalues = deepcopy(self.sympy_eigenvalues)
-        sympy_left_eigenvectors = deepcopy(self.sympy_left_eigenvectors)
-        sympy_right_eigenvectors = deepcopy(self.sympy_right_eigenvectors)
-
-        # make all dimension dependent functions 3d to simplify the C part of the interface
-        if self.dimension == 1:
-            sympy_flux = [sympy_flux[0], sympy_flux[0], sympy_flux[0]]
-            sympy_flux_jacobian = [
-                sympy_flux_jacobian[0],
-                sympy_flux_jacobian[0],
-                sympy_flux_jacobian[0],
-            ]
-            sympy_nonconservative_matrix = [
-                sympy_nonconservative_matrix[0],
-                sympy_nonconservative_matrix[0],
-                sympy_nonconservative_matrix[0],
-            ]
-            sympy_quasilinear_matrix = [
-                sympy_quasilinear_matrix[0],
-                sympy_quasilinear_matrix[0],
-                sympy_quasilinear_matrix[0],
-            ]
-        elif self.dimension == 2:
-            sympy_flux = [sympy_flux[0], sympy_flux[1], sympy_flux[0]]
-            sympy_flux_jacobian = [
-                sympy_flux_jacobian[0],
-                sympy_flux_jacobian[1],
-                sympy_flux_jacobian[0],
-            ]
-            sympy_nonconservative_matrix = [
-                sympy_nonconservative_matrix[0],
-                sympy_nonconservative_matrix[1],
-                sympy_nonconservative_matrix[0],
-            ]
-            sympy_quasilinear_matrix = [
-                sympy_quasilinear_matrix[0],
-                sympy_quasilinear_matrix[1],
-                sympy_quasilinear_matrix[0],
-            ]
-        elif self.dimension == 3:
-            pass
-        else:
-            assert False
-
-        # aggregate all expressions that are substituted and converted to C into the right data structure
-        list_matrix_symbols = [Q, Qaux, parameters]
-        list_attributes = [self.variables, self.aux_variables, self.parameters]
-        list_expressions = (
-            sympy_flux
-            + sympy_flux_jacobian
-            + sympy_nonconservative_matrix
-            + sympy_quasilinear_matrix
-            + [sympy_source, sympy_source_jacobian]
-        )
-        list_expression_names = [
-            "flux_x",
-            "flux_y",
-            "flux_z",
-            "flux_jacobian_x",
-            "flux_jacobian_y",
-            "flux_jacobian_z",
-            "nonconservative_matrix_x",
-            "nonconservative_matrix_y",
-            "nonconservative_matrix_z",
-            "quasilinear_matrix_x",
-            "quasilinear_matrix_y",
-            "quasilinear_matrix_z",
-            "source",
-            "source_jacobian",
-        ]
-        list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
-        list_attributes_incl_normal = [
-            self.variables,
-            self.aux_variables,
-            self.parameters,
-            self.sympy_normal,
-        ]
-        if sympy_eigenvalues is not None:
-            list_expressions_incl_normal = [sympy_eigenvalues]
-            list_expression_names_incl_normal = ["eigenvalues"]
-        else:
-            list_expressions_incl_normal = []
-            list_expression_names_incl_normal = []
-
-        # convert symbols to matrix symbols
-        for i in range(len(list_expressions)):
-            for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
-                list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(
-                    list_expressions[i], attr, matrix_symbol
-                )
-        for i in range(len(list_expressions_incl_normal)):
-            for attr, matrix_symbol in zip(
-                list_attributes_incl_normal, list_matrix_symbols_incl_normal
-            ):
-                list_expressions_incl_normal[i] = (
-                    substitute_sympy_attributes_with_symbol_matrix(
-                        list_expressions_incl_normal[i], attr, matrix_symbol
-                    )
-                )
-
-        # aggregate data structure to be passed to the C converter module
-        expression_name_tuples = [
-            (expr_name, expr, [Q, Qaux, parameters])
-            for (expr_name, expr) in zip(list_expression_names, list_expressions)
-        ]
-        expression_name_tuples += [
-            (expr_name, expr, [Q, Qaux, parameters, normal])
-            for (expr_name, expr) in zip(
-                list_expression_names_incl_normal, list_expressions_incl_normal
-            )
-        ]
-
-        directory = os.path.join(path, self.name)
-        module_name = "model"
-
-        # create c module
-        create_module(module_name, expression_name_tuples, directory)
-
-    def load_c_model(self, path="./.tmp"):
-        folder = os.path.join(path, self.name)
-        files_found = []
-        for file in os.listdir(folder):
-            if file.startswith("model") and file.endswith(".so"):
-                files_found.append(os.path.join(folder, file))
-
-        assert len(files_found) == 1
-        library_path = files_found[0]
-
-        c_model = cdll.LoadLibrary(library_path)
-
-        # the C module is constructed to use 3d functions, filled with dummies for dim<3.
-        # therefore we extract the correct dimension dependent functions now
-        if self.dimension == 1:
-            flux = [c_model.flux_x]
-            flux_jacobian = [c_model.flux_jacobian_x]
-            nonconservative_matrix = [c_model.nonconservative_matrix_x]
-            quasilinear_matrix = [c_model.quasilinear_matrix_x]
-        elif self.dimension == 2:
-            flux = [c_model.flux_x, c_model.flux_y]
-            flux_jacobian = [c_model.flux_jacobian_x, c_model.flux_jacobian_y]
-            nonconservative_matrix = [
-                c_model.nonconservative_matrix_x,
-                c_model.nonconservative_matrix_y,
-            ]
-            quasilinear_matrix = [
-                c_model.quasilinear_matrix_x,
-                c_model.quasilinear_matrix_y,
-            ]
-        elif self.dimension == 3:
-            flux = [c_model.flux_x, c_model.flux_y, c_model.flux_z]
-            flux_jacobian = [
-                c_model.flux_jggacobian_x,
-                c_model.flux_jacobian_y,
-                c_model.flux_jacobian_z,
-            ]
-            nonconservative_matrix = [
-                c_model.nonconservative_matrix_x,
-                c_model.nonconservative_matrix_y,
-                c_model.nonconservative_matrix_z,
-            ]
-            quasilinear_matrix = [
-                c_model.quasilinear_matrix_x,
-                c_model.quasilinear_matrix_y,
-                c_model.quasilinear_matrix_z,
-            ]
-        else:
-            assert False
-
-        source = c_model.source
-        source_jacobian = c_model.source_jacobian
-        eigenvalues = c_model.eigenvalues
-
-        # define array prototypes
-        array_2d_double = npct.ndpointer(dtype=np.double, ndim=2, flags="CONTIGUOUS")
-        array_1d_double = npct.ndpointer(dtype=np.double, ndim=1, flags="CONTIGUOUS")
-
-        # define function prototype
-        for d in range(self.dimension):
-            flux[d].argtypes = [
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-            ]
-            flux[d].restype = None
-            flux_jacobian[d].argtypes = [
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_2d_double,
-            ]
-            flux_jacobian[d].restype = None
-            nonconservative_matrix[d].argtypes = [
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_2d_double,
-            ]
-            nonconservative_matrix[d].restype = None
-            quasilinear_matrix[d].argtypes = [
-                array_1d_double,
-                array_1d_double,
-                array_1d_double,
-                array_2d_double,
-            ]
-            quasilinear_matrix[d].restype = None
-        source.argtypes = [
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-        ]
-        source.restype = None
-        source_jacobian.argtypes = [
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-            array_2d_double,
-        ]
-        source_jacobian.restype = None
-        eigenvalues.argtypes = [
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-            array_1d_double,
-        ]
-        eigenvalues.restype = None
-
-        out = {
-            "flux": flux,
-            "flux_jacobian": flux_jacobian,
-            "nonconservative_matrix": nonconservative_matrix,
-            "quasilinear_matrix": quasilinear_matrix,
-            "source": source,
-            "source_jacobian": source_jacobian,
-            "eigenvalues": eigenvalues,
-        }
-        return SimpleNamespace(**out)
 
     def get_boundary_conditions(self, printer="numpy"):
         """Returns a runtime boundary_conditions for numpy arrays from the symbolic model."""
         n_boundary_functions = len(self.boundary_conditions.boundary_functions)
-        # bcs = [None for i in range(n_boundary_functions)]
-        # l_bcs = []
         bcs = []
         for i in range(n_boundary_functions):
             func_bc = lambdify(
@@ -613,7 +254,6 @@ class Model:
                 ],
                 # vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
                 self.boundary_conditions.boundary_functions[i],
-                # modules={"jax.numpy": jnp})
                 printer,
             )
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
@@ -649,15 +289,12 @@ class Model:
             for d in range(self.dimension)
         ]
         # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-        # flux = [lambda Q, Qaux, param, f=l_flux[d]:  np.squeeze(np.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
         flux = [
             lambda Q, Qaux, param, f=l_flux[d]: jnp.squeeze(
                 np.array(f(Q, Qaux, param)), axis=1
             )
             for d in range(self.dimension)
         ]
-        # flux = [lambda Q, Qaux, param, f=l_flux[d]:  jnp.squeeze(jnp.array(f(Q, Qaux, param)), axis=-1) for d in range(self.dimension)]
-        # flux = l_flux
         l_flux_jacobian = lambdify(
             [
                 self.variables.get_list(),
@@ -667,7 +304,6 @@ class Model:
             self.sympy_flux_jacobian,
             printer,
         )
-        # flux_jacobian = vectorize(l_flux_jacobian)
         flux_jacobian = l_flux_jacobian
 
         l_nonconservative_matrix = [
@@ -706,7 +342,6 @@ class Model:
             for d in range(self.dimension)
         ]
         quasilinear_matrix = l_quasilinear_matrix
-        # quasilinear_matrix = vectorize(l_quasilinear_matrix)
 
         if self.settings.eigenvalue_mode == "symbolic":
             l_eigenvalues = lambdify(
@@ -721,14 +356,12 @@ class Model:
                 ),
                 printer,
             )
-            # eigenvalues = lambda Q, Qaux, param, normal :  np.squeeze(np.array(l_eigenvalues(Q, Qaux, param, normal)), axis=-1)
 
             def eigenvalues(Q, Qaux, param, normal):
                 return jnp.squeeze(
                     jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1
                 )
 
-            # eigenvalues = vectorize(l_eigenvalues, n_arguments=4)
         elif self.settings.eigenvalue_mode == "numerical":
             eigenvalues = None
 
@@ -747,7 +380,6 @@ class Model:
         def source(Q, Qaux, param):
             return jnp.squeeze(jnp.array(l_source(Q, Qaux, param)), axis=1)
 
-        # source = vectorize(l_source)
 
         l_source_jacobian = lambdify(
             [
@@ -761,7 +393,34 @@ class Model:
             printer,
         )
         source_jacobian = l_source_jacobian
-        # source_jacobian = vectorize(l_source_jacobian)
+
+        l_source_implicit = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.sympy_source_implicit, self.variables, self.aux_variables
+            ),
+            printer,
+        )
+        def source_implicit(Q, Qaux, param):
+            return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
+
+        l_constraints_implicit = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.sympy_constraints_implicit, self.variables, self.aux_variables
+            ),
+            printer,
+        )
+        def constraints_implicit(Q, Qaux, param):
+            return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
 
         left_eigenvectors = None
         right_eigenvectors = None
@@ -775,6 +434,8 @@ class Model:
             "right_eigenvectors": right_eigenvectors,
             "source": source,
             "source_jacobian": source_jacobian,
+            "source_implicit": source_implicit,
+            "constraints_implicit": constraints_implicit,
         }
         return SimpleNamespace(**d)
 
@@ -798,6 +459,12 @@ class Model:
     def source_jacobian(self):
         # generated automatically unless explicitly provided
         return None
+
+    def source_implicit(self):
+        return zeros(self.n_fields, 1)
+
+    def constraints_implicit(self):
+        return zeros(0, 1)
 
     def eigenvalues(self):
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]

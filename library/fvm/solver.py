@@ -632,3 +632,32 @@ class Solver:
         print(f"Runtime: {gettime() - time_start}")
 
         return Q, Qaux
+
+    def jax_implicit(
+        self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    ):
+        Q, Qaux = self.initialize(model, mesh)
+
+        parameters = model.parameter_values
+
+        # mesh = convert_mesh_to_jax(mesh)
+        parameters = jnp.asarray(parameters)
+
+        pde, bcs = self._load_runtime_model(model)
+        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+
+        jax.debug.print("IMPLICIT SOLVER")
+
+        jax.debug.print("{}", model.sympy_source_implicit)
+        jax.debug.print("{}", model.sympy_constraints_implicit)
+
+        time_start = gettime()
+
+        #grad = compute_face_gradient(Q[0], mesh)
+        #jax.debug.print("{}", grad[:, 0])
+        #jax.debug.print("{}", grad[:, 1])
+        #i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
+
+        print(f"Runtime: {gettime() - time_start}")
+
+        return Q, Qaux
