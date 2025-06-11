@@ -669,6 +669,52 @@ class Solver:
 
         return Q, Qaux
 
+    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
+
+        def residual(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
+            res = pde.constraints_implicit(Q[:,0], Qaux[:,0], parameters)
+            return res
+        
+        
+        # Jacobian-vector product helper
+        def Jv(Q, U, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
+            qaux = self.update_qaux(Q Qaux, mesh, model, parameters)
+            return jax.jvp(lambda q: residual(q, qaux, Qold, Qauxold, mesh, model, pde, parameters), (Q, ), (U, ))[1]
+        
+        
+        # Newton solver using CG for linear solve
+        def newton_solve(Q, Qaux, Qold, Qauxold, tol=1e-8, maxiter=20):
+            for i in range(maxiter):
+                r = residual(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters)
+                res_norm = jnp.linalg.norm(r)
+                print(f"Iter {i} , residual norm = {res_norm:.3e}")
+                if res_norm < tol:
+                    break
+        
+                def lin_op(v):
+                    return Jv(Q, v, Qaux, Qold, Qauxold, mesh, model, pde, parameters)
+        
+                delta, info = gmres(
+                    lin_op,
+                    -r,
+                    x0=jnp.zeros_like(Q),
+                    maxiter=100,
+                    solve_method="incremental",
+                    tol=10 ** (-8),
+                )
+        
+                alpha = 1.0
+                for _ in range(10):
+                    Qnew = Q + alpha * delta
+                    r_new = residual(Qnew, Qaux, Qold Qauxold, mesh, model, pde, parameters)
+                    if jnp.linalg.norm(r_new) < jnp.linalg.norm(r):
+                        Q = Qnew
+                        break
+                    alpha *= 0.5
+        
+            return Q
+
+
     def update_qaux(self, Q, Qaux, mesh, model, parameters):
         return Qaux
 
