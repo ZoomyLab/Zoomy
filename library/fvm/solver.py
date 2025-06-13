@@ -819,14 +819,8 @@ class Solver:
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
             res = pde.source_implicit(Q, qaux, parameters)
-            # res = res.at[:, mesh.n_inner_cells:].add(((Q - qold)[:, mesh.n_inner_cells:])**2)
-            # res_boundary = q-boundary_operator(time, res, qaux)
             res = res.at[:, mesh.n_inner_cells:].set(0.)
-            
-            # res = res.at[1].add(500.*(Q[0, 80] - (-1.03125)))
-            #p = Q[1]
-            #p_mean = jnp.mean(p)
-            #res = res.at[1].set(res[1] - p_mean) 
+            # res = res.at[1, 0].set(Q[1, 0] -0)
             return res
         
         
@@ -883,9 +877,9 @@ class Solver:
                         Q = Qnew
                         break
                     alpha *= 0.5
-                    # p = Qnew[0]
+                    # p = Qnew[1]
                     # p_mean = jnp.mean(p)
-                    # Q = Qnew.at[0].set(Qnew[0] - p_mean)
+                    # Q = Qnew.at[1].set(Qnew[1] - p_mean)
         
             return Q
         

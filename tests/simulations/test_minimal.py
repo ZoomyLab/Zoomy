@@ -497,8 +497,8 @@ def test_implicit():
         [
             BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
             BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Lambda(physical_tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -0.96875-2*dx}),
-            BC.Lambda(physical_tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: q[0] + dx * 2}),
+            BC.Lambda(physical_tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: 1.}),
+            BC.Lambda(physical_tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: -1.}),
         ]
     )
 
@@ -506,7 +506,7 @@ def test_implicit():
         Q = np.zeros(2, dtype=float)
         #Q[0] = -np.cos(x[0]*np.pi)/np.pi
         #Q[1] = - x[0]
-        Q[0] = x[0] + 0.2*np.sin(10* x[0])
+        Q[0] = -np.cos(x[0]*np.pi)/np.pi
         Q[1] = 0.
         return Q
 
