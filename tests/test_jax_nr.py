@@ -58,7 +58,6 @@ def compute_diagonal_of_jacobian(u, u_old1, u_old2):
     return jnp.array(diag)
 
 
-# Newton solver using CG for linear solve
 def newton_solve(u0, u_old1, u_old2, tol=1e-8, maxiter=20):
     u = u0
     for i in range(maxiter):

@@ -43,15 +43,19 @@ class InflowOutflow(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
     def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        # Extrapolate all fields
         Qout = Matrix(Q)
-
-        # Set the fields which are prescribed in boundary condition dict
-
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Matrix(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = eval(v)
+        return Qout
+    
+@define(slots=True, frozen=False, kw_only=True)
+class Lambda(BoundaryCondition):
+    prescribe_fields: dict[int, float]
+
+    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+        Qout = Matrix(Q)
+        for k, v in self.prescribe_fields.items():
+            Qout[k] = v(time, X, dX, Q, Qaux, parameters, normal)
         return Qout
 
 
@@ -86,7 +90,6 @@ class FromData(BoundaryCondition):
             interp_func = _sympy_interpolate_data(time, self.timeline, v)
             Qout[k] = 2 * interp_func - Q[k]
         return Qout
-
 
 @define(slots=True, frozen=False, kw_only=True)
 class PreciceCoupling(BoundaryCondition):
@@ -242,14 +245,17 @@ class BoundaryConditions:
                 mesh.boundary_face_cells[indices_to_sort] = (
                     mesh_copy.boundary_face_cells[indices_from_sort]
                 )
+                # mesh.boundary_face_cells = mesh.boundary_face_cells.at[indices_to_sort].set(
+                #     mesh_copy.boundary_face_cells[indices_from_sort]
+                # )
 
-                if not np.allclose(
-                    from_coords[sort_order_significance[-1], from_cells_sort_order],
-                    to_coords[sort_order_significance[-1], to_cells_sort_order],
-                ):
-                    print(
-                        "WARNING: Periodic boundary condition detected for incompatible mesh. The periodic sides of the mesh does not have the same face layout."
-                    )
+                # if not np.allclose(
+                #     from_coords[sort_order_significance[-1], from_cells_sort_order],
+                #     to_coords[sort_order_significance[-1], to_cells_sort_order],
+                # ):
+                #     print(
+                #         "WARNING: Periodic boundary condition detected for incompatible mesh. The periodic sides of the mesh does not have the same face layout."
+                #     )
         return mesh
 
     def initialize(self, mesh, time, X, dX, Q, Qaux, parameters, normal):

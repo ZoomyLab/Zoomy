@@ -58,7 +58,6 @@ class RuntimeModel:
     dimension: int = 1
     n_fields: int
     n_aux_fields: int
-    n_constraints: int
     n_parameters: int
     parameters: FArray
 
@@ -71,9 +70,7 @@ class RuntimeModel:
     eigenvalues: Callable
     left_eigenvectors: Optional[Callable]
     right_eigenvectors: Optional[Callable]
-
     source_imlicit: Callable
-    constraints_implicit: Callable
 
     bcs: list[Callable]
 
@@ -87,7 +84,6 @@ class RuntimeModel:
             model.dimension,
             model.n_fields,
             model.n_aux_fields,
-            model.n_constraints,
             model.n_parameters,
             pde.flux,
             pde.flux_jacobian,
@@ -100,7 +96,6 @@ class RuntimeModel:
             pde.left_eigenvectors,
             pde.right_eigenvectors,
             pde.source_implicit,
-            pde.constraints_implicit,
             bcs,
         )
 
@@ -124,7 +119,6 @@ class Model:
 
     n_fields: int
     n_aux_fields: int
-    n_constraints: int
     n_parameters: int
     variables: IterableNamespace
     aux_variables: IterableNamespace
@@ -147,7 +141,6 @@ class Model:
     sympy_right_eigenvectors: Optional[Matrix]
 
     sympy_source_implicit: Matrix
-    sympy_constraints_implicit: Matrix
 
     def __init__(
         self,
@@ -185,7 +178,6 @@ class Model:
 
         self.n_fields = self.variables.length()
         self.n_aux_fields = self.aux_variables.length()
-        self.n_constraints = self.constraints_implicit().shape[0]
         self.n_parameters = self.parameters.length()
 
         self.init_sympy_functions()
@@ -225,7 +217,6 @@ class Model:
         else:
             self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         self.sympy_source_implicit = self.source_implicit()
-        self.sympy_constraints_implicit = self.constraints_implicit()
         # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         # TODO check case imaginary
         # TODO check case not computable
@@ -240,6 +231,37 @@ class Model:
     def get_boundary_conditions(self, printer="numpy"):
         """Returns a runtime boundary_conditions for numpy arrays from the symbolic model."""
         n_boundary_functions = len(self.boundary_conditions.boundary_functions)
+        # l_bcs = [
+        #     lambdify(
+        #         [
+        #             self.time,
+        #             self.position.get_list(),
+        #             self.distance,
+        #             self.variables.get_list(),
+        #             self.aux_variables.get_list(),
+        #             self.parameters.get_list(),
+        #             self.sympy_normal.get_list(),
+        #         ],
+        #         vectorize_constant_sympy_expressions(
+        #             self.boundary_conditions.boundary_functions[d], self.variables, self.aux_variables
+        #         ),
+        #         printer,
+        #     )
+        #     for d in range(n_boundary_functions)
+        # ]
+        # # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
+        # bcs = [
+        #     lambda time,
+        #         position,
+        #         distance,
+        #         q,
+        #         qaux,
+        #         p,
+        #         n, f=l_bcs[d]: jnp.squeeze(
+        #         np.array(f(time, position, distance, q, qaux, p, n)), axis=1
+        #     )
+        #     for d in range(n_boundary_functions)
+        # ]
         bcs = []
         for i in range(n_boundary_functions):
             func_bc = lambdify(
@@ -252,8 +274,8 @@ class Model:
                     self.parameters.get_list(),
                     self.sympy_normal.get_list(),
                 ],
-                # vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
-                self.boundary_conditions.boundary_functions[i],
+                vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
+                #self.boundary_conditions.boundary_functions[i],
                 printer,
             )
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
@@ -266,7 +288,7 @@ class Model:
                 p,
                 n,
                 func=func_bc: jnp.squeeze(
-                    jnp.array(func(time, position, distance, q, qaux, p, n)), axis=-1
+                    jnp.array(func(time, position, distance, q, qaux, p, n)), axis=1
                 )
             )
             bcs.append(f)
@@ -408,19 +430,6 @@ class Model:
         def source_implicit(Q, Qaux, param):
             return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
 
-        l_constraints_implicit = lambdify(
-            [
-                self.variables.get_list(),
-                self.aux_variables.get_list(),
-                self.parameters.get_list(),
-            ],
-            vectorize_constant_sympy_expressions(
-                self.sympy_constraints_implicit, self.variables, self.aux_variables
-            ),
-            printer,
-        )
-        def constraints_implicit(Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_constraints_implicit(Q, Qaux, param)), axis=1)
 
         left_eigenvectors = None
         right_eigenvectors = None
@@ -435,7 +444,6 @@ class Model:
             "source": source,
             "source_jacobian": source_jacobian,
             "source_implicit": source_implicit,
-            "constraints_implicit": constraints_implicit,
         }
         return SimpleNamespace(**d)
 
@@ -463,8 +471,6 @@ class Model:
     def source_implicit(self):
         return zeros(self.n_fields, 1)
 
-    def constraints_implicit(self):
-        return zeros(0, 1)
 
     def eigenvalues(self):
         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]

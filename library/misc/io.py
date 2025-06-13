@@ -122,7 +122,7 @@ def get_save_fields(_filepath, write_all):
             def _save(i_snapshot, time, Q, Qaux):
                 return jax.pure_callback(
                     _save_hdf5,
-                    jax.ShapeDtypeStruct((), jnp.float32),
+                    jax.ShapeDtypeStruct((), jnp.float64),
                     i_snapshot,
                     time,
                     Q,
@@ -134,9 +134,9 @@ def get_save_fields(_filepath, write_all):
             def _save_jvp(primals, tangents):
                 # Primal evaluation
                 primal_out = _save(*primals)
-                # Derivative is zero. We match shape/dtype (float32 scalar)
+                # Derivative is zero. We match shape/dtype (float64 scalar)
                 # so returning 0.0 is valid.
-                return primal_out, jnp.float32(0.0)
+                return primal_out, jnp.float64(0.0)
 
             # Then return the new integer snapshot
             return _save(i_snapshot, time, Q, Qaux)

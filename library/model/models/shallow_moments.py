@@ -1157,9 +1157,15 @@ class ShallowMoments2d(Model):
         hu = self.variables[1]
         hv = self.variables[2]
         p = self.parameters
-        dhdx = self.aux_variables.dhdx
-        dhdy = self.aux_variables.dhdy
-        out[0] = dhdx - 2
+        dhdt = self.aux_variables.dhdt
+        dhudt = self.aux_variables.dhudt
+        dhvdt = self.aux_variables.dhvdt
+        dhudx = self.aux_variables.dhudx
+        dhudy = self.aux_variables.dhudy
+        dhvdx = self.aux_variables.dhudx
+        dhvdy = self.aux_variables.dhudy
+        out[0] = dhdt + dhudx + dhvdx
+        out[1] = dhudt + dhudx + dhvdx
         return out
 
     def source(self):
@@ -1409,6 +1415,52 @@ def generate_velocity_profiles(
         list_means.append(means)
         list_h.append(h)
     return list_profiles, list_means, list_of_positions, Z, list_h
+
+class Pressure2D(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=2,
+        fields=1,
+        aux_fields=0,
+        parameters={},
+        parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
+        settings={},
+        settings_default={"topography": False, "friction": []},
+        basis=Basismatrices(),
+    ):
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        self.levels = int((self.n_fields - 1) / 2) - 1
+        self.basismatrices = basis
+        self.basismatrices.basisfunctions = type(self.basismatrices.basisfunctions)(
+            order=self.levels
+        )
+        self.basismatrices.compute_matrices(self.levels)
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default=parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+    def source(self):
+        assert "dhdx" in vars(self.aux_variables)
+        assert "dhdy" in vars(self.aux_variables)
+        out = Matrix([0 for i in range(1)])
+        h = self.variables[0]
+        hu = self.variables[1]
+        hv = self.variables[2]
+        p = self.parameters
+        dhdx = self.aux_variables.dhdx
+        dhdy = self.aux_variables.dhdy
+        out[0] = dhdx - 2
+        return out
 
 
 if __name__ == "__main__":

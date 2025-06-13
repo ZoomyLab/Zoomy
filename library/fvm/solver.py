@@ -3,6 +3,7 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
+from jax.scipy.sparse.linalg import gmres
 
 from types import SimpleNamespace
 import pyprog
@@ -406,8 +407,7 @@ class Solver:
 
                 # Extract solution variables for the boundary cell
                 q_cell = Q[:, mesh.boundary_face_cells[i]]  # Shape: (Q_dim,)
-                # Shape: (1,)
-                qaux_cell = Qaux[:1, mesh.boundary_face_cells[i]]
+                qaux_cell = Qaux[:, mesh.boundary_face_cells[i]]
 
                 # Get geometric information
                 normal = mesh.face_normals[:, i_face]
@@ -455,7 +455,123 @@ class Solver:
 
         parameters = model.parameter_values
 
-        # mesh = convert_mesh_to_jax(mesh)
+        #mesh = convert_mesh_to_jax(mesh)
+        parameters = jnp.asarray(parameters)
+
+        pde, bcs = self._load_runtime_model(model)
+        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
+
+        def run(Q, Qaux, parameters, pde, bcs):
+            iteration = 0.0
+            time = 0.0
+            assert model.dimension == mesh.dimension
+
+            i_snapshot = 0.0
+            dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
+            io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+            mesh.write_to_hdf5(output_hdf5_path)
+            i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
+
+            # Qnew = deepcopy(Q)
+            Qnew = Q
+
+            min_inradius = jnp.min(mesh.cell_inradius)
+
+            def enforce_boundary_conditions(Q):
+                return Q
+
+            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(
+                mesh, pde, settings
+            )
+            space_solution_operator = self.get_space_solution_operator(
+                mesh, pde, bcs, settings
+            )
+            source_operator = self.get_compute_source(mesh, pde, settings)
+            boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+
+            time_start = gettime()
+
+            @jax.jit
+            def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
+                loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
+
+                def loop_body(init_value):
+                    time, iteration, i_snapshot, Qnew, Qaux = init_value
+                    Q = Qnew
+
+                    dt = settings.compute_dt(
+                        Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
+                    )
+                    # assert dt > 10 ** (-6)
+                    # assert not jnp.isnan(dt) and jnp.isfinite(dt)
+
+                    # if settings.truncate_last_time_step:
+                    #    if time + dt * 1.001 > settings.time_end:
+                    #        dt = settings.time_end - time + 10 ** (-10)
+
+                    Q1 = ode_solver_flux(
+                        space_solution_operator, Q, Qaux, parameters, dt
+                    )
+
+                    Q2 = ode_solver_source(
+                        source_operator,
+                        Q1,
+                        Qaux,
+                        parameters,
+                        dt,
+                        func_jac=self.compute_source_jac,
+                    )
+
+                    Q3 = boundary_operator(time, Q2, Qaux, parameters)
+
+                    # Update solution and time
+                    time += dt
+                    iteration += 1
+
+                    jax.debug.print(
+                        "iteration: {iteration}, time: {time}, dt: {dt}",
+                        iteration=iteration,
+                        time=time,
+                        dt=dt,
+                    )
+
+                    time_stamp = (i_snapshot + 1) * dt_snapshot
+
+                    # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
+                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
+
+                    return (time, iteration, i_snapshot, Q3, Qaux)
+
+                def proceed(loop_val):
+                    time, iteration, i_snapshot, Qnew, Qaux = loop_val
+                    return time < settings.time_end
+
+                (time, iteration, i_snapshot, Qnew, Qaux) = jax.lax.while_loop(
+                    proceed, loop_body, loop_val
+                )
+
+                return Qnew
+
+            Qnew = time_loop(time, iteration, i_snapshot, Qnew, Qaux)
+            return Qnew, Qaux
+
+        time_start = gettime()
+        Qnew, Qaux = run(Q, Qaux, parameters, pde, bcs)
+
+        print(f"Runtime: {gettime() - time_start}")
+
+        return Qnew, Qaux
+
+    def jax_test(
+        self, mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
+    ):
+        Q, Qaux = self.initialize(model, mesh)
+
+        parameters = model.parameter_values
+
+        #mesh = convert_mesh_to_jax(mesh)
         parameters = jnp.asarray(parameters)
 
         pde, bcs = self._load_runtime_model(model)
@@ -571,13 +687,18 @@ class Solver:
 
         parameters = model.parameter_values
 
-        # mesh = convert_mesh_to_jax(mesh)
+        mesh = convert_mesh_to_jax(mesh)
         parameters = jnp.asarray(parameters)
 
         pde, bcs = self._load_runtime_model(model)
-        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
+        
+        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
         output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        mesh.write_to_hdf5(output_hdf5_path)
         save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
+        boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+        mesh = convert_mesh_to_jax(mesh)
+
 
         io.init_output_directory(settings.output_dir, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
@@ -589,10 +710,12 @@ class Solver:
 
         time_start = gettime()
 
+
+        Q = boundary_operator(time, Q, Qaux, parameters)
         grad = compute_gradient(Q[0], mesh)
         div = compute_gradient(grad[:, 0], mesh)
-        Qaux = Qaux.at[0].set(div[:, 0])
-        Qaux = Qaux.at[1].set(grad[:, 1])
+        Qaux = Qaux.at[0].set(grad[:, 0])
+        Qaux = Qaux.at[1].set(div[:, 0])
         i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
 
         print(f"Runtime: {gettime() - time_start}")
@@ -625,8 +748,8 @@ class Solver:
         time_start = gettime()
 
         grad = compute_face_gradient(Q[0], mesh)
-        jax.debug.print("{}", grad[:, 0])
-        jax.debug.print("{}", grad[:, 1])
+        # jax.debug.print("{}", grad[:, 0])
+        # jax.debug.print("{}", grad[:, 1])
         i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
 
         print(f"Runtime: {gettime() - time_start}")
@@ -638,84 +761,138 @@ class Solver:
     ):
         Q, Qaux = self.initialize(model, mesh)
 
+        Qold = Q
+        Qauxold = Qaux
+
         parameters = model.parameter_values
 
-        # mesh = convert_mesh_to_jax(mesh)
+        mesh = convert_mesh_to_jax(mesh)
         parameters = jnp.asarray(parameters)
 
         pde, bcs = self._load_runtime_model(model)
         # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
 
-        Qaux = self.update_qaux(Q, Qaux, mesh, model, parameters)
+        time = 0.0
+        dt = 0.1
+        time_next_snapshot = 0.0
+        Qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
         jax.debug.print("IMPLICIT SOLVER")
 
-        jax.debug.print("{}", Qaux[0])
-        jax.debug.print("{}", Qaux[1])
-        jax.debug.print("{}", model.sympy_source_implicit)
-        jax.debug.print("{}", model.sympy_constraints_implicit)
-        constraint = pde.constraints_implicit(Q, Qaux, parameters)
-        jax.debug.print("constraint")
-        jax.debug.print("{}", constraint)
-       
+        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+        mesh.write_to_hdf5(output_hdf5_path)
+        save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
+
+        #mesh = convert_mesh_to_jax(mesh)
+        boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+
+        i_snapshot = 0.0
+
+        Q = boundary_operator(time, Q, Qaux, parameters)
+        Qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
+        i_snapshot = save_fields(time, time_next_snapshot, i_snapshot, Q, Qaux)
+        #jax.debug.print("{}", Qaux[0])
+        #jax.debug.print("{}", Qaux[1])
+        #jax.debug.print("{}", model.sympy_source_implicit)
 
         time_start = gettime()
 
-        #grad = compute_face_gradient(Q[0], mesh)
-        #jax.debug.print("{}", grad[:, 0])
-        #jax.debug.print("{}", grad[:, 1])
-        #i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
+        Q = self.implicit_solve(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator)
+        Qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
+        #jax.debug.print("constraint")
+        #jax.debug.print("{}", constraint)
+
+        time =+ dt
+        time_next_snapshot += dt
+        i_snapshot = save_fields(time, time_next_snapshot, i_snapshot, Q, Qaux)
+       
+
 
         print(f"Runtime: {gettime() - time_start}")
 
         return Q, Qaux
 
-    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
+    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator):
 
-        def residual(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
-            res = pde.constraints_implicit(Q[:,0], Qaux[:,0], parameters)
+
+        def residual(Q):
+            qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
+            q = boundary_operator(time, Q, qaux, parameters)
+            res = pde.source_implicit(Q, qaux, parameters)
+            # res = res.at[:, mesh.n_inner_cells:].add(((Q - qold)[:, mesh.n_inner_cells:])**2)
+            # res_boundary = q-boundary_operator(time, res, qaux)
+            res = res.at[:, mesh.n_inner_cells:].set(0.)
+            
+            # res = res.at[1].add(500.*(Q[0, 80] - (-1.03125)))
+            #p = Q[1]
+            #p_mean = jnp.mean(p)
+            #res = res.at[1].set(res[1] - p_mean) 
             return res
         
         
         # Jacobian-vector product helper
-        def Jv(Q, U, Qaux, Qold, Qauxold, mesh, model, pde, parameters):
-            qaux = self.update_qaux(Q Qaux, mesh, model, parameters)
-            return jax.jvp(lambda q: residual(q, qaux, Qold, Qauxold, mesh, model, pde, parameters), (Q, ), (U, ))[1]
+        def Jv(Q, U):
+            return jax.jvp(lambda q: residual(q), (Q, ), (U, ))[1]
+        
+                
+        def compute_diagonal_of_jacobian(Q):
+            ndof, N = Q.shape
+            diag = jnp.zeros_like(Q)
+            for i in range(ndof):
+                for j in range(N):
+                    e = jnp.zeros_like(Q).at[i, j].set(1.0)
+                    J_e = Jv(Q, e)
+                    diag = diag.at[i, j].set(J_e[i, j])
+            return diag  # shape (ndof, N)
         
         
         # Newton solver using CG for linear solve
-        def newton_solve(Q, Qaux, Qold, Qauxold, tol=1e-8, maxiter=20):
+        def newton_solve(Q, tol=1e-6, maxiter=8):
             for i in range(maxiter):
-                r = residual(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters)
+                r = residual(Q)
                 res_norm = jnp.linalg.norm(r)
                 print(f"Iter {i} , residual norm = {res_norm:.3e}")
                 if res_norm < tol:
                     break
         
                 def lin_op(v):
-                    return Jv(Q, v, Qaux, Qold, Qauxold, mesh, model, pde, parameters)
+                    return Jv(Q, v)
+                
+                # # Preconditioner
+                # diag_J = compute_diagonal_of_jacobian(Q)
+                # # regularize diagonal to avoid division by zero
+                # diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
+                # def preconditioner(v):
+                #     return v / diag_J
         
                 delta, info = gmres(
                     lin_op,
                     -r,
                     x0=jnp.zeros_like(Q),
                     maxiter=100,
-                    solve_method="incremental",
-                    tol=10 ** (-8),
+                    solve_method="batched",
+                    tol=10 ** (-6),
+                    # M=preconditioner,
                 )
         
                 alpha = 1.0
                 for _ in range(10):
                     Qnew = Q + alpha * delta
-                    r_new = residual(Qnew, Qaux, Qold Qauxold, mesh, model, pde, parameters)
+                    r_new = residual(Qnew)
                     if jnp.linalg.norm(r_new) < jnp.linalg.norm(r):
                         Q = Qnew
                         break
                     alpha *= 0.5
+                    # p = Qnew[0]
+                    # p_mean = jnp.mean(p)
+                    # Q = Qnew.at[0].set(Qnew[0] - p_mean)
         
             return Q
+        
+        return newton_solve(Q)
 
 
-    def update_qaux(self, Q, Qaux, mesh, model, parameters):
+    def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
         return Qaux
 
 
