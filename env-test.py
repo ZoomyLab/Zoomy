@@ -1,4 +1,4 @@
-name: sms
+nme: sms
 channels:
   - conda-forge
 dependencies:
