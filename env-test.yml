@@ -1,4 +1,4 @@
-nme: sms
+name: sms-test
 channels:
   - conda-forge
 dependencies:
@@ -16,7 +16,6 @@ dependencies:
     - scipy
     - h5py
     - pyprog
-    - mpi4py
     - petsc
     - petsc4py
     - pyvista
@@ -31,9 +30,6 @@ dependencies:
     - pygments
     # - pyprecice
 variables:
-  PETSC_DIR: '/home/ingo/Git/petsc'
-  PETSC_ARCH: 'linux-gnu'
-  SMS: '/home/ingo/Git/sms'
-  PYTHONPATH: ':/home/ingo/Git/sms'
+  PETSC_CONFIGURE_OPTIONS: "--with-debugging=0 --with-shared-libraries=1 --download-f2cblaslapack=1 --with-x=0 --with-mpi=0"
 
 
