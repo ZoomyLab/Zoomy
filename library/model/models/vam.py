@@ -147,8 +147,8 @@ class VAMPoisson(Model):
         hw0 = self.variables[3]
         hw1 = self.variables[4]
         b = self.variables[5]
-        p0 = self.variables[6]
-        p1 = self.variables[7]
+        p0 = self.variables[6]/h
+        p1 = self.variables[7]/h
         param = self.parameters
 
         u0 = hu0 / h
@@ -156,6 +156,7 @@ class VAMPoisson(Model):
         w0 = hw0 / h
         w1 = hw1 / h
         w2 = hw2 /h  
+
 
         dhdt   = self.aux_variables.dhdt   
         dhu0dt = self.aux_variables.dhu0dt 
@@ -183,13 +184,15 @@ class VAMPoisson(Model):
         R[6] = h*du0dx + 1/3 * dhu1dx + 1/3 * u1 * dhdx + 2*(w0 - u0 * dbdx)
         R[7] = h * du0dx + u1*dhdx + 2*(u1 * dbdx - w1)
         
-        delta = 0.000001
-        R[1] += + delta * h* (lap_p0 + lap_p1)
-        R[2] += + delta * h* (lap_p0 + lap_p1)
-        R[3] += + delta * h* (lap_p0 + lap_p1)
-        R[4] += + delta * h* (lap_p0 + lap_p1)
-        R[6] += + delta * h* (lap_p0 + lap_p1)
-        R[7] += + delta * h* (lap_p0 + lap_p1)
+        delta = 0.0
+        # R[1] += + delta * h* (lap_p0 + lap_p1)
+        # R[2] += + delta * h* (lap_p0 + lap_p1)
+        # R[3] += + delta * h* (lap_p0 + lap_p1)
+        # R[4] += + delta * h* (lap_p0 + lap_p1)
+        for i in range(6):
+            R[i] *= 0.00
+        R[6] += + delta * (lap_p0 + lap_p1)
+        R[7] += + delta * (lap_p0 + lap_p1)
 
         return R
     

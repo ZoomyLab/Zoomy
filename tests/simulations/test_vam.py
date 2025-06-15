@@ -60,7 +60,7 @@ class PoissonSolver(Solver):
         
         grad_p0 = compute_gradient(p0, mesh)
         lap_p0 = compute_gradient(grad_p0[:,0], mesh)
-        grad_p1 = compute_gradient(p0, mesh)
+        grad_p1 = compute_gradient(p1, mesh)
         lap_p1 = compute_gradient(grad_p1[:,0], mesh)
         Qaux = Qaux.at[13].set(lap_p0[:, 0])
         Qaux = Qaux.at[14].set(lap_p1[:, 0])
@@ -253,7 +253,7 @@ def test_vam_1d():
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=10.0,
+        time_end=10.3,
         output_snapshots=100,
         output_dir="outputs/vam",
     )
