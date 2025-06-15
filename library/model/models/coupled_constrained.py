@@ -56,7 +56,7 @@ class CoupledConstrained(Model):
         dudx = self.aux_variables.dudx
         dpdx = self.aux_variables.dpdx
         f = self.aux_variables.f
-        out[0] = dudt + dpdx
+        out[0] = dudt + dpdx  + 1
         out[1] = dudx + f
         # out[0] = dudx -1.
         # out[1] = dpdx

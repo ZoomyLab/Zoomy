@@ -86,7 +86,7 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=Tru
     return i_snapshot + 1.0
 
 
-def get_save_fields(_filepath, write_all):
+def get_save_fields(_filepath, write_all, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
         main_dir = os.getenv("SMS")

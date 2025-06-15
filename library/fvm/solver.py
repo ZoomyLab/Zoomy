@@ -811,79 +811,166 @@ class Solver:
         print(f"Runtime: {gettime() - time_start}")
 
         return Q, Qaux
+    
+    import jax
 
-    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator):
-
+    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=False):
 
         def residual(Q):
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
             res = pde.source_implicit(Q, qaux, parameters)
             res = res.at[:, mesh.n_inner_cells:].set(0.)
-            # res = res.at[1, 0].set(Q[1, 0] -0)
             return res
-        
-        
-        # Jacobian-vector product helper
+
         def Jv(Q, U):
-            return jax.jvp(lambda q: residual(q), (Q, ), (U, ))[1]
-        
-                
+            return jax.jvp(lambda q: residual(q), (Q,), (U,))[1]
+
+        @jax.jit
         def compute_diagonal_of_jacobian(Q):
             ndof, N = Q.shape
-            diag = jnp.zeros_like(Q)
-            for i in range(ndof):
-                for j in range(N):
-                    e = jnp.zeros_like(Q).at[i, j].set(1.0)
-                    J_e = Jv(Q, e)
-                    diag = diag.at[i, j].set(J_e[i, j])
-            return diag  # shape (ndof, N)
-        
-        
-        # Newton solver using CG for linear solve
-        def newton_solve(Q, tol=1e-6, maxiter=8):
-            for i in range(maxiter):
-                r = residual(Q)
-                res_norm = jnp.linalg.norm(r)
-                print(f"Iter {i} , residual norm = {res_norm:.3e}")
-                if res_norm < tol:
-                    break
-        
+
+            def compute_entry(i, j):
+                e = jnp.zeros_like(Q).at[i, j].set(1.0)
+                J_e = Jv(Q, e)
+                return J_e[i, j]
+
+            def outer_loop(i, diag):
+                def inner_loop(j, d):
+                    val = compute_entry(i, j)
+                    return d.at[i, j].set(val)
+                return jax.lax.fori_loop(0, N, inner_loop, diag)
+
+            diag_init = jnp.zeros_like(Q)
+            return jax.lax.fori_loop(0, ndof, outer_loop, diag_init)
+
+        def newton_solve(Q):
+            def cond_fun(state):
+                _, r, i = state
+                return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < 10)
+
+            def body_fun(state):
+                Q, r, i = state
+
+                if debug:
+                    jax.debug.print("Newton Iter {i}: residual norm = {res:.3e}", i=i, res=jnp.linalg.norm(r))
+
                 def lin_op(v):
                     return Jv(Q, v)
-                
-                # # Preconditioner
-                # diag_J = compute_diagonal_of_jacobian(Q)
-                # # regularize diagonal to avoid division by zero
-                # diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
-                # def preconditioner(v):
-                #     return v / diag_J
-        
+
                 delta, info = gmres(
                     lin_op,
                     -r,
                     x0=jnp.zeros_like(Q),
                     maxiter=100,
                     solve_method="batched",
-                    tol=10 ** (-6),
-                    # M=preconditioner,
+                    tol=1e-6,
                 )
+
+                def backtrack(alpha, Q, delta, r):
+                    def cond(val):
+                        alpha, _, _ = val
+                        return alpha > 1e-3
+
+                    def body(val):
+                        alpha, Q_curr, r_curr = val
+                        Qnew = Q_curr + alpha * delta
+                        r_new = residual(Qnew)
+                        improved = jnp.linalg.norm(r_new) < jnp.linalg.norm(r_curr)
+
+                        if debug:
+                            jax.debug.print("  Line search α = {alpha:.2e}, new residual norm = {res:.3e}", alpha=alpha, res=jnp.linalg.norm(r_new))
+
+                        return jax.lax.cond(
+                            improved,
+                            lambda _: (0.0, Qnew, r_new),  # Accept and stop
+                            lambda _: (alpha * 0.5, Q_curr, r_curr),  # Retry
+                            operand=None
+                        )
+
+                    return jax.lax.while_loop(cond, body, (alpha, Q, r))[1:]
+
+                Q_new, r_new = backtrack(1.0, Q, delta, r)
+                return (Q_new, r_new, i + 1)
+
+            r0 = residual(Q)
+            init_state = (Q, r0, 0)
+            Q_final, _, _ = jax.lax.while_loop(cond_fun, body_fun, init_state)
+            return Q_final
+
+        return jax.jit(newton_solve)(Q) if not debug else newton_solve(Q)
+
+
+    # def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator):
+
+
+    #     def residual(Q):
+    #         qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
+    #         q = boundary_operator(time, Q, qaux, parameters)
+    #         res = pde.source_implicit(Q, qaux, parameters)
+    #         res = res.at[:, mesh.n_inner_cells:].set(0.)
+    #         # res = res.at[1, 0].set(Q[1, 0] -0)
+    #         return res
         
-                alpha = 1.0
-                for _ in range(10):
-                    Qnew = Q + alpha * delta
-                    r_new = residual(Qnew)
-                    if jnp.linalg.norm(r_new) < jnp.linalg.norm(r):
-                        Q = Qnew
-                        break
-                    alpha *= 0.5
-                    # p = Qnew[1]
-                    # p_mean = jnp.mean(p)
-                    # Q = Qnew.at[1].set(Qnew[1] - p_mean)
         
-            return Q
+    #     # Jacobian-vector product helper
+    #     def Jv(Q, U):
+    #         return jax.jvp(lambda q: residual(q), (Q, ), (U, ))[1]
         
-        return newton_solve(Q)
+                
+    #     def compute_diagonal_of_jacobian(Q):
+    #         ndof, N = Q.shape
+    #         diag = jnp.zeros_like(Q)
+    #         for i in range(ndof):
+    #             for j in range(N):
+    #                 e = jnp.zeros_like(Q).at[i, j].set(1.0)
+    #                 J_e = Jv(Q, e)
+    #                 diag = diag.at[i, j].set(J_e[i, j])
+    #         return diag  # shape (ndof, N)
+        
+        
+    #     # Newton solver using CG for linear solve
+    #     def newton_solve(Q, tol=1e-6, maxiter=8):
+    #         for i in range(maxiter):
+    #             r = residual(Q)
+    #             res_norm = jnp.linalg.norm(r)
+    #             jax.debug.print("Iter {i} , residual norm = {res_norm:.3e}", i=i, res_norm=res_norm)
+    #             if res_norm < tol:
+    #                 break
+        
+    #             def lin_op(v):
+    #                 return Jv(Q, v)
+                
+    #             # # Preconditioner
+    #             # diag_J = compute_diagonal_of_jacobian(Q)
+    #             # # regularize diagonal to avoid division by zero
+    #             # diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
+    #             # def preconditioner(v):
+    #             #     return v / diag_J
+        
+    #             delta, info = gmres(
+    #                 lin_op,
+    #                 -r,
+    #                 x0=jnp.zeros_like(Q),
+    #                 maxiter=100,
+    #                 solve_method="batched",
+    #                 tol=10 ** (-6),
+    #                 # M=preconditioner,
+    #             )
+        
+    #             alpha = 1.0
+    #             for _ in range(10):
+    #                 Qnew = Q + alpha * delta
+    #                 r_new = residual(Qnew)
+    #                 if jnp.linalg.norm(r_new) < jnp.linalg.norm(r):
+    #                     Q = Qnew
+    #                     break
+    #                 alpha *= 0.5
+
+        
+    #         return Q
+        
+    #     return newton_solve(Q)
 
 
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):

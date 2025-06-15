@@ -8,6 +8,7 @@ from library.model.models.shallow_water import ShallowWater, ShallowWater2d
 from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d
 from library.model.models.shallow_moments import *
 from library.model.models.coupled_constrained import *
+from library.model.models.vam import *
 
 # from library.model.models.shallow_moments_sediment import *
 from library.model.models.shear_shallow_flow import *
