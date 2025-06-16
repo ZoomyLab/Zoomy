@@ -27,9 +27,9 @@ class VAMHyperbolic(Model):
         initial_conditions,
         dimension=1,
         fields=6,
-        aux_fields=['hw2'],
+        aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         parameters={},
-        parameters_default={"g": 1},
+        parameters_default={"g": 9.81},
         settings={},
         settings_default={},
     ):
@@ -111,8 +111,108 @@ class VAMHyperbolic(Model):
         
         return ev
 
+    def source_implicit(self):
+        R = Matrix([0 for i in range(self.n_fields)])
+        hw2 = self.aux_variables.hw2
+        h = self.variables[0]
+        hu0 = self.variables[1]
+        hu1 = self.variables[2]
+        hw0 = self.variables[3]
+        hw1 = self.variables[4]
+        b = self.variables[5]
+        param = self.parameters
+
+        u0 = hu0 / h
+        u1 = hu1 / h
+        w0 = hw0 / h
+        w1 = hw1 / h
+        w2 = hw2 /h  
+
+
+        p0 = self.aux_variables.p0
+        p1 = self.aux_variables.p1
+        dbdx = self.aux_variables.dbdx
+        dhdx = self.aux_variables.dhdx
+        dhp0dx = self.aux_variables.dhp0dx
+        dhp1dx = self.aux_variables.dhp0dx
+
+        R[0] = 0.
+        R[1] = dhp0dx + 2 * p1 * dbdx 
+        R[2] = -2*p1
+        R[3] = dhp1dx - (3*p0 - p1)*dhdx  -6*(p0-p1)*dbdx
+        R[4] = 6*(p0-p1)
+        R[5] = 0.
+        return R
+        
 
 class VAMPoisson(Model):
+    def __init__(
+        self,
+        boundary_conditions,
+        initial_conditions,
+        dimension=1,
+        fields=2,
+        aux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx', 'dt'],
+        parameters={},
+        parameters_default={"g": 9.81},
+        settings={},
+        settings_default={},
+    ):
+        self.variables = register_sympy_attribute(fields, "q")
+        self.n_fields = self.variables.length()
+        super().__init__(
+            dimension=dimension,
+            fields=fields,
+            aux_fields=aux_fields,
+            parameters=parameters,
+            parameters_default=parameters_default,
+            boundary_conditions=boundary_conditions,
+            initial_conditions=initial_conditions,
+            settings={**settings_default, **settings},
+        )
+
+    def source_implicit(self):
+        R = Matrix([0 for i in range(self.n_fields)])
+
+        h = self.aux_variables.h
+        p0 = self.variables[0] 
+        p1 = self.variables[1] 
+        dt = self.aux_variables.dt
+
+        dbdx   = self.aux_variables.dbdx
+        ddbdxx = self.aux_variables.ddbdxx
+        dhdx   = self.aux_variables.dhdx
+        ddhdxx = self.aux_variables.ddhdxx
+        dp0dx   = self.aux_variables.dp0dx
+        ddp0dxx = self.aux_variables.ddp0dxx
+        dp1dx   = self.aux_variables.dp1dx
+        ddp1dxx   = self.aux_variables.ddp1dxx
+        du0dx = self.aux_variables.du0dx
+        du1dx = self.aux_variables.du1dx
+
+        u0 = self.aux_variables.hu0/h
+        u1 = self.aux_variables.hu1/h
+        w0 = self.aux_variables.hw0/h
+        w1 = self.aux_variables.hw1/h
+
+        
+
+        delta = 0.1
+        I1 = 0.666666666666667*dt*dp0dx - 2*(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp0dx + p1*dhdx) + h*u1)/h + 0.333333333333333*(2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + 0.333333333333333*h*du0dx + 0.333333333333333*u0*dhdx + delta * ddp0dxx
+        I2 = -2*(-dt*(6*p0 - 6*p1) + h*w0)/h + 2*(2*dt*p1 + h*u0)*dbdx/h + (2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + delta * ddp1dxx
+        R[0] = I1 + I2
+        R[1] = I1 - I2
+
+ 
+
+        return R
+    
+    def eigenvalues(self):
+        ev = Matrix([0 for i in range(self.n_fields)])
+        return ev
+
+
+class VAMPoissonOld(Model):
     def __init__(
         self,
         boundary_conditions,

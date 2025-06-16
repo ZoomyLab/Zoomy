@@ -814,7 +814,7 @@ class Solver:
     
     import jax
 
-    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=False):
+    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[False, False]):
 
         def residual(Q):
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
@@ -847,16 +847,24 @@ class Solver:
         def newton_solve(Q):
             def cond_fun(state):
                 _, r, i = state
-                return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < 10)
+                maxiter = 10
+                return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < maxiter)
 
             def body_fun(state):
                 Q, r, i = state
 
-                if debug:
+                if debug[0]:
                     jax.debug.print("Newton Iter {i}: residual norm = {res:.3e}", i=i, res=jnp.linalg.norm(r))
 
                 def lin_op(v):
                     return Jv(Q, v)
+
+                # Preconditioner
+                #diag_J = compute_diagonal_of_jacobian(Q)
+                ## regularize diagonal to avoid division by zero
+                #diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
+                #def preconditioner(v):
+                #    return v / diag_J
 
                 delta, info = gmres(
                     lin_op,
@@ -878,7 +886,7 @@ class Solver:
                         r_new = residual(Qnew)
                         improved = jnp.linalg.norm(r_new) < jnp.linalg.norm(r_curr)
 
-                        if debug:
+                        if debug[1]:
                             jax.debug.print("  Line search α = {alpha:.2e}, new residual norm = {res:.3e}", alpha=alpha, res=jnp.linalg.norm(r_new))
 
                         return jax.lax.cond(
