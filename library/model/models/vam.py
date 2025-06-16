@@ -10,6 +10,7 @@ from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
 
+
 from library.model import *
 from library.model.models.base import (
     register_sympy_attribute,
@@ -197,13 +198,11 @@ class VAMPoisson(Model):
 
         
 
-        delta = 0.1
+        delta = 0.0
         I1 = 0.666666666666667*dt*dp0dx - 2*(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp0dx + p1*dhdx) + h*u1)/h + 0.333333333333333*(2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + 0.333333333333333*h*du0dx + 0.333333333333333*u0*dhdx + delta * ddp0dxx
         I2 = -2*(-dt*(6*p0 - 6*p1) + h*w0)/h + 2*(2*dt*p1 + h*u0)*dbdx/h + (2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + delta * ddp1dxx
-        R[0] = I1 + I2
-        R[1] = I1 - I2
-
- 
+        R[0] = I1 + I2 
+        R[1] = I1 - I2 
 
         return R
     
@@ -212,14 +211,14 @@ class VAMPoisson(Model):
         return ev
 
 
-class VAMPoissonOld(Model):
+class VAMPoissonFull(Model):
     def __init__(
         self,
         boundary_conditions,
         initial_conditions,
         dimension=1,
         fields=8,
-        aux_fields=['dhdt', 'dhu0dt', 'dhu1dt', 'dhw0dt', 'dhw1dt', 'dhdx', 'dhu0dx', 'dhu1dx', 'dhw0dx', 'dhw1dx', 'dhp0dx', 'dhp1dx', 'dbdx', 'du0dx', 'hw2', 'lap_p0', 'lap_p1'],
+        aux_fields=['dhdt', 'dhu0dt', 'dhu1dt', 'dhw0dt', 'dhw1dt', 'dhdx', 'dhu0dx', 'dhu1dx', 'dhw0dx', 'dhw1dx', 'dhp0dx', 'dhp1dx', 'dbdx', 'hw2', 'ddp0dxx', 'ddp1dxx', 'du0dx', 'du1dx'],
         parameters={},
         parameters_default={"g": 1},
         settings={},
@@ -272,8 +271,8 @@ class VAMPoissonOld(Model):
         dhp1dx = self.aux_variables.dhp1dx 
         dbdx   = self.aux_variables.dbdx   
         du0dx  = self.aux_variables.du0dx
-        lap_p0 = self.aux_variables.lap_p0
-        lap_p1 = self.aux_variables.lap_p1
+        ddp0dxx = self.aux_variables.ddp0dxx
+        ddp1dxx = self.aux_variables.ddp1dxx
 
         R[0] = dhdt 
         R[1] = dhu0dt + dhp0dx + 2 * p1 * dbdx 
@@ -281,18 +280,14 @@ class VAMPoissonOld(Model):
         R[3] = dhw0dt + dhp1dx - (3*p0 - p1)*dhdx  -6*(p0-p1)*dbdx
         R[4] = 6*(p0-p1)
         R[5] = 0.
-        R[6] = h*du0dx + 1/3 * dhu1dx + 1/3 * u1 * dhdx + 2*(w0 - u0 * dbdx)
-        R[7] = h * du0dx + u1*dhdx + 2*(u1 * dbdx - w1)
+        I1 = h*du0dx + 1/3 * dhu1dx + 1/3 * u1 * dhdx + 2*(w0 - u0 * dbdx)
+        I2 = h * du0dx + u1*dhdx + 2*(u1 * dbdx - w1)
+        R[6] = I1 + I2
+        R[7] = I1 - I2
         
         delta = 0.0
-        # R[1] += + delta * h* (lap_p0 + lap_p1)
-        # R[2] += + delta * h* (lap_p0 + lap_p1)
-        # R[3] += + delta * h* (lap_p0 + lap_p1)
-        # R[4] += + delta * h* (lap_p0 + lap_p1)
-        for i in range(6):
-            R[i] *= 0.00
-        R[6] += + delta * (lap_p0 + lap_p1)
-        R[7] += + delta * (lap_p0 + lap_p1)
+        R[6] +=  delta * (ddp0dxx )
+        R[7] +=  delta * (ddp1dxx)
 
         return R
     

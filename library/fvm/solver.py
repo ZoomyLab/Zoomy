@@ -4,6 +4,7 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 from jax.scipy.sparse.linalg import gmres
+from jaxopt import Broyden
 
 from types import SimpleNamespace
 import pyprog
@@ -812,15 +813,43 @@ class Solver:
 
         return Q, Qaux
     
-    import jax
+
+    def implicit_solve_alt(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[False, False]):
+    
+        def residual(Q):
+            qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
+            q = boundary_operator(time, Q, qaux, parameters)
+            res = pde.source_implicit(Q, qaux, parameters)
+            res = res.at[:, mesh.n_inner_cells:].set(0.0)
+            return res
+
+        def fun(Q):
+            return residual(Q)
+    
+        # Initialize the solver
+        solver = Broyden(fun=fun)
+    
+        # Run the solver
+        result = solver.run(Q)
+    
+        if debug[0]:
+            jax.debug.print("Broyden finished with norm = {res:.3e}", res=jnp.linalg.norm(fun(result.params)))
+    
+        return result.params
+
 
     def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[False, False]):
 
         def residual(Q):
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
-            res = pde.source_implicit(Q, qaux, parameters)
+            res = pde.source_implicit(q, qaux, parameters)
             res = res.at[:, mesh.n_inner_cells:].set(0.)
+            hp0 = q[0]
+            hp1 = q[1]
+            delta = 0.
+            res = res.at[0].add(delta * jnp.sum(hp0 + hp1))
+            res = res.at[1].add(delta * jnp.sum(hp0 + hp1))
             return res
 
         def Jv(Q, U):
