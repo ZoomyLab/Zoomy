@@ -1,3 +1,4 @@
+#!/bin/bash
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
 
 echo 'export SMS="${PWD}"' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
