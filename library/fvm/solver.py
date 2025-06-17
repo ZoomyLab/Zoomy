@@ -838,19 +838,24 @@ class Solver:
         return result.params
 
 
-    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[False, False]):
+    def implicit_solve(self, Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[False, False], user_residual=None):
 
-        def residual(Q):
+        def default_residual(Q):
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
             res = pde.source_implicit(q, qaux, parameters)
             res = res.at[:, mesh.n_inner_cells:].set(0.)
-            hp0 = q[0]
-            hp1 = q[1]
-            delta = 0.
-            res = res.at[0].add(delta * jnp.sum(hp0 + hp1))
-            res = res.at[1].add(delta * jnp.sum(hp0 + hp1))
+            #hp0 = q[0]
+            #hp1 = q[1]
+            #delta = 0.
+            #res = res.at[0].add(delta * jnp.sum(hp0 + hp1))
+            #res = res.at[1].add(delta * jnp.sum(hp0 + hp1))
             return res
+
+        if user_residual is None:
+            residual = default_residual
+        else:
+            residual = user_residual
 
         def Jv(Q, U):
             return jax.jvp(lambda q: residual(q), (Q,), (U,))[1]
@@ -876,7 +881,7 @@ class Solver:
         def newton_solve(Q):
             def cond_fun(state):
                 _, r, i = state
-                maxiter = 10
+                maxiter = 20
                 return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < maxiter)
 
             def body_fun(state):
@@ -899,8 +904,10 @@ class Solver:
                     lin_op,
                     -r,
                     x0=jnp.zeros_like(Q),
+                    #x0=Qold,
                     maxiter=100,
-                    solve_method="batched",
+                    solve_method="incremental",
+                    restart = 20,
                     tol=1e-6,
                 )
 
@@ -928,11 +935,15 @@ class Solver:
                     return jax.lax.while_loop(cond, body, (alpha, Q, r))[1:]
 
                 Q_new, r_new = backtrack(1.0, Q, delta, r)
+
                 return (Q_new, r_new, i + 1)
 
             r0 = residual(Q)
             init_state = (Q, r0, 0)
-            Q_final, _, _ = jax.lax.while_loop(cond_fun, body_fun, init_state)
+            Q_final, res, i = jax.lax.while_loop(cond_fun, body_fun, init_state)
+            if debug[0]:
+                jax.debug.print("Newton Iter {i}: residual norm = {res:.3e}", i=i, res=jnp.linalg.norm(res))
+
             return Q_final
 
         return jax.jit(newton_solve)(Q) if not debug else newton_solve(Q)
