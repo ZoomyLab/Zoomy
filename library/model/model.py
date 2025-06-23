@@ -10,6 +10,8 @@ from library.model.models.shallow_moments import *
 from library.model.models.coupled_constrained import *
 from library.model.models.vam import *
 from library.model.models.poisson import *
+from library.model.models.GN import *
+# 
 
 # from library.model.models.shallow_moments_sediment import *
 from library.model.models.shear_shallow_flow import *
