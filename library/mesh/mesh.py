@@ -16,27 +16,31 @@ import library.mesh.mesh_extrude as extrude
 import library.mesh.mesh_util as mesh_util
 from library.misc.static_class import register_static_pytree
 
+from itertools import combinations_with_replacement
+
+
 
 # petsc4py.init(sys.argv)
 
+def compute_derivatives(u, mesh):
+    A_glob = mesh.lsq_gradQ  # shape (n_cells, n_monomials, n_neighbors)
+    neighbors = mesh.lsq_neighbors  # list of neighbors per cell
+    
+    def reconstruct_cell(A_loc, neighbor_idx, u_i):
+        u_neighbors = u[neighbor_idx]
+        delta_u = u_neighbors - u_i
+        return A_loc.T @ delta_u  # shape (n_monomials,)
+    
+    return jax.vmap(reconstruct_cell)(
+        A_glob,
+        neighbors,
+        u,
+    )  # shape (n_cells, n_monomials)
 
-def compute_gradient(u, mesh):
-    A_glob = mesh.lsq_gradQ
-    neighbors = mesh.cell_neighbors
-    def grad_single_cell(A_loc, neighbor_idx, u_i):
-        u_neighbors = u[neighbor_idx]  # shape (n_neighbors,)
-        delta_u = u_neighbors - u_i  # shape (n_neighbors,)
-        return A_loc @ delta_u  # shape (dim,)
 
-    # returns (n_cells, dim)
-    return jax.vmap(grad_single_cell)(
-        A_glob,  # shape (n_cells, dim, n_neighbors)
-        neighbors,  # shape (n_cells, n_neighbors)
-        u,  # shape (n_cells,)
-    )
 
 def compute_face_gradient(u, mesh):
-    A_glob = mesh.lsq_face_gradQ
+    A_glob = mesh.lsq_neighbors
     neighbors = mesh.face_neighbors
     u_neighbors = u[neighbors]
     u_face = 0.5 * (u[neighbors[:, 0]] + u[neighbors[:, 1]])
@@ -52,45 +56,120 @@ def compute_face_gradient(u, mesh):
     )
 
 
-def least_squares_reconstruction(
-    n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
-):
-    A_glob = np.zeros((n_cells, dim, n_cells), dtype=float)
-    R_glob = np.zeros((n_cells, n_neighbors, n_cells), dtype=float)
-    for i_c in range(n_cells):
-        # note, n_neighbors <= n_faces_per_cell. I need to keep the vectorized version using n_faces_per_cell for consistency and add zero lines
-        dX = np.zeros((n_neighbors, dim), dtype=float)
-        R_loc = np.zeros((n_neighbors, n_cells), dtype=float)
-        A_loc = np.zeros((dim, n_neighbors), dtype=float)
-        R_loc[:, i_c] = -1.0
-        for i_neighbor, neighbor in enumerate(neighbors[i_c]):
-            R_loc[i_neighbor, neighbor] = 1.0
-            assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
-            for d in range(dim):
-                dX[i_neighbor, d] = cell_centers[neighbor][d] - \
-                    cell_centers[i_c][d]
-        A_loc = np.linalg.inv(dX.T @ dX) @ dX.T
-        A_glob[i_c, :, :] = np.einsum("ij, jk->ik", A_loc, R_loc)
-        R_glob[i_c, :, :] = R_loc
-    return A_glob, R_glob
+def get_polynomial_degree(mon_indices):
+    return max(sum(m) for m in mon_indices)
 
+def get_required_monomials_count(degree, dim):
+    from math import comb
+    return comb(int(degree + dim), int(dim))
+
+def build_vandermonde(cell_diffs, mon_indices):
+    n_neighbors, dim = cell_diffs.shape
+    n_monomials = len(mon_indices)
+    V = np.zeros((n_neighbors, n_monomials))
+    for i, powers in enumerate(mon_indices):
+        V[:, i] = np.prod(cell_diffs ** powers, axis=1)
+    return V
+
+def expand_neighbors(neighbors_list, initial_neighbors):
+    # Expand to the next ring: union of neighbors of neighbors
+    expanded = set(initial_neighbors)
+    for n in initial_neighbors:
+        expanded.update(neighbors_list[n])
+    return list(expanded)
 
 def least_squares_reconstruction_local(
-    n_cells, dim, n_neighbors, neighbors, cell_centers, polynomial_degree=1
+    n_cells, dim, neighbors_list, cell_centers, mon_indices
 ):
-    A_glob = np.zeros((n_cells, dim, n_neighbors), dtype=float)
-    for i_c in range(n_cells):
-        dX = np.zeros((n_neighbors, dim), dtype=float)
-        A_loc = np.zeros((dim, n_neighbors), dtype=float)
-        for i_neighbor, neighbor in enumerate(neighbors[i_c]):
-            assert not np.allclose(cell_centers[neighbor], cell_centers[i_c])
-            for d in range(dim):
-                dX[i_neighbor, d] = cell_centers[neighbor][d] - \
-                    cell_centers[i_c][d]
-        A_loc = np.linalg.pinv(dX)
-        A_glob[i_c, :, :] = A_loc
-    return A_glob
+    A_glob = []
+    neighbors_all = []  # to store expanded neighbors per cell
+    degree = get_polynomial_degree(mon_indices)
+    required_neighbors = get_required_monomials_count(degree, dim)
+    print(f"Required neighbors (min stencil size): {required_neighbors}")
 
+    # First, expand neighborhoods and store them
+    for i_c in range(n_cells):
+        current_neighbors = list(neighbors_list[i_c])
+
+        # Expand neighbor rings until we have enough
+        while len(current_neighbors) < required_neighbors:
+            new_neighbors = expand_neighbors(neighbors_list, current_neighbors)
+            current_neighbors = list(set(new_neighbors) - {i_c})
+
+        neighbors_all.append(current_neighbors)
+
+    # Compute max neighbors after expansion
+    max_neighbors = max(len(nbrs) for nbrs in neighbors_all)
+
+    A_glob = []
+    neighbors_array = np.empty((n_cells, max_neighbors), dtype=int)
+
+    for i_c in range(n_cells):
+        current_neighbors = list(neighbors_all[i_c])  # previously expanded
+        n_nbr = len(current_neighbors)
+    
+        # Expand further if still under-resolved
+        while n_nbr < max_neighbors:
+            extended_neighbors = expand_neighbors(neighbors_list, current_neighbors)
+            extended_neighbors = list(set(extended_neighbors) - {i_c})  # Remove self
+            # Keep only new neighbors not already present
+            new_neighbors = [n for n in extended_neighbors if n not in current_neighbors]
+            current_neighbors.extend(new_neighbors)
+            n_nbr = len(current_neighbors)
+    
+            # Stop if enough neighbors collected
+            if n_nbr >= max_neighbors:
+                break
+    
+        # Trim or pad neighbor list to exact max_neighbors
+        if len(current_neighbors) >= max_neighbors:
+            trimmed_neighbors = current_neighbors[:max_neighbors]
+        else:
+            padding = [i_c] * (max_neighbors - len(current_neighbors))
+            trimmed_neighbors = current_neighbors + padding
+    
+        neighbors_array[i_c, :] = trimmed_neighbors
+    
+        # Build dX matrix for least squares
+        dX = np.zeros((max_neighbors, dim), dtype=float)
+        for j, neighbor in enumerate(trimmed_neighbors):
+            dX[j, :] = cell_centers[neighbor] - cell_centers[i_c]
+    
+        # Rebuild Vandermonde with new or extended dX
+        V = build_vandermonde(dX, mon_indices)  # shape (max_neighbors, n_monomials)
+        A_loc = np.linalg.pinv(V).T  # shape (n_monomials, max_neighbors)
+
+        A_glob.append(A_loc)
+
+    A_glob = np.array(A_glob)  # shape (n_cells, n_monomials, max_neighbors)
+    return A_glob, neighbors_array
+
+def least_squares_reconstruction_local_old(
+    n_cells, dim, n_neighbors, neighbors_list, cell_centers, mon_indices
+):
+    A_glob = []
+    degree = get_polynomial_degree(mon_indices)
+    required_neighbors = get_required_monomials_count(degree, dim)
+
+    for i_c in range(n_cells):
+        current_neighbors = list(neighbors_list[i_c])
+
+        # Expand neighbor rings until we have enough
+        while len(current_neighbors) < required_neighbors:
+            new_neighbors = expand_neighbors(neighbors_list, current_neighbors)
+            current_neighbors = list(set(new_neighbors) - {i_c})
+
+        # Compute local diffs
+        dX = np.zeros((len(current_neighbors), dim), dtype=float)
+        for i_neighbor, neighbor in enumerate(current_neighbors):
+            dX[i_neighbor, :] = cell_centers[neighbor] - cell_centers[i_c]
+
+        V = build_vandermonde(dX, mon_indices)  # shape (n_neighbors, n_monomials)
+        A_loc = np.linalg.pinv(V)  # shape (n_monomials, n_neighbors)
+        A_glob.append(A_loc)
+
+    A_glob = np.array(A_glob)  # shape (n_cells, n_monomials, n_neighbors_effective)
+    return A_glob
 
 def least_squares_face_reconstruction_local(
     n_faces,
@@ -335,7 +414,7 @@ class Mesh:
     boundary_conditions_sorted_physical_tags: IArray
     boundary_conditions_sorted_names: CArray
     lsq_gradQ: FArray
-    lsq_face_gradQ: FArray
+    lsq_neighbors: FArray
     z_ordering: IArray
 
     @ classmethod
@@ -433,8 +512,8 @@ class Mesh:
         polynomial_degree = 1
         n_neighbors = n_faces_per_cell * polynomial_degree
         dim = 1
-        lsq_gradQ = least_squares_reconstruction_local(
-            n_cells, dim, n_neighbors, cell_neighbors, cell_centers
+        lsq_gradQ, lsq_neighbors = least_squares_reconstruction_local(
+            n_cells, dim, cell_neighbors, cell_centers, ((2, ),)
         )
 
         n_face_neighbors = 2
@@ -443,9 +522,9 @@ class Mesh:
         for i_f, neighbors in enumerate(face_cells):
             face_neighbors[i_f] = neighbors
 
-        lsq_face_gradQ = least_squares_face_reconstruction_local(
-            n_faces, dim, n_face_neighbors, face_neighbors, face_centers, cell_centers
-        )
+        #lsq_neighbors = least_squares_face_reconstruction_local(
+        #    n_faces, dim, n_face_neighbors, face_neighbors, face_centers, cell_centers
+        #)
 
         z_ordering = np.array([-1], dtype=float)
 
@@ -480,7 +559,7 @@ class Mesh:
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            lsq_face_gradQ,
+            lsq_neighbors,
             z_ordering,
         )
 
@@ -713,7 +792,7 @@ class Mesh:
                 gdm, gdm.getSupport(f), n_face_neighbors, cgStart)
             face_neighbors[i_f, :] = neighbors
 
-        lsq_face_gradQ = least_squares_face_reconstruction_local(
+        lsq_neighbors = least_squares_face_reconstruction_local(
             n_faces,
             dim,
             n_face_neighbors,
@@ -803,7 +882,7 @@ class Mesh:
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            lsq_face_gradQ,
+            lsq_neighbors,
             z_ordering,
         )
 
@@ -937,7 +1016,7 @@ class Mesh:
             boundary_conditions_sorted_physical_tags,
             boundary_conditions_sorted_names,
             lsq_gradQ,
-            lsq_face_gradQ,
+            lsq_neighbors,
         )
 
     def write_to_hdf5(self, filepath: str):
@@ -991,7 +1070,7 @@ class Mesh:
                     self.boundary_conditions_sorted_names, dtype="S"),
             )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
-            mesh.create_dataset("lsq_face_gradQ", data=np.array(self.lsq_face_gradQ))
+            mesh.create_dataset("lsq_neighbors", data=np.array(self.lsq_neighbors))
             mesh.create_dataset("z_ordering", data=np.array(self.z_ordering))
 
     @ classmethod
@@ -1032,7 +1111,7 @@ class Mesh:
                                                                      ], dtype="str"
                 ),
                 file["mesh"]["lsq_gradQ"][()],
-                file["mesh"]["lsq_face_gradQ"][()],
+                file["mesh"]["lsq_neighbors"][()],
                 file["mesh"]["z_ordering"][()],
             )
         return mesh
@@ -1100,7 +1179,7 @@ class MeshJAX(Mesh):
     boundary_conditions_sorted_physical_tags: jnp.ndarray = attr.ib()
     boundary_conditions_sorted_names: Any = attr.ib()  # Keeping as NumPy char array
     lsq_gradQ: jnp.ndarray = attr.ib()
-    lsq_face_gradQ: jnp.ndarray = attr.ib()
+    lsq_neighbors: jnp.ndarray = attr.ib()
     z_ordering: jnp.ndarray = attr.ib()
 
 
@@ -1142,7 +1221,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
             mesh.boundary_conditions_sorted_names
         ),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
-        lsq_face_gradQ=jnp.array(mesh.lsq_face_gradQ),
+        lsq_neighbors=jnp.array(mesh.lsq_neighbors),
         z_ordering=jnp.array(mesh.z_ordering),
     )
 
