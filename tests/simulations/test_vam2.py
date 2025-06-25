@@ -552,7 +552,7 @@ def test_vam_1d():
         #time_end=0.55,
         #time_end=0.013077056519679052,
         #time_end=0.01,
-        time_end=1.0,
+        time_end=10.0,
         output_snapshots=100,
         output_dir="outputs/vam",
     )
