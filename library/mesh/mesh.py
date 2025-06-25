@@ -187,7 +187,7 @@ def least_squares_reconstruction_local(
         n_nbr = len(current_neighbors)
     
         # Expand further if still under-resolved
-        while n_nbr < 2* max_neighbors:
+        while n_nbr < max_neighbors:
             extended_neighbors = expand_neighbors(neighbors_list, current_neighbors)
             extended_neighbors = list(set(extended_neighbors) - {i_c})  # Remove self
             # Keep only new neighbors not already present

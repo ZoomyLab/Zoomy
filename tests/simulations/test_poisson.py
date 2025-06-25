@@ -194,7 +194,7 @@ def test_poisson():
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
-        compute_dt=timestepping.adaptive(CFL=0.4),
+        compute_dt=timestepping.adaptive(CFL=0.9),
         time_end=100.2,
         output_snapshots=100,
         output_dir="outputs/poisson",

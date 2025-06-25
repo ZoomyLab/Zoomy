@@ -881,7 +881,7 @@ class Solver:
         def newton_solve(Q):
             def cond_fun(state):
                 _, r, i = state
-                maxiter = 20
+                maxiter = 100
                 return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < maxiter)
 
             def body_fun(state):
@@ -894,21 +894,23 @@ class Solver:
                     return Jv(Q, v)
 
                 # Preconditioner
-                #diag_J = compute_diagonal_of_jacobian(Q)
-                ## regularize diagonal to avoid division by zero
-                #diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
-                #def preconditioner(v):
+                # diag_J = compute_diagonal_of_jacobian(Q)
+                # # regularize diagonal to avoid division by zero
+                # diag_J = jnp.where(jnp.abs(diag_J) > 1e-12, diag_J, 1.0)
+                # def preconditioner(v):
                 #    return v / diag_J
 
                 delta, info = gmres(
                     lin_op,
                     -r,
                     x0=jnp.zeros_like(Q),
-                    #x0=Qold,
+                    # x0=Qold,
                     maxiter=100,
                     solve_method="incremental",
-                    restart = 20,
+                    # solve_method="batched",
+                    restart = 60,
                     tol=1e-6,
+                    # M=preconditioner,
                 )
 
                 def backtrack(alpha, Q, delta, r):

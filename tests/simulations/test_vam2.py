@@ -19,6 +19,8 @@ from library.mesh.mesh import convert_mesh_to_jax
 
 import numpy as np
 from sympy import Matrix, sqrt
+from functools import partial
+
 
 
 from library.model.model import Model
@@ -252,7 +254,7 @@ class HyperbolicSolver(Solver):
         dbdx  = compute_derivatives(b, mesh, derivatives_multi_index=([[1]]))[:,0]
         Qaux = Qaux.at[3].set(dbdx)
         
-        hw2 = -(w0 + w1) + (u0 + u1) * dbdx
+        hw2 = h*(-(w0 + w1) + (u0 + u1) * dbdx)
         Qaux = Qaux.at[0].set(hw2)
         
         
@@ -260,17 +262,20 @@ class HyperbolicSolver(Solver):
         Qaux = Qaux.at[4].set(dhdx)
         return Qaux
     
-        #@jax.jit
-    def compute_source_pressure(self, dt, Q, Qaux, parameters, mesh, pde):
-        dQ = jnp.zeros_like(Q)
-        dQ = dQ.at[:, : mesh.n_inner_cells].set(
-            pde.source_implicit(
-                Q[:, : mesh.n_inner_cells],
-                Qaux[:, : mesh.n_inner_cells],
-                parameters,
+    # @partial(jax.jit, static_argnames=["self", "mesh", "pde"])
+    def compute_source_pressure(self, mesh, pde):
+        @jax.jit
+        def f(dt, Q, Qaux, parameters):
+            dQ = jnp.zeros_like(Q)
+            dQ = dQ.at[:, : mesh.n_inner_cells].set(
+                pde.source_implicit(
+                    Q[:, : mesh.n_inner_cells],
+                    Qaux[:, : mesh.n_inner_cells],
+                    parameters,
+                )
             )
-        )
-        return Q - dt * dQ
+            return Q - dt * dQ
+        return f
 
 class PoissonSolver(Solver):
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
@@ -349,10 +354,12 @@ def solve_vam(
         
         source_operator2 = solverP.get_compute_source(mesh, pde2, settings)
         boundary_operator2 = solverP.get_apply_boundary_conditions(mesh, bcs2)
+        
+        pressure_correction = solverQ.compute_source_pressure(mesh, pde1)
 
         time_start = gettime()
 
-        #@jax.jit
+        @jax.jit
         def time_loop(time, iteration, i_snapshot, Q, Qaux, Pnew, Paux, Qold, Qauxold, Pold, Pauxold):
             loop_val = (time, iteration, i_snapshot, Q, Qaux, Pnew, Paux, Qold, Qauxold, Pold, Pauxold)
 
@@ -362,118 +369,131 @@ def solve_vam(
                 dt = settings.compute_dt(
                     Q, Qaux, parameters1, min_inradius, compute_max_abs_eigenvalue
                 )
+                
+                def step(Q, Qaux, P, Paux):
 
-                #############################################################
-                #####################VELOCITY PREDICTOR######################
-                #############################################################
+                    #############################################################
+                    #####################VELOCITY PREDICTOR######################
+                    #############################################################
+                    Qauxnew = solverQ.update_qaux(
+                        Q, Qaux, Qold, Qauxold, mesh, pde1, parameters1, time, dt
+                    )
+                    Q1 = ode_solver_flux(
+                        space_solution_operator, Q, Qauxnew, parameters1, dt
+                    )
+
+                    Q1 = Q1.at[5].set(Q0[5])
+
+                    Qauxnew = solverQ.update_qaux(
+                        Q1, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
+                    )
+                    #Qnew = ode_solver_source(
+                    #    source_operator,
+                    #    Q1,
+                    #    Qauxnew,
+                    #    parameters1,
+                    #    dt,
+                    #    func_jac=solverQ.compute_source_jac,
+                    #)
+
+                    #Qauxnew = solverQ.update_qaux(
+                    #    Qnew, Qauxnew, Q, Qaux, mesh, pde1, parameters1, time, dt
+                    #)
+                    Qnew = Q1
+                    Qnew = boundary_operator1(time, Qnew, Qauxnew, parameters1)
+
+
+                    #############################################################
+                    #########################PRESSURE############################
+                    #############################################################
+                    
+                    #        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx'],
+                    #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+
+                    h = Q[0]
+                    u0 = Q[1]/h
+                    u1 = Q[2]/h
+                    w0 = Q[3]/h
+                    w1 = Q[4]/h
+                    b = Q[5]
+                    
+                    dbdx = Qaux[3]
+                    ddbdxx = compute_derivatives(b, mesh, derivatives_multi_index=([[2]]))[:, 0]
+                    dhdx = Qaux[4]
+                    ddhdxx = compute_derivatives(h, mesh, derivatives_multi_index=([[2]]))[:, 0]
+                    du0dx = compute_derivatives(u0, mesh, derivatives_multi_index=([[1]]))[:, 0]
+                    du1dx = compute_derivatives(u1, mesh, derivatives_multi_index=([[1]]))[:, 0]
+
+                    Paux = Paux.at[4].set(h)
+                    Paux = Paux.at[5].set(dbdx)
+                    Paux = Paux.at[6].set(ddbdxx)
+                    Paux = Paux.at[7].set(dhdx)
+                    Paux = Paux.at[8].set(ddhdxx)
+                    Paux = Paux.at[9].set(u0)
+                    Paux = Paux.at[10].set(du0dx)
+                    Paux = Paux.at[11].set(w0)
+                    Paux = Paux.at[12].set(w1)
+                    Paux = Paux.at[13].set(u1)
+                    Paux = Paux.at[14].set(du1dx)
+                    Paux = Paux.at[15].set(dt)
+
+                    Paux = solverP.update_qaux(
+                        P, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
+                    )
+
+                    def residual(P):
+
+                    
+                        # dp0dx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[1]]))[:, 0]
+                        # ddp0dxx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[2]]))[:, 0]
+                        # dp1dx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[1]]))[:, 0]
+                        # ddp1dxx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[2]]))[:, 0]
+
+
+                        paux = solverP.update_qaux(P, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt)
+
+                        res = pde2.source_implicit(P, paux, parameters2)
+                        res = res.at[:, mesh.n_inner_cells:].set(0.)
+                        return res
+
+
+                    Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[False, False], user_residual=residual)
+
+                    ############################################################
+                    ########################CORRECTOR###########################
+                    ############################################################
+                    
+                    #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+                    Pauxnew = solverP.update_qaux(
+                        Pnew, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
+                    )
+                    Qauxnew = Qauxnew.at[1].set(Pnew[0])
+                    Qauxnew = Qauxnew.at[2].set(Pnew[1])
+                    h =  Qnew[0]
+                    
+                    dhp0dx = compute_derivatives(h*Pnew[0], mesh, derivatives_multi_index=([[1]]))[:, 0]
+                    dhp1dx = compute_derivatives(h*Pnew[1], mesh, derivatives_multi_index=([[1]]))[:, 0]
+
+                    Qauxnew = Qauxnew.at[5].set(dhp0dx)
+                    Qauxnew = Qauxnew.at[6].set(dhp1dx)
+                    # Qauxnew = solverQ.update_qaux(
+                    #     Qnew, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
+                    # )
+                    # Qnew = boundary_operator1(time, Qnew, Qauxnew, parameters1)
+
+                    Qnew = pressure_correction(dt, Qnew, Qauxnew, parameters1)
+                    Qauxnew = solverQ.update_qaux(
+                        Qnew, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
+                    )
+                    Qnew = boundary_operator1(time, Qnew, Qauxnew, parameters1)
+                    return Qnew, Qauxnew, Pnew, Pauxnew
+            
+                Qnew, Qauxnew, Pnew, Pauxnew = step(Q, Qaux, P, Paux)
+                Qnew, Qauxnew, Pnew, Pauxnew = step(Qnew, Qauxnew, Pnew, Pauxnew)
+                Qnew = 0.5 * (Qold + Qnew)
+                Pnew = 0.5 * (Pold + Pnew)
                 Qauxnew = solverQ.update_qaux(
-                    Q, Qaux, Qold, Qauxold, mesh, pde1, parameters1, time, dt
-                )
-                Q1 = ode_solver_flux(
-                    space_solution_operator, Q, Qauxnew, parameters1, dt
-                )
-
-                Q1 = Q1.at[5].set(Q0[5])
-
-                Qauxnew = solverQ.update_qaux(
-                    Q1, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
-                )
-                #Qnew = ode_solver_source(
-                #    source_operator,
-                #    Q1,
-                #    Qauxnew,
-                #    parameters1,
-                #    dt,
-                #    func_jac=solverQ.compute_source_jac,
-                #)
-
-                #Qauxnew = solverQ.update_qaux(
-                #    Qnew, Qauxnew, Q, Qaux, mesh, pde1, parameters1, time, dt
-                #)
-                Qnew = Q1
-                Qnew = boundary_operator1(time, Qnew, Qauxnew, parameters1)
-
-
-                #############################################################
-                #########################PRESSURE############################
-                #############################################################
-                
-                #        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx'],
-                #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
-
-                h = Q[0]
-                u0 = Q[1]/h
-                u1 = Q[2]/h
-                w0 = Q[3]/h
-                w1 = Q[4]/h
-                b = Q[5]
-                
-                dbdx = Qaux[3]
-                ddbdxx = compute_derivatives(b, mesh, derivatives_multi_index=([[2]]))[:, 0]
-                dhdx = Qaux[4]
-                ddhdxx = compute_derivatives(h, mesh, derivatives_multi_index=([[2]]))[:, 0]
-                du0dx = compute_derivatives(u0, mesh, derivatives_multi_index=([[1]]))[:, 0]
-                du1dx = compute_derivatives(u1, mesh, derivatives_multi_index=([[1]]))[:, 0]
-
-                Paux = Paux.at[4].set(h)
-                Paux = Paux.at[5].set(dbdx)
-                Paux = Paux.at[6].set(ddbdxx)
-                Paux = Paux.at[7].set(dhdx)
-                Paux = Paux.at[8].set(ddhdxx)
-                Paux = Paux.at[9].set(u0)
-                Paux = Paux.at[10].set(du0dx)
-                Paux = Paux.at[11].set(w0)
-                Paux = Paux.at[12].set(w1)
-                Paux = Paux.at[13].set(u1)
-                Paux = Paux.at[14].set(du1dx)
-                Paux = Paux.at[15].set(dt)
-
-                Paux = solverP.update_qaux(
-                    P, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
-                )
-
-                def residual(P):
-
-                   
-                    # dp0dx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[1]]))[:, 0]
-                    # ddp0dxx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[2]]))[:, 0]
-                    # dp1dx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[1]]))[:, 0]
-                    # ddp1dxx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[2]]))[:, 0]
-
-
-                    paux = solverP.update_qaux(P, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt)
-
-                    res = pde2.source_implicit(P, paux, parameters2)
-                    res = res.at[:, mesh.n_inner_cells:].set(0.)
-                    return res
-
-
-                Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[True, False], user_residual=residual)
-
-                ############################################################
-                ########################CORRECTOR###########################
-                ############################################################
-                
-                #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
-                Pauxnew = solverP.update_qaux(
-                    Pnew, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
-                )
-                Qauxnew = Qauxnew.at[1].set(Pnew[0])
-                Qauxnew = Qauxnew.at[2].set(Pnew[1])
-                h =  Qnew[0]
-                
-                dhp0dx = compute_derivatives(h*Pnew[0], mesh, derivatives_multi_index=([[1]]))[:, 0]
-                dhp1dx = compute_derivatives(h*Pnew[1], mesh, derivatives_multi_index=([[1]]))[:, 0]
-
-                Qauxnew = Qauxnew.at[5].set(dhp0dx)
-                Qauxnew = Qauxnew.at[6].set(dhp1dx)
-                
-                Qnew = solverQ.compute_source_pressure(dt, Qnew, Qauxnew, parameters1, mesh, pde1)
-                Qauxnew = solverQ.update_qaux(
-                    Qnew, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
-                )
-                Qnew = boundary_operator1(time, Qnew, Qauxnew, parameters1)
-
+                    Qnew, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt)
                 
                 # Update solution and time
                 time += dt
@@ -526,13 +546,13 @@ def test_vam_1d():
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
-        compute_dt=timestepping.adaptive(CFL=0.1),
+        compute_dt=timestepping.adaptive(CFL=0.8),
         #compute_dt=timestepping.constant(dt=0.001),
         #time_end=30.07184630730286572,
         #time_end=0.55,
         #time_end=0.013077056519679052,
         #time_end=0.01,
-        time_end=0.1,
+        time_end=1.0,
         output_snapshots=100,
         output_dir="outputs/vam",
     )
@@ -548,27 +568,29 @@ def test_vam_1d():
                 #3: lambda t, x, dx, q, qaux, p, n: 0.,
                 #4: lambda t, x, dx, q, qaux, p, n: 0.
             }),
-            # BC.Extrapolation(physical_tag='left'),
+            # BC.Lambda(physical_tag='right', prescribe_fields={
+            #    3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
+            #    4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
+            # }),
+            BC.Extrapolation(physical_tag='left'),
             BC.Extrapolation(physical_tag='right')
-            #BC.Lambda(physical_tag='right', prescribe_fields={
-            #    3: lambda t, x, dx, q, qaux, p, n: 0,
-            #    4: lambda t, x, dx, q, qaux, p, n: 0,
-            #}),
+
         ]
     )
     
     bcs2 = BC.BoundaryConditions(
         [
             BC.Extrapolation(physical_tag='left'),
+            BC.Extrapolation(physical_tag='right')
+
             # BC.Lambda(physical_tag='left', prescribe_fields={
-            #    0: lambda t, x, dx, q, qaux, p, n: 0.,
-            #    1: lambda t, x, dx, q, qaux, p, n: 0.
+            #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
+            #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
             # }),
             # BC.Lambda(physical_tag='right', prescribe_fields={
-            #    0: lambda t, x, dx, q, qaux, p, n: 0.,
-            #    1: lambda t, x, dx, q, qaux, p, n: 0.
+            #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
+            #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
             # }),
-            BC.Extrapolation(physical_tag='right')
         ]
     )
     
