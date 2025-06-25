@@ -18,8 +18,9 @@ def test_1d():
     mesh = convert_mesh_to_jax(mesh)
     X = mesh.cell_centers
     Q = custom_ic(X)
-    d2Q_dx2 = compute_derivatives(Q[0], mesh, derivatives_multi_index=((2,)))
+    d2Q_dx2 = compute_derivatives(Q[0], mesh, derivatives_multi_index=[[2]])
     assert(np.allclose(d2Q_dx2, 2. * np.ones_like(d2Q_dx2)))
+    # print(d2Q_dx2)
     
 def test_2d():
     main_dir = os.getenv("SMS")
@@ -36,7 +37,7 @@ def test_2d():
     X = mesh.cell_centers
     Q = custom_ic(X)
     # print(Q)
-    d2Q_d2y = compute_derivatives(Q[0], mesh, derivatives_multi_index=((0,2)))
+    d2Q_d2y = compute_derivatives(Q[0], mesh, derivatives_multi_index=[[0, 2]])
     assert(np.allclose(d2Q_d2y, 2. * np.ones_like(d2Q_d2y)))
     
     

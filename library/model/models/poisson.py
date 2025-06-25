@@ -56,7 +56,7 @@ class Poisson(Model):
         param = self.parameters
         kappa = self.aux_variables.kappa
 
-        R[0] = dTdt - kappa * ddTdxx
+        R[0] = - kappa * ddTdxx
         return R
         
 

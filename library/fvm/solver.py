@@ -41,7 +41,7 @@ import library.fvm.nonconservative_flux as nonconservative_flux
 import library.fvm.ader_flux as ader_flux
 import library.fvm.timestepping as timestepping
 import library.misc.io as io
-from library.mesh.mesh import convert_mesh_to_jax, compute_gradient, compute_face_gradient
+from library.mesh.mesh import convert_mesh_to_jax, compute_derivatives, compute_face_gradient
 from library.fvm.ode import *
 from library.misc.static_class import register_static_pytree
 
@@ -713,8 +713,8 @@ class Solver:
 
 
         Q = boundary_operator(time, Q, Qaux, parameters)
-        grad = compute_gradient(Q[0], mesh)
-        div = compute_gradient(grad[:, 0], mesh)
+        grad = compute_derivatives(Q[0], mesh, derivatives_multi_index=((1, )))
+        div = compute_derivatives(Q[0], mesh, derivatives_multi_index=((1, )))
         Qaux = Qaux.at[0].set(grad[:, 0])
         Qaux = Qaux.at[1].set(div[:, 0])
         i_snapshot = save_fields(time, time_stamp, i_snapshot, Q, Qaux)
@@ -844,7 +844,7 @@ class Solver:
             qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
             res = pde.source_implicit(q, qaux, parameters)
-            res = res.at[:, mesh.n_inner_cells:].set(0.)
+            res = res.at[:, mesh.n_inner_cells:].set((10*(q-Q)**2)[:, mesh.n_inner_cells:])
             #hp0 = q[0]
             #hp1 = q[1]
             #delta = 0.

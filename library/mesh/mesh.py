@@ -39,6 +39,8 @@ def build_monomial_indices(degree: int, dim: int):
     mon_indices = []
     for powers in product(range(degree + 1), repeat=dim):
         if sum(powers) <= degree:
+            if sum(powers) == 0:
+                continue
             mon_indices.append(powers)
     return mon_indices
 
@@ -66,41 +68,30 @@ def compute_face_gradient(u, mesh):
         u_face,  # shape (n_cells,)
     )
     
-def find_derivative_indices(full_monomials, requested_derivs):
-    """
-    Find the indices of requested derivatives inside the full monomial index list.
 
-    Parameters:
-        full_monomials (List[Tuple[int,...]]): The full list of monomial multi-indices.
-        requested_derivs (Tuple[Tuple[int,...], ...] or Tuple[int,...]):
-            The multi-indices of derivatives to extract.
-            Can be a single multi-index tuple or a tuple of multi-indices.
+def find_derivative_indices(full_monomials_arr, requested_derivs_arr):
+    """
+    Args:
+        full_monomials_arr: shape (N, dim)
+        requested_derivs_arr: shape (M, dim)
 
     Returns:
-        List[int]: indices in full_monomials corresponding to requested_derivs.
-                   Raises ValueError if any requested_deriv not found.
+        indices: shape (M,), where indices[i] gives the index of requested_derivs_arr[i]
+                 in full_monomials_arr, or -1 if not found
     """
-    # Handle the case when a single multi-index tuple is passed instead of a tuple of tuples
-    if not isinstance(requested_derivs, (list, tuple)):
-        raise TypeError("requested_derivs must be a tuple or list of multi-index tuples")
+    # Ensure arrays
+    full_monomials_arr = jnp.array(full_monomials_arr)
+    requested_derivs_arr = jnp.array(requested_derivs_arr)
 
-    # If requested_derivs is a single multi-index tuple (e.g. (1,0)), convert to tuple of one element
-    if len(requested_derivs) == 0:
-        raise ValueError("requested_derivs must contain at least one multi-index tuple")
+    # Compare all requested derivatives with all monomials
+    matches = jnp.all(full_monomials_arr[:, None, :] == requested_derivs_arr[None, :, :], axis=-1)  # (N, M)
 
-    # Check if requested_derivs looks like a single multi-index (e.g. (1,0)) instead of ((1,0),)
-    first_elem = requested_derivs[0]
-    if isinstance(first_elem, int):
-        # requested_derivs is likely a single multi-index tuple, e.g. (1,0)
-        requested_derivs = (requested_derivs,)
+    # Which monomials match each requested derivative?
+    found = jnp.any(matches, axis=0)  # (M,)
+    indices = jnp.argmax(matches, axis=0)  # (M,) — returns 0 even if not found
 
-    indices = []
-    for deriv in requested_derivs:
-        try:
-            idx = full_monomials.index(deriv)
-            indices.append(idx)
-        except ValueError:
-            raise ValueError(f"Derivative multi-index {deriv} not found in full monomial list.")
+    # Replace unfound indices with -1
+    indices = jnp.where(found, indices, -1)
     return indices
 
     
@@ -108,8 +99,10 @@ def find_derivative_indices(full_monomials, requested_derivs):
 def compute_derivatives(u, mesh, derivatives_multi_index=None):
     A_glob = mesh.lsq_gradQ  # shape (n_cells, n_monomials, n_neighbors)
     neighbors = mesh.lsq_neighbors  # list of neighbors per cell
-    mon_indices = build_monomial_indices(mesh.lsq_degree, mesh.dimension)
-    scale_factors = scale_lsq_derivative(mon_indices)
+    mon_indices = mesh.lsq_monomial_multi_index  # shape (n_monomials, dim)
+    # scale_factors = scale_lsq_derivative(mon_indices)
+    scale_factors = mesh.lsq_scale_factors
+
     if derivatives_multi_index is None:
         derivatives_multi_index = mon_indices
     indices = find_derivative_indices(mon_indices, derivatives_multi_index)
@@ -194,7 +187,7 @@ def least_squares_reconstruction_local(
         n_nbr = len(current_neighbors)
     
         # Expand further if still under-resolved
-        while n_nbr < max_neighbors:
+        while n_nbr < 2* max_neighbors:
             extended_neighbors = expand_neighbors(neighbors_list, current_neighbors)
             extended_neighbors = list(set(extended_neighbors) - {i_c})  # Remove self
             # Keep only new neighbors not already present
@@ -228,12 +221,13 @@ def least_squares_reconstruction_local(
         weights = compute_gaussian_weights(dX)  # shape (n_neighbors,)
         W = np.diag(weights)  # shape (n_neighbors, n_neighbors)
         VW = W @ V  # shape (n_neighbors, n_monomials)
-        A_loc = np.linalg.pinv(VW.T @ VW) @ VW.T @ W  # shape (n_monomials, n_neighbors)
+        alpha = dX.min() * 10**(-8)
+        A_loc = np.linalg.pinv(VW.T @ VW + alpha * np.eye(VW.shape[1])) @ VW.T @ W  # shape (n_monomials, n_neighbors)
         # A_loc = np.linalg.pinv(V).T  # shape (n_monomials, max_neighbors)
         A_glob.append(A_loc.T)
 
     A_glob = np.array(A_glob)  # shape (n_cells, n_monomials, max_neighbors)
-    return A_glob, neighbors_array
+    return A_glob, neighbors_array, mon_indices
 
 def least_squares_reconstruction_local_old(
     n_cells, dim, n_neighbors, neighbors_list, cell_centers, mon_indices
@@ -506,7 +500,8 @@ class Mesh:
     boundary_conditions_sorted_names: CArray
     lsq_gradQ: FArray
     lsq_neighbors: FArray
-    lsq_degree: int
+    lsq_monomial_multi_index: int
+    lsq_scale_factors: FArray
     z_ordering: IArray
 
     @ classmethod
@@ -604,9 +599,11 @@ class Mesh:
         polynomial_degree = 1
         n_neighbors = n_faces_per_cell * polynomial_degree
         dim = 1
-        lsq_gradQ, lsq_neighbors = least_squares_reconstruction_local(
+        lsq_gradQ, lsq_neighbors, lsq_monomial_multi_index = least_squares_reconstruction_local(
             n_cells, dim, cell_neighbors, cell_centers, lsq_degree
         )
+        lsq_scale_factors = scale_lsq_derivative(lsq_monomial_multi_index)
+
 
         n_face_neighbors = 2
         face_neighbors = (n_cells + 1) *  np.ones((n_faces, n_face_neighbors), dtype=int)
@@ -652,7 +649,8 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
-            lsq_degree,
+            lsq_monomial_multi_index,
+            lsq_scale_factors,
             z_ordering,
         )
 
@@ -872,9 +870,11 @@ class Mesh:
                 )
             cell_neighbors[i_c, :] = neighbors
 
-        lsq_gradQ, lsq_neighbors = least_squares_reconstruction_local(
+        lsq_gradQ, lsq_neighbors, lsq_monomial_multi_index = least_squares_reconstruction_local(
             n_cells, dim, cell_neighbors, cell_centers, lsq_degree
         )
+        lsq_scale_factors = scale_lsq_derivative(lsq_monomial_multi_index)
+
 
         n_face_neighbors = (2 * (n_faces_per_cell + 1) - 2) * polynomial_degree
         face_neighbors = (n_cells + 1) * np.ones((n_faces, n_face_neighbors), dtype=int)
@@ -976,7 +976,8 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
-            lsq_degree,
+            lsq_monomial_multi_index,
+            lsq_scale_factors,
             z_ordering,
         )
 
@@ -1111,7 +1112,9 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
-            lsq_degree,
+            lsq_monomial_multi_index,
+            lsq_scale_factors,
+            z_ordering
         )
 
     def write_to_hdf5(self, filepath: str):
@@ -1166,7 +1169,8 @@ class Mesh:
             )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
             mesh.create_dataset("lsq_neighbors", data=np.array(self.lsq_neighbors))
-            mesh.create_dataset("lsq_degree", data=(self.lsq_degree))
+            mesh.create_dataset("lsq_monomial_multi_index", data=(self.lsq_monomial_multi_index))
+            mesh.create_dataset("lsq_scale_factors", data=(self.lsq_scale_factors))
             mesh.create_dataset("z_ordering", data=np.array(self.z_ordering))
 
     @ classmethod
@@ -1208,7 +1212,8 @@ class Mesh:
                 ),
                 file["mesh"]["lsq_gradQ"][()],
                 file["mesh"]["lsq_neighbors"][()],
-                file["mesh"]["lsq_degree"][()],
+                file["mesh"]["lsq_monomial_multi_index"][()],
+                file["mesh"]["lsq_scale_factors"][()],
                 file["mesh"]["z_ordering"][()],
             )
         return mesh
@@ -1277,7 +1282,8 @@ class MeshJAX(Mesh):
     boundary_conditions_sorted_names: Any = attr.ib()  # Keeping as NumPy char array
     lsq_gradQ: jnp.ndarray = attr.ib()
     lsq_neighbors: jnp.ndarray = attr.ib()
-    lsq_degree: jnp.int64 = attr.ib()
+    lsq_monomial_multi_index: jnp.int64 = attr.ib()
+    lsq_scale_factors: jnp.ndarray = attr.ib()
     z_ordering: jnp.ndarray = attr.ib()
 
 
@@ -1320,7 +1326,8 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         ),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
         lsq_neighbors=jnp.array(mesh.lsq_neighbors),
-        lsq_degree=jnp.int64(mesh.lsq_degree),
+        lsq_monomial_multi_index=jnp.int64(mesh.lsq_monomial_multi_index),
+        lsq_scale_factors=jnp.int64(mesh.lsq_scale_factors),
         z_ordering=jnp.array(mesh.z_ordering),
     )
 

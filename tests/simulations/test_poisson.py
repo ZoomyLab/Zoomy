@@ -20,7 +20,7 @@ from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 import library.misc.io as io
-from library.mesh.mesh import compute_gradient
+from library.mesh.mesh import compute_derivatives
 
 
 import library.mesh.mesh as petscMesh
@@ -35,8 +35,11 @@ class PoissonSolver(Solver):
 
         T = Q[0]
         Told = Qold[0]
-        dTdx = compute_gradient(T, mesh)[:, 0]
-        ddTdxx = compute_gradient(dTdx, mesh)[:, 0]
+        dTdx = compute_derivatives(T, mesh, [[1,]])[:, 0]
+        ddTdxx_alt = compute_derivatives(dTdx, mesh, [[1,]])[:, 0]
+
+        ddTdxx = 1.0 * compute_derivatives(T, mesh, [[2,]])[:, 0] + 0.0 * ddTdxx_alt
+        # jax.debug.print("ddTdxx: {ddTdxx}", ddTdxx=ddTdxx)
         dTdt = (T-Told)/dt
         rho = 933.31 + 0.037978 * T - 3.6274 * 10**(-4) * T**2
         lam = 619.2/T + 58646/T**3 + 3.237*10**(-3)*T - 1.382*10**(-5)*T**2
@@ -55,7 +58,7 @@ class PoissonSolver(Solver):
 
 
         Qaux = Qaux.at[0].set(dTdt)
-        Qaux = Qaux.at[1].set(dTdx)
+        Qaux = Qaux.at[1].set(0.)
         Qaux = Qaux.at[2].set(ddTdxx)
         Qaux = Qaux.at[3].set(kappa)
         return Qaux
@@ -118,9 +121,23 @@ def solve(
                 Qauxnew = solver.update_qaux(
                     Q, Qaux, Qold, Qauxold, mesh, pde, parameters, time, dt
                 )
+                
+                def residual(Q):
+                    q = jnp.zeros_like(Q)
+                    q = q.at[0, 1:-1].set(Q[0, :mesh.n_inner_cells])
+                    q = q.at[0, 0].set(Q[0, mesh.n_inner_cells])
+                    q = q.at[0, -1].set(Q[0, mesh.n_inner_cells +1])
+                    
+                    lap_q = jnp.zeros_like(q)
+                    # lap_q = lap_q.at[0, 1:-1].set((q[0, 2:] - 2 * q[0, 1:-1] + q[0, :-2]) / (mesh.cell_inradius[0]*2)**2)
+                    lap_q = compute_derivatives(Q[0], mesh, [[2,]])[:,0]
+                    res = jnp.zeros_like(Q)
+                    res = res.at[0, :mesh.n_inner_cells].set(-lap_q[:mesh.n_inner_cells])
+                    return res
+                    
 
                 Qnew = boundary_operator(time, Q, Qauxnew, parameters)
-                Qnew = solver.implicit_solve(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[True, False])
+                Qnew = solver.implicit_solve(Q, Qaux, Qold, Qauxold, mesh, model, pde, parameters, time, dt, boundary_operator, debug=[True, False], user_residual=residual)
 
 
 
@@ -212,7 +229,7 @@ def test_poisson():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 100)
+    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 20, lsq_degree = 2)
 
     Q, Qaux = solve(
         mesh,
