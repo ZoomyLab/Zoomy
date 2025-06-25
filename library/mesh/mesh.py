@@ -16,28 +16,39 @@ import library.mesh.mesh_extrude as extrude
 import library.mesh.mesh_util as mesh_util
 from library.misc.static_class import register_static_pytree
 
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, product
 
 
 
 # petsc4py.init(sys.argv)
 
-def compute_derivatives(u, mesh):
-    A_glob = mesh.lsq_gradQ  # shape (n_cells, n_monomials, n_neighbors)
-    neighbors = mesh.lsq_neighbors  # list of neighbors per cell
-    
-    def reconstruct_cell(A_loc, neighbor_idx, u_i):
-        u_neighbors = u[neighbor_idx]
-        delta_u = u_neighbors - u_i
-        return A_loc.T @ delta_u  # shape (n_monomials,)
-    
-    return jax.vmap(reconstruct_cell)(
-        A_glob,
-        neighbors,
-        u,
-    )  # shape (n_cells, n_monomials)
 
 
+
+def build_monomial_indices(degree: int, dim: int):
+    """
+    Build the full set of monomial multi-indices for a given degree and dimension.
+
+    Parameters:
+    - degree (int): Maximum total polynomial degree
+    - dim (int): Number of dimensions
+
+    Returns:
+    - List of tuples: each tuple is a multi-index (α₁, ..., α_dim)
+    """
+    mon_indices = []
+    for powers in product(range(degree + 1), repeat=dim):
+        if sum(powers) <= degree:
+            mon_indices.append(powers)
+    return mon_indices
+
+def scale_lsq_derivative(mon_indices):
+    from math import factorial
+    import numpy as np
+    scale_factors = np.array([
+        np.prod([factorial(k) for k in mi]) for mi in mon_indices
+    ])  # shape (n_monomials,)
+    return scale_factors
 
 def compute_face_gradient(u, mesh):
     A_glob = mesh.lsq_neighbors
@@ -46,7 +57,7 @@ def compute_face_gradient(u, mesh):
     u_face = 0.5 * (u[neighbors[:, 0]] + u[neighbors[:, 1]])
     def grad_single_face(A_loc, u_f, u_neighbors):
         delta_u = u_neighbors - u_f  # shape (n_neighbors,)
-        return A_loc @ delta_u  # shape (dim,)
+        return (A_loc @ delta_u)  # shape (dim,)
 
     # returns (n_faces, dim)
     return jax.vmap(grad_single_face)(
@@ -54,6 +65,64 @@ def compute_face_gradient(u, mesh):
         u_neighbors,  # shape (n_faces, n_neighbors)
         u_face,  # shape (n_cells,)
     )
+    
+def find_derivative_indices(full_monomials, requested_derivs):
+    """
+    Find the indices of requested derivatives inside the full monomial index list.
+
+    Parameters:
+        full_monomials (List[Tuple[int,...]]): The full list of monomial multi-indices.
+        requested_derivs (Tuple[Tuple[int,...], ...] or Tuple[int,...]):
+            The multi-indices of derivatives to extract.
+            Can be a single multi-index tuple or a tuple of multi-indices.
+
+    Returns:
+        List[int]: indices in full_monomials corresponding to requested_derivs.
+                   Raises ValueError if any requested_deriv not found.
+    """
+    # Handle the case when a single multi-index tuple is passed instead of a tuple of tuples
+    if not isinstance(requested_derivs, (list, tuple)):
+        raise TypeError("requested_derivs must be a tuple or list of multi-index tuples")
+
+    # If requested_derivs is a single multi-index tuple (e.g. (1,0)), convert to tuple of one element
+    if len(requested_derivs) == 0:
+        raise ValueError("requested_derivs must contain at least one multi-index tuple")
+
+    # Check if requested_derivs looks like a single multi-index (e.g. (1,0)) instead of ((1,0),)
+    first_elem = requested_derivs[0]
+    if isinstance(first_elem, int):
+        # requested_derivs is likely a single multi-index tuple, e.g. (1,0)
+        requested_derivs = (requested_derivs,)
+
+    indices = []
+    for deriv in requested_derivs:
+        try:
+            idx = full_monomials.index(deriv)
+            indices.append(idx)
+        except ValueError:
+            raise ValueError(f"Derivative multi-index {deriv} not found in full monomial list.")
+    return indices
+
+    
+    
+def compute_derivatives(u, mesh, derivatives_multi_index=None):
+    A_glob = mesh.lsq_gradQ  # shape (n_cells, n_monomials, n_neighbors)
+    neighbors = mesh.lsq_neighbors  # list of neighbors per cell
+    mon_indices = build_monomial_indices(mesh.lsq_degree, mesh.dimension)
+    scale_factors = scale_lsq_derivative(mon_indices)
+    if derivatives_multi_index is None:
+        derivatives_multi_index = mon_indices
+    indices = find_derivative_indices(mon_indices, derivatives_multi_index)
+    def reconstruct_cell(A_loc, neighbor_idx, u_i):
+        u_neighbors = u[neighbor_idx]
+        delta_u = u_neighbors - u_i
+        return (scale_factors * (A_loc.T @ delta_u )).T # shape (n_monomials,)
+    
+    return jax.vmap(reconstruct_cell)(
+        A_glob,
+        neighbors,
+        u,
+    )[:, indices]  # shape (n_cells, n_monomials)
 
 
 def get_polynomial_degree(mon_indices):
@@ -78,14 +147,30 @@ def expand_neighbors(neighbors_list, initial_neighbors):
         expanded.update(neighbors_list[n])
     return list(expanded)
 
+def compute_gaussian_weights(dX, sigma=1.0):
+    distances = np.linalg.norm(dX, axis=1)
+    weights = np.exp(-(distances / sigma)**2)
+    return weights
+
 def least_squares_reconstruction_local(
-    n_cells, dim, neighbors_list, cell_centers, mon_indices
+    n_cells, dim, neighbors_list, cell_centers, lsq_degree
 ):
+    
+    """
+    Build the full set of monomial multi-indices for a given degree and dimension.
+
+    Parameters:
+    - degree (int): Maximum total polynomial degree
+    - dim (int): Number of dimensions
+
+    Returns:
+    - List of tuples: each tuple is a multi-index (α₁, ..., α_dim)
+    """
+    mon_indices = build_monomial_indices(lsq_degree, dim)
     A_glob = []
     neighbors_all = []  # to store expanded neighbors per cell
     degree = get_polynomial_degree(mon_indices)
     required_neighbors = get_required_monomials_count(degree, dim)
-    print(f"Required neighbors (min stencil size): {required_neighbors}")
 
     # First, expand neighborhoods and store them
     for i_c in range(n_cells):
@@ -129,17 +214,23 @@ def least_squares_reconstruction_local(
             trimmed_neighbors = current_neighbors + padding
     
         neighbors_array[i_c, :] = trimmed_neighbors
+        
+
     
         # Build dX matrix for least squares
         dX = np.zeros((max_neighbors, dim), dtype=float)
         for j, neighbor in enumerate(trimmed_neighbors):
             dX[j, :] = cell_centers[neighbor] - cell_centers[i_c]
     
-        # Rebuild Vandermonde with new or extended dX
         V = build_vandermonde(dX, mon_indices)  # shape (max_neighbors, n_monomials)
-        A_loc = np.linalg.pinv(V).T  # shape (n_monomials, max_neighbors)
-
-        A_glob.append(A_loc)
+        
+        # Compute weights
+        weights = compute_gaussian_weights(dX)  # shape (n_neighbors,)
+        W = np.diag(weights)  # shape (n_neighbors, n_neighbors)
+        VW = W @ V  # shape (n_neighbors, n_monomials)
+        A_loc = np.linalg.pinv(VW.T @ VW) @ VW.T @ W  # shape (n_monomials, n_neighbors)
+        # A_loc = np.linalg.pinv(V).T  # shape (n_monomials, max_neighbors)
+        A_glob.append(A_loc.T)
 
     A_glob = np.array(A_glob)  # shape (n_cells, n_monomials, max_neighbors)
     return A_glob, neighbors_array
@@ -415,10 +506,11 @@ class Mesh:
     boundary_conditions_sorted_names: CArray
     lsq_gradQ: FArray
     lsq_neighbors: FArray
+    lsq_degree: int
     z_ordering: IArray
 
     @ classmethod
-    def create_1d(cls, domain: tuple[float, float], n_inner_cells: int):
+    def create_1d(cls, domain: tuple[float, float], n_inner_cells: int, lsq_degree=1):
         xL = domain[0]
         xR = domain[1]
 
@@ -513,7 +605,7 @@ class Mesh:
         n_neighbors = n_faces_per_cell * polynomial_degree
         dim = 1
         lsq_gradQ, lsq_neighbors = least_squares_reconstruction_local(
-            n_cells, dim, cell_neighbors, cell_centers, ((2, ),)
+            n_cells, dim, cell_neighbors, cell_centers, lsq_degree
         )
 
         n_face_neighbors = 2
@@ -560,6 +652,7 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
+            lsq_degree,
             z_ordering,
         )
 
@@ -604,7 +697,7 @@ class Mesh:
         return order
 
     @ classmethod
-    def from_gmsh(cls, filepath, allow_z_integration=False):
+    def from_gmsh(cls, filepath, allow_z_integration=False, lsq_degree=1):
         dm = PETSc.DMPlex().createFromFile(filepath, comm=PETSc.COMM_WORLD)
         boundary_dict = get_physical_boundary_labels(filepath)
         (cStart, cEnd) = dm.getHeightStratum(0)
@@ -779,8 +872,8 @@ class Mesh:
                 )
             cell_neighbors[i_c, :] = neighbors
 
-        lsq_gradQ = least_squares_reconstruction_local(
-            n_cells, dim, n_neighbors, cell_neighbors, cell_centers, polynomial_degree=1
+        lsq_gradQ, lsq_neighbors = least_squares_reconstruction_local(
+            n_cells, dim, cell_neighbors, cell_centers, lsq_degree
         )
 
         n_face_neighbors = (2 * (n_faces_per_cell + 1) - 2) * polynomial_degree
@@ -792,15 +885,15 @@ class Mesh:
                 gdm, gdm.getSupport(f), n_face_neighbors, cgStart)
             face_neighbors[i_f, :] = neighbors
 
-        lsq_neighbors = least_squares_face_reconstruction_local(
-            n_faces,
-            dim,
-            n_face_neighbors,
-            face_neighbors,
-            face_centers,
-            cell_centers,
-            polynomial_degree=1,
-        )
+        # lsq_face = least_squares_face_reconstruction_local(
+        #     n_faces,
+        #     dim,
+        #     n_face_neighbors,
+        #     face_neighbors,
+        #     face_centers,
+        #     cell_centers,
+        #     polynomial_degree=1,
+        # )
 
         face_volumes = np.array(face_volumes, dtype=float)
         face_centers = np.array(face_centers, dtype=float)
@@ -883,6 +976,7 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
+            lsq_degree,
             z_ordering,
         )
 
@@ -1017,6 +1111,7 @@ class Mesh:
             boundary_conditions_sorted_names,
             lsq_gradQ,
             lsq_neighbors,
+            lsq_degree,
         )
 
     def write_to_hdf5(self, filepath: str):
@@ -1071,6 +1166,7 @@ class Mesh:
             )
             mesh.create_dataset("lsq_gradQ", data=np.array(self.lsq_gradQ))
             mesh.create_dataset("lsq_neighbors", data=np.array(self.lsq_neighbors))
+            mesh.create_dataset("lsq_degree", data=(self.lsq_degree))
             mesh.create_dataset("z_ordering", data=np.array(self.z_ordering))
 
     @ classmethod
@@ -1112,6 +1208,7 @@ class Mesh:
                 ),
                 file["mesh"]["lsq_gradQ"][()],
                 file["mesh"]["lsq_neighbors"][()],
+                file["mesh"]["lsq_degree"][()],
                 file["mesh"]["z_ordering"][()],
             )
         return mesh
@@ -1180,6 +1277,7 @@ class MeshJAX(Mesh):
     boundary_conditions_sorted_names: Any = attr.ib()  # Keeping as NumPy char array
     lsq_gradQ: jnp.ndarray = attr.ib()
     lsq_neighbors: jnp.ndarray = attr.ib()
+    lsq_degree: jnp.int64 = attr.ib()
     z_ordering: jnp.ndarray = attr.ib()
 
 
@@ -1222,6 +1320,7 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
         ),  # Kept as NumPy array
         lsq_gradQ=jnp.array(mesh.lsq_gradQ),
         lsq_neighbors=jnp.array(mesh.lsq_neighbors),
+        lsq_degree=jnp.int64(mesh.lsq_degree),
         z_ordering=jnp.array(mesh.z_ordering),
     )
 
@@ -1232,10 +1331,8 @@ if __name__ == "__main__":
     path3 = "/home/ingo/Git/sms/meshes/quad_2d/mesh_finest.msh"
     path4 = "/home/ingo/Git/sms/meshes/triangle_2d/mesh_coarse.msh"
     labels = get_physical_boundary_labels(path)
-    # print(labels)
 
     # dm, boundary_dict, ghost_cells_dict = load_gmsh(path)
-    # print(ghost_cells_dict)
 
     mesh = Mesh.from_gmsh(path)
     assert mesh.cell_faces.max() == mesh.n_faces - 1
