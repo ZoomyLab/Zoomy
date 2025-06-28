@@ -1,4 +1,4 @@
-name: sms-test
+name: sms-cuda
 channels:
   - conda-forge
 dependencies:
@@ -23,8 +23,8 @@ dependencies:
     - trame-vtk
     - trame-vuetify
     - seaborn
-    - jax
-    - jaxlib
+    - jax[cuda]
+    - jaxlib[cuda]
     - jaxopt
     - panel
     - watchfiles
