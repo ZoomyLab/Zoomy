@@ -905,10 +905,10 @@ class Solver:
                     -r,
                     x0=jnp.zeros_like(Q),
                     # x0=Qold,
-                    maxiter=100,
+                    maxiter=200,
                     solve_method="incremental",
                     # solve_method="batched",
-                    restart = 60,
+                    restart = 100,
                     tol=1e-6,
                     # M=preconditioner,
                 )

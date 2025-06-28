@@ -217,15 +217,15 @@ class VAMPoisson(Model):
         doldu1dx = self.aux_variables.du1dx
         
 
-        delta = 0.0
+        delta = 0.001
         #I1 = 0.666666666666667*dt*dp0dx - 2*(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp0dx + p1*dhdx) + h*u1)/h + 0.333333333333333*(2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + 0.333333333333333*h*du0dx + 0.333333333333333*u0*dhdx + delta * ddp0dxx
         #I2 = -2*(-dt*(6*p0 - 6*p1) + h*w0)/h + 2*(2*dt*p1 + h*u0)*dbdx/h + (2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + delta * ddp1dxx
         # I1 = 0.666666666666667*dt*dhp1dx/h - 0.666666666666667*dt*hp1*dhdx/h**2 - 2*(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dbdx/h + 2*(-dt*(-(3*hp0/h - hp1/h)*dhdx - (6*hp0/h - 6*hp1/h)*dbdx + dhp1dx) + h*w0)/h + 0.333333333333333*(2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h + 0.333333333333333*h*du1dx + 0.333333333333333*u1*dhdx + delta *ddhp0dxx
         # I2 = -2*(-dt*(6*hp0/h - 6*hp1/h) + h*w1)/h + 2*(2*dt*hp1/h + h*u1)*dbdx/h + (2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h + delta *ddhp1dxx
-        I1 = 0.666666666666667*dt*dp1dx - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldw0)/h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx +delta *ddp0dxx
+        I1 = 0.666666666666667*dt*dp1dx - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldw0)/h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx + delta *ddp0dxx
         I2 = -2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(2*dt*p1 + h*oldu1)*dbdx/h + (2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta *ddp1dxx
-        R[0] = I1 + I2
-        R[1] = I1 - I2
+        R[0] = I1 
+        R[1] = I2
 
         return R
     
@@ -457,7 +457,7 @@ def solve_vam(
                         return res
 
 
-                    Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[True, False], user_residual=residual)
+                    Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[False, False], user_residual=residual)
 
                     ############################################################
                     ########################CORRECTOR###########################
@@ -546,7 +546,7 @@ def test_vam_1d():
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
-        compute_dt=timestepping.adaptive(CFL=0.4),
+        compute_dt=timestepping.adaptive(CFL=0.8),
         #compute_dt=timestepping.constant(dt=0.001),
         #time_end=30.07184630730286572,
         #time_end=0.55,
@@ -557,82 +557,82 @@ def test_vam_1d():
         output_dir="outputs/vam",
     )
 
-    bc_tags = ["left", "right"]
-    bc_tags_periodic_to = ["right", "left"]
+    # bc_tags = ["left", "right"]
+    # bc_tags_periodic_to = ["right", "left"]
 
-    bcs1 = BC.BoundaryConditions(
-        [
-            BC.Lambda(physical_tag='left', prescribe_fields={
-                1: lambda t, x, dx, q, qaux, p, n: .11197,
-                #2: lambda t, x, dx, q, qaux, p, n: 0.,
-                #3: lambda t, x, dx, q, qaux, p, n: 0.,
-                #4: lambda t, x, dx, q, qaux, p, n: 0.
-            }),
-            # BC.Lambda(physical_tag='right', prescribe_fields={
-            #    3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
-            #    4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
-            # }),
-            BC.Extrapolation(physical_tag='left'),
-            BC.Extrapolation(physical_tag='right')
+    # bcs1 = BC.BoundaryConditions(
+    #     [
+    #         BC.Lambda(physical_tag='left', prescribe_fields={
+    #             1: lambda t, x, dx, q, qaux, p, n: .11197,
+    #             #2: lambda t, x, dx, q, qaux, p, n: 0.,
+    #             #3: lambda t, x, dx, q, qaux, p, n: 0.,
+    #             #4: lambda t, x, dx, q, qaux, p, n: 0.
+    #         }),
+    #         # BC.Lambda(physical_tag='right', prescribe_fields={
+    #         #    3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
+    #         #    4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
+    #         # }),
+    #         BC.Extrapolation(physical_tag='left'),
+    #         BC.Extrapolation(physical_tag='right')
 
-        ]
-    )
+    #     ]
+    # )
     
-    bcs2 = BC.BoundaryConditions(
-        [
-            BC.Extrapolation(physical_tag='left'),
-            BC.Extrapolation(physical_tag='right')
+    # bcs2 = BC.BoundaryConditions(
+    #     [
+    #         BC.Extrapolation(physical_tag='left'),
+    #         BC.Extrapolation(physical_tag='right')
 
-            # BC.Lambda(physical_tag='left', prescribe_fields={
-            #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
-            #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
-            # }),
-            # BC.Lambda(physical_tag='right', prescribe_fields={
-            #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
-            #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
-            # }),
-        ]
-    )
+    #         # BC.Lambda(physical_tag='left', prescribe_fields={
+    #         #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
+    #         #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
+    #         # }),
+    #         # BC.Lambda(physical_tag='right', prescribe_fields={
+    #         #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
+    #         #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
+    #         # }),
+    #     ]
+    # )
     
-    def custom_ic1(x):
-        Q = np.zeros(6, dtype=float)
-        Q[1] = np.where(x[0]-5 < 1, 0.0, 0.)
-        Q[5] = 0.20*np.exp(-(x[0]-0.)**2 / 1.2**2) 
-        Q[0] = np.where(x[0] < 1, 0.34, 0.015) - Q[5]
-        Q[0] = np.where(Q[0] > 0.015, Q[0], 0.015)
-        # Q[0] = np.where(x[0]**2 < 0.5, 0.2, 0.1)
-        return Q
+    # def custom_ic1(x):
+    #     Q = np.zeros(6, dtype=float)
+    #     Q[1] = np.where(x[0]-5 < 1, 0.0, 0.)
+    #     Q[5] = 0.20*np.exp(-(x[0]-0.)**2 / 1.2**2) 
+    #     Q[0] = np.where(x[0] < 1, 0.34, 0.015) - Q[5]
+    #     Q[0] = np.where(Q[0] > 0.015, Q[0], 0.015)
+    #     # Q[0] = np.where(x[0]**2 < 0.5, 0.2, 0.1)
+    #     return Q
     
-    def custom_ic2(x):
-        Q = np.zeros(2, dtype=float)
-        return Q
+    # def custom_ic2(x):
+    #     Q = np.zeros(2, dtype=float)
+    #     return Q
 
-    ic1 = IC.UserFunction(custom_ic1)
-    ic2 = IC.UserFunction(custom_ic2)
+    # ic1 = IC.UserFunction(custom_ic1)
+    # ic2 = IC.UserFunction(custom_ic2)
     
     
-    model1 = VAMHyperbolic(
-        parameters=settings.parameters,
-        boundary_conditions=bcs1,
-        initial_conditions=ic1,
-        settings={},
-    )
+    # model1 = VAMHyperbolic(
+    #     parameters=settings.parameters,
+    #     boundary_conditions=bcs1,
+    #     initial_conditions=ic1,
+    #     settings={},
+    # )
     
-    model2 = VAMPoisson(
-        parameters=settings.parameters,
-        boundary_conditions=bcs2,
-        initial_conditions=ic2,
-        settings={},
-    )
+    # model2 = VAMPoisson(
+    #     parameters=settings.parameters,
+    #     boundary_conditions=bcs2,
+    #     initial_conditions=ic2,
+    #     settings={},
+    # )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 100, lsq_degree=2)
+    # mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 100, lsq_degree=2)
 
-    Q, Qaux = solve_vam(
-        mesh,
-        model1,
-        model2,
-        settings,
-    )
+    # Q, Qaux = solve_vam(
+    #     mesh,
+    #     model1,
+    #     model2,
+    #     settings,
+    # )
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 
