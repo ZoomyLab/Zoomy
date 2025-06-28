@@ -625,7 +625,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 100, lsq_degree=2)
+    mesh = petscMesh.Mesh.create_1d((-1.5, 5), 200, lsq_degree=2)
 
     Q, Qaux = solve_vam(
         mesh,
