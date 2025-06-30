@@ -50,15 +50,18 @@ class PageParaview(param.Parameterized):
     parent_app = param.Parameter(default=None, doc="Reference to MainApp")
 
     def view(self):
-        back_button = pn.widgets.Button(name="Back", button_type="danger")
-        def go_back(_):
-            if self.parent_app:
-                self.parent_app.active_page = 'tabs'
-        back_button.on_click(go_back)
+
+        html_pane = pn.pane.HTML("""
+        <iframe src="http://localhost:8080" 
+                width="100%" 
+                height="100%" 
+                style="border:none; position:absolute; top:0; left:0; width:100%; height:100%;">
+        </iframe>
+        """, sizing_mode="stretch_both", height_policy="max", width_policy="max")
+
 
         return pn.Column(
-            "# Paraview Page",
-            "Imagine advanced visualization content here...",
+        html_pane
         )
 
 
