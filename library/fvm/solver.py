@@ -881,7 +881,7 @@ class Solver:
         def newton_solve(Q):
             def cond_fun(state):
                 _, r, i = state
-                maxiter = 100
+                maxiter = 10
                 return jnp.logical_and(jnp.linalg.norm(r) > 1e-6, i < maxiter)
 
             def body_fun(state):
@@ -905,7 +905,7 @@ class Solver:
                     -r,
                     x0=jnp.zeros_like(Q),
                     # x0=Qold,
-                    maxiter=200,
+                    maxiter=10,
                     solve_method="incremental",
                     # solve_method="batched",
                     restart = 100,

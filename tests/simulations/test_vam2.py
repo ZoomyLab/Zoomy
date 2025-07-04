@@ -81,8 +81,8 @@ class VAMHyperbolic(Model):
         
         fx[0] = hu0
         fx[1] = hu0 * u0 + 1/3 * hu1 * u1
-        fx[2] = hu0 * w0 + 1/3 * hu1 * w1
-        fx[3] = 2*hu0 * u1
+        fx[2] = 2*hu0 * u1
+        fx[3] = hu0 * w0 + 1/3 * hu1 * w1
         fx[4] = hu0 * w1 + u1 * (hw0 + 2/5*hw2)
         
         return [fx]
@@ -105,9 +105,9 @@ class VAMHyperbolic(Model):
         w2 = hw2 / h
 
         nc[1, 0] = param.g * h
-        nc[3, 2] = -u0
-        nc[4, 2] = - 1/5 * w2 + w0
         nc[1, 5] = param.g * h
+        nc[2, 3] = -u0
+        nc[4, 2] = + 1/5 * w2 - w0
         return [-nc]
     
     def eigenvalues(self):
@@ -170,7 +170,7 @@ class VAMPoisson(Model):
         initial_conditions,
         dimension=1,
         fields=['p0', 'p1'],
-        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
+        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx', 'd4p0dx4', 'd4p1dx4', 'h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
         parameters={},
         parameters_default={"g": 9.81},
         settings={},
@@ -199,6 +199,7 @@ class VAMPoisson(Model):
 
         dbdx   = self.aux_variables.dbdx
         ddbdxx = self.aux_variables.ddbdxx
+
         dhdx   = self.aux_variables.dhdx
         ddhdxx = self.aux_variables.ddhdxx
         
@@ -206,6 +207,9 @@ class VAMPoisson(Model):
         dp1dx = self.aux_variables.dp1dx
         ddp0dxx = self.aux_variables.ddp0dxx
         ddp1dxx = self.aux_variables.ddp1dxx
+
+        d4p0dx4 = self.aux_variables.d4p0dx4
+        d4p1dx4 = self.aux_variables.d4p1dx4
         
         
         #Note, these are not truly the values from the old time step, but rather the values from the middle state after hyperbolic step
@@ -215,17 +219,24 @@ class VAMPoisson(Model):
         oldw0 = self.aux_variables.w0
         oldu1 = self.aux_variables.u1
         doldu1dx = self.aux_variables.du1dx
-        
 
-        delta = 0.0
+        delta4 = 0.00
+        delta2 = 0.0
         #I1 = 0.666666666666667*dt*dp0dx - 2*(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp0dx + p1*dhdx) + h*u1)/h + 0.333333333333333*(2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + 0.333333333333333*h*du0dx + 0.333333333333333*u0*dhdx + delta * ddp0dxx
         #I2 = -2*(-dt*(6*p0 - 6*p1) + h*w0)/h + 2*(2*dt*p1 + h*u0)*dbdx/h + (2*dt*p1 + h*u0)*dhdx/h + (-(-dt*(h*ddp0dxx + p0*dhdx + 2*p1*dbdx) + h*dp1dx)*dhdx/h**2 + (-dt*(h*du1dx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp0dx + 2*dhdx*ddp0dxx) + h*dhdx + dp1dx*dhdx)/h)*h + delta * ddp1dxx
         # I1 = 0.666666666666667*dt*dhp1dx/h - 0.666666666666667*dt*hp1*dhdx/h**2 - 2*(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dbdx/h + 2*(-dt*(-(3*hp0/h - hp1/h)*dhdx - (6*hp0/h - 6*hp1/h)*dbdx + dhp1dx) + h*w0)/h + 0.333333333333333*(2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h + 0.333333333333333*h*du1dx + 0.333333333333333*u1*dhdx + delta *ddhp0dxx
         # I2 = -2*(-dt*(6*hp0/h - 6*hp1/h) + h*w1)/h + 2*(2*dt*hp1/h + h*u1)*dbdx/h + (2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h + delta *ddhp1dxx
-        I1 = 0.666666666666667*dt*dp1dx - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldw0)/h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx +delta *ddp0dxx
-        I2 = -2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(2*dt*p1 + h*oldu1)*dbdx/h + (2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta *ddp1dxx
-        R[0] = I1 + I2
-        R[1] = I1 - I2
+        #I1 = 0.666666666666667*dt*dp1dx - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldw0)/h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx +delta *ddp0dxx
+        #I2 = -2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(2*dt*p1 + h*oldu1)*dbdx/h + (2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta *ddp1dxx
+        #I1 = h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx +delta *ddp0dxx
+        #I2 = -2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(2*dt*p1 + h*oldu1)*dbdx/h + (2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta *ddp1dxx
+        #I1 = 0.666666666666667*dt*dp1dx - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldw0)/h + 0.333333333333333*(2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx + delta * d4p0dx4
+        #I2 = -2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(2*dt*p1 + h*oldu1)*dbdx/h + (2*dt*p1 + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta * d4p1dx4
+        #I2 = delta * d4p1dx4
+        I1 = -0.333333333333333*dt*(-(3*p0 - p1)*ddhdxx - (6*p0 - 6*p1)*ddbdxx - (3*dp0dx - dp1dx)*dhdx - (6*dp0dx - 6*dp1dx)*dbdx + h*ddp1dxx + p1*ddhdxx + 2*dhdx*dp1dx) - 2*(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dbdx/h + 0.333333333333333*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldu1)*dhdx/h + 2*(2*dt*p1 + h*oldw0)/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + 0.333333333333333*h*doldu1dx + 0.333333333333333*oldu1*dhdx + delta2 * ddp0dxx + delta4 *d4p0dx4
+        I2 =-2*(-dt*(6*p0 - 6*p1) + h*oldw1)/h + 2*(-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldu1)*dbdx/h + (-dt*(-(3*p0 - p1)*dhdx - (6*p0 - 6*p1)*dbdx + h*dp1dx + p1*dhdx) + h*oldu1)*dhdx/h + (-(-dt*(h*dp0dx + p0*dhdx + 2*p1*dbdx) + h*oldu0)*dhdx/h**2 + (-dt*(h*ddp0dxx + p0*ddhdxx + 2*p1*ddbdxx + 2*dbdx*dp1dx + 2*dhdx*dp0dx) + h*doldu0dx + oldu0*dhdx)/h)*h + delta2 * ddp1dxx + delta4 * d4p1dx4
+        R[0] = I1 
+        R[1] = I2
 
         return R
     
@@ -291,10 +302,15 @@ class PoissonSolver(Solver):
         dp1dx = compute_derivatives(p1, mesh, derivatives_multi_index=([[1]]))[:, 0]
         ddp1dxx = compute_derivatives(p1, mesh, derivatives_multi_index=([[2]]))[:, 0]
 
+        d4p0dx4 = compute_derivatives(p0, mesh, derivatives_multi_index=([[4]]))[:, 0]
+        d4p1dx4 = compute_derivatives(p1, mesh, derivatives_multi_index=([[4]]))[:, 0]
+
         Qaux = Qaux.at[0].set(dp0dx)
         Qaux = Qaux.at[1].set(ddp0dxx)
         Qaux = Qaux.at[2].set(dp1dx)
         Qaux = Qaux.at[3].set(ddp1dxx)
+        Qaux = Qaux.at[4].set(d4p0dx4)
+        Qaux = Qaux.at[5].set(d4p1dx4)
 
         return Qaux
 
@@ -424,18 +440,19 @@ def solve_vam(
                     du0dx = compute_derivatives(u0, mesh, derivatives_multi_index=([[1]]))[:, 0]
                     du1dx = compute_derivatives(u1, mesh, derivatives_multi_index=([[1]]))[:, 0]
 
-                    Paux = Paux.at[4].set(h)
-                    Paux = Paux.at[5].set(dbdx)
-                    Paux = Paux.at[6].set(ddbdxx)
-                    Paux = Paux.at[7].set(dhdx)
-                    Paux = Paux.at[8].set(ddhdxx)
-                    Paux = Paux.at[9].set(u0)
-                    Paux = Paux.at[10].set(du0dx)
-                    Paux = Paux.at[11].set(w0)
-                    Paux = Paux.at[12].set(w1)
-                    Paux = Paux.at[13].set(u1)
-                    Paux = Paux.at[14].set(du1dx)
-                    Paux = Paux.at[15].set(dt)
+                    offset = 2
+                    Paux = Paux.at[4+offset].set(h)
+                    Paux = Paux.at[5+offset].set(dbdx)
+                    Paux = Paux.at[6+offset].set(ddbdxx)
+                    Paux = Paux.at[7+offset].set(dhdx)
+                    Paux = Paux.at[8+offset].set(ddhdxx)
+                    Paux = Paux.at[9+offset].set(u0)
+                    Paux = Paux.at[10+offset].set(du0dx)
+                    Paux = Paux.at[11+offset].set(w0)
+                    Paux = Paux.at[12+offset].set(w1)
+                    Paux = Paux.at[13+offset].set(u1)
+                    Paux = Paux.at[14+offset].set(du1dx)
+                    Paux = Paux.at[15+offset].set(dt)
 
                     Paux = solverP.update_qaux(
                         P, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
@@ -546,13 +563,13 @@ def test_vam_1d():
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
-        compute_dt=timestepping.adaptive(CFL=0.4),
+        compute_dt=timestepping.adaptive(CFL=0.1),
         #compute_dt=timestepping.constant(dt=0.001),
         #time_end=30.07184630730286572,
         #time_end=0.55,
         #time_end=0.013077056519679052,
-        #time_end=0.01,
-        time_end=10.0,
+        time_end=0.45,
+        #time_end=0.35,
         output_snapshots=100,
         output_dir="outputs/vam",
     )
@@ -568,12 +585,13 @@ def test_vam_1d():
                 #3: lambda t, x, dx, q, qaux, p, n: 0.,
                 #4: lambda t, x, dx, q, qaux, p, n: 0.
             }),
-            # BC.Lambda(physical_tag='right', prescribe_fields={
-            #    3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
-            #    4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
-            # }),
-            BC.Extrapolation(physical_tag='left'),
-            BC.Extrapolation(physical_tag='right')
+            BC.Lambda(physical_tag='right', prescribe_fields={
+                0: lambda t, x, dx, q, qaux, p, n: 0.015,
+               #3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
+               #4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
+            }),
+            #BC.Extrapolation(physical_tag='left'),
+            #BC.Extrapolation(physical_tag='right')
 
         ]
     )
@@ -581,12 +599,14 @@ def test_vam_1d():
     bcs2 = BC.BoundaryConditions(
         [
             BC.Extrapolation(physical_tag='left'),
-            BC.Extrapolation(physical_tag='right')
+            BC.Extrapolation(physical_tag='right'),
 
-            # BC.Lambda(physical_tag='left', prescribe_fields={
-            #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
-            #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
-            # }),
+            #BC.Lambda(physical_tag='left', prescribe_fields={
+            #   #0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
+            #   #1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
+            #   0: lambda t, x, dx, q, qaux, p, n: 0.,
+            #   1: lambda t, x, dx, q, qaux, p, n: 0.
+            #}),
             # BC.Lambda(physical_tag='right', prescribe_fields={
             #    0: lambda t, x, dx, q, qaux, p, n: 0.5 * q[0],
             #    1: lambda t, x, dx, q, qaux, p, n: 0.5 * q[1]
@@ -625,7 +645,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 5), 200, lsq_degree=2)
+    mesh = petscMesh.Mesh.create_1d((-1.5, 3.0), 40, lsq_degree=2)
 
     Q, Qaux = solve_vam(
         mesh,
