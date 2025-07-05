@@ -156,8 +156,8 @@ class VAMHyperbolic(Model):
 
         R[0] = 0.
         R[1] = dhp0dx + 2 * p1 * dbdx 
-        R[2] = -2*p1
-        R[3] = dhp1dx - (3*p0 - p1)*dhdx  -6*(p0-p1)*dbdx
+        R[2] = dhp1dx - (3*p0 - p1)*dhdx  -6*(p0-p1)*dbdx
+        R[3] = -2*p1
         R[4] = 6*(p0-p1)
         R[5] = 0.
         return R
@@ -563,12 +563,12 @@ def test_vam_1d():
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
-        compute_dt=timestepping.adaptive(CFL=0.1),
+        compute_dt=timestepping.adaptive(CFL=0.4),
         #compute_dt=timestepping.constant(dt=0.001),
         #time_end=30.07184630730286572,
         #time_end=0.55,
         #time_end=0.013077056519679052,
-        time_end=0.45,
+        time_end=20.,
         #time_end=0.35,
         output_snapshots=100,
         output_dir="outputs/vam",
@@ -581,17 +581,17 @@ def test_vam_1d():
         [
             BC.Lambda(physical_tag='left', prescribe_fields={
                 1: lambda t, x, dx, q, qaux, p, n: .11197,
-                #2: lambda t, x, dx, q, qaux, p, n: 0.,
-                #3: lambda t, x, dx, q, qaux, p, n: 0.,
-                #4: lambda t, x, dx, q, qaux, p, n: 0.
+                2: lambda t, x, dx, q, qaux, p, n: 0.,
+                3: lambda t, x, dx, q, qaux, p, n: 0.,
+                4: lambda t, x, dx, q, qaux, p, n: 0.
             }),
-            BC.Lambda(physical_tag='right', prescribe_fields={
-                0: lambda t, x, dx, q, qaux, p, n: 0.015,
-               #3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
-               #4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
-            }),
+            #BC.Lambda(physical_tag='right', prescribe_fields={
+            #    0: lambda t, x, dx, q, qaux, p, n: 0.015,
+            #   #3: lambda t, x, dx, q, qaux, p, n: 0.5 * q[3],
+            #   #4: lambda t, x, dx, q, qaux, p, n: 0.5 * q[4],
+            #}),
             #BC.Extrapolation(physical_tag='left'),
-            #BC.Extrapolation(physical_tag='right')
+            BC.Extrapolation(physical_tag='right')
 
         ]
     )
@@ -617,7 +617,7 @@ def test_vam_1d():
     def custom_ic1(x):
         Q = np.zeros(6, dtype=float)
         Q[1] = np.where(x[0]-5 < 1, 0.0, 0.)
-        Q[5] = 0.20*np.exp(-(x[0]-0.)**2 / 1.2**2) 
+        Q[5] = 0.20*np.exp(-(x[0]-0.)**2 / (2*0.2**2)) 
         Q[0] = np.where(x[0] < 1, 0.34, 0.015) - Q[5]
         Q[0] = np.where(Q[0] > 0.015, Q[0], 0.015)
         # Q[0] = np.where(x[0]**2 < 0.5, 0.2, 0.1)
@@ -645,7 +645,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 3.0), 40, lsq_degree=2)
+    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 60, lsq_degree=2)
 
     Q, Qaux = solve_vam(
         mesh,
