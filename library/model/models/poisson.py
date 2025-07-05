@@ -28,7 +28,7 @@ class Poisson(Model):
         initial_conditions,
         dimension=1,
         fields=1,
-        aux_fields=['dTdt', 'dTdx', 'ddTdxx', 'kappa'],
+        aux_fields=['ddTdxx'],
         parameters={},
         parameters_default={},
         settings={},
@@ -50,13 +50,10 @@ class Poisson(Model):
     def source_implicit(self):
         R = Matrix([0 for i in range(self.n_fields)])
         T = self.variables[0]
-        dTdt = self.aux_variables.dTdt
-        dTdx = self.aux_variables.dTdx
         ddTdxx = self.aux_variables.ddTdxx
         param = self.parameters
-        kappa = self.aux_variables.kappa
 
-        R[0] = - kappa * ddTdxx
+        R[0] = - ddTdxx + 2
         return R
         
 
