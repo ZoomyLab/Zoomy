@@ -8,6 +8,7 @@ dependencies:
   - panel
   - holoviews
   - pip
+  - tol-colors
 
 variables:
   SMS: '/home/mbd/Maschinenbautag/shallow-moments-simulation'

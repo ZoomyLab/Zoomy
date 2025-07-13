@@ -154,17 +154,20 @@ def save_fields_test(a):
     _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux)
     return i_snapshot + 1
 
+def load_mesh_from_hdf5(filepath):
+    mesh = Mesh.from_hdf5(filepath)
+    return mesh
+
 
 def load_fields_from_hdf5(filepath, i_snapshot=-1):
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "r") as f:
+        fields = f["fields"]
         if i_snapshot == -1:
-            i_snapshot = len(f.keys()) - 1
+            i_snapshot = len(fields.keys()) - 1
         else:
             i_snapshot = i_snapshot
-        # group = f[str(i_snapshot)]
-        fields = f["fields"]
         group = fields[f"iteration_{i_snapshot}"]
         time = group["time"][()]
         Q = group["Q"][()]

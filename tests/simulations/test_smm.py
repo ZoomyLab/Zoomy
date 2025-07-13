@@ -241,7 +241,7 @@ def test_sindy_generate_reference_data():
 @pytest.mark.unfinished
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_smm_2d(mesh_type):
-    level = 2
+    level = 0
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
@@ -275,7 +275,8 @@ def test_smm_2d(mesh_type):
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"friction": ["chezy", "newtonian"]},
+        #settings={"friction": ["chezy", "newtonian"]},
+        settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
     main_dir = os.getenv("SMS")
@@ -1613,8 +1614,8 @@ def test_eccomas_hyperbolicity():
 if __name__ == "__main__":
     ### TESTED
 
-    test_smm_1d()
-    # test_smm_2d("quad")
+    #test_smm_1d()
+    test_smm_2d("quad")
     # test_smm_2d("triangle")
     # test_steffler()
 

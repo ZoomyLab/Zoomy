@@ -31,6 +31,7 @@ dependencies:
     - watchfiles
     - pygments
     # - pyprecice
+    - tol-colors
 variables:
   PETSC_DIR: '/home/ingo/Git/petsc'
   PETSC_ARCH: 'linux-gnu'

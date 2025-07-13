@@ -531,17 +531,19 @@ class Solver:
                     time += dt
                     iteration += 1
 
-                    jax.debug.print(
-                        "iteration: {iteration}, time: {time}, dt: {dt}",
-                        iteration=iteration,
-                        time=time,
-                        dt=dt,
-                    )
 
                     time_stamp = (i_snapshot + 1) * dt_snapshot
 
                     # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
                     i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
+
+                    jax.debug.print(
+                        "iteration: {iteration}, time: {time}, dt: {dt}, time_stamp: {time_stamp}",
+                        iteration=iteration,
+                        time=time,
+                        dt=dt,
+                        time_stamp=time_stamp
+                    )
 
                     return (time, iteration, i_snapshot, Q3, Qaux)
 

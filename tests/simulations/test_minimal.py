@@ -25,7 +25,7 @@ from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 import library.misc.io as io
-from library.mesh.mesh import compute_gradient
+from library.mesh.mesh import compute_derivatives
 
 
 import library.mesh.mesh as petscMesh
@@ -104,9 +104,9 @@ def test_smm_2d():
         num_flux=flux.Zero(),
         nc_flux=nc_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.45),
-        time_end=0.1,
+        time_end=6.0,
         output_snapshots=100,
-        output_dir="outputs/test",
+        output_dir=f"outputs/sme_{level}",
     )
 
     bcs = BC.BoundaryConditions(
@@ -120,7 +120,7 @@ def test_smm_2d():
 
     def custom_ic(x):
         Q = np.zeros(3 + 2 * level, dtype=float)
-        Q[0] = np.where(x[0] < 0.5, 1.0, 1.2) + np.where(x[1] < 0.5, 1.0, 1.2)
+        Q[0] = np.where(x[0] < 5., 0.005, 0.001)
         return Q
 
     ic = IC.UserFunction(custom_ic)
@@ -131,18 +131,21 @@ def test_smm_2d():
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
-        settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        #settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip"]},
+        settings={},
     )
 
     main_dir = os.getenv("SMS")
     mesh = petscMesh.Mesh.from_gmsh(
-        os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
+        #os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
+        os.path.join(main_dir, "meshes/channel_quad_2d/mesh.msh")
     )
 
     mesh = convert_mesh_to_jax(mesh)
     solver = Solver()
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 
 def test_jax_jit_grad():
@@ -537,9 +540,9 @@ def test_implicit():
 
 if __name__ == "__main__":
     #test_smm_1d()
-    #test_smm_2d()
+    test_smm_2d()
     # test_jax_jit_grad()
     #test_jax_jit_grad_minimal()
     # test_reconstruction()
     #test_reconstruction_faces()
-    test_implicit()
+    #test_implicit()
