@@ -3,7 +3,7 @@ import numpy.polynomial.legendre as L
 import numpy.polynomial.chebyshev as C
 from scipy.optimize import least_squares as lsq
 import sympy
-from sympy import Matrix
+from sympy import Matrix, Piecewise
 from sympy.abc import x
 
 from sympy import integrate, diff
@@ -384,6 +384,7 @@ class ShallowMoments(Model):
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
+
 
     def source(self):
         out = Matrix([0 for i in range(self.n_fields)])
@@ -1001,7 +1002,7 @@ class ShallowMoments2d(Model):
         initial_conditions,
         dimension=2,
         fields=3,
-        aux_fields=0,
+        aux_fields=['dudx', 'dvdy'],
         parameters={},
         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
@@ -1026,6 +1027,31 @@ class ShallowMoments2d(Model):
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
+
+    def interpolate_3d(self):
+        out = Matrix([0 for i in range(5)])
+        x = self.position_3d[0]
+        y = self.position_3d[1]
+        z = self.position_3d[2]
+        h = self.variables[0]
+        u = self.variables[1]/h
+        v = self.variables[2]/h
+        dudx = self.aux_variables[0]
+        dvdy = self.aux_variables[1]
+        rho_w = 1000.
+        g = 9.81
+        rho_3d = rho_w * Piecewise((1., h-z > 0), (0.,True))
+        u_3d = u*Piecewise((1, h-z > 0), (0, True))
+        v_3d = v*Piecewise((1, h-z > 0), (0, True))
+        w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
+        p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
+        out[0] = rho_3d
+        out[1] = u_3d
+        out[2] = v_3d
+        out[3] = w_3d
+        out[4] = p_3d
+
+        return out
 
     def flux(self):
         offset = self.levels + 1

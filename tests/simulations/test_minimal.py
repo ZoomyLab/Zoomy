@@ -85,6 +85,14 @@ def test_smm_1d():
     solver = Solver()
     solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    
+class SWESolver(Solver):
+    def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
+        dudx = compute_derivatives(Q[1]/Q[0], mesh, derivatives_multi_index=[[0, 0]])[:,0]
+        dvdy = compute_derivatives(Q[2]/Q[0], mesh, derivatives_multi_index=[[0, 1]])[:,0]
+        Qaux = Qaux.at[0].set(dudx)
+        Qaux = Qaux.at[1].set(dvdy)
+        return Qaux
 
 def test_smm_2d():
     level = 0
@@ -93,6 +101,9 @@ def test_smm_2d():
         name="ShallowMoments",
         parameters={
             "g": 9.81,
+            'ex': 0.,
+            'ey': 0.,
+            'ez': 1.,
             "C": 1.0,
             "nu": 0.000001,
             "lamda": 7,
@@ -105,7 +116,7 @@ def test_smm_2d():
         nc_flux=nc_flux.segmentpath(),
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=6.0,
-        output_snapshots=100,
+        output_snapshots=2,
         output_dir=f"outputs/sme_{level}",
     )
 
@@ -142,10 +153,11 @@ def test_smm_2d():
     )
 
     mesh = convert_mesh_to_jax(mesh)
-    solver = Solver()
+    solver = SWESolver()
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), scale_h=100.)
 
 
 def test_jax_jit_grad():

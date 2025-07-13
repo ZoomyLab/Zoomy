@@ -1000,7 +1000,7 @@ def read_vtk_cell_fields(
 
 def get_extruded_mesh_type(mesh_type: str) -> str:
     if (mesh_type) == "quad":
-        return "hex"
+        return "hexahedron"
     elif (mesh_type) == "triangle":
         return "wface"
     else:
@@ -1014,7 +1014,7 @@ def get_n_nodes_per_element(mesh_type: str) -> int:
         return 3
     elif (mesh_type) == "wface":
         return 6
-    elif (mesh_type) == "hex":
+    elif (mesh_type) == "hexahedron":
         return 8
     elif (mesh_type) == "tetra":
         return 4
@@ -1025,7 +1025,7 @@ def get_n_nodes_per_element(mesh_type: str) -> int:
 def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
     if mesh_type == "triangle":
         return "triangle"
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return "hexahedron"
     elif mesh_type == "line":
         return "line"
@@ -1046,35 +1046,33 @@ def extrude_2d_element_vertices_mesh(
     height: FArray,
     n_layers: int,
 ) -> Tuple[FArray, IArray, str]:
-    n_vertices = vertex_coordinates.shape[0]
-    n_elements = element_vertices.shape[0]
+    n_vertices = vertex_coordinates.shape[1]
+    n_elements = element_vertices.shape[1]
     num_nodes_per_element_2d = get_n_nodes_per_element(mesh_type)
     mesh_type = get_extruded_mesh_type(mesh_type)
     num_nodes_per_element = get_n_nodes_per_element(mesh_type)
     Z = np.linspace(0, 1, n_layers)
     points_3d = np.zeros(
         (
-            vertex_coordinates.shape[0] * n_layers,
+            vertex_coordinates.shape[1] * n_layers,
             3,
         ),
         dtype=float,
     )
     element_vertices_3d = np.zeros(
-        (n_elements * (n_layers - 1), num_nodes_per_element), dtype=int
+        (num_nodes_per_element, n_elements * (n_layers - 1)), dtype=int
     )
     for i in range(n_vertices):
-        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[i, :2]
+        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[:2, i]
         points_3d[i * n_layers : (i + 1) * n_layers, 2] = height[i] * Z
 
     # compute connectivity for mesh (element_vertices)
     for i_layer in range(n_layers - 1):
-        element_vertices_3d[
+        element_vertices_3d[:num_nodes_per_element_2d,
             i_layer * n_elements : (i_layer + 1) * n_elements,
-            :num_nodes_per_element_2d,
         ] = i_layer + element_vertices * n_layers
-        element_vertices_3d[
+        element_vertices_3d[num_nodes_per_element_2d:,
             i_layer * n_elements : (i_layer + 1) * n_elements,
-            num_nodes_per_element_2d:,
         ] = i_layer + 1 + element_vertices * n_layers
     return (points_3d, element_vertices_3d, mesh_type)
 

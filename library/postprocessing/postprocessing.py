@@ -9,7 +9,71 @@ import library.mesh.fvm_mesh as fvm_mesh
 import library.mesh.mesh as petscMesh
 import library.misc.io as io
 from library.model.models.shallow_moments import reconstruct_uvw
+from library.model.models.base import RuntimeModel
 
+def vtk_interpolate_3d(
+    model, output_path, path_to_simulation, Nz=10, start_at_time=0, scale_h=1.0
+):
+    sim = h5py.File(path_to_simulation, "r")
+    parameters = io.load_settings(os.path.join(path_to_simulation, "settings.hdf5"))
+    # mesh = sim['mesh']
+    fields = sim["fields"]
+    mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
+    n_snapshots = len(list(fields.keys()))
+
+    Z = np.linspace(0, 1, Nz)
+
+    #mesh = GradientMesh.fromMesh(mesh)
+    i_count = 0
+    basis = model.basismatrices.basisfunctions
+    lvl = model.levels
+    phi = lambda z: np.array(
+        [lambdify(x, basis.basis(i, x))(z) for i in range(lvl + 1)]
+    )
+    psi = lambda z: np.array(
+        [
+            lambdify(x, integrate(basis.basis(i, x), (x, 0, 1)))(z)
+            for i in range(lvl + 1)
+        ]
+    )
+    print("init phi psi and mesh")
+    pde = model.get_pde(printer='numpy')
+    for i_snapshot in range(n_snapshots):
+        group_name = "iteration_" + str(i_snapshot)
+        group = fields[group_name]
+        time = group["time"][()]
+        if time < start_at_time:
+            continue
+        Q = group["Q"][()]
+        Qaux = group["Qaux"][()]
+        #gradQ = mesh.gradQ(Q)
+
+
+        rhoUVWP = np.zeros((Q.shape[1] * Nz, 5), dtype=float)
+        for i_elem, (q, qaux) in enumerate(zip(Q.T, Qaux.T)):
+            #u, v, w = reconstruct_uvw(q, gradq, model.levels, phi, psi)
+
+            for iz, z in enumerate(Z):
+                rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
+        # io._save_fields_to_hdf5(
+        #     os.path.join(output_path, 'fields3d.h5'), i_count, time, rhoUVWP"
+        # )
+        i_count += 1
+        print("converted {}".format(str(i_snapshot)))
+    print("write 3d")
+
+    (points_3d, element_vertices_3d, mesh_type) = (
+        fvm_mesh.extrude_2d_element_vertices_mesh(
+            mesh.type, mesh.vertex_coordinates, mesh.cell_vertices, Q[0] * scale_h, Nz
+        )
+    )
+    io._write_to_vtk_from_vertices_edges(
+        os.path.join(output_path, "mesh3d.vtk"),
+        mesh_type,
+        points_3d,
+        element_vertices_3d.T,
+        fields=rhoUVWP.T,
+    )
 
 def recover_3d_from_smm_as_vtk(
     model, output_path, path_to_simulation, Nz=10, start_at_time=0, scale_h=1.0

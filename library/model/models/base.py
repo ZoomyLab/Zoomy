@@ -71,6 +71,7 @@ class RuntimeModel:
     left_eigenvectors: Optional[Callable]
     right_eigenvectors: Optional[Callable]
     source_imlicit: Callable
+    interpolate_3d: Callable
 
     bcs: list[Callable]
 
@@ -78,7 +79,7 @@ class RuntimeModel:
     def from_model(cls, model):
         pde = model.get_pde()
         # bcs = model.create_python_boundary_interface(printer='numpy')
-        bcs.get_boundary_conditions()
+        bcs = model.get_boundary_conditions()
         return cls(
             model.name,
             model.dimension,
@@ -96,6 +97,7 @@ class RuntimeModel:
             pde.left_eigenvectors,
             pde.right_eigenvectors,
             pde.source_implicit,
+            pde.interpolate_3d,
             bcs,
         )
 
@@ -139,8 +141,8 @@ class Model:
     sympy_eigenvalues: Matrix
     sympy_left_eigenvectors: Optional[Matrix]
     sympy_right_eigenvectors: Optional[Matrix]
-
     sympy_source_implicit: Matrix
+    sympy_interpolate_3d: Matrix
 
     def __init__(
         self,
@@ -164,7 +166,8 @@ class Model:
         self.variables = register_sympy_attribute(fields, "q")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
         self.time = sympy.symbols("time", real=True)
-        self.position = register_sympy_attribute(dimension, "X")
+        self.position = register_sympy_attribute(self.dimension, "X")
+        self.position_3d = register_sympy_attribute(3, "X")
         self.distance = sympy.symbols("dX", real=True)
         updated_parameters = {**parameters_default, **parameters}
         self.parameters = register_sympy_attribute(updated_parameters, "p")
@@ -217,6 +220,7 @@ class Model:
         else:
             self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         self.sympy_source_implicit = self.source_implicit()
+        self.sympy_interpolate_3d = self.interpolate_3d()
         # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         # TODO check case imaginary
         # TODO check case not computable
@@ -430,6 +434,22 @@ class Model:
         def source_implicit(Q, Qaux, param):
             return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
 
+        l_interpolate_3d = lambdify(
+            [
+                self.position_3d.get_list(),
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.sympy_interpolate_3d, self.variables, self.aux_variables
+            ),
+            printer,
+        )
+        def interpolate_3d(X, Q, Qaux, param):
+            return jnp.squeeze(jnp.array(l_interpolate_3d(X, Q, Qaux, param)), axis=1)
+
+
 
         left_eigenvectors = None
         right_eigenvectors = None
@@ -444,6 +464,7 @@ class Model:
             "source": source,
             "source_jacobian": source_jacobian,
             "source_implicit": source_implicit,
+            "interpolate_3d": interpolate_3d,
         }
         return SimpleNamespace(**d)
 
@@ -470,6 +491,9 @@ class Model:
 
     def source_implicit(self):
         return zeros(self.n_fields, 1)
+
+    def interpolate_3d(self):
+        return zeros(5, 1)
 
 
     def eigenvalues(self):

@@ -27,7 +27,7 @@ def init_output_directory(path, clean):
 def save_settings(filepath, settings):
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
-    with h5py.File(os.path.join(filepath, "settings.hdf5"), "w") as f:
+    with h5py.File(os.path.join(filepath, "settings.h5"), "w") as f:
         attrs = f.create_group("parameters")
         for k, v in settings.parameters.items():
             attrs.create_dataset(k, data=v)
@@ -51,6 +51,20 @@ def save_settings(filepath, settings):
         # f.create_dataset('compute_dt_args', data=settings.compute_dt_args)
         f.create_dataset("time_end", data=settings.time_end)
         f.create_dataset("callbacks", data=settings.callbacks)
+        
+def load_settings(filepath):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
+    with h5py.File(os.path.join('/home/ingo/Git/sms/outputs/sme_0', "settings.h5"), "r") as f:
+        parameters = {k: v[()] for k, v in f["parameters"].items()}
+        name = f["name"][()]
+        output_dir = f["output_dir"][()]
+        output_snapshots = f["output_snapshots"][()]
+        output_write_all = f["output_write_all"][()]
+        output_clean_dir = f["output_clean_dir"][()]
+        truncate_last_time_step = f["truncate_last_time_step"][()]
+        callbacks = f["callbacks"][()]
+    return parameters
 
 
 def clean_files(filepath, filename=".vtk"):
@@ -77,7 +91,7 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=Tru
             if overwrite:
                 del fields[group_name]
             else:
-                raise ValueError(f"Group {group_name} already exists in {filename}")
+                raise ValueError(f"Group {group_name} already exists in {filepath}")
         attrs = fields.create_group(group_name)
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
@@ -210,7 +224,7 @@ def _write_to_vtk_from_vertices_edges(
         mesh_type == "triangle"
         or mesh_type == "quad"
         or mesh_type == "wface"
-        or mesh_type == "hex"
+        or mesh_type == "hexahedron"
         or mesh_type == "line"
         or mesh_type == "tetra"
     )

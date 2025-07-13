@@ -463,6 +463,7 @@ class Solver:
         # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
         output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
         save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
+        
 
         def run(Q, Qaux, parameters, pde, bcs):
             iteration = 0.0
@@ -473,6 +474,7 @@ class Solver:
             dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
             io.init_output_directory(settings.output_dir, settings.output_clean_dir)
             mesh.write_to_hdf5(output_hdf5_path)
+            io.save_settings(settings.output_dir, settings)
             i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
             # Qnew = deepcopy(Q)
@@ -532,7 +534,8 @@ class Solver:
                     iteration += 1
 
 
-                    time_stamp = (i_snapshot + 1) * dt_snapshot
+
+                    time_stamp = (i_snapshot) * dt_snapshot
 
                     # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
                     i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
