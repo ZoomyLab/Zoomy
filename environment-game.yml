@@ -9,6 +9,7 @@ dependencies:
   - holoviews
   - pip
   - tol-colors
+    - dotenv
 
 variables:
   SMS: '/home/mbd/Maschinenbautag/shallow-moments-simulation'

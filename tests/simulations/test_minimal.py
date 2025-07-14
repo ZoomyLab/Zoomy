@@ -20,6 +20,8 @@ import library.fvm.timestepping as timestepping
 import library.fvm.flux as flux
 import library.fvm.nonconservative_flux as nc_flux
 from library.model.boundary_conditions import BoundaryCondition
+from library.model.models.basisfunctions import Basisfunction, Legendre_shifted
+from library.model.models.basismatrices import Basismatrices
 
 from library.model.model import *
 import library.model.initial_conditions as IC
@@ -505,7 +507,7 @@ def test_implicit():
         compute_dt=timestepping.adaptive(CFL=0.45),
         time_end=0.1,
         output_snapshots=10,
-        output_dir="outputs/test/CoupledConstrained",
+        output_dir="outputs/test_implicit",
     )
 
     bcs = BC.BoundaryConditions(
@@ -549,12 +551,89 @@ def test_implicit():
 
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
+def test_smm_junction():
+    level = 2
+    n_fields = 3 + 2 * level
+    settings = Settings(
+        name="ShallowMoments",
+        parameters={
+            "g": 9.81,
+            'ex': 0.,
+            'ey': 0.,
+            'ez': 1.,
+            "C": 1.0,
+            "nu": 0.000001,
+            "lamda": 7,
+            "rho": 1,
+            "eta": 1,
+            "c_slipmod": 1 / 70.0,
+        },
+        reconstruction=recon.constant,
+        num_flux=flux.Zero(),
+        nc_flux=nc_flux.segmentpath(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=3.0,
+        output_snapshots=30,
+        output_dir=f"outputs/junction_{level}",
+    )
+
+    offset = 1+level
+
+    inflow_dict = { 
+        0: lambda t, x, dx, q, qaux, p, n: Piecewise((0.1, t < 0.2),(q[0], True)),
+        1: lambda t, x, dx, q, qaux, p, n: Piecewise((-0.3, t < 0.2),(-q[1], True)),
+                   }
+    inflow_dict.update({
+        1+i: lambda t, x, dx, q, qaux, p, n: 0 for i in range(level)
+    })
+    inflow_dict.update({
+        1+offset+i: lambda t, x, dx, q, qaux, p, n: 0 for i in range(level+1)
+    })
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Lambda(physical_tag="inflow", prescribe_fields=inflow_dict),
+            BC.Wall(physical_tag="wall"),
+        ]
+    )
+
+    def custom_ic(x):
+        Q = np.zeros(3 + 2 * level, dtype=float)
+        Q[0] = 0.01
+        return Q
+
+    ic = IC.UserFunction(custom_ic)
+
+    model = ShallowMoments2d(
+        fields=3 + 2 * level,
+        aux_fields=2,
+        parameters=settings.parameters,
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+        settings={"friction": ["newtonian", "slip_mod"]},
+        basis=Basismatrices(basis=Legendre_shifted(order=level+1)),
+    )
+
+    main_dir = os.getenv("SMS")
+    mesh = petscMesh.Mesh.from_gmsh(
+        #os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
+        os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")
+    )
+
+    mesh = convert_mesh_to_jax(mesh)
+    solver = SWESolver()
+    Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
+
+    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    #postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), scale_h=100.)
+
 
 if __name__ == "__main__":
     #test_smm_1d()
-    test_smm_2d()
+    #test_smm_2d()
     # test_jax_jit_grad()
     #test_jax_jit_grad_minimal()
     # test_reconstruction()
     #test_reconstruction_faces()
     #test_implicit()
+    test_smm_junction()

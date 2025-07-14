@@ -1244,6 +1244,34 @@ class ShallowMoments2d(Model):
                 )
         return out
 
+    def slip_mod(self):
+        """
+        :gui:
+            - requires_parameter: ('lamda', 0.0)
+            - requires_parameter: ('rho', 1.0)
+        """
+        assert "lamda" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_fields)])
+        offset = self.levels+1
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.levels + 1]
+        hb = self.variables[1+offset : 1+offset + self.levels + 1]
+        p = self.parameters
+        ub = 0
+        vb = 0
+        for i in range(1 + self.levels):
+            ub += ha[i] / h
+            vb += hb[i] / h
+        for k in range(1, 1 + self.levels):
+            out[1 + k] += (
+                -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
+            )
+            out[1+offset+k] += (
+                -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
+            )
+        return out
+
     def newtonian_boundary_layer(self):
         assert "nu" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_fields)])

@@ -31,6 +31,7 @@ dependencies:
     - pygments
     # - pyprecice
     - tol-colors
+    - dotenv
 variables:
   PETSC_CONFIGURE_OPTIONS: "--with-debugging=0 --with-shared-libraries=1 --download-f2cblaslapack=1 --with-x=0 --with-mpi=0"
 
