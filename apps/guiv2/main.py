@@ -4,11 +4,12 @@ import panel as pn
 from apps.guiv2.mesh import MeshSection
 from apps.guiv2.model import ModelSection
 from apps.guiv2.visu import VisuSection
+from apps.guiv2.simulation import SimulationSection
 
 pn.extension()
 
 class PageTabs(param.Parameterized):
-    active_tab = param.Integer(default=0, bounds=(0,3))
+    active_tab = param.Integer(default=0, bounds=(0,4))
     parent_app = param.Parameter(default=None, doc="Reference to the main app")
 
     def __init__(self, **params):
@@ -17,8 +18,9 @@ class PageTabs(param.Parameterized):
 
         tabMesh = MeshSection(self.parent_app)
         tabModel = ModelSection(self.parent_app)
+        tabSim = SimulationSection(self.parent_app)
         tabVisu = VisuSection(self.parent_app)
-        self.tab_list = [tabMesh, tabModel, tabVisu]
+        self.tab_list = [tabMesh, tabModel, tabSim, tabVisu]
 
         self.tabs = pn.Tabs(*[(tab.title, tab.main_view()) for tab in self.tab_list], dynamic=True)
         self.tabs.param.watch(self._update_active_tab, 'active')
@@ -127,7 +129,7 @@ class MainApp(param.Parameterized):
         - main_content (the current page) in template.main
         - sidebar_content in template.sidebar
         """
-        template = pn.template.BootstrapTemplate(title="Shallow Moment Simulation Suite")
+        template = pn.template.BootstrapTemplate(title="Zoomy")
         template.sidebar.append(self.sidebar_content)    # pass the method
         template.main.append(self.main_content)          # pass the method
         return template

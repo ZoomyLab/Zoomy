@@ -40,11 +40,15 @@ class MeshSection(Section):
 
         self.title='Mesh'
 
-        mesh1 = MeshCard(parent_app, path='meshes/quad_2d/mesh.msh', title="Mesh #1")
-        mesh2 = MeshCard(parent_app, path='meshes/simple_openfoam/mesh_2d_mid.msh', title="Mesh #2" )
+        mesh1 = MeshCard(parent_app, path='meshes/line/mesh.msh', title="Rectangle")
+        mesh2 = MeshCard(parent_app, path='meshes/channel_junction/mesh_2d_coarse.msh', title="Junction" )
+        mesh3 = MeshCard(parent_app, path='meshes/curved_open_channel_extended/mesh.msh', title="Curved Channel" )
+        mesh4 = MeshCard(parent_app, path='meshes/channel_2d_hole_sym/mesh_finer.msh', title="Channel with hole" )
 
         self.manager.add_card(mesh1)
         self.manager.add_card(mesh2)
+        self.manager.add_card(mesh3)
+        self.manager.add_card(mesh4)
 
         self.manager.selected_card = mesh1
 
