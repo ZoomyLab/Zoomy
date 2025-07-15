@@ -9,6 +9,7 @@ import shutil
 
 # import library.mesh.fvm_mesh as fvm_mesh
 from library.mesh.mesh import *
+import library.mesh.mesh_util as mesh_util
 
 
 def init_output_directory(path, clean):
@@ -98,6 +99,31 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=Tru
         if Qaux is not None:
             attrs.create_dataset("Qaux", data=Qaux)
     return i_snapshot + 1.0
+
+def get_save_fields_simple(_filepath, write_all, overwrite=True):
+    def _save_hdf5(i_snapshot, time, Q, Qaux):
+        i_snap = int(i_snapshot)
+        main_dir = os.getenv("SMS")
+        filepath = os.path.join(main_dir, _filepath)
+
+        with h5py.File(filepath, "a") as f:
+            if i_snap == 0 and not "fields" in f.keys():
+                fields = f.create_group("fields")
+            else:
+                fields = f["fields"]
+            group_name = "iteration_" + str(i_snap)
+            if group_name in fields:
+                if overwrite:
+                    del fields[group_name]
+                else:
+                    raise ValueError(f"Group {group_name} already exists in {filename}")
+            attrs = fields.create_group(group_name)
+            attrs.create_dataset("time", data=time, dtype=float)
+            attrs.create_dataset("Q", data=Q)
+            if Qaux is not None:
+                attrs.create_dataset("Qaux", data=Qaux)
+        return i_snapshot + 1.0
+    return _save_hdf5
 
 
 def get_save_fields(_filepath, write_all, overwrite=True):
@@ -243,7 +269,7 @@ def _write_to_vtk_from_vertices_edges(
             point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
     meshout = meshio.Mesh(
         vertex_coordinates,
-        [(mesh_type, cell_vertices)],
+        [(mesh_util.convert_mesh_type_to_meshio_mesh_type(mesh_type), cell_vertices)],
         cell_data=d_fields,
         point_data=point_d_fields,
     )
@@ -322,5 +348,5 @@ def generate_vtk(
     # finalize vtk
     with open(os.path.join(path, f"{full_filepath_out}.vtk.series"), "w") as f:
         json.dump(vtk_timestamp_file, f)
-
+        
     file.close()

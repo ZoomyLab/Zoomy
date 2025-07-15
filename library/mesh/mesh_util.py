@@ -16,6 +16,20 @@ def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
     else:
         assert False
 
+def _get_n_nodes_per_element(mesh_type: str) -> int:
+    if (mesh_type) == "quad":
+        return 4
+    elif (mesh_type) == "triangle":
+        return 3
+    elif (mesh_type) == "wface":
+        return 6
+    elif (mesh_type) == "hexahedron":
+        return 8
+    elif (mesh_type) == "tetra":
+        return 4
+    else:
+        assert False
+
 def get_extruded_mesh_type(mesh_type: str) -> str:
     if (mesh_type) == "quad":
         return "hexahedron"

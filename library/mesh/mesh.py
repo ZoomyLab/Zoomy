@@ -1076,8 +1076,6 @@ class Mesh:
         face_subvolumes = np.empty((n_faces, 2), dtype=float)
         boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
         boundary_conditions_sorted_names = np.array(["left", "right"])
-        lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
-        deltaQ = np.zeros((n_cells, n_faces_per_cell, n_cells), dtype=float)
         face_normals = np.zeros((n_faces, dimension + 1), dtype=float)
         face_volumes = np.zeros((n_faces), dtype=float)
         face_centers = np.zeros((n_faces, dimension + 1), dtype=float)
@@ -1085,7 +1083,7 @@ class Mesh:
         # hard coded guess
         n_face_neighbors = 0
         face_neighbors = (n_cells + 1) * np.ones((n_faces, n_face_neighbors), dtype=int)
-        lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
+        lsq_gradQ = np.zeros((n_cells, dimension, 0), dtype=float)
         lsq_neighbors = np.zeros(1)
         lsq_monomial_multi_index = np.zeros(1)
         lsq_scale_factors = np.zeros(1)
@@ -1343,6 +1341,44 @@ def convert_mesh_to_jax(mesh: Mesh) -> MeshJAX:
     )
 
 
+def reconstruct_3d(
+    mesh_type: str,
+    vertex_coordinates: FArray,
+    element_vertices: IArray,
+    height: FArray,
+    n_layers: int,
+    ) :
+    n_vertices = vertex_coordinates.shape[1]
+    n_elements = element_vertices.shape[1]
+    num_nodes_per_element_2d = get_n_nodes_per_element(mesh_type)
+    mesh_type = get_extruded_mesh_type(mesh_type)
+    num_nodes_per_element = get_n_nodes_per_element(mesh_type)
+    Z = np.linspace(0, 1, n_layers)
+    points_3d = np.zeros(
+        (
+            vertex_coordinates.shape[1] * n_layers,
+            3,
+        ),
+        dtype=float,
+    )
+    element_vertices_3d = np.zeros(
+        (num_nodes_per_element, n_elements * (n_layers - 1)), dtype=int
+    )
+    for i in range(n_vertices):
+        points_3d[i * n_layers : (i + 1) * n_layers, :2] = vertex_coordinates[:2, i]
+        points_3d[i * n_layers : (i + 1) * n_layers, 2] = height[i] * Z
+
+    # compute connectivity for mesh (element_vertices)
+    for i_layer in range(n_layers - 1):
+        element_vertices_3d[:num_nodes_per_element_2d,
+            i_layer * n_elements : (i_layer + 1) * n_elements,
+        ] = i_layer + element_vertices * n_layers
+        element_vertices_3d[num_nodes_per_element_2d:,
+            i_layer * n_elements : (i_layer + 1) * n_elements,
+        ] = i_layer + 1 + element_vertices * n_layers
+    return (points_3d, element_vertices_3d, mesh_type)
+
+
 if __name__ == "__main__":
     path = "/home/ingo/Git/sms/meshes/quad_2d/mesh_coarse.msh"
     path2 = "/home/ingo/Git/sms/meshes/quad_2d/mesh_fine.msh"
@@ -1368,3 +1404,5 @@ if __name__ == "__main__":
         fields=np.ones((2, mesh.n_inner_cells), dtype=float),
         field_names=["A", "B"],
     )
+
+

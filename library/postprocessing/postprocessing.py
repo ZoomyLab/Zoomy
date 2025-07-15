@@ -16,6 +16,57 @@ def vtk_interpolate_3d(
 ):
     sim = h5py.File(path_to_simulation, "r")
     parameters = io.load_settings(os.path.join(path_to_simulation, "settings.hdf5"))
+    fields = sim["fields"]
+    mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
+    n_snapshots = len(list(fields.keys()))
+
+    Z = np.linspace(0, 1, Nz)
+
+    mesh_extr = petscMesh.Mesh.extrude_mesh(mesh, Nz)
+    output_path = 'output/out3d.h5'
+    mesh_extr.write_to_hdf5(output_path)
+    save_fields = io.get_save_fields_simple(output_path, True)
+
+    #mesh = GradientMesh.fromMesh(mesh)
+    i_count = 0
+    pde = model.get_pde(printer='numpy')
+    for i_snapshot in range(n_snapshots):
+        group_name = "iteration_" + str(i_snapshot)
+        group = fields[group_name]
+        time = group["time"][()]
+        if time < start_at_time:
+            continue
+        Q = group["Q"][()]
+        Qaux = group["Qaux"][()]
+
+        rhoUVWP = np.zeros((Q.shape[1] * Nz, 5), dtype=float)
+
+        #for i_elem, (q, qaux) in enumerate(zip(Q.T, Qaux.T)):
+        #    for iz, z in enumerate(Z):
+        #        rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
+        for iz, z in enumerate(Z):
+        
+            #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
+            # rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), 0] = Q[0, :mesh.n_inner_cells]
+            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], parameters).T
+            rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew
+
+        # rhoUVWP[mesh.n_inner_cells:mesh.n_inner_cells+mesh.n_inner_cells, 0] = Q[0, :mesh.n_inner_cells]
+
+        qaux = np.zeros((Q.shape[1]*Nz, 1), dtype=float)
+        _ = save_fields(i_snapshot, time, rhoUVWP.T, qaux.T)
+        i_count += 1
+        print("converted {}".format(str(i_snapshot)))
+
+    io.generate_vtk(output_path)
+    print(f"write 3d: {output_path}")
+
+
+def vtk_interpolate_3d_old(
+    model, output_path, path_to_simulation, Nz=10, start_at_time=0, scale_h=1.0
+):
+    sim = h5py.File(path_to_simulation, "r")
+    parameters = io.load_settings(os.path.join(path_to_simulation, "settings.hdf5"))
     # mesh = sim['mesh']
     fields = sim["fields"]
     mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
@@ -36,17 +87,17 @@ def vtk_interpolate_3d(
             for i in range(lvl + 1)
         ]
     )
-    print("init phi psi and mesh")
     pde = model.get_pde(printer='numpy')
-    for i_snapshot in range(n_snapshots):
+    #for i_snapshot in range(n_snapshots):
+    i_snapshot = n_snapshots-1 
+    if True:
         group_name = "iteration_" + str(i_snapshot)
         group = fields[group_name]
         time = group["time"][()]
-        if time < start_at_time:
-            continue
+        #if time < start_at_time:
+        #    continue
         Q = group["Q"][()]
         Qaux = group["Qaux"][()]
-        #gradQ = mesh.gradQ(Q)
 
 
         rhoUVWP = np.zeros((Q.shape[1] * Nz, 5), dtype=float)
@@ -88,18 +139,6 @@ def recover_3d_from_smm_as_vtk(
 
     mesh = GradientMesh.fromMesh(mesh)
     i_count = 0
-    basis = model.basis
-    lvl = model.levels
-    phi = lambda z: np.array(
-        [lambdify(x, basis.basis(i, x))(z) for i in range(lvl + 1)]
-    )
-    psi = lambda z: np.array(
-        [
-            lambdify(x, integrate(basis.basis(i, x), (x, 0, 1)))(z)
-            for i in range(lvl + 1)
-        ]
-    )
-    print("init phi psi and mesh")
     for i_snapshot in range(n_snapshots):
         group = fields[str(i_snapshot)]
         time = group["time"][()]

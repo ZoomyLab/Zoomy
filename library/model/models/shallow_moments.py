@@ -1030,26 +1030,30 @@ class ShallowMoments2d(Model):
 
     def interpolate_3d(self):
         out = Matrix([0 for i in range(5)])
+        level = self.levels
+        offset = level+1
         x = self.position_3d[0]
         y = self.position_3d[1]
         z = self.position_3d[2]
         h = self.variables[0]
-        u = self.variables[1]/h
-        v = self.variables[2]/h
+        a = [self.variables[1+i]/h for i in range(offset)]
+        b = [self.variables[1+offset+i]/h for i in range(offset)]
         dudx = self.aux_variables[0]
         dvdy = self.aux_variables[1]
         rho_w = 1000.
         g = 9.81
-        rho_3d = rho_w * Piecewise((1., h-z > 0), (0.,True))
-        u_3d = u*Piecewise((1, h-z > 0), (0, True))
-        v_3d = v*Piecewise((1, h-z > 0), (0, True))
-        w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
-        p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
-        out[0] = rho_3d
+        # rho_3d = rho_w * Piecewise((1., h-z > 0), (0.,True))
+        # u_3d = u*Piecewise((1, h-z > 0), (0, True))
+        # v_3d = v*Piecewise((1, h-z > 0), (0, True))
+        # w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
+        # p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
+        u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
+        v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(b, z)
+        out[0] = h
         out[1] = u_3d
         out[2] = v_3d
-        out[3] = w_3d
-        out[4] = p_3d
+        out[3] = 0
+        out[4] = rho_w * g * h * (1-z)
 
         return out
 

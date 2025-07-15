@@ -53,6 +53,13 @@ class Basisfunction:
             b = lambdify(x, self.get(i))
             u[:] += alpha[i] * b(Z)
         return u
+    
+    def reconstruct_velocity_profile_at(self, alpha, z):
+        u = 0
+        for i in range(len(self.basis)):
+            b = lambdify(x, self.get(i))
+            u += alpha[i] * b(z)
+        return u
 
     def reconstruct_alpha(self, velocities, z):
         n_basis = len(self.basis)

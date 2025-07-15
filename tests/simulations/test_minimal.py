@@ -552,7 +552,7 @@ def test_implicit():
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
 
 def test_smm_junction():
-    level = 2
+    level = 4
     n_fields = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
@@ -566,7 +566,7 @@ def test_smm_junction():
             "lamda": 7,
             "rho": 1,
             "eta": 1,
-            "c_slipmod": 1 / 70.0,
+            "c_slipmod": 1 / 7.0,
         },
         reconstruction=recon.constant,
         num_flux=flux.Zero(),
@@ -616,8 +616,8 @@ def test_smm_junction():
 
     main_dir = os.getenv("SMS")
     mesh = petscMesh.Mesh.from_gmsh(
-        #os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
-        os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")
+        os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
+        # os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")
     )
 
     mesh = convert_mesh_to_jax(mesh)
@@ -625,7 +625,7 @@ def test_smm_junction():
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
     io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
-    #postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), scale_h=100.)
+    postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), Nz=20)
 
 
 if __name__ == "__main__":
