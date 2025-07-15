@@ -10,6 +10,7 @@ import attr
 from attr import define
 from typing import Union, Any
 
+
 from library.misc.custom_types import IArray, FArray, CArray
 from library.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
 import library.mesh.mesh_extrude as extrude
@@ -655,7 +656,7 @@ class Mesh:
         )
 
     def _compute_ascending_order_structured_axis(self):
-        cell_centers = self.cell_centers
+        cell_centers = self.cell_centers.T
         dimension = self.dimension
         if dimension == 1:
             order = np.lexsort((cell_centers[:, 0],))
@@ -1080,6 +1081,16 @@ class Mesh:
         face_normals = np.zeros((n_faces, dimension + 1), dtype=float)
         face_volumes = np.zeros((n_faces), dtype=float)
         face_centers = np.zeros((n_faces, dimension + 1), dtype=float)
+        
+        # hard coded guess
+        n_face_neighbors = 0
+        face_neighbors = (n_cells + 1) * np.ones((n_faces, n_face_neighbors), dtype=int)
+        lsq_gradQ = np.zeros((n_cells, dimension, n_cells), dtype=float)
+        lsq_neighbors = np.zeros(1)
+        lsq_monomial_multi_index = np.zeros(1)
+        lsq_scale_factors = np.zeros(1)
+        z_ordering = np.array([-1], dtype=float)
+
 
         return cls(
             msh.dimension + 1,
@@ -1090,8 +1101,8 @@ class Mesh:
             n_vertices,
             n_boundary_faces,
             n_faces_per_cell,
-            vertex_coordinates.T,
-            cell_vertices.T,
+            vertex_coordinates,
+            cell_vertices,
             cell_faces.T,
             cell_volumes,
             cell_centers.T,
@@ -1237,8 +1248,8 @@ class Mesh:
                 d_fields[field_names[i_fields]] = [field]
         # the brackets around the second argument (cells) indicate that I have only mesh type of mesh element of type self.type, with corresponding vertices.
         meshout = meshio.Mesh(
-            vertex_coords_3d,
-            [(self.type, self.cell_vertices.T)],
+            vertex_coords_3d.T,
+            [(mesh_util.convert_mesh_type_to_meshio_mesh_type(self.type), self.cell_vertices.T)],
             cell_data=d_fields,
             point_data=point_data,
         )
@@ -1246,7 +1257,7 @@ class Mesh:
         filepath, file_ext = os.path.splitext(filepath)
         if not os.path.exists(path) and path != "":
             os.mkdir(path)
-        meshout.write(filepath + ".vtk")
+        meshout.write(filepath + ".vtk", binary=False)
 
 
 @ define(frozen=True, slots=True)

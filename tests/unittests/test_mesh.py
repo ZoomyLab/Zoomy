@@ -141,17 +141,21 @@ def test_extrude_and_write_3d_mesh():
 
 @pytest.mark.critical
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
-def test_extrude_2d_as_fvm_mesh(mesh_type: str):
+def test_extrude_2d_mesh(mesh_type: str):
     main_dir = os.getenv("SMS")
     mesh = Mesh.from_gmsh(
-        os.path.join(main_dir, f"meshes/{mesh_type}_2d/mesh_coarse.msh"), f"{mesh_type}"
+        os.path.join(main_dir, f"meshes/{mesh_type}_2d/mesh_coarse.msh")
     )
+    # mesh = Mesh.from_gmsh(
+    #     os.path.join(main_dir, f"meshes/line/mesh.msh")
+    # )
 
-    mesh_ext = Mesh.extrude_fvm_mesh(mesh, 3)
+    mesh_ext = Mesh.extrude_mesh(mesh, 3)
 
-    filepath = os.path.join(main_dir, "output/test.vtk")
+    filepath = os.path.join(main_dir, f"output/test_{mesh_type}.vtk")
     os.makedirs(os.path.split(filepath)[0], exist_ok=True)
-    mesh_ext.write_to_file_vtk(filepath)
+    # mesh.write_to_vtk(filepath)
+    mesh_ext.write_to_vtk(filepath)
 
 
 @pytest.mark.critical
@@ -165,15 +169,15 @@ def test_extract_z_axis_on_extruded_mesh():
 
 
 if __name__ == "__main__":
-    test_create_1d_mesh()
-    test_load_2d_mesh("quad")
-    test_load_2d_mesh("triangle")
+    #test_create_1d_mesh()
+    #test_load_2d_mesh("quad")
+    #test_load_2d_mesh("triangle")
     # test_load_3d_mesh("tetra")
     # test_write_to_hdf5()
     # test_from_hdf5()
     # test_write_to_file_vtk()
     # test_read_vtk_cell_fields()
     # test_extrude_and_write_3d_mesh()
-    # test_extrude_2d_as_fvm_mesh('quad')
-    # test_extrude_2d_as_fvm_mesh('triangle')
+    # test_extrude_2d_mesh('quad')
+    test_extrude_2d_mesh('triangle')
     # test_extract_z_axis_on_extruded_mesh()

@@ -1,9 +1,24 @@
 import numpy as np
 
+def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
+    if mesh_type == "triangle":
+        return "triangle"
+    elif mesh_type == "hexahedron":
+        return "hexahedron"
+    elif mesh_type == "line":
+        return "line"
+    elif mesh_type == "quad":
+        return "quad"
+    elif mesh_type == "wface":
+        return "wedge"
+    elif mesh_type == "tetra":
+        return "tetra"
+    else:
+        assert False
 
 def get_extruded_mesh_type(mesh_type: str) -> str:
     if (mesh_type) == "quad":
-        return "hex"
+        return "hexahedron"
     elif (mesh_type) == "triangle":
         return "wface"
     else:
@@ -55,7 +70,7 @@ def face_normals(coordinates, element, mesh_type) -> float:
         return _face_normals_2d(coordinates, element, mesh_type)
     elif mesh_type == "tetra":
         return _face_normals_3d(coordinates, element, mesh_type)
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return _face_normals_3d(coordinates, element, mesh_type)
     elif mesh_type == "wface":
         return _face_normals_3d(coordinates, element, mesh_type)
@@ -145,7 +160,7 @@ def volume(coordinates, element, mesh_type) -> float:
         return _area_quad(coordinates, element)
     elif mesh_type == "tetra":
         return _volume_tetra(coordinates, element)
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return _volume_hex(coordinates, element)
     elif mesh_type == "wface":
         return _volume_wface(coordinates, element)
@@ -225,8 +240,8 @@ def inradius(coordinates, element, mesh_type) -> float:
         return _inradius_quad(coordinates, element)
     elif mesh_type == "tetra":
         return _inradius_tetra(coordinates, element)
-    elif mesh_type == "hex":
-        return _inradius_generic(coordinates, element, "hex")
+    elif mesh_type == "hexahedron":
+        return _inradius_generic(coordinates, element, "hexahedron")
     elif mesh_type == "wface":
         return _inradius_generic(coordinates, element, "wface")
     assert False
@@ -296,7 +311,7 @@ def _face_order(element, mesh_type):
         return _edge_order_quad(element)
     elif mesh_type == "tetra":
         return _face_order_tetra(element)
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return _face_order_hex(element)
     elif mesh_type == "wface":
         return _face_order_wface(element)
@@ -358,7 +373,7 @@ def _get_num_vertices_per_face(mesh_type) -> float:
         return [2, 2, 2, 2]
     elif mesh_type == "tetra":
         return [3, 3, 3, 3]
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return [4, 4, 4, 4, 4, 4]
     elif mesh_type == "wface":
         return [3, 3, 4, 4, 4]
@@ -372,7 +387,7 @@ def _get_dimension(mesh_type):
         return 2
     elif mesh_type == "tetra":
         return 3
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return 3
     else:
         assert False
@@ -387,7 +402,7 @@ def _get_faces_per_element(mesh_type):
         return 4
     elif mesh_type == "tetra":
         return 4
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return 6
     elif mesh_type == "wface":
         return 5
@@ -402,7 +417,7 @@ def _get_boundary_element_type(mesh_type):
         return ["line", "line", "line", "line"]
     elif mesh_type == "tetra":
         return ["triangle", "triangle", "triangle", "triangle"]
-    elif mesh_type == "hex":
+    elif mesh_type == "hexahedron":
         return ["quad", "quad", "quad", "quad", "quad", "quad"]
     elif mesh_type == "wface":
         return ["triangle", "triangle", "quad", "quad", "quad"]
