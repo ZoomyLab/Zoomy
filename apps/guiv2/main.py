@@ -40,7 +40,6 @@ class PageTabs(param.Parameterized):
         The parent app can embed this layout into a template.
         """
         return pn.Column(
-            "## Tabs Page",
             self.tabs
         )
 

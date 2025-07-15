@@ -38,7 +38,7 @@ class MeshSection(Section):
     def __init__(self, parent_app, **params):
         super().__init__(**params)
 
-        self.title='Mesh'
+        self.title='Mesh Selection'
 
         mesh1 = MeshCard(parent_app, path='meshes/line/mesh.msh', title="Rectangle")
         mesh2 = MeshCard(parent_app, path='meshes/channel_junction/mesh_2d_coarse.msh', title="Junction" )
