@@ -55,8 +55,10 @@ images_ijrewhs
 library/model/models/\
 .cache
 
-meshes/*
+meshes/**
 !meshes/**/*.geo
+!meshes/
+
 of_coupling/of-original/dynamicCode
 of_coupling/of-original/export1
 tests/vtk.js/webview/paraview-lite
