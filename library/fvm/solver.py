@@ -9,7 +9,7 @@ from jaxopt import Broyden
 from types import SimpleNamespace
 import pyprog
 from attr import define, field
-from typing import Callable, Optional, Type, Any
+from typing import Callable, Optional, Type, Any, List
 
 # from copy import deepcopy
 from time import time as gettime
@@ -53,7 +53,7 @@ class Settings:
     parameters: dict = {}
     reconstruction: Callable = recon.constant
     reconstruction_edge: Callable = recon.constant_edge
-    num_flux: Callable = flux.LF()
+    num_flux: Callable = flux.Zero()
     nc_flux: Callable = nonconservative_flux.segmentpath()
     compute_dt: Callable = timestepping.constant(dt=0.1)
     time_end: float = 1.0
@@ -67,7 +67,11 @@ class Settings:
     debug: bool = False
     profiling: bool = False
     compute_gradient: bool = False
-    precice_config_path: str = "/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml"
+
+@register_static_pytree
+@define(slots=True, frozen=True, kw_only=True)
+class PreciceSettings(Settings):
+    precice_config_path: str = "/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml" 
 
 
 @define(frozen=True)
@@ -456,7 +460,7 @@ class Solver:
 
         parameters = model.parameter_values
 
-        #mesh = convert_mesh_to_jax(mesh)
+        mesh = convert_mesh_to_jax(mesh)
         parameters = jnp.asarray(parameters)
 
         pde, bcs = self._load_runtime_model(model)
