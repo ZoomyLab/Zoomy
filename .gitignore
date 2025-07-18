@@ -55,9 +55,10 @@ images_ijrewhs
 library/model/models/\
 .cache
 
-meshes/**/
+/meshes/**/*
+!/meshes
+!/meshes/*
 !meshes/**/*.geo
-!meshes/
 
 of_coupling/of-original/dynamicCode
 of_coupling/of-original/export1
