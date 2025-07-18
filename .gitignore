@@ -55,7 +55,7 @@ images_ijrewhs
 library/model/models/\
 .cache
 
-meshes/**
+meshes/**/*
 !meshes/**/*.geo
 !meshes/
 
