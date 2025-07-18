@@ -14,8 +14,11 @@ from library.model.models.base import RuntimeModel
 def vtk_interpolate_3d(
     model, output_path, path_to_simulation, Nz=10, start_at_time=0, scale_h=1.0
 ):
+    main_dir = os.getenv("SMS")
+    path_to_simulation = os.path.join(main_dir, path_to_simulation)
+    output_path = os.path.join(main_dir, output_path)
     sim = h5py.File(path_to_simulation, "r")
-    parameters = io.load_settings(os.path.join(path_to_simulation, "settings.hdf5"))
+    parameters = io.load_settings(output_path)
     fields = sim["fields"]
     mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
     n_snapshots = len(list(fields.keys()))
@@ -23,7 +26,8 @@ def vtk_interpolate_3d(
     Z = np.linspace(0, 1, Nz)
 
     mesh_extr = petscMesh.Mesh.extrude_mesh(mesh, Nz)
-    output_path = 'output/out3d.h5'
+    output_path = os.path.join(main_dir, output_path)
+    output_path = os.path.join(output_path, "fields3d.h5")
     mesh_extr.write_to_hdf5(output_path)
     save_fields = io.get_save_fields_simple(output_path, True)
 

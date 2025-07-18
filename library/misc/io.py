@@ -56,7 +56,7 @@ def save_settings(filepath, settings):
 def load_settings(filepath):
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
-    with h5py.File(os.path.join('/home/ingo/Git/sms/outputs/sme_0', "settings.h5"), "r") as f:
+    with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
         parameters = {k: v[()] for k, v in f["parameters"].items()}
         name = f["name"][()]
         output_dir = f["output_dir"][()]
