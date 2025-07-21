@@ -8,7 +8,7 @@ from sympy.abc import x
 
 from sympy import integrate, diff
 from sympy import legendre
-from sympy import lambdify
+from sympy import lambdify, Rational
 
 
 from library.model import *
@@ -18,17 +18,19 @@ from library.model.models.base import (
 )
 from library.model.models.base import Model
 import library.model.initial_conditions as IC
+import library.model.boundary_conditions as BC
 from library.model.models.basisfunctions import *
 from library.model.models.basismatrices import *
 
 class GN(Model):
     def __init__(
         self,
-        boundary_conditions,
-        initial_conditions,
+        boundary_conditions= None,
+        initial_conditions=None,
         dimension=1,
         fields=2,
-        aux_fields=['dq0dt','D1', 'dtF0', 'dtF1'],
+        # D = h^3 / 3 * (dt * dx * u + u * dx^2 u - (dx u)^2)
+        aux_fields=['dD_dx'],
         parameters={},
         parameters_default={"g": 9.81},
         settings={},
@@ -49,27 +51,23 @@ class GN(Model):
         
     def flux(self):
         fx = Matrix([0 for i in range(self.n_fields)])
-        nu = self.variables[0]
-        u = self.variables[1]
+        h = self.variables[0]
+        hu = self.variables[1]
 
         param = self.parameters
         
-        fx[0] = u + nu * u
-        fx[1] = 1/2 * u**2
-
+        fx[0] = hu
+        fx[1] = hu**2 / h + 1/2 * param.g * h**2 
         return [fx]
 
     
 
     def source_implicit(self):
         R = Matrix([0 for i in range(self.n_fields)])
-        dq0dt = self.aux_variables.dq0dt
-        D1 = self.aux_variables.D1
-        dtF0 = self.aux_variables.dtF0
-        dtF1 = self.aux_variables.dtF1
+        dD_dx = self.aux_variables.dD_dx
 
 
-        R[0] = dq0dt + dtF0
-        R[1] = D1 + dtF1
+        R[0] = 0
+        R[1] = dD_dx
         return R
         
