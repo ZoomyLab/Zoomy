@@ -165,7 +165,7 @@ class Model:
 
         self.variables = register_sympy_attribute(fields, "q")
         self.aux_variables = register_sympy_attribute(aux_fields, "aux")
-        self.time = sympy.symbols("time", real=True)
+        self.time = sympy.symbols("t", real=True)
         self.position = register_sympy_attribute(self.dimension, "X")
         self.position_3d = register_sympy_attribute(3, "X")
         self.distance = sympy.symbols("dX", real=True)
