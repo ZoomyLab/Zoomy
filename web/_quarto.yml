@@ -26,8 +26,6 @@ website:
         href: software.qmd
       - text: "Publications"
         href: publications.qmd
-      - text: "About"
-        href: about.qmd
     right: 
       - icon: github
         menu:
