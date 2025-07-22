@@ -1,0 +1,33 @@
+---
+nocite: |
+  @*
+---
+
+::: {.callout-warning}
+This page is under construction
+:::
+
+# Publications explained
+
+## (Preprint)
+
+::: {layout-ncol=2}
+
+![click to view the video](images/wip.png){ width=100% }
+
+**Abstract**
+
+:::
+
+::: {layout-ncol=2}
+
+**Main result**
+
+![Main result](images/wip.png){ width=100% }
+
+:::
+
+# Publication List
+
+::: {#refs}
+:::

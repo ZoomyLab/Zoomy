@@ -1,0 +1,221 @@
+## Legal notice and data protection
+
+**Responsible for the content of these pages:**
+
+Ingo Steldermann
+
+Ringstr. 103
+
+52078 Aachen
+
+E-Mail: info@shallowflow.com
+
+## Disclaimer
+
+1. **Content of the online offer**
+
+The author does not assume any liability for the topicality, correctness, completeness or quality of the information provided. Liability claims against the author relating to material or immaterial damage caused by the use or non-use of the information provided or by the use of incorrect and incomplete information are generally excluded, unless there is evidence of intentional or gross negligence on the part of the author.
+All offers are subject to change and non-binding. The author expressly reserves the right to change, supplement or delete parts of the pages or the entire offer without prior notice or to cease publication temporarily or permanently.
+
+2. **References and links**
+
+In the case of direct or indirect references to external websites (“hyperlinks”), which lie outside the author's area of responsibility, a liability obligation would only come into effect if the author had knowledge of the contents and it was technically possible and reasonable for him to prevent use in the event of illegal contents.
+The author hereby expressly declares that at the time the links were created, no illegal content was recognisable on the linked pages. The author has no influence whatsoever on the current and future design, content or authorship of the linked pages. Therefore, he hereby expressly distances himself from all contents of all linked pages that were changed after the link was set. This statement applies to all links and references set within the author's own Internet offer as well as to external entries in guest books, discussion forums, link directories, mailing lists and in all other forms of databases set up within the author's own Internet offer, as well as to entries by the author, which can be accessed by external write access. For illegal, incorrect or incomplete contents and in particular for damages resulting from the use or non-use of such information, the provider of the page to which reference was made is solely liable, not the one who merely refers to the respective publication via links.
+
+3. **Copyright and trademark law**
+
+The author endeavours to observe the copyrights of the images, graphics, sound documents, video sequences and texts used in all publications, to use images, graphics, sound documents, video sequences and texts created by himself or to resort to license-free graphics, sound documents, video sequences and texts.
+All brands and trademarks mentioned within the Internet offer and possibly protected by third parties are subject without restriction to the provisions of the applicable trademark law and the ownership rights of the respective registered owners. The mere mention does not lead to the conclusion that trademarks are not protected by the rights of third parties!
+The copyright for published objects created by the author himself remains solely with the author of the pages. Any duplication or use of such graphics, sound documents, video sequences and texts in other electronic or printed publications is not permitted without the express consent of the author.
+
+4. **Legal validity of this disclaimer**
+
+This disclaimer is to be regarded as part of the Internet offer from which reference was made to this page. If parts or individual formulations of this text do not, no longer or do not completely correspond to the current legal situation, the remaining parts of the document remain unaffected in their content and validity.
+
+## Privary Policy
+
+### Data protection at a glance
+
+The following information provides a simple overview of what happens to your personal data when you visit this website. Personal data is all data with which you can be personally identified. Detailed information on the subject of data protection can be found in our privacy policy listed below this text.
+
+### Data collection on this website
+
+**Who is responsible for data collection on this website?**
+
+The data processing on this website is carried out by the website operator. You can find its contact details in the section “Note on the controller” in this privacy policy.
+
+**How do we collect your data?**
+
+On the one hand, your data will be collected by you providing it with us. Here it can be e.g. to enter data that you enter in a contact form.
+
+Other data is collected automatically or after your consent when you visit the website by our IT systems. These are mainly technical data (e.g. B. Internet browser, operating system or time of page viewing). This data is collected automatically as soon as you enter this website.
+
+**We use your data?**
+
+Part of the data is collected to ensure error-free provision of the website. Other data can be used to analyse your user behaviour.
+
+**What rights do you have of your data?**
+
+You have the right to obtain information about the origin, recipient and purpose of your stored personal data free of charge at any time. You also have the right to request the correction or deletion of this data. If you have given your consent to data processing, you can revoke this consent at any time for the future. In addition, you have the right to request, in certain circumstances, to request the restriction of the processing of your personal data.
+
+Furthermore, you have the right to lodge a complaint with the competent supervisory authority. You can contact us at any time about this and other questions about data protection.
+
+**Third-party analysis tools and tools**
+
+When you visit this website, your surfing behaviour can be statistically evaluated. This is mainly done with so-called analysis programs. Detailed information on these analysis programs can be found in the following privacy policy.
+
+
+## Hosting
+
+### External hosting
+
+This website is hosted by an external service provider (hoster). The personal data collected on this website is stored on the servers of the hoster. This can be IP addresses, contact requests, meta and communication data, contract data, contact details, names, website access and other data generated via a website.
+
+The hoster is deployed for the purpose of fulfilling the contract to our potential and existing customers (Art. 6 para. 1 lit. b GDPR) and in the interest of a secure, fast and efficient provision of our online offer by a professional provider (Art. 6 para. 1 lit. f GDPR).
+
+Our host will only process your data to the extent necessary to fulfil its performance obligations and follow our instructions regarding this data.
+
+We use the following Hosters:
+
+STRATO GmbH
+
+Otto-Ostrowski-Straße 7
+
+10249 Berlin
+
+**Contract processing**
+
+We have concluded a contract for order processing (AVV) with the above-mentioned provider. This is a contract prescribed by data protection law, which guarantees that they process the personal data of our website visitors only in accordance with our instructions and in compliance with the GDPR.
+
+## General information and mandatory information
+
+**Data protection**
+
+The operators of these pages take the protection of your personal data very seriously. We treat your personal data confidentially and in accordance with the statutory data protection regulations and this privacy policy.
+
+If you use this website, various personal data is collected. Personal data is data with which you can be personally identified. This privacy policy explains what data we collect and what we use it for. It also explains how and for what purpose this is done. We would like to point out that data transmission over the Internet (e.g. when communicating by e-mail) can have security vulnerabilities. A complete protection of data against access by third parties is not possible.
+
+Note on the responsible body
+
+The responsible body for data processing on this website is:
+
+Ingo Steldermann
+
+Ringstr. 103
+
+52078 Aachen
+
+E-Mail: info@shallowflow.com
+
+The controller is the natural or legal person who, alone or jointly with others, about the purposes and means of the processing of personal data (e.g. B. Names, email addresses o. ethere).
+
+**Storage duration**
+
+If no more specific storage period has been specified within this privacy policy, your personal data will remain with us until the purpose for data processing is not applicable. If you assert a legitimate request for deletion or revoke your consent to data processing, your data will be deleted, unless we have any other legally permissible reasons for the storage of your personal data (e.g. tax or commercial retention periods); in the latter case, deletion takes place after these reasons has since then these reasons have lapsed.
+
+**Note on data transfer to the USA and other third countries**
+
+We use, among other things, tools from companies based in the USA or other third countries not secure under data protection law. If these tools are active, your personal data may be transferred to and processed there. We would like to point out that in these countries no level of data protection comparable to the EU can be guaranteed.
+
+For example, US companies are required to disclose personal data to security agencies without you as affecting being able to take legal action against this. It cannot therefore be ruled out that US authorities (e.g. B. Secret services) process, evaluate and permanently store your data on US servers for monitoring purposes. We have no influence on these processing activities.
+
+**Revocation of your consent to data processing**
+
+Many data processing operations are only possible with your explicit consent. You can revoke your consent at any time. The legality of the data processing carried out until the revocation remains unaffected by the revocation.
+
+**Right to object to data collection in special surveys and against**
+
+**Direct marketing (Art. 21 GDPR)**
+
+IF THE DATA PROCESSING ON GROAD OF ART. 6 ABS. 1 LIT. OR F GDPR, HAVE EVERY TIME THE RIGHT OF THE GREEN, THE GREEN OF THE YOUR SON OF SPECIAL SITUATION FEELs, AGAINST THE DISCLAIMER OF PERSONAL PERSONAL DATA SPECIAL PROSE INSTRUTH; THE PARTICULATIONS OF THE PARTICIPATION OF PARTIES. THE LEGAL LEGAL DAYS, ON THE A PROCESSING, RELEASES. IF YOU ARE NOT MORE USE, MEETING THE PERSONAL DATA NOT MORE DISTRIBUTION, IT YOU ARE INSTRUAL PROTECTIRY PROTECTS WITHIN WORKERS WITHOWN GREAT FOUNDATIONS ON THE DISPLOYMENT SECTORS, THE YOU ARE RELEASES,HUNG, EXCLUSIVE DEFENCE OF RIGHT PRODUCTS (EMPLOYMENT AFTER ART. 21 ABS. 1 GDPR).
+
+WILL BE RESPONSIBLE TO REPRESENTATION OF YOUR PERSONAL YOU HAVE THE RIGHT, EVERY PREPARATION OF THIS PROCESSING USE OF THE USE OF RECALLING BETRIMINAL PERSONE CITY DATA TO PURPOSE OF THE PURPOSE OF THE PURPOSESUCH DIRECT TERMS IN CONNECTION. IF YOU ARE BY YOU WILL BE PERSONAL DATA ONLY ONLY MORE TO OVERVIEW OF THE DIRECT WORLDING USE (EMPLOYEMENT AFTER ART. 21 ABS. 2 GDPR).
+
+**Right to complain at the supervisory authority**
+
+In the event of violations of the GDPR, the data subjects have the right to lodge a complaint with a supervisory authority, in particular in the Member State of their habitual residence, their workplace or the place of the alleged infringement. The right to lodge a complaint exists without prejudice to any other administrative or judicial remedy.
+
+**Right to data transfer**
+
+You have the right to have data that we process automatically on the basis of your consent or in fulfilment of a contract handed over to you or to a third party in a common, machine-readable format. If you request the direct transfer of the data to another controller, this will only be done if it is technically feasible.
+
+**SSL or TLS encryption**
+
+For security reasons and to protect the transmission of confidential content, such as orders or requests that you send to us as the site operator, use SSL or SSL or TLS encryption.
+
+You can recognise an encrypted connection by the fact that the address line of the browser changes from "http://" to "https://" and by the lock icon in your browser line.
+
+If the SSL or TLS encryption is activated, the data you transmit to us cannot be read by third parties.
+
+**Information, research and correction**
+
+Within the scope of the applicable statutory provisions, you have the right to free information about your stored personal data, their origin and recipients and the purpose of the data processing and, if necessary, a right to correction or deletion of this data at any time. You can contact us at any time if you have any further questions about personal data.
+
+**Right to rejecting the processing**
+
+You have the right to request the restriction of the processing of your personal data. You can contact us at any time. The right to restriction of processing exists as a result of cases: If you dispute the accuracy of your personal data stored by us, we usually need time to check this. For the duration of the examination, you have the right to request the restriction of the processing of your personal data. If the processing of your personal data has been unlawful, you may request the restriction of data processing instead of deletion. If we no longer need your personal data, but you need it to exercise, defend or assert legal claims, you have the right to request the restriction of the processing of your personal data instead of deletion.
+
+If you are opposed to Art. 21 para. 1 GDPR, a balance must be made between your interests and our interests. As long as it is not yet clear whose interests prevail, you have the right to request the restriction of the processing of your personal data.
+
+If you have restricted the processing of your personal data, this data may only be processed – with the exception of its storage – with your consent or for the establishment, exercise or defence of legal claims or for the protection of the rights of another natural or legal person or for reasons of important public interest of the European Union or a Member State.
+
+## Data collection on this website
+
+**Server log files**
+
+The provider of the pages automatically collects and stores information in so-called server log files, which your browser automatically transmits to us. These are:
+
+* Browser type and browser version
+* operating system used
+* Referrer URL
+* Host name of the accessing computer
+* Time of the server request
+* IP address
+
+This data will not be combined with other data sources. This data is collected on the basis of Art. 6 para. 1 lit. f GDPR. The website operator has a legitimate interest in the technically error-free presentation and optimization of its website – for this purpose, the server log files must be recorded.
+
+**Request by e-mail**
+
+If you contact us by e-mail, your request, including all resulting personal data (name, request), will be stored and processed by us for the purpose of processing your request. We will not pass on this data without your consent.
+
+The processing of this data is based on Art. 6 para. 1 lit. b GDPR, if your request is related to the performance of a contract or is necessary for the implementation of pre-contractual measures. In all other cases, the processing is based on our legitimate interest in the effective processing of the inquiries addressed to us (Art. 6 para. 1 lit. f GDPR) or on your consent (Art. 6 para. 1 lit. a GDPR) if this has been queried.
+
+The data sent by you to us via contact requests will remain with us until you request its deletion, revoke your consent to its storage or the purpose for its storage no longer applies (e.g. after completion of your request). Mandatory legal provisions – in particular statutory retention periods – remain unaffected.
+
+## Plugins and tools
+
+**Google Maps**
+
+This page uses the Google Maps map service. The provider is Google Ireland Limited (“Google”), GordonHouse, Barrow Street, Dublin 4, Ireland. To use the functions of Google Maps, it is necessary to store your IP address. This information is usually transmitted to a Google server in the USA and stored there.
+
+The provider of this site has no influence on this data transmission. If Google Maps is enabled, Google can use Google Web Fonts for the purpose of displaying the fonts. When calling Google Maps, your browser loads the required web fonts into your browser cache to display texts and fonts correctly.
+
+The use of Google Maps is in the interest of an appealing presentation of our online offers and an easy findability of the places indicated by us on the website. This represents a legitimate interest in the sense of Art. 6 para. 1 lit. f GDPR. If a corresponding consent has been requested, the processing is carried out exclusively on the basis of Art. 6 para. 1 lit. a GDPR; consent is revokable at any time.
+
+The data transfer to the USA is based on the standard contractual clauses of the EU Commission.
+
+Details can be found here:
+
+https://privacy.google.com/businesses/gdprcontrollerterms/ and
+
+https://privacy.google.com/businesses/gdprcontrollerterms/sccs/.
+
+More information on the handling of user data can be found in Google's privacy policy:
+
+https://policies.google.com/privacy?hl.en.
+
+**Wordfence**
+
+We have included Wordfence on this website. Its provider is Defiant Inc., Defiant, Inc., 800 5th Ave Ste 4100, Seattle, WA 98104, USA (hereinafter Wordfence).
+
+Wordfence is used to protect our website from unwanted access or malicious cyber attacks. For this purpose, our website establishes a permanent connection to the servers of Wordfence, so that Wordfence can match and, if necessary, block its databases with the accesses made on our website.
+
+The use of Wordfence is based on Art. 6 para. 1 lit. f GDPR. The website operator has a legitimate interest in protecting its website from cyber attacks. If a corresponding consent has been requested, the processing is carried out exclusively on the basis of Art. 6 para. 1 lit. a GDPR; consent is revokable at any time.
+
+The data transfer to the USA is based on the standard contractual clauses of the EU Commission.
+
+Details can be found here:
+
+[Wordfence and GDPR – General Data Protection Regulation](https://www.wordfence.com/help/general-data-protection-regulation/)
+
+Source (adapted): https://www.e-recht24.de

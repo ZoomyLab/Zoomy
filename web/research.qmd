@@ -1,0 +1,69 @@
+::: {.callout-warning}
+This page is under construction
+:::
+
+# Research
+
+## Shallow Moments: Zoom into the shallow
+
+**Abstract**
+
+
+### What are these Shallow Moments?
+
+::: {layout-ncol=2}
+
+![Figure 1](images/wip.png){ width=100% }
+
+Example of 1d slide? Or dam break? Or OF to SWE modeling dilemma?
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+:::
+
+### Why should I care?
+
+::: {layout-ncol=2}
+
+**Relevance**
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+![Figure 2](images/wip.png){ width=100% }
+
+:::
+
+### How mature is it?
+
+::: {layout-ncol=2}
+
+![Figure 3](images/wip.png){ width=100% }
+
+**What have we done**
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+
+:::
+
+### In which directions will it go?
+
+::: {layout-ncol=2}
+
+**Reseach objectives**
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+![Figure 4](images/wip.png){ width=100% }
+
+:::
+
+### How can I get started?
+
+::: {layout-ncol=2}
+
+![Figure 5](images/wip.png){ width=100% }
+
+**Playground, publication, videos, give a call, mail**
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+
+:::
+
+

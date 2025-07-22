@@ -1,0 +1,61 @@
+::: {.callout-warning}
+This page is under construction
+:::
+
+#
+
+## Zoomy is
+
+
+### Simple to use
+
+::: {layout-ncol=2}
+
+![Figure 1](images/wip.png){ width=100% }
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+:::
+
+### Application oriented
+
+::: {layout-ncol=2}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+![Figure 2](images/wip.png){ width=100% }
+
+:::
+
+### Flexible
+
+::: {layout-ncol=2}
+
+![Figure 4](images/wip.png){ width=100% }
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+
+:::
+
+### Automatic differentiation
+
+::: {layout-ncol=2}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+![Figure 3](images/wip.png){ width=100% }
+
+:::
+
+### Fast
+
+::: {layout-ncol=2}
+
+![Figure 4](images/wip.png){ width=100% }
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
+
+:::
+
+

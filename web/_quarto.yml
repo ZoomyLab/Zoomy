@@ -1,0 +1,82 @@
+
+project:
+  type: website
+
+bibliography: bibliography.bib
+
+
+website:
+  title: ""
+  favicon: /images/favicon.png
+  search: 
+    location: navbar
+    type: overlay
+  navbar:
+    logo: /images/logo_text.png
+    left:
+      - text: "Documentation"
+        href: docs/index.qmd
+      - text: "Tutorials"
+        href: tutorials/index.qmd
+      - text: "Examples"
+        href: examples/index.qmd
+      - text: "Playground"
+        href: playground/playground.qmd
+      - text: "Software"
+        href: software.qmd
+      - text: "Publications"
+        href: publications.qmd
+      - text: "About"
+        href: about.qmd
+    right: 
+      - icon: github
+        menu:
+          - text: Zoomy
+            href: https://github.com/mbd-rwth/Zoomy
+          - text: MBD
+            href: https://github.com/mbd-rwth
+      - text: "{{< iconify fa6-brands linkedin >}}"
+        href: 'https://de.linkedin.com/company/rwth-mbd'
+
+  sidebar:
+    - id: tutorials 
+      title: "Tutorials"
+      style: "floating"
+      contents:
+        - tutorials/index.qmd
+        - tutorials/swe/simple.ipynb
+        - tutorials/poisson/simple.ipynb
+        - tutorials/vam/simple.ipynb
+        - tutorials/sme/simple.ipynb
+
+  page-footer:
+    background: None
+    foreground: None
+    border: false
+    left: "Copyright 2025, Ingo Steldermann"
+    right: 
+      - text: "Legal notice and data protection" 
+        href: legal.qmd
+
+format:
+  html:
+    theme: cosmo
+    # embed-resources: true
+    # self-contained-math: true
+    css: custom.css
+    toc: true
+    html-math-method: mathjax
+    include-in-header:
+      - text: |
+          <script>
+          MathJax = {
+            tex: {
+              tags: 'ams'
+            }
+          };
+          </script>
+
+
+execute: 
+  freeze: true
+  cache: false

@@ -1,0 +1,15 @@
+---
+toc: false
+format:
+  html:
+    toc: false
+    page-layout: full
+listing:
+  template: ../themes/gallery.ejs
+  contents: playground.yml
+---
+
+::: {.callout-warning}
+This page is under construction
+:::
+

@@ -1,0 +1,35 @@
+---
+format:
+  html:
+    toc: false
+    sidebar: false
+    page-layout: full
+    grid:
+      gutter-width: 0px
+      margin-width: 0px
+      sidebar-width: 0rem
+      body-width: 20000px
+    css: index.css
+comments: false
+---
+
+
+
+
+::: {.section #section1}
+
+#
+
+# Zoomy
+
+flexible modeling and simulation software \
+for free-surface flows
+
+:::
+
+::: {.link}
+
+[ZOOM IN](/playground/playground.qmd)
+
+:::
+

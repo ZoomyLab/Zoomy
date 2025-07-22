@@ -1,0 +1,103 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-image: url('/images/background.png');
+  background-size: cover; 
+  background-position: center; 
+  background-repeat: no-repeat; 
+}
+
+.section {
+  position: relative;
+  display: flex;
+  justify-content: center; /* Centers content horizontally */
+  align-items: flex-start; /* Centers content vertically */
+  height: 100vh; /* Full viewport height for each section */
+}
+
+#section1 {
+  margin-top: 20vh;
+  margin-bottom: 0vh;
+
+  h1, p {
+    color: white !important; 
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); 
+    text-align: left;
+    font-size: 150%;
+  }
+  h1 {
+    font-size: 350%;
+  }
+  h1 {
+    padding-left: 30%;
+    padding-right: 10%;
+  }
+  p {
+    padding-left: 35%;
+    padding-right: 10%;
+  }
+  
+}
+
+
+.link a {
+    color: white; 
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); 
+    text-align: left;
+    font-size: 300%;
+    padding-left: 53%;
+    padding-right: 10%;
+    text-decoration: none;
+    font-weight: normal;
+
+}
+
+
+@media screen and (max-width: 768px) {
+  #section1 {
+    h1 {
+      padding-left: 10%;
+      padding-right: 10%;
+    }
+    p {
+      padding-left: 15%;
+      padding-right: 10%;
+    }
+    
+  }
+
+    .link a {
+        padding-left: 40%;
+        padding-right: 10%;
+
+    }
+}
+
+.link a:hover {
+    font-size: 330%;
+    color: white; 
+    font-weight: normal;
+}
+  
+
+
+.navbar {
+  background-color: rgba(255, 255, 255, 0.4); 
+}
+
+
+/* Main content area should grow to fill space */
+main {
+  flex-grow: 1;
+}
+
+footer {
+  background-color: rgba(255, 255, 255, 0.4);
+  padding: -20px;
+  text-align: center;
+}

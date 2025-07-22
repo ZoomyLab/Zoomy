@@ -1,0 +1,13 @@
+- category: Playground
+  description: |
+    A browser is all you need to get started!
+  tiles:
+    - title: Main software 
+      subtitle: a GUI to run simulation
+      href: /apps/gui
+      thumbnail: images/playground/gui.png
+
+    - title: Shallow Water Game 
+      subtitle: " - interact and play"
+      href: /apps/swe-game
+      thumbnail: images/playground/swe-game.gif

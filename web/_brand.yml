@@ -1,0 +1,18 @@
+color:
+  palette:
+    dark-grey: "#222222"
+    blue: "#8EBAE5"
+    white: "#ffffff"
+  background: white
+  foreground: dark-grey
+  primary: black
+
+logo: 
+  medium: images/logo_text.png
+
+typography:
+  fonts:
+    - family: Noto Sans
+      source: google
+  base: Noto Sans
+  headings: Noto Sans
