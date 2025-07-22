@@ -2,6 +2,16 @@
 
 Flexible modeling and simulation software for free-surface flows.
 
+## Documentation
+
+See our [Documentation](https://mbd-rwth.github.io/Zoomy/) for details on 
+
+* how to get started
+* installation instructions
+* tutorials
+* examples
+* ...
+
 ## Installation
 
 ### Conda/Mamba
@@ -57,18 +67,12 @@ PETSC_DIR=/path/to/petsc/installation
 PETSC_ARCH=architecture used for compiling petsc
 ```
 
-## Getting started
-
-see our `tutorials` folder.
 
 ## License
 The bryne code is free open-source software,
 licensed under version 3 or later of the GNU General Public License.
 See the file [LICENSE](LICENSE) for full copying permissions.
 
-## Documentation
-
-T.b.d.
 
 ## Publications
 
