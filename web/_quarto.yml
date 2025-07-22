@@ -4,6 +4,16 @@ project:
 
 bibliography: bibliography.bib
 
+quartodoc:
+  style: pkgdown
+  dir: api
+  package: library
+  sections:
+    - title: 
+      desc: Test
+      contents:
+        - fvm.solver.Settings
+
 
 website:
   title: ""
@@ -24,6 +34,8 @@ website:
         href: playground/playground.qmd
       - text: "Software"
         href: software.qmd
+      - text: "API"
+        href: api/index.qmd
       - text: "Publications"
         href: publications.qmd
     right: 
@@ -73,6 +85,9 @@ format:
             }
           };
           </script>
+          <script data-goatcounter="https://ingosteldermann.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+
 
 
 execute: 
