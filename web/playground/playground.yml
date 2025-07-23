@@ -3,11 +3,11 @@
     A browser is all you need to get started!
   tiles:
     - title: Main software 
-      subtitle: a GUI to run simulation
-      href: /apps/gui
+      subtitle: GUI for Zoomy
+      href: no-playground.qmd
       thumbnail: images/playground/gui.png
 
-    - title: Shallow Water Game 
+    - title: Shallow Water Game based on Zoomy
       subtitle: " - interact and play"
-      href: /apps/swe-game
+      href: no-playground.qmd
       thumbnail: images/playground/swe-game.gif
