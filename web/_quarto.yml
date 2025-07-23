@@ -1,7 +1,6 @@
 
 project:
   type: website
-
 bibliography: bibliography.bib
 
 quartodoc:
@@ -81,6 +80,12 @@ website:
     right: 
       - text: "Legal notice and data protection" 
         href: legal.qmd
+
+
+  repo-url: https://github.com/mbd-rwth/Zoomy/web
+  repo-actions: [edit, issue]
+  repo-branch: main
+  repo-link-target: "_blank"
 
 format:
   html:
