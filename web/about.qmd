@@ -1,7 +1,7 @@
 ---
 about:
-  template: jolla
-  image: images/about.png
+  template: marquee
+  image: images/team.png
   links:
   - icon: github
     text: Github
@@ -12,7 +12,7 @@ about:
 
 ## Development
 
-Zoomy is developed in the [MBD](https://www.mbd.rwth-aachen.de/go/id/qamyz/?lidx=1) group of [Julia Kowalski](https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qashd/julia-kowalski/?allou=1) at the RWTH Aachen University. 
+Zoomy is developed at [MBD](https://www.mbd.rwth-aachen.de/go/id/qamyz/?lidx=1), the group of [Julia Kowalski](https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qashd/julia-kowalski/?allou=1&lidx=1) at the RWTH Aachen University. 
 
 The project was kicked-off during the PhD project of [Ingo Steldermann](https://shallowflow.com/about.html).
 
