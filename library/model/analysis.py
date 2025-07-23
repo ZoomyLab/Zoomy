@@ -18,9 +18,10 @@ class ModelAnalyser():
     def get_equations(self):
         return self.equations
 
-    def print_equations(self):
-        for eq in self.equations:
-            display(Latex(f'${latex(eq)}$'))
+    def print_equations(self):          
+        latex_lines = " \\\\\n".join([f"& {latex(eq)}" for eq in self.equations])
+        latex_block = r"$$\begin{align*}" + "\n" + latex_lines + r"\end{align*}$$"
+        display(Latex(latex_block))
             
     def get_time_space(self):
         x, y, z = self.model.position_3d
