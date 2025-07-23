@@ -51,11 +51,18 @@ website:
       title: "Tutorials"
       style: "floating"
       contents:
-        - tutorials/index.qmd
-        - tutorials/swe/simple.ipynb
-        - tutorials/poisson/simple.ipynb
-        - tutorials/vam/simple.ipynb
-        - tutorials/sme/simple.ipynb
+        - section: "Shallow Water"
+          contents:
+            - tutorials/swe/simple.ipynb
+        - section: "Poisson"
+          contents:
+            - tutorials/poisson/simple.ipynb
+        - section: "VAM"
+          contents:
+            - tutorials/vam/simple.ipynb
+        - section: "SME"
+          contents:
+            - tutorials/sme/simple.ipynb
     - id: documentation 
       title: "Documentation"
       style: "floating"
