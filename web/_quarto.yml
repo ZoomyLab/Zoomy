@@ -21,7 +21,7 @@ website:
     location: navbar
     type: overlay
   navbar:
-    logo: /images/logo.svg
+    logo: /images/logo.png
     left:
       - text: "Software"
         href: software.qmd
