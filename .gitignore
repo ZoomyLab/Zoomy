@@ -34,7 +34,7 @@ _output
 _output*
 *.vscode*
 _site
-.jupyter-cache
+.jupyter_cache
 
 # outputs
 *.h5
