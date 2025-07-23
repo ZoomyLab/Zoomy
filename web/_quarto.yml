@@ -24,20 +24,18 @@ website:
   navbar:
     logo: /images/logo.svg
     left:
+      - text: "Software"
+        href: software.qmd
+      - text: "Playground"
+        href: playground/playground.qmd
       - text: "Documentation"
         href: docs/index.qmd
       - text: "Tutorials"
         href: tutorials/index.qmd
-      - text: "Examples"
-        href: examples/index.qmd
-      - text: "Playground"
-        href: playground/playground.qmd
-      - text: "Software"
-        href: software.qmd
-      - text: "API"
-        href: api/index.qmd
       - text: "Publications"
         href: publications.qmd
+      - text: "About"
+        href: about.qmd
     right: 
       - icon: github
         menu:
@@ -58,6 +56,15 @@ website:
         - tutorials/poisson/simple.ipynb
         - tutorials/vam/simple.ipynb
         - tutorials/sme/simple.ipynb
+    - id: documentation 
+      title: "Documentation"
+      style: "floating"
+      contents:
+        - section: "Getting-started"
+          contents: 
+            - docs/index.qmd
+        - text: "API"
+          href: api/index.qmd
 
   page-footer:
     background: None
@@ -91,5 +98,5 @@ format:
 
 
 execute: 
-  freeze: true
-  cache: false
+  freeze: auto
+  cache: true
