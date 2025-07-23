@@ -32,8 +32,9 @@ __pycache__
 .venv
 _output
 _output*
-_freeze
 *.vscode*
+_site
+.jupyter-cache
 
 # outputs
 *.h5
