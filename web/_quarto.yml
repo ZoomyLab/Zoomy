@@ -50,6 +50,7 @@ website:
       title: "Tutorials"
       style: "floating"
       contents:
+        - tutorials/index.qmd
         - section: "Shallow Water"
           contents:
             - tutorials/swe/simple.ipynb
