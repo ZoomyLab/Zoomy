@@ -4,7 +4,6 @@ import os
 # from library.mesh.fvm_mesh import *
 from library.mesh.mesh import Mesh
 import library.misc.io as io
-from library.misc.misc import all_class_members_identical
 
 
 @pytest.mark.critical

@@ -1,5 +1,3 @@
-# from __future__ import division, print_function
-
 import numpy as np
 import jax.numpy as jnp
 import jax
@@ -8,15 +6,12 @@ from jaxopt import Broyden
 
 from types import SimpleNamespace
 import pyprog
-from attr import define, field
+from attr import define
 from typing import Callable, Optional, Type, Any, List
 
-# from copy import deepcopy
 from time import time as gettime
 import os
-import sys
-import argparse
-import shutil
+
 from functools import partial
 
 
@@ -44,35 +39,6 @@ import library.misc.io as io
 from library.mesh.mesh import convert_mesh_to_jax, compute_derivatives, compute_face_gradient
 from library.fvm.ode import *
 from library.misc.static_class import register_static_pytree
-
-
-@register_static_pytree
-@define(slots=True, frozen=True, kw_only=True)
-class Settings:
-    name: str = "Simulation"
-    parameters: dict = {}
-    reconstruction: Callable = recon.constant
-    reconstruction_edge: Callable = recon.constant_edge
-    num_flux: Callable = flux.Zero()
-    nc_flux: Callable = nonconservative_flux.segmentpath()
-    compute_dt: Callable = timestepping.constant(dt=0.1)
-    time_end: float = 1.0
-    truncate_last_time_step: bool = True
-    output_snapshots: int = 10
-    output_write_all: bool = False
-    output_dir: str = "outputs/output"
-    output_clean_dir: bool = True
-    solver_code_base: str = "python"
-    callbacks: [str] = []
-    debug: bool = False
-    profiling: bool = False
-    compute_gradient: bool = False
-
-@register_static_pytree
-@define(slots=True, frozen=True, kw_only=True)
-class PreciceSettings(Settings):
-    precice_config_path: str = "/home/ingo/Desktop/precice-tutorial/partitioned-backwards-facing-step/precice-config.xml" 
-
 
 @define(frozen=True)
 class Solver:

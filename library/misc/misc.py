@@ -11,9 +11,14 @@ from types import SimpleNamespace
 from sympy import MatrixSymbol
 
 from library.misc.custom_types import FArray
+from library.misc.static_class import register_static_pytree
 
 
-@define(slots=True, frozen=False)
+
+
+
+@register_static_pytree
+@define(slots=True, frozen=False, kw_only=True)
 class IterableNamespace(SimpleNamespace):
     iterable_obj: list[Any]
 
@@ -33,53 +38,25 @@ class IterableNamespace(SimpleNamespace):
     def to_value_dict(self, values):
         out = {k: values[i] for i, k in enumerate(vars(self).keys())}
         return out
-
-
-def require(requirement):
+    
+@register_static_pytree
+@define(slots=True, frozen=False, kw_only=True)
+class Settings(IterableNamespace):
     """
-    Decorator to check if a requirement is met before executing the decorated function.
-
-    Parameters:
-    - requirement (str): The requirement string to evaluate. Should evaluate to True or False.
-
+    Settings class for the application.
+    
+    Args: 
+        **kwargs: Arbitrary keyword arguments to set as attributes.
+        
     Returns:
-    - wrapper: The decorated function that will check the requirement before executing.
+        An `IterableNamespace` instance.
     """
-
-    # decorator to check the assertion given in requirements given the settings
-    def req_decorator(func):
-        @wraps(func)
-        def wrapper(settings, *args, **kwargs):
-            requirement_evaluated = eval(requirement)
-            if not requirement_evaluated:
-                print("Requirement {}: {}".format(requirement, requirement_evaluated))
-                assert requirement_evaluated
-            return func(settings, *args, **kwargs)
-
-        return wrapper
-
-    return req_decorator
-
-
-def all_class_members_identical(a, b):
-    members = [
-        attr
-        for attr in dir(a)
-        if not callable(getattr(a, attr)) and not attr.startswith("__")
-    ]
-    for member in members:
-        m_a = getattr(a, member)
-        m_b = getattr(b, member)
-        if type(m_a) == np.ndarray:
-            if not ((getattr(a, member) == getattr(b, member)).all()):
-                print(getattr(a, member))
-                print(getattr(b, member))
-                assert False
-        else:
-            if not (getattr(a, member) == getattr(b, member)):
-                print(getattr(a, member))
-                print(getattr(b, member))
-                assert False
+    
+    def __init__(self, **kwargs):
+        # assert that kwargs constains name
+        if 'name' not in kwargs:
+            raise ValueError("Settings must have a 'name' attribute.")
+        super().__init__(**kwargs)
 
 
 def compute_transverse_direction(normal):
@@ -137,63 +114,4 @@ def projection_in_x_y_direction(Qn, Qt, normal):
 def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
     Qnew = np.array(Qorig)
     Qnew[momentum_eqns] = projection_in_x_y_direction(Qn, Qt, normal)
-    # Qnew = np.concatenate(
-    #     [Qorig[:, 0][:, np.newaxis], projection_in_x_y_direction(Qn, Qt, normal)],
-    #     axis=1,
-    # )
     return Qnew
-
-
-def vectorize(
-    func: Callable[[list[FArray]], FArray], n_arguments=3
-) -> Callable[[list[FArray]], FArray]:
-    """Note that besides vectorization, we also convert the output to a numpy array and erase the trailing 1 in the dimension for vectors (stored in sympy as matrices)"""
-    if n_arguments == 3:
-        # probe has format [n_dim, [N, n_fields, 1 or n_fields (Vector or Matrix)]]
-        def f(Q, Qaux, param):
-            probe = np.array(func(Q[0], Qaux[0], param))
-            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
-            for i, (q, qaux) in enumerate(zip(Q, Qaux)):
-                Qout[i] = np.array(func(q, qaux, param))
-            return Qout
-
-    elif n_arguments == 4:
-
-        def f(Q, Qaux, normals, param):
-            probe = np.array(func(Q[0], Qaux[0], normals[0], param))
-            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
-            for i, (q, qaux, normals) in enumerate(zip(Q, Qaux, normals)):
-                Qout[i] = func(q, qaux, normals, param)
-            return np.squeeze(Qout)
-
-    return f
-
-
-# def load_npy(filepath=main_dir + "/output/", filename="mesh.npy", filenumber=None):
-#     if filenumber is not None:
-#         full_filename = filepath + filename + "." + str(int(filenumber))
-#     else:
-#         full_filename = filepath + filename
-#     if not os.path.exists(full_filename):
-#         print("File or file path to: ", full_filename, " does not exist")
-#         assert False
-#     data = np.load(full_filename)
-#     return data
-
-
-# def write_field_to_npy(
-#     field, filepath=main_dir + "/output/", filename="mesh.npy", filenumber=None
-# ):
-#     if filenumber is not None:
-#         full_filename = filepath + filename + "." + str(int(filenumber))
-#     else:
-#         full_filename = filepath + filename
-#     os.makedirs(filepath, exist_ok=True)
-#     # the extra step over 'open' is to allow for a filename with filenumber
-#     with open(full_filename, "wb") as f:
-#         np.save(f, field)
-
-
-# def interpolate_field_to_mesh(field, mesh_field, mesh_out):
-#     interpolator = interp.interp1d(mesh_field, field)
-#     return interpolator(mesh_out)

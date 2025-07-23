@@ -3,8 +3,29 @@ import pytest
 
 from library.misc.misc import *
 
+@pytest.mark.unittest
+def test_iterable_namespace():
+    ns = IterableNamespace(a=lambda x: x, b=2, c='3')
+    assert ns.length() == 3
+    assert ns.get_list()[2] == '3'
+    assert ns.b == 2
+    assert ns.c == '3'
+    
+@pytest.mark.unittest
+def test_settings():
+    try: 
+        ns = Settings(a=lambda x: x, b=2, c='3')
+        assert True, "Settings should raise ValueError if 'name' is not provided"
+    except:
+        ns = Settings(name='test', a=lambda x: x, b=2, c='3')
+        
+    assert ns.length() == 4
+    assert ns.get_list()[3] == '3'
+    assert ns.name == 'test'
+    assert ns.b == 2
+    assert ns.c == '3'
 
-@pytest.mark.critical
+@pytest.mark.unittest
 def test_projection_in_normal_transverse_direction_and_back():
     dim = 2
     n_fields = 1 + 2 * dim
@@ -24,4 +45,7 @@ def test_projection_in_normal_transverse_direction_and_back():
 
 
 if __name__ == "__main__":
+    test_iterable_namespace()
+    test_settings()
     test_projection_in_normal_transverse_direction_and_back()
+
