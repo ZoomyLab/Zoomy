@@ -17,12 +17,12 @@ quartodoc:
 
 website:
   title: ""
-  favicon: /images/favicon.png
+  favicon: /images/favicon.svg
   search: 
     location: navbar
     type: overlay
   navbar:
-    logo: /images/logo_text.png
+    logo: /images/logo.svg
     left:
       - text: "Documentation"
         href: docs/index.qmd

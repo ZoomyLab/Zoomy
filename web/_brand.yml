@@ -8,7 +8,7 @@ color:
   primary: black
 
 logo: 
-  medium: images/logo_text.png
+  small: images/logo_no_text.svg
 
 typography:
   fonts:
