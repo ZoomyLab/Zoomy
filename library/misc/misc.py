@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from loguru import logger
 
 # import scipy.interpolate as interp
 # from functools import wraps
@@ -19,29 +20,105 @@ from library.misc.static_class import register_static_pytree
 
 @register_static_pytree
 @define(slots=True, frozen=False, kw_only=True)
-class IterableNamespace(SimpleNamespace):
-    iterable_obj: list[Any]
-
+class Zstruct(SimpleNamespace):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.iterable_obj = list(self.__dict__.values())
 
     def __getitem__(self, key):
-        return self.iterable_obj[key]
+        return self.values()[key]
 
     def length(self):
-        return len(self.iterable_obj)
+        return len(self.values())
 
-    def get_list(self):
-        return self.iterable_obj
+    def get_list(self, recursive: bool = True):
+        if recursive:
+            output = []
+            for item in self.values():
+                if hasattr(item, 'get_list'):
+                    # If item is a Zstruct or similar, call get_list recursively
+                    output.append(item.get_list(recursive=True))
+                else:
+                    output.append(item)
+            return output
+        else:
+            return self.values()
+        
+    def as_dict(self, recursive: bool = True):
+        if recursive:
+            output = {}
+            for key, value in self.items():
+                if hasattr(value, 'as_dict'):
+                    # If value is a Zstruct or similar, call as_dict recursively
+                    output[key] = value.as_dict(recursive=True)
+                else:
+                    output[key] = value
+            return output
+        else:
+            return self.__dict__
 
-    def to_value_dict(self, values):
-        out = {k: values[i] for i, k in enumerate(vars(self).keys())}
-        return out
+    
+    def items(self, resursive: bool = False):
+        return self.as_dict(recursive=resursive).items()
+    
+    def keys(self):
+        return list(self.as_dict(recursive=False).keys())
+    
+    def values(self):
+        return list(self.as_dict(recursive=False).values())
+    
+    def contains(self, key):
+        if self.as_dict(recursive=False).get(key) is not None:
+            return True
+        return False
+    
+    def update(self, zstruct, recursive: bool = True):
+        """
+        Update the current Zstruct with another Zstruct or dictionary.
+        """
+        if not isinstance(zstruct, Zstruct):
+            raise TypeError("zstruct must be a Zstruct or a dictionary.")
+        
+        if recursive:
+            # Update each attribute recursively
+            for key, value in zstruct.as_dict(recursive=False).items():
+                if hasattr(self, key):
+                    current_value = getattr(self, key)
+                    if isinstance(current_value, Zstruct) and isinstance(value, Zstruct):
+                        # If both are Zstructs, update recursively
+                        current_value.update(value, recursive=True)
+                    else:
+                        setattr(self, key, value)
+                else:
+                    setattr(self, key, value)
+        else:
+            # Update only the top-level attributes
+            for key, value in zstruct.as_dict(recursive=False).items():
+                setattr(self, key, value)
+                
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create a Zstruct recursively from a dictionary.
+        
+        Args:
+            d (dict): Dictionary.
+        
+        Returns:
+            Zstruct: An instance of Zstruct.
+        """
+        if not isinstance(d, dict):
+            raise TypeError("Input must be a dictionary.")
+        
+        # Convert the dictionary to a Zstruct
+        for k, v in d.items():
+            if isinstance(v, dict):
+                d[k] = Zstruct.from_dict(v)     
+        return cls(**d)
+
     
 @register_static_pytree
 @define(slots=True, frozen=False, kw_only=True)
-class Settings(IterableNamespace):
+class Settings(Zstruct):
     """
     Settings class for the application.
     
@@ -54,10 +131,39 @@ class Settings(IterableNamespace):
     
     def __init__(self, **kwargs):
         # assert that kwargs constains name
-        if 'name' not in kwargs:
-            raise ValueError("Settings must have a 'name' attribute.")
+        if 'solver' not in kwargs or not isinstance(kwargs['solver'], Zstruct):
+            logger.warning("No 'solver' Zstruct found in Settings. Default: empty Zstruct")
+            kwargs['solver'] = Zstruct()
+        if 'model' not in kwargs or not isinstance(kwargs['model'], Zstruct):
+            logger.warning("No 'model' Zstruct found in Settings. Default: empty Zstruct")
+            kwargs['model'] = Zstruct()
+        if 'output' not in kwargs or not isinstance(kwargs['output'], Zstruct):
+            logger.warning("No 'output' Zstruct found in Settings. Default: Zstruct(directory='output')")
+            kwargs['output'] = Zstruct(directory='output')
+        output = kwargs['output']
+        model = kwargs['model']
+        if not output.contains('directory'):
+            logger.warning("No 'directory' attribute found in output Zstruct. Default: 'output'")
+            kwargs['output'] = Zstruct(directory='output', **output.as_dict())
+        if not output.contains('filename'):
+            logger.warning("No 'filename' attribute found in output Zstruct. Default: 'simulation'")
+            kwargs['output'] = Zstruct(filename='simulation', **output.as_dict())
+        if not model.contains('parameters'):
+            logger.warning("No 'parameters' attribute found in model Zstruct. Default: empy Zstruct")
+            kwargs['model'] = Zstruct(parameters=Zstruct(), **model.as_dict())
         super().__init__(**kwargs)
-
+        
+    @classmethod
+    def default(cls):
+        """
+        Returns a default Settings instance.
+        """
+        return cls(
+            model=Zstruct(parameters=Zstruct()),
+            solver=Zstruct(),
+            output=Zstruct(directory='output', filename='simulation')
+        )
+    
 
 def compute_transverse_direction(normal):
     dim = normal.shape[0]

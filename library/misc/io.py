@@ -6,10 +6,12 @@ import h5py
 import meshio
 import json
 import shutil
+from loguru import logger
 
 # import library.mesh.fvm_mesh as fvm_mesh
-from library.mesh.mesh import *
+from library.mesh.mesh import Mesh
 import library.mesh.mesh_util as mesh_util
+from library.misc.misc import Zstruct, Settings
 
 
 def init_output_directory(path, clean):
@@ -24,48 +26,111 @@ def init_output_directory(path, clean):
             else:
                 os.remove(os.path.join(path, f))
 
+def get_hdf5_type(value):
+    out = type(value)
+    if isinstance(value, str):
+        out = h5py.string_dtype()
+    return out
 
-def save_settings(filepath, settings):
+def write_dict_to_hdf5(group, d):
+    for key, value in d.items():
+        if isinstance(value, dict):
+            subgroup = group.create_group(key)
+            write_dict_to_hdf5(subgroup, value)
+        elif isinstance(value, (str, int, float, bool)):
+            group.create_dataset(key, data=value, dtype=get_hdf5_type(value))
+        elif isinstance(value, (list, tuple)):
+            group.create_dataset(key, data=value)
+        elif isinstance(value, type(np.ndarray)):
+            group.create_dataset(key, data=value)
+        elif hasattr(value, "as_dict"): 
+            subgroup = group.create_group(key)
+            write_dict_to_hdf5(subgroup, value.as_dict())
+        else:
+            logger.warning(f"Skipping unsupported type for key: {key} -> {type(value)}")
+            
+def load_hdf5_to_dict(group):
+    d = {}
+    for key, value in group.items():
+        if isinstance(value, h5py.Group):
+            d[key] = load_hdf5_to_dict(value)
+        elif isinstance(value, h5py.Dataset):
+            if value.dtype == h5py.string_dtype():
+                d[key] = value[()].decode('utf-8')
+            else:  
+                d[key] = value[()]
+        else:
+            logger.warning(f"Skipping unsupported type for key: {key} -> {type(value)}")
+
+    return d
+
+
+def save_settings(settings):
     main_dir = os.getenv("SMS")
-    filepath = os.path.join(main_dir, filepath)
+    filepath = os.path.join(main_dir, settings.output.directory)
     with h5py.File(os.path.join(filepath, "settings.h5"), "w") as f:
-        attrs = f.create_group("parameters")
-        for k, v in settings.parameters.items():
-            attrs.create_dataset(k, data=v)
-        f.create_dataset(
-            "parameter_values",
-            data=np.array(list(settings.parameters.values()), dtype=float),
-        )
-        f.create_dataset("name", data=settings.name)
-        f.create_dataset("output_dir", data=settings.output_dir)
-        f.create_dataset("output_snapshots", data=settings.output_snapshots)
-        f.create_dataset("output_write_all", data=settings.output_write_all)
-        f.create_dataset("output_clean_dir", data=settings.output_clean_dir)
-        f.create_dataset(
-            "truncate_last_time_step", data=settings.truncate_last_time_step
-        )
-        # f.create_dataset('reconstruction', data.settings.reconstruction.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('reconstruction_edge', data.settings.reconstruction_edge.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('num_flux', data.settings.num_flux.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('nc_flux', data.settings.nc_flux.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('compute_dt', data.settings.compute_dt.__name__, dtype=h5py.string_dtype())
-        # f.create_dataset('compute_dt_args', data=settings.compute_dt_args)
-        f.create_dataset("time_end", data=settings.time_end)
-        f.create_dataset("callbacks", data=settings.callbacks)
+        write_dict_to_hdf5(f, settings.as_dict(recursive=True))
         
 def load_settings(filepath):
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
-        parameters = {k: v[()] for k, v in f["parameters"].items()}
-        name = f["name"][()]
-        output_dir = f["output_dir"][()]
-        output_snapshots = f["output_snapshots"][()]
-        output_write_all = f["output_write_all"][()]
-        output_clean_dir = f["output_clean_dir"][()]
-        truncate_last_time_step = f["truncate_last_time_step"][()]
+        d = load_hdf5_to_dict(f)
+        
+    settings = Settings.from_dict(d)                
+    return settings
+        
+def load_settings2(filepath):
+    main_dir = os.getenv("SMS")
+    filepath = os.path.join(main_dir, filepath)
+    with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
+        model = f["model"]
+        solver = f["solver"]
+        output = f["output"]
+        
+        d_model = {}
+        if 'parameters' in model:
+            parameters = {k: v[()] for k, v in model["parameters"].items()}
+            parameters = Zstruct(**parameters)
+        for k in model.keys():
+            if k != 'parameters':
+                v = model[k][()]
+                if isinstance(v, (str, int, float, bool)):
+                    d_model[k] = v
+                else:
+                    raise ValueError(f"Unsupported type for model attribute {k}: {type(v)}")
+        d_model['parameters'] = parameters
+        model = Zstruct(**d_model)
+        d_solver = {}
+        for k in solver.keys():
+            v = solver[k][()]
+            if isinstance(v, (str, int, float, bool)):
+                d_solver[k] = v
+            else:
+                raise ValueError(f"Unsupported type for solver attribute {k}: {type(v)}")
+        solver = Zstruct(**d_solver)
+        
+        d_output = {}
+        for k in output.keys():
+            v = output[k][()]
+            if isinstance(v, (str, int, float, bool)):
+                d_output[k] = v
+            else:
+                raise ValueError(f"Unsupported type for output attribute {k}: {type(v)}")
+        output = Zstruct(**d_output)
+        
+        settings = Settings(model=model, solver=solver, output=output)
+                
+                
+        # parameters = {k: v[()] for k, v in f["parameters"].items()}
+        # name = f["name"][()]
+        # output_dir = f["output_dir"][()]
+        # output_snapshots = f["output_snapshots"][()]
+        # output_write_all = f["output_write_all"][()]
+        # output_clean_dir = f["output_clean_dir"][()]
+        # truncate_last_time_step = f["truncate_last_time_step"][()]
         callbacks = f["callbacks"][()]
-    return parameters
+    return settings
 
 
 def clean_files(filepath, filename=".vtk"):

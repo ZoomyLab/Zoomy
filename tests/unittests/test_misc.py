@@ -4,26 +4,37 @@ import pytest
 from library.misc.misc import *
 
 @pytest.mark.unittest
-def test_iterable_namespace():
-    ns = IterableNamespace(a=lambda x: x, b=2, c='3')
+def test_Zstruct():
+    ns = Zstruct(a=lambda x: x, b=2, c='3')
     assert ns.length() == 3
     assert ns.get_list()[2] == '3'
     assert ns.b == 2
     assert ns.c == '3'
     
+    assert ns.contains('model') == False
+    assert ns.contains('a') == True
+    
 @pytest.mark.unittest
 def test_settings():
-    try: 
-        ns = Settings(a=lambda x: x, b=2, c='3')
-        assert True, "Settings should raise ValueError if 'name' is not provided"
-    except:
-        ns = Settings(name='test', a=lambda x: x, b=2, c='3')
+
+    ns = Settings(name='test', model=Zstruct(name='model'), solver=Zstruct(), output={}, a=lambda x: x, b=2, c='3')
         
-    assert ns.length() == 4
-    assert ns.get_list()[3] == '3'
+    assert ns.length() == 7
+    assert ns.get_list()[6] == '3'
     assert ns.name == 'test'
     assert ns.b == 2
     assert ns.c == '3'
+    assert ns.model.name == 'model'
+    assert ns.output.directory == 'output'
+    
+@pytest.mark.unittest
+def test_settings_update():
+    
+    ns1 = Settings(name='ns1')
+    ns1.update(Settings(name='test', model=Zstruct(name='model'), solver=Zstruct()))
+    assert ns1.name == 'test'
+    assert ns1.model.name == 'model'
+    
 
 @pytest.mark.unittest
 def test_projection_in_normal_transverse_direction_and_back():
@@ -45,7 +56,8 @@ def test_projection_in_normal_transverse_direction_and_back():
 
 
 if __name__ == "__main__":
-    test_iterable_namespace()
+    test_Zstruct()
     test_settings()
+    test_settings_update()
     test_projection_in_normal_transverse_direction_and_back()
 
