@@ -1,10 +1,11 @@
 import os
 import numpy as np
-from sympy import integrate, diff
+from sympy import integrate, diff, Matrix
 from sympy.abc import x
 from time import time as get_time
 
-from library.model.model import *
+from scipy.optimize import least_squares as lsq
+
 from library.model.models.basisfunctions import Legendre_shifted
 
 

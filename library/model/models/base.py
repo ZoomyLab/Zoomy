@@ -27,7 +27,7 @@ from types import SimpleNamespace
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.misc.custom_types import FArray
-from library.misc.misc import IterableNamespace
+from library.misc.misc import Zstruct
 from library.model.sympy2c import create_module
 
 init_printing()
@@ -122,14 +122,14 @@ class Model:
     n_fields: int
     n_aux_fields: int
     n_parameters: int
-    variables: IterableNamespace
-    aux_variables: IterableNamespace
-    parameters: IterableNamespace
+    variables: Zstruct
+    aux_variables: Zstruct
+    parameters: Zstruct
     parameters_default: dict
     parameter_values: FArray
     sympy_normal: Matrix
 
-    settings: IterableNamespace
+    settings: Zstruct
     settings_default_dict: dict
 
     sympy_flux: list[Matrix]
@@ -554,7 +554,7 @@ def register_sympy_attribute(argument, string_identifier="q_"):
         attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
     else:
         assert False
-    return IterableNamespace(**attributes)
+    return Zstruct(**attributes)
 
 
 def register_parameter_defaults(parameters):
@@ -568,7 +568,7 @@ def register_parameter_defaults(parameters):
 
 
 def substitute_sympy_attributes_with_symbol_matrix(
-    expr: Matrix, attr: IterableNamespace, attr_matrix: MatrixSymbol
+    expr: Matrix, attr: Zstruct, attr_matrix: MatrixSymbol
 ):
     if expr is None:
         return None

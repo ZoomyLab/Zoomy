@@ -200,7 +200,7 @@ def solver_price_c_layered(
     iteration = 0
     time = 0.0
 
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
 
     assert model.dimension == mesh.base.dimension
 
@@ -232,7 +232,7 @@ def solver_price_c_layered(
 
     i_snapshot = 0
     dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    io.init_output_directory(settings.output.directory, settings.output_clean_dir)
     mesh.write_to_hdf5(output_hdf5_path)
     i_snapshot = io.save_fields(
         output_hdf5_path, time, 0, i_snapshot, Q, Qaux, settings.output_write_all
@@ -240,7 +240,7 @@ def solver_price_c_layered(
 
     Qnew = deepcopy(Q)
 
-    space_solution_operator = _get_semidiscrete_solution_operator(
+    flux_operator = _get_semidiscrete_solution_operator(
         mesh.base, pde, bcs, settings
     )
     compute_source = _get_source(mesh.base, pde, settings)
@@ -270,7 +270,7 @@ def solver_price_c_layered(
             Qloc = mesh.get_layer(Q, layer)
             Qauxloc = mesh.get_layer(Qaux, layer)
             Qnewloc = ode_solver_flux(
-                space_solution_operator, Qloc, Qauxloc, parameters, dt
+                flux_operator, Qloc, Qauxloc, parameters, dt
             )
 
             Qnewloc = ode_solver_source(

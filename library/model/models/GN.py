@@ -11,7 +11,6 @@ from sympy import legendre
 from sympy import lambdify, Rational
 
 
-from library.model import *
 from library.model.models.base import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
@@ -19,8 +18,6 @@ from library.model.models.base import (
 from library.model.models.base import Model
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-from library.model.models.basisfunctions import *
-from library.model.models.basismatrices import *
 
 class GN(Model):
     def __init__(

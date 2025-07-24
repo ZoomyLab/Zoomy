@@ -24,7 +24,6 @@ from library.model.models.base import (
 from library.model.models.base import Model
 
 
-from library.model import *
 
 from attr import define
 from sympy import integrate, diff

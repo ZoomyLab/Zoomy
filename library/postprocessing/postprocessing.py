@@ -12,13 +12,12 @@ from library.model.models.shallow_moments import reconstruct_uvw
 from library.model.models.base import RuntimeModel
 
 def vtk_interpolate_3d(
-    model, output_path, path_to_simulation, Nz=10, start_at_time=0, scale_h=1.0
+    model, settings, Nz=10, start_at_time=0, scale_h=1.0
 ):
     main_dir = os.getenv("SMS")
-    path_to_simulation = os.path.join(main_dir, path_to_simulation)
-    output_path = os.path.join(main_dir, output_path)
+    path_to_simulation = os.path.join(main_dir, os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))    
     sim = h5py.File(path_to_simulation, "r")
-    parameters = io.load_settings(output_path)
+    settings = io.load_settings(settings.output.directory)
     fields = sim["fields"]
     mesh = petscMesh.Mesh.from_hdf5(path_to_simulation)
     n_snapshots = len(list(fields.keys()))
@@ -26,8 +25,7 @@ def vtk_interpolate_3d(
     Z = np.linspace(0, 1, Nz)
 
     mesh_extr = petscMesh.Mesh.extrude_mesh(mesh, Nz)
-    output_path = os.path.join(main_dir, output_path)
-    output_path = os.path.join(output_path, "fields3d.h5")
+    output_path = os.path.join(main_dir, settings.output.directory + "/fields3d.h5")
     mesh_extr.write_to_hdf5(output_path)
     save_fields = io.get_save_fields_simple(output_path, True)
 
@@ -52,7 +50,7 @@ def vtk_interpolate_3d(
         
             #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
             # rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), 0] = Q[0, :mesh.n_inner_cells]
-            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], parameters).T
+            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], settings.model.parameters.values()).T
             rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew
 
         # rhoUVWP[mesh.n_inner_cells:mesh.n_inner_cells+mesh.n_inner_cells, 0] = Q[0, :mesh.n_inner_cells]
