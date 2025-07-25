@@ -1,6 +1,8 @@
 import numpy as np
 import jax.numpy as jnp
 from numpy.polynomial.legendre import leggauss
+from functools import partial
+import jax
 
 
 def zero():
@@ -84,7 +86,7 @@ def segmentpath_1d(integration_order=3):
 
     return nc_flux
 
-
+@partial(jax.named_call, name="NC_Flux")
 def segmentpath(integration_order=3):
     # compute integral of NC-Matrix int NC(Q(s)) ds for segment path Q(s) = Ql + (Qr-Ql)*s for s = [0,1]
     samples, weights = leggauss(integration_order)

@@ -2,6 +2,7 @@ import os
 from time import time as gettime
 
 import jax
+from functools import partial
 import jax.numpy as jnp
 import numpy as np
 from attr import define
@@ -122,7 +123,9 @@ class HyperbolicSolver(Solver):
         return Q, Qaux
 
     def get_compute_max_abs_eigenvalue(self, mesh, pde):
+        
         @jax.jit
+        @partial(jax.named_call, name="EV")
         def compute_max_abs_eigenvalue(Q, Qaux, parameters):
             max_abs_eigenvalue = -jnp.inf
             i_cellA = mesh.face_cells[0]
@@ -144,6 +147,7 @@ class HyperbolicSolver(Solver):
 
     def get_flux_operator(self, mesh, pde, bcs):
         @jax.jit
+        @partial(jax.named_call, name="Flux")
         def flux_operator(dt, Q, Qaux, parameters, dQ):
             compute_num_flux = self._settings.solver.num_flux
             compute_nc_flux = self._settings.solver.nc_flux
@@ -196,6 +200,7 @@ class HyperbolicSolver(Solver):
             )
             assert not failedB
 
+            @partial(jax.named_call, name="update_dQ_body")
             def update_dQ_body(
                 loop_idx,
                 dQ,
@@ -265,6 +270,7 @@ class HyperbolicSolver(Solver):
         runtime_bcs = tuple(runtime_bcs)
 
         @jax.jit
+        @partial(jax.named_call, name="BC")
         def apply_boundary_conditions(time, Q, Qaux, parameters):
             """
             Applies boundary conditions to the solution arrays Q and Qaux using JAX's functional updates.
@@ -380,9 +386,11 @@ class HyperbolicSolver(Solver):
             boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
 
             @jax.jit
+            @partial(jax.named_call, name="time loop")
             def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
                 loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
 
+                @partial(jax.named_call, name="time_step")
                 def loop_body(init_value):
                     time, iteration, i_snapshot, Qnew, Qaux = init_value
                     Q = Qnew

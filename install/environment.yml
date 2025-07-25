@@ -35,6 +35,7 @@ dependencies:
     - dotenv
     - loguru
     - removestar
+    - xprof
 variables:
   PETSC_DIR: '/home/ingo/Git/petsc'
   PETSC_ARCH: 'linux-gnu'
