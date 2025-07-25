@@ -181,7 +181,7 @@ def get_save_fields_simple(_filepath, write_all, overwrite=True):
                 if overwrite:
                     del fields[group_name]
                 else:
-                    raise ValueError(f"Group {group_name} already exists in {filename}")
+                    raise ValueError(f"Group {group_name} already exists in {filepath}")
             attrs = fields.create_group(group_name)
             attrs.create_dataset("time", data=time, dtype=float)
             attrs.create_dataset("Q", data=Q)
@@ -207,7 +207,7 @@ def get_save_fields(_filepath, write_all, overwrite=True):
                 if overwrite:
                     del fields[group_name]
                 else:
-                    raise ValueError(f"Group {group_name} already exists in {filename}")
+                    raise ValueError(f"Group {group_name} already exists in {filepath}")
             attrs = fields.create_group(group_name)
             attrs.create_dataset("time", data=time, dtype=float)
             attrs.create_dataset("Q", data=Q)
@@ -349,12 +349,12 @@ def generate_vtk(
     field_names=None,
     aux_field_names=None,
     skip_aux=False,
+    filename="out",
 ):
     main_dir = os.getenv("SMS")
     abs_filepath = os.path.join(main_dir, filepath)
     path = os.path.dirname(abs_filepath)
-    filename_out = "out"
-    full_filepath_out = os.path.join(path, filename_out)
+    full_filepath_out = os.path.join(path, filename)
     # abs_filepath = os.path.join(main_dir, filepath)
     # with h5py.File(os.path.join(filepath, 'mesh'), "r") as file_mesh, h5py.File(os.path.join(filepath, 'fields'), "r") as file_fields:
     file = h5py.File(os.path.join(main_dir, filepath), "r")
@@ -375,7 +375,7 @@ def generate_vtk(
             Qaux = file_fields[snapshot]["Qaux"][()]
         else:
             Qaux = np.empty((Q.shape[0], 0))
-        output_vtk = f"{filename_out}.{get_iteration_from_datasetname(snapshot)}"
+        output_vtk = f"{filename}.{get_iteration_from_datasetname(snapshot)}"
 
         # TODO callout to compute pointwise data?
         point_fields = None
