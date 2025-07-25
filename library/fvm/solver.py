@@ -8,16 +8,18 @@ from attr import define
 from jax.scipy.sparse.linalg import gmres
 from jaxopt import Broyden
 
+from loguru import logger
+
 # WARNING: I get a segmentation fault if I do not include petsc4py before precice
 try:
     from petsc4py import PETSc
 except ModuleNotFoundError as err:
-    print(err)
+    logger.warning(err)
 
 try:
     import precice
 except ModuleNotFoundError as err:
-    print(err)
+    logger.warning(err)
 
 
 import library.fvm.flux as flux
@@ -29,6 +31,13 @@ import library.misc.transformation as transformation
 import library.fvm.ode as ode
 import library.fvm.timestepping as timestepping
 
+def log_callback(iteration, time, dt, time_stamp):
+    # convert the DeviceArrays/numpy scalars to Python scalars
+    logger.info(
+        f"iteration: {int(iteration)}, time: {float(time):.6f}, "
+        f"dt: {float(dt):.6f}, next write at time: {float(time_stamp):.6f}"
+    )
+    return None    
 
 @define(frozen=False)
 class Solver:
@@ -100,10 +109,10 @@ class HyperbolicSolver(Solver):
 
         super().__init__(defaults)
         
+        self._settings.update(settings)
+        
         self.compute_dt = timestepping.adaptive(self._settings.solver.CFL)
 
-
-        self._settings.update(settings)
 
     def initialize(self, mesh, model):
         Q, Qaux = super().initialize(model, mesh)
@@ -337,7 +346,6 @@ class HyperbolicSolver(Solver):
         parameters = jnp.asarray(parameters)
 
         pde, bcs = transformation.transform_model_in_place(model)
-        # Q = self._apply_boundary_conditions(mesh, time, Q, Qaux, parameters, bcs)
         output_hdf5_path = os.path.join(
             self._settings.output.directory, f"{self._settings.output.filename}.h5"
         )
@@ -359,7 +367,6 @@ class HyperbolicSolver(Solver):
             io.save_settings(self._settings)
             i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
-            # Qnew = deepcopy(Q)
             Qnew = Q
 
             min_inradius = jnp.min(mesh.cell_inradius)
@@ -383,12 +390,6 @@ class HyperbolicSolver(Solver):
                     dt = self.compute_dt(
                         Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
                     )
-                    # assert dt > 10 ** (-6)
-                    # assert not jnp.isnan(dt) and jnp.isfinite(dt)
-
-                    # if self._settings.truncate_last_time_step:
-                    #    if time + dt * 1.001 > self._settings.time_end:
-                    #        dt = self._settings.time_end - time + 10 ** (-10)
 
                     Q1 = ode.RK1(flux_operator, Q, Qaux, parameters, dt)
 
@@ -408,16 +409,15 @@ class HyperbolicSolver(Solver):
 
                     time_stamp = (i_snapshot) * dt_snapshot
 
-                    # i_snapshot = jax.pure_callback(save_fields, jax.ShapeDtypeStruct(shape=(), dtype=jnp.int32), time, time_stamp , i_snapshot, Qnew, Qaux)
                     i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
 
-                    jax.debug.print(
-                        "iteration: {iteration}, time: {time}, dt: {dt}, time_stamp: {time_stamp}",
-                        iteration=iteration,
-                        time=time,
-                        dt=dt,
-                        time_stamp=time_stamp,
+                    
+                    jax.experimental.io_callback(
+                        log_callback,                 
+                        None,                          
+                        iteration, time, dt, time_stamp 
                     )
+                    
 
                     return (time, iteration, i_snapshot, Q3, Qaux)
 
@@ -506,8 +506,6 @@ class HyperbolicSolver(Solver):
         Qaux = self.update_qaux(
             Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt
         )
-        # jax.debug.print("constraint")
-        # jax.debug.print("{}", constraint)
 
         time = +dt
         time_next_snapshot += dt
