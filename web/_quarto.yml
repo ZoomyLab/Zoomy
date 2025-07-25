@@ -63,6 +63,7 @@ website:
         - section: "SME"
           contents:
             - tutorials/sme/simple.ipynb
+            - tutorials/sme/minimal.ipynb
     - id: documentation 
       title: "Documentation"
       style: "floating"
