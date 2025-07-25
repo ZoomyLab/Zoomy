@@ -64,3 +64,4 @@ library/model/models/\
 of_coupling/of-original/dynamicCode
 of_coupling/of-original/export1
 tests/vtk.js/webview/paraview-lite
+web/tutorials/vam/simple_files/execute-results/html.json
