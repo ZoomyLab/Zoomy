@@ -28,7 +28,7 @@ from apps.gui.gui_solver import solvers
 from apps.gui.gui_visualization import visu
 from apps.gui.gui_elements import MyControls
 from apps.gui.gui_simulate import run as run_simulation
-from tests.simulations.test_minimal import test_smm_2d
+from tests.regressiontests.test_minimal import test_smm_2d
 
 pn.extension('gridstack', 'vtk', 'mathjax', 'katex', 'ipywidgets_bokeh', 'bokeh', 'codeeditor', 'terminal', notifications=True, console_output='disable')
 

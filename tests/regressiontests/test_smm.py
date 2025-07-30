@@ -78,7 +78,7 @@ def test_smm_wave():
     mesh = Mesh.create_1d((0, 2 * np.pi), 30)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -138,7 +138,7 @@ def test_smm_analytical():
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -192,7 +192,7 @@ def test_smm_1d():
     mesh = petscMesh.Mesh.create_1d((-1, 30), 1000)
 
     jax_fvm_unsteady_semidiscrete(mesh, model, settings)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_sindy_generate_reference_data():
@@ -233,8 +233,8 @@ def test_sindy_generate_reference_data():
     mesh = Mesh.create_1d((-1, 20), 200)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
-    # io.generate_vtk(settings.output_dir, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
+    io.generate_vtk(settings.output.directory)
+    # io.generate_vtk(settings.output.directory, filename_fields = 'fields_intermediate.hdf5', filename_out='out_intermediate')
 
 
 @pytest.mark.critical
@@ -287,7 +287,7 @@ def test_smm_2d(mesh_type):
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -336,7 +336,7 @@ def test_inflowoutflow_2d():
     )
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -408,7 +408,7 @@ def test_steffler():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_steffler_small():
@@ -478,7 +478,7 @@ def test_steffler_small():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -571,7 +571,7 @@ def test_channel_with_hole_2d():
     fvm_c_unsteady_semidiscete(
         mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
     )
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -623,12 +623,12 @@ def test_smm_grad_2d():
     mesh = GradientMesh.fromMesh(mesh)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    # io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output.directory)
     postprocessing.recover_3d_from_smm_as_vtk(
         model,
-        settings.output_dir,
-        os.path.join(settings.output_dir, "mesh.hdf5"),
-        os.path.join(settings.output_dir, "fields.hdf5"),
+        settings.output.directory,
+        os.path.join(settings.output.directory, "mesh.hdf5"),
+        os.path.join(settings.output.directory, "fields.hdf5"),
         Nz=10,
         start_at_time=1.0,
     )
@@ -674,7 +674,7 @@ def test_smm_1d_crazy_basis():
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -729,7 +729,7 @@ def test_c_solver(mesh_type):
     fvm_c_unsteady_semidiscete(
         mesh, model, settings, ode_solver_flux="RK1", ode_solver_source="RK1"
     )
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -815,7 +815,7 @@ def test_restart_from_openfoam(level=1):
     #     "triangle",
     #  )
     mesh = Mesh.from_hdf5(
-        os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5")
+        os.path.join(os.path.join(main_dir, settings.output.directory), "mesh.hdf5")
     )
 
     fvm_c_unsteady_semidiscete(
@@ -829,7 +829,7 @@ def test_restart_from_openfoam(level=1):
         rebuild_c=True,
     )
 
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -915,7 +915,7 @@ def test_restart_from_openfoam_prediction(
         #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
         "triangle",
     )
-    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output.directory), "mesh.hdf5"))
 
     fvm_c_unsteady_semidiscete(
         mesh,
@@ -928,7 +928,7 @@ def test_restart_from_openfoam_prediction(
         rebuild_c=True,
     )
 
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -976,9 +976,9 @@ def test_spline_strongbc_1d():
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
     Q, Qaux, time = io.load_fields_from_hdf5(
-        os.path.join(settings.output_dir, "fields.hdf5")
+        os.path.join(settings.output.directory, "fields.hdf5")
     )
     list_U, list_means, list_of_positions, Z, list_h = generate_velocity_profiles(
         Q,
@@ -1102,7 +1102,7 @@ def test_restart_from_openfoam_plotter(level=1):
     #     "triangle",
     #  )
     mesh = Mesh.from_hdf5(
-        os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5")
+        os.path.join(os.path.join(main_dir, settings.output.directory), "mesh.hdf5")
     )
 
     # fvm_c_unsteady_semidiscete(
@@ -1116,7 +1116,7 @@ def test_restart_from_openfoam_plotter(level=1):
     #     rebuild_c=True,
     # )
 
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -1179,7 +1179,7 @@ def test_petsc(mesh_type):
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -1295,13 +1295,13 @@ def test_enforce_w_bc():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    # io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
-    #     settings.output_dir,
-    #     os.path.join(settings.output_dir, "mesh.hdf5"),
-    #     os.path.join(settings.output_dir, "fields.hdf5"),
+    #     settings.output.directory,
+    #     os.path.join(settings.output.directory, "mesh.hdf5"),
+    #     os.path.join(settings.output.directory, "fields.hdf5"),
     #     Nz=10,
     #     start_at_time=1.0,
     # )
@@ -1409,13 +1409,13 @@ def test_ijshs24():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    # io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
-    #     settings.output_dir,
-    #     os.path.join(settings.output_dir, "mesh.hdf5"),
-    #     os.path.join(settings.output_dir, "fields.hdf5"),
+    #     settings.output.directory,
+    #     os.path.join(settings.output.directory, "mesh.hdf5"),
+    #     os.path.join(settings.output.directory, "fields.hdf5"),
     #     Nz=10,
     #     start_at_time=1.0,
     # )
@@ -1576,39 +1576,39 @@ def test_eccomas_hyperbolicity():
     mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
 
     print("SMM-WS")
-    settings.output_dir = "outputs/eccomas/SMMWE"
+    settings.output.directory = "outputs/eccomas/SMMWE"
     jax_fvm_unsteady_semidiscrete(
         mesh, model_SMMWS, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
     # print('SMM')
-    # settings.output_dir = 'outputs/eccomas/SMM'
+    # settings.output.directory = 'outputs/eccomas/SMM'
     # jax_fvm_unsteady_semidiscrete(
     #     mesh, model_SMM, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     # )
-    # io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'))
 
     print("SSF")
-    settings.output_dir = "outputs/eccomas/SSF"
+    settings.output.directory = "outputs/eccomas/SSF"
     jax_fvm_unsteady_semidiscrete(
         mesh, model_SSF, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
     print("SSF orig")
-    settings.output_dir = "outputs/eccomas/SSF_orig"
+    settings.output.directory = "outputs/eccomas/SSF_orig"
     jax_fvm_unsteady_semidiscrete(
         mesh, model_SSF_orig, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
     print("SSF energy")
-    settings.output_dir = "outputs/eccomas/SSF_energy"
+    settings.output.directory = "outputs/eccomas/SSF_energy"
     jax_fvm_unsteady_semidiscrete(
         mesh, model_SSF_energy, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 if __name__ == "__main__":

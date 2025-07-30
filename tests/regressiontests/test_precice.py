@@ -102,7 +102,7 @@ def test_smm_1d(
     mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
 
     precice_fvm(mesh, model, settings, ode_solver_source=RK1)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 if __name__ == "__main__":

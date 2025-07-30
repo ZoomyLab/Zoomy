@@ -14,7 +14,6 @@ from types import SimpleNamespace
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.misc.custom_types import FArray
-from library.misc.misc import vectorize  # type: ignore
 from library.model.models.base import Model
 
 

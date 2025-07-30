@@ -1,4 +1,5 @@
-from library.model.models.shallow_moments import *
+from library.model.models.shallow_moments import (IC, Matrix, Model, eigenvalue_dict_to_matrix,
+                                                  register_sympy_attribute, sympy)
 
 
 class ShallowMomentsSediment(Model):

@@ -25,4 +25,4 @@ def run(model_class, ic, bcs, mesh, solver, settings, **param):
     solver(
         mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f'{settings.name}.h5'))
+    io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'))

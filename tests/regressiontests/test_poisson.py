@@ -52,9 +52,9 @@ def solve(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde, bcs = solver._load_runtime_model(model)
+    pde, bcs = solver.transform_in_place(model)
 
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     assert model.dimension == mesh.dimension
@@ -63,7 +63,7 @@ def solve(
     dt = 0.0
     i_snapshot = 0.0
 
-    io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+    io.init_output_directory(settings.output.directory, settings.output_clean_dir)
     mesh.write_to_hdf5(output_hdf5_path)
     i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
@@ -137,7 +137,7 @@ def test_poisson():
         model,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 if __name__ == "__main__":
     test_poisson()

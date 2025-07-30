@@ -59,9 +59,9 @@ def solve(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde, bcs = solver._load_runtime_model(model)
+    pde, bcs = solver.transform_in_place(model)
 
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     def run(Q, Qaux, parameters, pde, bcs):
@@ -71,7 +71,7 @@ def solve(
 
         i_snapshot = 0.0
         dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output.directory, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         _ = save_fields(time, 0.0, i_snapshot, Q, Qaux)
         i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
@@ -84,7 +84,7 @@ def solve(
 
         dt = 0.1
 
-        space_solution_operator = solver.get_space_solution_operator(
+        flux_operator = solver.get_flux_operator(
             mesh, pde, bcs, settings
         )
         boundary_operator = solver.get_apply_boundary_conditions(mesh, bcs)
@@ -109,7 +109,7 @@ def solve(
                 
                 def residual(Q):
                     dF = jnp.zeros_like(Q)
-                    dF = space_solution_operator(dt, Qnew, Qauxnew, parameters, dF)
+                    dF = flux_operator(dt, Qnew, Qauxnew, parameters, dF)
                     dtF = dt * dF
                     qaux = solver.update_qaux(Q, Qauxnew, Qnew, Qauxnew, mesh, model, parameters, time, dt)
                     q = boundary_operator(time, Qnew, qaux, parameters)
@@ -217,7 +217,7 @@ def test_poisson():
         model,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 if __name__ == "__main__":
     test_poisson()
