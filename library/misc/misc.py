@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from loguru import logger
 
 # import scipy.interpolate as interp
 # from functools import wraps
@@ -11,76 +12,158 @@ from types import SimpleNamespace
 from sympy import MatrixSymbol
 
 from library.misc.custom_types import FArray
+from library.misc.static_class import register_static_pytree
 
 
-@define(slots=True, frozen=False)
-class IterableNamespace(SimpleNamespace):
-    iterable_obj: list[Any]
 
+
+
+@register_static_pytree
+@define(slots=True, frozen=False, kw_only=True)
+class Zstruct(SimpleNamespace):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.iterable_obj = list(self.__dict__.values())
 
     def __getitem__(self, key):
-        return self.iterable_obj[key]
+        return self.values()[key]
 
     def length(self):
-        return len(self.iterable_obj)
+        return len(self.values())
 
-    def get_list(self):
-        return self.iterable_obj
-
-    def to_value_dict(self, values):
-        out = {k: values[i] for i, k in enumerate(vars(self).keys())}
-        return out
-
-
-def require(requirement):
-    """
-    Decorator to check if a requirement is met before executing the decorated function.
-
-    Parameters:
-    - requirement (str): The requirement string to evaluate. Should evaluate to True or False.
-
-    Returns:
-    - wrapper: The decorated function that will check the requirement before executing.
-    """
-
-    # decorator to check the assertion given in requirements given the settings
-    def req_decorator(func):
-        @wraps(func)
-        def wrapper(settings, *args, **kwargs):
-            requirement_evaluated = eval(requirement)
-            if not requirement_evaluated:
-                print("Requirement {}: {}".format(requirement, requirement_evaluated))
-                assert requirement_evaluated
-            return func(settings, *args, **kwargs)
-
-        return wrapper
-
-    return req_decorator
-
-
-def all_class_members_identical(a, b):
-    members = [
-        attr
-        for attr in dir(a)
-        if not callable(getattr(a, attr)) and not attr.startswith("__")
-    ]
-    for member in members:
-        m_a = getattr(a, member)
-        m_b = getattr(b, member)
-        if type(m_a) == np.ndarray:
-            if not ((getattr(a, member) == getattr(b, member)).all()):
-                print(getattr(a, member))
-                print(getattr(b, member))
-                assert False
+    def get_list(self, recursive: bool = True):
+        if recursive:
+            output = []
+            for item in self.values():
+                if hasattr(item, 'get_list'):
+                    # If item is a Zstruct or similar, call get_list recursively
+                    output.append(item.get_list(recursive=True))
+                else:
+                    output.append(item)
+            return output
         else:
-            if not (getattr(a, member) == getattr(b, member)):
-                print(getattr(a, member))
-                print(getattr(b, member))
-                assert False
+            return self.values()
+        
+    def as_dict(self, recursive: bool = True):
+        if recursive:
+            output = {}
+            for key, value in self.items():
+                if hasattr(value, 'as_dict'):
+                    # If value is a Zstruct or similar, call as_dict recursively
+                    output[key] = value.as_dict(recursive=True)
+                else:
+                    output[key] = value
+            return output
+        else:
+            return self.__dict__
 
+    
+    def items(self, resursive: bool = False):
+        return self.as_dict(recursive=resursive).items()
+    
+    def keys(self):
+        return list(self.as_dict(recursive=False).keys())
+    
+    def values(self):
+        return list(self.as_dict(recursive=False).values())
+    
+    def contains(self, key):
+        if self.as_dict(recursive=False).get(key) is not None:
+            return True
+        return False
+    
+    def update(self, zstruct, recursive: bool = True):
+        """
+        Update the current Zstruct with another Zstruct or dictionary.
+        """
+        if not isinstance(zstruct, Zstruct):
+            raise TypeError("zstruct must be a Zstruct or a dictionary.")
+        
+        if recursive:
+            # Update each attribute recursively
+            for key, value in zstruct.as_dict(recursive=False).items():
+                if hasattr(self, key):
+                    current_value = getattr(self, key)
+                    if isinstance(current_value, Zstruct) and isinstance(value, Zstruct):
+                        # If both are Zstructs, update recursively
+                        current_value.update(value, recursive=True)
+                    else:
+                        setattr(self, key, value)
+                else:
+                    setattr(self, key, value)
+        else:
+            # Update only the top-level attributes
+            for key, value in zstruct.as_dict(recursive=False).items():
+                setattr(self, key, value)
+                
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create a Zstruct recursively from a dictionary.
+        
+        Args:
+            d (dict): Dictionary.
+        
+        Returns:
+            Zstruct: An instance of Zstruct.
+        """
+        if not isinstance(d, dict):
+            raise TypeError("Input must be a dictionary.")
+        
+        # Convert the dictionary to a Zstruct
+        for k, v in d.items():
+            if isinstance(v, dict):
+                d[k] = Zstruct.from_dict(v)     
+        return cls(**d)
+
+    
+@register_static_pytree
+@define(slots=True, frozen=False, kw_only=True)
+class Settings(Zstruct):
+    """
+    Settings class for the application.
+    
+    Args: 
+        **kwargs: Arbitrary keyword arguments to set as attributes.
+        
+    Returns:
+        An `IterableNamespace` instance.
+    """
+    
+    def __init__(self, **kwargs):
+        # assert that kwargs constains name
+        if 'solver' not in kwargs or not isinstance(kwargs['solver'], Zstruct):
+            logger.warning("No 'solver' Zstruct found in Settings. Default: empty Zstruct")
+            kwargs['solver'] = Zstruct()
+        if 'model' not in kwargs or not isinstance(kwargs['model'], Zstruct):
+            logger.warning("No 'model' Zstruct found in Settings. Default: empty Zstruct")
+            kwargs['model'] = Zstruct()
+        if 'output' not in kwargs or not isinstance(kwargs['output'], Zstruct):
+            logger.warning("No 'output' Zstruct found in Settings. Default: Zstruct(directory='output')")
+            kwargs['output'] = Zstruct(directory='output')
+        output = kwargs['output']
+        model = kwargs['model']
+        if not output.contains('directory'):
+            logger.warning("No 'directory' attribute found in output Zstruct. Default: 'output'")
+            kwargs['output'] = Zstruct(directory='output', **output.as_dict())
+        if not output.contains('filename'):
+            logger.warning("No 'filename' attribute found in output Zstruct. Default: 'simulation'")
+            kwargs['output'] = Zstruct(filename='simulation', **output.as_dict())
+        if not model.contains('parameters'):
+            logger.warning("No 'parameters' attribute found in model Zstruct. Default: empy Zstruct")
+            kwargs['model'] = Zstruct(parameters=Zstruct(), **model.as_dict())
+        super().__init__(**kwargs)
+        
+    @classmethod
+    def default(cls):
+        """
+        Returns a default Settings instance.
+        """
+        return cls(
+            model=Zstruct(parameters=Zstruct()),
+            solver=Zstruct(),
+            output=Zstruct(directory='output', filename='simulation')
+        )
+    
 
 def compute_transverse_direction(normal):
     dim = normal.shape[0]
@@ -137,63 +220,4 @@ def projection_in_x_y_direction(Qn, Qt, normal):
 def project_in_x_y_and_recreate_Q(Qn, Qt, Qorig, momentum_eqns, normal):
     Qnew = np.array(Qorig)
     Qnew[momentum_eqns] = projection_in_x_y_direction(Qn, Qt, normal)
-    # Qnew = np.concatenate(
-    #     [Qorig[:, 0][:, np.newaxis], projection_in_x_y_direction(Qn, Qt, normal)],
-    #     axis=1,
-    # )
     return Qnew
-
-
-def vectorize(
-    func: Callable[[list[FArray]], FArray], n_arguments=3
-) -> Callable[[list[FArray]], FArray]:
-    """Note that besides vectorization, we also convert the output to a numpy array and erase the trailing 1 in the dimension for vectors (stored in sympy as matrices)"""
-    if n_arguments == 3:
-        # probe has format [n_dim, [N, n_fields, 1 or n_fields (Vector or Matrix)]]
-        def f(Q, Qaux, param):
-            probe = np.array(func(Q[0], Qaux[0], param))
-            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
-            for i, (q, qaux) in enumerate(zip(Q, Qaux)):
-                Qout[i] = np.array(func(q, qaux, param))
-            return Qout
-
-    elif n_arguments == 4:
-
-        def f(Q, Qaux, normals, param):
-            probe = np.array(func(Q[0], Qaux[0], normals[0], param))
-            Qout = np.zeros((Q.shape[0],) + probe.shape, dtype=probe.dtype)
-            for i, (q, qaux, normals) in enumerate(zip(Q, Qaux, normals)):
-                Qout[i] = func(q, qaux, normals, param)
-            return np.squeeze(Qout)
-
-    return f
-
-
-# def load_npy(filepath=main_dir + "/output/", filename="mesh.npy", filenumber=None):
-#     if filenumber is not None:
-#         full_filename = filepath + filename + "." + str(int(filenumber))
-#     else:
-#         full_filename = filepath + filename
-#     if not os.path.exists(full_filename):
-#         print("File or file path to: ", full_filename, " does not exist")
-#         assert False
-#     data = np.load(full_filename)
-#     return data
-
-
-# def write_field_to_npy(
-#     field, filepath=main_dir + "/output/", filename="mesh.npy", filenumber=None
-# ):
-#     if filenumber is not None:
-#         full_filename = filepath + filename + "." + str(int(filenumber))
-#     else:
-#         full_filename = filepath + filename
-#     os.makedirs(filepath, exist_ok=True)
-#     # the extra step over 'open' is to allow for a filename with filenumber
-#     with open(full_filename, "wb") as f:
-#         np.save(f, field)
-
-
-# def interpolate_field_to_mesh(field, mesh_field, mesh_out):
-#     interpolator = interp.interp1d(mesh_field, field)
-#     return interpolator(mesh_out)

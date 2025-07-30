@@ -57,7 +57,7 @@ def test_swetopo_1d():
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -107,7 +107,7 @@ def test_swetopo_2d(mesh_type):
     )
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 def test_calibration_1d(inputs):
@@ -209,13 +209,13 @@ def test_calibration_1d(inputs):
     ]
 
     postprocessing.append_custom_fields_to_aux_fields_for_hdf5(
-        settings.output_dir, custom_functions
+        settings.output.directory, custom_functions
     )
-    # io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output.directory)
 
     postprocessing.write_to_calibration_dataformat(
-        settings.output_dir,
-        os.path.join(settings.output_dir, "calibration_data.hdf5"),
+        settings.output.directory,
+        os.path.join(settings.output.directory, "calibration_data.hdf5"),
         field_names=["h", "hu", "b"],
         aux_field_names=["u", "Fr", "E"],
     )

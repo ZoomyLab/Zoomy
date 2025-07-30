@@ -35,7 +35,6 @@ import library.model.initial_conditions as IC
 from library.model.models.basisfunctions import *
 from library.model.models.basismatrices import *
 
-
 class VAMHyperbolic(Model):
     def __init__(
         self,
@@ -238,7 +237,7 @@ class VAMPoisson(Model):
         return ev
 
 
-class HyperbolicSolverHP(Solver):
+class HyperbolicSolver(Solver):
 
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
 
@@ -249,8 +248,8 @@ class HyperbolicSolverHP(Solver):
         hw1=Q[4]
         b=Q[5]
 
-        hp0 = Qaux[1]
-        hp1 = Qaux[2]
+        p0 = Qaux[1]
+        p1 = Qaux[2]
         u0 = hu0/h
         u1 = hu1/h
         w0 = hw0/h
@@ -258,18 +257,21 @@ class HyperbolicSolverHP(Solver):
 
         dhdx   = compute_derivatives(h, mesh, derivatives_multi_index=([[1]]))[:, 0]
         dbdx  = compute_derivatives(b, mesh, derivatives_multi_index=([[1]]))[:,0]
-        dhp0dx  = compute_derivatives(hp0, mesh, derivatives_multi_index=([[1]]))[:,0]
-        dhp1dx  = compute_derivatives(hp1, mesh, derivatives_multi_index=([[1]]))[:,0]
+        dhp0dx  = compute_derivatives(h*p0, mesh, derivatives_multi_index=([[1]]))[:,0]
+        dhp1dx  = compute_derivatives(h*p1, mesh, derivatives_multi_index=([[1]]))[:,0]
         hw2 = -(w0 + w1) + (u0 + u1) * dbdx
-        # Qaux_fields=['hw2', 'hp0', 'hp1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+
+
+        #aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         Qaux = Qaux.at[0].set(hw2)
         Qaux = Qaux.at[3].set(dbdx)
         Qaux = Qaux.at[4].set(dhdx)
         Qaux = Qaux.at[5].set(dhp0dx)
         Qaux = Qaux.at[6].set(dhp1dx)
         return Qaux
-    
-        #@jax.jit
+
+
+    #@jax.jit
     def compute_source_pressure(self, dt, Q, Qaux, parameters, mesh, pde):
         dQ = jnp.zeros_like(Q)
         dQ = dQ.at[:, : mesh.n_inner_cells].set(
@@ -281,33 +283,32 @@ class HyperbolicSolverHP(Solver):
         )
         return Q - dt * dQ
 
-class PoissonSolverHP(Solver):
+
+
+class PoissonSolver(Solver):
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
 
-        hp0 = Q[0]
-        hp1 = Q[1]
-        
-        #        aux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
+        h = Qaux[0]
+        p0 = Q[0]
+        p1 = Q[1]
 
+        dp0dx = compute_derivatives(p0, mesh, derivatives_multi_index=([[1]]))[:, 0]
+        ddp0dxx = compute_derivatives(p0, mesh, derivatives_multi_index=([[2]]))[:, 0]
+        dp1dx = compute_derivatives(p1, mesh, derivatives_multi_index=([[1]]))[:, 0]
+        ddp1dxx = compute_derivatives(p1, mesh, derivatives_multi_index=([[2]]))[:, 0]
 
-
-        dhp0dx = compute_derivatives(hp0, mesh, derivatives_multi_index=([[1]]))[:, 0]
-        ddhp0dxx = compute_derivatives(hp0, mesh, derivatives_multi_index=([[2]]))[:, 0]
-        dhp1dx = compute_derivatives(hp1, mesh, derivatives_multi_index=([[1]]))[:, 0]
-        ddhp1dxx = compute_derivatives(hp1, mesh, derivatives_multi_index=([[2]]))[:, 0]
-
-        Qaux = Qaux.at[13].set(dhp0dx)
-        Qaux = Qaux.at[14].set(ddhp0dxx)
-        Qaux = Qaux.at[15].set(dhp1dx)
-        Qaux = Qaux.at[16].set(ddhp1dxx)
-
+        Qaux = Qaux.at[13].set(dp0dx)
+        Qaux = Qaux.at[14].set(ddp0dxx)
+        Qaux = Qaux.at[15].set(dp1dx)
+        Qaux = Qaux.at[16].set(ddp1dxx)
         return Qaux
+
 
 def solve_vam(
     mesh, model1, model2, settings, ode_solver_flux=RK1, ode_solver_source=RK1
 ):
-    solverQ = HyperbolicSolverHP()
-    solverP = PoissonSolverHP()
+    solverQ = HyperbolicSolver()
+    solverP = PoissonSolver()
     
     Q, Qaux = solverQ.initialize(model1, mesh)
     P, Paux = solverP.initialize(model2, mesh)
@@ -321,9 +322,9 @@ def solve_vam(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde1, bcs1 = solverQ._load_runtime_model(model1)
-    pde2, bcs2 = solverP._load_runtime_model(model2)
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    pde1, bcs1 = solverQ.transform_in_place(model1)
+    pde2, bcs2 = solverP.transform_in_place(model2)
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     def run(Q, Qaux, parameters1, pde1, bcs1, P, Paux, parameters2, pde2, bcs2):
@@ -334,7 +335,7 @@ def solve_vam(
 
         i_snapshot = 0.0
         dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output.directory, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         _ = save_fields(time, 0.0, i_snapshot, Q, Qaux)
         i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
@@ -351,7 +352,7 @@ def solve_vam(
         compute_max_abs_eigenvalue = solverQ.get_compute_max_abs_eigenvalue(
             mesh, pde1, settings
         )
-        space_solution_operator = solverQ.get_space_solution_operator(
+        flux_operator = solverQ.get_flux_operator(
             mesh, pde1, bcs1, settings
         )
         source_operator = solverQ.get_compute_source(mesh, pde1, settings)
@@ -380,7 +381,7 @@ def solve_vam(
                     Q, Qaux, Qold, Qauxold, mesh, pde1, parameters1, time, dt
                 )
                 Q1 = ode_solver_flux(
-                    space_solution_operator, Q, Qauxnew, parameters1, dt
+                    flux_operator, Q, Qauxnew, parameters1, dt
                 )
 
                 Q1 = Q1.at[5].set(Q0[5])
@@ -408,8 +409,6 @@ def solve_vam(
                 #########################PRESSURE############################
                 #############################################################
 
-                # Paux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
-
                 h = Q[0]
                 u0 = Q[1]/h
                 u1 = Q[2]/h
@@ -418,8 +417,8 @@ def solve_vam(
                 b = Q[5]
                 dbdx = compute_derivatives(b, mesh, derivatives_multi_index=([[1]]))[:, 0]
                 ddbdxx = compute_derivatives(b, mesh, derivatives_multi_index=([[2]]))[:, 0]
-                dhdx = compute_derivatives(h, mesh, derivatives_multi_index=([[1]]))[:,0]
-                ddhdxx = compute_derivatives(h, mesh, derivatives_multi_index=([[2]]))[:,0]
+                dhdx = compute_derivatives(h, mesh, derivatives_multi_index=([[1]]))[:, 0]
+                ddhdxx = compute_derivatives(h, mesh, derivatives_multi_index=([[2]]))[:, 0]
                 du0dx = compute_derivatives(u0, mesh, derivatives_multi_index=([[1]]))[:, 0]
                 du1dx = compute_derivatives(u1, mesh, derivatives_multi_index=([[1]]))[:, 0]
                 hw2 = -(w0 + w1) + (u0 + u1) * dbdx
@@ -441,32 +440,42 @@ def solve_vam(
 
                 def residual(P):
 
-                   
-                    dp0dx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[1]]))[:, 0]
-                    ddp0dxx = compute_derivatives(P[0], mesh, derivatives_multi_index=([[2]]))[:, 0]
-                    dp1dx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[1]]))[:, 0]
-                    ddp1dxx = compute_derivatives(P[1], mesh, derivatives_multi_index=([[2]]))[:, 0]
+                    p = jnp.zeros_like(P)
+                    p = p.at[:, 1:-1].set(P[:, :mesh.n_inner_cells])
+                    p = p.at[0].set(p[1])
+                    p = p.at[-1].set(p[-2])
 
+
+                    dx = min_inradius*2
+                    dpdx = jnp.zeros_like(P)
+                    dpdx = dpdx.at[:, 1:-1].set((p[:, 0:-2] - 2 * p[:, 1:-1] + p[:, 2:])/2/dx)
+                    dpdx = dpdx.at[0].set(dpdx[1])
+                    dpdx = dpdx.at[-1].set(dpdx[-2])
+                    ddpdxx = jnp.zeros_like(P)
+                    ddpdxx = ddpdxx.at[:, 1:-1].set((dpdx[:, 0:-2] - 2 * dpdx[:, 1:-1] + dpdx[:, 2:])/2/dx)
+                    ddpdxx = ddpdxx.at[0].set(ddpdxx[1])
+                    ddpdxx = ddpdxx.at[-1].set(ddpdxx[-2])
 
                     paux = Paux
-                    paux = paux.at[13].set(dp0dx)
-                    paux = paux.at[14].set(ddp0dxx)
-                    paux = paux.at[15].set(dp1dx)
-                    paux = paux.at[16].set(ddp1dxx)
+                    
+                    paux = paux.at[13].set(dpdx[0])
+                    paux = paux.at[14].set(ddpdxx[0])
+                    paux = paux.at[15].set(dpdx[1])
+                    paux = paux.at[16].set(ddpdxx[1])
 
-                    res = pde2.source_implicit(P, paux, parameters2)
+                    res = pde2.source_implicit(p, paux, parameters2)
                     res = res.at[:, mesh.n_inner_cells:].set(0.)
                     return res
 
 
-                Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[True, False], user_residual=residual)
+                Pnew = solverP.implicit_solve(P, Paux, Pold, Pauxold, mesh, model2, pde2, parameters2, time, dt, boundary_operator2, debug=[True, False], user_residual=None)
 
-                ############################################################
-                ########################CORRECTOR###########################
-                ############################################################
+                #############################################################
+                #########################CORRECTOR###########################
+                #############################################################
                 Qauxnew = Qauxnew.at[1].set(Pnew[0])
                 Qauxnew = Qauxnew.at[2].set(Pnew[1])
-                #Qauxnew = Qauxnew.at[2].set(0.)
+                ##Qauxnew = Qauxnew.at[2].set(0.)
                 Qauxnew = solverQ.update_qaux(
                     Qnew, Qauxnew, Qold, Qauxold, mesh, pde1, parameters1, time, dt
                 )
@@ -517,7 +526,6 @@ def solve_vam(
 
     return P, Paux
 
-
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_vam_1d():
@@ -535,7 +543,7 @@ def test_vam_1d():
         #time_end=0.55,
         #time_end=0.013077056519679052,
         #time_end=0.01,
-        time_end=0.1,
+        time_end=0.52,
         output_snapshots=100,
         output_dir="outputs/vam",
     )
@@ -545,13 +553,12 @@ def test_vam_1d():
 
     bcs1 = BC.BoundaryConditions(
         [
-            # BC.Lambda(physical_tag='left', prescribe_fields={
-            #     1: lambda t, x, dx, q, qaux, p, n: .11197,
-            #     #2: lambda t, x, dx, q, qaux, p, n: 0.,
-            #     #3: lambda t, x, dx, q, qaux, p, n: 0.,
-            #     #4: lambda t, x, dx, q, qaux, p, n: 0.
-            # }),
-            BC.Extrapolation(physical_tag='left'),
+            BC.Lambda(physical_tag='left', prescribe_fields={
+                1: lambda t, x, dx, q, qaux, p, n: .11197,
+                #2: lambda t, x, dx, q, qaux, p, n: 0.,
+                #3: lambda t, x, dx, q, qaux, p, n: 0.,
+                #4: lambda t, x, dx, q, qaux, p, n: 0.
+            }),
             BC.Extrapolation(physical_tag='right')
             #BC.Lambda(physical_tag='right', prescribe_fields={
             #    3: lambda t, x, dx, q, qaux, p, n: 0,
@@ -563,25 +570,24 @@ def test_vam_1d():
     bcs2 = BC.BoundaryConditions(
         [
             BC.Extrapolation(physical_tag='left'),
-            # BC.Lambda(physical_tag='left', prescribe_fields={
+            #BC.Lambda(physical_tag='left', prescribe_fields={
             #    0: lambda t, x, dx, q, qaux, p, n: 0.,
             #    1: lambda t, x, dx, q, qaux, p, n: 0.
-            # }),
-            # BC.Lambda(physical_tag='right', prescribe_fields={
+            #}),
+            #BC.Lambda(physical_tag='right', prescribe_fields={
             #    0: lambda t, x, dx, q, qaux, p, n: 0.,
             #    1: lambda t, x, dx, q, qaux, p, n: 0.
-            # }),
+            #}),
             BC.Extrapolation(physical_tag='right')
         ]
     )
     
     def custom_ic1(x):
         Q = np.zeros(6, dtype=float)
-        Q[1] = np.where(x[0]-5 < 1, 0.0, 0.)
-        Q[5] = 0.00*np.exp(-(x[0]-5)**2 / 1.0**2) 
-        Q[0] = np.where(x[0] < 100, 0.34, 0.015) - Q[5]
+        Q[1] = np.where(x[0] < 1, 0.11197, 0.)
+        Q[5] = 0.2*np.exp(-x[0]**2 / 1.0**2) 
+        Q[0] = np.where(x[0] < 1, 0.34, 0.015) - Q[5]
         Q[0] = np.where(Q[0] > 0.015, Q[0], 0.015)
-        Q[0] = np.where(x[0]**2 < 0.5, 0.2, 0.1)
         return Q
     
     def custom_ic2(x):
@@ -606,7 +612,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
+    mesh = petscMesh.Mesh.create_1d((-1.5, 15), 100, lsq_degree=2)
 
     Q, Qaux = solve_vam(
         mesh,
@@ -614,9 +620,89 @@ def test_vam_1d():
         model2,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
+
+def test_vam_1d_full():
+    settings = Settings(
+        name="VAM",
+        parameters={
+            "g": 9.81,
+        },
+        reconstruction=recon.constant,
+        num_flux=flux.Zero(),
+        nc_flux=nc_flux.segmentpath(),
+        compute_dt=timestepping.adaptive(CFL=0.45),
+        time_end=2.,
+        output_snapshots=100,
+        output_dir="outputs/vam",
+    )
+
+    bc_tags = ["left", "right"]
+    bc_tags_periodic_to = ["right", "left"]
+
+    bcs1 = BC.BoundaryConditions(
+        [
+            BC.Lambda(physical_tag='left', prescribe_fields={1: lambda t, x, dx, q, qaux, p, n: .11197}),
+            BC.Extrapolation(physical_tag='right')
+        ]
+    )
+    
+    bcs2 = BC.BoundaryConditions(
+        [
+            BC.Lambda(physical_tag='left', prescribe_fields={
+                0: lambda t, x, dx, q, qaux, p, n: 0.,
+                1: lambda t, x, dx, q, qaux, p, n: 0.
+            }),
+            BC.Lambda(physical_tag='right', prescribe_fields={
+                0: lambda t, x, dx, q, qaux, p, n: 0.,
+                1: lambda t, x, dx, q, qaux, p, n: 0.
+            }),
+            #BC.Extrapolation(physical_tag='left'),
+            #BC.Extrapolation(physical_tag='right')
+        ]
+    )
+    
+    def custom_ic1(x):
+        Q = np.zeros(6, dtype=float)
+        Q[1] = np.where(x[0] < 1, 0.11197, 0.)
+        Q[5] = 0.2*np.exp(-x[0]**2 / 1.0**2) 
+        Q[0] = np.where(x[0] < 1, 0.34, 0.015) - Q[5]
+        Q[0] = np.where(Q[0] > 0.015, Q[0], 0.015)
+        return Q
+    
+    def custom_ic2(x):
+        Q = np.zeros(8, dtype=float)
+        return Q
+
+    ic1 = IC.UserFunction(custom_ic1)
+    ic2 = IC.UserFunction(custom_ic2)
+    
+    
+    model1 = VAMHyperbolic(
+        parameters=settings.parameters,
+        boundary_conditions=bcs1,
+        initial_conditions=ic1,
+        settings={},
+    )
+    
+    model2 = VAMPoissonFull(
+        parameters=settings.parameters,
+        boundary_conditions=bcs2,
+        initial_conditions=ic2,
+        settings={},
+    )
+
+    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 30)
+
+    P, Paux = solve_vam_full(
+        mesh,
+        model1,
+        model2,
+        settings,
+    )
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
+
 
 
 if __name__ == "__main__":
     test_vam_1d()
-

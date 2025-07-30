@@ -674,7 +674,7 @@ plt.show()
 #
 # #| code-fold: true
 # #| code-summary: "Postprocessing"
-# filepath = os.path.join(settings.output_dir, 'Simulation.h5')
+# filepath = os.path.join(settings.output.directory, 'Simulation.h5')
 # X, Q, Qaux, T = io.load_timeline_of_fields_from_hdf5(filepath)
 # # remove the boundary points
 # Q = Q[:, :, :-2]
@@ -986,10 +986,10 @@ plt.show()
 #
 # #| code-fold: true
 # #| code-summary: "Postprocessing"
-# io.generate_vtk(os.path.join(os.path.join(main_dir, settings.output_dir), f'{settings.name}.h5'))
-# out_0 = pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), 'out.0.vtk'))
-# out_10 = pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), 'out.10.vtk'))
-# out_98 = pv.read(os.path.join(os.path.join(main_dir, settings.output_dir), 'out.98.vtk'))
+# io.generate_vtk(os.path.join(os.path.join(main_dir, settings.output.directory), f'{settings.name}.h5'))
+# out_0 = pv.read(os.path.join(os.path.join(main_dir, settings.output.directory), 'out.0.vtk'))
+# out_10 = pv.read(os.path.join(os.path.join(main_dir, settings.output.directory), 'out.10.vtk'))
+# out_98 = pv.read(os.path.join(os.path.join(main_dir, settings.output.directory), 'out.98.vtk'))
 # field_names = out_0.cell_data.keys()
 # print(f'Field names: {field_names}')
 #

@@ -99,8 +99,8 @@ def test_ssf():
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
 
-    # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(settings.output.directory)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_ssf_energy():
@@ -188,8 +188,8 @@ def test_ssf_energy():
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RKimplicit
     )
 
-    # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(settings.output.directory)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_ssf_pathconservative():
@@ -303,8 +303,8 @@ def test_ssf_pathconservative():
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
 
-    # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(settings.output.directory)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -384,7 +384,7 @@ def test_ssf_2d():
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_mid.msh"),
     #     "triangle",
     #  )
-    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output_dir), "mesh.hdf5"))
+    # mesh = Mesh.from_hdf5( os.path.join(os.path.join(main_dir, settings.output.directory), "mesh.hdf5"))
 
     # fvm_c_unsteady_semidiscete(
     #     mesh,
@@ -397,7 +397,7 @@ def test_ssf_2d():
     #     rebuild_c=True,
     # )
 
-    # io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output.directory)
 
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh")
@@ -407,7 +407,7 @@ def test_ssf_2d():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 if __name__ == "__main__":

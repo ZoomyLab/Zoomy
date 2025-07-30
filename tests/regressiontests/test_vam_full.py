@@ -242,9 +242,9 @@ def solve_vam(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde1, bcs1 = solverQ._load_runtime_model(model1)
-    pde2, bcs2 = solverP._load_runtime_model(model2)
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    pde1, bcs1 = solverQ.transform_in_place(model1)
+    pde2, bcs2 = solverP.transform_in_place(model2)
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     def run(Q, Qaux, parameters1, pde1, bcs1, P, Paux, parameters2, pde2, bcs2):
@@ -255,7 +255,7 @@ def solve_vam(
 
         i_snapshot = 0.0
         dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output.directory, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         _ = save_fields(time, 0.0, i_snapshot, Q, Qaux)
         i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
@@ -272,7 +272,7 @@ def solve_vam(
         compute_max_abs_eigenvalue = solverQ.get_compute_max_abs_eigenvalue(
             mesh, pde1, settings
         )
-        space_solution_operator = solverQ.get_space_solution_operator(
+        flux_operator = solverQ.get_flux_operator(
             mesh, pde1, bcs1, settings
         )
         source_operator = solverQ.get_compute_source(mesh, pde1, settings)
@@ -301,7 +301,7 @@ def solve_vam(
                     Q, Qaux, Qold, Qauxold, mesh, pde1, parameters1, time, dt
                 )
                 Q1 = ode_solver_flux(
-                    space_solution_operator, Q, Qauxnew, parameters1, dt
+                    flux_operator, Q, Qauxnew, parameters1, dt
                 )
 
                 Q1 = Q1.at[5].set(Q0[5])
@@ -464,9 +464,9 @@ def solve_vam_full(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde1, bcs1 = solverQ._load_runtime_model(model1)
-    pde2, bcs2 = solverP._load_runtime_model(model2)
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    pde1, bcs1 = solverQ.transform_in_place(model1)
+    pde2, bcs2 = solverP.transform_in_place(model2)
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     def run(Q, Qaux, parameters1, pde1, bcs1, P, Paux, parameters2, pde2, bcs2):
@@ -477,7 +477,7 @@ def solve_vam_full(
 
         i_snapshot = 0.0
         dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output.directory, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         _ = save_fields(time, 0.0, i_snapshot, Q, Qaux)
         i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
@@ -494,7 +494,7 @@ def solve_vam_full(
         compute_max_abs_eigenvalue = solverQ.get_compute_max_abs_eigenvalue(
             mesh, pde1, settings
         )
-        space_solution_operator = solverQ.get_space_solution_operator(
+        flux_operator = solverQ.get_flux_operator(
             mesh, pde1, bcs1, settings
         )
         boundary_operator1 = solverQ.get_apply_boundary_conditions(mesh, bcs1)
@@ -520,7 +520,7 @@ def solve_vam_full(
                     Q, Qaux, Qold, Qauxold, mesh, pde1, parameters1, time, dt
                 )
                 Q1 = ode_solver_flux(
-                    space_solution_operator, Q, Qauxnew, parameters1, dt
+                    flux_operator, Q, Qauxnew, parameters1, dt
                 )
 
                 Q1 = Q1.at[5].set(Q0[5])
@@ -700,7 +700,7 @@ def test_vam_1d():
         model2,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 def test_vam_1d_full():
     settings = Settings(
@@ -780,7 +780,7 @@ def test_vam_1d_full():
         model2,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -848,7 +848,7 @@ def test_vam_1d_fullyimplicit():
         model,
         settings,
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 class SolverFullImplicit(Solver):
 
@@ -931,9 +931,9 @@ def solve_vam_fullyimplicit(
     
     mesh = convert_mesh_to_jax(mesh)
 
-    pde, bcs = solver._load_runtime_model(model)
+    pde, bcs = solver.transform_in_place(model)
 
-    output_hdf5_path = os.path.join(settings.output_dir, f"{settings.name}.h5")
+    output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
     def run(Q, Qaux, parameters, pde, bcs):
@@ -943,7 +943,7 @@ def solve_vam_fullyimplicit(
 
         i_snapshot = 0.0
         dt_snapshot = settings.time_end / (settings.output_snapshots - 1)
-        io.init_output_directory(settings.output_dir, settings.output_clean_dir)
+        io.init_output_directory(settings.output.directory, settings.output_clean_dir)
         mesh.write_to_hdf5(output_hdf5_path)
         _ = save_fields(time, 0.0, i_snapshot, Q, Qaux)
         i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
@@ -957,13 +957,13 @@ def solve_vam_fullyimplicit(
         compute_max_abs_eigenvalue = solver.get_compute_max_abs_eigenvalue(
             mesh, pde, settings
         )
-        space_solution_operator = solver.get_space_solution_operator(
+        flux_operator = solver.get_flux_operator(
             mesh, pde, bcs, settings
         )
 
         dt = 0.1
 
-        space_solution_operator = solver.get_space_solution_operator(
+        flux_operator = solver.get_flux_operator(
             mesh, pde, bcs, settings
         )
         boundary_operator = solver.get_apply_boundary_conditions(mesh, bcs)
@@ -986,7 +986,7 @@ def solve_vam_fullyimplicit(
                     q = boundary_operator(time, Q, Qaux, parameters)
                     qaux = solver.update_qaux(q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
                     qnew = RK1(
-                        space_solution_operator, q, qaux, parameters, dt
+                        flux_operator, q, qaux, parameters, dt
                     )
 
                     qnew = qnew.at[5].set(Q0[5])

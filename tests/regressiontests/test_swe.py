@@ -48,7 +48,7 @@ def test_swe_1d():
     mesh = Mesh.create_1d((-1, 1), 100)
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -95,7 +95,7 @@ def test_swe_2d(mesh_type):
     )
 
     fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    io.generate_vtk(settings.output_dir)
+    io.generate_vtk(settings.output.directory)
 
 
 if __name__ == "__main__":

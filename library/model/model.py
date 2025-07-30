@@ -6,15 +6,9 @@ from library.model.models.base import Model, ModelGUI
 from library.model.models.advection import Advection
 from library.model.models.shallow_water import ShallowWater, ShallowWater2d
 from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d
-from library.model.models.shallow_moments import *
-from library.model.models.coupled_constrained import *
-from library.model.models.vam import *
-from library.model.models.poisson import *
-from library.model.models.GN import *
 # 
 
 # from library.model.models.shallow_moments_sediment import *
-from library.model.models.shear_shallow_flow import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.mesh.fvm_mesh import Mesh

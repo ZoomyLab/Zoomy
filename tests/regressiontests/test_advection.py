@@ -48,8 +48,8 @@ def test_advection_1d():
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
-    # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(settings.output.directory)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -94,7 +94,7 @@ def test_reconstruction_1d():
     mesh = petscMesh.Mesh.create_1d((-1, 1), 10)
 
     solver_price_c(mesh, model, settings, RK1)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -166,8 +166,8 @@ def test_advection_2d(mesh_type):
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
-    # io.generate_vtk(settings.output_dir)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    # io.generate_vtk(settings.output.directory)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -224,10 +224,10 @@ def test_advection_3d(mesh_type):
     mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_mid.msh")
 
     solver_price_c(mesh, model, settings, RK1)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
-    # io.generate_vtk(settings.output_dir)
+    # io.generate_vtk(settings.output.directory)
 
 
 @pytest.mark.critical
@@ -284,7 +284,7 @@ def test_periodic_bc(mesh_type):
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 @pytest.mark.critical
@@ -367,7 +367,7 @@ def test_reconstruction_2d(mesh_type):
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
     io.generate_vtk(
-        os.path.join(settings.output_dir, f"{settings.name}.h5"),
+        os.path.join(settings.output.directory, f"{settings.name}.h5"),
         field_names=["Q"],
         aux_field_names=["dQdx", "dQdy", "phi"],
     )

@@ -86,7 +86,7 @@ def test_smm_1d():
 
     solver = Solver()
     solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
     
 class SWESolver(Solver):
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
@@ -158,8 +158,8 @@ def test_smm_2d():
     solver = SWESolver()
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
-    postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), scale_h=100.)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
+    postprocessing.vtk_interpolate_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), scale_h=100.)
 
 
 def test_jax_jit_grad():
@@ -259,7 +259,7 @@ def test_jax_jit_grad():
     model.parameter_values = params_orig
     no_ad()
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_jax_jit_grad_minimal():
@@ -359,7 +359,7 @@ def test_jax_jit_grad_minimal():
     # model.parameter_values = params_orig
     # no_ad()
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 def test_reconstruction():
@@ -423,7 +423,7 @@ def test_reconstruction():
     solver = Solver()
     Qaux, Qnew = solver.jax_reconstruction(mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 def test_reconstruction_faces():
     level = 0
@@ -483,7 +483,7 @@ def test_reconstruction_faces():
     solver = Solver()
     Qaux, Qnew = solver.jax_reconstruction_faces(mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 class MySolver(Solver):
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
@@ -549,7 +549,7 @@ def test_implicit():
     solver = MySolver()
     Qaux, Qnew = solver.jax_implicit(mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 def test_smm_junction():
     level = 4
@@ -624,8 +624,8 @@ def test_smm_junction():
     solver = SWESolver()
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
-    io.generate_vtk(os.path.join(settings.output_dir, f"{settings.name}.h5"))
-    postprocessing.vtk_interpolate_3d(model, settings.output_dir,  os.path.join(settings.output_dir, f"{settings.name}.h5"), Nz=20)
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
+    postprocessing.vtk_interpolate_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), Nz=20)
 
 
 if __name__ == "__main__":
