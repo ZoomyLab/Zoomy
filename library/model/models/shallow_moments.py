@@ -989,8 +989,8 @@ class ShallowMomentsTurbulenceSimple(ShallowMoments):
             basis=basis,
         )
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = variables.length()
-        assert n_fields >= 4
+        self.n_fields = self.variables.length()
+        assert self.n_fields >= 4
 
 
 class ShallowMoments2d(Model):

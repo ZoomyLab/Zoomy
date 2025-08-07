@@ -3,12 +3,12 @@ import numpy as np
 import h5py
 from sympy.abc import x
 from sympy import lambdify, integrate
-from loguru import logger
 
 from library.fvm.reconstruction import GradientMesh
 import library.mesh.fvm_mesh as fvm_mesh
 import library.mesh.mesh as petscMesh
 import library.misc.io as io
+from library.misc.logger_config import logger
 from library.model.models.shallow_moments import reconstruct_uvw
 from library.model.models.base import RuntimeModel
 
@@ -59,7 +59,6 @@ def vtk_interpolate_3d(
         qaux = np.zeros((Q.shape[1]*Nz, 1), dtype=float)
         _ = save_fields(i_snapshot, time, rhoUVWP.T, qaux.T)
         i_count += 1
-        print("converted {}".format(str(i_snapshot)))
         
         logger.info(f"Converted snapshot {i_snapshot}/{n_snapshots}")
 

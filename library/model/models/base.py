@@ -16,8 +16,8 @@ from sympy import (
     cancel,
     latex,
     init_printing,
+    zeros
 )
-from sympy import zeros
 
 from attr import define
 from typing import Optional, Union, Callable
@@ -97,6 +97,7 @@ class RuntimeModel:
             pde.left_eigenvectors,
             pde.right_eigenvectors,
             pde.source_implicit,
+            pde.residual,
             pde.interpolate_3d,
             bcs,
         )
@@ -142,6 +143,7 @@ class Model:
     sympy_left_eigenvectors: Optional[Matrix]
     sympy_right_eigenvectors: Optional[Matrix]
     sympy_source_implicit: Matrix
+    sympy_residual: Matrix
     sympy_interpolate_3d: Matrix
 
     def __init__(
@@ -172,7 +174,7 @@ class Model:
         updated_parameters = {**parameters_default, **parameters}
         self.parameters = register_sympy_attribute(updated_parameters, "p")
         self.parameters_default = parameters_default
-        self.parameter_values = register_parameter_defaults(updated_parameters)
+        self.parameter_values = register_parameter_values(updated_parameters)
         self.sympy_normal = register_sympy_attribute(
             ["n" + str(i) for i in range(self.dimension)], "n"
         )
@@ -220,6 +222,7 @@ class Model:
         else:
             self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         self.sympy_source_implicit = self.source_implicit()
+        self.sympy_residual = self.residual()
         self.sympy_interpolate_3d = self.interpolate_3d()
         # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
         # TODO check case imaginary
@@ -433,6 +436,21 @@ class Model:
         )
         def source_implicit(Q, Qaux, param):
             return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
+        
+        l_residual = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.sympy_residual, self.variables, self.aux_variables
+            ),
+            printer,
+        )
+        def residual(Q, Qaux, param):
+            return jnp.squeeze(jnp.array(l_residual(Q, Qaux, param)), axis=1)
+
 
         l_interpolate_3d = lambdify(
             [
@@ -464,6 +482,7 @@ class Model:
             "source": source,
             "source_jacobian": source_jacobian,
             "source_implicit": source_implicit,
+            "residual": residual,
             "interpolate_3d": interpolate_3d,
         }
         return SimpleNamespace(**d)
@@ -492,6 +511,9 @@ class Model:
     def source_implicit(self):
         return zeros(self.n_fields, 1)
 
+    def residual(self):
+        return zeros(self.n_fields, 1)
+    
     def interpolate_3d(self):
         return zeros(5, 1)
 
@@ -557,7 +579,7 @@ def register_sympy_attribute(argument, string_identifier="q_"):
     return Zstruct(**attributes)
 
 
-def register_parameter_defaults(parameters):
+def register_parameter_values(parameters):
     if type(parameters) == int:
         default_values = np.zeros(parameters, dtype=float)
     elif type(parameters) == type({}):

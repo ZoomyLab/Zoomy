@@ -44,7 +44,7 @@ class Poisson(Model):
             settings={**settings_default, **settings},
         )
         
-    def source_implicit(self):
+    def residual(self):
         R = Matrix([0 for i in range(self.n_fields)])
         T = self.variables[0]
         ddTdxx = self.aux_variables.ddTdxx

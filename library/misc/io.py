@@ -6,12 +6,13 @@ import h5py
 import meshio
 import json
 import shutil
-from loguru import logger
 
 # import library.mesh.fvm_mesh as fvm_mesh
 from library.mesh.mesh import Mesh
 import library.mesh.mesh_util as mesh_util
 from library.misc.misc import Zstruct, Settings
+from library.misc.logger_config import logger
+
 
 
 def init_output_directory(path, clean):
@@ -144,7 +145,6 @@ def clean_files(filepath, filename=".vtk"):
 
 def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=True):
     i_snap = int(i_snapshot)
-    jax.debug.print("SAVING")
     main_dir = os.getenv("SMS")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "a") as f:
