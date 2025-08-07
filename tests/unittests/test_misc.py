@@ -39,10 +39,10 @@ def test_settings_update():
 @pytest.mark.unittest
 def test_projection_in_normal_transverse_direction_and_back():
     dim = 2
-    n_fields = 1 + 2 * dim
-    momentum_eqns = np.array(list(range(1, n_fields)))
+    n_variables = 1 + 2 * dim
+    momentum_eqns = np.array(list(range(1, n_variables)))
     N = 10
-    Q = np.linspace(1, n_fields * N, n_fields * N).reshape((N, n_fields))
+    Q = np.linspace(1, n_variables * N, n_variables * N).reshape((N, n_variables))
     angles = [0.0, np.pi / 2.0, np.pi / 4.0]
     compute_normal = lambda angle: np.array([np.cos(angle), -np.sin(angle), 0.0])
     normals = [compute_normal(angle)[:dim] for angle in angles]

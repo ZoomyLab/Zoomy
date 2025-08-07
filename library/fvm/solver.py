@@ -32,6 +32,8 @@ from library.misc.misc import Zstruct, Settings
 import library.misc.transformation as transformation
 import library.fvm.ode as ode
 import library.fvm.timestepping as timestepping
+from library.model.models.base import RuntimeModel
+
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp):
     logger.info(
@@ -165,22 +167,29 @@ class Solver:
             model.variables,
             model.aux_variables,
             model.parameters,
-            model.sympy_normal,
+            model.normal,
         )
 
-        n_fields = model.n_fields
+        n_variables = model.n_variables
         n_cells = mesh.n_cells
-        n_aux_fields = model.aux_variables.length()
+        n_aux_variables = model.aux_variables.length()
 
-        Q = np.empty((n_fields, n_cells), dtype=float)
-        Qaux = np.empty((n_aux_fields, n_cells), dtype=float)
-        return np.array(Q), np.array(Qaux)
+        Q = np.empty((n_variables, n_cells), dtype=float)
+        Qaux = np.empty((n_aux_variables, n_cells), dtype=float)
+        return Q, Qaux
+        
+    def create_runtime(self, Q, Qaux, model, mesh):      
+        jax_mesh = convert_mesh_to_jax(mesh)
+        Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
+        parameters = jnp.asarray(model.parameter_values)
+        runtime_model = RuntimeModel.from_model(model)        
+        return np.array(Q), np.array(Qaux), parameters, jax_mesh, runtime_model
 
-    def get_compute_source(self, mesh, pde):
+    def get_compute_source(self, mesh, model):
         @jax.jit
         def compute_source(dt, Q, Qaux, parameters, dQ):
             dQ = dQ.at[:, : mesh.n_inner_cells].set(
-                pde.source(
+                model.source(
                     Q[:, : mesh.n_inner_cells],
                     Qaux[:, : mesh.n_inner_cells],
                     parameters,
@@ -190,11 +199,11 @@ class Solver:
 
         return compute_source
 
-    def get_compute_source_jacobian(self, mesh, pde):
+    def get_compute_source_jacobian(self, mesh, model):
         @jax.jit
         def compute_source(dt, Q, Qaux, parameters, dQ):
             dQ = dQ.at[:, : mesh.n_inner_cells].set(
-                pde.source_jacobian(
+                model.source_jacobian(
                     Q[:, : mesh.n_inner_cells],
                     Qaux[:, : mesh.n_inner_cells],
                     parameters,
@@ -204,8 +213,8 @@ class Solver:
 
         return compute_source
     
-    def get_apply_boundary_conditions(self, mesh, runtime_bcs):
-        runtime_bcs = tuple(runtime_bcs)
+    def get_apply_boundary_conditions(self, mesh, model):
+        runtime_bcs = tuple(model.bcs)
 
         @jax.jit
         @partial(jax.named_call, name="BC")
@@ -280,7 +289,7 @@ class Solver:
 
         return apply_boundary_conditions
     
-    def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, pde, parameters, time, dt):
+    def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
         """
         Update auxiliary variables
         """
@@ -318,10 +327,9 @@ class HyperbolicSolver(Solver):
         Q, Qaux = super().initialize(model, mesh)
         Q = model.initial_conditions.apply(mesh.cell_centers, Q)
         Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
-        
         return Q, Qaux
 
-    def get_compute_max_abs_eigenvalue(self, mesh, pde):
+    def get_compute_max_abs_eigenvalue(self, mesh, model):
         
         @jax.jit
         @partial(jax.named_call, name="EV")
@@ -336,15 +344,15 @@ class HyperbolicSolver(Solver):
 
             normal = mesh.face_normals
 
-            evA = pde.eigenvalues(qA, qauxA, parameters, normal)
-            evB = pde.eigenvalues(qB, qauxB, parameters, normal)
+            evA = model.eigenvalues(qA, qauxA, parameters, normal)
+            evB = model.eigenvalues(qB, qauxB, parameters, normal)
             max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
 
             return max_abs_eigenvalue
 
         return compute_max_abs_eigenvalue
 
-    def get_flux_operator(self, mesh, pde, bcs):
+    def get_flux_operator(self, mesh, model):
         @jax.jit
         @partial(jax.named_call, name="Flux")
         def flux_operator(dt, Q, Qaux, parameters, dQ):
@@ -379,7 +387,7 @@ class HyperbolicSolver(Solver):
                 svB,
                 face_volumes,
                 dt,
-                pde,
+                model,
             )
             # Ensure no failure
             assert not failedA
@@ -395,7 +403,7 @@ class HyperbolicSolver(Solver):
                 svA,
                 face_volumes,
                 dt,
-                pde,
+                model,
             )
             assert not failedB
 
@@ -470,12 +478,7 @@ class HyperbolicSolver(Solver):
     def solve(self, mesh, model, write_output=True):
         Q, Qaux = self.initialize(mesh, model)
         
-
-        mesh = convert_mesh_to_jax(mesh)
-        Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
-        parameters = jnp.asarray(model.parameter_values)
-
-        pde, bcs = transformation.transform_model_in_place(model)
+        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, model, mesh)
         
         if write_output:
             output_hdf5_path = os.path.join(
@@ -488,7 +491,7 @@ class HyperbolicSolver(Solver):
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
 
-        def run(Q, Qaux, parameters, pde, bcs):
+        def run(Q, Qaux, parameters, model):
             iteration = 0.0
             time = 0.0
             assert model.dimension == mesh.dimension
@@ -507,10 +510,10 @@ class HyperbolicSolver(Solver):
 
             min_inradius = jnp.min(mesh.cell_inradius)
 
-            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, pde)
-            flux_operator = self.get_flux_operator(mesh, pde, bcs)
-            source_operator = self.get_compute_source(mesh, pde)
-            boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, model)
+            flux_operator = self.get_flux_operator(mesh, model)
+            source_operator = self.get_compute_source(mesh, model)
+            boundary_operator = self.get_apply_boundary_conditions(mesh, model)
 
             @jax.jit
             @partial(jax.named_call, name="time loop")
@@ -570,7 +573,7 @@ class HyperbolicSolver(Solver):
             return Qnew, Qaux
 
         time_start = gettime()
-        Qnew, Qaux = run(Q, Qaux, parameters, pde, bcs)
+        Qnew, Qaux = run(Q, Qaux, parameters, model)
         jax.experimental.io_callback(
             log_callback_execution_time,                 
             None,                          
@@ -581,11 +584,11 @@ class HyperbolicSolver(Solver):
 
 class PoissonSolver(Solver):
     
-    def get_residual(self, Qaux, Qold, Qauxold, parameters, mesh, pde, boundary_operator, time, dt):
+    def get_residual(self, Qaux, Qold, Qauxold, parameters, mesh, model, boundary_operator, time, dt):
         def residual(Q):
-            qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, pde, parameters, time, dt)
+            qaux = self.update_qaux(Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
             q = boundary_operator(time, Q, qaux, parameters)
-            res = pde.residual(q, qaux, parameters)
+            res = model.residual(q, qaux, parameters)
             # res = res.at[:, mesh.n_inner_cells:].set((10*(q-Q)**2)[:, mesh.n_inner_cells:])
             res = res.at[:, mesh.n_inner_cells:].set(0.0)
             return res
@@ -596,17 +599,8 @@ class PoissonSolver(Solver):
     # @jax.jit
     def solve(self, mesh, model, write_output=True):
         Q, Qaux = self.initialize(model, mesh)
+        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, model, mesh)
         
-        Q = jnp.array(Q)
-        Qaux = jnp.array(Qaux)
-
-        parameters = jnp.asarray(model.parameter_values)
-
-        mesh = convert_mesh_to_jax(mesh)
-
-        pde, bcs = transformation.transform_model_in_place(model)
-
-
         # dummy values for a consistent interface
         i_snapshot = 0.0
         time = 0.0
@@ -616,7 +610,7 @@ class PoissonSolver(Solver):
         Qold = Q
         Qauxold = Qaux
 
-        boundary_operator = self.get_apply_boundary_conditions(mesh, bcs)
+        boundary_operator = self.get_apply_boundary_conditions(mesh, model.bcs)
 
         Q = boundary_operator(time, Q, Qaux, parameters)
         Qaux = self.update_qaux(
@@ -641,7 +635,7 @@ class PoissonSolver(Solver):
 
         
 
-        residual = self.get_residual(Qaux, Qold, Qauxold, parameters, mesh, pde, boundary_operator, time, dt)
+        residual = self.get_residual(Qaux, Qold, Qauxold, parameters, mesh, model, boundary_operator, time, dt)
         newton_solve = newton_solver(residual)
 
         time_start = gettime()

@@ -88,16 +88,16 @@ def constant(mesh, fields, i_elem, i_th_neighbor):
     """
     # n_edges = mesh.n_edges
     dim = mesh.dimension
-    n_fields = len(fields)
+    n_variables = len(fields)
     n_dim_fields = [field.shape[1] for field in fields]
-    field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
-    field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
+    field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_variables)]
+    field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_variables)]
 
     # get neighborhood
     i_elem_neighbor = mesh.element_neighbors[i_elem, i_th_neighbor]
 
     # reconstruct
-    for i_field in range(n_fields):
+    for i_field in range(n_variables):
         field_i[i_field] = fields[i_field][i_elem]
         field_j[i_field] = fields[i_field][i_elem_neighbor]
 
@@ -107,21 +107,21 @@ def constant(mesh, fields, i_elem, i_th_neighbor):
 def constant_edge(mesh, fields, field_ghost, i_elem):
     # n_edges = mesh.n_edges
     dim = mesh.dimension
-    n_fields = len(fields)
+    n_variables = len(fields)
     n_dim_fields = [field.shape[1] for field in fields]
-    field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
-    field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_fields)]
+    field_i = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_variables)]
+    field_j = [np.zeros((n_dim_fields[i]), dtype=float) for i in range(n_variables)]
 
     # get neighborhood
 
     # reconstruct
-    for i_field in range(n_fields):
+    for i_field in range(n_variables):
         field_i[i_field] = fields[i_field][i_elem]
 
     # assumption, the first field is Q. Use the ghost cell for that.
     # all further fields get a copy of the value of fields
     field_j[0] = field_ghost
-    for i_field in range(1, n_fields):
+    for i_field in range(1, n_variables):
         field_j[i_field] = fields[i_field][i_elem]
 
     return field_i, field_j
@@ -130,16 +130,16 @@ def constant_edge(mesh, fields, field_ghost, i_elem):
 def constant_old(mesh, fields):
     n_edges = mesh.n_edges
     dim = mesh.dimension
-    n_fields = len(fields)
+    n_variables = len(fields)
     n_dim_fields = [field.shape[1] for field in fields]
     # n_eq = Q.shape[1]
     # n_aux_eq = Qaux.shape[1]
 
     field_i = [
-        np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_fields)
+        np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_variables)
     ]
     field_j = [
-        np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_fields)
+        np.zeros((n_edges, n_dim_fields[i]), dtype=float) for i in range(n_variables)
     ]
 
     # Qi = np.zeros((n_edges, n_eq), dtype=float)
@@ -154,7 +154,7 @@ def constant_old(mesh, fields):
             neighbor = mesh.element_neighbors[elem, i_neighbor]
             # I can only count each edge once (otherwise I need double the memory)
             if elem < neighbor:
-                for i_field in range(n_fields):
+                for i_field in range(n_variables):
                     field_i[i_field][edge] = fields[i_field][elem]
                     field_j[i_field][edge] = fields[i_field][neighbor]
                 # Qi[edge] = Q[elem]
@@ -166,7 +166,7 @@ def constant_old(mesh, fields):
     for elem, neighbor in zip(
         mesh.boundary_edge_elements, mesh.boundary_edge_neighbors
     ):
-        for i_field in range(n_fields):
+        for i_field in range(n_variables):
             field_i[i_field][edge] = fields[i_field][elem]
             field_j[i_field][edge] = fields[i_field][neighbor]
         # Qi[edge] = Q[elem]
@@ -230,8 +230,8 @@ class GradientMesh(fvm_mesh.Mesh):
 
     def gradQ(self, Q):
         dim = self.dimension
-        n_fields = Q.shape[1]
-        gradQ = np.zeros((self.n_elements, n_fields, dim), dtype=float)
+        n_variables = Q.shape[1]
+        gradQ = np.zeros((self.n_elements, n_variables, dim), dtype=float)
         for i_elem in range(self.n_elements):
             q_self = Q[i_elem]
             for i_face in range(self.element_n_neighbors[i_elem]):
@@ -295,8 +295,8 @@ class GradientPetscMesh(petsc_mesh.Mesh):
 
     def gradQ(self, Q):
         dim = self.dimension
-        n_fields = Q.shape[1]
-        gradQ = np.zeros((self.n_cells, n_fields, dim), dtype=float)
+        n_variables = Q.shape[1]
+        gradQ = np.zeros((self.n_cells, n_variables, dim), dtype=float)
         for i_elem in range(self.n_cells):
             q_self = Q[i_elem]
             for i_face in range(self.cell_n_neighbors[i_elem]):

@@ -1,5 +1,5 @@
 # ---
-# title: 'Introduction to SMS'
+# title: 'Introduction to ZOOMY_DIR'
 # author: Ingo Steldermann
 # date: 09/18/2024
 # jupyter:
@@ -48,7 +48,7 @@ seaborn.set_context("talk")
 from IPython.display import Math
 import sympy as sym
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 import pytest
 from types import SimpleNamespace
 
@@ -89,18 +89,18 @@ class ShallowMomentsSedimentSimple(Model):
         aux_initial_conditions=IC.Constant(),
         dimension=1,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters={},
-        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        _default_parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
         basis=Basis(),
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
-        self.levels = self.n_fields - 3
-        self.basis = Basis(basis=Legendre_shifted(order=self.levels + 1))
-        self.basis.compute_matrices(self.levels)
+        self.n_variables = self.variables.length()
+        self.level = self.n_variables - 3
+        self.basis = Basis(basis=Legendre_shifted(order=self.level + 1))
+        self.basis.compute_matrices(self.level)
         if type(fields) == type([]):
             fields_smm = fields[:-1]
         elif type(fields) == int:
@@ -110,20 +110,20 @@ class ShallowMomentsSedimentSimple(Model):
         self.smm = ShallowMoments(
             dimension=dimension,
             fields=fields_smm,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             aux_initial_conditions=aux_initial_conditions,
-            basis=Basis(basis=Legendre_shifted(order=self.levels + 1)),
+            basis=Basis(basis=Legendre_shifted(order=self.level + 1)),
         )
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             aux_initial_conditions=aux_initial_conditions,
@@ -131,14 +131,14 @@ class ShallowMomentsSedimentSimple(Model):
         )
 
     def quasilinear_matrix(self):
-        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         h = self.variables[0]
         ha = self.variables[1:-1]
         a = [_ha / h for _ha in ha]
         u = a[0]
         p = self.parameters
         ub = 0
-        for i in range(self.levels + 1):
+        for i in range(self.level + 1):
             ub += a[i]
 
         def my_abs(x):
@@ -168,31 +168,31 @@ class ShallowMomentsSedimentSimple(Model):
         nc[1, 0] = p.g * h - u**2
 
         nc[1, 1] = 2 * u
-        if self.levels > 0:
+        if self.level > 0:
             nc[1, 2] = 2 / 3 * u
         nc[1, -1] = p.g * h
 
-        if self.levels > 0:
+        if self.level > 0:
             nc[2, 0] = -2 * a[0] * a[1]
             nc[2, 1] = 2 * a[1]
-        if self.levels > 1:
+        if self.level > 1:
             nc[3, 0] = -2 / 3 * a[1] ** 2
 
-        for k in range(1, self.levels + 1):
+        for k in range(1, self.level + 1):
             nc[1 + k, 1 + k] = a[0]
-        for k in range(1, self.levels + 1 - 1):
+        for k in range(1, self.level + 1 - 1):
             N = k + 1
             nc[1 + k, 1 + k + 1] = (N + 1) / (2 * N + 1) * a[1]
             nc[1 + k + 1, 1 + k] = (N - 1) / (2 * N - 1) * a[1]
 
         nc[-1, 0] = -ub * delta_q
         nc[-1, 1] = delta_q
-        for k in range(1, self.levels + 1):
+        for k in range(1, self.level + 1):
             nc[-1, 1 + k] = delta_q
         return [-nc]
 
     def eigenvalues(self):
-        evs = Matrix([0 for i in range(self.n_fields)])
+        evs = Matrix([0 for i in range(self.n_variables)])
         # h = self.variables[0]
         # hu = self.variables[1]
         # u = hu/h
@@ -203,12 +203,7 @@ class ShallowMomentsSedimentSimple(Model):
         return evs
 
     def source(self):
-        out = Matrix([0 for i in range(self.n_fields)])
-        if self.settings.topography:
-            out += self.topography()
-        if self.settings.friction:
-            for friction_model in self.settings.friction:
-                out += getattr(self, friction_model)()
+        out = Matrix([0 for i in range(self.n_variables)])
         return out
 
     def newtonian(self):
@@ -217,7 +212,7 @@ class ShallowMomentsSedimentSimple(Model):
             - requires_parameter: ('nu', 0.0)
         """
         assert "nu" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         out[:-1, 0] = self.smm.newtonian()
         return out
 
@@ -227,13 +222,13 @@ class ShallowMomentsSedimentSimple(Model):
             - requires_parameter: ('epsilon', 1000.0)
         """
         assert "epsilon" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
-        ha = self.variables[1 : 1 + self.levels + 1]
+        ha = self.variables[1 : 1 + self.level + 1]
         a = [_ha / h for _ha in ha]
         p = self.parameters
         ub = 0
-        for i in range(self.levels + 1):
+        for i in range(self.level + 1):
             ub += a[i]
 
         def my_abs(x):
@@ -241,7 +236,7 @@ class ShallowMomentsSedimentSimple(Model):
             # return sym.piecewise_fold(sym.Piecewise((-x, x<0), (x, True)))
             # return (sym.Piecewise((-x, x<0), (x, True)))
 
-        for k in range(1 + self.levels):
+        for k in range(1 + self.level):
             out[1 + k] += -(p.epsilon * self.basis.M[k, k]) * ub * my_abs(ub)
         return out
 
@@ -424,18 +419,18 @@ plt.show()
 #         aux_initial_conditions=IC.Constant(),
 #         dimension=1,
 #         fields=3,
-#         aux_fields=0,
+#         aux_variables=0,
 #         parameters = {},
-#         parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+#         _default_parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
 #         settings={},
 #         settings_default={"topography": False, "friction": []},
 #         basis=Basis()
 #     ):
 #         self.basis = basis
 #         self.variables = register_sympy_attribute(fields, "q")
-#         self.n_fields = self.variables.length()
-#         self.levels = self.n_fields - 3
-#         self.basis.compute_matrices(self.levels)
+#         self.n_variables = self.variables.length()
+#         self.level = self.n_variables - 3
+#         self.basis.compute_matrices(self.level)
 #         if type(fields) == type([]):
 #             fields_smm = fields[:-1]
 #         elif type(fields) == int:
@@ -445,9 +440,9 @@ plt.show()
 #         self.smm = ShallowMoments(
 #             dimension=dimension,
 #             fields=fields_smm,
-#             aux_fields=aux_fields,
+#             aux_variables=aux_variables,
 #             parameters=parameters,
-#             parameters_default = parameters_default,
+#             _default_parameters = _default_parameters,
 #             boundary_conditions=boundary_conditions,
 #             initial_conditions=initial_conditions,
 #             aux_initial_conditions=aux_initial_conditions,
@@ -455,9 +450,9 @@ plt.show()
 #         super().__init__(
 #             dimension=dimension,
 #             fields=fields,
-#             aux_fields=aux_fields,
+#             aux_variables=aux_variables,
 #             parameters=parameters,
-#             parameters_default = parameters_default,
+#             _default_parameters = _default_parameters,
 #             boundary_conditions=boundary_conditions,
 #             initial_conditions=initial_conditions,
 #             aux_initial_conditions=aux_initial_conditions,
@@ -465,12 +460,12 @@ plt.show()
 #         )
 #
 #     def flux(self):
-#         flux = Matrix([0 for i in range(self.n_fields)])
+#         flux = Matrix([0 for i in range(self.n_variables)])
 #         # smm flux
 #         flux[:-1,0] = self.smm.sympy_flux[0]
 #
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
+#         ha = self.variables[1:1+self.level+1]
 #         a = [_ha/h for _ha in ha]
 #         p = self.parameters
 #         # bedload equation
@@ -478,7 +473,7 @@ plt.show()
 #         def my_abs(x):
 #             return sym.Abs(x)
 #             # return sym.Piecewise((x, x>=0), (-x, True))
-#         for i in range(self.levels):
+#         for i in range(self.level):
 #             ub += a[i+1]
 #         tau = p.epsilon * p.rho * my_abs(ub) * ub
 #         theta = (my_abs(tau)*p.d_s**2)/(p.g * (p.rho_s - p.rho) * d_s**3)
@@ -496,9 +491,9 @@ plt.show()
 #         return [-flux]
 #
 #     def nonconservative_matrix(self):
-#         nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+#         nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
+#         ha = self.variables[1:1+self.level+1]
 #         a = [_ha / h for _ha in ha]
 #         p = self.parameters
 #         um = ha[0]/h
@@ -506,7 +501,7 @@ plt.show()
 #         def my_abs(x):
 #             return sym.Abs(x)
 #             # return sym.Piecewise((-x, x<0), (x, True))
-#         for i in range(self.levels):
+#         for i in range(self.level):
 #             ub += a[i+1]
 #         tau = p.epsilon * p.rho * my_abs(ub) * ub
 #         theta = (my_abs(tau)*p.d_s**2)/(p.g * (p.rho_s - p.rho) * d_s**3)
@@ -519,24 +514,24 @@ plt.show()
 #         # delta_q = (24 * p.Q)/(1-p.phi) * sign(tau) * p.epsilon / (p.g * (1/p.r - 1) * p.d_s) * (pos(theta - p.theta_c))**(1/2) * ub / h
 #         delta_q = 10**(-6) * (24 * p.Q)/(1-p.phi) * sign(tau) * p.epsilon / (p.g * (1/p.r - 1) * p.d_s) * (sym.Abs(theta))**(1/2) * ub / h
 #         nc[-1, 0]= - ub * delta_q
-#         for l in range(self.levels+1):
+#         for l in range(self.level+1):
 #             nc[-1, l+1] = delta_q
 #         return [nc]
 #
 #     def eigenvalues(self):
-#         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+#         A = self.normal[0] * self.sympy_quasilinear_matrix[0]
 #         for d in range(1, self.dimension):
-#             A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
-#         if self.levels > 1:
+#             A += self.normal[d] * self.sympy_quasilinear_matrix[d]
+#         if self.level > 1:
 #             alpha_erase = self.variables[2:-1]
 #             for alpha_i in alpha_erase:
 #                 A = A.subs(alpha_i, 0)
-#         for i in range(self.n_fields):
+#         for i in range(self.n_variables):
 #             A[-1, i] = 0
 #         return eigenvalue_dict_to_matrix(A.eigenvals())
 #
 #     def source(self):
-#         out = Matrix([0 for i in range(self.n_fields)])
+#         out = Matrix([0 for i in range(self.n_variables)])
 #         if self.settings.topography:
 #             out += self.topography()
 #         if self.settings.friction:
@@ -551,7 +546,7 @@ plt.show()
 #             - requires_parameter: ('nu', 0.0)
 #         """
 #         assert "nu" in vars(self.parameters)
-#         out = Matrix([0 for i in range(self.n_fields)])
+#         out = Matrix([0 for i in range(self.n_variables)])
 #         out[:-1,0] = self.smm.newtonian()
 #         return out
 #
@@ -561,9 +556,9 @@ plt.show()
 #             - requires_parameter: ('epsilon', 1000.0)
 #         """
 #         assert "epsilon" in vars(self.parameters)
-#         out = Matrix([0 for i in range(self.n_fields)])
+#         out = Matrix([0 for i in range(self.n_variables)])
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
+#         ha = self.variables[1:1+self.level+1]
 #         a = [_ha/h for _ha in ha]
 #         p = self.parameters
 #         ub = a[0]
@@ -571,10 +566,10 @@ plt.show()
 #             return sym.Abs(x)
 #             # return sym.piecewise_fold(sym.Piecewise((-x, x<0), (x, True)))
 #             # return (sym.Piecewise((-x, x<0), (x, True)))
-#         for i in range(self.levels):
+#         for i in range(self.level):
 #             ub += a[i+1]
-#         for k in range(1+self.levels):
-#             for l in range(1+self.levels):
+#         for k in range(1+self.level):
+#             for l in range(1+self.level):
 #                 out[1+k] += -(p.epsilon * self.basis.M[k,k]) * ub * my_abs(ub)
 #         return out
 # # -
@@ -713,101 +708,101 @@ plt.show()
 #         initial_conditions,
 #         dimension=2,
 #         fields=3,
-#         aux_fields=0,
+#         aux_variables=0,
 #         parameters = {},
-#         parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
+#         _default_parameters={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
 #         settings={},
 #         settings_default={"topography": False, "friction": []},
 #         basis=Basis()
 #     ):
 #         self.basis = basis
 #         self.variables = register_sympy_attribute(fields, "q")
-#         self.n_fields = self.variables.length()
-#         self.levels = int((self.n_fields - 1)/2)-1
-#         self.basis.compute_matrices(self.levels)
+#         self.n_variables = self.variables.length()
+#         self.level = int((self.n_variables - 1)/2)-1
+#         self.basis.compute_matrices(self.level)
 #         super().__init__(
 #             dimension=dimension,
 #             fields=fields,
-#             aux_fields=aux_fields,
+#             aux_variables=aux_variables,
 #             parameters=parameters,
-#             parameters_default = parameters_default,
+#             _default_parameters = _default_parameters,
 #             boundary_conditions=boundary_conditions,
 #             initial_conditions=initial_conditions,
 #             settings={**settings_default, **settings},
 #         )
 #
 #     def flux(self):
-#         offset = self.levels+1
-#         flux_x = Matrix([0 for i in range(self.n_fields)])
-#         flux_y = Matrix([0 for i in range(self.n_fields)])
+#         offset = self.level+1
+#         flux_x = Matrix([0 for i in range(self.n_variables)])
+#         flux_y = Matrix([0 for i in range(self.n_variables)])
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
-#         hb = self.variables[1+self.levels+1:1+2*(self.levels+1)]
+#         ha = self.variables[1:1+self.level+1]
+#         hb = self.variables[1+self.level+1:1+2*(self.level+1)]
 #         p = self.parameters
 #         flux_x[0] = ha[0]
 #         flux_x[1] = p.g * p.ez * h * h / 2
-#         for k in range(self.levels+1):
-#             for i in range(self.levels+1):
-#                 for j in range(self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(self.level+1):
+#                 for j in range(self.level+1):
 #                     # TODO avoid devision by zero
 #                     flux_x[k+1] += ha[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
-#         for k in range(self.levels+1):
-#             for i in range(self.levels+1):
-#                 for j in range(self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(self.level+1):
+#                 for j in range(self.level+1):
 #                     # TODO avoid devision by zero
 #                     flux_x[k+1+offset] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
 #
 #         flux_y[0] = hb[0]
 #         flux_y[1+offset] = p.g * p.ez * h * h / 2
-#         for k in range(self.levels+1):
-#             for i in range(self.levels+1):
-#                 for j in range(self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(self.level+1):
+#                 for j in range(self.level+1):
 #                     # TODO avoid devision by zero
 #                     flux_y[k+1] += hb[i] * ha[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
-#         for k in range(self.levels+1):
-#             for i in range(self.levels+1):
-#                 for j in range(self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(self.level+1):
+#                 for j in range(self.level+1):
 #                     # TODO avoid devision by zero
 #                     flux_y[k+1+offset] += hb[i] * hb[j] / h * self.basis.A[k, i, j] / self.basis.M[ k, k ]
 #         return [flux_x, flux_y]
 #
 #     def nonconservative_matrix(self):
-#         offset = self.levels+1
-#         nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
-#         nc_y = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+#         offset = self.level+1
+#         nc_x = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
+#         nc_y = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
-#         hb = self.variables[1+offset:1+offset+self.levels+1]
+#         ha = self.variables[1:1+self.level+1]
+#         hb = self.variables[1+offset:1+offset+self.level+1]
 #         p = self.parameters
 #         um = ha[0]/h
 #         vm = hb[0]/h
-#         for k in range(1, self.levels+1):
+#         for k in range(1, self.level+1):
 #             nc_x[k+1, k+1] += um
 #             nc_y[k+1, k+1+offset] += um
-#         for k in range(self.levels+1):
-#             for i in range(1, self.levels+1):
-#                 for j in range(1, self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(1, self.level+1):
+#                 for j in range(1, self.level+1):
 #                     nc_x[k+1, i+1] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
 #                     nc_y[k+1, i+1+offset] -= ha[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
 #
-#         for k in range(1, self.levels+1):
+#         for k in range(1, self.level+1):
 #             nc_x[k+1+offset, k+1] += vm
 #             nc_y[k+1+offset, k+1+offset] += vm
-#         for k in range(self.levels+1):
-#             for i in range(1, self.levels+1):
-#                 for j in range(1, self.levels+1):
+#         for k in range(self.level+1):
+#             for i in range(1, self.level+1):
+#                 for j in range(1, self.level+1):
 #                     nc_x[k+1+offset, i+1] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
 #                     nc_y[k+1+offset, i+1+offset] -= hb[j]/h*self.basis.B[k, i, j]/self.basis.M[k, k]
 #         return [nc_x, nc_y]
 #
 #     def eigenvalues(self):
 #         # we delete heigher order moments (level >= 2) for analytical eigenvalues
-#         offset = self.levels+1
-#         A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+#         offset = self.level+1
+#         A = self.normal[0] * self.sympy_quasilinear_matrix[0]
 #         for d in range(1, self.dimension):
-#             A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
-#         alpha_erase = self.variables[2:2+self.levels]
-#         beta_erase = self.variables[2+offset : 2+offset+self.levels]
+#             A += self.normal[d] * self.sympy_quasilinear_matrix[d]
+#         alpha_erase = self.variables[2:2+self.level]
+#         beta_erase = self.variables[2+offset : 2+offset+self.level]
 #         for alpha_i in alpha_erase:
 #             A = A.subs(alpha_i, 0)
 #         for beta_i in beta_erase:
@@ -815,7 +810,7 @@ plt.show()
 #         return eigenvalue_dict_to_matrix(A.eigenvals())
 #
 #     def source(self):
-#         out = Matrix([0 for i in range(self.n_fields)])
+#         out = Matrix([0 for i in range(self.n_variables)])
 #         if self.settings.topography:
 #             out += self.topography()
 #         if self.settings.friction:
@@ -826,8 +821,8 @@ plt.show()
 #     def topography(self):
 #         assert "dhdx" in vars(self.aux_variables)
 #         assert "dhdy" in vars(self.aux_variables)
-#         offset = self.levels+1
-#         out = Matrix([0 for i in range(self.n_fields)])
+#         offset = self.level+1
+#         out = Matrix([0 for i in range(self.n_variables)])
 #         h = self.variables[0]
 #         p = self.parameters
 #         dhdx = self.aux_variables.dhdx
@@ -839,14 +834,14 @@ plt.show()
 #
 #     def newtonian(self):
 #         assert "nu" in vars(self.parameters)
-#         out = Matrix([0 for i in range(self.n_fields)])
-#         offset = self.levels+1
+#         out = Matrix([0 for i in range(self.n_variables)])
+#         offset = self.level+1
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
-#         hb = self.variables[1+offset:1+self.levels+1+offset]
+#         ha = self.variables[1:1+self.level+1]
+#         hb = self.variables[1+offset:1+self.level+1+offset]
 #         p = self.parameters
-#         for k in range(1+self.levels):
-#             for i in range(1+self.levels):
+#         for k in range(1+self.level):
+#             for i in range(1+self.level):
 #                 out[1+k] += -p.nu/h * ha[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
 #                 out[1+k+offset] += -p.nu/h * hb[i]  / h * self.basis.D[i, k]/ self.basis.M[k, k]
 #         return out
@@ -855,34 +850,34 @@ plt.show()
 #     def slip(self):
 #         assert "lamda" in vars(self.parameters)
 #         assert "rho" in vars(self.parameters)
-#         out = Matrix([0 for i in range(self.n_fields)])
-#         offset = self.levels+1
+#         out = Matrix([0 for i in range(self.n_variables)])
+#         offset = self.level+1
 #         h = self.variables[0]
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
-#         hb = self.variables[1+offset:1+self.levels+1+offset]
+#         ha = self.variables[1:1+self.level+1]
+#         hb = self.variables[1+offset:1+self.level+1+offset]
 #         p = self.parameters
-#         for k in range(1+self.levels):
-#             for i in range(1+self.levels):
+#         for k in range(1+self.level):
+#             for i in range(1+self.level):
 #                 out[1+k] += -1./p.lamda/p.rho * ha[i]  / h / self.basis.M[k, k]
 #                 out[1+k+offset] += -1./p.lamda/p.rho * hb[i]  / h / self.basis.M[k, k]
 #         return out
 #
 #     def chezy(self):
 #         assert "C" in vars(self.parameters)
-#         out = Matrix([0 for i in range(self.n_fields)])
-#         offset = self.levels+1
+#         out = Matrix([0 for i in range(self.n_variables)])
+#         offset = self.level+1
 #         h = self.variables[0]
-#         ha = self.variables[1:1+self.levels+1]
-#         hb = self.variables[1+offset:1+self.levels+1+offset]
+#         ha = self.variables[1:1+self.level+1]
+#         hb = self.variables[1+offset:1+self.level+1+offset]
 #         p = self.parameters
 #         tmp = 0
-#         for i in range(1+self.levels):
-#             for j in range(1+self.levels):
+#         for i in range(1+self.level):
+#             for j in range(1+self.level):
 #                 tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
 #         sqrt = sympy.sqrt(tmp)
-#         for k in range(1+self.levels):
-#             for l in range(1+self.levels):
+#         for k in range(1+self.level):
+#             for l in range(1+self.level):
 #                 out[1+k] += -1./(p.C**2 * self.basis.M[k,k]) * ha[l] * sqrt / h
 #                 out[1+k+offset] += -1./(p.C**2 * self.basis.M[k,k]) * hb[l] * sqrt / h
 #         return out

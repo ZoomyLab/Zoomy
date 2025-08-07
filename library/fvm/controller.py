@@ -15,7 +15,7 @@
 # import library.solver.mesh as mesh
 # import library.solver.initial_condition as initial_condition
 
-# # import library.solver.aux_fields as aux_fields
+# # import library.solver.aux_variables as aux_variables
 # import library.solver.boundary_conditions as boundary_conditions
 # import library.solver.misc as misc
 # from library.solver.limiter import limiter
@@ -33,14 +33,14 @@
 # class Controller(BaseYaml):
 #     yaml_tag = "!Controller"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.name = "Simulation"
 #         self.output_dir = "output"
 #         self.output_write_vtk = False
 #         self.output_snapshots = 2
 
 #         self.debug_animation = False
-#         self.debug_animation_fields = [0]
+#         self.debug_animation_variables = [0]
 #         self.debug_animation_range = [[]]
 #         self.debug_animation_pause = 0.05
 
@@ -54,7 +54,7 @@
 #         self.time_end = 1.0
 #         self.error_threshold = 10 ** (-10)
 #         self.iteration_max = np.inf
-#         self.callback_parameters = {}
+#         self.callback_default_parameters = {}
 #         self.callback_list_init = []
 #         self.callback_list_post_solvestep = []
 
@@ -287,7 +287,7 @@
 
 #         Qnew = initial_condition.initialize(
 #             self.model.initial_conditions,
-#             self.model.n_fields,
+#             self.model.n_variables,
 #             self.mesh.element_centers,
 #         )
 #         Q = deepcopy(Qnew)
@@ -295,8 +295,8 @@
 #         dt = self.dtmin
 #         kwargs = {
 #             "model": self.model,
-#             "callback_parameters": self.callback_parameters,
-#             "aux_fields": {},
+#             "callback_default_parameters": self.callback_default_parameters,
+#             "aux_variables": {},
 #             "mesh": self.mesh,
 #             "time": time,
 #             "iteration": iteration,
@@ -337,8 +337,8 @@
 #             EVs, imaginary = self.solver.compute_eigenvalues(Qnew, normals)
 #             # TODO use this to avoid EV computation in flux. Problem
 #             # finding the appropriate neigbor edge it to find EVj!
-#             kwargs["aux_fields"].update({"EVs": EVs})
-#             EVmax = np.abs(kwargs["aux_fields"]["EVs"]).max()
+#             kwargs["aux_variables"].update({"EVs": EVs})
+#             EVmax = np.abs(kwargs["aux_variables"]["EVs"]).max()
 #             dt = self.solver.compute_timestep_size(Qnew, self.cfl, EVmax)
 #             assert not np.isnan(dt) and np.isfinite(dt)
 #             if iteration < self.warmup_interations:
@@ -420,19 +420,19 @@
 #             ),
 #             "dim": 2,
 #             "map_fields": list(
-#                 np.linspace(0, self.model.n_fields - 1, self.model.n_fields, dtype=int)
+#                 np.linspace(0, self.model.n_variables - 1, self.model.n_variables, dtype=int)
 #             ),
 #         }
 #         Qnew = initial_condition.initialize(
 #             ic,
-#             self.model.n_fields,
+#             self.model.n_variables,
 #             self.mesh.element_centers,
 #         )
 
 #         kwargs = {
 #             "model": self.model,
-#             "callback_parameters": self.callback_parameters,
-#             "aux_fields": {},
+#             "callback_default_parameters": self.callback_default_parameters,
+#             "aux_variables": {},
 #             "mesh": self.mesh,
 #         }
 #         self.init_output_timesteps()
@@ -465,13 +465,13 @@
 #                 "dim": 2,
 #                 "map_fields": list(
 #                     np.linspace(
-#                         0, self.model.n_fields - 1, self.model.n_fields, dtype=int
+#                         0, self.model.n_variables - 1, self.model.n_variables, dtype=int
 #                     )
 #                 ),
 #             }
 #             Qnew = initial_condition.initialize(
 #                 ic,
-#                 self.model.n_fields,
+#                 self.model.n_variables,
 #                 self.mesh.element_centers,
 #             )
 #             kwargs.update({"time": time, "iteration": iteration})

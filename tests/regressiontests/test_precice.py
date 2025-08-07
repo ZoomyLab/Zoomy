@@ -15,7 +15,7 @@ import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 
 @pytest.mark.critical
@@ -82,7 +82,7 @@ def test_smm_1d(
     )
     model = ShallowMoments(
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,

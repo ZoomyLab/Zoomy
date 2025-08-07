@@ -28,7 +28,7 @@ def test_model_initialization(dimension):
         dimension, Model, dimension, 0, 0, momentum_eqns[dimension - 1]
     )
 
-    functions = model.get_pde()
+    functions = model._get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 

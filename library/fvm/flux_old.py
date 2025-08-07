@@ -13,7 +13,7 @@
 # class Flux(BaseYaml):
 #     yaml_tag = "!Flux"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = "rusanov"
 #         self.limiter = None
 

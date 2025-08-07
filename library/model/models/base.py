@@ -1,7 +1,5 @@
 import jax.numpy as jnp
 import numpy as np
-import numpy.ctypeslib as npct
-from scipy.linalg import eigvals
 import os
 from copy import deepcopy
 from ctypes import cdll
@@ -12,16 +10,15 @@ from sympy import (
     lambdify,
     powsimp,
     MatrixSymbol,
-    fraction,
-    cancel,
     latex,
     init_printing,
     zeros
 )
 
-from attr import define
 from typing import Optional, Union, Callable
 from types import SimpleNamespace
+from attrs import define, field
+
 
 
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
@@ -36,239 +33,142 @@ init_printing()
 def vectorize_constant_sympy_expressions(expr, Q, Qaux):
     symbol_list = Q.get_list() + Qaux.get_list()
     q0 = Q[0]
-    for i in range(expr.shape[0]):
-        for j in range(expr.shape[1]):
-            if not any(symbol in expr[i, j].free_symbols for symbol in symbol_list):
-                if expr[i, j] == 0:
-                    expr[i, j] = 10 ** (-20) * q0
-                elif expr[i, j]:
-                    expr[i, j] = expr[i, j] + 10 ** (-20) * q0
-                    # print('I don\'t know how to vectorize this yet')
-                    # assert False
-    return expr
+
+    rows, cols = expr.shape
+
+    new_data = []
+
+    for i in range(rows):
+        row = []
+        for j in range(cols):
+            entry = expr[i, j]
+            if not any(symbol in entry.free_symbols for symbol in symbol_list):
+                if entry == 0:
+                    row.append(10 ** (-20) * q0)
+                else:
+                    row.append(entry + 10 ** (-20) * q0)
+            else:
+                row.append(entry)
+        new_data.append(row)
+
+    return Matrix(new_data)
 
 
-def custom_simplify(expr):
-    return powsimp(expr, combine="all", force=False, deep=True)
 
 
-@define(slots=True, frozen=False, kw_only=True)
+@define(kw_only=True, slots=True, frozen=True)
 class RuntimeModel:
-    name: str
-    dimension: int = 1
-    n_fields: int
-    n_aux_fields: int
-    n_parameters: int
-    parameters: FArray
+    # --- Required attributes (no defaults) ---
+    name: str = field()
+    n_variables: int = field()
+    n_aux_variables: int = field()
+    n_parameters: int = field()
+    parameters: FArray = field()
+    flux: list[Callable] = field()
+    flux_jacobian: list[Callable] = field()
+    source: Callable = field()
+    source_jacobian: Callable = field()
+    nonconservative_matrix: list[Callable] = field()
+    quasilinear_matrix: list[Callable] = field()
+    eigenvalues: Callable = field()
+    source_implicit: Callable = field()
+    interpolate_3d: Callable = field()
+    bcs: list[Callable] = field()
 
-    flux: list[Callable]
-    flux_jacobian: list[Callable]
-    source: Callable
-    source_jacobian: Callable
-    nonconservative_matrix: list[Callable]
-    quasilinear_matrix: list[Callable]
-    eigenvalues: Callable
-    left_eigenvectors: Optional[Callable]
-    right_eigenvectors: Optional[Callable]
-    source_imlicit: Callable
-    interpolate_3d: Callable
-
-    bcs: list[Callable]
+    # --- Optional attributes ---
+    dimension: int = field(default=1)
+    left_eigenvectors: Optional[Callable] = field(default=None)
+    right_eigenvectors: Optional[Callable] = field(default=None)
 
     @classmethod
     def from_model(cls, model):
-        pde = model.get_pde()
-        # bcs = model.create_python_boundary_interface(printer='numpy')
-        bcs = model.get_boundary_conditions()
+        pde = model._get_pde()
+        bcs = model._get_boundary_conditions()
         return cls(
-            model.name,
-            model.dimension,
-            model.n_fields,
-            model.n_aux_fields,
-            model.n_parameters,
-            pde.flux,
-            pde.flux_jacobian,
-            pde.source,
-            pde.source_jacobian,
-            pde.nonconservative_matrix,
-            pde.quasilinear_matrix,
-            pde.source,
-            pde.eigenvalues,
-            pde.left_eigenvectors,
-            pde.right_eigenvectors,
-            pde.source_implicit,
-            pde.residual,
-            pde.interpolate_3d,
-            bcs,
+            name=model.name,
+            dimension=model.dimension,
+            n_variables=model.n_variables,
+            n_aux_variables=model.n_aux_variables,
+            n_parameters=model.n_parameters,
+            parameters=model.parameter_values,
+            flux=pde.flux,
+            flux_jacobian=pde.flux_jacobian,
+            source=pde.source,
+            source_jacobian=pde.source_jacobian,
+            nonconservative_matrix=pde.nonconservative_matrix,
+            quasilinear_matrix=pde.quasilinear_matrix,
+            eigenvalues=pde.eigenvalues,
+            left_eigenvectors=pde.left_eigenvectors,
+            right_eigenvectors=pde.right_eigenvectors,
+            source_implicit=pde.source_implicit,
+            interpolate_3d=pde.interpolate_3d,
+            bcs=bcs,
         )
 
 
-@define(slots=True, frozen=False, kw_only=True)
+
+def default_simplify(expr):
+    return powsimp(expr, combine="all", force=False, deep=True)
+
+@define(frozen=True, slots=True, kw_only=True)
 class Model:
     """
     Generic (virtual) model implementation.
     """
-
-    name: str
+    
+    boundary_conditions: BoundaryConditions 
+    
+    name: str = "Model"
     dimension: int = 1
-    boundary_conditions: BoundaryConditions = BoundaryConditions(
-        [
-            Extrapolation(physical_tag="left"),
-            Extrapolation(physical_tag="right"),
-        ]
-    )
-    initial_conditions: InitialConditions = Constant()
-    aux_initial_conditions: InitialConditions = Constant()
 
-    n_fields: int
-    n_aux_fields: int
-    n_parameters: int
-    variables: Zstruct
-    aux_variables: Zstruct
-    parameters: Zstruct
-    parameters_default: dict
-    parameter_values: FArray
-    sympy_normal: Matrix
+    initial_conditions: InitialConditions = field(factory=Constant)
+    aux_initial_conditions: InitialConditions = field(factory=Constant)
+    
+    parameters: Zstruct = field(factory=lambda: Zstruct())
 
-    settings: Zstruct
-    settings_default_dict: dict
 
-    sympy_flux: list[Matrix]
-    sympy_flux_jacobian: list[Matrix]
-    sympy_source: Matrix
-    sympy_source_jacobian: Matrix
-    sympy_nonconservative_matrix: list[Matrix]
-    sympy_quasilinear_matrix: list[Matrix]
-    sympy_eigenvalues: Matrix
-    sympy_left_eigenvectors: Optional[Matrix]
-    sympy_right_eigenvectors: Optional[Matrix]
-    sympy_source_implicit: Matrix
-    sympy_residual: Matrix
-    sympy_interpolate_3d: Matrix
+    time: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("t", real=True))
+    distance: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("dX", real=True))
+    position_3d: Zstruct = field(init=False, factory=lambda: register_sympy_attribute(3, "X"))
 
-    def __init__(
-        self,
-        dimension: int,
-        fields: Union[int, list],
-        aux_fields: Union[int, list],
-        boundary_conditions: BoundaryConditions,
-        initial_conditions: InitialConditions,
-        aux_initial_conditions: InitialConditions = Constant(),
-        parameters: dict = {},
-        parameters_default: dict = {},
-        settings: dict = {},
-        settings_default: dict = {"eigenvalue_mode": "symbolic"},
-    ):
-        self.name = "Model"
-        self.dimension = dimension
-        self.boundary_conditions = boundary_conditions
-        self.initial_conditions = initial_conditions
-        self.aux_initial_conditions = aux_initial_conditions
+    _simplify: Callable = field(factory=lambda: default_simplify)
 
-        self.variables = register_sympy_attribute(fields, "q")
-        self.aux_variables = register_sympy_attribute(aux_fields, "aux")
-        self.time = sympy.symbols("t", real=True)
-        self.position = register_sympy_attribute(self.dimension, "X")
-        self.position_3d = register_sympy_attribute(3, "X")
-        self.distance = sympy.symbols("dX", real=True)
-        updated_parameters = {**parameters_default, **parameters}
-        self.parameters = register_sympy_attribute(updated_parameters, "p")
-        self.parameters_default = parameters_default
-        self.parameter_values = register_parameter_values(updated_parameters)
-        self.sympy_normal = register_sympy_attribute(
-            ["n" + str(i) for i in range(self.dimension)], "n"
+    # Derived fields initialized in __attrs_post_init__
+    _default_parameters: dict = field(init=False, factory=dict)
+    n_variables: int = field(init=False)
+    n_aux_variables: int = field(init=False)
+    n_parameters: int = field(init=False)
+    variables: Zstruct = field(init=False, default=1)
+    aux_variables: Zstruct = field(default=0)
+    parameter_values: FArray = field(init=False)
+    normal: Matrix = field(init=False)
+    position: Zstruct = field(init=False)
+    
+
+
+    def __attrs_post_init__(self):
+        updated_default_parameters = {**self._default_parameters, **self.parameters}
+
+        # Use object.__setattr__ because class is frozen
+        object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q"))
+        object.__setattr__(self, "aux_variables", register_sympy_attribute(self.aux_variables, "qaux"))
+        object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
+
+        object.__setattr__(self, "parameters", register_sympy_attribute(updated_default_parameters, "p"))
+        object.__setattr__(self, "parameter_values", register_parameter_values(updated_default_parameters))
+        object.__setattr__(
+            self, "normal",
+            register_sympy_attribute(["n" + str(i) for i in range(self.dimension)], "n")
         )
 
-        self.settings = SimpleNamespace(**{**settings_default, **settings})
-
-        self.n_fields = self.variables.length()
-        self.n_aux_fields = self.aux_variables.length()
-        self.n_parameters = self.parameters.length()
-
-        self.init_sympy_functions()
-
-    def get_latex(self):
-        return latex(self.flux)
-
-    def init_sympy_functions(self):
-        self.sympy_flux = self.flux()
-        if self.flux_jacobian() is None:
-            self.sympy_flux_jacobian = [
-                zeros(self.n_fields, self.n_fields) for i in range(self.dimension)
-            ]
-            for d in range(self.dimension):
-                self.sympy_flux_jacobian[d] = Matrix(
-                    custom_simplify(
-                        Matrix(self.sympy_flux[d]).jacobian(self.variables),
-                    )
-                )
-        else:
-            self.sympy_flux_jacobian = self.flux_jacobian()
-        self.sympy_source = self.source()
-        if self.source_jacobian() is None:
-            self.sympy_source_jacobian = Matrix(
-                custom_simplify(
-                    Matrix(self.sympy_source).jacobian(self.variables),
-                )
-            )
-        else:
-            self.sympy_source_jacobian = self.source_jacobian()
-        self.sympy_nonconservative_matrix = self.nonconservative_matrix()
-        if self.quasilinear_matrix() is None:
-            self.sympy_quasilinear_matrix = [
-                self.sympy_flux_jacobian[d] - self.sympy_nonconservative_matrix[d]
-                for d in range(self.dimension)
-            ]
-        else:
-            self.sympy_quasilinear_matrix = self.quasilinear_matrix()
-        self.sympy_source_implicit = self.source_implicit()
-        self.sympy_residual = self.residual()
-        self.sympy_interpolate_3d = self.interpolate_3d()
-        # self.sympy_quasilinear_matrix = self.quasilinear_matrix()
-        # TODO check case imaginary
-        # TODO check case not computable
-        if self.settings.eigenvalue_mode == "symbolic":
-            self.sympy_eigenvalues = self.eigenvalues()
-        else:
-            self.sympy_eigenvalues = None
-        self.sympy_left_eigenvectors = None
-        self.sympy_right_eigenvectors = None
+        object.__setattr__(self, "n_variables", self.variables.length())
+        object.__setattr__(self, "n_aux_variables", self.aux_variables.length())
+        object.__setattr__(self, "n_parameters", self.parameters.length())
 
 
-    def get_boundary_conditions(self, printer="numpy"):
-        """Returns a runtime boundary_conditions for numpy arrays from the symbolic model."""
+    def _get_boundary_conditions(self, printer="jax"):
+        """Returns a runtime boundary_conditions for jax arrays from the symbolic model."""
         n_boundary_functions = len(self.boundary_conditions.boundary_functions)
-        # l_bcs = [
-        #     lambdify(
-        #         [
-        #             self.time,
-        #             self.position.get_list(),
-        #             self.distance,
-        #             self.variables.get_list(),
-        #             self.aux_variables.get_list(),
-        #             self.parameters.get_list(),
-        #             self.sympy_normal.get_list(),
-        #         ],
-        #         vectorize_constant_sympy_expressions(
-        #             self.boundary_conditions.boundary_functions[d], self.variables, self.aux_variables
-        #         ),
-        #         printer,
-        #     )
-        #     for d in range(n_boundary_functions)
-        # ]
-        # # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
-        # bcs = [
-        #     lambda time,
-        #         position,
-        #         distance,
-        #         q,
-        #         qaux,
-        #         p,
-        #         n, f=l_bcs[d]: jnp.squeeze(
-        #         np.array(f(time, position, distance, q, qaux, p, n)), axis=1
-        #     )
-        #     for d in range(n_boundary_functions)
-        # ]
         bcs = []
         for i in range(n_boundary_functions):
             func_bc = lambdify(
@@ -279,10 +179,9 @@ class Model:
                     self.variables.get_list(),
                     self.aux_variables.get_list(),
                     self.parameters.get_list(),
-                    self.sympy_normal.get_list(),
+                    self.normal.get_list(),
                 ],
                 vectorize_constant_sympy_expressions(self.boundary_conditions.boundary_functions[i], self.variables, self.aux_variables),
-                #self.boundary_conditions.boundary_functions[i],
                 printer,
             )
             # the func=func part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
@@ -301,7 +200,7 @@ class Model:
             bcs.append(f)
         return bcs
 
-    def get_pde(self, printer="numpy"):
+    def _get_pde(self, printer="jax"):
         """Returns a runtime model for numpy arrays from the symbolic model."""
         l_flux = [
             lambdify(
@@ -311,7 +210,7 @@ class Model:
                     self.parameters.get_list(),
                 ),
                 vectorize_constant_sympy_expressions(
-                    self.sympy_flux[d], self.variables, self.aux_variables
+                    self.flux()[d], self.variables, self.aux_variables
                 ),
                 printer,
             )
@@ -330,7 +229,7 @@ class Model:
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
             ],
-            self.sympy_flux_jacobian,
+            self.flux_jacobian(),
             printer,
         )
         flux_jacobian = l_flux_jacobian
@@ -343,7 +242,7 @@ class Model:
                     self.parameters.get_list(),
                 ],
                 vectorize_constant_sympy_expressions(
-                    self.sympy_nonconservative_matrix[d],
+                    self.nonconservative_matrix()[d],
                     self.variables,
                     self.aux_variables,
                 ),
@@ -364,7 +263,7 @@ class Model:
                     self.parameters.get_list(),
                 ],
                 vectorize_constant_sympy_expressions(
-                    self.sympy_quasilinear_matrix[d], self.variables, self.aux_variables
+                    self.quasilinear_matrix()[d], self.variables, self.aux_variables
                 ),
                 printer,
             )
@@ -372,27 +271,23 @@ class Model:
         ]
         quasilinear_matrix = l_quasilinear_matrix
 
-        if self.settings.eigenvalue_mode == "symbolic":
-            l_eigenvalues = lambdify(
-                [
-                    self.variables.get_list(),
-                    self.aux_variables.get_list(),
-                    self.parameters.get_list(),
-                    self.sympy_normal.get_list(),
-                ],
-                vectorize_constant_sympy_expressions(
-                    self.sympy_eigenvalues, self.variables, self.aux_variables
-                ),
-                printer,
+        l_eigenvalues = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+                self.normal.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.eigenvalues(), self.variables, self.aux_variables
+            ),
+            printer,
+        )
+
+        def eigenvalues(Q, Qaux, param, normal):
+            return jnp.squeeze(
+                jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1
             )
-
-            def eigenvalues(Q, Qaux, param, normal):
-                return jnp.squeeze(
-                    jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1
-                )
-
-        elif self.settings.eigenvalue_mode == "numerical":
-            eigenvalues = None
 
         l_source = lambdify(
             [
@@ -401,7 +296,7 @@ class Model:
                 self.parameters.get_list(),
             ],
             vectorize_constant_sympy_expressions(
-                self.sympy_source, self.variables, self.aux_variables
+                self.source(), self.variables, self.aux_variables
             ),
             printer,
         )
@@ -417,7 +312,7 @@ class Model:
                 self.parameters.get_list(),
             ],
             vectorize_constant_sympy_expressions(
-                self.sympy_source_jacobian, self.variables, self.aux_variables
+                self.source_jacobian(), self.variables, self.aux_variables
             ),
             printer,
         )
@@ -430,7 +325,7 @@ class Model:
                 self.parameters.get_list(),
             ],
             vectorize_constant_sympy_expressions(
-                self.sympy_source_implicit, self.variables, self.aux_variables
+                self.source_implicit(), self.variables, self.aux_variables
             ),
             printer,
         )
@@ -444,7 +339,7 @@ class Model:
                 self.parameters.get_list(),
             ],
             vectorize_constant_sympy_expressions(
-                self.sympy_residual, self.variables, self.aux_variables
+                self.residual(), self.variables, self.aux_variables
             ),
             printer,
         )
@@ -460,7 +355,7 @@ class Model:
                 self.parameters.get_list(),
             ],
             vectorize_constant_sympy_expressions(
-                self.sympy_interpolate_3d, self.variables, self.aux_variables
+                self.interpolate_3d(), self.variables, self.aux_variables
             ),
             printer,
         )
@@ -491,73 +386,45 @@ class Model:
         return [Matrix(self.variables[:]) for d in range(self.dimension)]
 
     def nonconservative_matrix(self):
-        return [zeros(self.n_fields, self.n_fields) for d in range(self.dimension)]
+        return [zeros(self.n_variables, self.n_variables) for d in range(self.dimension)]
 
     def source(self):
-        return zeros(self.n_fields, 1)
+        return zeros(self.n_variables, 1)
 
     def flux_jacobian(self):
-        # generated automatically unless explicitly provided
-        return None
+        """ generated automatically unless explicitly provided """
+        return [ self._simplify(
+                Matrix(self.flux()[d]).jacobian(self.variables),
+            ) for d in range(self.dimension) ]
 
     def quasilinear_matrix(self):
-        # generated automatically unless explicitly provided
-        return None
+        """ generated automatically unless explicitly provided """
+        return [ self._simplify(
+                Matrix(self.flux_jacobian()[d] + self.nonconservative_matrix()[d],
+            )
+        ) for d in range(self.dimension) ]
 
     def source_jacobian(self):
-        # generated automatically unless explicitly provided
-        return None
+        """ generated automatically unless explicitly provided """
+        return self._simplify(
+                Matrix(self.source()).jacobian(self.variables),
+            )
 
     def source_implicit(self):
-        return zeros(self.n_fields, 1)
+        return zeros(self.n_variables, 1)
 
     def residual(self):
-        return zeros(self.n_fields, 1)
+        return zeros(self.n_variables, 1)
     
     def interpolate_3d(self):
         return zeros(5, 1)
 
 
     def eigenvalues(self):
-        A = self.sympy_normal[0] * self.sympy_quasilinear_matrix[0]
+        A = self.normal[0] * self.sympy_quasilinear_matrix[0]
         for d in range(1, self.dimension):
-            A += self.sympy_normal[d] * self.sympy_quasilinear_matrix[d]
+            A += self.normal[d] * self.sympy_quasilinear_matrix[d]
         return eigenvalue_dict_to_matrix(A.eigenvals())
-
-    def get_default_setup(self):
-        text = """
-        def setup():
-            level = 0
-            settings = Settings(
-                name="ShallowMoments2d",
-                parameters={"g": 1.0, "C": 1.0, "nu": 0.1},
-                reconstruction=recon.constant,
-                num_flux=flux.LLF(),
-                compute_dt=timestepping.adaptive(CFL=0.45),
-                time_end=1.0,
-                output_snapshots=100, output_dir='outputs/test')
-            
-            inflow_dict = {i: 0.0 for i in range(1, 2 * (1 + level) + 1)}
-            inflow_dict[1] = 0.36
-            outflow_dict = {0: 1.0}
-            
-            bcs = BC.BoundaryConditions(
-                [
-                    BC.Wall(physical_tag="top"),
-                    BC.Wall(physical_tag="bottom"),
-                    BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-                    BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
-                ]
-            )
-            ic = IC.Constant(
-                constants=lambda n_fields: np.array(
-                    [1.0, 0.1, 0.1] + [0.0 for i in range(n_fields - 3)]
-                )
-            )
-        
-            return ic, bcs, settings
-        """
-        return text
 
 
 def register_sympy_attribute(argument, string_identifier="q_"):
@@ -589,27 +456,9 @@ def register_parameter_values(parameters):
     return default_values
 
 
-def substitute_sympy_attributes_with_symbol_matrix(
-    expr: Matrix, attr: Zstruct, attr_matrix: MatrixSymbol
-):
-    if expr is None:
-        return None
-    assert attr.length() == attr_matrix.shape[0]
-    for i, k in enumerate(attr.get_list()):
-        expr = Matrix(expr).subs(k, attr_matrix[i])
-    return expr
-
-
-def eigenvalue_dict_to_matrix(eigenvalues):
+def eigenvalue_dict_to_matrix(eigenvalues, simplify=default_simplify):
     evs = []
     for ev, mult in eigenvalues.items():
         for i in range(mult):
-            evs.append(custom_simplify(ev))
+            evs.append(simplify(ev))
     return Matrix(evs)
-
-
-class ModelGUI(Model):
-    """
-    :gui:
-    { 'parameters': { 'I': {'type': 'int', 'value': 1, 'step': 1}, 'F': {'type': 'float', 'value': 1., 'step':0.1}, 'S': {'type': 'string', 'value': 'asdf'}, 'Arr':{'type': 'array', 'value': np.array([[1., 2.], [3., 4.]])} },}
-    """

@@ -10,12 +10,11 @@ import library.mesh.mesh as petscMesh
 import library.misc.io as io
 from library.misc.logger_config import logger
 from library.model.models.shallow_moments import reconstruct_uvw
-from library.model.models.base import RuntimeModel
 
 def vtk_interpolate_3d(
     model, settings, Nz=10, start_at_time=0, scale_h=1.0, filename='out_3d'
 ):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     path_to_simulation = os.path.join(main_dir, os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))    
     sim = h5py.File(path_to_simulation, "r")
     settings = io.load_settings(settings.output.directory)
@@ -32,7 +31,7 @@ def vtk_interpolate_3d(
 
     #mesh = GradientMesh.fromMesh(mesh)
     i_count = 0
-    pde = model.get_pde(printer='numpy')
+    pde = model._get_pde(printer='numpy')
     for i_snapshot in range(n_snapshots):
         group_name = "iteration_" + str(i_snapshot)
         group = fields[group_name]
@@ -51,7 +50,7 @@ def vtk_interpolate_3d(
         
             #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
             # rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), 0] = Q[0, :mesh.n_inner_cells]
-            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], settings.model.parameters.values()).T
+            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], model.parameter_values).T
             rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew
 
         # rhoUVWP[mesh.n_inner_cells:mesh.n_inner_cells+mesh.n_inner_cells, 0] = Q[0, :mesh.n_inner_cells]
@@ -75,18 +74,18 @@ def write_to_calibration_dataformat(
     mesh = fvm_mesh.Mesh.from_hdf5(os.path.join(input_folderpath, "mesh.hdf5"))
     snapshots = list(fields.keys())
 
-    n_fields = fields[str(0)]["Q"][()].shape[1]
-    n_aux_fields = fields[str(0)]["Qaux"][()].shape[1]
+    n_variables = fields[str(0)]["Q"][()].shape[1]
+    n_aux_variables = fields[str(0)]["Qaux"][()].shape[1]
 
     if field_names is None:
-        field_names = [str(i) for i in range(n_fields)]
+        field_names = [str(i) for i in range(n_variables)]
     if aux_field_names is None:
-        aux_field_names += [str(i) for i in range(n_aux_fields)]
+        aux_field_names += [str(i) for i in range(n_aux_variables)]
     # convert back to dict
     parameters = {key: value[()] for key, value in settings["parameters"].items()}
     # parameters = settings['parameters'][()]
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     f = h5py.File(os.path.join(main_dir, output_filepath), "w")
 
     # write static data, e.g. mesh, parameters, name

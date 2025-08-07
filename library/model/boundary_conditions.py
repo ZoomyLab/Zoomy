@@ -133,12 +133,12 @@ class Wall(BoundaryCondition):
         q = Matrix(Q)
         n = Matrix(normal)
         dim = normal.length()
-        n_fields = Q.length()
+        n_variables = Q.length()
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
         zero = 10 ** (-20) * q[0]
         h = q[0]
         p = parameters
-        out = Matrix([zero for i in range(n_fields)])
+        out = Matrix([zero for i in range(n_variables)])
         out[0] = h
         momentum_list_wall = []
         for momentum in momentum_list:

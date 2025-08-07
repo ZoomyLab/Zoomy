@@ -16,7 +16,7 @@ from library.misc.logger_config import logger
 
 
 def init_output_directory(path, clean):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(main_dir, path)
     os.makedirs(path, exist_ok=True)
     if clean:
@@ -67,13 +67,13 @@ def load_hdf5_to_dict(group):
 
 
 def save_settings(settings):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, settings.output.directory)
     with h5py.File(os.path.join(filepath, "settings.h5"), "w") as f:
         write_dict_to_hdf5(f, settings.as_dict(recursive=True))
         
 def load_settings(filepath):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
         d = load_hdf5_to_dict(f)
@@ -82,7 +82,7 @@ def load_settings(filepath):
     return settings
         
 def load_settings2(filepath):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
         model = f["model"]
@@ -135,7 +135,7 @@ def load_settings2(filepath):
 
 
 def clean_files(filepath, filename=".vtk"):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     abs_filepath = os.path.join(main_dir, filepath)
     if os.path.exists(abs_filepath):
         for file in os.listdir(abs_filepath):
@@ -145,7 +145,7 @@ def clean_files(filepath, filename=".vtk"):
 
 def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=True):
     i_snap = int(i_snapshot)
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "a") as f:
         if i_snap == 0 and not "fields" in f.keys():
@@ -168,7 +168,7 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=Tru
 def get_save_fields_simple(_filepath, write_all, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         filepath = os.path.join(main_dir, _filepath)
 
         with h5py.File(filepath, "a") as f:
@@ -194,7 +194,7 @@ def get_save_fields_simple(_filepath, write_all, overwrite=True):
 def get_save_fields(_filepath, write_all, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         filepath = os.path.join(main_dir, _filepath)
 
         with h5py.File(filepath, "a") as f:
@@ -265,7 +265,7 @@ def load_mesh_from_hdf5(filepath):
 
 
 def load_fields_from_hdf5(filepath, i_snapshot=-1):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(filepath, "r") as f:
         fields = f["fields"]
@@ -281,7 +281,7 @@ def load_fields_from_hdf5(filepath, i_snapshot=-1):
 
 
 def load_timeline_of_fields_from_hdf5(filepath):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     l_time = []
     l_Q = []
@@ -351,7 +351,7 @@ def generate_vtk(
     skip_aux=False,
     filename="out",
 ):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     abs_filepath = os.path.join(main_dir, filepath)
     path = os.path.dirname(abs_filepath)
     full_filepath_out = os.path.join(path, filename)

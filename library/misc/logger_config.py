@@ -10,7 +10,7 @@ zoomy_log_mode = os.getenv("ZoomyLog", "Default")
 
 zoomy_log_level = os.getenv("ZoomyLogLevel", "DEBUG")
 
-main_dir = os.getenv("SMS", os.getcwd())
+main_dir = os.getenv("ZOOMY_DIR", os.getcwd())
 
 if zoomy_log_mode == "Default":
     logger.add(sys.stderr, level=zoomy_log_level) 

@@ -15,7 +15,7 @@ def run(model_class, ic, bcs, mesh, solver, settings, **param):
     model = model_class(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,

@@ -37,7 +37,7 @@ def test_advection_1d():
     model = Advection(
         dimension=1,
         fields=1,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -85,7 +85,7 @@ def test_reconstruction_1d():
     model = Advection(
         dimension=1,
         fields=1,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -147,13 +147,13 @@ def test_advection_2d(mesh_type):
     model = Advection(
         dimension=2,
         fields=2,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     # mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
@@ -209,13 +209,13 @@ def test_advection_3d(mesh_type):
     model = Advection(
         dimension=3,
         fields=2,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     # mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
@@ -260,8 +260,8 @@ def test_periodic_bc(mesh_type):
     )
 
     ic = IC.RP2d(
-        low=lambda n_fields: np.array([0.1] + [0.0 for i in range(n_fields - 3)]),
-        high=lambda n_fields: np.array([0.2] + [0.0 for i in range(n_fields - 3)]),
+        low=lambda n_variables: np.array([0.1] + [0.0 for i in range(n_variables - 3)]),
+        high=lambda n_variables: np.array([0.2] + [0.0 for i in range(n_variables - 3)]),
         jump_position_x=0,
         jump_position_y=1.0,
     )
@@ -269,14 +269,14 @@ def test_periodic_bc(mesh_type):
     model = Advection(
         dimension=2,
         fields=1,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type))
     )
@@ -321,22 +321,22 @@ def test_reconstruction_2d(mesh_type):
     )
 
     # ic = IC.RP2d(
-    #     low=lambda n_fields: np.array(
-    #         [0.1] + [0.0 for i in range(n_fields - 3)]
+    #     low=lambda n_variables: np.array(
+    #         [0.1] + [0.0 for i in range(n_variables - 3)]
     #     ),
-    #     high=lambda n_fields: np.array(
-    #         [0.2] + [0.0 for i in range(n_fields - 3)]
+    #     high=lambda n_variables: np.array(
+    #         [0.2] + [0.0 for i in range(n_variables - 3)]
     #     ),
     #     jump_position_x = 0,
     #     jump_position_y = 1.
     # )
 
     # ic = IC.RadialDambreak(
-    #     low=lambda n_fields: np.array(
-    #         [0.1] + [0.0 for i in range(n_fields - 3)]
+    #     low=lambda n_variables: np.array(
+    #         [0.1] + [0.0 for i in range(n_variables - 3)]
     #     ),
-    #     high=lambda n_fields: np.array(
-    #         [0.2] + [0.0 for i in range(n_fields - 3)]
+    #     high=lambda n_variables: np.array(
+    #         [0.2] + [0.0 for i in range(n_variables - 3)]
     #     ),
     #     radius = 0.2,
     # )
@@ -351,14 +351,14 @@ def test_reconstruction_2d(mesh_type):
     model = Advection(
         dimension=2,
         fields=1,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type))
     )

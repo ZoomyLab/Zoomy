@@ -52,18 +52,18 @@ def _initialize_problem(model, mesh, settings=None):
         model.variables,
         model.aux_variables,
         model.parameters,
-        model.sympy_normal,
+        model.normal,
     )
 
-    n_fields = model.n_fields
+    n_variables = model.n_variables
     n_cells = mesh.mesh.n_cells
-    n_aux_fields = model.aux_variables.length()
+    n_aux_variables = model.aux_variables.length()
     if settings:
         if settings.compute_gradient:
-            n_aux_fields_ext = n_aux_fields + n_fields * mesh.base.dimension
+            n_aux_variables_ext = n_aux_variables + n_variables * mesh.base.dimension
 
-    Q = np.empty((n_fields, n_cells), dtype=float)
-    Qaux = np.zeros((n_aux_fields_ext, n_cells), dtype=float)
+    Q = np.empty((n_variables, n_cells), dtype=float)
+    Qaux = np.zeros((n_aux_variables_ext, n_cells), dtype=float)
 
     Q = model.initial_conditions.apply(mesh.mesh.cell_centers, Q)
     Qaux = model.aux_initial_conditions.apply(mesh.mesh.cell_centers, Qaux)
@@ -82,21 +82,21 @@ class MeshLayered:
         return cls(n_layers, base, mesh)
 
     def _get_gradient_field_index_list(self, Q, Qaux):
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         dims = self.base.dimension
-        n_grad_fields = n_fields * dims
-        n_aux_fields = Qaux.shape[0]
-        i_grad_start = n_aux_fields - n_grad_fields
-        out = np.zeros((dims, n_fields), dtype=int)
+        n_grad_fields = n_variables * dims
+        n_aux_variables = Qaux.shape[0]
+        i_grad_start = n_aux_variables - n_grad_fields
+        out = np.zeros((dims, n_variables), dtype=int)
         for d in range(dims):
             out[d, :] = np.array(
                 list(
                     range(
-                        i_grad_start + d * n_fields, i_grad_start + (d + 1) * n_fields
+                        i_grad_start + d * n_variables, i_grad_start + (d + 1) * n_variables
                     )
                 )
             )
-        out = out.reshape((dims, n_fields))
+        out = out.reshape((dims, n_variables))
         return out
 
     def get_n_cells_total(self):
@@ -223,7 +223,7 @@ def solver_price_c_layered(
         Qloc = mesh.get_layer(Q, layer)
         Qauxloc = mesh.get_layer(Qaux, layer)
         Qloc = apply_boundary_conditions(
-            mesh.base, time, Qloc, Qauxloc[: model.n_aux_fields, :], parameters, bcs
+            mesh.base, time, Qloc, Qauxloc[: model.n_aux_variables, :], parameters, bcs
         )
         Q = mesh.write_layer(Q, Qloc, layer)
     Qaux = mesh.update_gradient(Q, Qaux)
@@ -285,7 +285,7 @@ def solver_price_c_layered(
                 mesh.base,
                 time,
                 Qnewloc,
-                Qauxloc[: model.n_aux_fields, :],
+                Qauxloc[: model.n_aux_variables, :],
                 parameters,
                 bcs,
             )
@@ -316,20 +316,20 @@ def solver_price_c_layered(
 
 
 def _initialize_test_fields():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     mesh = Mesh.from_gmsh(path)
     mesh = MeshLayered.from_Mesh(3, mesh)
-    n_fields = 2
+    n_variables = 2
     # omega + grad
-    n_aux_fields = 1 + n_fields * 2
+    n_aux_variables = 1 + n_variables * 2
     n_cells_total = mesh.get_n_cells_total()
-    Q = np.empty((n_fields, n_cells_total), dtype=float)
-    Qaux = np.empty((n_aux_fields, n_cells_total), dtype=float)
+    Q = np.empty((n_variables, n_cells_total), dtype=float)
+    Qaux = np.empty((n_aux_variables, n_cells_total), dtype=float)
     dims = 2
     offset = 0
     grad_fields = [
-        list(range(offset + n_fields * d, offset + n_fields * (d + 1)))
+        list(range(offset + n_variables * d, offset + n_variables * (d + 1)))
         for d in range(dims)
     ]
     n_layers = mesh.n_layers
@@ -337,16 +337,16 @@ def _initialize_test_fields():
 
     ## write local
     for layer in range(n_layers):
-        Qloc = (layer + 1) * np.ones((n_fields, n_cells), dtype=float)
+        Qloc = (layer + 1) * np.ones((n_variables, n_cells), dtype=float)
         Qloc[0] = 1.0
-        Qauxloc = np.ones((n_aux_fields, n_cells), dtype=float)
+        Qauxloc = np.ones((n_aux_variables, n_cells), dtype=float)
         mesh.write_layer(Q, Qloc, layer)
         mesh.write_layer(Qaux, Qauxloc, layer)
     return mesh, Q, Qaux
 
 
 def test_get_n_cells_total():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     mesh = Mesh.from_gmsh(path)
     mesh = MeshLayered.from_Mesh(3, mesh)
@@ -414,7 +414,7 @@ def test_apply_boundary_conditions():
 
 def test_simulation():
     # mesh = Mesh.create_1d((-1, 1), 30)
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"),
     )
@@ -441,7 +441,7 @@ def test_simulation():
             boundary_conditions=bcs,
             initial_conditions=ic,
             fields=fields,
-            aux_fields=1,
+            aux_variables=1,
             settings={"friction": []},
             parameters={"p0": 1.0, "p1": 1.0},
         )

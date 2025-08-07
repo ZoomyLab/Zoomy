@@ -17,7 +17,7 @@ main_dir = os.getenv("SMPYTHON")
 def test_smm_basic_1d():
     ic = {"scheme": "func", "name": "smooth"}
     model = ShallowMoments(initial_conditions=ic)
-    model.n_fields = 4
+    model.n_variables = 4
     controller = Controller(model=model)
     controller.callback_list_init = ["controller_init_topo_const"]
     controller.time_end = 0.3
@@ -40,9 +40,9 @@ def test_smm_basic_1d():
     )
     print(np.linalg.norm(Q[-1] - Qref))
     assert np.allclose(Q[-1], Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.plot(X[:, 0], Q[-1, 1, :] / Q[-1, 0, :], label="u")
     # plt.plot(X[:, 0], Q[-1, 2, :] / Q[-1, 0, :], label="a")
     # plt.plot(X[:, 0], Q[-1, 3, :] / Q[-1, 0, :], label="a2")
@@ -54,7 +54,7 @@ def test_smm_basic_1d():
 def test_smm_1d():
     ic = {"scheme": "func", "name": "smooth"}
     model = ShallowMoments(initial_conditions=ic)
-    model.n_fields = 4
+    model.n_variables = 4
     model.models = ["newtonian"]
     model.parameters = {"nu": 0.1, "lamda": 1.0, "rho": 1.0}
     controller = Controller(model=model)
@@ -79,13 +79,13 @@ def test_smm_1d():
         filename="state.npy",
     )
     assert np.allclose(Q[-1], Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.plot(X[:, 0], Q[-1, 1, :] / Q[-1, 0, :], label="u")
     # plt.plot(X[:, 0], Q[-1, 2, :] / Q[-1, 0, :], label="a")
     # plt.plot(X[:, 0], Q[-1, 3, :] / Q[-1, 0, :], label="a2")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Qref[0, :], "*", label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Qref[0, :], "*", label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -94,7 +94,7 @@ def test_smm_1d():
 def test_smmb_1d():
     ic = {"scheme": "func", "name": "smooth"}
     model = ShallowMomentsWithBottom(initial_conditions=ic)
-    model.n_fields = 5
+    model.n_variables = 5
     model.models = ["newtonian"]
     model.parameters = {"nu": 0.1, "lamda": 1.0, "rho": 1.0}
     controller = Controller(model=model)
@@ -153,7 +153,7 @@ def test_smm_reproduce_paper_1d():
     ic = {"scheme": "func", "name": "paper_linear"}
     model = ShallowMoments(initial_conditions=ic)
     mesh = Mesh1D(number_of_elements=50, domain=[-1, 1])
-    model.n_fields = 5
+    model.n_variables = 5
     model.models = ["newtonian"]
     model.parameters = {"nu": 0.1, "lamda": 1.0, "rho": 1.0}
     controller = Controller(model=model)
@@ -201,7 +201,7 @@ def test_smmb_reproduce_paper_1d():
     ic = {"scheme": "func", "name": "paper_linear"}
     model = ShallowMomentsWithBottom(initial_conditions=ic)
     mesh = Mesh1D(number_of_elements=50, domain=[-1, 1])
-    model.n_fields = 6
+    model.n_variables = 6
     model.models = ["newtonian"]
     model.parameters = {"nu": 0.1, "lamda": 1.0, "rho": 1.0}
     controller = Controller(model=model)
@@ -247,7 +247,7 @@ def test_smmb_reproduce_paper_1d():
 def test_hsmm_basic_1d():
     ic = {"scheme": "func", "name": "smooth"}
     model = ShallowMomentsHyperbolic(initial_conditions=ic)
-    model.n_fields = 4
+    model.n_variables = 4
     controller = Controller(model=model)
     controller.callback_list_init = ["controller_init_topo_const"]
     controller.time_end = 0.3
@@ -269,9 +269,9 @@ def test_hsmm_basic_1d():
     #     filename="state.npy",
     # )
     # assert np.allclose(Q[-1], Qref)
-    plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     plt.plot(X[:, 0], Q[-1, 1, :] / Q[-1, 0, :], label="u")
     plt.plot(X[:, 0], Q[-1, 2, :] / Q[-1, 0, :], label="a")
     plt.plot(X[:, 0], Q[-1, 3, :] / Q[-1, 0, :], label="a2")
@@ -284,7 +284,7 @@ def test_hsmm_basic_1d():
 def test_smmb_basin_wb_simple_1d():
     ic = {"scheme": "func", "name": "basin_lake_at_rest"}
     model = ShallowMomentsWithBottom(initial_conditions=ic)
-    model.n_fields = 3
+    model.n_variables = 3
     model.boundary_conditions = [
         Wall(physical_tag="left"),
         Wall(physical_tag="right"),
@@ -331,7 +331,7 @@ def test_smm_strong_bc_coupling():
 def test_smm_2d():
     ic = {"scheme": "func", "name": "riemann_offset"}
     model = ShallowMoments2d(initial_conditions=ic)
-    model.n_fields = 5
+    model.n_variables = 5
     model.boundary_conditions = [
         Extrapolation(physical_tag="left"),
         Extrapolation(physical_tag="right"),
@@ -374,7 +374,7 @@ def test_smm_2d():
 def test_smmb_2d():
     ic = {"scheme": "func", "name": "riemann_offset"}
     model = ShallowMomentsWithBottom2d(initial_conditions=ic)
-    model.n_fields = 6
+    model.n_variables = 6
     model.boundary_conditions = [
         Extrapolation(physical_tag="left"),
         Extrapolation(physical_tag="right"),
@@ -439,7 +439,7 @@ def test_compare_smm_smmb_2d():
 def test_smm_with_hole_2d():
     ic = {"scheme": "func", "name": "riemann"}
     model = ShallowMomentsWithBottom2d(initial_conditions=ic)
-    model.n_fields = 6
+    model.n_variables = 6
     model.boundary_conditions = [
         Custom_extrapolation(
             physical_tag="left",
@@ -493,7 +493,7 @@ def test_smm_with_hole_2d():
 def test_smmb_basin_wb_2d():
     ic = {"scheme": "func", "name": "basin_2d"}
     model = ShallowMomentsWithBottom2d(initial_conditions=ic)
-    model.n_fields = 6
+    model.n_variables = 6
     model.boundary_conditions = [
         Wall2D(physical_tag="left"),
         Wall2D(physical_tag="right"),

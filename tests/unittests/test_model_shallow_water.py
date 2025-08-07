@@ -35,7 +35,7 @@ def test_model_initialization(dimension):
         momentum_eqns[dimension - 1],
     )
 
-    functions = model.get_pde()
+    functions = model._get_pde()
     if dimension == 1:
         assert (
             str(model.sympy_eigenvalues)
@@ -67,13 +67,13 @@ def test_source_1d():
         dimension=1,
         cls=ShallowWater,
         fields=2,
-        aux_fields=["dhdx"],
+        aux_variables=["dhdx"],
         parameters=parameters,
         momentum_eqns=momentum_eqns,
         settings=settings,
     )
 
-    functions = model.get_pde()
+    functions = model._get_pde()
     assert (
         str(model.sympy_source)
         == "Matrix([[0], [-g*nu**2*q1*Abs(q1/q0)**2.33333333333333 + g*q0*(-dhdx*ez + ex) - nu*q1/q0]])"
@@ -101,7 +101,7 @@ def test_source_2d():
         dimension=2,
         cls=ShallowWater2d,
         fields=3,
-        aux_fields=["dhdx", "dhdy"],
+        aux_variables=["dhdx", "dhdy"],
         parameters=parameters,
         momentum_eqns=momentum_eqns,
         settings=settings,
@@ -115,7 +115,7 @@ def test_source_2d():
         == "Matrix([[0, 0, 0], [2.33333333333333*g*nu**2*q1**2*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0**2 + g*(-dhdx*ez + ex) + nu*q1/q0**2, -g*nu**2*Abs(q1/q0)**2.33333333333333 - 2.33333333333333*g*nu**2*q1*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0 - nu/q0, 0], [2.33333333333333*g*nu**2*q2**2*Abs(q2/q0)**1.33333333333333*sign(q2/q0)/q0**2 + g*(-dhdy*ez + ey) + nu*q2/q0**2, 0, -g*nu**2*Abs(q2/q0)**2.33333333333333 - 2.33333333333333*g*nu**2*q2*Abs(q2/q0)**1.33333333333333*sign(q2/q0)/q0 - nu/q0]])"
     )
 
-    functions = model.get_pde()
+    functions = model._get_pde()
 
 
 if __name__ == "__main__":

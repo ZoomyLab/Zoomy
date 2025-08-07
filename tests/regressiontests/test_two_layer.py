@@ -43,27 +43,27 @@ class VAMHyperbolic(Model):
         initial_conditions,
         dimension=1,
         fields=6,
-        aux_fields=['hw2', 'hp0', 'hp1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        aux_variables=['hw2', 'hp0', 'hp1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         parameters={},
-        parameters_default={"g": 9.81},
+        _default_parameters={"g": 9.81},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
         
     def flux(self):
-        fx = Matrix([0 for i in range(self.n_fields)])
+        fx = Matrix([0 for i in range(self.n_variables)])
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
         hu0 = self.variables[1]
@@ -86,7 +86,7 @@ class VAMHyperbolic(Model):
         return [fx]
 
     def nonconservative_matrix(self):
-        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
 
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
@@ -109,7 +109,7 @@ class VAMHyperbolic(Model):
         return [-nc]
     
     def eigenvalues(self):
-        ev = Matrix([0 for i in range(self.n_fields)])
+        ev = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu0 = self.variables[1]
         hu1 = self.variables[2]
@@ -128,7 +128,7 @@ class VAMHyperbolic(Model):
         return ev
 
     def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
         hu0 = self.variables[1]
@@ -168,27 +168,27 @@ class VAMPoisson(Model):
         initial_conditions,
         dimension=1,
         fields=['hp0', 'hp1'],
-        aux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
+        aux_variables=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
         parameters={},
-        parameters_default={"g": 9.81},
+        _default_parameters={"g": 9.81},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
 
     def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
 
         h = self.aux_variables.h
         #p0 = self.variables.p0/h
@@ -234,7 +234,7 @@ class VAMPoisson(Model):
         return R
     
     def eigenvalues(self):
-        ev = Matrix([0 for i in range(self.n_fields)])
+        ev = Matrix([0 for i in range(self.n_variables)])
         return ev
 
 
@@ -261,7 +261,7 @@ class HyperbolicSolverHP(Solver):
         dhp0dx  = compute_derivatives(hp0, mesh, derivatives_multi_index=([[1]]))[:,0]
         dhp1dx  = compute_derivatives(hp1, mesh, derivatives_multi_index=([[1]]))[:,0]
         hw2 = -(w0 + w1) + (u0 + u1) * dbdx
-        # Qaux_fields=['hw2', 'hp0', 'hp1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        # Qaux_variables=['hw2', 'hp0', 'hp1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         Qaux = Qaux.at[0].set(hw2)
         Qaux = Qaux.at[3].set(dbdx)
         Qaux = Qaux.at[4].set(dhdx)
@@ -287,7 +287,7 @@ class PoissonSolverHP(Solver):
         hp0 = Q[0]
         hp1 = Q[1]
         
-        #        aux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
+        #        aux_variables=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
 
 
 
@@ -408,7 +408,7 @@ def solve_vam(
                 #########################PRESSURE############################
                 #############################################################
 
-                # Paux_fields=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
+                # Paux_variables=['h', 'hu0', 'hu1', 'hw0', 'hw1' ,'b', 'hw2', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'du0dx', 'du1dx', 'dhp0dx', 'ddhp0dxx', 'dhp1dx', 'ddhp1dxx', 'dt', 'd4hp0dx4', 'd4hp1dx4'],
 
                 h = Q[0]
                 u0 = Q[1]/h

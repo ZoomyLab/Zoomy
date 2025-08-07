@@ -45,27 +45,27 @@ class VAMHyperbolic(Model):
         initial_conditions,
         dimension=1,
         fields=6,
-        aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         parameters={},
-        parameters_default={"g": 9.81},
+        _default_parameters={"g": 9.81},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
         
     def flux(self):
-        fx = Matrix([0 for i in range(self.n_fields)])
+        fx = Matrix([0 for i in range(self.n_variables)])
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
         hu0 = self.variables[1]
@@ -88,7 +88,7 @@ class VAMHyperbolic(Model):
         return [fx]
 
     def nonconservative_matrix(self):
-        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
 
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
@@ -111,7 +111,7 @@ class VAMHyperbolic(Model):
         return [-nc]
     
     def eigenvalues(self):
-        ev = Matrix([0 for i in range(self.n_fields)])
+        ev = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu0 = self.variables[1]
         hu1 = self.variables[2]
@@ -130,7 +130,7 @@ class VAMHyperbolic(Model):
         return ev
 
     def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
         hw2 = self.aux_variables.hw2
         h = self.variables[0]
         hu0 = self.variables[1]
@@ -170,27 +170,27 @@ class VAMPoisson(Model):
         initial_conditions,
         dimension=1,
         fields=['p0', 'p1'],
-        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
+        aux_variables=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
         parameters={},
-        parameters_default={"g": 9.81},
+        _default_parameters={"g": 9.81},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
 
     def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
 
         h = self.aux_variables.h
         p0 = self.variables.p0
@@ -230,7 +230,7 @@ class VAMPoisson(Model):
         return R
     
     def eigenvalues(self):
-        ev = Matrix([0 for i in range(self.n_fields)])
+        ev = Matrix([0 for i in range(self.n_variables)])
         return ev
 
 
@@ -249,7 +249,7 @@ class HyperbolicSolver(Solver):
         w1 = hw1 / h
         u0 = hu0 / h
         u1 = hu1 / h
-        # aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        # aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
 
         dbdx  = compute_derivatives(b, mesh, derivatives_multi_index=([[1]]))[:,0]
         Qaux = Qaux.at[3].set(dbdx)
@@ -284,7 +284,7 @@ class PoissonSolver(Solver):
         p1 = Q[1]
         
 
-        #  aux_fields=[ 'dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx', 'h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
+        #  aux_variables=[ 'dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx', 'h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx', 'dt'],
 
         dp0dx = compute_derivatives(p0, mesh, derivatives_multi_index=([[1]]))[:, 0]
         ddp0dxx = compute_derivatives(p0, mesh, derivatives_multi_index=([[2]]))[:, 0]
@@ -407,8 +407,8 @@ def solve_vam(
                     #########################PRESSURE############################
                     #############################################################
                     
-                    #        aux_fields=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx'],
-                    #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+                    #        aux_variables=['dp0dx', 'ddp0dxx', 'dp1dx', 'ddp1dxx','h', 'dbdx', 'ddbdxx', 'dhdx', 'ddhdxx', 'u0', 'du0dx', 'w0', 'w1', 'u1', 'du1dx'],
+                    #         aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
 
                     h = Q[0]
                     u0 = Q[1]/h
@@ -463,7 +463,7 @@ def solve_vam(
                     ########################CORRECTOR###########################
                     ############################################################
                     
-                    #         aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+                    #         aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
                     Pauxnew = solverP.update_qaux(
                         Pnew, Paux, Pold, Pauxold, mesh, pde2, parameters2, time, dt
                     )

@@ -25,27 +25,27 @@ class Poisson(Model):
         initial_conditions,
         dimension=1,
         fields=1,
-        aux_fields=['ddTdxx'],
+        aux_variables=['ddTdxx'],
         parameters={},
-        parameters_default={},
+        _default_parameters={},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
         
     def residual(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
         T = self.variables[0]
         ddTdxx = self.aux_variables.ddTdxx
         param = self.parameters

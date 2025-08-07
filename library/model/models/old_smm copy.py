@@ -23,9 +23,9 @@
 # class ShallowMomentReference2d(Model2d):
 #     yaml_tag = "!ShallowMomentReference2d"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 2
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 2
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -34,8 +34,8 @@
 #         h = Q[0]
 #         hu = Q[1]
 #         u = hu / h
-#         hum = kwargs["aux_fields"]["hu_mean"]
-#         hvm = kwargs["aux_fields"]["hv_mean"]
+#         hum = kwargs["aux_variables"]["hu_mean"]
+#         hvm = kwargs["aux_variables"]["hv_mean"]
 #         result = np.zeros((2, 2, h.shape[0]))
 #         result[0, 0] = hum
 #         result[0, 1] = hu * u + self.g * h * h / 2
@@ -119,7 +119,7 @@
 #             )
 
 #         for i_bp, elem in enumerate(kwargs_in["mesh"]["boundary_edge_element"]):
-#             kwargs["aux_fields"] = elementwise_aux_fields(i_elem, **kwargs_in)
+#             kwargs["aux_variables"] = elementwise_aux_variables(i_elem, **kwargs_in)
 #             kwargs["i_elem"] = elem
 #             # TODO WRONG!!
 #             kwargs["i_edge"] = i_bp
@@ -150,16 +150,16 @@
 # class ShallowMoments(Model):
 #     yaml_tag = "!ShallowMoments"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 1 + 2 * self.dimension
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 1 + 2 * self.dimension
 #         self.basis = "legendre"
 #         self.bc_coupling_type = "weak"
 #         self.nc_treatment = "flux_increment"
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
-#         self.level = int((self.n_fields - 1) / self.dimension) - 1
+#         self.level = int((self.n_variables - 1) / self.dimension) - 1
 #         # TODO it is not nice that the parameters exist in both!
 #         self.matrices = smm.Matrices(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -280,9 +280,9 @@
 # class ShallowMomentsHyperbolic(Model):
 #     yaml_tag = "!ShallowMomentsHyperbolic"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 1 + 2 * self.dimension
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 1 + 2 * self.dimension
 #         self.basis = "legendre"
 #         self.bc_coupling_type = "weak"
 #         self.nc_treatment = "flux_increment"
@@ -291,7 +291,7 @@
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
-#         self.level = int((self.n_fields - 1) / self.dimension) - 1
+#         self.level = int((self.n_variables - 1) / self.dimension) - 1
 #         # TODO it is not nice that the parameters exist in both!
 #         self.matrices = smmh.Matrices(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -367,9 +367,9 @@
 # class ShallowMomentsExner(Model):
 #     yaml_tag = "!ShallowMomentsExner"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 3 + 2
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 3 + 2
 #         self.basis = "legendre"
 #         self.bc_coupling_type = "weak"
 #         self.nc_treatment = "flux_increment"
@@ -385,7 +385,7 @@
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
-#         self.level = int((self.n_fields - 1) / self.dimension) - 2
+#         self.level = int((self.n_variables - 1) / self.dimension) - 2
 #         # TODO it is not nice that the parameters exist in both!
 #         self.matrices = smm_exner.Matrices_exner(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -510,7 +510,7 @@
 #         Q[1:-1] *= Q[0]
 #         return Q
 
-#     def get_parameters(self):
+#     def get_default_parameters(self):
 #         return self.friction_parameters
 
 #     def get_massmatrix(self):
@@ -545,14 +545,14 @@
 #     yaml_tag = "!ShallowMomentsWithBottom"
 #     dimension = 1
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         # I need to run the parent.parent.set_runtime_variables, since I need to call a different smm.Matrices !!
 #         # since this is not possible? (super().super() does not exist), i call it call it directly
 #         self.compute_unit_vectors()
-#         self.level = int((self.n_fields - 2) / self.dimension) - 1
+#         self.level = int((self.n_variables - 2) / self.dimension) - 1
 
 #         self.matrices = smm.MatricesWithBottom(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -581,14 +581,14 @@
 
 #     dimension = 2
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         # I need to run the parent.parent.set_runtime_variables, since I need to call a different smm.Matrices !!
 #         # since this is not possible? (super().super() does not exist), i call it call it directly
 #         self.compute_unit_vectors()
-#         self.level = int((self.n_fields - 1) / self.dimension) - 1
+#         self.level = int((self.n_variables - 1) / self.dimension) - 1
 
 #         self.matrices = smm.Matrices2d(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -619,14 +619,14 @@
 #     yaml_tag = "!ShallowMomentsWithBottom2d"
 #     dimension = 2
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         # I need to run the parent.parent.set_runtime_variables, since I need to call a different smm.Matrices !!
 #         # since this is not possible? (super().super() does not exist), i call it call it directly
 #         self.compute_unit_vectors()
-#         self.level = int((self.n_fields - 2) / self.dimension) - 1
+#         self.level = int((self.n_variables - 2) / self.dimension) - 1
 
 #         self.matrices = smm.MatricesWithBottom2d(level=self.level, basistype=self.basis)
 #         self.matrices.bc_type = self.bc_coupling_type
@@ -751,7 +751,7 @@
 #     #     h = np.where(h <= 0.0, 0.0, h)
 #     #     u = np.where(h <= 0.0, 0.0, hu / h)
 #     #     v = np.where(h <= 0.0, 0.0, hv / h)
-#     #     # C = kwargs["aux_fields"]["ChezyCoef"]
+#     #     # C = kwargs["aux_variables"]["ChezyCoef"]
 #     #     C = kwargs["model"].parameters["ChezyCoef"]
 #     #     u_sq = np.sqrt(u**2 + v**2)
 #     #     output[1] = -1.0 / C**2 * u * u_sq
@@ -768,7 +768,7 @@
 #         u = np.where(h <= 0.0, 0.0, hu / h)
 #         v = np.where(h <= 0.0, 0.0, hv / h)
 #         C = kwargs["model"].parameters["ChezyCoef"]
-#         # C = kwargs["aux_fields"]["ChezyCoef"]
+#         # C = kwargs["aux_variables"]["ChezyCoef"]
 #         u_sq = np.sqrt(u**2 + v**2)
 #         eps = 10 ** (-10)
 #         out[1, 0] = +1.0 / C**2 * 2 * u * u_sq / h

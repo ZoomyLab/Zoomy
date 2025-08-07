@@ -11,7 +11,7 @@ from apps.gui.gui_elements import MyCard, MyOrganizer, MyMesh
 meshes = MyOrganizer()
 
 
-main_dir = os.getenv('SMS')
+main_dir = os.getenv('ZOOMY_DIR')
 meshes.add_card(MyMesh(meshes, title='# Create \n 1d line', path =os.path.join(main_dir,  "meshes/line/mesh.msh"), wip=True))
 meshes.add_card(MyMesh(meshes, title='# Create \n 2d square', wip=True))
 meshes.add_card(MyMesh(meshes, title='# Square \n 2d, quad', path =os.path.join(main_dir,  "meshes/quad_2d/mesh_coarse.msh")))

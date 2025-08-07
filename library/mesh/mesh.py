@@ -1127,7 +1127,7 @@ class Mesh:
         )
 
     def write_to_hdf5(self, filepath: str):
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         with h5py.File(os.path.join(main_dir, filepath), "w") as f:
             mesh = f.create_group("mesh")
             mesh.create_dataset("dimension", data=self.dimension)

@@ -11,7 +11,7 @@ def test_default():
     y = np.zeros_like(x)
     z = np.zeros_like(x)
     X = np.vstack((x, y, z)).T
-    Q = Constant(lambda n_fields: np.ones(n_fields)).apply(Q, X)
+    Q = Constant(lambda n_variables: np.ones(n_variables)).apply(Q, X)
     assert np.allclose(Q, np.ones_like(Q))
 
 

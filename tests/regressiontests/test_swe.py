@@ -39,7 +39,7 @@ def test_swe_1d():
     model = ShallowWater(
         dimension=1,
         fields=2,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -82,13 +82,13 @@ def test_swe_2d(mesh_type):
     model = ShallowWater2d(
         dimension=2,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy"], "eigenvalue_mode": "symbolic"},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
