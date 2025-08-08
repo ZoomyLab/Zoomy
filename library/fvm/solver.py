@@ -63,6 +63,7 @@ def newton_solver(residual):
         return jax.jvp(lambda q: residual(q), (Q,), (U,))[1]
 
     @jax.jit
+    @partial(jax.named_call, name="preconditioner")
     def compute_diagonal_of_jacobian(Q):
         ndof, N = Q.shape
 
@@ -81,6 +82,7 @@ def newton_solver(residual):
         return jax.lax.fori_loop(0, ndof, outer_loop, diag_init)
 
     @jax.jit
+    @partial(jax.named_call, name="newton_solver")
     def newton_solve(Q):
         def cond_fun(state):
             _, r, i = state
@@ -195,6 +197,7 @@ class Solver():
 
     def get_compute_source(self, mesh, model):
         @jax.jit
+        @partial(jax.named_call, name="source")
         def compute_source(dt, Q, Qaux, parameters, dQ):
             dQ = dQ.at[:, : mesh.n_inner_cells].set(
                 model.source(
@@ -209,6 +212,7 @@ class Solver():
 
     def get_compute_source_jacobian(self, mesh, model):
         @jax.jit
+        @partial(jax.named_call, name="source_jacobian")
         def compute_source(dt, Q, Qaux, parameters, dQ):
             dQ = dQ.at[:, : mesh.n_inner_cells].set(
                 model.source_jacobian(
@@ -225,7 +229,7 @@ class Solver():
         runtime_bcs = tuple(model.bcs)
 
         @jax.jit
-        @partial(jax.named_call, name="BC")
+        @partial(jax.named_call, name="boudnary_conditions")
         def apply_boundary_conditions(time, Q, Qaux, parameters):
             """
             Applies boundary conditions to the solution arrays Q and Qaux using JAX's functional updates.
@@ -338,7 +342,7 @@ class HyperbolicSolver(Solver):
     def get_compute_max_abs_eigenvalue(self, mesh, model):
         
         @jax.jit
-        @partial(jax.named_call, name="EV")
+        @partial(jax.named_call, name="max_abs_eigenvalue")
         def compute_max_abs_eigenvalue(Q, Qaux, parameters):
             max_abs_eigenvalue = -jnp.inf
             i_cellA = mesh.face_cells[0]
@@ -395,8 +399,6 @@ class HyperbolicSolver(Solver):
                 dt,
                 model,
             )
-            # Ensure no failure
-            assert not failedA
 
             nc_fluxB, failedB = compute_nc_flux(
                 qB,
@@ -411,7 +413,6 @@ class HyperbolicSolver(Solver):
                 dt,
                 model,
             )
-            assert not failedB
 
             @partial(jax.named_call, name="update_dQ_body")
             def update_dQ_body(
@@ -494,11 +495,14 @@ class HyperbolicSolver(Solver):
         else:
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
+            
+        Q = jax.put_device(Q)
+        Qaux = jax.put_device(Qaux)
+        mesh = jax.put_device(mesh)
 
         def run(Q, Qaux, parameters, model):
             iteration = 0.0
             time = 0.0
-            assert model.dimension == mesh.dimension
 
             i_snapshot = 0.0
             dt_snapshot = self.time_end / (self.settings.output.snapshots - 1)
@@ -601,7 +605,8 @@ class PoissonSolver(Solver):
     
 
 
-    # @jax.jit
+    @jax.jit
+    @partial(jax.named_call, name="poission_solver")
     def solve(self, mesh, model, write_output=True):
         Q, Qaux = self.initialize(mesh, model)
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)

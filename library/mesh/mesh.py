@@ -1378,6 +1378,101 @@ def reconstruct_3d(
         ] = i_layer + 1 + element_vertices * n_layers
     return (points_3d, element_vertices_3d, mesh_type)
 
+def meshjax_flatten(mesh: MeshJAX):
+    # Children: all jnp arrays only (no strings)
+    children = (
+        mesh.vertex_coordinates,
+        mesh.cell_vertices,
+        mesh.cell_faces,
+        mesh.cell_volumes,
+        mesh.cell_centers,
+        mesh.cell_inradius,
+        mesh.cell_neighbors,
+        mesh.boundary_face_cells,
+        mesh.boundary_face_ghosts,
+        mesh.boundary_face_function_numbers,
+        mesh.boundary_face_physical_tags,
+        mesh.boundary_face_face_indices,
+        mesh.face_cells,
+        mesh.face_normals,
+        mesh.face_volumes,
+        mesh.face_centers,
+        mesh.face_subvolumes,
+        mesh.face_neighbors,
+        mesh.boundary_conditions_sorted_physical_tags,
+        mesh.lsq_gradQ,
+        mesh.lsq_neighbors,
+        mesh.z_ordering,
+    )
+    # Aux data: static metadata, excluding the string list
+    aux_data = (
+        mesh.dimension,
+        mesh.type,
+        mesh.n_cells,
+        mesh.n_inner_cells,
+        mesh.n_faces,
+        mesh.n_vertices,
+        mesh.n_boundary_faces,
+        mesh.n_faces_per_cell,
+        # boundary_conditions_sorted_names excluded here
+        mesh.lsq_monomial_multi_index,
+        mesh.lsq_scale_factors,
+    )
+    return children, aux_data
+
+def meshjax_unflatten(aux_data, children):
+    (
+        dimension,
+        type_,
+        n_cells,
+        n_inner_cells,
+        n_faces,
+        n_vertices,
+        n_boundary_faces,
+        n_faces_per_cell,
+        # boundary_conditions_sorted_names is excluded here, so provide a default or None
+        lsq_monomial_multi_index,
+        lsq_scale_factors,
+    ) = aux_data
+    return MeshJAX(
+        dimension=dimension,
+        type=type_,
+        n_cells=n_cells,
+        n_inner_cells=n_inner_cells,
+        n_faces=n_faces,
+        n_vertices=n_vertices,
+        n_boundary_faces=n_boundary_faces,
+        n_faces_per_cell=n_faces_per_cell,
+        vertex_coordinates=children[0],
+        cell_vertices=children[1],
+        cell_faces=children[2],
+        cell_volumes=children[3],
+        cell_centers=children[4],
+        cell_inradius=children[5],
+        cell_neighbors=children[6],
+        boundary_face_cells=children[7],
+        boundary_face_ghosts=children[8],
+        boundary_face_function_numbers=children[9],
+        boundary_face_physical_tags=children[10],
+        boundary_face_face_indices=children[11],
+        face_cells=children[12],
+        face_normals=children[13],
+        face_volumes=children[14],
+        face_centers=children[15],
+        face_subvolumes=children[16],
+        face_neighbors=children[17],
+        boundary_conditions_sorted_physical_tags=children[18],
+        boundary_conditions_sorted_names=None,  # or [] or some default value
+        lsq_gradQ=children[19],
+        lsq_neighbors=children[20],
+        lsq_monomial_multi_index=lsq_monomial_multi_index,
+        lsq_scale_factors=lsq_scale_factors,
+        z_ordering=children[21],
+    )
+
+jax.tree_util.register_pytree_node(MeshJAX, meshjax_flatten, meshjax_unflatten)
+
+
 
 if __name__ == "__main__":
     path = "/home/ingo/Git/sms/meshes/quad_2d/mesh_coarse.msh"
