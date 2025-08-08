@@ -72,6 +72,7 @@ class RuntimeModel:
     quasilinear_matrix: list[Callable] = field()
     eigenvalues: Callable = field()
     source_implicit: Callable = field()
+    residual: Callable = field()
     interpolate_3d: Callable = field()
     bcs: list[Callable] = field()
 
@@ -101,6 +102,7 @@ class RuntimeModel:
             left_eigenvectors=pde.left_eigenvectors,
             right_eigenvectors=pde.right_eigenvectors,
             source_implicit=pde.source_implicit,
+            residual=pde.residual,
             interpolate_3d=pde.interpolate_3d,
             bcs=bcs,
         )

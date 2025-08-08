@@ -165,7 +165,7 @@ class Solver():
         object.__setattr__(self, 'settings', defaults)
         
 
-    def initialize(self, model, mesh):
+    def initialize(self, mesh, model):
         model.boundary_conditions.initialize(
             mesh,
             model.time,
@@ -185,12 +185,12 @@ class Solver():
         Qaux = np.empty((n_aux_variables, n_cells), dtype=float)
         return Q, Qaux
         
-    def create_runtime(self, Q, Qaux, model, mesh):      
+    def create_runtime(self, Q, Qaux, mesh, model):      
         jax_mesh = convert_mesh_to_jax(mesh)
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         parameters = jnp.asarray(model.parameter_values)
         runtime_model = RuntimeModel.from_model(model)        
-        return np.array(Q), np.array(Qaux), parameters, jax_mesh, runtime_model
+        return Q, Qaux, parameters, jax_mesh, runtime_model
 
     def get_compute_source(self, mesh, model):
         @jax.jit
@@ -329,7 +329,7 @@ class HyperbolicSolver(Solver):
         
 
     def initialize(self, mesh, model):
-        Q, Qaux = super().initialize(model, mesh)
+        Q, Qaux = super().initialize(mesh, model)
         Q = model.initial_conditions.apply(mesh.cell_centers, Q)
         Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
         return Q, Qaux
@@ -483,7 +483,7 @@ class HyperbolicSolver(Solver):
     def solve(self, mesh, model, write_output=True):
         Q, Qaux = self.initialize(mesh, model)
         
-        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, model, mesh)
+        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
         
         if write_output:
             output_hdf5_path = os.path.join(
@@ -508,7 +508,7 @@ class HyperbolicSolver(Solver):
                     self.settings.output.directory, self.settings.output.clean_directory
                 )
                 mesh.write_to_hdf5(output_hdf5_path)
-                io.savesettings(self.settings)
+                io.save_settings(self.settings)
             i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
             Qnew = Q
@@ -604,8 +604,8 @@ class PoissonSolver(Solver):
 
     # @jax.jit
     def solve(self, mesh, model, write_output=True):
-        Q, Qaux = self.initialize(model, mesh)
-        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, model, mesh)
+        Q, Qaux = self.initialize(mesh, model)
+        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
         
         # dummy values for a consistent interface
         i_snapshot = 0.0
@@ -616,7 +616,8 @@ class PoissonSolver(Solver):
         Qold = Q
         Qauxold = Qaux
 
-        boundary_operator = self.get_apply_boundary_conditions(mesh, model.bcs)
+        boundary_operator = self.get_apply_boundary_conditions(mesh, model)
+
 
         Q = boundary_operator(time, Q, Qaux, parameters)
         Qaux = self.update_qaux(
