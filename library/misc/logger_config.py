@@ -8,7 +8,7 @@ logger.remove()
 # Check the ZoomyLog setting
 zoomy_log_mode = os.getenv("ZoomyLog", "Default")
 
-zoomy_log_level = os.getenv("ZoomyLogLevel", "DEBUG")
+zoomy_log_level = os.getenv("ZoomyLogLevel", "INFO")
 
 main_dir = os.getenv("ZOOMY_DIR", os.getcwd())
 

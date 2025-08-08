@@ -39,11 +39,12 @@ import library.fvm.timestepping as timestepping
 from library.model.models.base import RuntimeModel
 
 
-def log_callback_hyperbolic(iteration, time, dt, time_stamp):
-    logger.info(
-        f"iteration: {int(iteration)}, time: {float(time):.6f}, "
-        f"dt: {float(dt):.6f}, next write at time: {float(time_stamp):.6f}"
-    )
+def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
+    if iteration % log_every == 0:
+        logger.info(
+            f"iteration: {int(iteration)}, time: {float(time):.6f}, "
+            f"dt: {float(dt):.6f}, next write at time: {float(time_stamp):.6f}"
+        )
     return None    
 
 
@@ -314,7 +315,7 @@ class Solver():
 @define(frozen=True, slots=True, kw_only=True)            
 class HyperbolicSolver(Solver):
     settings: Zstruct = field(factory=lambda: Settings.default())
-    compute_dt: Callable = field(factory=lambda: timestepping.adaptive(CFL=0.9))
+    compute_dt: Callable = field(factory=lambda: timestepping.adaptive(CFL=0.45))
     num_flux: Callable = field(factory=lambda: flux.Zero())
     nc_flux: Callable = field(factory=lambda: nonconservative_flux.segmentpath())
     time_end: float = 0.1
@@ -323,7 +324,7 @@ class HyperbolicSolver(Solver):
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
         defaults = Settings.default()
-        defaults.output.update(Zstruct(snapshots=10, write_all=False))
+        defaults.output.update(Zstruct(snapshots=10))
         defaults.update(self.settings)
         object.__setattr__(self, 'settings', defaults)
         
@@ -489,9 +490,7 @@ class HyperbolicSolver(Solver):
             output_hdf5_path = os.path.join(
                 self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
-            save_fields = io.get_save_fields(
-                output_hdf5_path, self.settings.output.write_all
-            )
+            save_fields = io.get_save_fields(output_hdf5_path)
         else:
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot

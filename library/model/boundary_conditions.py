@@ -169,6 +169,10 @@ class BoundaryConditions:
     boundary_functions: List[Callable] = []
     initialized: bool = False
 
+    @classmethod
+    def dummy(cls):
+        return [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    
     def resolve_periodic_bcs(self, mesh):
         """
         Goal: if 'apply_boundary_condition' is called, the ghost cell value is computed, given an input cell value funtion.

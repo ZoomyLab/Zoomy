@@ -191,7 +191,7 @@ def get_save_fields_simple(_filepath, write_all, overwrite=True):
     return _save_hdf5
 
 
-def get_save_fields(_filepath, write_all, overwrite=True):
+def get_save_fields(_filepath, write_all=False, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
         main_dir = os.getenv("ZOOMY_DIR")

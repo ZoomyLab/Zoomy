@@ -58,7 +58,6 @@ def vectorize_constant_sympy_expressions(expr, Q, Qaux):
 
 @define(kw_only=True, slots=True, frozen=True)
 class RuntimeModel:
-    # --- Required attributes (no defaults) ---
     name: str = field()
     n_variables: int = field()
     n_aux_variables: int = field()
@@ -75,9 +74,7 @@ class RuntimeModel:
     residual: Callable = field()
     interpolate_3d: Callable = field()
     bcs: list[Callable] = field()
-
-    # --- Optional attributes ---
-    dimension: int = field(default=1)
+    dimension: int = field()
     left_eigenvectors: Optional[Callable] = field(default=None)
     right_eigenvectors: Optional[Callable] = field(default=None)
 
