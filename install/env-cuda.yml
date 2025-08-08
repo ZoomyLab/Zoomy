@@ -1,38 +1,37 @@
-name: sms-cuda
+name: zoomy-cuda
 channels:
   - conda-forge
+  - lrntct
+
 dependencies:
   - python=3.12
-  - pip
-  - pip:
-    - sympy>=1.13.3
-    - attrs
-    - numpy
-    - ipython
-    - ipykernel
-    - matplotlib
-    - pytest
-    - meshio
-    - scipy
-    - h5py
-    - pyprog
-    - petsc
-    - petsc4py
-    - pyvista
-    - trame
-    - trame-vtk
-    - trame-vuetify
-    - seaborn
-    - jax[cuda]
-    - jaxlib[cuda]
-    - jaxopt
-    - panel
-    - watchfiles
-    - pygments
-    # - pyprecice
-    - tol-colors
-    - dotenv
-variables:
-  PETSC_CONFIGURE_OPTIONS: "--with-debugging=0 --with-shared-libraries=1 --download-f2cblaslapack=1 --with-x=0 --with-mpi=0"
+  - sympy>=1.13.3
+  - attrs
+  - numpy
+  - ipython
+  - ipykernel
+  - matplotlib
+  - pytest
+  - meshio
+  - scipy
+  - h5py
+  - petsc
+  - petsc4py
+  - pyvista
+  - trame
+  - trame-vtk
+  - trame-vuetify
+  - seaborn
+  - jax
+  - jaxlib
+  - jaxopt
+  - panel
+  - pygments
+  - swashes  # from lrntct channel
 
+  - pip:
+    - pyprog  # if this isn't on conda-forge
+    - watchfiles
+    - tol-colors
+    - python-dotenv
 
