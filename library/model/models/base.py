@@ -421,9 +421,9 @@ class Model:
 
 
     def eigenvalues(self):
-        A = self.normal[0] * self.sympy_quasilinear_matrix[0]
+        A = self.normal[0] * self.quasilinear_matrix()[0]
         for d in range(1, self.dimension):
-            A += self.normal[d] * self.sympy_quasilinear_matrix[d]
+            A += self.normal[d] * self.quasilinear_matrix()[d]
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
 

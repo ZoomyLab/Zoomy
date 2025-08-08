@@ -9,6 +9,10 @@ from attr import define
 from jax.scipy.sparse.linalg import gmres
 from jaxopt import Broyden
 
+from typing import Callable
+from attrs import define, field
+
+
 from library.misc.logger_config import logger
 
 
@@ -151,12 +155,15 @@ def newton_solver(residual):
 
 
 
-@define(frozen=False)
-class Solver:
-    def __init__(self, settings):
-        self._settings = Settings.default()
+@define(frozen=True, slots=True, kw_only=True)            
+class Solver():
+    settings: Zstruct = field(factory=lambda: Settings.default())
 
-        self._settings.update(settings)
+    def __attrs_post_init__(self):
+        defaults = Settings.default()
+        defaults.update(self.settings)
+        object.__setattr__(self, 'settings', defaults)
+        
 
     def initialize(self, model, mesh):
         model.boundary_conditions.initialize(
@@ -304,24 +311,22 @@ class Solver:
 
 
     
-            
+@define(frozen=True, slots=True, kw_only=True)            
 class HyperbolicSolver(Solver):
-    def __init__(self, settings):
+    settings: Zstruct = field(factory=lambda: Settings.default())
+    compute_dt: Callable = field(factory=lambda: timestepping.adaptive(CFL=0.9))
+    num_flux: Callable = field(factory=lambda: flux.Zero())
+    nc_flux: Callable = field(factory=lambda: nonconservative_flux.segmentpath())
+    time_end: float = 0.1
+
+
+    def __attrs_post_init__(self):
+        super().__attrs_post_init__()
         defaults = Settings.default()
-        defaults.solver.update(Zstruct(
-                num_flux=flux.Zero(),
-                nc_flux=nonconservative_flux.segmentpath(),
-                time_end=1.0,
-                CFL = 0.9,
-            ))
         defaults.output.update(Zstruct(snapshots=10, write_all=False))
-
-        super().__init__(defaults)
+        defaults.update(self.settings)
+        object.__setattr__(self, 'settings', defaults)
         
-        self._settings.update(settings)
-        
-        self.compute_dt = timestepping.adaptive(self._settings.solver.CFL)
-
 
     def initialize(self, mesh, model):
         Q, Qaux = super().initialize(model, mesh)
@@ -356,8 +361,8 @@ class HyperbolicSolver(Solver):
         @jax.jit
         @partial(jax.named_call, name="Flux")
         def flux_operator(dt, Q, Qaux, parameters, dQ):
-            compute_num_flux = self._settings.solver.num_flux
-            compute_nc_flux = self._settings.solver.nc_flux
+            compute_num_flux = self.num_flux
+            compute_nc_flux = self.nc_flux
             # Initialize dQ as zeros using jax.numpy
             dQ = jnp.zeros_like(dQ)
 
@@ -482,10 +487,10 @@ class HyperbolicSolver(Solver):
         
         if write_output:
             output_hdf5_path = os.path.join(
-                self._settings.output.directory, f"{self._settings.output.filename}.h5"
+                self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
             save_fields = io.get_save_fields(
-                output_hdf5_path, self._settings.output.write_all
+                output_hdf5_path, self.settings.output.write_all
             )
         else:
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
@@ -497,13 +502,13 @@ class HyperbolicSolver(Solver):
             assert model.dimension == mesh.dimension
 
             i_snapshot = 0.0
-            dt_snapshot = self._settings.solver.time_end / (self._settings.output.snapshots - 1)
+            dt_snapshot = self.time_end / (self.settings.output.snapshots - 1)
             if write_output:
                 io.init_output_directory(
-                    self._settings.output.directory, self._settings.output.clean_directory
+                    self.settings.output.directory, self.settings.output.clean_directory
                 )
                 mesh.write_to_hdf5(output_hdf5_path)
-                io.save_settings(self._settings)
+                io.savesettings(self.settings)
             i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
 
             Qnew = Q
@@ -561,7 +566,7 @@ class HyperbolicSolver(Solver):
 
                 def proceed(loop_val):
                     time, iteration, i_snapshot, Qnew, Qaux = loop_val
-                    return time < self._settings.solver.time_end
+                    return time < self.time_end
 
                 (time, iteration, i_snapshot, Qnew, Qaux) = jax.lax.while_loop(
                     proceed, loop_body, loop_val
@@ -582,6 +587,7 @@ class HyperbolicSolver(Solver):
         return Qnew, Qaux
 
 
+@define(frozen=True, slots=True, kw_only=True)
 class PoissonSolver(Solver):
     
     def get_residual(self, Qaux, Qold, Qauxold, parameters, mesh, model, boundary_operator, time, dt):
@@ -619,10 +625,10 @@ class PoissonSolver(Solver):
 
         if write_output:
             io.init_output_directory(
-                self._settings.output.directory, self._settings.output.clean_directory
+                self.settings.output.directory, self.settings.output.clean_directory
             )
             output_hdf5_path = os.path.join(
-                self._settings.output.directory, f"{self._settings.output.filename}.h5"
+                self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
             mesh.write_to_hdf5(output_hdf5_path)
             save_fields = io.get_save_fields(
