@@ -59,14 +59,14 @@ def test_smm_wave():
         Q[0] = np.cos(x[0])
         return Q
 
-    # ic = IC.Constant(constants = lambda n_fields: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
+    # ic = IC.Constant(constants = lambda n_variables: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
     ic = IC.UserFunction(custom_ic)
     icaux = IC.UserFunction(custom_ic_aux)
 
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=["dhdx"],
+        aux_variables=["dhdx"],
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -113,9 +113,9 @@ def test_smm_analytical():
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
-    # ic = IC.Constant(constants = lambda n_fields: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
+    # ic = IC.Constant(constants = lambda n_variables: [1., 4/3, -1/4, -1/12 ] + [0 for i in range(level-2)])
     ic = IC.Constant(
-        constants=lambda n_fields: [
+        constants=lambda n_variables: [
             1.0,
             0.1,
         ]
@@ -124,7 +124,7 @@ def test_smm_analytical():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -182,7 +182,7 @@ def test_smm_1d():
     )
     model = ShallowMoments(
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -224,7 +224,7 @@ def test_sindy_generate_reference_data():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -271,7 +271,7 @@ def test_smm_2d(mesh_type):
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -279,7 +279,7 @@ def test_smm_2d(mesh_type):
         settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
     )
@@ -317,20 +317,20 @@ def test_inflowoutflow_2d():
         ]
     )
     ic = IC.Constant(
-        constants=lambda n_fields: np.array(
-            [1.0, 0.1, 0.1] + [0.0 for i in range(n_fields - 3)]
+        constants=lambda n_variables: np.array(
+            [1.0, 0.1, 0.1] + [0.0 for i in range(n_variables - 3)]
         )
     )
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": []},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
@@ -355,7 +355,7 @@ def test_steffler():
         output_dir="outputs/steffler",
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh")
     )
@@ -381,8 +381,8 @@ def test_steffler():
         ]
     )
     ic = IC.Constant(
-        constants=lambda n_fields: np.array(
-            [h0, 0.0] + [0.0 for i in range(n_fields - 2)]
+        constants=lambda n_variables: np.array(
+            [h0, 0.0] + [0.0 for i in range(n_variables - 2)]
         )
     )
     # folder = "./output_lvl1_friction"
@@ -397,7 +397,7 @@ def test_steffler():
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -425,7 +425,7 @@ def test_steffler_small():
         output_dir="outputs/test",
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_coarse.msh")
     )
@@ -451,8 +451,8 @@ def test_steffler_small():
         ]
     )
     ic = IC.Constant(
-        constants=lambda n_fields: np.array(
-            [h0, 0.0] + [0.0 for i in range(n_fields - 2)]
+        constants=lambda n_variables: np.array(
+            [h0, 0.0] + [0.0 for i in range(n_variables - 2)]
         )
     )
     # folder = "./output_lvl1_friction"
@@ -467,7 +467,7 @@ def test_steffler_small():
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -508,7 +508,7 @@ def test_channel_with_hole_2d():
         output_dir=args.path,
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/channel_2d_hole/mesh_fine.msh"), "triangle"
     )
@@ -543,8 +543,8 @@ def test_channel_with_hole_2d():
 
     ic = IC.UserFunction(ic_func)
     # ic = IC.Constant(
-    #     constants=lambda n_fields: np.array(
-    #         [1.0, 0.7] + [0.0 for i in range(n_fields - 2)]
+    #     constants=lambda n_variables: np.array(
+    #         [1.0, 0.7] + [0.0 for i in range(n_variables - 2)]
     #     )
     # )
 
@@ -560,7 +560,7 @@ def test_channel_with_hole_2d():
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -609,13 +609,13 @@ def test_smm_grad_2d():
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy"]},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
@@ -664,7 +664,7 @@ def test_smm_1d_crazy_basis():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -714,13 +714,13 @@ def test_c_solver(mesh_type):
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy", "newtonian"]},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
@@ -735,7 +735,7 @@ def test_c_solver(mesh_type):
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_restart_from_openfoam(level=1):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034 * 10 ** (-6)},
@@ -795,7 +795,7 @@ def test_restart_from_openfoam(level=1):
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -804,7 +804,7 @@ def test_restart_from_openfoam(level=1):
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     # mesh = Mesh.load_gmsh(
     # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -837,7 +837,7 @@ def test_restart_from_openfoam(level=1):
 def test_restart_from_openfoam_prediction(
     level=1, coefs=[1.957, -16.829, 3.119, 8.151, 0, -4.466, 0.061, 3.444]
 ):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     settings = Settings(
         name="ShallowMoments2d",
         parameters={
@@ -896,7 +896,7 @@ def test_restart_from_openfoam_prediction(
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -905,7 +905,7 @@ def test_restart_from_openfoam_prediction(
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
         #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -962,7 +962,7 @@ def test_spline_strongbc_1d():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -1022,7 +1022,7 @@ def test_spline_strongbc_1d():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_restart_from_openfoam_plotter(level=1):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034 * 10 ** (-6)},
@@ -1082,7 +1082,7 @@ def test_restart_from_openfoam_plotter(level=1):
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -1091,7 +1091,7 @@ def test_restart_from_openfoam_plotter(level=1):
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     # mesh = Mesh.load_gmsh(
     # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -1164,13 +1164,13 @@ def test_petsc(mesh_type):
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy", "newtonian"]},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type))
@@ -1251,8 +1251,8 @@ def test_enforce_w_bc():
     )
 
     ic = IC.Constant(
-        constants=lambda n_fields: np.array(
-            [1.0, 0.0, 0.0] + [0.0 for i in range(n_fields - 3)]
+        constants=lambda n_variables: np.array(
+            [1.0, 0.0, 0.0] + [0.0 for i in range(n_variables - 3)]
         )
     )
 
@@ -1270,7 +1270,7 @@ def test_enforce_w_bc():
     model = ShallowMoments2d(
         dimension=2,
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -1280,7 +1280,7 @@ def test_enforce_w_bc():
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
     )
@@ -1295,7 +1295,7 @@ def test_enforce_w_bc():
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
+    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_variables)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_variables)])
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
@@ -1376,8 +1376,8 @@ def test_ijshs24():
     )
 
     ic = IC.Constant(
-        constants=lambda n_fields: np.array(
-            [1.0, 0.0] + [0.0 for i in range(n_fields - 2)]
+        constants=lambda n_variables: np.array(
+            [1.0, 0.0] + [0.0 for i in range(n_variables - 2)]
         )
     )
 
@@ -1393,7 +1393,7 @@ def test_ijshs24():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -1403,13 +1403,13 @@ def test_ijshs24():
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.create_1d((0, 10), 500)
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
     )
-    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_fields)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_fields)])
+    # io.generate_vtk(os.path.join(settings.output.directory, f'{settings.name}.h5'), field_names=[f'Q_{i}' for i in range(model.n_variables)], aux_field_names=['dQdx', 'dQdy'] + [f'phi_{i}' for i in range(model.n_variables)])
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
     # postprocessing.recover_3d_from_smm_as_vtk(
     #     model,
@@ -1481,7 +1481,7 @@ def test_eccomas_hyperbolicity():
     model_SMMWS = ShallowMomentsSSF(
         dimension=1,
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -1495,7 +1495,7 @@ def test_eccomas_hyperbolicity():
     # model_SMM = ShallowMoments(
     #     dimension=1,
     #     fields=2 + level,
-    #     aux_fields=0,
+    #     aux_variables=0,
     #     parameters=settings.parameters,
     #     boundary_conditions=bcs,
     #     initial_conditions=ic,
@@ -1572,7 +1572,7 @@ def test_eccomas_hyperbolicity():
     )
     model_SSF_energy.name = "ShearShallowFlowEnergy"
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
 
     print("SMM-WS")

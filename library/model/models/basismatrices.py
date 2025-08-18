@@ -14,10 +14,10 @@ class Basismatrices:
         self.basisfunctions = basis
         self.use_cache = use_cache
         self.cache_dir = cache_path
-        self.cache_subdir = f"basismatrices/{basis.name}/{basis.order}"
+        self.cache_subdir = f"basismatrices/{basis.name}/{basis.level}"
 
     def load_cached_matrices(self):
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         failed = False
         try:
@@ -33,7 +33,7 @@ class Basismatrices:
         return failed
 
     def save_cached_matrices(self):
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         os.makedirs(path, exist_ok=True)
         np.save(os.path.join(path, "M"), self.M)

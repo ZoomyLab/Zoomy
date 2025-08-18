@@ -10,7 +10,7 @@ from library.misc.io import load_fields_from_hdf5, load_mesh_from_hdf5
 
 sns.set_context("paper", font_scale=1.5)
 sns.set_style("whitegrid")
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 sns.set_palette(tc.colorsets['bright'])
 def vam_analytical_eta(): 

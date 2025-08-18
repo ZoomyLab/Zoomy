@@ -15,10 +15,10 @@ class Basisfunction:
     def basis_definition(self):
         x = Symbol("x")
         b = lambda k, x: x**k
-        return [b(k, x) for k in range(self.order + 1)]
+        return [b(k, x) for k in range(self.level + 1)]
 
-    def __init__(self, order=1, **kwargs):
-        self.order = order
+    def __init__(self, level=0, **kwargs):
+        self.level = level
         self.basis = self.basis_definition(**kwargs)
 
     def get(self, k):
@@ -90,7 +90,7 @@ class Legendre_shifted(Basisfunction):
     def basis_definition(self):
         x = Symbol("x")
         b = lambda k, x: legendre(k, 2 * x - 1) * (-1) ** (k)
-        return [b(k, x) for k in range(self.order + 1)]
+        return [b(k, x) for k in range(self.level + 1)]
 
 
 class Spline(Basisfunction):

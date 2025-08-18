@@ -24,7 +24,7 @@ import library.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 
 @pytest.mark.critical
@@ -60,7 +60,7 @@ def get_model():
     model = ShallowMoments(
         dimension=1,
         fields=2 + level,
-        aux_fields=1,
+        aux_variables=1,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -253,7 +253,7 @@ def model_to_firedrake(model):
     params = {"ksp_type": "cg"}
     dQ = Function(MFS)
     prob = LinearVariationalProblem(a, L, dQ)
-    solv = LinearVariationalSolver(prob, solver_parameters=params)
+    solv = LinearVariationalSolver(prob, solver_default_parameters=params)
 
     T = 3 * dt
 

@@ -24,20 +24,20 @@ class CoupledConstrained(Model):
         initial_conditions,
         dimension=2,
         fields=2,
-        aux_fields=4,
+        aux_variables=4,
         parameters={},
-        parameters_default={},
+        _default_parameters={},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},

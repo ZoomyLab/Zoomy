@@ -25,7 +25,7 @@ def create_pyvista_panel(vtk_folder, scalar_fields):
 #    - controls: dict
 #        Dictionary containing the control widgets.
 #    """
-#    main_dir = os.getenv('SMS')
+#    main_dir = os.getenv('ZOOMY_DIR')
 #    vtk_path = os.path.join(main_dir, vtk_folder)
 #    
 #    # Check if the folder exists

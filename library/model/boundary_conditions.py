@@ -133,12 +133,12 @@ class Wall(BoundaryCondition):
         q = Matrix(Q)
         n = Matrix(normal)
         dim = normal.length()
-        n_fields = Q.length()
+        n_variables = Q.length()
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
         zero = 10 ** (-20) * q[0]
         h = q[0]
         p = parameters
-        out = Matrix([zero for i in range(n_fields)])
+        out = Matrix([zero for i in range(n_variables)])
         out[0] = h
         momentum_list_wall = []
         for momentum in momentum_list:
@@ -169,6 +169,10 @@ class BoundaryConditions:
     boundary_functions: List[Callable] = []
     initialized: bool = False
 
+    @classmethod
+    def dummy(cls):
+        return [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    
     def resolve_periodic_bcs(self, mesh):
         """
         Goal: if 'apply_boundary_condition' is called, the ghost cell value is computed, given an input cell value funtion.

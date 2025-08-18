@@ -22,9 +22,9 @@
 # class ShallowWater(Model):
 #     yaml_tag = "!ShallowWater"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 2
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 2
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -62,7 +62,7 @@
 #     def rhs(self, t, Q, **kwargs):
 #         output = np.zeros_like(Q)
 #         # Topography
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         h = Q[0]
 #         output[1] = h * self.g * (self.ex - self.ez * dHdx)
 
@@ -78,7 +78,7 @@
 #             output = np.zeros((Q.shape[0], Q.shape[0], Q.shape[1]))
 
 #         # Topography
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         h = Q[0]
 #         # dR1_dh=0
 #         # dR1_dhu=0
@@ -142,9 +142,9 @@
 # class ShallowWaterWithBottom(Model):
 #     yaml_tag = "!ShallowWaterWithBottom"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 3
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 3
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -268,9 +268,9 @@
 #     yaml_tag = "!ShallowWaterWithBottom2d"
 #     dimension = 2
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 4
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 4
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -489,7 +489,7 @@
 #         h = np.where(h <= 0.0, 0.0, h)
 #         u = np.where(h <= 0.0, 0.0, hu / h)
 #         v = np.where(h <= 0.0, 0.0, hv / h)
-#         # C = kwargs["aux_fields"]["ChezyCoef"]
+#         # C = kwargs["aux_variables"]["ChezyCoef"]
 #         C = kwargs["model"].parameters["ChezyCoef"]
 #         u_sq = np.sqrt(u**2 + v**2)
 #         output[1] = -1.0 / C**2 * u * u_sq
@@ -505,7 +505,7 @@
 #         u = np.where(h <= 0.0, 0.0, hu / h)
 #         v = np.where(h <= 0.0, 0.0, hv / h)
 #         C = kwargs["model"].parameters["ChezyCoef"]
-#         # C = kwargs["aux_fields"]["ChezyCoef"]
+#         # C = kwargs["aux_variables"]["ChezyCoef"]
 #         u_sq = np.sqrt(u**2 + v**2)
 #         eps = 10 ** (-10)
 #         out[1, 0] = +1.0 / C**2 * 2 * u * u_sq / h
@@ -588,9 +588,9 @@
 # class ShallowWater2d(Model2d):
 #     yaml_tag = "!ShallowWater2d"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 3
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 3
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -705,9 +705,9 @@
 # class ShallowWaterSympy(Model):
 #     yaml_tag = "!ShallowWaterSympy"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 2
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 2
 
 #     def set_runtime_variables(self):
 #         super().set_runtime_variables()
@@ -772,7 +772,7 @@
 #     def rhs(self, t, Q, **kwargs):
 #         output = np.zeros_like(Q)
 #         # Topography
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         h = Q[0]
 #         output[1] = h * self.g * (self.ex - self.ez * dHdx)
 
@@ -788,7 +788,7 @@
 #             output = np.zeros((Q.shape[0], Q.shape[0], Q.shape[1]))
 
 #         # Topography
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         h = Q[0]
 #         # dR1_dh=0
 #         # dR1_dhu=0
@@ -852,9 +852,9 @@
 # class ShallowWaterExner(Model):
 #     yaml_tag = "!ShallowWaterExner"
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
-#         self.n_fields = 3
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
+#         self.n_variables = 3
 #         self.parameters = {
 #             "sediment_density": 1580,
 #             "water_density": 1000,

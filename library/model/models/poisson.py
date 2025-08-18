@@ -5,12 +5,13 @@ from scipy.optimize import least_squares as lsq
 import sympy
 from sympy import Matrix, sqrt
 from sympy.abc import x
+from attr import define, field
 
 from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
 
-
+from library.misc.misc import Zstruct
 from library.model.models.base import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
@@ -18,34 +19,16 @@ from library.model.models.base import (
 from library.model.models.base import Model
 import library.model.initial_conditions as IC
 
+
+@define(kw_only=True, slots=True, frozen=True)
 class Poisson(Model):
-    def __init__(
-        self,
-        boundary_conditions,
-        initial_conditions,
-        dimension=1,
-        fields=1,
-        aux_fields=['ddTdxx'],
-        parameters={},
-        parameters_default={},
-        settings={},
-        settings_default={},
-    ):
-        self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
-        super().__init__(
-            dimension=dimension,
-            fields=fields,
-            aux_fields=aux_fields,
-            parameters=parameters,
-            parameters_default=parameters_default,
-            boundary_conditions=boundary_conditions,
-            initial_conditions=initial_conditions,
-            settings={**settings_default, **settings},
-        )
-        
-    def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+    dimension: int = 1
+    variables: Zstruct = field(init=False, default=1)
+    aux_variables: Zstruct = field(factory = lambda: ['ddTdxx', 'ddTdyy', 'ddTdzz'])
+    
+            
+    def residual(self):
+        R = Matrix([0 for i in range(self.n_variables)])
         T = self.variables[0]
         ddTdxx = self.aux_variables.ddTdxx
         param = self.parameters

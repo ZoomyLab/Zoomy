@@ -16,7 +16,7 @@ from library.mesh.fvm_mesh import Mesh
 
 # @pytest.mark.critical
 # def test_segment_2d():
-#     main_dir = os.getenv("SMS")
+#     main_dir = os.getenv("ZOOMY_DIR")
 #     mesh = Mesh.load_mesh(
 #         os.path.join(main_dir, "meshes/tri_2d/mesh_coarse.msh"),
 #         "tri",
@@ -77,7 +77,7 @@ def test_boundary_condition_periodic():
 
 @pytest.mark.critical
 def test_boundary_condition_extrapolation_2d():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     bc_tags = ["left", "right", "top", "bottom"]
     bcs = [Extrapolation(physical_tag=tag) for tag in bc_tags]
     mesh = Mesh.load_mesh(
@@ -114,7 +114,7 @@ def test_boundary_condition_wall():
 
 @pytest.mark.critical
 def test_boundary_condition_wall_2d():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     bc_tags = ["left", "right", "top", "bottom"]
     bcs = [Wall(physical_tag=tag, momentum_eqns=[1, 2]) for tag in bc_tags]
     mesh = Mesh.load_mesh(

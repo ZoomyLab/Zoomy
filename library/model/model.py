@@ -2,7 +2,7 @@ import os
 import numpy as np
 from typing import Union, Type
 
-from library.model.models.base import Model, ModelGUI
+from library.model.models.base import Model
 from library.model.models.advection import Advection
 from library.model.models.shallow_water import ShallowWater, ShallowWater2d
 from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWaterTopo2d
@@ -18,11 +18,11 @@ def create_default_mesh_and_model(
     dimension: int = 1,
     cls: Type[Model] = Advection,
     fields: Union[int, list] = 1,
-    aux_fields: Union[int, list] = 0,
+    aux_variables: Union[int, list] = 0,
     parameters: Union[int, list, dict] = 0,
     settings: dict = {},
 ):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     assert main_dir != ""
     ic = IC.Constant()
 
@@ -42,7 +42,7 @@ def create_default_mesh_and_model(
     model = cls(
         dimension=dimension,
         fields=fields,
-        aux_fields=aux_fields,
+        aux_variables=aux_variables,
         parameters=parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,

@@ -19,7 +19,7 @@ def segmentpath_ssf(integration_order=3):
 
     def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
 
         flux = model.flux
         dim = normal.shape[0]
@@ -68,10 +68,10 @@ def segmentpath_1d(integration_order=3):
     def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
         assert dim == 1
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
 
         def B(s):
-            out = np.zeros((n_fields, n_fields), dtype=float)
+            out = np.zeros((n_variables, n_variables), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
                 tmp = model.nonconservative_matrix[0](
@@ -79,7 +79,7 @@ def segmentpath_1d(integration_order=3):
                 )
             return out
 
-        Bint = np.zeros((n_fields, n_fields))
+        Bint = np.zeros((n_variables, n_variables))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
         return 0.5 * np.einsum("ij, j->i", Bint, (Qj - Qi)), False
@@ -96,12 +96,12 @@ def segmentpath(integration_order=3):
 
     def nc_flux(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
 
         # n_cells = Qi.shape[1]
         def B(s):
-            # out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
-            out = np.zeros((n_fields, n_fields), dtype=float)
+            # out = np.zeros((n_variables, n_variables, n_cells), dtype=float)
+            out = np.zeros((n_variables, n_variables), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
                 tmp = model.nonconservative_matrix[d](
@@ -110,8 +110,8 @@ def segmentpath(integration_order=3):
                 out = tmp * normal[d]
             return out
 
-        # Bint = np.zeros((n_fields, n_fields, n_cells))
-        Bint = np.zeros((n_fields, n_fields))
+        # Bint = np.zeros((n_variables, n_variables, n_cells))
+        Bint = np.zeros((n_variables, n_variables))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
         # The multiplication with (Qj-Qi) the part dPsi/ds out of the integral above. But since I use a segment path, dPsi/ds is (Qj-Qi)=const
@@ -124,11 +124,11 @@ def segmentpath(integration_order=3):
         Qi, Qj, Qauxi, Qauxj, parameters, normal, svA, svB, vol_face, dt, model
     ):
         dim = normal.shape[0]
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
         n_cells = Qi.shape[1]
 
         def B(s):
-            out = jnp.zeros((n_fields, n_fields, n_cells), dtype=float)
+            out = jnp.zeros((n_variables, n_variables, n_cells), dtype=float)
             tmp = jnp.zeros_like(out)
             for d in range(dim):
                 tmp = model.quasilinear_matrix[d](
@@ -138,13 +138,13 @@ def segmentpath(integration_order=3):
                 # out[:,:,:] += tmp * normal[d]
             return out
 
-        Bint = jnp.zeros((n_fields, n_fields, n_cells))
+        Bint = jnp.zeros((n_variables, n_variables, n_cells))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
 
         Bint_sq = jnp.einsum("ij..., jk...->ik...", Bint, Bint)
         I = jnp.zeros_like(Bint)
-        for i in range(n_fields):
+        for i in range(n_variables):
             # I[i, i, :] = 1.
             I = I.at[i, i, :].set(1.0)
 
@@ -161,12 +161,12 @@ def segmentpath(integration_order=3):
         Qi, Qj, Qauxi, Qauxj, parameters, normal, svA, svB, vol_face, dt, model
     ):
         dim = normal.shape[0]
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
         n_cells = 1
 
         def B(s):
-            out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
-            # out = np.zeros((n_fields, n_fields), dtype=float)
+            out = np.zeros((n_variables, n_variables, n_cells), dtype=float)
+            # out = np.zeros((n_variables, n_variables), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
                 tmp = model.quasilinear_matrix[d](
@@ -175,14 +175,14 @@ def segmentpath(integration_order=3):
                 out[:, :, 0] += tmp * normal[d]
             return out
 
-        Bint = np.zeros((n_fields, n_fields, n_cells))
+        Bint = np.zeros((n_variables, n_variables, n_cells))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
 
         Bint_sq = np.einsum("ij..., jk...->ik...", Bint, Bint)
         I = np.zeros_like(Bint)
         _I = np.zeros_like(Bint)
-        for i in range(n_fields):
+        for i in range(n_variables):
             I[i, i, :] = 1.0
         # for d in range(dim):
         #     I += normal[d] * _I
@@ -205,25 +205,25 @@ def segmentpath(integration_order=3):
 
     # def nc_flux_quasilinear(Qi, Qj, Qauxi, Qauxj, parameters, normal, svA, svB, vol_face, dt, model):
     #     dim = normal.shape[0]
-    #     n_fields = Qi.shape[0]
+    #     n_variables = Qi.shape[0]
 
     #     n_cells = Qi.shape[1]
     #     def B(s):
-    #         out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
-    #         # out = np.zeros((n_fields, n_fields), dtype=float)
+    #         out = np.zeros((n_variables, n_variables, n_cells), dtype=float)
+    #         # out = np.zeros((n_variables, n_variables), dtype=float)
     #         tmp = np.zeros_like(out)
     #         for d in range(dim):
     #             tmp = model.quasilinear_matrix[d](Qi + s * (Qj - Qi), Qauxi + s * (Qauxj - Qauxi), parameters)
     #             out = tmp * normal[d]
     #         return out
 
-    #     Bint = np.zeros((n_fields, n_fields, n_cells))
+    #     Bint = np.zeros((n_variables, n_variables, n_cells))
     #     for w, s in zip(weights, samples):
     #         Bint += w * B(s)
 
     #     Bint_sq = np.einsum('ij..., jk...->ik...', Bint, Bint)
     #     I = np.empty_like(Bint)
-    #     for i in range(n_fields):
+    #     for i in range(n_variables):
     #         I[i, i, :] = 1.
 
     #     # Am = 0.5* Bint - 2*np.einsum('..., ij...->ij...', (svA * svB)/(svA + svB) * 2/(dt * vol_face), I)
@@ -234,13 +234,13 @@ def segmentpath(integration_order=3):
 
     def nc_flux_vectorized(Qi, Qj, Qauxi, Qauxj, parameters, normal, model):
         dim = normal.shape[0]
-        n_fields = Qi.shape[0]
+        n_variables = Qi.shape[0]
 
         n_cells = Qi.shape[1]
 
         def B(s):
-            out = np.zeros((n_fields, n_fields, n_cells), dtype=float)
-            # out = np.zeros((n_fields, n_fields), dtype=float)
+            out = np.zeros((n_variables, n_variables, n_cells), dtype=float)
+            # out = np.zeros((n_variables, n_variables), dtype=float)
             tmp = np.zeros_like(out)
             for d in range(dim):
                 tmp = model.nonconservative_matrix[d](
@@ -249,8 +249,8 @@ def segmentpath(integration_order=3):
                 out = tmp * normal[d]
             return out
 
-        Bint = np.zeros((n_fields, n_fields, n_cells))
-        # Bint = np.zeros((n_fields, n_fields))
+        Bint = np.zeros((n_variables, n_variables, n_cells))
+        # Bint = np.zeros((n_variables, n_variables))
         for w, s in zip(weights, samples):
             Bint += w * B(s)
         # The multiplication with (Qj-Qi) the part dPsi/ds out of the integral above. But since I use a segment path, dPsi/ds is (Qj-Qi)=const

@@ -1,20 +1,20 @@
 import yaml
 import os
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 
 class BaseYaml(yaml.YAMLObject):
     yaml_tag = "!Baseclass"
 
     def __init__(self, **kwargs):
-        self.set_default_parameters()
+        self.set_default_default_parameters()
         self.set_optional_arguments(kwargs)
-        self.save_above_parameters_for_config()
+        self.save_above_default_parameters_for_config()
         # runtime variables will only be set via explicit calling or reinitialization via read_class_from_file
         # self.set_runtime_variables()
 
-    def set_default_parameters(self):
+    def set_default_default_parameters(self):
         return
 
     def set_runtime_variables(self):
@@ -27,7 +27,7 @@ class BaseYaml(yaml.YAMLObject):
             else:
                 print("attribute: ", key, " not found.")
 
-    def save_above_parameters_for_config(self):
+    def save_above_default_parameters_for_config(self):
         self.yaml_keys = list(self.__dict__.keys())
 
     @classmethod
@@ -71,7 +71,7 @@ class BaseYaml(yaml.YAMLObject):
 class ExampleClass(BaseYaml):
     yaml_tag = "!ExampleClass"
 
-    def set_default_parameters(self):
+    def set_default_default_parameters(self):
         self.a = 1
         self.b = 2
         self.d = 10
@@ -84,7 +84,7 @@ class ExampleClass(BaseYaml):
 class ExampleClass2(BaseYaml):
     yaml_tag = "!ExampleClass2"
 
-    def set_default_parameters(self):
+    def set_default_default_parameters(self):
         self.a = 10
         self.d = "asdf"
         self.e = [1, 2, 3, 3]
@@ -96,6 +96,6 @@ class ExampleClass2(BaseYaml):
 class ExampleClassStacked(BaseYaml):
     yaml_tag = "!ExampleClassStacked"
 
-    def set_default_parameters(self):
+    def set_default_default_parameters(self):
         self.c1 = ExampleClass(a=2, b=-2)
         self.c2 = ExampleClass2(a=100, b=1000)

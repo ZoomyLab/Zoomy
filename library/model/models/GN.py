@@ -27,27 +27,27 @@ class GN(Model):
         dimension=1,
         fields=2,
         # D = h^3 / 3 * (dt * dx * u + u * dx^2 u - (dx u)^2)
-        aux_fields=['dD_dx'],
+        aux_variables=['dD_dx'],
         parameters={},
-        parameters_default={"g": 9.81},
+        _default_parameters={"g": 9.81},
         settings={},
         settings_default={},
     ):
         self.variables = register_sympy_attribute(fields, "q")
-        self.n_fields = self.variables.length()
+        self.n_variables = self.variables.length()
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
         
     def flux(self):
-        fx = Matrix([0 for i in range(self.n_fields)])
+        fx = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
 
@@ -60,7 +60,7 @@ class GN(Model):
     
 
     def source_implicit(self):
-        R = Matrix([0 for i in range(self.n_fields)])
+        R = Matrix([0 for i in range(self.n_variables)])
         dD_dx = self.aux_variables.dD_dx
 
 

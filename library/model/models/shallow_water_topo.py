@@ -26,18 +26,18 @@ class ShallowWaterTopo(ShallowWater):
         initial_conditions,
         dimension=1,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters={},
-        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        _default_parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings=settings,
@@ -45,7 +45,7 @@ class ShallowWaterTopo(ShallowWater):
         )
 
     def flux(self):
-        flux = Matrix([0 for i in range(self.n_fields)])
+        flux = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
@@ -54,7 +54,7 @@ class ShallowWaterTopo(ShallowWater):
         return [flux]
 
     def nonconservative_matrix(self):
-        nc = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
@@ -70,18 +70,18 @@ class ShallowWaterTopo2d(ShallowWater2d):
         initial_conditions,
         dimension=2,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters={},
-        parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
+        _default_parameters={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings=settings,
@@ -89,8 +89,8 @@ class ShallowWaterTopo2d(ShallowWater2d):
         )
 
     def flux(self):
-        fx = Matrix([0 for i in range(self.n_fields)])
-        fy = Matrix([0 for i in range(self.n_fields)])
+        fx = Matrix([0 for i in range(self.n_variables)])
+        fy = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]
@@ -104,8 +104,8 @@ class ShallowWaterTopo2d(ShallowWater2d):
         return [fx, fy]
 
     def nonconservative_matrix(self):
-        nc_x = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
-        nc_y = Matrix([[0 for i in range(self.n_fields)] for j in range(self.n_fields)])
+        nc_x = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
+        nc_y = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters

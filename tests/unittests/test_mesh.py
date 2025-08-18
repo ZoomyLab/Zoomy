@@ -15,7 +15,7 @@ def test_create_1d_mesh():
 @pytest.mark.critical
 @pytest.mark.parametrize("mesh_type", ["quad", "tri"])
 def test_load_2d_mesh(mesh_type: str):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     )
@@ -25,7 +25,7 @@ def test_load_2d_mesh(mesh_type: str):
 @pytest.mark.critical
 @pytest.mark.parametrize("mesh_type", ["tetra"])
 def test_load_3d_mesh(mesh_type: str):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_3d/mesh.msh".format(mesh_type)),
     )
@@ -34,7 +34,7 @@ def test_load_3d_mesh(mesh_type: str):
 
 @pytest.mark.critical
 def test_write_to_hdf5():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -47,7 +47,7 @@ def test_write_to_hdf5():
 
 @pytest.mark.critical
 def test_write_to_file_vtk():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -70,7 +70,7 @@ def test_write_to_file_vtk():
 
 @pytest.mark.critical
 def test_from_hdf5():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -102,7 +102,7 @@ def test_from_hdf5():
 
 @pytest.mark.critical
 def test_read_vtk_cell_fields():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
@@ -118,7 +118,7 @@ def test_read_vtk_cell_fields():
 
 @pytest.mark.critical
 def test_extrude_and_write_3d_mesh():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
@@ -141,7 +141,7 @@ def test_extrude_and_write_3d_mesh():
 @pytest.mark.critical
 @pytest.mark.parametrize("mesh_type", ["quad", "triangle"])
 def test_extrude_2d_mesh(mesh_type: str):
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.from_gmsh(
         os.path.join(main_dir, f"meshes/{mesh_type}_2d/mesh_coarse.msh")
     )
@@ -159,7 +159,7 @@ def test_extrude_2d_mesh(mesh_type: str):
 
 @pytest.mark.critical
 def test_extract_z_axis_on_extruded_mesh():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     print("start")
     path = os.path.join(main_dir, "meshes/channel_straight_long/mesh_3d_5572.msh")
     mesh = Mesh.from_gmsh(path, allow_z_integration=True)

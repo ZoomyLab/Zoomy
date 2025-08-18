@@ -33,15 +33,15 @@ def test_model_initialization_1d():
     )
 
     # TODO make this one function call and replace others as well
-    _ = model.get_pde()
+    _ = model._get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 
     num_elements = Q.shape[0]
-    F = [np.zeros((model.n_fields)) for d in range(dimension)]
-    JacF = [np.zeros((model.n_fields, model.n_fields)) for d in range(dimension)]
-    S = np.zeros((model.n_fields))
-    JacS = np.zeros((model.n_fields, model.n_fields))
+    F = [np.zeros((model.n_variables)) for d in range(dimension)]
+    JacF = [np.zeros((model.n_variables, model.n_variables)) for d in range(dimension)]
+    S = np.zeros((model.n_variables))
+    JacS = np.zeros((model.n_variables, model.n_variables))
     for i in range(num_elements):
         for d in range(dimension):
             c_model.flux[d](Q[i], Qaux[i], parameters, F[d])
@@ -54,7 +54,7 @@ def test_model_initialization_1d():
         assert np.allclose(JacS, np.zeros_like(JacS))
 
     n_inner_elements = mesh.n_elements
-    evalues = np.zeros((model.n_fields))
+    evalues = np.zeros((model.n_variables))
     for i_elem in range(mesh.n_elements):
         for i_edge in range(mesh.element_n_neighbors[i_elem]):
             c_model.eigenvalues(
@@ -111,15 +111,15 @@ def test_model_initialization_2d():
     )
 
     # TODO make this one function call and replace others as well
-    _ = model.get_pde()
+    _ = model._get_pde()
     _ = model.create_c_interface()
     c_model = model.load_c_model()
 
     num_elements = Q.shape[0]
-    F = [np.zeros((model.n_fields)) for d in range(dimension)]
-    JacF = [np.zeros((model.n_fields, model.n_fields)) for d in range(dimension)]
-    S = np.zeros((model.n_fields))
-    JacS = np.zeros((model.n_fields, model.n_fields))
+    F = [np.zeros((model.n_variables)) for d in range(dimension)]
+    JacF = [np.zeros((model.n_variables, model.n_variables)) for d in range(dimension)]
+    S = np.zeros((model.n_variables))
+    JacS = np.zeros((model.n_variables, model.n_variables))
     for i in range(num_elements):
         for d in range(dimension):
             c_model.flux[d](Q[i], Qaux[i], parameters, F[d])
@@ -133,7 +133,7 @@ def test_model_initialization_2d():
         assert np.allclose(S, np.zeros_like(S))
         assert np.allclose(JacS, np.zeros_like(JacS))
     n_inner_elements = mesh.n_elements
-    evalues = np.zeros((model.n_fields))
+    evalues = np.zeros((model.n_variables))
     for i_elem, i_edge in mesh.inner_edge_list:
         c_model.eigenvalues(
             Q[i_elem],

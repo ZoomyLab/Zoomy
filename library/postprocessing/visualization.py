@@ -12,7 +12,7 @@ pn.extension("vtk")
 
 def pyvista_3d(folder, filename='out_3d', scale=1.):
     # Set up
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     settings = io.load_settings(os.path.join(main_dir, folder))
     output_dir = os.path.join(main_dir, settings.output.directory)
     vtk_files = sorted(glob(os.path.join(output_dir, f"{filename}.*.vtk")))
