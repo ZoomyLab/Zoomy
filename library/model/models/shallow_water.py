@@ -7,7 +7,7 @@ from sympy import Symbol, Matrix, lambdify, transpose, Abs, sqrt
 
 from sympy import zeros, ones
 
-from attr import define
+from attr import define, field
 from typing import Optional
 from types import SimpleNamespace
 
@@ -15,6 +15,62 @@ from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.misc.custom_types import FArray
 from library.model.models.base import Model
+from library.misc.misc import Zstruct
+
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowWaterEquations(Model):
+    dimension: int = 2
+    variables: Zstruct = field(init=False, default=dimension + 1)
+    aux_variables: Zstruct = field(default=2)
+    _default_parameters: dict = field(
+        init=False,
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0}
+        )
+
+
+    def interpolate_3d(self):
+        out = Matrix([0 for i in range(5)])
+        dim = self.dimension
+        x = self.position_3d[0]
+        y = self.position_3d[1]
+        z = self.position_3d[2]
+        h = self.variables[0]
+        U = [hu / h for hu in self.variables[1:1+dim]]
+        rho_w = 1000.
+        g = 9.81
+        out[0] = h
+        out[1] = U[0]
+        out[2] = 0 if dim == 1 else U[1]
+        out[3] = 0
+        out[4] = rho_w * g * h * (1-z)
+        return out
+
+    def flux(self):
+        dim = self.dimension
+        h = self.variables[0]
+        U = Matrix([hu / h for hu in self.variables[1:1+dim]])
+        g = self.parameters.g
+        I = Matrix.eye(dim)
+        F = Matrix.zeros(self.variables.length(), dim)
+        F[0, :] = (h * U).T
+        F[1:, :] = h * U * U.T + g/2 * h**2 * I
+        return [F[:, d] for d in range(dim)]
+    
+    def source(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        return out
+    
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        dim = self.dimension
+        out = Matrix([0 for i in range(self.n_variables)])
+        h = self.variables[0]
+        hU = self.variables[1:1+dim]
+        U = Matrix([hu / h for hu in hU])
+        p = self.parameters
+        u_sq = sqrt(U.dot(U))
+        out[1:1+dim] = -1.0 / p.C**2 * U * u_sq
+        return out
 
 
 @define(slots=True, frozen=False, kw_only=True)

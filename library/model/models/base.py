@@ -288,6 +288,45 @@ class Model:
                 jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1
             )
 
+        l_left_eigenvectors = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+                self.normal.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.left_eigenvectors(), self.variables, self.aux_variables
+            ),
+            printer,
+        )
+
+        def left_eigenvectors(Q, Qaux, param, normal):
+            return jnp.squeeze(
+                jnp.array(l_left_eigenvectors(Q, Qaux, param, normal)), axis=1
+            )
+
+
+        l_right_eigenvectors = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+                self.normal.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.right_eigenvectors(), self.variables, self.aux_variables
+            ),
+            printer,
+        )
+
+        def right_eigenvectors(Q, Qaux, param, normal):
+            return jnp.squeeze(
+                jnp.array(l_right_eigenvectors(Q, Qaux, param, normal)), axis=1
+            )
+            
+        
+
         l_source = lambdify(
             [
                 self.variables.get_list(),
@@ -348,7 +387,7 @@ class Model:
 
         l_interpolate_3d = lambdify(
             [
-                self.position_3d.get_list(),
+                self.position.get_list(),
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
@@ -424,6 +463,12 @@ class Model:
         for d in range(1, self.dimension):
             A += self.normal[d] * self.quasilinear_matrix()[d]
         return eigenvalue_dict_to_matrix(A.eigenvals())
+    
+    def left_eigenvectors(self):
+        return zeros(self.n_variables, self.n_variables)
+    
+    def right_eigenvectors(self):
+        return zeros(self.n_variables, self.n_variables)
 
 
 def register_sympy_attribute(argument, string_identifier="q_"):
