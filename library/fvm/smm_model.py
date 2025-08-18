@@ -18,7 +18,7 @@
 # class Matrices(BaseYaml):
 #     dim = 1
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.level = 2
 #         self.basistype = "legendre"
 #         self.bc_type = "weak"
@@ -448,7 +448,7 @@
 #         g = kwargs["g"]
 #         ex = kwargs["ex"]
 #         ez = kwargs["ez"]
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         if len(Q.shape) == 1:
 #             topo = np.zeros((self.level + 2))
 #         else:
@@ -462,7 +462,7 @@
 #         g = kwargs["g"]
 #         ex = kwargs["ex"]
 #         ez = kwargs["ez"]
-#         dHdx = kwargs["aux_fields"]["dHdx"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
 #         Jac = np.zeros((self.level + 2, self.level + 2, Q.shape[1]))
 #         Jac[1:, 0] = g * ex - g * ez * dHdx * np.outer(self.W, np.ones((Q.shape[1])))
 #         return Jac
@@ -1349,8 +1349,8 @@
 #     quad_x, quad_w = np.polynomial.legendre.leggauss(5)
 #     quax_x = 0.5 * (quad_x + 1)
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         self.offset = self.level + 1
@@ -1538,8 +1538,8 @@
 #         ex = kwargs["ex"]
 #         ey = kwargs["ey"]
 #         ez = kwargs["ez"]
-#         dHdx = kwargs["aux_fields"]["dHdx"]
-#         dHdy = kwargs["aux_fields"]["dHdy"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
+#         dHdy = kwargs["aux_variables"]["dHdy"]
 #         if len(Q.shape) == 1:
 #             topo = np.zeros((1 + dim * offset))
 #         else:
@@ -1561,8 +1561,8 @@
 #         ex = kwargs["ex"]
 #         ey = kwargs["ey"]
 #         ez = kwargs["ez"]
-#         dHdx = kwargs["aux_fields"]["dHdx"]
-#         dHdy = kwargs["aux_fields"]["dHdy"]
+#         dHdx = kwargs["aux_variables"]["dHdx"]
+#         dHdy = kwargs["aux_variables"]["dHdy"]
 #         Jac = np.zeros((1 + 2 * offset, 1 + 2 * offset, Q.shape[1]))
 #         Jac[1 : 1 + offset, 0] = np.einsum(
 #             "..., i->i...", (g * ex - g * ez * dHdx) * np.ones_like(h), self.W
@@ -2229,8 +2229,8 @@
 #             q = np.where(Qin[0] <= 0, 0, q)
 #         return Qin
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         self.offset = self.level + 1
@@ -2369,8 +2369,8 @@
 #             q = np.where(Qin[0] <= 0, 0, q)
 #         return Qin
 
-#     def set_default_parameters(self):
-#         super().set_default_parameters()
+#     def set_default_default_parameters(self):
+#         super().set_default_default_parameters()
 
 #     def set_runtime_variables(self):
 #         self.offset = self.level + 1

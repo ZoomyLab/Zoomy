@@ -48,7 +48,7 @@ def test_swetopo_1d():
     model = ShallowWaterTopo(
         dimension=1,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -94,13 +94,13 @@ def test_swetopo_2d(mesh_type):
     model = ShallowWaterTopo2d(
         dimension=2,
         fields=4,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["chezy"]},
     )
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type,
@@ -183,7 +183,7 @@ def test_calibration_1d(inputs):
     model = ShallowWaterTopo(
         dimension=1,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -208,7 +208,7 @@ def test_calibration_1d(inputs):
         ("E", lambda X, Q, Qaux, param: Q[:, 1] ** 2 / Q[:, 0] + param["g"] * Q[:, 0]),
     ]
 
-    postprocessing.append_custom_fields_to_aux_fields_for_hdf5(
+    postprocessing.append_custom_fields_to_aux_variables_for_hdf5(
         settings.output.directory, custom_functions
     )
     # io.generate_vtk(settings.output.directory)

@@ -10,7 +10,7 @@
 # class Quasilinear(BaseYaml):
 #     yaml_tag = "!Quasilinear"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = None
 
 #     def evaluate(self, A, time, Q, **kwargs):

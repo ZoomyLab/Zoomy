@@ -15,7 +15,7 @@
 # class ODE(BaseYaml):
 #     yaml_tag = "!ODE"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = "RK"
 #         self.order = 1
 #         # TODO implement relaxation

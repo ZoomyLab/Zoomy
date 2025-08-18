@@ -30,25 +30,25 @@ class ShallowWater(Model):
         initial_conditions,
         dimension=1,
         fields=2,
-        aux_fields=0,
+        aux_variables=0,
         parameters={},
-        parameters_default={"g": 1.0, "ex": 0.0, "ez": 1.0},
+        _default_parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
 
     def flux(self):
-        flux = Matrix([0 for i in range(self.n_fields)])
+        flux = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
@@ -57,17 +57,12 @@ class ShallowWater(Model):
         return [flux]
 
     def source(self):
-        out = Matrix([0 for i in range(self.n_fields)])
-        if self.settings.topography:
-            out += self.topography()
-        if self.settings.friction:
-            for friction_model in self.settings.friction:
-                out += getattr(self, friction_model)()
+        out = Matrix([0 for i in range(self.n_variables)])
         return out
 
     def topography(self):
         assert "dhdx" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
@@ -77,7 +72,7 @@ class ShallowWater(Model):
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         p = self.parameters
@@ -86,7 +81,7 @@ class ShallowWater(Model):
 
     def manning(self):
         assert "nm" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         u = hu / h
@@ -96,7 +91,7 @@ class ShallowWater(Model):
 
     def chezy(self):
         assert "C" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         u = hu / h
@@ -117,9 +112,9 @@ class ShallowWater2d(ShallowWater):
         initial_conditions,
         dimension=2,
         fields=3,
-        aux_fields=0,
+        aux_variables=0,
         parameters={},
-        parameters_default={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
+        _default_parameters={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
         settings={},
         settings_default={"topography": False, "friction": []},
     ):
@@ -127,17 +122,17 @@ class ShallowWater2d(ShallowWater):
         super().__init__(
             dimension=dimension,
             fields=fields,
-            aux_fields=aux_fields,
+            aux_variables=aux_variables,
             parameters=parameters,
-            parameters_default=parameters_default,
+            _default_parameters=_default_parameters,
             boundary_conditions=boundary_conditions,
             initial_conditions=initial_conditions,
             settings={**settings_default, **settings},
         )
 
     def flux(self):
-        fx = Matrix([0 for i in range(self.n_fields)])
-        fy = Matrix([0 for i in range(self.n_fields)])
+        fx = Matrix([0 for i in range(self.n_variables)])
+        fy = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]
@@ -153,7 +148,7 @@ class ShallowWater2d(ShallowWater):
     def topography(self):
         assert "dhdx" in vars(self.aux_variables)
         assert "dhdy" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]
@@ -166,7 +161,7 @@ class ShallowWater2d(ShallowWater):
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]
@@ -177,7 +172,7 @@ class ShallowWater2d(ShallowWater):
 
     def manning(self):
         assert "nu" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]
@@ -190,7 +185,7 @@ class ShallowWater2d(ShallowWater):
 
     def chezy(self):
         assert "C" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_fields)])
+        out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         hu = self.variables[1]
         hv = self.variables[2]

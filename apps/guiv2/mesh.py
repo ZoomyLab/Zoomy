@@ -5,7 +5,7 @@ import panel as pn
 from apps.guiv2.basicelements import Card, Section
 from apps.guiv2.libmesh.load_gmsh import load_gmsh
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 pn.extension()
 

@@ -100,8 +100,8 @@ class ModelAnalyser():
         substitutions.update({Qaux[i]: qaux[i] for i in range(len(qaux))})
         
 
-        A = model.sympy_quasilinear_matrix 
-        S = model.sympy_source_implicit
+        A = model.quasilinear_matrix()
+        S = model.residual()
         if constraints is not None:
             C = constraints
         else:
@@ -124,10 +124,10 @@ class ModelAnalyser():
             AgradQ += A[d] * gradQ[:, d]
 
 
-        expr = Matrix.vstack((diff(q, t) + AgradQ - S) , C)
+        expr = list(Matrix.vstack((diff(q, t) + AgradQ - S) , C))
         for i in range(len(expr)):
             expr[i] = nsimplify(expr[i], rational=True)
-        
+        expr = Matrix(expr)
         eps = self.get_eps()
         res = expr.copy()
         for i, e in enumerate(expr):

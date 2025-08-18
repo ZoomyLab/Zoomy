@@ -13,7 +13,7 @@
 # class NonConservativeTerms(BaseYaml):
 #     yaml_tag = "!NonConservativeTerms"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = "segmentpath"
 
 #     def evaluate(self, model):

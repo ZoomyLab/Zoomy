@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from loguru import logger
 
 # import scipy.interpolate as interp
 # from functools import wraps
@@ -13,6 +12,8 @@ from sympy import MatrixSymbol
 
 from library.misc.custom_types import FArray
 from library.misc.static_class import register_static_pytree
+from library.misc.logger_config import logger
+
 
 
 
@@ -131,26 +132,19 @@ class Settings(Zstruct):
     
     def __init__(self, **kwargs):
         # assert that kwargs constains name
-        if 'solver' not in kwargs or not isinstance(kwargs['solver'], Zstruct):
-            logger.warning("No 'solver' Zstruct found in Settings. Default: empty Zstruct")
-            kwargs['solver'] = Zstruct()
-        if 'model' not in kwargs or not isinstance(kwargs['model'], Zstruct):
-            logger.warning("No 'model' Zstruct found in Settings. Default: empty Zstruct")
-            kwargs['model'] = Zstruct()
         if 'output' not in kwargs or not isinstance(kwargs['output'], Zstruct):
-            logger.warning("No 'output' Zstruct found in Settings. Default: Zstruct(directory='output')")
-            kwargs['output'] = Zstruct(directory='output')
+            logger.warning("No 'output' Zstruct found in Settings. Default: Zstruct(directory='output', filename='simulation', clean_directory=False)")
+            kwargs['output'] = Zstruct(directory='output', filename='simulation', clean_directory=True)
         output = kwargs['output']
-        model = kwargs['model']
         if not output.contains('directory'):
             logger.warning("No 'directory' attribute found in output Zstruct. Default: 'output'")
             kwargs['output'] = Zstruct(directory='output', **output.as_dict())
         if not output.contains('filename'):
             logger.warning("No 'filename' attribute found in output Zstruct. Default: 'simulation'")
             kwargs['output'] = Zstruct(filename='simulation', **output.as_dict())
-        if not model.contains('parameters'):
-            logger.warning("No 'parameters' attribute found in model Zstruct. Default: empy Zstruct")
-            kwargs['model'] = Zstruct(parameters=Zstruct(), **model.as_dict())
+        if not output.contains('clean_directory'):
+            logger.warning("No 'clean_directory' attribute found in output Zstruct. Default: False")
+            kwargs['output'] = Zstruct(clean_directory=False, **output.as_dict())
         super().__init__(**kwargs)
         
     @classmethod
@@ -159,9 +153,7 @@ class Settings(Zstruct):
         Returns a default Settings instance.
         """
         return cls(
-            model=Zstruct(parameters=Zstruct()),
-            solver=Zstruct(),
-            output=Zstruct(directory='output', filename='simulation')
+            output=Zstruct(directory='output', filename='simulation', clean_directory=False)
         )
     
 

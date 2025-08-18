@@ -21,7 +21,7 @@
 # class FiniteVolumeMethod(BaseYaml):
 #     yaml_tag = "!FVM"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = "explicit_split_source_vectorized"
 #         self.reconstruction = reconstruction.Reconstruction()
 #         self.flux = flux.Flux()
@@ -360,8 +360,8 @@
 #             kwargs_source = kwargs
 #         for i_elem in range(self.mesh.n_elements):
 #             kwargs_source_elem = kwargs_source.copy()
-#             kwargs_source_elem["aux_fields"] = elementwise_aux_fields(
-#                 i_elem, kwargs_source["aux_fields"]
+#             kwargs_source_elem["aux_variables"] = elementwise_aux_variables(
+#                 i_elem, kwargs_source["aux_variables"]
 #             )
 #             if Qnew[0, i_elem] > 0:
 #                 Qnew[:, i_elem] = self.integrator.evaluate(
@@ -463,7 +463,7 @@
 #     return Qnew
 
 
-# def elementwise_aux_fields(elem, aux_field_dict):
+# def elementwise_aux_variables(elem, aux_field_dict):
 #     aux_out = deepcopy(aux_field_dict)
 #     for key, item in aux_out.items():
 #         aux_out[key] = item[elem]

@@ -27,7 +27,7 @@
 # def controller_init_topo_const(cls, Q, **kwargs):
 #     mesh = kwargs["mesh"].element_centers
 #     H = np.zeros((mesh.shape[0]))
-#     kwargs["aux_fields"].update({"H": H, "dHdx": H, "dHdy": H})
+#     kwargs["aux_variables"].update({"H": H, "dHdx": H, "dHdy": H})
 #     return Q, kwargs
 
 
@@ -49,31 +49,31 @@
 #     H = func(mesh[:, 0], mesh[:, 1])
 #     dHdx = dfuncdx(mesh[:, 0], mesh[:, 1])
 #     dHdy = dfuncdy(mesh[:, 0], mesh[:, 1])
-#     kwargs["aux_fields"].update({"H": H, "dHdx": dHdx, "dHdy": dHdy})
+#     kwargs["aux_variables"].update({"H": H, "dHdx": dHdx, "dHdy": dHdy})
 #     return Q, kwargs
 
 
 # # def controller_init_point_data(cls, Q, **kwargs):
-# #     n_fields = Q.shape[0]
+# #     n_variables = Q.shape[0]
 # #     point_data = {}
 # #     data = np.zeros((kwargs["mesh"].element_vertices.shape[0]))
-# #     for i in n_fields:
+# #     for i in n_variables:
 # #         point_data.update({str(i): data})
 # #     kwargs["point_data"].update({"point_data": point_data})
 # #     return Q, kwargs
 
 
 # def controller_compute_point_data(cls, Q, **kwargs):
-#     n_fields = Q.shape[0]
+#     n_variables = Q.shape[0]
 #     area = np.zeros((kwargs["mesh"].element_vertices.max() + 1))
 #     point_data = {}
-#     for i in range(n_fields):
+#     for i in range(n_variables):
 #         point_data.update({str(i): np.zeros_like(area)})
 
 #     for i_elem in range(cls.mesh.n_elements):
 #         for i_vertex in cls.mesh.element_vertices[i_elem]:
 #             area[i_vertex] += cls.mesh.element_volume[i_elem]
-#             for i in range(n_fields):
+#             for i in range(n_variables):
 #                 point_data[str(i)][i_vertex] += (
 #                     cls.mesh.element_volume[i_elem] * Q[i, i_elem]
 #                 )
@@ -81,11 +81,11 @@
 #         Qj = cls.solver.bc_func(i_bp, Q, **kwargs)
 #         for i_vertex in cls.mesh.boundary_edge_vertices[i_bp]:
 #             area[i_vertex] += cls.mesh.element_volume[i_elem]
-#             for i in range(n_fields):
+#             for i in range(n_variables):
 #                 point_data[str(i)][i_vertex] += cls.mesh.element_volume[i_elem] * Qj[i]
 #     for field in point_data.values():
 #         field /= area
-#     cls.callback_parameters.update({"point_data": point_data})
+#     cls.callback_default_parameters.update({"point_data": point_data})
 #     filename = (
 #         main_dir + "/" + cls.output_dir + "/out." + str(kwargs["iteration"]) + ".vtk"
 #     )
@@ -98,12 +98,12 @@
 
 
 # def controller_compute_vertical_velocity_pointwise(cls, Q, **kwargs):
-#     n_fields = Q.shape[0]
+#     n_variables = Q.shape[0]
 #     try:
 #         level = cls.model.level
 #     except:
 #         level = 0
-#     point_data = cls.callback_parameters["point_data"]
+#     point_data = cls.callback_default_parameters["point_data"]
 #     # convert point data to array
 #     points = cls.mesh.vertex_coordinates
 #     values = np.zeros((Q.shape[0], points.shape[0]))
@@ -131,8 +131,8 @@
 #     )
 #     UVW = np.zeros((values.shape[1] * (N), 3))
 
-#     if "scale_3d_height" in cls.callback_parameters:
-#         scale_z = cls.callback_parameters["scale_3d_height"]
+#     if "scale_3d_height" in cls.callback_default_parameters:
+#         scale_z = cls.callback_default_parameters["scale_3d_height"]
 #     else:
 #         scale_z = 1.0
 
@@ -176,30 +176,30 @@
 
 
 # def controller_compute_vertical_velocity(cls, Q, **kwargs):
-#     n_fields = Q.shape[0]
+#     n_variables = Q.shape[0]
 #     try:
 #         level = cls.model.level
 #     except:
 #         level = 0
-#     point_data = cls.callback_parameters["point_data"]
+#     point_data = cls.callback_default_parameters["point_data"]
 #     # convert point data to array
 #     points = np.zeros((Q.shape[1], cls.mesh.num_nodes_per_element, 3))
-#     values = np.zeros((Q.shape[1], cls.mesh.num_nodes_per_element, n_fields))
+#     values = np.zeros((Q.shape[1], cls.mesh.num_nodes_per_element, n_variables))
 #     p0 = np.zeros((Q.shape[1], 3))
-#     v0 = np.zeros((Q.shape[1], n_fields))
-#     for i in range(n_fields):
+#     v0 = np.zeros((Q.shape[1], n_variables))
+#     for i in range(n_variables):
 #         for i_elem in range(cls.mesh.n_elements):
 #             for i_vertex, vertex in enumerate(cls.mesh.element_vertices[i_elem]):
 #                 values[i_elem, i_vertex, i] = point_data[str(i)][vertex]
 #     p0 = cls.mesh.element_centers
 #     v0 = Q.T
 #     for i_elem in range(cls.mesh.n_elements):
-#         for i in range(n_fields):
+#         for i in range(n_variables):
 #             for i_vertex, vertex in enumerate(cls.mesh.element_vertices[i_elem]):
 #                 values[i_elem, i_vertex, i] = point_data[str(i)][vertex]
 #                 points[i_elem, i_vertex] = cls.mesh.vertex_coordinates[vertex, :]
 #     # compute gradient fields
-#     grad = np.zeros((n_fields, 2, Q.shape[1]))
+#     grad = np.zeros((n_variables, 2, Q.shape[1]))
 #     for i_elem in range(cls.mesh.n_elements):
 #         grad[:, :, i_elem] = compute_gradient(
 #             points[i_elem], values[i_elem], p0[i_elem], v0[i_elem]
@@ -232,7 +232,7 @@
 #                 i
 #             ]
 #             vertex_coords_3d[i_layer * n_vertices + i, 2] = (
-#                 H[i] * cls.callback_parameters["scale_3d_height"] * Zp[i_layer]
+#                 H[i] * cls.callback_default_parameters["scale_3d_height"] * Zp[i_layer]
 #             )
 #     for i_layer in range(N):
 #         for i in range(n_elements):
@@ -256,9 +256,9 @@
 #             )
 
 #     # create streamline plots
-#     if cls.callback_parameters["streamlines"]:
-#         positions = cls.callback_parameters["streamlines_config"]["positions"]
-#         normals = cls.callback_parameters["streamlines_config"]["normals"]
+#     if cls.callback_default_parameters["streamlines"]:
+#         positions = cls.callback_default_parameters["streamlines_config"]["positions"]
+#         normals = cls.callback_default_parameters["streamlines_config"]["normals"]
 #         for position, normal in zip(positions, normals):
 #             # get elements from positions
 #             # get from vertex_coordinates
@@ -361,19 +361,19 @@
 #     dHdy = np.zeros_like(H)
 
 #     # update output
-#     kwargs["aux_fields"].update({"H": H, "dHdx": dHdx, "dHdy": dHdy})
+#     kwargs["aux_variables"].update({"H": H, "dHdx": dHdx, "dHdy": dHdy})
 #     return Q, kwargs
 
 
 # def controller_clip_small_moments(cls, Q, **kwargs):
 #     dim = kwargs["model"].dimension
-#     n_fields = kwargs["model"].n_fields
+#     n_variables = kwargs["model"].n_variables
 #     scalar_fields = 1
 #     if "WithBottom" in kwargs["model"].yaml_tag:
 #         scalar_fields += 1
-#     level = int((n_fields - scalar_fields) / dim - 1)
+#     level = int((n_variables - scalar_fields) / dim - 1)
 #     offset = level + 1
-#     assert (level + 1) * dim + scalar_fields == n_fields
+#     assert (level + 1) * dim + scalar_fields == n_variables
 
 #     Q[1 : 1 + dim * offset] = np.where(
 #         np.abs(Q[1 : 1 + dim * offset]) < 10 ** (-8), 0, Q[1 : 1 + dim * offset]
@@ -383,13 +383,13 @@
 
 # def controller_damp_oszillations_at_stiffler_inlet(cls, Q, **kwargs):
 #     dim = kwargs["model"].dimension
-#     n_fields = kwargs["model"].n_fields
+#     n_variables = kwargs["model"].n_variables
 #     scalar_fields = 1
 #     if "WithBottom" in kwargs["model"].yaml_tag:
 #         scalar_fields += 1
-#     level = int((n_fields - scalar_fields) / dim - 1)
+#     level = int((n_variables - scalar_fields) / dim - 1)
 #     offset = level + 1
-#     assert (level + 1) * dim + scalar_fields == n_fields
+#     assert (level + 1) * dim + scalar_fields == n_variables
 
 #     # find out relevant elements
 #     filtered_elements = kwargs["mesh"].element_centers[:, 0] > 4.2
@@ -407,13 +407,13 @@
 
 # def controller_filter_elements_for_L2_error(cls, Q, **kwargs):
 #     dim = kwargs["model"].dimension
-#     n_fields = kwargs["model"].n_fields
+#     n_variables = kwargs["model"].n_variables
 #     scalar_fields = 1
 #     if "WithBottom" in kwargs["model"].yaml_tag:
 #         scalar_fields += 1
-#     level = int((n_fields - scalar_fields) / dim - 1)
+#     level = int((n_variables - scalar_fields) / dim - 1)
 #     offset = level + 1
-#     assert (level + 1) * dim + scalar_fields == n_fields
+#     assert (level + 1) * dim + scalar_fields == n_variables
 
 #     # find out relevant elements
 #     filtered_elements = np.array(kwargs["mesh"].element_centers[:, 0] < 4.3, dtype=bool)

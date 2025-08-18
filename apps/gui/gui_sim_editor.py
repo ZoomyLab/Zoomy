@@ -34,8 +34,8 @@ bcs = BC.BoundaryConditions(
     ]
 )
 ic = IC.Constant(
-    constants=lambda n_fields: np.array(
-        [1.0, 0.1, 0.1] + [0.0 for i in range(n_fields - 3)]
+    constants=lambda n_variables: np.array(
+        [1.0, 0.1, 0.1] + [0.0 for i in range(n_variables - 3)]
     )
 )
 """

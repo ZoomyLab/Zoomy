@@ -1,8 +1,8 @@
 import os
 
 def transform_in_place(model, printer='jax'):
-    runtime_pde = model.get_pde(printer=printer)
-    runtime_bcs = model.get_boundary_conditions(printer=printer)
+    runtime_pde = model._get_pde(printer=printer)
+    runtime_bcs = model._get_boundary_conditions(printer=printer)
 
     return runtime_pde, runtime_bcs
 

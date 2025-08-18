@@ -938,7 +938,7 @@ class Mesh:
         meshout.write(filepath + ".vtk")
 
     def write_to_hdf5(self, filepath: str, filename="mesh.hdf5"):
-        main_dir = os.getenv("SMS")
+        main_dir = os.getenv("ZOOMY_DIR")
         with h5py.File(
             os.path.join(os.path.join(main_dir, filepath), filename), "w"
         ) as f:
@@ -988,11 +988,11 @@ def _compute_number_of_edges(n_elements, element_n_neighbors, n_nodes_per_elemen
 
 
 def read_vtk_cell_fields(
-    filename: str, n_fields: int, map_field_indices: list[int]
+    filename: str, n_variables: int, map_field_indices: list[int]
 ) -> FArray:
     mesh = meshio.read(filename)
     number_of_elements = mesh.cell_data["0"][0].shape[0]
-    output = np.zeros((n_fields, number_of_elements))
+    output = np.zeros((n_variables, number_of_elements))
     for k, v in mesh.cell_data.items():
         output[map_field_indices[int(k)]] = v[0]
     return output

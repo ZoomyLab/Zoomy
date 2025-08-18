@@ -39,7 +39,7 @@ dependencies:
 variables:
   PETSC_DIR: '/home/ingo/Git/petsc'
   PETSC_ARCH: 'linux-gnu'
-  SMS: '/home/ingo/Git/sms'
+  ZOOMY_DIR: '/home/ingo/Git/sms'
   PYTHONPATH: ':/home/ingo/Git/sms'
 
 

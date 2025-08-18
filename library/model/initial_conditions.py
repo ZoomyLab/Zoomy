@@ -22,67 +22,67 @@ class InitialConditions:
 
 @define(slots=True, frozen=True)
 class Constant(InitialConditions):
-    constants: Callable[[int], FArray] = lambda n_fields: np.array(
-        [1.0] + [0.0 for i in range(n_fields - 1)]
+    constants: Callable[[int], FArray] = lambda n_variables: np.array(
+        [1.0] + [0.0 for i in range(n_variables - 1)]
     )
 
     def apply(self, X, Q):
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         for i in range(Q.shape[1]):
-            Q[:, i] = self.constants(n_fields)
+            Q[:, i] = self.constants(n_variables)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RP(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array(
-        [1.0 * (i == 0) for i in range(n_fields)]
+    low: Callable[[int], FArray] = lambda n_variables: np.array(
+        [1.0 * (i == 0) for i in range(n_variables)]
     )
-    high: Callable[[int], FArray] = lambda n_fields: np.array(
-        [2.0 * (i == 0) for i in range(n_fields)]
+    high: Callable[[int], FArray] = lambda n_variables: np.array(
+        [2.0 * (i == 0) for i in range(n_variables)]
     )
     jump_position_x: float = 0.0
 
     def apply(self, X, Q):
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         for i in range(Q.shape[1]):
             if X[0, i] < self.jump_position_x:
-                Q[:, i] = self.high(n_fields)
+                Q[:, i] = self.high(n_variables)
             else:
-                Q[:, i] = self.low(n_fields)
+                Q[:, i] = self.low(n_variables)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RP2d(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array(
-        [1.0 * (i == 0) for i in range(n_fields)]
+    low: Callable[[int], FArray] = lambda n_variables: np.array(
+        [1.0 * (i == 0) for i in range(n_variables)]
     )
-    high: Callable[[int], FArray] = lambda n_fields: np.array(
-        [2.0 * (i == 0) for i in range(n_fields)]
+    high: Callable[[int], FArray] = lambda n_variables: np.array(
+        [2.0 * (i == 0) for i in range(n_variables)]
     )
     jump_position_x: float = 0.0
     jump_position_y: float = 0.0
 
     def apply(self, X, Q):
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         for i in range(Q.shape[1]):
             if X[0, i] < self.jump_position_x and X[1, i] < self.jump_position_y:
-                Q[:, i] = self.high(n_fields)
+                Q[:, i] = self.high(n_variables)
             else:
-                Q[:, i] = self.low(n_fields)
+                Q[:, i] = self.low(n_variables)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RP3d(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array(
-        [1.0 * (i == 0) for i in range(n_fields)]
+    low: Callable[[int], FArray] = lambda n_variables: np.array(
+        [1.0 * (i == 0) for i in range(n_variables)]
     )
-    high: Callable[[int], FArray] = lambda n_fields: np.array(
-        [2.0 * (i == 0) for i in range(n_fields)]
+    high: Callable[[int], FArray] = lambda n_variables: np.array(
+        [2.0 * (i == 0) for i in range(n_variables)]
     )
     jump_position_x: float = 0.0
     jump_position_y: float = 0.0
@@ -90,26 +90,26 @@ class RP3d(InitialConditions):
 
     def apply(self, X, Q):
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         for i in range(Q.shape[1]):
             if (
                 X[0, i] < self.jump_position_x
                 and X[1, i] < self.jump_position_y
                 and X[2, i] < self.jump_position_z
             ):
-                Q[:, i] = self.high(n_fields)
+                Q[:, i] = self.high(n_variables)
             else:
-                Q[:, i] = self.low(n_fields)
+                Q[:, i] = self.low(n_variables)
         return Q
 
 
 @define(slots=True, frozen=False)
 class RadialDambreak(InitialConditions):
-    low: Callable[[int], FArray] = lambda n_fields: np.array(
-        [1.0 * (i == 0) for i in range(n_fields)]
+    low: Callable[[int], FArray] = lambda n_variables: np.array(
+        [1.0 * (i == 0) for i in range(n_variables)]
     )
-    high: Callable[[int], FArray] = lambda n_fields: np.array(
-        [2.0 * (i == 0) for i in range(n_fields)]
+    high: Callable[[int], FArray] = lambda n_variables: np.array(
+        [2.0 * (i == 0) for i in range(n_variables)]
     )
     radius: float = 0.1
 
@@ -119,12 +119,12 @@ class RadialDambreak(InitialConditions):
         for d in range(dim):
             center[d] = X[d, :].mean()
         assert X.shape[1] == Q.shape[1]
-        n_fields = Q.shape[0]
+        n_variables = Q.shape[0]
         for i in range(Q.shape[1]):
             if np.linalg.norm(X[:, i] - center) <= self.radius:
-                Q[:, i] = self.high(n_fields)
+                Q[:, i] = self.high(n_variables)
             else:
-                Q[:, i] = self.low(n_fields)
+                Q[:, i] = self.low(n_variables)
         return Q
 
 

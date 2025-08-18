@@ -53,7 +53,7 @@ class HyperbolicSolver(Solver):
         hw2 = -(w0 + w1) + (u0 + u1) * dbdx
 
 
-        #aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        #aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         Qaux = Qaux.at[0].set(hw2)
         Qaux = Qaux.at[3].set(dbdx)
         Qaux = Qaux.at[4].set(dhdx)
@@ -119,7 +119,7 @@ class HyperbolicSolverHP(HyperbolicSolver):
         hw2 = -(w0 + w1) + (u0 + u1) * dbdx
 
 
-        #aux_fields=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
+        #aux_variables=['hw2', 'p0', 'p1', 'dbdx', 'dhdx', 'dhp0dx', 'dhp1dx'],
         Qaux = Qaux.at[0].set(hw2)
         Qaux = Qaux.at[3].set(dbdx)
         Qaux = Qaux.at[4].set(dhdx)
@@ -897,7 +897,7 @@ class SolverFullImplicit(Solver):
         dhw0dt = (hw0-_hw0)/dt
         dhw1dt = (hw1-_hw1)/dt
 
-        #aux_fields=[ 'hw2', 'dhdt', 'dhu0dt', 'dhu1dt', 'dhw0dt', 'dhw1dt', 'dhdx', 'dhu0dx', 'dhu1dx', 'dhw0dx', 'dhw1dx', 'dhp0dx', 'dhp1dx', 'dbdx','ddhp0dxx', 'ddhp1dxx', 'du0dx', 'du1dx'],
+        #aux_variables=[ 'hw2', 'dhdt', 'dhu0dt', 'dhu1dt', 'dhw0dt', 'dhw1dt', 'dhdx', 'dhu0dx', 'dhu1dx', 'dhw0dx', 'dhw1dx', 'dhp0dx', 'dhp1dx', 'dbdx','ddhp0dxx', 'ddhp1dxx', 'du0dx', 'du1dx'],
         Qaux = Qaux.at[0].set(hw2)
         Qaux = Qaux.at[1].set(dhdt)
         Qaux = Qaux.at[2].set(dhu0dt)

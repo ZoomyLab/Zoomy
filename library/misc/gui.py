@@ -57,5 +57,5 @@ def get_gui_tags(path):
 
 
 if __name__ == "__main__":
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     browse_all_gui_tags(os.path.join(main_dir, "library"))

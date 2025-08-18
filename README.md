@@ -61,7 +61,7 @@ The following environment variables need to be set
 
 ```{bash}
 PYTHONPATH=/path/to/Zoomy
-SMS=/path/to/Zoomy
+ZOOMY_DIR=/path/to/Zoomy
 JAX_ENABLE_X64=True
 PETSC_DIR=/path/to/petsc/installation
 PETSC_ARCH=architecture used for compiling petsc

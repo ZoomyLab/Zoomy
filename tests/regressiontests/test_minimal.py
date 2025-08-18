@@ -75,7 +75,7 @@ def test_smm_1d():
     )
     model = ShallowMoments(
         fields=2 + level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -98,7 +98,7 @@ class SWESolver(Solver):
 
 def test_smm_2d():
     level = 0
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -140,7 +140,7 @@ def test_smm_2d():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=2,
+        aux_variables=2,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -148,7 +148,7 @@ def test_smm_2d():
         settings={},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         #os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/channel_quad_2d/mesh.msh")
@@ -164,7 +164,7 @@ def test_smm_2d():
 
 def test_jax_jit_grad():
     level = 1
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -203,7 +203,7 @@ def test_jax_jit_grad():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -211,7 +211,7 @@ def test_jax_jit_grad():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -264,7 +264,7 @@ def test_jax_jit_grad():
 
 def test_jax_jit_grad_minimal():
     level = 1
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -303,7 +303,7 @@ def test_jax_jit_grad_minimal():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=0,
+        aux_variables=0,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -311,7 +311,7 @@ def test_jax_jit_grad_minimal():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -364,7 +364,7 @@ def test_jax_jit_grad_minimal():
 
 def test_reconstruction():
     level = 0
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -406,7 +406,7 @@ def test_reconstruction():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=["dhdx", "dhdy"],
+        aux_variables=["dhdx", "dhdy"],
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -414,7 +414,7 @@ def test_reconstruction():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -427,7 +427,7 @@ def test_reconstruction():
 
 def test_reconstruction_faces():
     level = 0
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -466,7 +466,7 @@ def test_reconstruction_faces():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=2,
+        aux_variables=2,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -474,7 +474,7 @@ def test_reconstruction_faces():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -531,14 +531,14 @@ def test_implicit():
 
     model = CoupledConstrained(
         fields=2,
-        aux_fields=["dudt", "dudx", "dpdx", "f"],
+        aux_variables=["dudt", "dudx", "dpdx", "f"],
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={},
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         # os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
@@ -553,7 +553,7 @@ def test_implicit():
 
 def test_smm_junction():
     level = 4
-    n_fields = 3 + 2 * level
+    n_variables = 3 + 2 * level
     settings = Settings(
         name="ShallowMoments",
         parameters={
@@ -606,15 +606,15 @@ def test_smm_junction():
 
     model = ShallowMoments2d(
         fields=3 + 2 * level,
-        aux_fields=2,
+        aux_variables=2,
         parameters=settings.parameters,
         boundary_conditions=bcs,
         initial_conditions=ic,
         settings={"friction": ["newtonian", "slip_mod"]},
-        basis=Basismatrices(basis=Legendre_shifted(order=level+1)),
+        basis=Basismatrices(basis=Legendre_shifted(level=level+1)),
     )
 
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
         # os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")

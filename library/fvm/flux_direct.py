@@ -10,7 +10,7 @@
 # class FluxDirect(BaseYaml):
 #     yaml_tag = "!FluxDirect"
 
-#     def set_default_parameters(self):
+#     def set_default_default_parameters(self):
 #         self.scheme = None
 #         self.limiter = None
 

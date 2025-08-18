@@ -12,7 +12,7 @@ dependencies:
     - dotenv
 
 variables:
-  SMS: '/home/mbd/Maschinenbautag/shallow-moments-simulation'
+  ZOOMY_DIR: '/home/mbd/Maschinenbautag/shallow-moments-simulation'
   PYTHONPATH: ':/home/mbd/Maschinenbautag/shallow-moments-simulation'
 
 

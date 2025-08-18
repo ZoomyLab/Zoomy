@@ -12,7 +12,7 @@ from library.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
 import library.misc.io as io
 
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 
 def load_file(filename):

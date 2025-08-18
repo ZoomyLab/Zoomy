@@ -58,9 +58,9 @@ def test_swe_sympy_basic_1d():
         filename="state.npy",
     )
     assert np.allclose(Q[-1], Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -88,9 +88,9 @@ def test_swe_sympy_friction_1d():
     #     filename="state.npy",
     # )
     # assert np.allclose(Q[-1], Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -120,9 +120,9 @@ def test_swe_friction_1d():
         filename="state.npy",
     )
     assert np.allclose(Q[-1], Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -151,9 +151,9 @@ def test_swe_inclination_1d():
     )
     assert np.allclose(Q[-1], Qref)
 
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -181,9 +181,9 @@ def test_swe_topography_1d():
     )
     assert np.allclose(Q[-1], Qref)
 
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label="H")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label="H")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -211,9 +211,9 @@ def test_swe_timedependent_topography_1d():
         filename="state.npy",
     )
     assert np.allclose(Q, Qref)
-    # plt.plot(X[:, 0], params["aux_fields"]["H"], label='H')
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[0, 0, :], label="h(t=0)")
-    # plt.plot(X[:, 0], params["aux_fields"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"], label='H')
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[0, 0, :], label="h(t=0)")
+    # plt.plot(X[:, 0], params["aux_variables"]["H"] + Q[-1, 0, :], label="h(t=t_end)")
     # plt.legend()
     # plt.show()
 
@@ -698,7 +698,7 @@ def test_sweb_mesh_with_hole(mesh_file, mesh_type):
 def test_swe_stiffler_2d():
     ic = {"scheme": "func", "name": "stiffler_2d"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
-    model.n_fields = 4
+    model.n_variables = 4
     # model.friction_models = ["chezy", "newtonian"]
     model.friction_models = ["chezy"]
     model.parameters = {"ChezyCoef": 16, "nu": 0.1}
@@ -758,7 +758,7 @@ def test_swe_complex_topography_2d():
     ic = {"scheme": "func", "name": "complex_topography"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.domain = [-1, 1, -1, 1]
-    model.n_fields = 4
+    model.n_variables = 4
     model.friction_models = ["newtonian"]
     model.parameters = {"nu": 0.01}
     model.boundary_conditions = [
@@ -798,7 +798,7 @@ def test_swe_stiffler_dam_break_2d():
     ic = {"scheme": "func", "name": "stiffler_dam_break"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.domain = [-1, 1, -1, 1]
-    model.n_fields = 4
+    model.n_variables = 4
     model.g = 9.81
     # model.friction_models = ["chezy", "newtonian"]
     # model.parameters = {"ChezyCoef": 16.0, "nu": 0.1}
@@ -829,7 +829,7 @@ def test_swe_nozzle_2d():
     # ic = {"scheme": "func", "name": "const_height"}
     ic = {"scheme": "func", "name": "riemann_offset"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
-    model.n_fields = 4
+    model.n_variables = 4
     model.boundary_conditions = [
         # Custom_extrapolation(
         #     physical_tag="left",
@@ -869,7 +869,7 @@ def test_swe_nozzle_2d():
 def test_swe_exner_basic_1d():
     ic = {"scheme": "lambda", 0: "lambda x: 1.0*(x[:,0]<=0) + 0.05*(x[:,0]>0)"}
     model = ShallowWaterExner(initial_conditions=ic)
-    model.n_fields = 3
+    model.n_variables = 3
     mesh = Mesh1D(number_of_elements=80)
     controller = Controller(model=model, mesh=mesh)
     # controller.callback_list_init = ["controller_init_topo_const"]

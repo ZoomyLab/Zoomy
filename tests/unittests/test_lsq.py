@@ -23,7 +23,7 @@ def test_1d():
     # print(d2Q_dx2)
     
 def test_2d():
-    main_dir = os.getenv("SMS")
+    main_dir = os.getenv("ZOOMY_DIR")
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), lsq_degree=2
     )

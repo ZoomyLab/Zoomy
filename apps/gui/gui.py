@@ -32,7 +32,7 @@ from tests.regressiontests.test_minimal import test_smm_2d
 
 pn.extension('gridstack', 'vtk', 'mathjax', 'katex', 'ipywidgets_bokeh', 'bokeh', 'codeeditor', 'terminal', notifications=True, console_output='disable')
 
-main_dir = os.getenv("SMS")
+main_dir = os.getenv("ZOOMY_DIR")
 
 
 ###  General Controls ##########################################################
@@ -77,7 +77,7 @@ def gui():
     ### Material Template ##########################################################
     template = pn.template.BootstrapTemplate(
      # editable=True,
-        title='SMS - Shallow Moment Simulation',
+        title='ZOOMY_DIR - Shallow Moment Simulation',
         logo=os.path.join(main_dir, 'apps/gui/data/logo_white.png'),
     )
     

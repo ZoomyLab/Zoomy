@@ -1,0 +1,14 @@
+## Logging
+
+We use [loguru](https://loguru.readthedocs.io/) for logging.
+
+The following environment variables exist (default value is bold):
+
+```
+ZoomyLog=["**Default**", "File"]
+ZoomyLogLevel=["DEBUG", "**INFO**", "WARNING", "ERROR"]
+```
+
+Per **default**, the file is written standard output. 
+
+If the log file is written to **file**, the filepath is set to `logs/log.log`. The configuration can be changed in `library/misc/logger_config.py`.
