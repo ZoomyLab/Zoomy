@@ -528,7 +528,7 @@ class Mesh:
         face_normals = np.zeros((n_faces, dimension), dtype=float)
         face_volumes = np.ones((n_faces), dtype=float)
 
-        cell_centers = np.zeros((n_cells, dimension), dtype=float)
+        cell_centers = np.zeros((n_cells, 3), dtype=float)
         cell_centers[:n_inner_cells, 0] = np.arange(xL + dx / 2, xR, dx)
         cell_centers[n_inner_cells, 0] = xL - dx / 2
         cell_centers[n_inner_cells + 1, 0] = xR + dx / 2
@@ -730,7 +730,7 @@ class Mesh:
         cell_vertices = np.zeros(
             (n_inner_cells, n_vertices_per_cell), dtype=int)
         cell_faces = np.zeros((n_inner_cells, n_faces_per_cell), dtype=int)
-        cell_centers = np.zeros((n_cells, dim), dtype=float)
+        cell_centers = np.zeros((n_cells, 3), dtype=float)
         # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
         cell_volumes = np.ones((n_cells), dtype=float)
         cell_inradius = compute_cell_inradius(dm)
@@ -750,7 +750,7 @@ class Mesh:
             assert _cell_vertices.shape[0] == cell_vertices.shape[1]
             # assert (_cell_vertices_orientation == 0).all()
             cell_vertices[i_c, :] = _cell_vertices - vStart
-            cell_centers[i_c, :] = cell_center
+            cell_centers[i_c, :dim] = cell_center[:dim]
             cell_volumes[i_c] = cell_volume
 
         vertex_coordinates = np.array(gdm.getCoordinates()).reshape((-1, dim))
@@ -813,10 +813,10 @@ class Mesh:
                 # for periodic boudnary conditions, I need the ghost cell to have a cell_center. I copy the one from the related inner cell.
                 _face_cell = gdm.getSupport(e).min()
                 _face_ghost = gdm.getSupport(e).max()
-                cell_centers[_face_ghost] = (
-                    cell_centers[_face_cell]
+                cell_centers[_face_ghost, :dim] = (
+                    cell_centers[_face_cell, :dim]
                     + 2
-                    * ((face_center - cell_centers[_face_cell]) @ face_normal)
+                    * ((face_center - cell_centers[_face_cell, :dim]) @ face_normal)
                     * face_normal
                 )
                 # subvolumes of the ghost cell are computes wrongly. In this case, copy the value from the inner cell.
@@ -872,7 +872,7 @@ class Mesh:
             cell_neighbors[i_c, :] = neighbors
 
         lsq_gradQ, lsq_neighbors, lsq_monomial_multi_index = least_squares_reconstruction_local(
-            n_cells, dim, cell_neighbors, cell_centers, lsq_degree
+            n_cells, dim, cell_neighbors, cell_centers[:, :dim], lsq_degree
         )
         lsq_scale_factors = scale_lsq_derivative(lsq_monomial_multi_index)
 
@@ -897,7 +897,9 @@ class Mesh:
         # )
 
         face_volumes = np.array(face_volumes, dtype=float)
-        face_centers = np.array(face_centers, dtype=float)
+        _face_centers = np.array(face_centers, dtype=float)
+        face_centers = np.zeros((n_faces, 3), dtype=float)
+        face_centers[:, :dim] = _face_centers[:, :dim]
         face_normals = np.array(face_normals, dtype=float)
         face_subvolumes = np.array(face_subvolumes, dtype=float)
 
@@ -1008,7 +1010,7 @@ class Mesh:
         cell_volumes = np.empty((n_cells), dtype=float)
         cell_inradius = np.empty((n_cells), dtype=float)
         cell_face_areas = np.empty((n_cells, n_faces_per_cell), dtype=float)
-        cell_face_normals = np.empty(
+        cell_face_normals = np.zeros(
             (n_cells, n_faces_per_cell, 3), dtype=float)
         cell_n_neighbors = np.empty((n_cells), dtype=int)
         cell_neighbors = np.empty((n_cells, n_faces_per_cell), dtype=int)
@@ -1059,7 +1061,7 @@ class Mesh:
 
         # truncate normals and positions from 3d to dimendion-d
         vertex_coordinates = vertex_coordinates.T[:, :dimension].T
-        cell_centers = cell_centers[:, :dimension]
+        cell_centers = cell_centers[:, :]
         # cell_face_normals = cell_face_normals[:, :, :dimension]
 
         # TODO
@@ -1076,9 +1078,9 @@ class Mesh:
         face_subvolumes = np.empty((n_faces, 2), dtype=float)
         boundary_conditions_sorted_physical_tags = np.array([0, 1], dtype=int)
         boundary_conditions_sorted_names = np.array(["left", "right"])
-        face_normals = np.zeros((n_faces, dimension + 1), dtype=float)
+        face_normals = np.zeros((n_faces, 3), dtype=float)
         face_volumes = np.zeros((n_faces), dtype=float)
-        face_centers = np.zeros((n_faces, dimension + 1), dtype=float)
+        face_centers = np.zeros((n_faces, 3), dtype=float)
         
         # hard coded guess
         n_face_neighbors = 0

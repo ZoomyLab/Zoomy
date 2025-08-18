@@ -496,9 +496,9 @@ class HyperbolicSolver(Solver):
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
             
-        Q = jax.put_device(Q)
-        Qaux = jax.put_device(Qaux)
-        mesh = jax.put_device(mesh)
+        Q = jax.device_put(Q)
+        Qaux = jax.device_put(Qaux)
+        mesh = jax.device_put(mesh)
 
         def run(Q, Qaux, parameters, model):
             iteration = 0.0

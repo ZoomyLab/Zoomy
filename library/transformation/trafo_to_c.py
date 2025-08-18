@@ -82,7 +82,7 @@ def create_c_model_interface(model, settings):
     parameters = MatrixSymbol('parameters', model.n_parameters, 1)
     normal = MatrixSymbol('normal', model.dimension, 1)
     position = MatrixSymbol('position', model.position, 1)
-    position_3d = MatrixSymbol('position_3d', model.position_3d, 1)
+    position = MatrixSymbol('position', model.position, 1)
     
 
     # deepcopy to not mess up the sympy expressions of the class - in case I want to call the function a second time

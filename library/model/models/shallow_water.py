@@ -31,9 +31,9 @@ class ShallowWaterEquations(Model):
     def interpolate_3d(self):
         out = Matrix([0 for i in range(5)])
         dim = self.dimension
-        x = self.position_3d[0]
-        y = self.position_3d[1]
-        z = self.position_3d[2]
+        x = self.position[0]
+        y = self.position[1]
+        z = self.position[2]
         h = self.variables[0]
         U = [hu / h for hu in self.variables[1:1+dim]]
         rho_w = 1000.

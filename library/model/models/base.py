@@ -128,7 +128,7 @@ class Model:
 
     time: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("t", real=True))
     distance: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("dX", real=True))
-    position_3d: Zstruct = field(init=False, factory=lambda: register_sympy_attribute(3, "X"))
+    position: Zstruct = field(init=False, factory=lambda: register_sympy_attribute(3, "X"))
 
     _simplify: Callable = field(factory=lambda: default_simplify)
 
@@ -141,7 +141,7 @@ class Model:
     aux_variables: Zstruct = field(default=0)
     parameter_values: FArray = field(init=False)
     normal: Matrix = field(init=False)
-    position: Zstruct = field(init=False)
+    # position: Zstruct = field(init=False)
     
 
 
@@ -151,7 +151,7 @@ class Model:
         # Use object.__setattr__ because class is frozen
         object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q"))
         object.__setattr__(self, "aux_variables", register_sympy_attribute(self.aux_variables, "qaux"))
-        object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
+        # object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
 
         object.__setattr__(self, "parameters", register_sympy_attribute(updated_default_parameters, "p"))
         object.__setattr__(self, "parameter_values", register_parameter_values(updated_default_parameters))

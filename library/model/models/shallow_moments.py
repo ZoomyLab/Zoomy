@@ -62,9 +62,9 @@ class ShallowMoments2d(Model):
         out = Matrix([0 for i in range(5)])
         level = self.level
         offset = level+1
-        x = self.position_3d[0]
-        y = self.position_3d[1]
-        z = self.position_3d[2]
+        x = self.position[0]
+        y = self.position[1]
+        z = self.position[2]
         h = self.variables[0]
         a = [self.variables[1+i]/h for i in range(offset)]
         b = [self.variables[1+offset+i]/h for i in range(offset)]
