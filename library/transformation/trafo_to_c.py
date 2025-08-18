@@ -19,7 +19,7 @@ def regularize_denominator(expr, regularization_constant = 10**(-4), regularize 
 def substitute_sympy_attributes_with_symbol_matrix(expr: Matrix, attr: Zstruct, attr_matrix: MatrixSymbol):
     if expr is None:
         return None
-    assert attr.length() == attr_matrix.shape[0]
+    assert attr.length() <= attr_matrix.shape[0]
     for i, k in enumerate(attr.get_list()):
         expr = Matrix(expr).subs(k, attr_matrix[i])
     return expr
@@ -80,9 +80,8 @@ def create_c_model_interface(model, settings):
     Q = MatrixSymbol('Q', model.n_variables, 1)
     Qaux = MatrixSymbol('Qaux', model.n_aux_variables, 1)
     parameters = MatrixSymbol('parameters', model.n_parameters, 1)
-    normal = MatrixSymbol('normal', model.dimension, 1)
-    position = MatrixSymbol('position', model.position, 1)
-    position = MatrixSymbol('position', model.position, 1)
+    normal = MatrixSymbol('normal', 3, 1)
+    position = MatrixSymbol('position', 3, 1)
     
 
     # deepcopy to not mess up the sympy expressions of the class - in case I want to call the function a second time
@@ -123,7 +122,7 @@ def create_c_model_interface(model, settings):
                              'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z',
                              'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
                              'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
-                             'source', 'source_jacobian', 'source_implicit', 'residual', 'interpolate_3d']
+                             'source', 'source_jacobian', 'source_implicit', 'residual']
     list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
     list_attributes_incl_normal = [model.variables, model.aux_variables, model.parameters, model.normal]
     if eigenvalues is not None:
@@ -132,6 +131,12 @@ def create_c_model_interface(model, settings):
     else:
         list_expressions_incl_normal = []
         list_expression_names_incl_normal = []
+    
+    list_matrix_symbols_incl_position = [Q, Qaux, parameters, position]
+    list_attributes_incl_position = [model.variables, model.aux_variables, model.parameters, model.position]
+    list_expressions_incl_position = [interpolate_3d]
+    list_expression_names_incl_position = ['interpolate_3d']
+
 
     # convert symbols to matrix symbols
     for i in range(len(list_expressions)):
@@ -140,14 +145,19 @@ def create_c_model_interface(model, settings):
     for i in range(len(list_expressions_incl_normal)):
         for attr, matrix_symbol in zip(list_attributes_incl_normal, list_matrix_symbols_incl_normal):
             list_expressions_incl_normal[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_incl_normal[i], attr, matrix_symbol)
+    for i in range(len(list_expressions_incl_position)):
+        for attr, matrix_symbol in zip(list_attributes_incl_position, list_matrix_symbols_incl_position):
+            list_expressions_incl_position[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_incl_position[i], attr, matrix_symbol)
             
 
     # aggregate data structure to be passed to the C converter module
     expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
     expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names_incl_normal, list_expressions_incl_normal)]
-
+    expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, position]) for (expr_name, expr) in zip(list_expression_names_incl_position, list_expressions_incl_position)]
+    
+    main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(settings.output.directory, '.c_interface')
-    directory = os.path.join(path, model.name)
+    directory = os.path.join(main_dir, os.path.join(path, model.name))
     module_name = 'model'
 
     # create c module
