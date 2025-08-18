@@ -1,5 +1,5 @@
 import os
-from sympy import MatrixSymbol, fraction, cancel, Matrix
+from sympy import MatrixSymbol, fraction, cancel, Matrix, symbols
 from copy import deepcopy
 
 from library.misc.misc import Zstruct
@@ -19,9 +19,12 @@ def regularize_denominator(expr, regularization_constant = 10**(-4), regularize 
 def substitute_sympy_attributes_with_symbol_matrix(expr: Matrix, attr: Zstruct, attr_matrix: MatrixSymbol):
     if expr is None:
         return None
-    assert attr.length() <= attr_matrix.shape[0]
-    for i, k in enumerate(attr.get_list()):
-        expr = Matrix(expr).subs(k, attr_matrix[i])
+    if type(attr) is Zstruct:
+        assert attr.length() <= attr_matrix.shape[0]
+        for i, k in enumerate(attr.get_list()):
+            expr = Matrix(expr).subs(k, attr_matrix[i])
+    else:
+        expr = Matrix(expr).subs(attr, attr_matrix)
     return expr
 
 
@@ -38,41 +41,41 @@ def save_model_to_C(model, settings):
     #     path=os.path.join(settings.output.directory, "c_interface")
     #     )
 
-## #TODO create c_boundary_interface similat to create_c_interface
-## def create_c_boundary_interface(model, path='.tmp/'):
-##     # define matrix symbols that will be used as substitutions for the currelty used symbols in the
-##     # expressions
-##     Q = MatrixSymbol('Q', model.n_variables, 1)
-##     Q_ghost = MatrixSymbol('Qg', model.n_variables, 1)
-##     Qaux = MatrixSymbol('Qaux', model.n_aux_variables, 1)
-##     parameters = MatrixSymbol('parameters', model.n_parameters, 1)
-##     normal = MatrixSymbol('normal', model.dimension, 1)
-## 
-## 
-##     sympy_boundary_functions = deepcopy(model.boundary_conditions.boundary_functions)
-##     #TODO create module
-##     #TODO delete the code below
-## 
-##     # aggregate all expressions that are substituted and converted to C into the right data structure
-##     list_matrix_symbols = [Q, Qaux, parameters, normal]
-##     list_attributes = [model.variables, model.aux_variables, model.parameters, model.sympy_normal]
-##     list_expressions = sympy_boundary_functions
-##     list_expression_names = [f'boundary_condition_{i}' for i in range(len(sympy_boundary_functions))]
-## 
-##     # convert symbols to matrix symbols
-##     for i in range(len(list_expressions)):
-##         for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
-##             list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
-##             
-## 
-##     # aggregate data structure to be passed to the C converter module
-##     expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
-## 
-##     directory = os.path.join(path, model.name)
-##     module_name = 'boundary_conditions'
-## 
-##     # create c module
-##     create_module(module_name, expression_name_tuples, directory)
+# #TODO create c_boundary_interface similat to create_c_interface
+# def create_c_boundary_interface(model, path='.tmp/'):
+#     # define matrix symbols that will be used as substitutions for the currelty used symbols in the
+#     # expressions
+#     Q = MatrixSymbol('Q', model.n_variables, 1)
+#     Q_ghost = MatrixSymbol('Qg', model.n_variables, 1)
+#     Qaux = MatrixSymbol('Qaux', model.n_aux_variables, 1)
+#     parameters = MatrixSymbol('parameters', model.n_parameters, 1)
+#     normal = MatrixSymbol('normal', model.dimension, 1)
+
+
+#     sympy_boundary_functions = deepcopy(model.boundary_conditions.boundary_functions)
+#     #TODO create module
+#     #TODO delete the code below
+
+#     # aggregate all expressions that are substituted and converted to C into the right data structure
+#     list_matrix_symbols = [Q, Qaux, parameters, normal]
+#     list_attributes = [model.variables, model.aux_variables, model.parameters, model.sympy_normal]
+#     list_expressions = sympy_boundary_functions
+#     list_expression_names = [f'boundary_condition_{i}' for i in range(len(sympy_boundary_functions))]
+
+#     # convert symbols to matrix symbols
+#     for i in range(len(list_expressions)):
+#         for attr, matrix_symbol in zip(list_attributes, list_matrix_symbols):
+#             list_expressions[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions[i], attr, matrix_symbol)
+            
+
+#     # aggregate data structure to be passed to the C converter module
+#     expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
+
+#     directory = os.path.join(path, model.name)
+#     module_name = 'boundary_conditions'
+
+#     # create c module
+#     create_module(module_name, expression_name_tuples, directory)
 
 def create_c_model_interface(model, settings):
     # define matrix symbols that will be used as substitutions for the currelty used symbols in the
@@ -82,6 +85,7 @@ def create_c_model_interface(model, settings):
     parameters = MatrixSymbol('parameters', model.n_parameters, 1)
     normal = MatrixSymbol('normal', 3, 1)
     position = MatrixSymbol('position', 3, 1)
+    time, distance = symbols(['time', 'distance'])
     
 
     # deepcopy to not mess up the sympy expressions of the class - in case I want to call the function a second time
@@ -97,6 +101,7 @@ def create_c_model_interface(model, settings):
     source_implicit = deepcopy(model.source_implicit())
     residual = deepcopy(model.residual())
     interpolate_3d = deepcopy(model.interpolate_3d())
+    boundary_conditions = deepcopy(model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, normal))
 
     # make all dimension dependent functions 3d to simplify the C part of the interface
     if model.dimension == 1:
@@ -123,6 +128,7 @@ def create_c_model_interface(model, settings):
                              'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
                              'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
                              'source', 'source_jacobian', 'source_implicit', 'residual']
+    
     list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
     list_attributes_incl_normal = [model.variables, model.aux_variables, model.parameters, model.normal]
     if eigenvalues is not None:
@@ -136,6 +142,11 @@ def create_c_model_interface(model, settings):
     list_attributes_incl_position = [model.variables, model.aux_variables, model.parameters, model.position]
     list_expressions_incl_position = [interpolate_3d]
     list_expression_names_incl_position = ['interpolate_3d']
+    
+    list_matrix_symbols_bc = [time, position, distance, Q, Qaux, parameters, normal]
+    list_attributes_bc = [model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal]
+    list_expressions_bc = [boundary_conditions]
+    list_expression_names_bc = ['boundary_conditions']
 
 
     # convert symbols to matrix symbols
@@ -148,12 +159,16 @@ def create_c_model_interface(model, settings):
     for i in range(len(list_expressions_incl_position)):
         for attr, matrix_symbol in zip(list_attributes_incl_position, list_matrix_symbols_incl_position):
             list_expressions_incl_position[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_incl_position[i], attr, matrix_symbol)
+    for i in range(len(list_expressions_bc)):
+        for attr, matrix_symbol in zip(list_attributes_bc, list_matrix_symbols_bc):
+            list_expressions_bc[i] = substitute_sympy_attributes_with_symbol_matrix(list_expressions_bc[i], attr, matrix_symbol)    
             
 
     # aggregate data structure to be passed to the C converter module
     expression_name_tuples = [(expr_name, expr, [Q, Qaux, parameters]) for (expr_name, expr) in zip(list_expression_names, list_expressions)]
     expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, normal]) for (expr_name, expr) in zip(list_expression_names_incl_normal, list_expressions_incl_normal)]
     expression_name_tuples += [(expr_name, expr, [Q, Qaux, parameters, position]) for (expr_name, expr) in zip(list_expression_names_incl_position, list_expressions_incl_position)]
+    expression_name_tuples += [(expr_name, expr, list_matrix_symbols_bc) for (expr_name, expr) in zip(list_expression_names_bc, list_expressions_bc)]
     
     main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(settings.output.directory, '.c_interface')

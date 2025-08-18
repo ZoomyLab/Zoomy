@@ -131,13 +131,12 @@ class Wall(BoundaryCondition):
 
     def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
         q = Matrix(Q)
-        n = Matrix(normal)
-        dim = normal.length()
         n_variables = Q.length()
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
+        dim = momentum_list[0].shape[0]
+        n = Matrix(normal[:dim])
         zero = 10 ** (-20) * q[0]
         h = q[0]
-        p = parameters
         out = Matrix([zero for i in range(n_variables)])
         out[0] = h
         momentum_list_wall = []
@@ -300,3 +299,13 @@ class BoundaryConditions:
     def get_boundary_function_list(self):
         assert self.initialized
         return self.boundary_functions
+    
+    def get_boundary_function_matrix(self, time, X, dX, Q, Qaux, parameters, normal):
+        n_variables = Q.length()
+        n_bcs = len(self.boundary_conditions)
+        out = Matrix.zeros(n_bcs, n_variables)
+        for i, bc in enumerate(self.boundary_conditions):
+            out[i] = bc.get_boundary_condition_function(
+                time, X, dX, Q, Qaux, parameters, normal
+            )
+        return out
