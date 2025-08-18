@@ -16,12 +16,12 @@ See our [Documentation](https://mbd-rwth.github.io/Zoomy/) for details on
 
 ### Conda/Mamba
 
-
 #### CPU (Linux / Mac)
 
 **Installation**
 
 ```
+cd install
 conda env create -f env-zoomy.yml
 ./conda_config_setup.sh
 ```
@@ -35,6 +35,7 @@ conda activate zoomy
 #### GPU (Linux / Mac)
 
 ```
+cd install
 conda env create -f env-zoomy-gpu.yml
 ./conda_config_setup.sh
 ```
@@ -69,7 +70,7 @@ PETSC_ARCH=architecture used for compiling petsc
 
 
 ## License
-The bryne code is free open-source software,
+The Zoomy code is free open-source software,
 licensed under version 3 or later of the GNU General Public License.
 See the file [LICENSE](LICENSE) for full copying permissions.
 
