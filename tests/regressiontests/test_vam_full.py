@@ -242,8 +242,8 @@ def solve_vam(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde1, bcs1 = solverQ.transform_in_place(model1)
-    pde2, bcs2 = solverP.transform_in_place(model2)
+    pde1, bcs1 = solverQ.to_jax(model1)
+    pde2, bcs2 = solverP.to_jax(model2)
     output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
@@ -464,8 +464,8 @@ def solve_vam_full(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde1, bcs1 = solverQ.transform_in_place(model1)
-    pde2, bcs2 = solverP.transform_in_place(model2)
+    pde1, bcs1 = solverQ.to_jax(model1)
+    pde2, bcs2 = solverP.to_jax(model2)
     output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
 
@@ -931,7 +931,7 @@ def solve_vam_fullyimplicit(
     
     mesh = convert_mesh_to_jax(mesh)
 
-    pde, bcs = solver.transform_in_place(model)
+    pde, bcs = solver.to_jax(model)
 
     output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)
