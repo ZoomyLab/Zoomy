@@ -29,6 +29,8 @@ dependencies:
   - pygments
   - swashes  # from lrntct channel
   - fenics-dolfinx 
+  - gmsh
+  - python-gmsh
   - pip
   - pip:
     - pyprog 
