@@ -309,7 +309,7 @@ class BoundaryConditions:
         n_bcs = len(self.boundary_conditions)
         out = Matrix.zeros(n_bcs, n_variables)
         for i, bc in enumerate(self.boundary_conditions):
-            out[i] = bc.get_boundary_condition_function(
+            out[i, :] = bc.get_boundary_condition_function(
                 time, X, dX, Q, Qaux, parameters, normal
-            )
+            ).T
         return out
