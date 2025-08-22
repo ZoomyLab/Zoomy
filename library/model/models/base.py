@@ -163,6 +163,34 @@ class Model:
         object.__setattr__(self, "n_variables", self.variables.length())
         object.__setattr__(self, "n_aux_variables", self.aux_variables.length())
         object.__setattr__(self, "n_parameters", self.parameters.length())
+        
+    def get_boundary_conditions_matrix_inputs(self):
+        """
+        Returns the inputs for the boundary conditions matrix.
+        """
+        return (
+            self.time,
+            self.position,
+            self.distance,
+            self.variables,
+            self.aux_variables,
+            self.parameters,
+            self.normal,
+        )
+        
+    def get_boundary_conditions_matrix_inputs_as_list(self):
+        """
+        Returns the inputs for the boundary conditions matrix where the Zstructs are converted to lists.
+        """
+        return [
+            self.time,
+            self.position.get_list(),
+            self.distance,
+            self.variables.get_list(),
+            self.aux_variables.get_list(),
+            self.parameters.get_list(),
+            self.normal.get_list(),
+        ]
 
 
     def _get_boundary_conditions(self, printer="jax"):

@@ -11,7 +11,7 @@ from attr import define, field
 from typing import Union, Optional, Callable, List, Dict
 
 from library.misc.custom_types import IArray, FArray
-import library.mesh.fvm_mesh as fvm_mesh
+import library.mesh.mesh as mesh
 from library.mesh.mesh_util import center
 from library.misc.misc import (
     project_in_x_y_and_recreate_Q,
@@ -282,6 +282,10 @@ class BoundaryConditions:
         mesh = self.resolve_periodic_bcs(mesh)
         self.initialized = True
         return mesh
+    
+    def map_physical_id_to_function_index(self, mesh):
+        dict_tag_to_name = {int(k): str(v) for k, v in zip(mesh.boundary_conditions_sorted_physical_tags, mesh.boundary_conditions_sorted_names)}
+        
 
     def get_precice_boundary_indices_to_bc_name(self, mesh):
         dict_physical_name_to_index = {
