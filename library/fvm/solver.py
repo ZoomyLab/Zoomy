@@ -36,7 +36,7 @@ from library.misc.misc import Zstruct, Settings
 import library.misc.transformation as transformation
 import library.fvm.ode as ode
 import library.fvm.timestepping as timestepping
-from library.model.models.base import RuntimeModel
+from library.model.models.base import JaxRuntimeModel
 
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
@@ -192,7 +192,7 @@ class Solver():
         jax_mesh = convert_mesh_to_jax(mesh)
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         parameters = jnp.asarray(model.parameter_values)
-        runtime_model = RuntimeModel.from_model(model)        
+        runtime_model = JaxRuntimeModel.from_model(model)        
         return Q, Qaux, parameters, jax_mesh, runtime_model
 
     def get_compute_source(self, mesh, model):

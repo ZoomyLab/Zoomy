@@ -3,6 +3,7 @@ import numpy as np
 import os
 from copy import deepcopy
 from ctypes import cdll
+import dolfinx
 
 import sympy
 from sympy import (
@@ -57,7 +58,7 @@ def vectorize_constant_sympy_expressions(expr, Q, Qaux):
 
 
 @define(kw_only=True, slots=True, frozen=True)
-class RuntimeModel:
+class JaxRuntimeModel:
     name: str = field()
     n_variables: int = field()
     n_aux_variables: int = field()
@@ -103,6 +104,8 @@ class RuntimeModel:
             interpolate_3d=pde.interpolate_3d,
             bcs=bcs,
         )
+        
+
 
 
 

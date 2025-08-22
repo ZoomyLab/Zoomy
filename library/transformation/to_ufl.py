@@ -5,6 +5,9 @@ import os
 from sympy import MatrixSymbol, fraction, cancel, Matrix, symbols
 from sympy.utilities.lambdify import lambdify
 from copy import deepcopy
+from typing import Callable
+from attrs import define, field
+import dolfinx
 
 import numpy as np
 
@@ -188,4 +191,118 @@ def to_ufl(model, settings):
     a = sympy_matrix_to_ufl(flux[0], list_matrix_symbols, ufl_vars)
     print(a)
     return a
+
+
+def get_ufl_boundary_functions(model):
+    boundary_function_matrix = model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs())
+    n_bcs = boundary_function_matrix.shape[0]
+    bc_funcs = []
+    for i in range(n_bcs):
+        bc_funcs.append(
+            lambdify(
+                # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+                (model.variables.get_list(),
+                 model.normal.get_list()
+                 ), # The (),) comma is crutial!
+                boundary_function_matrix[i, :].T,
+                ufl_map
+            )
+        )
+    return bc_funcs
+
+def get_lambda_function(model, function):
+    f = lambdify(
+        # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+        (
+            model.variables.get_list(),
+            model.aux_variables.get_list(),
+            model.parameters.get_list(),
+        ), # The (),) comma is crutial!
+        function,
+        ufl_map
+    )
+    return f
     
+def get_lambda_function_with_normal(model, function):
+    f = lambdify(
+        # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+        (
+            model.variables.get_list(),
+            model.aux_variables.get_list(),
+            model.parameters.get_list(),
+            model.normal.get_list()
+        ), # The (),) comma is crutial!
+        function,
+        ufl_map
+    )
+    return f
+
+def get_lambda_function_boundary(model, function):
+    f = lambdify(
+        # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+        (
+            model.time,
+            semodellf.position.get_list(),
+            model.distance,
+            model.variables.get_list(),
+            model.aux_variables.get_list(),
+            model.parameters.get_list(),
+            model.normal.get_list(),
+        ), # The (),) comma is crutial!
+        function,
+        ufl_map
+    )
+    return f
+    
+@define(kw_only=True, slots=True, frozen=True)
+class FenicsXRuntimeModel:
+    name: str = field()
+    n_variables: int = field()
+    n_aux_variables: int = field()
+    n_parameters: int = field()
+    parameters = field()
+    flux: Callable = field()
+    flux_jacobian: Callable = field()
+    source: Callable = field()
+    source_jacobian: Callable = field()
+    nonconservative_matrix: Callable = field()
+    quasilinear_matrix: Callable = field()
+    eigenvalues: Callable = field()
+    source_implicit: Callable = field()
+    residual: Callable = field()
+    interpolate_3d: Callable = field()
+    bcs: Callable = field()
+    dimension: int = field()
+    left_eigenvectors: Callable = field(default=None)
+    right_eigenvectors: Callable = field(default=None)
+
+    @classmethod
+    def from_model(cls, domain, model):
+        pde = model._get_pde()
+        bcs = model._get_boundary_conditions()
+        
+        parameters = [dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(p) for p in model.parameter_values)]
+        
+        
+        ## TODO CONINUE: lambdify function with above methods
+        return cls(
+            name=model.name,
+            dimension=model.dimension,
+            n_variables=model.n_variables,
+            n_aux_variables=model.n_aux_variables,
+            n_parameters=model.n_parameters,
+            parameters=parameters,
+            flux=get_lambda_function(model, pde.flux),
+            flux_jacobian=get_lambda_function(model, pde.flux_jacobian),
+            source=get_lambda_function(model, pde.source),
+            source_jacobian=pde.source_jacobian,
+            nonconservative_matrix=pde.nonconservative_matrix,
+            quasilinear_matrix=pde.quasilinear_matrix,
+            eigenvalues=pde.eigenvalues,
+            left_eigenvectors=pde.left_eigenvectors,
+            right_eigenvectors=pde.right_eigenvectors,
+            source_implicit=pde.source_implicit,
+            residual=pde.residual,
+            interpolate_3d=pde.interpolate_3d,
+            bcs=get_ufl_boundary_functions(model),
+        )
