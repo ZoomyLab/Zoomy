@@ -27,6 +27,7 @@ ufl_map = {
     "math.cos": ufl.cos,
     "math.tan": ufl.tan,
     "sqrt": ufl.sqrt,
+    "ImmutableDenseMatrix": ufl.as_vector,
 }
 
 
@@ -237,12 +238,26 @@ def get_lambda_function_with_normal(model, function):
     )
     return f
 
+def get_lambda_function_with_position(model, function):
+    f = lambdify(
+        # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+        (
+            model.position.get_list(),
+            model.variables.get_list(),
+            model.aux_variables.get_list(),
+            model.parameters.get_list(),
+        ), # The (),) comma is crutial!
+        function,
+        ufl_map
+    )
+    return f
+
 def get_lambda_function_boundary(model, function):
     f = lambdify(
         # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
         (
             model.time,
-            semodellf.position.get_list(),
+            model.position.get_list(),
             model.distance,
             model.variables.get_list(),
             model.aux_variables.get_list(),
@@ -253,6 +268,23 @@ def get_lambda_function_boundary(model, function):
         ufl_map
     )
     return f
+
+# def get_ufl_boundary_functions(model):
+#     boundary_function_matrix = model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs())
+#     n_bcs = boundary_function_matrix.shape[0]
+#     bc_funcs = []
+#     for i in range(n_bcs):
+#         bc_funcs.append(
+#             lambdify(
+#                 # tuple(model.get_boundary_conditions_matrix_inputs_as_list()),
+#                 (model.variables.get_list(),
+#                  model.normal.get_list()
+#                  ), # The (),) comma is crutial!
+#                 boundary_function_matrix[i, :].T,
+#                 trafo.ufl_map
+#             )
+#         )
+#     return bc_funcs
     
 @define(kw_only=True, slots=True, frozen=True)
 class FenicsXRuntimeModel:
@@ -278,13 +310,9 @@ class FenicsXRuntimeModel:
 
     @classmethod
     def from_model(cls, domain, model):
-        pde = model._get_pde()
-        bcs = model._get_boundary_conditions()
-        
-        parameters = [dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(p) for p in model.parameter_values)]
+        parameters = [dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(p)) for p in model.parameter_values]
         
         
-        ## TODO CONINUE: lambdify function with above methods
         return cls(
             name=model.name,
             dimension=model.dimension,
@@ -292,17 +320,17 @@ class FenicsXRuntimeModel:
             n_aux_variables=model.n_aux_variables,
             n_parameters=model.n_parameters,
             parameters=parameters,
-            flux=get_lambda_function(model, pde.flux),
-            flux_jacobian=get_lambda_function(model, pde.flux_jacobian),
-            source=get_lambda_function(model, pde.source),
-            source_jacobian=pde.source_jacobian,
-            nonconservative_matrix=pde.nonconservative_matrix,
-            quasilinear_matrix=pde.quasilinear_matrix,
-            eigenvalues=pde.eigenvalues,
-            left_eigenvectors=pde.left_eigenvectors,
-            right_eigenvectors=pde.right_eigenvectors,
-            source_implicit=pde.source_implicit,
-            residual=pde.residual,
-            interpolate_3d=pde.interpolate_3d,
-            bcs=get_ufl_boundary_functions(model),
+            flux=get_lambda_function(model, Matrix.hstack(*model.flux())),
+            flux_jacobian=get_lambda_function(model, Matrix.hstack(*model.flux_jacobian())),
+            source=get_lambda_function(model, model.source()),
+            source_jacobian=get_lambda_function(model, model.source_jacobian()),
+            nonconservative_matrix=get_lambda_function(model, Matrix.hstack(*model.nonconservative_matrix())),
+            quasilinear_matrix=get_lambda_function(model, Matrix.hstack(*model.quasilinear_matrix())),
+            eigenvalues=get_lambda_function_with_normal(model, model.eigenvalues()),
+            left_eigenvectors=get_lambda_function_with_normal(model, model.left_eigenvectors()),
+            right_eigenvectors=get_lambda_function_with_normal(model, model.right_eigenvectors()),
+            source_implicit=get_lambda_function(model, model.source_implicit()),
+            residual=get_lambda_function(model, model.residual()),
+            interpolate_3d=get_lambda_function_with_position(model, model.interpolate_3d()),
+            bcs=get_lambda_function_boundary(model, model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs()))
         )

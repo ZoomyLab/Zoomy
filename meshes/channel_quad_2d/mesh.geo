@@ -1,4 +1,4 @@
-scale = 0.025;
+scale = 0.125;
 
 Point(10) = {0, 0,  0, scale};
 Point(11) = {10, 0,  0, scale};
