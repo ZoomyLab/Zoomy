@@ -142,10 +142,10 @@ class AmrexPrinter(CXX11CodePrinter):
         """
         return text
 
-    def create_function_normal(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
+    def create_function_normal(self, name, expr, n_dof_q, n_dof_qaux, dim, target='res'):
         if type(expr) is list:
             dim = len(expr)
-            return [self.create_function_normal(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux) for i, dir in enumerate(['x', 'y', 'z'][:dim])]
+            return [self.create_function_normal(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux, dim) for i, dir in enumerate(['x', 'y', 'z'][:dim])]
         res_shape = expr.shape
         body = self.convert_expression_body(expr, target=target)
         text = f"""
@@ -154,7 +154,7 @@ class AmrexPrinter(CXX11CodePrinter):
     static {self.createSmallMatrix(*res_shape)}
     {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
     {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
-    {self.createSmallMatrix(3, 1)} const& normal) noexcept
+    {self.createSmallMatrix(dim, 1)} const& normal) noexcept
     {{
         auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
         {body}
@@ -184,7 +184,7 @@ class AmrexPrinter(CXX11CodePrinter):
         return text
 
 
-    def create_function_boundary(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
+    def create_function_boundary(self, name, expr, n_dof_q, n_dof_qaux, dim, target='res'):
         res_shape = expr.shape
         body = self.convert_expression_body(expr, target=target)
         text = f"""
@@ -193,7 +193,7 @@ class AmrexPrinter(CXX11CodePrinter):
     static {self.createSmallMatrix(*res_shape)}
     {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
     {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
-    {self.createSmallMatrix(3, 1)} const& normal, 
+    {self.createSmallMatrix(dim, 1)} const& normal, 
     {self.createSmallMatrix(3, 1)} const& position,
     amrex::Real const& time,
     amrex::Real const& dX) noexcept
@@ -215,14 +215,14 @@ class AmrexPrinter(CXX11CodePrinter):
         module_functions += self.create_function('flux_jacobian', model.flux(), n_dof, n_dof_qaux)
         module_functions += self.create_function('nonconservative_matrix', model.nonconservative_matrix(), n_dof, n_dof_qaux)
         module_functions += self.create_function('quasilinear_matrix', model.quasilinear_matrix(), n_dof, n_dof_qaux)
-        module_functions.append(self.create_function_normal('eigenvalues', model.eigenvalues(), n_dof, n_dof_qaux))
+        module_functions.append(self.create_function_normal('eigenvalues', model.eigenvalues(), n_dof, n_dof_qaux, dim))
         module_functions.append(self.create_function('left_eigenvectors', model.left_eigenvectors(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('right_eigenvectors', model.right_eigenvectors(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('source', model.source(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('residual', model.residual(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('source_implicit', model.source_implicit(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('interpolate_3d', model.interpolate_3d(), n_dof, n_dof_qaux))
-        module_functions.append(self.create_function_boundary('boundary_conditions', model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal), n_dof, n_dof_qaux))
+        module_functions.append(self.create_function_boundary('boundary_conditions', model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal), n_dof, n_dof_qaux, dim))
         full = self.create_file_header(n_dof, n_dof_qaux, dim) + '\n\n' + '\n\n'.join(module_functions) + self.create_file_footer()
         return full
     
