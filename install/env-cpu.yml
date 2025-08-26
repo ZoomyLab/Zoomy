@@ -28,6 +28,7 @@ dependencies:
   - panel
   - pygments
   - swashes  # from lrntct channel
+  - pyswashes
   - fenics-dolfinx 
   - gmsh
   - python-gmsh
