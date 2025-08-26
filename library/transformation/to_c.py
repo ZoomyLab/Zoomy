@@ -40,6 +40,36 @@ class AmrexPrinter(CXX11CodePrinter):
             if s in map:
                 return map[s]
         return super()._print_Symbol(s)
+    
+    def _print_Pow(self, expr):
+        """
+        Print a SymPy Power.
+
+        * integer exponent  -> amrex::Math::powi<EXP>(base)
+        * otherwise         -> amrex::Math::pow (run-time exponent)
+        """
+        base, exp = expr.as_base_exp()
+
+        # integer exponent ------------------------------------------------
+        if exp.is_Integer:
+            n = int(exp)
+
+            # 0, 1 and negative exponents inlined
+            if n == 0:
+                return "1.0"
+            if n == 1:
+                return self._print(base)
+            if n < 0:
+                # negative integer: 1 / powi<-n>(base)
+                return (f"(1.0 / amrex::Math::powi<{abs(n)}>("
+                        f"{self._print(base)}))")
+
+            # positive integer
+            return f"amrex::Math::powi<{n}>({self._print(base)})"
+
+        # non-integer exponent -------------------------------------------
+        return (f"amrex::Math::pow("
+                f"{self._print(base)}, {self._print(exp)})")
 
     # the only method we override
     def doprint(self, expr, **settings):
@@ -105,7 +135,7 @@ class AmrexPrinter(CXX11CodePrinter):
     {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
     {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux) noexcept
     {{
-        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
         {body}
         return {target};
     }}
@@ -126,7 +156,7 @@ class AmrexPrinter(CXX11CodePrinter):
     {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
     {self.createSmallMatrix(3, 1)} const& normal) noexcept
     {{
-        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
         {body}
         return {target};
 
@@ -145,7 +175,7 @@ class AmrexPrinter(CXX11CodePrinter):
     {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
     {self.createSmallMatrix(3, 1)} const& position) noexcept
     {{
-        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
         {body}
         return {target};
     }}
@@ -162,13 +192,13 @@ class AmrexPrinter(CXX11CodePrinter):
     AMREX_FORCE_INLINE
     static {self.createSmallMatrix(*res_shape)}
     {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,f
     {self.createSmallMatrix(3, 1)} const& normal, 
     {self.createSmallMatrix(3, 1)} const& position,
     amrex::Real const& time
     amrex::Real const& dX) noexcept
     {{
-        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
         {body}
         return {target};
 
