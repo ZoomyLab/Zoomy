@@ -68,108 +68,118 @@ class AmrexPrinter(CXX11CodePrinter):
             for j in range(expr.cols):
                 lines.append(f"{target}({i},{j}) = {self.doprint(simplified[0][i, j])};")
 
-        body = '\n    '.join(lines)
+        body = '\n        '.join(lines)
         return body
     
     def createSmallMatrix(self, rows, cols):
         return f"amrex::SmallMatrix<amrex::Real,{rows},{cols}>"
     
-    def create_file_header(self):
-        header = textwrap.dedent("""
+    def create_file_header(self, n_dof_q, n_dof_qaux, dim):
+        header = textwrap.dedent(f"""
         #pragma once
         #include <AMReX_Array4.H>
         #include <AMReX_Vector.H>
+        
+        class Model {{
+            static constexpr int n_dof_q    = {n_dof_q};
+            static constexpr int n_dof_qaux = {n_dof_qaux};
+            static constexpr int dimension  = {dim};
         """)
         return header
     
-    def create_function(self, name, expr, n_dof_q, n_dof_qaux):
+    def create_file_footer(self):
+        return  """
+};
+                """
+    
+    def create_function(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
         if type(expr) is list:
             dim = len(expr)
             return [self.create_function(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux) for i, dir in enumerate(['x', 'y', 'z'][:dim])]
         res_shape = expr.shape
-        header = textwrap.dedent(f"""
-        AMREX_GPU_HOST_DEVICE
-        AMREX_FORCE_INLINE
-        {self.createSmallMatrix(*res_shape)}
-        {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-            {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux) noexcept""")
-        body = self.convert_expression_body(expr, target='res')
-        full = f"""{header}
+        body = self.convert_expression_body(expr, target=target)
+        text = f"""
+    AMREX_GPU_HOST_DEVICE
+    AMREX_FORCE_INLINE
+    static {self.createSmallMatrix(*res_shape)}
+    {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux) noexcept
     {{
-    {body}
-    return res;
+        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        {body}
+        return {target};
     }}
         """
-        return full
+        return text
 
-    def create_function_normal(self, name, expr, n_dof_q, n_dof_qaux):
+    def create_function_normal(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
         if type(expr) is list:
             dim = len(expr)
             return [self.create_function_normal(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux) for i, dir in enumerate(['x', 'y', 'z'][:dim])]
         res_shape = expr.shape
-        header = textwrap.dedent(f"""
-        AMREX_GPU_HOST_DEVICE
-        AMREX_FORCE_INLINE
-        {self.createSmallMatrix(*res_shape)}
-        {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-            {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux, 
-            amrex::Real *const& normal) noexcept""")
-        body = self.convert_expression_body(expr, target='res')
-        full = f"""{header}
+        body = self.convert_expression_body(expr, target=target)
+        text = f"""
+    AMREX_GPU_HOST_DEVICE
+    AMREX_FORCE_INLINE
+    static {self.createSmallMatrix(*res_shape)}
+    {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
+    {self.createSmallMatrix(3, 1)} const& normal) noexcept
     {{
-    {body}
-    return res;
+        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        {body}
+        return {target};
+
     }}
         """
-        return full
+        return text
     
-    def create_function_interpolate(self, name, expr, n_dof_q, n_dof_qaux):
+    def create_function_interpolate(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
         res_shape = expr.shape
-        header = textwrap.dedent(f"""
-        AMREX_GPU_HOST_DEVICE
-        AMREX_FORCE_INLINE
-        {self.createSmallMatrix(*res_shape)}
-        {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-            {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux, 
-            amrex::Real const& position) noexcept""")
-        body = self.convert_expression_body(expr, target='res')
-        full = f"""{header}
+        body = self.convert_expression_body(expr, target=target)
+        text = f"""
+    AMREX_GPU_HOST_DEVICE
+    AMREX_FORCE_INLINE
+    static {self.createSmallMatrix(*res_shape)}
+    {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
+    {self.createSmallMatrix(3, 1)} const& position) noexcept
     {{
-    {body}
-    return res;
+        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        {body}
+        return {target};
     }}
+
         """
-        return full
+        return text
 
 
-    def create_function_boundary(self, name, expr, n_dof_q, n_dof_qaux):
-        if type(expr) is list:
-            return [self.create_function_boundary(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux) for i, dir in enumerate(['x', 'y', 'z'][:model.dimension])]
+    def create_function_boundary(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
         res_shape = expr.shape
-        header = textwrap.dedent(f"""\
-        AMREX_GPU_HOST_DEVICE
-        AMREX_FORCE_INLINE
-        {self.createSmallMatrix(*res_shape)}
-        {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-            {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux, 
-            amrex::Real const& normal, 
-            amrex::Real const& position,
-            amrex::Real const& time
-            amrex::Real const& dX) noexcept""")
-        body = self.convert_expression_body(expr, target='res')
-        full = f"""{header}
+        body = self.convert_expression_body(expr, target=target)
+        text = f"""
+    AMREX_GPU_HOST_DEVICE
+    AMREX_FORCE_INLINE
+    static {self.createSmallMatrix(*res_shape)}
+    {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
+    {self.createSmallMatrix(3, 1)} const& normal, 
+    {self.createSmallMatrix(3, 1)} const& position,
+    amrex::Real const& time
+    amrex::Real const& dX) noexcept
     {{
-    {body}
-    return res;
+        {target} = {self.createSmallMatrix(*res_shape)}{{}};
+        {body}
+        return {target};
+
     }}
         """
-        return full
+        return text
     
     def create_model(self, model):
         n_dof = model.n_variables
         n_dof_qaux = model.n_aux_variables
         dim =  model.dimension
-        text = self.create_file_header
         module_functions = []
         module_functions += self.create_function('flux', model.flux(), n_dof, n_dof_qaux)
         module_functions += self.create_function('flux_jacobian', model.flux(), n_dof, n_dof_qaux)
@@ -183,7 +193,7 @@ class AmrexPrinter(CXX11CodePrinter):
         module_functions.append(self.create_function('source_implicit', model.source_implicit(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('interpolate_3d', model.interpolate_3d(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function_boundary('boundary_conditions', model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal), n_dof, n_dof_qaux))
-        full = self.create_file_header() + '\n\n' + '\n\n'.join(module_functions)
+        full = self.create_file_header(n_dof, n_dof_qaux, dim) + '\n\n' + '\n\n'.join(module_functions) + self.create_file_footer()
         return full
     
 
