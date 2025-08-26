@@ -68,7 +68,7 @@ class AmrexPrinter(CXX11CodePrinter):
             for j in range(expr.cols):
                 lines.append(f"{target}({i},{j}) = {self.doprint(simplified[0][i, j])};")
 
-        body = '\n            '.join(lines)
+        body = '\n    '.join(lines)
         return body
     
     def createSmallMatrix(self, rows, cols):
@@ -117,8 +117,8 @@ class AmrexPrinter(CXX11CodePrinter):
         body = self.convert_expression_body(expr, target='res')
         full = f"""{header}
     {{
-        {body}
-        return res;
+    {body}
+    return res;
     }}
         """
         return full
@@ -135,8 +135,8 @@ class AmrexPrinter(CXX11CodePrinter):
         body = self.convert_expression_body(expr, target='res')
         full = f"""{header}
     {{
-        {body}
-        return res;
+    {body}
+    return res;
     }}
         """
         return full
@@ -158,10 +158,10 @@ class AmrexPrinter(CXX11CodePrinter):
             amrex::Real const& dX) noexcept""")
         body = self.convert_expression_body(expr, target='res')
         full = f"""{header}
-        {{
-            {body}
-            return res;
-        }}
+    {{
+    {body}
+    return res;
+    }}
         """
         return full
     
