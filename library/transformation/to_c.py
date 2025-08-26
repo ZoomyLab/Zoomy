@@ -24,7 +24,7 @@ class AmrexPrinter(CXX11CodePrinter):
         self.map_Q = {k: f"Q({i})" for i, k in enumerate(model.variables.values())}
         self.map_Qaux = {k: f"Qaux({i})" for i, k in enumerate(model.aux_variables.values())}
         self.map_param = {k: str(float(model.parameter_values[i])) for i, k in enumerate(model.parameters.values())}
-        self.map_normal = {k:  f"n({i})" for i, k in enumerate(model.normal.values())}
+        self.map_normal = {k:  f"normal({i})" for i, k in enumerate(model.normal.values())}
         self.map_position = {k:  f"X({i})" for i, k in enumerate(model.position.values())}
 
 
