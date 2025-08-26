@@ -28,9 +28,8 @@ class AmrexPrinter(CXX11CodePrinter):
         self.map_position = {k:  f"X({i})" for i, k in enumerate(model.position.values())}
 
 
-        self.custom_map = {}
+        self._custom_map = set({})
         # names that should *keep* their std:: prefix
-        self._keep_std = set(self.custom_map or ())
 
         # pre-compile regex  std::something(
         self._std_regex = re.compile(r'std::([A-Za-z_]\w*)')
@@ -78,10 +77,10 @@ class AmrexPrinter(CXX11CodePrinter):
         # callback that the regex will call for every match
         def _repl(match):
             fname = match.group(1)
-            if fname in self._keep_std:
-                return f'std::{fname}'
+            if fname in self._custom_map:
+                return self._custom_map[fname]
             else:
-                return f'amrex::Math::{fname}'
+                return f'std::{fname}'
 
         # apply the replacement to the whole code string
         return self._std_regex.sub(_repl, code) 
