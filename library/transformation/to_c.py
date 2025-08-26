@@ -192,10 +192,10 @@ class AmrexPrinter(CXX11CodePrinter):
     AMREX_FORCE_INLINE
     static {self.createSmallMatrix(*res_shape)}
     {name} ( {self.createSmallMatrix(n_dof_q, 1)} const& Q,
-    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,f
+    {self.createSmallMatrix(n_dof_qaux, 1)} const& Qaux,
     {self.createSmallMatrix(3, 1)} const& normal, 
     {self.createSmallMatrix(3, 1)} const& position,
-    amrex::Real const& time
+    amrex::Real const& time,
     amrex::Real const& dX) noexcept
     {{
         auto {target} = {self.createSmallMatrix(*res_shape)}{{}};
