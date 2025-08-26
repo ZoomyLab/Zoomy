@@ -40,7 +40,7 @@ class ShallowMoments2d(Model):
     )
 
     def __attrs_post_init__(self):
-        object.__setattr__(self, "variables", (self.level+1*2)+1)
+        object.__setattr__(self, "variables", ((self.level+1)*2)+1)
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
