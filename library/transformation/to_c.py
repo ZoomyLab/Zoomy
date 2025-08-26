@@ -68,7 +68,7 @@ class AmrexPrinter(CXX11CodePrinter):
             return f"amrex::Math::powi<{n}>({self._print(base)})"
 
         # non-integer exponent -------------------------------------------
-        return (f"amrex::pow("
+        return (f"std::pow("
                 f"{self._print(base)}, {self._print(exp)})")
 
     # the only method we override
