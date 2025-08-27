@@ -19,6 +19,10 @@ from library.misc.misc import Zstruct
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowWaterEquations(Model):
+    dimension: int = 1
+
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowWaterEquations(Model):
     dimension: int = 2
     variables: Zstruct = field(init=False, default=dimension + 1)
     aux_variables: Zstruct = field(default=2)

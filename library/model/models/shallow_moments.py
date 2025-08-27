@@ -24,6 +24,9 @@ import library.model.initial_conditions as IC
 from library.model.models.basismatrices import Basismatrices
 from library.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowMoments(Model):
+    dimension: int = 1
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowMoments2d(Model):
