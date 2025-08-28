@@ -1,0 +1,28 @@
+# ---------------- init ----------------
+init.dem_field      = 0
+init.release_field  = 1
+
+# ---------------- output --------------
+output.test_case        = 0
+output.identifier       = 0
+output.plot_dt_interval = 0.04
+
+# ---------------- solver --------------
+solver.time_end  = 0.2
+solver.dt        = 1.e-5
+solver.adapt_dt  = true
+solver.cfl       = 0.45
+
+# ---------------- geometry ------------
+geometry.n_cell_x = 1537
+geometry.n_cell_y = 887
+geometry.phy_bb_x0 = 0.0
+geometry.phy_bb_y0 = 0.0
+geometry.phy_bb_x1 = 7685.0
+geometry.phy_bb_y1 = 4435.0
+geometry.dem_file = "/rwthfs/rz/cluster/home/is086873/Git/Zoomy/data/ca_elev.raw"
+geometry.release_file = "/rwthfs/rz/cluster/home/is086873/Git/Zoomy/data/ca_debrisflow.raw"
+
+# ---------------- grid ----------------
+grid.max_grid_size_x = 32
+grid.max_grid_size_y = 32

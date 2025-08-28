@@ -1,0 +1,153 @@
+#ifndef RIEMANN
+#define RIEMANN
+#include "AMReX_Array4.H"
+#include "model.h"
+#include "constants.H"
+
+//AMREX_GPU_DEVICE
+//AMREX_FORCE_INLINE
+//VecQ
+//price_c (VecQ Qi, VecQ Qj, amrex::Real Vi, amrex::Real Vj, amrex::Real Vij)
+//{
+//    // Gauss quadrature points shifted from [-1, 1] to [0, 1]
+//    amrex::Real wi[3] = {0.5*5./9., 0.5*8./9., 0.5*5./9.};
+//    amrex::Real xi[3] = {0.5*(-sqrt(3./5.)+1), 0.5, 0.5*(sqrt(3./5.)+1)};
+//
+//    MatQ Aint{};
+//    VecQ q{};
+//    for (int iquad=0; iquad<3; ++iquad){
+//        q = Qi + xi[iquad] * (Qj-Qi);
+//        Aint += wi[iquad] * A(q);
+//    }
+//
+//    MatQ Asq = Aint * Aint;
+//    MatQ I = MatQ::Identity();
+//
+//    MatQ Am;
+//    VecQ fluctuation;
+//    VecQ dQ;
+//    // Subcell areas
+//    amrex::Real svi = Vi/4.;
+//    amrex::Real svj = Vj/4.;
+//    // TODO this needs to be an input. However, integrator.evolve does not pass this info on
+//    amrex::Real dt =0.0001;
+//
+//    // Approximation of A-|A|
+//    Am = 0.5 * Aint - (svi * svj)/(svi + svj) * 1./(dt * Vij) * I - 1./4. * (dt * Vij)/(svi + svj) * Asq;
+//    dQ = Qj-Qi;
+//    fluctuation = (Am * dQ) * (Vij / Vi);
+//
+//
+//    return fluctuation;
+//
+//}
+//
+//AMREX_GPU_DEVICE
+//AMREX_FORCE_INLINE
+//VecQ
+//uprice (VecQ Qi, VecQ Qj, amrex::Real Vi, amrex::Real Vij, std::function<MatQ(VecQ)> A, std::function<VecQ(VecQ)> eigenvalues)
+//{
+//    // TODO not working. But I can't find literature besides a (wrong?) citation in Koellermeier's dis.
+//    
+//    // Gauss quadrature points shifted from [-1, 1] to [0, 1]
+//    amrex::Real wi[3] = {0.5*5./9., 0.5*8./9., 0.5*5./9.};
+//    amrex::Real xi[3] = {0.5*(-sqrt(3./5.)+1), 0.5, 0.5*(sqrt(3./5.)+1)};
+//
+//    MatQ Aint{};
+//    VecQ q{};
+//    for (int iquad=0; iquad<3; ++iquad){
+//        q = Qi + xi[iquad] * (Qj-Qi);
+//        Aint += wi[iquad] * A(q);
+//    }
+//
+//    MatQ Asq = Aint * Aint;
+//    MatQ I = MatQ::Identity();
+//
+//    MatQ Am;
+//    VecQ fluctuation;
+//    VecQ dQ;
+//
+//    VecQ ev_i = eigenvalues(Qi);
+//    VecQ ev_j = eigenvalues(Qj);
+//    amrex::Real s1  = ev_i(0, 0);
+//    amrex::Real sM  = ev_i(0, 0);
+//    for (int i=0; i<n_dof; ++i)
+//    {
+//        s1 = std::min(s1, amrex::min(ev_i(i, 0), ev_j(i, 0)));
+//        sM = std::max(sM, amrex::max(ev_i(i, 0), ev_j(i, 0)));
+//    }
+//    s1 = std::abs(s1);
+//    sM = std::abs(sM);
+//
+//    // Approximation of A-|A|
+//    Am = 0.5 * (Aint - (s1 * sM)/(s1 + sM) * I - 1./(s1 + sM) * Asq);
+//    dQ = Qj-Qi;
+//    fluctuation = (Am * dQ) * (Vij / Vi);
+//
+//    return fluctuation;
+//}
+
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+VecQ
+rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Real sign, amrex::Real Vi, amrex::Real Vij, std::function<MatQ(VecQ, VecQaux)> A)
+{
+    VecQ fluctuation{};
+    int n_dof = Model::n_dof_q;
+
+
+    amrex::Real eps = 1e-4;
+    amrex::Real eps_low = 1e-1;
+
+    int ib = n_dof - 1;
+    // I am a wall from the viewpoint of my neighbor
+    // TODO this should become a wall boundary condition
+    if (Qi(0,0) < eps && Qi(ib,0) > Qj(0,0) + Qj(ib,0)) return fluctuation;
+    // My neighbor a wall for me
+    // TODO this should become a wall boundary condition
+    if (Qj(0,0) < eps && Qj(ib,0) > Qi(0,0) + Qi(ib,0)) return fluctuation;
+    // My neighbor is dry 
+    //if (Qj(0,0) < eps) return fluctuation;
+    
+    //Qi = wet_dry_fix(Qi);
+    //Qj = wet_dry_fix(Qj);
+
+    // Gauss quadrature points shifted from [-1, 1] to [0, 1]
+    amrex::Real wi[3] = {0.5*5./9., 0.5*8./9., 0.5*5./9.};
+    amrex::Real xi[3] = {0.5*(-sqrt(3./5.)+1), 0.5, 0.5*(sqrt(3./5.)+1)};
+
+    MatQ Aint{};
+    VecQ q{};
+    VecQaux qaux{};
+    for (int iquad=0; iquad<3; ++iquad){
+        q = Qi + xi[iquad] * (Qj-Qi);
+        qaux = Qauxi + xi[iquad] * (Qauxj-Qauxi);
+        Aint += wi[iquad] * A(q, qaux);
+    }
+
+    MatQ Asq = Aint * Aint;
+    MatQ I = MatQ::Identity();
+    //I(0,ib) = 1.;
+    //I(ib,ib) = 0.;
+
+    MatQ Am;
+    VecQ dQ;
+
+    VecQ ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    VecQ ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    amrex::Real sM  = std::abs(ev_i(0, 0));
+    for (int i=0; i<n_dof; ++i)
+    {
+        sM = std::max(sM, amrex::max(std::abs(ev_i(i, 0)), std::abs(ev_j(i, 0))));
+    }
+
+    // Approximation of A +/- |A| with |A| the numerical viscosity approx. by max eigenvalue
+    Am = 0.5*(Aint -sign*sM * I);
+    dQ = sign*(Qj-Qi);
+    fluctuation = (Am * dQ) * (Vij / Vi);
+
+    return fluctuation;
+
+}
+
+#endif
