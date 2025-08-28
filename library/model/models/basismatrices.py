@@ -10,7 +10,7 @@ from library.model.models.basisfunctions import Legendre_shifted
 
 
 class Basismatrices:
-    def __init__(self, basis=Legendre_shifted(), use_cache=True, cache_path=".cache"):
+    def __init__(self, basis=Legendre_shifted(), use_cache=False, cache_path=".cache"):
         self.basisfunctions = basis
         self.use_cache = use_cache
         self.cache_dir = cache_path
@@ -46,13 +46,20 @@ class Basismatrices:
 
     def _compute_matrices(self, level):
         start = get_time()
-        self.M = np.empty((level + 1, level + 1), dtype=float)
-        self.A = np.empty((level + 1, level + 1, level + 1), dtype=float)
-        self.B = np.empty((level + 1, level + 1, level + 1), dtype=float)
-        self.D = np.empty((level + 1, level + 1), dtype=float)
-        self.DD = np.empty((level + 1, level + 1), dtype=float)
-        self.D1 = np.empty((level + 1, level + 1), dtype=float)
-        self.DT = np.empty((level + 1, level + 1, level + 1), dtype=float)
+        # self.M = np.empty((level + 1, level + 1), dtype=float)
+        # self.A = np.empty((level + 1, level + 1, level + 1), dtype=float)
+        # self.B = np.empty((level + 1, level + 1, level + 1), dtype=float)
+        # self.D = np.empty((level + 1, level + 1), dtype=float)
+        # self.DD = np.empty((level + 1, level + 1), dtype=float)
+        # self.D1 = np.empty((level + 1, level + 1), dtype=float)
+        # self.DT = np.empty((level + 1, level + 1, level + 1), dtype=float)
+        self.M = np.empty((level + 1, level + 1))
+        self.A = np.empty((level + 1, level + 1, level + 1))
+        self.B = np.empty((level + 1, level + 1, level + 1))
+        self.D = np.empty((level + 1, level + 1))
+        self.DD = np.empty((level + 1, level + 1))
+        self.D1 = np.empty((level + 1, level + 1))
+        self.DT = np.empty((level + 1, level + 1, level + 1))
 
         for k in range(level + 1):
             for i in range(level + 1):
@@ -67,11 +74,12 @@ class Basismatrices:
         print(f"Time compute matrices: {get_time() - start}")
 
     def compute_matrices(self, level):
+        failed = True
         if self.use_cache:
             failed = self.load_cached_matrices()
-            if failed:
-                self._compute_matrices(level)
-                self.save_cached_matrices()
+        if failed or (not self.use_cache):
+            self._compute_matrices(level)
+            self.save_cached_matrices()
 
     def enforce_boundary_conditions_lsq(self, rhs=np.zeros(2), dim=1):
         level = len(self.basisfunctions.basis) - 1

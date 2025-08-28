@@ -41,7 +41,7 @@ def vtk_interpolate_3d(
         Q = group["Q"][()]
         Qaux = group["Qaux"][()]
 
-        rhoUVWP = np.zeros((Q.shape[1] * Nz, 5), dtype=float)
+        rhoUVWP = np.zeros((Q.shape[1] * Nz, 6), dtype=float)
 
         #for i_elem, (q, qaux) in enumerate(zip(Q.T, Qaux.T)):
         #    for iz, z in enumerate(Z):

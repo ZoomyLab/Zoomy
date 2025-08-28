@@ -33,6 +33,7 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
     // These must be in the same order as the components in the solution MultiFab solution_3d
     //
     Vector<std::string> var_names;
+    var_names.push_back("b");
     var_names.push_back("h");
     var_names.push_back("u");
     var_names.push_back("v");
@@ -57,7 +58,7 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
 
     geom_3d.define(domain_3d, rb, CoordSys::cartesian, geom.isPeriodic());
 
-    int ncomp  = 5;
+    int ncomp  = 6;
     int nghost = 0;
 
     int n_dof = Model::n_dof_q;

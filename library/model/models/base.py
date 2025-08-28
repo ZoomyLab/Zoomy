@@ -486,7 +486,7 @@ class Model:
         return zeros(self.n_variables, 1)
     
     def interpolate_3d(self):
-        return zeros(5, 1)
+        return zeros(6, 1)
 
 
     def eigenvalues(self):
