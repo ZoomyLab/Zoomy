@@ -24,7 +24,7 @@ except ModuleNotFoundError as err:
 
 try:
     import precice
-except ModuleNotFoundError as err:
+except (ModuleNotFoundError, Exception) as err:
     logger.warning(err)
 
 
@@ -523,7 +523,7 @@ class HyperbolicSolver(Solver):
             source_operator = self.get_compute_source(mesh, model)
             boundary_operator = self.get_apply_boundary_conditions(mesh, model)
 
-            @jax.jit
+            # @jax.jit
             @partial(jax.named_call, name="time loop")
             def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
                 loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
@@ -564,7 +564,6 @@ class HyperbolicSolver(Solver):
                         iteration, time, dt, time_stamp 
                     )
                     
-
                     return (time, iteration, i_snapshot, Q3, Qaux)
 
                 def proceed(loop_val):

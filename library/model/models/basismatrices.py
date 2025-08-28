@@ -53,13 +53,13 @@ class Basismatrices:
         # self.DD = np.empty((level + 1, level + 1), dtype=float)
         # self.D1 = np.empty((level + 1, level + 1), dtype=float)
         # self.DT = np.empty((level + 1, level + 1, level + 1), dtype=float)
-        self.M = np.empty((level + 1, level + 1))
-        self.A = np.empty((level + 1, level + 1, level + 1))
-        self.B = np.empty((level + 1, level + 1, level + 1))
-        self.D = np.empty((level + 1, level + 1))
-        self.DD = np.empty((level + 1, level + 1))
-        self.D1 = np.empty((level + 1, level + 1))
-        self.DT = np.empty((level + 1, level + 1, level + 1))
+        self.M = np.empty((level + 1, level + 1), dtype=object)
+        self.A = np.empty((level + 1, level + 1, level + 1), dtype=object)
+        self.B = np.empty((level + 1, level + 1, level + 1), dtype=object)
+        self.D = np.empty((level + 1, level + 1), dtype=object)
+        self.DD = np.empty((level + 1, level + 1), dtype=object)
+        self.D1 = np.empty((level + 1, level + 1), dtype=object)
+        self.DT = np.empty((level + 1, level + 1, level + 1), dtype=object)
 
         for k in range(level + 1):
             for i in range(level + 1):

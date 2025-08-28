@@ -371,6 +371,7 @@ def generate_vtk(
     for snapshot in snapshots:
         time = file_fields[snapshot]["time"][()]
         Q = file_fields[snapshot]["Q"][()]
+
         if not skip_aux:
             Qaux = file_fields[snapshot]["Qaux"][()]
         else:

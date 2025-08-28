@@ -62,7 +62,7 @@ class ShallowMoments2d(Model):
 
 
     def interpolate_3d(self):
-        out = Matrix([0 for i in range(5)])
+        out = Matrix([0 for i in range(6)])
         level = self.level
         offset = level+1
         x = self.position[0]
