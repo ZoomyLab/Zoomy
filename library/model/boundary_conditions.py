@@ -136,9 +136,8 @@ class Wall(BoundaryCondition):
         dim = momentum_list[0].shape[0]
         n = Matrix(normal[:dim])
         zero = 10 ** (-20) * q[0]
-        h = q[0]
         out = Matrix([zero for i in range(n_variables)])
-        out[0] = h
+        out = q
         momentum_list_wall = []
         for momentum in momentum_list:
             normal_momentum_coef = momentum.dot(n)

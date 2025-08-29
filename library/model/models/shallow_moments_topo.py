@@ -30,7 +30,7 @@ class ShallowMomentsTopo(Model):
     dimension: int = 2
     level: int
     variables: Union[list, int] = field(init=False)
-    aux_variables: Union[list, int] = field(default=2)
+    aux_variables: Union[list, int] = field(default=0)
     basisfunctions: Union[Basisfunction, type[Basisfunction]] = field(default=Legendre_shifted)
     basismatrices: Basismatrices = field(init=False)
 
@@ -44,10 +44,6 @@ class ShallowMomentsTopo(Model):
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
-        if not aux_variables.contains("dudx"):
-            aux_var_list += ["dudx"]
-        if self.dimension == 2 and not aux_variables.contains("dvdy"):
-            aux_var_list += ["dvdy"]
         object.__setattr__(self, "aux_variables", register_sympy_attribute(aux_var_list, "qaux_"))
 
         # Recompute basis matrices
@@ -76,10 +72,11 @@ class ShallowMomentsTopo(Model):
         y = self.position[1]
         z = self.position[2]
         b, h, alpha, beta, hinv = self.get_primitives()
-        dudx = self.aux_variables.dudx
-        dvdy = self.aux_variables.dvdy
-        rho_w = 1000.
-        g = 9.81
+        dalphadx = self.aux_variables[1:1+offset]
+        dbetady = self.aux_variables[1+offset:1+2*offset]
+        assert "rho" in vars(self.parameters)
+        assert "g" in vars(self.parameters)
+        p = self.parameters
         u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(alpha, z)
         v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(beta, z)
         out[0] = b
@@ -87,7 +84,7 @@ class ShallowMomentsTopo(Model):
         out[2] = u_3d
         out[3] = v_3d
         out[4] = 0
-        out[5] = rho_w * g * h * (1-z)
+        out[5] = p.rho * p.g * h * (1-z)
         return out
 
     def flux(self):
@@ -208,7 +205,7 @@ class ShallowMomentsTopo(Model):
                 out[1+1 + k] += (
                     -p.nu
                     * alpha[i]
-                    / h
+                    * hinv
                     * self.basismatrices.D[i, k]
                     / self.basismatrices.M[k, k]
                 )
@@ -224,6 +221,8 @@ class ShallowMomentsTopo(Model):
     def slip_mod(self):
         assert "lamda" in vars(self.parameters)
         assert "rho" in vars(self.parameters)
+        assert "c_slipmod" in vars(self.parameters)
+
         out = Matrix([0 for i in range(self.n_variables)])
         offset = self.level+1
         b, h, alpha, beta, hinv = self.get_primitives()
@@ -283,18 +282,35 @@ class ShallowMomentsTopo(Model):
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
+    ref_model: Model = field(init=False)
     
-    def get_primitives(self):
-        offset = self.level + 1
-        b = self.variables[0]
-        h = self.variables[1]
-        hinv = 1/h
-        ha = self.variables[2 : 2 + self.level + 1]
-        hb = self.variables[2 + offset : 2 + offset + self.level + 1]
-        alpha = [ha[i] * hinv for i in range(offset)]
-        beta = [hb[i] * hinv for i in range(offset)]
-        return [b, h, alpha, beta, hinv]
+    def __attrs_post_init__(self):
+        super().__attrs_post_init__()
+        object.__setattr__(self, "ref_model", ShallowMomentsTopo(level=self.level, dimension=self.dimension, boundary_conditions=self.boundary_conditions))
+
+    def flux(self):
+        return [self.substitute_precomputed_denominator(f, self.variables[1], self.aux_variables.hinv) for f in self.ref_model.flux()]      
     
+    def nonconservative_matrix(self):
+        return [self.substitute_precomputed_denominator(f, self.variables[1], self.aux_variables.hinv) for f in self.ref_model.nonconservative_matrix()]  
+    
+    def quasilinear_matrix(self):
+        return [self.substitute_precomputed_denominator(f, self.variables[1], self.aux_variables.hinv) for f in self.ref_model.quasilinear_matrix()]    
+    
+    def source(self):
+        return self.substitute_precomputed_denominator(self.ref_model.source(), self.variables[1], self.aux_variables.hinv)
+    
+    def source_implicit(self):
+        return self.substitute_precomputed_denominator(self.ref_model.source_implicit(), self.variables[1], self.aux_variables.hinv)
+    
+    def residual(self):
+        return self.substitute_precomputed_denominator(self.ref_model.residual(), self.variables[1], self.aux_variables.hinv)
+    
+    def left_eigenvalues(self):
+        return self.substitute_precomputed_denominator(self.ref_model.left_eigenvalues(), self.variables[1], self.aux_variables.hinv)
+    
+    def right_eigenvalues(self):
+        return self.substitute_precomputed_denominator(self.ref_model.right_eigenvalues(), self.variables[1], self.aux_variables.hinv)
+
     def eigenvalues(self):
-        model = ShallowMomentsTopo(level=self.level, dimension=self.dimension, boundary_conditions=self.boundary_conditions)
-        return model.eigenvalues()
+        return self.substitute_precomputed_denominator(self.ref_model.eigenvalues(), self.variables[1], self.aux_variables.hinv)

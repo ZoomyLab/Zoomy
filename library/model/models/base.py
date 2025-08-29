@@ -6,6 +6,7 @@ from ctypes import cdll
 import dolfinx
 
 import sympy
+
 from sympy import (
     Matrix,
     lambdify,
@@ -149,7 +150,7 @@ class Model:
 
 
     def __attrs_post_init__(self):
-        updated_default_parameters = {**self._default_parameters, **self.parameters}
+        updated_default_parameters = {**self._default_parameters, **self.parameters.as_dict()}
 
         # Use object.__setattr__ because class is frozen
         object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q"))
@@ -500,6 +501,27 @@ class Model:
     
     def right_eigenvectors(self):
         return zeros(self.n_variables, self.n_variables)
+    
+    def substitute_precomputed_denominator(self, expr, sym, sym_inv):
+        if isinstance(expr, sympy.MatrixBase):
+            return expr.applyfunc(lambda e: self.substitute_precomputed_denominator(e, sym, sym_inv))
+
+        num, den = sympy.fraction(expr)
+        if den.has(sym):
+            # split into (part involving sym, part not involving sym)
+            den_sym, den_rest = den.as_independent(sym, as_Add=False)
+            # careful: as_independent returns (independent, dependent)
+            # so we need to swap naming
+            den_rest, den_sym = den_sym, den_rest
+
+            # replace sym by sym_inv in the sym-dependent part
+            den_sym_repl = den_sym.xreplace({sym: sym_inv})
+
+            return self.substitute_precomputed_denominator(num, sym, sym_inv) * den_sym_repl / den_rest
+        elif expr.args:
+            return expr.func(*[self.substitute_precomputed_denominator(arg, sym, sym_inv) for arg in expr.args])
+        else:
+            return expr
 
 
 def register_sympy_attribute(argument, string_identifier="q_"):

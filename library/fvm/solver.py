@@ -39,7 +39,7 @@ import library.fvm.timestepping as timestepping
 from library.model.models.base import JaxRuntimeModel
 
 
-def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
+def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=1):
     if iteration % log_every == 0:
         logger.info(
             f"iteration: {int(iteration)}, time: {float(time):.6f}, "
@@ -301,6 +301,13 @@ class Solver():
 
         return apply_boundary_conditions
     
+    def update_q(self, Q, Qaux, mesh, model, parameters):
+        """
+        Update variables before the solve step.
+        """
+        # This is a placeholder implementation. Replace with actual logic as needed.
+        return Q
+    
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
         """
         Update auxiliary variables
@@ -487,11 +494,15 @@ class HyperbolicSolver(Solver):
         
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
         
+        # init once with dummy values for dt
+        # Qaux = self.update_qaux(Q, Qaux, Q, Qaux, mesh, model, parameters, 0.0, 1.0)
+
+        
         if write_output:
             output_hdf5_path = os.path.join(
                 self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
-            save_fields = io.get_save_fields(output_hdf5_path)
+            save_fields = io.get_save_fields(output_hdf5_path, write_all=True)
         else:
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
@@ -523,7 +534,7 @@ class HyperbolicSolver(Solver):
             source_operator = self.get_compute_source(mesh, model)
             boundary_operator = self.get_apply_boundary_conditions(mesh, model)
 
-            # @jax.jit
+            @jax.jit
             @partial(jax.named_call, name="time loop")
             def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
                 loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
@@ -532,12 +543,16 @@ class HyperbolicSolver(Solver):
                 def loop_body(init_value):
                     time, iteration, i_snapshot, Qnew, Qaux = init_value
                     Q = Qnew
+                    
+                    Q = self.update_q(Q, Qaux, mesh, model, parameters)
 
+                    
                     dt = self.compute_dt(
                         Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
                     )
 
                     Q1 = ode.RK1(flux_operator, Q, Qaux, parameters, dt)
+                    # Q1 = Q
 
                     Q2 = ode.RK1(
                         source_operator,
@@ -546,9 +561,11 @@ class HyperbolicSolver(Solver):
                         parameters,
                         dt,
                     )
+                    # Q2 = Q1
 
                     Q3 = boundary_operator(time, Q2, Qaux, parameters)
-
+                    # Q3 = Q2
+                    
                     # Update solution and time
                     time += dt
                     iteration += 1
