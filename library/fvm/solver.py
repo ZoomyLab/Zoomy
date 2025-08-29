@@ -363,6 +363,16 @@ class HyperbolicSolver(Solver):
 
             evA = model.eigenvalues(qA, qauxA, parameters, normal)
             evB = model.eigenvalues(qB, qauxB, parameters, normal)
+            
+            filterA = jnp.where(qA[0] < 10**(-4), 0., 1.)
+            filterA = jnp.stack(filter*evA.shape[0], axis=0)
+            filterB = jnp.where(qB[0] < 10**(-4), 0., 1.)
+            filterB = jnp.stack([filter]*evB.shape[0], axis=0)
+            evA *= filterA
+            evB *= filterB
+
+
+
             max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
 
             return max_abs_eigenvalue
@@ -451,12 +461,14 @@ class HyperbolicSolver(Solver):
 
                 fluxA_contribution = jnp.where(
                     iA_masked,
-                    (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
+                    # (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
+                    (nc_fluxA)[:, faces],
                     zeros,
                 )
                 fluxB_contribution = jnp.where(
                     iB_masked,
-                    (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
+                    # (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
+                    (nc_fluxB)[:, faces],
                     zeros,
                 )
 

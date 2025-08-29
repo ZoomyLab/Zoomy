@@ -300,8 +300,8 @@ def segmentpath(integration_order=3):
             # -- very same wet/dry & wall checks as in the original ----------------
             cond1 = (Qi[index_h] < eps) & (Qi[index_topography] > Qj[index_h] + Qj[index_topography])
             cond2 = (Qj[index_h] < eps) & (Qj[index_topography] > Qi[index_h] + Qi[index_topography])
-            # dry   = cond1 | cond2
-            dry = (Qi[index_h] < eps) & (Qj[index_h] < eps)
+            dry   = cond1 | cond2
+            # dry = (Qi[index_h] < eps) & (Qj[index_h] < eps)
 
             
 
@@ -332,10 +332,11 @@ def segmentpath(integration_order=3):
                 # ------------------------------------------------------
                 Id = jnp.eye(n_dof, dtype=Qi.dtype)
                 Id = Id.at[index_topography, index_topography].set(0.0)
+                Id = Id.at[index_h, index_h].set(0.0)
+
                 # Id = Id.at[index_h, index_topography].set(1.0)
                 Am   = 0.5 * (A_int - sM * Id)
                 flux = (Am @ dQ) * (Vij / Vi)
-                assert flux[0] == 0
                 return flux
 
             return jax.lax.cond(dry,
@@ -372,7 +373,8 @@ def segmentpath(integration_order=3):
                                     0, 0, 0))(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vi)
             return flux.T
 
-        return rusanov_batched(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij), False
+        flux = rusanov_batched(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij)
+        return flux,  False
 
 
     # return nc_flux
