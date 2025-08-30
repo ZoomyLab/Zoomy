@@ -36,7 +36,7 @@ class ShallowMomentsTopo(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0}
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6},
     )
 
     def __attrs_post_init__(self):
@@ -182,8 +182,8 @@ class ShallowMomentsTopo(Model):
         for d in range(1, self.dimension):
             A += self.normal[d] * self.quasilinear_matrix()[d]
         b, h, alpha, beta, hinv = self.get_primitives()
-        alpha_erase = alpha[2:] if self.level >= 2 else []
-        beta_erase = beta[2:] if self.level >= 2 else []
+        alpha_erase = alpha[1:] if self.level >= 2 else []
+        beta_erase = beta[1:] if self.level >= 2 else []
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
         for beta_i in beta_erase:
@@ -318,3 +318,6 @@ class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
         for i in range(self.n_variables):
             evs[i] = Piecewise((evs[i], h > 1e-8), (0, True))
         return evs
+    
+    def interpolate_3d(self):
+        return self.substitute_precomputed_denominator(self.ref_model.interpolate_3d(), self.variables[1], self.aux_variables.hinv)
