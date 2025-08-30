@@ -306,11 +306,15 @@ class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
     def residual(self):
         return self.substitute_precomputed_denominator(self.ref_model.residual(), self.variables[1], self.aux_variables.hinv)
     
-    def left_eigenvalues(self):
-        return self.substitute_precomputed_denominator(self.ref_model.left_eigenvalues(), self.variables[1], self.aux_variables.hinv)
+    def left_eigenvectors(self):
+        return self.substitute_precomputed_denominator(self.ref_model.left_eigenvectors(), self.variables[1], self.aux_variables.hinv)
     
-    def right_eigenvalues(self):
-        return self.substitute_precomputed_denominator(self.ref_model.right_eigenvalues(), self.variables[1], self.aux_variables.hinv)
+    def right_eigenvectors(self):
+        return self.substitute_precomputed_denominator(self.ref_model.right_eigenvectors(), self.variables[1], self.aux_variables.hinv)
 
     def eigenvalues(self):
-        return self.substitute_precomputed_denominator(self.ref_model.eigenvalues(), self.variables[1], self.aux_variables.hinv)
+        h = self.variables[1]
+        evs = self.substitute_precomputed_denominator(self.ref_model.eigenvalues(), self.variables[1], self.aux_variables.hinv)
+        for i in range(self.n_variables):
+            evs[i] = Piecewise((evs[i], h > 1e-8), (0, True))
+        return evs

@@ -379,9 +379,10 @@ def segmentpath(integration_order=3):
         flux = rusanov_batched(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij)
         return flux,  False
 
-
+    ### OLD
     # return nc_flux
     # return nc_flux_vectorized
     # return nc_flux_quasilinear_componentwise
+    ### JAX
     # return nc_flux_quasilinear
     return nc_flux_jax

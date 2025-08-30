@@ -461,14 +461,14 @@ class HyperbolicSolver(Solver):
 
                 fluxA_contribution = jnp.where(
                     iA_masked,
-                    # (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
-                    (nc_fluxA)[:, faces],
+                    (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
+                    # (nc_fluxA)[:, faces],
                     zeros,
                 )
                 fluxB_contribution = jnp.where(
                     iB_masked,
-                    # (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
-                    (nc_fluxB)[:, faces],
+                    (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
+                    # (nc_fluxB)[:, faces],
                     zeros,
                 )
 
@@ -553,12 +553,11 @@ class HyperbolicSolver(Solver):
 
                 @partial(jax.named_call, name="time_step")
                 def loop_body(init_value):
-                    time, iteration, i_snapshot, Qnew, Qaux = init_value
+                    time, iteration, i_snapshot, Qnew, Qauxnew = init_value
+                    
                     Q = Qnew
-                    
-                    Q = self.update_q(Q, Qaux, mesh, model, parameters)
-
-                    
+                    Qaux = Qauxnew
+                
                     dt = self.compute_dt(
                         Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
                     )
@@ -583,8 +582,12 @@ class HyperbolicSolver(Solver):
                     iteration += 1
 
                     time_stamp = (i_snapshot) * dt_snapshot
+                    
+                    Qnew = self.update_q(Q3, Qaux, mesh, model, parameters)
+                    Qauxnew = self.update_qaux(Qnew, Qaux, Q, Qaux, mesh, model, parameters, time, dt)
 
-                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qaux)
+
+                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qauxnew)
 
                     
                     jax.experimental.io_callback(
@@ -593,13 +596,13 @@ class HyperbolicSolver(Solver):
                         iteration, time, dt, time_stamp 
                     )
                     
-                    return (time, iteration, i_snapshot, Q3, Qaux)
+                    return (time, iteration, i_snapshot, Qnew, Qauxnew)
 
                 def proceed(loop_val):
                     time, iteration, i_snapshot, Qnew, Qaux = loop_val
                     return time < self.time_end
 
-                (time, iteration, i_snapshot, Qnew, Qaux) = jax.lax.while_loop(
+                (time, iteration, i_snapshot, Qnew, Qauxnew) = jax.lax.while_loop(
                     proceed, loop_body, loop_val
                 )
 
