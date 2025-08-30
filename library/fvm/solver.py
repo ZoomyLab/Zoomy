@@ -39,7 +39,7 @@ import library.fvm.timestepping as timestepping
 from library.model.models.base import JaxRuntimeModel
 
 
-def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=1):
+def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
     if iteration % log_every == 0:
         logger.info(
             f"iteration: {int(iteration)}, time: {float(time):.6f}, "
@@ -364,9 +364,9 @@ class HyperbolicSolver(Solver):
             evA = model.eigenvalues(qA, qauxA, parameters, normal)
             evB = model.eigenvalues(qB, qauxB, parameters, normal)
             
-            # filterA = jnp.where(qA[0] < 10**(-4), 0., 1.)
+            # filterA = jnp.where(qA[1] < 10**(-4), 0., 1.)
             # filterA = jnp.stack(filterA*evA.shape[0], axis=0)
-            # filterB = jnp.where(qB[0] < 10**(-4), 0., 1.)
+            # filterB = jnp.where(qB[1] < 10**(-4), 0., 1.)
             # filterB = jnp.stack([filterB]*evB.shape[0], axis=0)
             # evA *= filterA
             # evB *= filterB
@@ -514,7 +514,7 @@ class HyperbolicSolver(Solver):
             output_hdf5_path = os.path.join(
                 self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
-            save_fields = io.get_save_fields(output_hdf5_path, write_all=True)
+            save_fields = io.get_save_fields(output_hdf5_path, write_all=False)
         else:
             def save_field(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
