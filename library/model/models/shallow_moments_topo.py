@@ -316,7 +316,7 @@ class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
         h = self.variables[1]
         evs = self.substitute_precomputed_denominator(self.ref_model.eigenvalues(), self.variables[1], self.aux_variables.hinv)
         for i in range(self.n_variables):
-            evs[i] = Piecewise((evs[i], h > 1e-8), (0, True))
+            evs[i] = Piecewise((evs[i], h > 1e-4), (0, True))
         return evs
     
     def interpolate_3d(self):

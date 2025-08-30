@@ -900,7 +900,7 @@ class Mesh:
         _face_centers = np.array(face_centers, dtype=float)
         face_centers = np.zeros((n_faces, 3), dtype=float)
         face_centers[:, :dim] = _face_centers[:, :dim]
-        face_normals = np.array(face_normals, dtype=float)
+        face_normals = -np.array(face_normals, dtype=float)
         face_subvolumes = np.array(face_subvolumes, dtype=float)
 
         face_cells = np.array(face_cells, dtype=int)
