@@ -36,7 +36,7 @@ class ShallowMomentsTopo(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6},
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000},
     )
 
     def __attrs_post_init__(self):
@@ -230,8 +230,8 @@ class ShallowMomentsTopo(Model):
         ub = 0
         vb = 0
         for i in range(1 + self.level):
-            ub += alpha[i]
-            vb += beta[i]
+            ub += alpha[i] * self.basisfunctions.eval(i, 0)
+            vb += beta[i] * self.basisfunctions.eval(i, 0)
         for k in range(1, 1 + self.level):
             out[1+1 + k] += (
                 -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
