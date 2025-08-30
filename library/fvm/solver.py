@@ -364,12 +364,12 @@ class HyperbolicSolver(Solver):
             evA = model.eigenvalues(qA, qauxA, parameters, normal)
             evB = model.eigenvalues(qB, qauxB, parameters, normal)
             
-            filterA = jnp.where(qA[0] < 10**(-4), 0., 1.)
-            filterA = jnp.stack(filter*evA.shape[0], axis=0)
-            filterB = jnp.where(qB[0] < 10**(-4), 0., 1.)
-            filterB = jnp.stack([filter]*evB.shape[0], axis=0)
-            evA *= filterA
-            evB *= filterB
+            # filterA = jnp.where(qA[0] < 10**(-4), 0., 1.)
+            # filterA = jnp.stack(filterA*evA.shape[0], axis=0)
+            # filterB = jnp.where(qB[0] < 10**(-4), 0., 1.)
+            # filterB = jnp.stack([filterB]*evB.shape[0], axis=0)
+            # evA *= filterA
+            # evB *= filterB
 
 
 
@@ -507,7 +507,7 @@ class HyperbolicSolver(Solver):
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
         
         # init once with dummy values for dt
-        # Qaux = self.update_qaux(Q, Qaux, Q, Qaux, mesh, model, parameters, 0.0, 1.0)
+        Qaux = self.update_qaux(Q, Qaux, Q, Qaux, mesh, model, parameters, 0.0, 1.0)
 
         
         if write_output:

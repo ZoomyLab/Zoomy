@@ -298,10 +298,10 @@ def segmentpath(integration_order=3):
             n_dof = Qi.shape[0]
 
             # -- very same wet/dry & wall checks as in the original ----------------
-            cond1 = (Qi[index_h] < eps) & (Qi[index_topography] > Qj[index_h] + Qj[index_topography])
-            cond2 = (Qj[index_h] < eps) & (Qj[index_topography] > Qi[index_h] + Qi[index_topography])
-            dry   = cond1 | cond2
-            # dry = (Qi[index_h] < eps) & (Qj[index_h] < eps)
+            # cond1 = (Qi[index_h] < eps) & (Qi[index_topography] > Qj[index_h] + Qj[index_topography])
+            # cond2 = (Qj[index_h] < eps) & (Qj[index_topography] > Qi[index_h] + Qi[index_topography])
+            # dry   = cond1 | cond2
+            dry = (Qi[index_h] < eps) & (Qj[index_h] < eps)
 
             
 
@@ -331,17 +331,20 @@ def segmentpath(integration_order=3):
                 # 3)   Rusanov fluctuation that leaves cell "i"
                 # ------------------------------------------------------
                 Id = jnp.eye(n_dof, dtype=Qi.dtype)
-                Id = Id.at[index_topography, index_topography].set(0.0)
-                Id = Id.at[index_h, index_h].set(0.0)
+                # Id = Id.at[index_topography, index_topography].set(0.0)
+                # Id = Id.at[index_h, index_h].set(0.0)
 
                 # Id = Id.at[index_h, index_topography].set(1.0)
                 Am   = 0.5 * (A_int - sM * Id)
                 flux = (Am @ dQ) * (Vij / Vi)
                 return flux
 
+            # return jax.lax.cond(dry,
+            #                     lambda: jnp.zeros_like(Qi),
+            #                     _compute)
             return jax.lax.cond(dry,
-                                lambda: jnp.zeros_like(Qi),
-                                _compute)
+                    _compute,
+                    _compute)
 
 
         # ---------------------------------------------------------------------------

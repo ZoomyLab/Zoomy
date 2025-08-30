@@ -72,8 +72,8 @@ class ShallowMomentsTopo(Model):
         y = self.position[1]
         z = self.position[2]
         b, h, alpha, beta, hinv = self.get_primitives()
-        dalphadx = self.aux_variables[1:1+offset]
-        dbetady = self.aux_variables[1+offset:1+2*offset]
+        # dalphadx = self.aux_variables[1:1+offset]
+        # dbetady = self.aux_variables[1+offset:1+2*offset]
         assert "rho" in vars(self.parameters)
         assert "g" in vars(self.parameters)
         p = self.parameters
