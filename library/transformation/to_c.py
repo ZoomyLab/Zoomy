@@ -110,6 +110,7 @@ class AmrexPrinter(CXX11CodePrinter):
         #include <AMReX_Vector.H>
         
         class Model {{
+        public:
             static constexpr int n_dof_q    = {n_dof_q};
             static constexpr int n_dof_qaux = {n_dof_qaux};
             static constexpr int dimension  = {dim};

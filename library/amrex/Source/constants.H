@@ -10,7 +10,7 @@
 typedef amrex::SmallMatrix<amrex::Real, Model::n_dof_q, 1> VecQ;
 typedef amrex::SmallMatrix<amrex::Real, Model::n_dof_q, Model::n_dof_q> MatQ;
 typedef amrex::SmallMatrix<amrex::Real, Model::n_dof_qaux, 1> VecQaux;
-typedef amrex::SmallMatrix<amrex::Real, 5, 1> VecQ3d;
+typedef amrex::SmallMatrix<amrex::Real, 6, 1> VecQ3d;
 typedef amrex::SmallMatrix<amrex::Real, 3, 1> Vec3;
 typedef amrex::SmallMatrix<amrex::Real, 2, 1> Vec2;
 

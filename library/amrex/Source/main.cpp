@@ -13,7 +13,8 @@ using namespace amrex;
 
 
 // Declare the function here instead of in a separate .H file
-void init_solution(const std::string& filename, const Geometry& geom, MultiFab& solution, int comp);
+void init_solution(const Geometry& geom, MultiFab& solution);
+void readRasterIntoComponent(const std::string& filename, const Geometry& geom, MultiFab& solution, int comp);
 void write_plotfiles   (const int identifier, const int step, MultiFab & solution, MultiFab & solution_aux, Geometry const& geom, const Real time);
 
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
@@ -25,6 +26,61 @@ double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Ve
         sM = amrex::max(sM, amrex::max(std::abs(ev(i, 0)), std::abs(ev(i, 0))));
     }
     return sM;
+}
+
+void update_q(MultiFab& Q, const MultiFab& Qaux)
+{
+
+    for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
+    {
+        // We will loop over all cells in this box
+        const Box& bx = mfi.validbox();
+
+        // These define the pointers we can pass to the GPU
+        const Array4<      Real>& Q_arr     = Q.array(mfi);
+        const Array4<const Real>& Qaux_arr  = Qaux.array(mfi);
+
+        // evolve
+        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        {
+            Real h = Q_arr(i,j,k,1);
+            h = h > 0 ? h : 0.;
+            Real eps = 1e-4;
+            Real factor = h / (amrex::max(h, eps));
+            Q_arr(i,j,k,1) = h;
+            for (int i=2; i<Model::n_dof_q; ++i)
+            {
+                Q_arr(i,j,k,i) *= factor;
+            }
+        });
+    } // mfi
+
+}
+
+
+void update_qaux(const MultiFab& Q, MultiFab& Qaux)
+{
+
+    for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
+    {
+        // We will loop over all cells in this box
+        const Box& bx = mfi.validbox();
+
+        // These define the pointers we can pass to the GPU
+        const Array4<const Real>& Q_arr     = Q.array(mfi);
+        const Array4<      Real>& Qaux_arr        = Qaux.array(mfi);
+
+        // evolve
+        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        {
+            Real h = Q_arr(i,j,k,1);
+            h = h > 0 ? h : 0.;
+            Real eps = 1e-4;
+            Real hinv = 2 / (h+(amrex::max(h, eps)));
+            Qaux_arr(i,j,k,0) = hinv;
+        });
+    } // mfi
+
 }
 
 
@@ -179,7 +235,7 @@ int main (int argc, char* argv[])
                      {AMREX_D_DECL( phy_bb_x1, phy_bb_y1, 1.)});
 
     // periodic in all direction
-    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1,1,1)};
+    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(0,0,0)};
 
     // This defines a Geometry object
     geom.define(domain, real_box, CoordSys::cartesian, is_periodic);
@@ -199,7 +255,6 @@ int main (int argc, char* argv[])
 
     // allocate phi MultiFab
     MultiFab Q(ba, dm, Ncomp, Nghost);
-    MultiFab Qnew(ba, dm, Ncomp, Nghost);
     MultiFab Qaux(ba, dm, n_dof_qaux, Nghost);
 
     // time = starting time in the simulation
@@ -208,27 +263,38 @@ int main (int argc, char* argv[])
     // **********************************
     // INITIALIZE DATA
     // **********************************
-    init_solution(dem_file, geom, Q, 0);
-    init_solution(release_file, geom, Qaux, 1);
+    init_solution(geom, Q);
+    readRasterIntoComponent(release_file, geom, Q, 1);
+    readRasterIntoComponent(dem_file, geom, Q, 0);
+    // amrex::Gpu::streamSynchronize();
+
+
 
     int step = 0;
     int iteration = 0;
     Real next_write = 0.;
     if (time >= next_write)
     {
-        write_plotfiles(identifier, step,Qnew, Qaux, geom,time);
+        write_plotfiles(identifier, step,Q, Qaux, geom,time);
         next_write += plot_dt_interval;
         step +=1;
     }
 
-    auto evolve = [&](MultiFab& Qnew, MultiFab& Q, MultiFab& Qaux, const Real /* time */) {
+    auto evolve = [&](MultiFab& Q, MultiFab& Qaux, const Real /* time */) 
+    {
 
         // fill periodic ghost cells
         Q.FillBoundary(geom.periodicity());
         Qaux.FillBoundary(geom.periodicity());
 
+
+        update_q(Q, Qaux);
+        update_qaux(Q, Qaux);
+
         Real max_abs_ev = computeMaxAbsEigenvalue(Q, Qaux);
-        if (adapt_dt) dt = CFL * cell_size / max_abs_ev;
+        if (adapt_dt && iteration > 5) dt = CFL * cell_size / max_abs_ev;
+        amrex::Print() << "    dt = " << dt << ", max_abs_ev = " << max_abs_ev << "\n";
+        amrex::Print() << "    cell_size = " << cell_size << "\n";
 
 
 
@@ -238,8 +304,7 @@ int main (int argc, char* argv[])
             const Box& bx = mfi.validbox();
 
             // These define the pointers we can pass to the GPU
-            const Array4<const Real>& Q_arr     = Q.array(mfi);
-            const Array4<Real>& Qnew_arr        = Qnew.array(mfi);
+            const Array4<      Real>& Q_arr        = Q.array(mfi);
             const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
 
             // evolve
@@ -248,7 +313,7 @@ int main (int argc, char* argv[])
                 VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1]);
                 for (int n=0; n<Ncomp; n++)
                 {
-                    Qnew_arr(i,j,k,n) += dt*dQ(n);
+                    Q_arr(i,j,k,n) += dt*dQ(n);
                 }
             });
         } // mfi
@@ -272,28 +337,9 @@ int main (int argc, char* argv[])
         // Advance to output time
         //
         //
+        // Q.ParallelCopy(Qnew);
 
-        for ( MFIter mfi(Qnew); mfi.isValid(); ++mfi )
-        {
-            // We will loop over all cells in this box
-            const Box& bx = mfi.validbox();
-
-            // These define the pointers we can pass to the GPU
-            const Array4<Real>& Qnew_arr     = Qnew.array(mfi);
-            ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
-            {
-                if (Qnew_arr(i,j,k,0) < 0.)
-                {
-                    for (int n=0; n<Ncomp; n++)
-                    {
-                        Qnew_arr(i,j,k,n) = 0.;
-                    }
-                }
-            });
-        }
-        Q.ParallelCopy(Qnew);
-
-        evolve(Qnew, Q, Qaux, time);
+        evolve(Q, Qaux, time);
 
         //
         // Set time to evolve to
@@ -314,7 +360,7 @@ int main (int argc, char* argv[])
         //
         if (time >= next_write)
         {
-            write_plotfiles(identifier, step,Qnew, Qaux, geom,time);
+            write_plotfiles(identifier, step,Q, Qaux, geom,time);
             next_write += plot_dt_interval;
             step += 1;
         }

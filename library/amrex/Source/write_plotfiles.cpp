@@ -111,7 +111,7 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
             }
 
 
-            for (int n=0;n<5; ++n) {
+            for (int n=0;n<6; ++n) {
                 sol_3d_arr(i, j, k, n) = Q3d(n, 0);
             }
         });

@@ -36,7 +36,7 @@ class ShallowMomentsTopo(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0}
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, 'rho': 1000.0}
     )
 
     def __attrs_post_init__(self):
@@ -311,6 +311,9 @@ class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
     
     def right_eigenvectors(self):
         return self.substitute_precomputed_denominator(self.ref_model.right_eigenvectors(), self.variables[1], self.aux_variables.hinv)
+    
+    def interpolate_3d(self):
+        return self.substitute_precomputed_denominator(self.ref_model.interpolate_3d(), self.variables[1], self.aux_variables.hinv)
 
     def eigenvalues(self):
         h = self.variables[1]

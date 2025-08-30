@@ -5,12 +5,12 @@ init.release_field  = 1
 # ---------------- output --------------
 output.test_case        = 0
 output.identifier       = 0
-output.plot_dt_interval = 0.04
+output.plot_dt_interval = 0.5
 
 # ---------------- solver --------------
-solver.time_end  = 0.2
-solver.dt        = 1.e-5
-solver.adapt_dt  = true
+solver.time_end  = 10.
+solver.dt        = 0.01
+solver.adapt_dt  = false
 solver.cfl       = 0.45
 
 # ---------------- geometry ------------
@@ -24,5 +24,5 @@ geometry.dem_file = "/rwthfs/rz/cluster/home/is086873/Git/Zoomy/data/ca_elev.raw
 geometry.release_file = "/rwthfs/rz/cluster/home/is086873/Git/Zoomy/data/ca_debrisflow.raw"
 
 # ---------------- grid ----------------
-grid.max_grid_size_x = 32
-grid.max_grid_size_y = 32
+grid.max_grid_size_x = 64
+grid.max_grid_size_y = 64

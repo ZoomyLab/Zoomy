@@ -99,15 +99,16 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     amrex::Real eps = 1e-4;
     amrex::Real eps_low = 1e-1;
 
-    int ib = n_dof - 1;
+    int ib = 0;
+    int ih = 1;
     // I am a wall from the viewpoint of my neighbor
     // TODO this should become a wall boundary condition
-    if (Qi(0,0) < eps && Qi(ib,0) > Qj(0,0) + Qj(ib,0)) return fluctuation;
+    if (Qi(ih,0) < eps && Qi(ib,0) > Qj(ih,0) + Qj(ib,0)) return fluctuation;
     // My neighbor a wall for me
     // TODO this should become a wall boundary condition
-    if (Qj(0,0) < eps && Qj(ib,0) > Qi(0,0) + Qi(ib,0)) return fluctuation;
+    if (Qj(ih,0) < eps && Qj(ib,0) > Qi(ih,0) + Qi(ib,0)) return fluctuation;
     // My neighbor is dry 
-    //if (Qj(0,0) < eps) return fluctuation;
+    if (Qj(ih,0) < eps) return fluctuation;
     
     //Qi = wet_dry_fix(Qi);
     //Qj = wet_dry_fix(Qj);
@@ -128,7 +129,7 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     MatQ Asq = Aint * Aint;
     MatQ I = MatQ::Identity();
     //I(0,ib) = 1.;
-    //I(ib,ib) = 0.;
+    I(ib,ib) = 0.;
 
     MatQ Am;
     VecQ dQ;
