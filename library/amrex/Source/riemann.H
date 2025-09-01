@@ -117,7 +117,7 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     // TODO this should become a wall boundary condition
     // if (Qj(ih,0) < eps && Qj(ib,0) > Qi(ih,0) + Qi(ib,0)) return fluctuation;
     // My neighbor is dry 
-    if (Qj(ih,0) < eps) return fluctuation;
+    // if (Qj(ih,0) < eps) return fluctuation;
     
     //Qi = wet_dry_fix(Qi);
     //Qj = wet_dry_fix(Qj);

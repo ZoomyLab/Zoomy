@@ -45,13 +45,18 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
         {
             Real h = Q_arr(i,j,k,1);
             h = h > 0 ? h : 0.;
-            Real eps = 1e-2;
-            Real factor = h / (amrex::max(h, eps));
+            Real eps = 1e-1;
+            // Real factor = h / (amrex::max(h, eps));
+            Real factor = h > eps? 1. : 0.;
             // factor = 0.;
             Q_arr(i,j,k,1) = h;
-            for (int n=2; n<Model::n_dof_q; ++n)
+            if (h < eps)
             {
-                Q_arr(i,j,k,n) *= factor;
+                for (int n=2; n<Model::n_dof_q; ++n)
+                {
+                    // Q_arr(i,j,k,n) *= factor;
+                    Q_arr(i,j,k,n) = 0.;
+                }
             }
         });
     } // mfi
@@ -121,8 +126,13 @@ double computeMaxAbsEigenvalue(const MultiFab& Q, const MultiFab& Qaux)
             const Real ev_xm = computeLocalMaxAbsEigenvalue(q, qaux, normal_xm);
             const Real ev_yp = computeLocalMaxAbsEigenvalue(q, qaux, normal_yp);
             const Real ev_ym = computeLocalMaxAbsEigenvalue(q, qaux, normal_ym);
-            return {amrex::max(amrex::max(ev_xp, ev_xm), 
+            Real max_abs_ev =  {amrex::max(amrex::max(ev_xp, ev_xm), 
                               amrex::max(ev_yp, ev_ym))};
+            if (max_abs_ev > 100)
+            {
+                amrex::Print() << "Large eigenvalue detected: " << max_abs_ev << "(i,j): " << i << " " << j << "\n";
+            }
+            return max_abs_ev;
         });
     } // mfi
     auto tuple = reduce_data.value(reduce_op); 
@@ -370,7 +380,7 @@ int main (int argc, char* argv[])
         //    with what dt and to what final time
         //
         
-        amrex::Print() << "Advance: Time: " << time << " s,  " <<  iteration <<  " << iteration << " in " << step_stop_time << " seconds; " << "\n";
+        amrex::Print() << "Advance: Time: " << time << " s,  " <<  iteration <<  " << iteration  in " << step_stop_time << " seconds; " << "\n";
         iteration +=1;
 
         time = new_time;

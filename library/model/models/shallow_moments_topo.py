@@ -140,6 +140,8 @@ class ShallowMomentsTopo(Model):
         p = self.parameters
         um = alpha[0]
         vm = beta[0]
+        nc_x[2, 0] += -p.ez * p.g * h
+        nc_y[2+offset, 0] += -p.ez * p.g * h
         for k in range(1, self.level + 1):
             nc_x[1+k + 1, 1+k + 1] += um
             nc_y[1+k + 1, 1+k + 1 + offset] += um
@@ -193,6 +195,19 @@ class ShallowMomentsTopo(Model):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         return out
+    
+    def inclination(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        assert "ex" in vars(self.parameters)
+        assert "ey" in vars(self.parameters)
+        assert "g" in vars(self.parameters)
+        offset = self.level + 1
+        b, h, alpha, beta, hinv = self.get_primitives()
+        p = self.parameters
+        out[2] = p.g * p.ex * h
+        out[2+offset] = p.g * p.ey * h
+        return out
+
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)

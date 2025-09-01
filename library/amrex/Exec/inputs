@@ -5,12 +5,12 @@ init.release_field  = 1
 # ---------------- output --------------
 output.test_case        = 0
 output.identifier       = 0
-output.plot_dt_interval = 0.1
+output.plot_dt_interval = 1.
 
 # ---------------- solver --------------
-solver.time_end  = 20.
-solver.dt        = 0.001
-solver.adapt_dt  = false
+solver.time_end  = 50.
+solver.dt        = 0.00001
+solver.adapt_dt  = true
 solver.cfl       = 0.2
 
 # ---------------- geometry ------------
