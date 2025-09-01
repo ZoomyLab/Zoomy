@@ -23,7 +23,7 @@ double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Ve
     amrex::Real sM  = std::abs(ev(0, 0));
     for (int i=0; i<Model::n_dof_q; ++i)
     {
-        sM = amrex::max(sM, amrex::max(std::abs(ev(i, 0)), std::abs(ev(i, 0))));
+        sM = amrex::max(sM, std::abs(ev(i, 0)));
     }
     return sM;
 }
@@ -45,12 +45,13 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
         {
             Real h = Q_arr(i,j,k,1);
             h = h > 0 ? h : 0.;
-            Real eps = 1e-4;
+            Real eps = 1e-2;
             Real factor = h / (amrex::max(h, eps));
+            // factor = 0.;
             Q_arr(i,j,k,1) = h;
-            for (int i=2; i<Model::n_dof_q; ++i)
+            for (int n=2; n<Model::n_dof_q; ++n)
             {
-                Q_arr(i,j,k,i) *= factor;
+                Q_arr(i,j,k,n) *= factor;
             }
         });
     } // mfi
@@ -75,7 +76,7 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
         {
             Real h = Q_arr(i,j,k,1);
             h = h > 0 ? h : 0.;
-            Real eps = 1e-4;
+            Real eps = 1e-2;
             Real hinv = 2 / (h+(amrex::max(h, eps)));
             Qaux_arr(i,j,k,0) = hinv;
         });
@@ -235,7 +236,7 @@ int main (int argc, char* argv[])
                      {AMREX_D_DECL( phy_bb_x1, phy_bb_y1, 1.)});
 
     // periodic in all direction
-    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(0,0,0)};
+    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1,1,1)};
 
     // This defines a Geometry object
     geom.define(domain, real_box, CoordSys::cartesian, is_periodic);
@@ -293,8 +294,7 @@ int main (int argc, char* argv[])
 
         Real max_abs_ev = computeMaxAbsEigenvalue(Q, Qaux);
         if (adapt_dt && iteration > 5) dt = CFL * cell_size / max_abs_ev;
-        amrex::Print() << "    dt = " << dt << ", max_abs_ev = " << max_abs_ev << "\n";
-        amrex::Print() << "    cell_size = " << cell_size << "\n";
+        amrex::Print() << "  Evolve: abs_max_ev: " << max_abs_ev << " dt: " << dt << "\n";
 
 
 
@@ -310,7 +310,7 @@ int main (int argc, char* argv[])
             // evolve
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1]);
+                VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
                     Q_arr(i,j,k,n) += dt*dQ(n);
@@ -370,8 +370,7 @@ int main (int argc, char* argv[])
         //    with what dt and to what final time
         //
         
-        amrex::Print() << "Advanced iteration " << iteration << " in " << step_stop_time << " seconds; dt = "
-                       << dt << " time = " << new_time << "\n";
+        amrex::Print() << "Advance: Time: " << time << " s,  " <<  iteration <<  " << iteration << " in " << step_stop_time << " seconds; " << "\n";
         iteration +=1;
 
         time = new_time;

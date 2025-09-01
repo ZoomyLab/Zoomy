@@ -5,13 +5,13 @@ init.release_field  = 1
 # ---------------- output --------------
 output.test_case        = 0
 output.identifier       = 0
-output.plot_dt_interval = 0.5
+output.plot_dt_interval = 0.1
 
 # ---------------- solver --------------
-solver.time_end  = 10.
-solver.dt        = 0.01
+solver.time_end  = 20.
+solver.dt        = 0.001
 solver.adapt_dt  = false
-solver.cfl       = 0.45
+solver.cfl       = 0.2
 
 # ---------------- geometry ------------
 geometry.n_cell_x = 1537
