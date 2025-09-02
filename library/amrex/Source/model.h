@@ -280,10 +280,12 @@ public:
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
         amrex::Real t0 = 9.81*Q(1);
+        amrex::Real t1 = amrex::Math::powi<2>(Qaux(0));
+        amrex::Real t2 = 1.0*Qaux(0)*std::pow(amrex::Math::powi<2>(Q(2))*t1 + amrex::Math::powi<2>(Q(3))*t1, 1.0/2.0)/amrex::Math::powi<2>(0.16666666666666666);
         res(0,0) = 0;
         res(1,0) = 0;
-        res(2,0) = 0.0*t0;
-        res(3,0) = 0.0*t0;
+        res(2,0) = 0.0*t0 - Q(2)*t2;
+        res(3,0) = 0.0*t0 - Q(3)*t2;
         return res;
     }
         

@@ -116,6 +116,7 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     // if (Qj(ih,0) < eps) return fluctuation;
 
     // if ((Qj(ih,0) < eps) && (Qi(ih, 0) < eps)) return fluctuation;
+
     
     //Qi = wet_dry_fix(Qi);
     //Qj = wet_dry_fix(Qj);
@@ -170,8 +171,10 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     }
 
     // Approximation of A +/- |A| with |A| the numerical viscosity approx. by max eigenvalue
-    amrex::Real relax = sM > 1000 ? 0. : 1.;
-    Am = 0.5*(relax * Aint + sign* sM * I);
+    // amrex::Real relax = sM > 1000 ? 0. : 1.;
+    // sM = amrex::min(sM, amrex::max(Vi/dt, Vj/dt));
+
+    Am = 0.5*(Aint + sign* sM * I);
     dQ = (Qj-Qi);
     fluctuation = (Am * dQ) * (Vij / Vi);
 
@@ -207,6 +210,14 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     //     check_nan(Am, "Am in rusanov");
     //     check_nan(dQ, "dQ in rusanov");
     // }
+
+    if (Qi(ih, 0) < eps || Qj(ih, 0) < eps)
+    {
+        for (int n=1; n<n_dof; ++n)
+        {
+            fluctuation(n, 0) = 0.;
+        }
+    }
 
     return fluctuation;
 

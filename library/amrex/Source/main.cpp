@@ -77,8 +77,8 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
             // {
             //     for (int n=2; n<Model::n_dof_q; ++n)
             //     {
-            //         // Q_arr(i,j,k,n) *= factor;
-            //         Q_arr(i,j,k,n) = 0.;
+            //         Q_arr(i,j,k,n) *= factor;
+            //         // Q_arr(i,j,k,n) = 0.;
             //     }
             // }
         });
@@ -183,7 +183,7 @@ int main (int argc, char* argv[])
     Real  phy_bb_x0 = 0., phy_bb_y0 = 0., phy_bb_x1 = 1., phy_bb_y1 = 1.;
     Real  plot_dt_interval = 0.1;
     int   test_case = 0, identifier = 0;
-    Real  time_end = 1.0, dt = 1.0e-4, CFL = 0.5;
+    Real  time_end = 1.0, dt = 1.0e-4, CFL = 0.5, dtmin=1.0e-7, dtmax=1.e-2;
     bool  adapt_dt = false;
     
     int   dem_field = 0, release_field = 1;
@@ -217,6 +217,9 @@ int main (int argc, char* argv[])
         pp.query("dt",       dt);
         pp.query("adapt_dt", adapt_dt);
         pp.query("cfl",      CFL);
+        pp.query("dtmin",       dtmin);
+        pp.query("dtmax",       dtmax);
+
     }
     
     /* ---------------------------------------------------------------
@@ -343,8 +346,8 @@ int main (int argc, char* argv[])
         if (adapt_dt && iteration > 5) 
             {
                 dt = CFL * cell_size / max_abs_ev;
-                dt = amrex::min(dt, 1.);
-                dt = amrex::max(dt, 1.e-5);
+                dt = amrex::min(dt, dtmax);
+                dt = amrex::max(dt, dtmin);
             }
         amrex::Print() << "  Evolve: abs_max_ev: " << max_abs_ev << " dt: " << dt << "\n";
 
