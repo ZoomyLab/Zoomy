@@ -70,3 +70,7 @@ logs/log.log
 *.F90
 *.ex
 tmp_build_dir
+data/evel_artificial.raw
+data/evel_artificial.tif
+data/release_artificial.raw
+data/release_artificial.tif

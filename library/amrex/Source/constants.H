@@ -30,6 +30,19 @@ amrex::SmallMatrix<amrex::Real, R, C> makeSmallMatrix(const std::initializer_lis
     return mat;
 }
 
-
+template <typename T, int NRows, int NCols, typename CharT>
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+void check_nan(const amrex::SmallMatrix<T, NRows, NCols>& v, const CharT* error_message)
+{
+    for (int i = 0; i < NRows; ++i) {
+        for (int j = 0; j < NCols; ++j) {
+            if (std::isnan(v(i, j))) {
+                amrex::Print() << "NaN detected in " << error_message
+                               << " at (" << i << "," << j << ")\n";
+            }
+        }
+    }
+}
 
 #endif

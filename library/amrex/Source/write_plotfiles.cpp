@@ -130,11 +130,11 @@ void write_plotfiles (const int identifier, const int step, MultiFab& solution, 
     // Next we write the plotfile which interprets the results to create a full 3D field 
     // using what we know about the basis functions.  This arbitrarily is set to have 8 cells in the vertical
     //
-    // write_plotfiles_2d (identifier ,step, solution, geom, time);
+    write_plotfiles_2d (identifier ,step, solution, geom, time);
 
     //
     // Next we write the plotfile which interprets the results to create a full 3D field 
     // using what we know about the basis functions.  This arbitrarily is set to have 8 cells in the vertical
     //
-    write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
+    // write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
 }

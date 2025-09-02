@@ -19,7 +19,23 @@ void write_plotfiles   (const int identifier, const int step, MultiFab & solutio
 
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
 {
-    VecQ ev = Model::eigenvalues(Q, Qaux, normal);
+    Real eps = 1e-4;
+    int ih = 1;
+    VecQ ev;
+    for (int n=0; n<Model::n_dof_q; ++n)
+    {
+        ev(n,0) = 0.;
+    }
+    if (Q(ih,0) > eps)
+    {
+        ev = Model::eigenvalues(Q, Qaux, normal);
+    }
+    
+    for (int n=0; n<Model::n_dof_q; ++n)
+    {
+        if (std::isnan(ev(n, 0))) ev(n, 0) = 0.;
+    }
+
     amrex::Real sM  = std::abs(ev(0, 0));
     for (int i=0; i<Model::n_dof_q; ++i)
     {
@@ -71,19 +87,27 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
     {
         // We will loop over all cells in this box
         const Box& bx = mfi.validbox();
+        const Box& gbx = grow(bx,1);               // include 1 ghost
 
         // These define the pointers we can pass to the GPU
         const Array4<const Real>& Q_arr     = Q.array(mfi);
         const Array4<      Real>& Qaux_arr        = Qaux.array(mfi);
 
-        // evolve
-        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             Real h = Q_arr(i,j,k,1);
             h = h > 0 ? h : 0.;
             Real eps = 1e-2;
-            Real hinv = 2 / (h+(amrex::max(h, eps)));
-            Qaux_arr(i,j,k,0) = hinv;
+            // Real hinv = 2 / (h+(amrex::max(h, eps)));
+            // Qaux_arr(i,j,k,0) = hinv;
+            if (h < eps)
+            {
+                Qaux_arr(i,j,k,0) = 0.;
+            }
+            else{
+                Qaux_arr(i,j,k,0) = 1./h;
+            }
+            
         });
     } // mfi
 
@@ -301,6 +325,9 @@ int main (int argc, char* argv[])
 
         update_q(Q, Qaux);
         update_qaux(Q, Qaux);
+
+        Q.FillBoundary(geom.periodicity());
+        Qaux.FillBoundary(geom.periodicity());
 
         Real max_abs_ev = computeMaxAbsEigenvalue(Q, Qaux);
         if (adapt_dt && iteration > 5) dt = CFL * cell_size / max_abs_ev;

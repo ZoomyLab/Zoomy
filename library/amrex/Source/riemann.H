@@ -13,9 +13,9 @@ price_c (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
    amrex::Real wi[3] = {0.5*5./9., 0.5*8./9., 0.5*5./9.};
    amrex::Real xi[3] = {0.5*(-sqrt(3./5.)+1), 0.5, 0.5*(sqrt(3./5.)+1)};
 
-   MatQ Aint{};
-   VecQ q{};
-   VecQaux qaux{};
+   MatQ Aint = MatQ::Zero();
+   VecQ q = VecQ::Zero();
+   VecQaux qaux = VecQaux::Zero();
 
    for (int iquad=0; iquad<3; ++iquad){
        q = Qi + xi[iquad] * (Qj-Qi);
@@ -91,22 +91,18 @@ price_c (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
 //    return fluctuation;
 //}
 
+
 AMREX_GPU_DEVICE
 AMREX_FORCE_INLINE
 VecQ
-rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Real sign, amrex::Real Vi, amrex::Real Vj, amrex::Real Vij, std::function<MatQ(VecQ, VecQaux)> A, amrex::Real dt)
+rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Real sign, amrex::Real Vi, amrex::Real Vj, amrex::Real Vij, std::function<MatQ(VecQ, VecQaux)> A, amrex::Real dt)
 {
-    VecQ fluctuation{};
+    VecQ fluctuation = VecQ::Zero();
     int n_dof = Model::n_dof_q;
-
 
     amrex::Real eps = 1e-4;
     amrex::Real eps_low = 1e-1;
 
-    for (int n=0; n<Model::n_dof_q; ++n)
-    {
-        fluctuation(n,0) = 0.;
-    }
 
     int ib = 0;
     int ih = 1;
@@ -118,6 +114,8 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     // if (Qj(ih,0) < eps && Qj(ib,0) > Qi(ih,0) + Qi(ib,0)) return fluctuation;
     // My neighbor is dry 
     // if (Qj(ih,0) < eps) return fluctuation;
+
+    // if ((Qj(ih,0) < eps) && (Qi(ih, 0) < eps)) return fluctuation;
     
     //Qi = wet_dry_fix(Qi);
     //Qj = wet_dry_fix(Qj);
@@ -126,13 +124,13 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     amrex::Real wi[3] = {0.5*5./9., 0.5*8./9., 0.5*5./9.};
     amrex::Real xi[3] = {0.5*(-sqrt(3./5.)+1), 0.5, 0.5*(sqrt(3./5.)+1)};
 
-    MatQ Aint{};
-    VecQ q{};
-    VecQaux qaux{};
+    MatQ Aint = MatQ::Zero();
+    VecQ q = VecQ::Zero();
+    VecQaux qaux = VecQaux::Zero();
     for (int iquad=0; iquad<3; ++iquad){
         q = Qi + xi[iquad] * (Qj-Qi);
         qaux = Qauxi + xi[iquad] * (Qauxj-Qauxi);
-        Aint += wi[iquad] * sign* A(q, qaux);
+        Aint += wi[iquad] * A(q, qaux);
     }
 
     // MatQ Asq = Aint * Aint;
@@ -144,8 +142,26 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     MatQ Am;
     VecQ dQ;
 
-    VecQ ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    VecQ ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    VecQ ev_i, ev_j;
+    for (int n=0; n<n_dof; ++n)
+    {
+        ev_i(n,0) = 0.;
+        ev_j(n,0) = 0.;
+    }
+    if (Qi(ih,0) > eps)
+    {
+        ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    }
+    if (Qj(ih,0) > eps) 
+    {
+        ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    }
+
+    for (int n=0; n<n_dof; ++n)
+    {
+        if (std::isnan(ev_i(n, 0))) ev_i(n, 0) = 0.;
+        if (std::isnan(ev_j(n, 0))) ev_j(n, 0) = 0.;
+    }
     amrex::Real sM  = std::abs(ev_i(0, 0));
     for (int i=0; i<n_dof; ++i)
     {
@@ -153,9 +169,48 @@ rusanov (VecQ Qi, VecQ Qj, VecQaux Qauxi, VecQaux Qauxj, Vec2 normal, amrex::Rea
     }
 
     // Approximation of A +/- |A| with |A| the numerical viscosity approx. by max eigenvalue
-    Am = 0.5*(Aint - sM * I);
+    Am = 0.5*(Aint + sign* sM * I);
     dQ = (Qj-Qi);
     fluctuation = (Am * dQ) * (Vij / Vi);
+
+    bool is_nan = false;
+    for (int n=0; n<n_dof; ++n)
+    {
+        if (std::isnan(fluctuation(n, 0))) 
+        {
+            is_nan = true;
+        }
+        if (fluctuation(n, 0) > 1.e6 || fluctuation(n, 0) < -1.e6)
+        {
+            amrex::Print() << "Lage fluctuation detected in rusanov\n";   }
+    }
+
+    if (is_nan)
+    {
+        amrex::Print() << "=================" << "\n";
+        amrex::Print() << "Sign " << sign << "\n";
+        for (int n=0; n<n_dof; ++n)
+        {
+            amrex::Print() << "Qi[" << n << "] " << Qi(n,0) << "\n";
+            amrex::Print() << "Qj[" << n << "] " << Qj(n,0) << "\n";
+        }
+        amrex::Print() << "Qauxi[0]" << Qauxi(0,0) << "\n";
+        amrex::Print() << "Qauxj[0]" << Qauxj(0,0) << "\n";
+        check_nan(Qi, "Qi in rusanov");
+        check_nan(Qj, "Qj in rusanov");
+        check_nan(Qauxi, "Qauxi in rusanov");
+        check_nan(Qauxj, "Qauxj in rusanov");
+        check_nan(Aint, "Aint in rusanov");
+        check_nan(Asq, "Asq in rusanov");
+        check_nan(Am, "Am in rusanov");
+        check_nan(dQ, "dQ in rusanov");
+    }
+
+    // for (int n=0; n<n_dof; ++n)
+    // {
+    //     fluctuation(n, 0) = 0.;
+    // }
+    // fluctuation(2, 0) = 0.5 * (Qi(1, 0) + Qj(1, 0)) * 1.;
 
     return fluctuation;
 
