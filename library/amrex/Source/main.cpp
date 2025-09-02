@@ -19,22 +19,22 @@ void write_plotfiles   (const int identifier, const int step, MultiFab & solutio
 
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
 {
-    Real eps = 1e-4;
-    int ih = 1;
-    VecQ ev;
-    for (int n=0; n<Model::n_dof_q; ++n)
-    {
-        ev(n,0) = 0.;
-    }
-    if (Q(ih,0) > eps)
-    {
-        ev = Model::eigenvalues(Q, Qaux, normal);
-    }
+    // Real eps = 1e-6;
+    // int ih = 1;
+    VecQ ev = Model::eigenvalues(Q, Qaux, normal);
+    // for (int n=0; n<Model::n_dof_q; ++n)
+    // {
+    //     ev(n,0) = 0.;
+    // }
+    // if (Q(ih,0) > eps)
+    // {
+    //     ev = Model::eigenvalues(Q, Qaux, normal);
+    // }
     
-    for (int n=0; n<Model::n_dof_q; ++n)
-    {
-        if (std::isnan(ev(n, 0))) ev(n, 0) = 0.;
-    }
+    // for (int n=0; n<Model::n_dof_q; ++n)
+    // {
+    //     if (std::isnan(ev(n, 0))) ev(n, 0) = 0.;
+    // }
 
     amrex::Real sM  = std::abs(ev(0, 0));
     for (int i=0; i<Model::n_dof_q; ++i)
@@ -51,21 +51,27 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
     {
         // We will loop over all cells in this box
         const Box& bx = mfi.validbox();
+        // const Box& gbx = grow(bx,1);               // include 1 ghost
+
 
         // These define the pointers we can pass to the GPU
         const Array4<      Real>& Q_arr     = Q.array(mfi);
         const Array4<const Real>& Qaux_arr  = Qaux.array(mfi);
 
-        // evolve
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             Real h = Q_arr(i,j,k,1);
-            h = h > 0 ? h : 0.;
-            Real eps = 1e-1;
-            // Real factor = h / (amrex::max(h, eps));
-            Real factor = h > eps? 1. : 0.;
+            h = h > 0. ? h : 0.;
+            Real eps = 1e-2;
+            Real factor = h / (amrex::max(h, eps));
+            // Real factor = h > eps? 1. : 0.;
             // factor = 0.;
             Q_arr(i,j,k,1) = h;
+            // for (int n=2; n<Model::n_dof_q; ++n)
+            // {
+            //     Q_arr(i,j,k,n) *= factor;
+            //     // Q_arr(i,j,k,n) = 0.;
+            // }
             if (h < eps)
             {
                 for (int n=2; n<Model::n_dof_q; ++n)
@@ -87,26 +93,26 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
     {
         // We will loop over all cells in this box
         const Box& bx = mfi.validbox();
-        const Box& gbx = grow(bx,1);               // include 1 ghost
+        // const Box& gbx = grow(bx,1);               // include 1 ghost
 
         // These define the pointers we can pass to the GPU
         const Array4<const Real>& Q_arr     = Q.array(mfi);
         const Array4<      Real>& Qaux_arr        = Qaux.array(mfi);
 
-        ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             Real h = Q_arr(i,j,k,1);
             h = h > 0 ? h : 0.;
             Real eps = 1e-2;
-            // Real hinv = 2 / (h+(amrex::max(h, eps)));
-            // Qaux_arr(i,j,k,0) = hinv;
-            if (h < eps)
-            {
-                Qaux_arr(i,j,k,0) = 0.;
-            }
-            else{
-                Qaux_arr(i,j,k,0) = 1./h;
-            }
+            Real hinv = 2 / (h+(amrex::max(h, eps)));
+            Qaux_arr(i,j,k,0) = hinv;
+            // if (h < eps)
+            // {
+            //     Qaux_arr(i,j,k,0) = 0.;
+            // }
+            // else{
+            //     Qaux_arr(i,j,k,0) = 1./h;
+            // }
             
         });
     } // mfi
@@ -152,10 +158,10 @@ double computeMaxAbsEigenvalue(const MultiFab& Q, const MultiFab& Qaux)
             const Real ev_ym = computeLocalMaxAbsEigenvalue(q, qaux, normal_ym);
             Real max_abs_ev =  {amrex::max(amrex::max(ev_xp, ev_xm), 
                               amrex::max(ev_yp, ev_ym))};
-            if (max_abs_ev > 100)
-            {
-                amrex::Print() << "Large eigenvalue detected: " << max_abs_ev << "(i,j): " << i << " " << j << "\n";
-            }
+            // if (max_abs_ev > 100)
+            // {
+            //     amrex::Print() << "Large eigenvalue detected: " << max_abs_ev << "(i,j): " << i << " " << j << "\n";
+            // }
             return max_abs_ev;
         });
     } // mfi
@@ -290,6 +296,8 @@ int main (int argc, char* argv[])
 
     // allocate phi MultiFab
     MultiFab Q(ba, dm, Ncomp, Nghost);
+    MultiFab Qtmp(ba, dm, Ncomp, Nghost);
+
     MultiFab Qaux(ba, dm, n_dof_qaux, Nghost);
 
     // time = starting time in the simulation
@@ -299,6 +307,7 @@ int main (int argc, char* argv[])
     // INITIALIZE DATA
     // **********************************
     init_solution(geom, Q);
+    init_solution(geom, Qtmp);
     readRasterIntoComponent(release_file, geom, Q, 1);
     readRasterIntoComponent(dem_file, geom, Q, 0);
     // amrex::Gpu::streamSynchronize();
@@ -315,12 +324,12 @@ int main (int argc, char* argv[])
         step +=1;
     }
 
-    auto evolve = [&](MultiFab& Q, MultiFab& Qaux, const Real /* time */) 
+    auto evolve = [&](MultiFab& Qtmp, MultiFab& Q, MultiFab& Qaux, const Real /* time */) 
     {
 
         // fill periodic ghost cells
-        Q.FillBoundary(geom.periodicity());
-        Qaux.FillBoundary(geom.periodicity());
+        // Q.FillBoundary(geom.periodicity());
+        // Qaux.FillBoundary(geom.periodicity());
 
 
         update_q(Q, Qaux);
@@ -340,19 +349,22 @@ int main (int argc, char* argv[])
             // We will loop over all cells in this box
             const Box& bx = mfi.validbox();
 
+
             // These define the pointers we can pass to the GPU
             const Array4<      Real>& Q_arr        = Q.array(mfi);
+            const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
             const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
 
-            // evolve
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
                 VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
-                    Q_arr(i,j,k,n) += dt*dQ(n);
+                    Qtmp_arr(i,j,k,n) = Q_arr(i, j, k, n) + dt*dQ(n);
                 }
             });
+            // Qtmp.FillBoundary(geom.periodicity());
+
         } // mfi
     };
 
@@ -376,7 +388,8 @@ int main (int argc, char* argv[])
         //
         // Q.ParallelCopy(Qnew);
 
-        evolve(Q, Qaux, time);
+        evolve(Qtmp, Q, Qaux, time);
+        std::swap(Q , Qtmp );
 
         //
         // Set time to evolve to

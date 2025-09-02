@@ -100,7 +100,7 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     VecQ fluctuation = VecQ::Zero();
     int n_dof = Model::n_dof_q;
 
-    amrex::Real eps = 1e-4;
+    amrex::Real eps = 1e-2;
     amrex::Real eps_low = 1e-1;
 
 
@@ -142,26 +142,27 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     MatQ Am;
     VecQ dQ;
 
-    VecQ ev_i, ev_j;
-    for (int n=0; n<n_dof; ++n)
-    {
-        ev_i(n,0) = 0.;
-        ev_j(n,0) = 0.;
-    }
-    if (Qi(ih,0) > eps)
-    {
-        ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    }
-    if (Qj(ih,0) > eps) 
-    {
-        ev_j = Model::eigenvalues(Qj, Qauxj, normal);
-    }
+    VecQ ev_i = VecQ::Zero();
+    VecQ ev_j = VecQ::Zero();
+    // if (Qi(ih,0) > eps)
+    // {
+    //     ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    // }
+    // if (Qj(ih,0) > eps) 
+    // {
+    //     ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    // }
+    ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    ev_j = Model::eigenvalues(Qj, Qauxj, normal);
 
-    for (int n=0; n<n_dof; ++n)
-    {
-        if (std::isnan(ev_i(n, 0))) ev_i(n, 0) = 0.;
-        if (std::isnan(ev_j(n, 0))) ev_j(n, 0) = 0.;
-    }
+
+
+    // for (int n=0; n<n_dof; ++n)
+    // {
+        
+    //     if (std::isnan(ev_i(n, 0))) amrex::Print() << "NaN detected in ev_i in rusanov\n";
+    //     if (std::isnan(ev_j(n, 0))) amrex::Print() << "NaN detected in ev_j in rusanov\n";
+    // }
     amrex::Real sM  = std::abs(ev_i(0, 0));
     for (int i=0; i<n_dof; ++i)
     {
@@ -173,44 +174,38 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     dQ = (Qj-Qi);
     fluctuation = (Am * dQ) * (Vij / Vi);
 
-    bool is_nan = false;
-    for (int n=0; n<n_dof; ++n)
-    {
-        if (std::isnan(fluctuation(n, 0))) 
-        {
-            is_nan = true;
-        }
-        if (fluctuation(n, 0) > 1.e6 || fluctuation(n, 0) < -1.e6)
-        {
-            amrex::Print() << "Lage fluctuation detected in rusanov\n";   }
-    }
-
-    if (is_nan)
-    {
-        amrex::Print() << "=================" << "\n";
-        amrex::Print() << "Sign " << sign << "\n";
-        for (int n=0; n<n_dof; ++n)
-        {
-            amrex::Print() << "Qi[" << n << "] " << Qi(n,0) << "\n";
-            amrex::Print() << "Qj[" << n << "] " << Qj(n,0) << "\n";
-        }
-        amrex::Print() << "Qauxi[0]" << Qauxi(0,0) << "\n";
-        amrex::Print() << "Qauxj[0]" << Qauxj(0,0) << "\n";
-        check_nan(Qi, "Qi in rusanov");
-        check_nan(Qj, "Qj in rusanov");
-        check_nan(Qauxi, "Qauxi in rusanov");
-        check_nan(Qauxj, "Qauxj in rusanov");
-        check_nan(Aint, "Aint in rusanov");
-        check_nan(Asq, "Asq in rusanov");
-        check_nan(Am, "Am in rusanov");
-        check_nan(dQ, "dQ in rusanov");
-    }
-
+    // bool is_nan = false;
     // for (int n=0; n<n_dof; ++n)
     // {
-    //     fluctuation(n, 0) = 0.;
+    //     if (std::isnan(fluctuation(n, 0))) 
+    //     {
+    //         is_nan = true;
+    //     }
+    //     if (fluctuation(n, 0) > 1.e6 || fluctuation(n, 0) < -1.e6)
+    //     {
+    //         amrex::Print() << "Lage fluctuation detected in rusanov\n";   }
     // }
-    // fluctuation(2, 0) = 0.5 * (Qi(1, 0) + Qj(1, 0)) * 1.;
+
+    // if (is_nan)
+    // {
+    //     amrex::Print() << "=================" << "\n";
+    //     amrex::Print() << "Sign " << sign << "\n";
+    //     for (int n=0; n<n_dof; ++n)
+    //     {
+    //         amrex::Print() << "Qi[" << n << "] " << Qi(n,0) << "\n";
+    //         amrex::Print() << "Qj[" << n << "] " << Qj(n,0) << "\n";
+    //     }
+    //     amrex::Print() << "Qauxi[0]" << Qauxi(0,0) << "\n";
+    //     amrex::Print() << "Qauxj[0]" << Qauxj(0,0) << "\n";
+    //     check_nan(Qi, "Qi in rusanov");
+    //     check_nan(Qj, "Qj in rusanov");
+    //     check_nan(Qauxi, "Qauxi in rusanov");
+    //     check_nan(Qauxj, "Qauxj in rusanov");
+    //     check_nan(Aint, "Aint in rusanov");
+    //     check_nan(Asq, "Asq in rusanov");
+    //     check_nan(Am, "Am in rusanov");
+    //     check_nan(dQ, "dQ in rusanov");
+    // }
 
     return fluctuation;
 

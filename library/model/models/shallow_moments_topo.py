@@ -287,10 +287,10 @@ class ShallowMomentsTopo(Model):
         sqrt = sympy.sqrt(tmp)
         for k in range(1 + self.level):
             for l in range(1 + self.level):
-                out[1 + k] += (
+                out[2 + k] += (
                     -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * alpha[l] * sqrt
                 )
-                out[1 + k + offset] += (
+                out[2 + k + offset] += (
                     -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * beta[l] * sqrt
                 )
         return out

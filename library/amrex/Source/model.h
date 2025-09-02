@@ -295,11 +295,10 @@ public:
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
-        amrex::Real t0 = 9.81*Q(1);
         res(0,0) = 0;
         res(1,0) = 0;
-        res(2,0) = 0.0*t0;
-        res(3,0) = 0.0*t0;
+        res(2,0) = 0;
+        res(3,0) = 0;
         return res;
     }
         
