@@ -14,6 +14,12 @@ typedef amrex::SmallMatrix<amrex::Real, 6, 1> VecQ3d;
 typedef amrex::SmallMatrix<amrex::Real, 3, 1> Vec3;
 typedef amrex::SmallMatrix<amrex::Real, 2, 1> Vec2;
 
+amrex::Real eps = 1e-2;
+int ih = 1;
+int ib = 0;
+
+
+
 
 template <int R, int C>
 amrex::SmallMatrix<amrex::Real, R, C> makeSmallMatrix(const std::initializer_list<amrex::Real>& vals)

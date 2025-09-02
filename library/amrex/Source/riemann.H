@@ -100,12 +100,6 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     VecQ fluctuation = VecQ::Zero();
     int n_dof = Model::n_dof_q;
 
-    amrex::Real eps = 1e-2;
-    amrex::Real eps_low = 1e-1;
-
-
-    int ib = 0;
-    int ih = 1;
     // I am a wall from the viewpoint of my neighbor
     // TODO this should become a wall boundary condition
     // if (Qi(ih,0) < eps && Qi(ib,0) > Qj(ih,0) + Qj(ib,0)) return fluctuation;
@@ -115,7 +109,7 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     // My neighbor is dry 
     // if (Qj(ih,0) < eps) return fluctuation;
 
-    // if ((Qj(ih,0) < eps) && (Qi(ih, 0) < eps)) return fluctuation;
+    if ((Qj(ih,0) < eps) && (Qi(ih, 0) < eps)) return fluctuation;
 
     
     //Qi = wet_dry_fix(Qi);
@@ -145,16 +139,16 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
 
     VecQ ev_i = VecQ::Zero();
     VecQ ev_j = VecQ::Zero();
-    // if (Qi(ih,0) > eps)
-    // {
-    //     ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    // }
-    // if (Qj(ih,0) > eps) 
-    // {
-    //     ev_j = Model::eigenvalues(Qj, Qauxj, normal);
-    // }
-    ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    if (Qi(ih,0) > eps)
+    {
+        ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    }
+    if (Qj(ih,0) > eps) 
+    {
+        ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    }
+    // ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    // ev_j = Model::eigenvalues(Qj, Qauxj, normal);
 
 
 
@@ -213,7 +207,7 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
 
     if (Qi(ih, 0) < eps || Qj(ih, 0) < eps)
     {
-        for (int n=1; n<n_dof; ++n)
+        for (int n=2; n<n_dof; ++n)
         {
             fluctuation(n, 0) = 0.;
         }

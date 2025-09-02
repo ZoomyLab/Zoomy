@@ -19,10 +19,8 @@ void write_plotfiles   (const int identifier, const int step, MultiFab & solutio
 
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
 {
-    Real eps = 1e-2;
-    int ih = 1;
     VecQ ev = VecQ::Zero(); 
-    // Model::eigenvalues(Q, Qaux, normal);
+    // ev = Model::eigenvalues(Q, Qaux, normal);
     // for (int n=0; n<Model::n_dof_q; ++n)
     // {
     //     ev(n,0) = 0.;
@@ -61,9 +59,8 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real h = Q_arr(i,j,k,1);
+            Real h = Q_arr(i,j,k,ih);
             h = h > 0. ? h : 0.;
-            Real eps = 1e-2;
             Real factor = h / (amrex::max(h, eps));
             // Real factor = h > eps? 1. : 0.;
             // factor = 0.;
@@ -102,10 +99,11 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real h = Q_arr(i,j,k,1);
+            Real h = Q_arr(i,j,k,ih);
             h = h > 0 ? h : 0.;
-            Real eps = 1e-2;
             Real hinv = 2 / (h+(amrex::max(h, eps)));
+            hinv = h < eps ? 0. : hinv;
+
             Qaux_arr(i,j,k,0) = hinv;
             // if (h < eps)
             // {
@@ -360,7 +358,7 @@ int main (int argc, char* argv[])
 
 
             // These define the pointers we can pass to the GPU
-            const Array4<      Real>& Q_arr        = Q.array(mfi);
+            const Array4<const Real>& Q_arr        = Q.array(mfi);
             const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
             const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
 
@@ -372,7 +370,7 @@ int main (int argc, char* argv[])
                     Qtmp_arr(i,j,k,n) = Q_arr(i, j, k, n) + dt*dQ(n);
                 }
             });
-            // Qtmp.FillBoundary(geom.periodicity());
+            Qtmp.FillBoundary(geom.periodicity());
 
         } // mfi
     };
