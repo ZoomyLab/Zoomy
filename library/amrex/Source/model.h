@@ -203,29 +203,13 @@ public:
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
         amrex::Real t0 = normal(0)*Q(2);
         amrex::Real t1 = normal(1)*Q(3);
-        amrex::Real t2 = Q(1) > 1.0e-8;
-        amrex::Real t3 = amrex::Math::powi<2>(Qaux(0));
-        amrex::Real t4 = std::pow(1.0*9.81*amrex::Math::powi<5>(Q(1)), 1.0/2.0)*std::pow(amrex::Math::powi<2>(normal(0)) + amrex::Math::powi<2>(normal(1)), 1.0/2.0);
-        amrex::Real t5 = Q(1)*t0 + Q(1)*t1;
+        amrex::Real t2 = amrex::Math::powi<2>(Qaux(0));
+        amrex::Real t3 = std::pow(1.0*9.81*amrex::Math::powi<5>(Q(1)), 1.0/2.0)*std::pow(amrex::Math::powi<2>(normal(0)) + amrex::Math::powi<2>(normal(1)), 1.0/2.0);
+        amrex::Real t4 = Q(1)*t0 + Q(1)*t1;
         res(0,0) = 0;
-        res(1,0) = ((t2) ? (
-   Qaux(0)*(t0 + t1)
-)
-: (
-   0
-));
-        res(2,0) = ((t2) ? (
-   t3*(t4 + t5)
-)
-: (
-   0
-));
-        res(3,0) = ((t2) ? (
-   t3*(-t4 + t5)
-)
-: (
-   0
-));
+        res(1,0) = Qaux(0)*(t0 + t1);
+        res(2,0) = t2*(t3 + t4);
+        res(3,0) = t2*(-t3 + t4);
         return res;
 
     }
@@ -295,10 +279,11 @@ public:
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
+        amrex::Real t0 = 9.81*Q(1);
         res(0,0) = 0;
         res(1,0) = 0;
-        res(2,0) = 0;
-        res(3,0) = 0;
+        res(2,0) = 0.0*t0;
+        res(3,0) = 0.0*t0;
         return res;
     }
         

@@ -19,17 +19,18 @@ void write_plotfiles   (const int identifier, const int step, MultiFab & solutio
 
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
 {
-    // Real eps = 1e-6;
-    // int ih = 1;
-    VecQ ev = Model::eigenvalues(Q, Qaux, normal);
+    Real eps = 1e-2;
+    int ih = 1;
+    VecQ ev = VecQ::Zero(); 
+    // Model::eigenvalues(Q, Qaux, normal);
     // for (int n=0; n<Model::n_dof_q; ++n)
     // {
     //     ev(n,0) = 0.;
     // }
-    // if (Q(ih,0) > eps)
-    // {
-    //     ev = Model::eigenvalues(Q, Qaux, normal);
-    // }
+    if (Q(ih,0) > eps)
+    {
+        ev = Model::eigenvalues(Q, Qaux, normal);
+    }
     
     // for (int n=0; n<Model::n_dof_q; ++n)
     // {
@@ -72,14 +73,14 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
             //     Q_arr(i,j,k,n) *= factor;
             //     // Q_arr(i,j,k,n) = 0.;
             // }
-            if (h < eps)
-            {
-                for (int n=2; n<Model::n_dof_q; ++n)
-                {
-                    // Q_arr(i,j,k,n) *= factor;
-                    Q_arr(i,j,k,n) = 0.;
-                }
-            }
+            // if (h < eps)
+            // {
+            //     for (int n=2; n<Model::n_dof_q; ++n)
+            //     {
+            //         // Q_arr(i,j,k,n) *= factor;
+            //         Q_arr(i,j,k,n) = 0.;
+            //     }
+            // }
         });
     } // mfi
 
@@ -339,7 +340,12 @@ int main (int argc, char* argv[])
         Qaux.FillBoundary(geom.periodicity());
 
         Real max_abs_ev = computeMaxAbsEigenvalue(Q, Qaux);
-        if (adapt_dt && iteration > 5) dt = CFL * cell_size / max_abs_ev;
+        if (adapt_dt && iteration > 5) 
+            {
+                dt = CFL * cell_size / max_abs_ev;
+                dt = amrex::min(dt, 1.);
+                dt = amrex::max(dt, 1.e-5);
+            }
         amrex::Print() << "  Evolve: abs_max_ev: " << max_abs_ev << " dt: " << dt << "\n";
 
 

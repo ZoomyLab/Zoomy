@@ -170,7 +170,8 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     }
 
     // Approximation of A +/- |A| with |A| the numerical viscosity approx. by max eigenvalue
-    Am = 0.5*(Aint + sign* sM * I);
+    amrex::Real relax = sM > 1000 ? 0. : 1.;
+    Am = 0.5*(relax * Aint + sign* sM * I);
     dQ = (Qj-Qi);
     fluctuation = (Am * dQ) * (Vij / Vi);
 
