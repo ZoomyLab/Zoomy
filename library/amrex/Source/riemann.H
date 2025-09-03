@@ -102,14 +102,14 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
 
     // I am a wall from the viewpoint of my neighbor
     // TODO this should become a wall boundary condition
-    // if (Qi(ih,0) < eps && Qi(ib,0) > Qj(ih,0) + Qj(ib,0)) return fluctuation;
+    if (Qi(idx_h,0) < eps && Qi(idx_b,0) > Qj(idx_h,0) + Qj(idx_b,0)) return fluctuation;
     // My neighbor a wall for me
     // TODO this should become a wall boundary condition
-    // if (Qj(ih,0) < eps && Qj(ib,0) > Qi(ih,0) + Qi(ib,0)) return fluctuation;
+    if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0)) return fluctuation;
     // My neighbor is dry 
-    // if (Qj(ih,0) < eps) return fluctuation;
+    // if (Qj(idx_h,0) < eps) return fluctuation;
 
-    if ((Qj(ih,0) < eps) && (Qi(ih, 0) < eps)) return fluctuation;
+    if ((Qj(idx_h,0) < eps) && (Qi(idx_h, 0) < eps)) return fluctuation;
 
     
     //Qi = wet_dry_fix(Qi);
@@ -131,25 +131,31 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     // MatQ Asq = Aint * Aint;
     MatQ Asq = Aint;
     MatQ I = MatQ::Identity();
-    // I(0,ib) = 1.;
-    I(ib,ib) = 0.;
+    // I(0,idx_b) = 1.;
+    I(idx_b,idx_b) = 0.;
 
     MatQ Am;
     VecQ dQ;
 
     VecQ ev_i = VecQ::Zero();
     VecQ ev_j = VecQ::Zero();
-    if (Qi(ih,0) > eps)
-    {
-        ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    }
-    if (Qj(ih,0) > eps) 
-    {
-        ev_j = Model::eigenvalues(Qj, Qauxj, normal);
-    }
-    // ev_i = Model::eigenvalues(Qi, Qauxi, normal);
-    // ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    // if (Qi(idx_h,0) > eps)
+    // {
+    //     ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    // }
+    // if (Qj(idx_h,0) > eps) 
+    // {
+    //     ev_j = Model::eigenvalues(Qj, Qauxj, normal);
+    // }
+    ev_i = Model::eigenvalues(Qi, Qauxi, normal);
+    ev_j = Model::eigenvalues(Qj, Qauxj, normal);
 
+    // for (int n=0; n<n_dof; ++n)
+    // {
+        
+    //     if (std::isnan(ev_i(n, 0))) ev_i(n, 0) = 0.;
+    //     if (std::isnan(ev_j(n, 0))) ev_j(n, 0) = 0.;
+    // }
 
 
     // for (int n=0; n<n_dof; ++n)
@@ -205,13 +211,13 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     //     check_nan(dQ, "dQ in rusanov");
     // }
 
-    if (Qi(ih, 0) < eps || Qj(ih, 0) < eps)
-    {
-        for (int n=2; n<n_dof; ++n)
-        {
-            fluctuation(n, 0) = 0.;
-        }
-    }
+    // if (Qi(idx_h, 0) < eps || Qj(idx_h, 0) < eps)
+    // {
+    //     for (int n=2; n<n_dof; ++n)
+    //     {
+    //         fluctuation(n, 0) = 0.;
+    //     }
+    // }
 
     return fluctuation;
 

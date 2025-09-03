@@ -20,15 +20,15 @@ void write_plotfiles   (const int identifier, const int step, MultiFab & solutio
 double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Vec2& normal)
 {
     VecQ ev = VecQ::Zero(); 
-    // ev = Model::eigenvalues(Q, Qaux, normal);
+    ev = Model::eigenvalues(Q, Qaux, normal);
     // for (int n=0; n<Model::n_dof_q; ++n)
     // {
     //     ev(n,0) = 0.;
     // }
-    if (Q(ih,0) > eps)
-    {
-        ev = Model::eigenvalues(Q, Qaux, normal);
-    }
+    // if (Q(idx_h,0) > eps)
+    // {
+    //     ev = Model::eigenvalues(Q, Qaux, normal);
+    // }
     
     // for (int n=0; n<Model::n_dof_q; ++n)
     // {
@@ -59,7 +59,7 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real h = Q_arr(i,j,k,ih);
+            Real h = Q_arr(i,j,k,idx_h);
             h = h > 0. ? h : 0.;
             Real factor = h / (amrex::max(h, eps));
             // Real factor = h > eps? 1. : 0.;
@@ -99,10 +99,10 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real h = Q_arr(i,j,k,ih);
+            Real h = Q_arr(i,j,k,idx_h);
             h = h > 0 ? h : 0.;
             Real hinv = 2 / (h+(amrex::max(h, eps)));
-            hinv = h < eps ? 0. : hinv;
+            // hinv = h < eps ? 0. : hinv;
 
             Qaux_arr(i,j,k,0) = hinv;
             // if (h < eps)
@@ -370,7 +370,7 @@ int main (int argc, char* argv[])
                     Qtmp_arr(i,j,k,n) = Q_arr(i, j, k, n) + dt*dQ(n);
                 }
             });
-            Qtmp.FillBoundary(geom.periodicity());
+            // Qtmp.FillBoundary(geom.periodicity());
 
         } // mfi
     };
