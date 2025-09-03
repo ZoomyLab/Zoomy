@@ -177,6 +177,7 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     {
         sM = std::max(sM, amrex::max(std::abs(ev_i(i, 0)), std::abs(ev_j(i, 0))));
     }
+    // if (std::isinf(sM) || amrex::isnan(sM)) sM = 1000.;
 
     // Approximation of A +/- |A| with |A| the numerical viscosity approx. by max eigenvalue
     // amrex::Real relax = sM > 1000 ? 0. : 1.;
