@@ -14,7 +14,7 @@ typedef amrex::SmallMatrix<amrex::Real, 6, 1> VecQ3d;
 typedef amrex::SmallMatrix<amrex::Real, 3, 1> Vec3;
 typedef amrex::SmallMatrix<amrex::Real, 2, 1> Vec2;
 
-inline constexpr amrex::Real eps = 1e-8;
+inline constexpr amrex::Real eps = 1e-4;
 inline constexpr int idx_h = 1;
 inline constexpr int idx_b = 0;
 
