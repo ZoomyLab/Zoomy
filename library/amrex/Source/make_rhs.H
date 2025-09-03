@@ -13,7 +13,7 @@
 AMREX_GPU_DEVICE
 AMREX_FORCE_INLINE
 VecQ
-make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+make_flux (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
 {
     int n_dof = Model::n_dof_q;
     int n_dof_aux = Model::n_dof_qaux;
@@ -56,9 +56,61 @@ make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex
     VecQ fy_lo = rusanov(Qy_hi, Qij, Qauxy_hi, Qauxij, normal_yp, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
     VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
 
-    VecQ rhs = -(fx_hi + fx_lo) - (fy_hi + fy_lo) + Model::source(Qij, Qauxij);
-    // VecQ rhs = Model::source(Qij, Qauxij);
+    VecQ rhs = -(fx_hi + fx_lo) - (fy_hi + fy_lo) ;
 
+
+    return rhs;
+}
+
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+VecQ
+make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+{
+    int n_dof = Model::n_dof_q;
+    int n_dof_aux = Model::n_dof_qaux;
+    VecQ Qij;
+    VecQaux Qauxij;
+    for (int k=0;k<n_dof; ++k) {
+        Qij(k,0)   = sol_array(i,j,0,k);
+    }
+
+    for (int k=0;k<n_dof_aux; ++k) {
+        Qauxij(k,0)   = sol_array_aux(i,j,0,k);
+    }
+    VecQ rhs = VecQ::Zero();
+    rhs = Model::source(Qij, Qauxij);
+    return rhs;
+}
+
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+VecQ
+make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+{
+    int n_dof = Model::n_dof_q;
+    int n_dof_aux = Model::n_dof_qaux;
+    VecQ Qij;
+    VecQaux Qauxij;
+    for (int k=0;k<n_dof; ++k) {
+        Qij(k,0)   = sol_array(i,j,0,k);
+    }
+
+    for (int k=0;k<n_dof_aux; ++k) {
+        Qauxij(k,0)   = sol_array_aux(i,j,0,k);
+    }
+    VecQ rhs = Qij;
+    return rhs;
+    amrex::Real h = Qij(idx_h,0);
+    amrex::Real hinv = Qauxij(0,0);
+    // if (h < eps) return rhs;
+    // amrex::Real factor = h / amrex::max(h, eps);
+    // rhs = factor*factor*Model::source(Qij, Qauxij);
+    amrex::Real q = hinv * std::sqrt(Qij(2, 0) * Qij(2, 0) + Qij(3, 0) * Qij(3, 0));
+    amrex::Real Cf = 9.81 / 30. / 30.;
+    rhs(2, 0) = Qij(2, 0) / (1. + dt * Cf * q);
+    rhs(3, 0) = Qij(3, 0) / (1. + dt * Cf * q);
+    // rhs = Model::source(Qij, Q
 
     return rhs;
 }

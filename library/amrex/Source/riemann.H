@@ -106,6 +106,14 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     // My neighbor a wall for me
     // TODO this should become a wall boundary condition
     if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0)) return fluctuation;
+    // if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0))
+    // {
+    //     Qj(idx_b, 0) = Qi(idx_b, 0);
+    //     Qj(idx_h, 0) = Qi(idx_h, 0);
+    //     Qj(2,2) = std::abs(normal(0)) > 0 ? -Qi(2,2) : 0.;
+    //     Qj(3,2) = std::abs(normal(1)) > 0 ? -Qi(3,2) : 0.;
+
+    // }
     // My neighbor is dry 
     // if (Qj(idx_h,0) < eps) return fluctuation;
 // 

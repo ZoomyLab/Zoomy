@@ -60,11 +60,19 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             Real h = Q_arr(i,j,k,idx_h);
-            h = h > 0. ? h : 0.;
-            Real factor = h / (amrex::max(h, eps));
+            if (h <= 0)
+            {
+                for (int n=1; n<Model::n_dof_q; ++n)
+                {
+                    Q_arr(i,j,k,n) = 0.;
+                }
+            }
+            // h = h > 0. ? h : 0.;
+
+            // Real factor = h / (amrex::max(h, eps));
             // Real factor = h > eps? 1. : 0.;
             // factor = 0.;
-            Q_arr(i,j,k,idx_h) = h;
+            // Q_arr(i,j,k,idx_h) = h;
             // for (int n=2; n<Model::n_dof_q; ++n)
             // {
             //     Q_arr(i,j,k,n) *= factor;
@@ -358,16 +366,41 @@ int main (int argc, char* argv[])
 
 
             // These define the pointers we can pass to the GPU
-            const Array4<const Real>& Q_arr        = Q.array(mfi);
+            const Array4<      Real>& Q_arr        = Q.array(mfi);
             const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
             const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
 
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
+                VecQ dQ = make_flux(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
                     Qtmp_arr(i,j,k,n) = Q_arr(i, j, k, n) + dt*dQ(n);
+                }
+            });
+        }
+        update_q(Qtmp, Qaux);
+        update_qaux(Qtmp, Qaux);
+        Qtmp.FillBoundary(geom.periodicity());
+        Qaux.FillBoundary(geom.periodicity());
+        for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
+        {
+            // We will loop over all cells in this box
+            const Box& bx = mfi.validbox();
+
+
+            // These define the pointers we can pass to the GPU
+            const Array4<      Real>& Q_arr        = Q.array(mfi);
+            const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
+            const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
+
+            ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+            {
+                VecQ dQ = make_rhs_explicit(i, j, Qtmp_arr, Qaux_arr, dx[0], dx[1], dt);
+                for (int n=0; n<Ncomp; n++)
+                {
+                    Q_arr(i,j,k,n) = dQ(n);
+                    // Q_arr(i,j,k,n) = Qtmp_arr(i,j,k,n) + dt*dQ(n);
                 }
             });
             // Qtmp.FillBoundary(geom.periodicity());
@@ -396,7 +429,7 @@ int main (int argc, char* argv[])
         // Q.ParallelCopy(Qnew);
 
         evolve(Qtmp, Q, Qaux, time);
-        std::swap(Q , Qtmp );
+        // std::swap(Q , Qtmp );
 
         //
         // Set time to evolve to
