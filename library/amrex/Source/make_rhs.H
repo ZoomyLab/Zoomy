@@ -79,7 +79,7 @@ make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex
         Qauxij(k,0)   = sol_array_aux(i,j,0,k);
     }
     VecQ rhs = VecQ::Zero();
-    rhs = Model::source(Qij, Qauxij);
+    // rhs = Model::source(Qij, Qauxij);
     return rhs;
 }
 
@@ -103,14 +103,13 @@ make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_arr
     return rhs;
     amrex::Real h = Qij(idx_h,0);
     amrex::Real hinv = Qauxij(0,0);
-    // if (h < eps) return rhs;
-    // amrex::Real factor = h / amrex::max(h, eps);
-    // rhs = factor*factor*Model::source(Qij, Qauxij);
+
     amrex::Real q = hinv * std::sqrt(Qij(2, 0) * Qij(2, 0) + Qij(3, 0) * Qij(3, 0));
     amrex::Real Cf = 9.81 / 30. / 30.;
+    int level = (Model::n_dof_q-2)/Model::dimension;
+    int offset = level+1;
     rhs(2, 0) = Qij(2, 0) / (1. + dt * Cf * q);
-    rhs(3, 0) = Qij(3, 0) / (1. + dt * Cf * q);
-    // rhs = Model::source(Qij, Q
+    rhs(2+offset, 0) = Qij(2+offset, 0) / (1. + dt * Cf * q);
 
     return rhs;
 }

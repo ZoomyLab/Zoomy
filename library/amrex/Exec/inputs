@@ -9,11 +9,13 @@ output.plot_dt_interval = 1.
 
 # ---------------- solver --------------
 solver.time_end  = 30.
-solver.dt        = 0.0000001
+solver.dt        = 0.000001
 solver.adapt_dt  = true
-solver.cfl       = 0.2
-solver.dtmin    = 1.e-8
-solver.dtmax    = 0.1
+solver.cfl       = 0.1
+solver.dtmin    = 1.e-10
+solver.dtmax    = 0.01
+solver.warmup_steps =  5
+
 
 # ---------------- geometry ------------
 geometry.n_cell_x = 1537

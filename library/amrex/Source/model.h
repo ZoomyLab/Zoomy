@@ -279,12 +279,10 @@ public:
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
-        amrex::Real t0 = amrex::Math::powi<2>(Qaux(0));
-        amrex::Real t1 = 1.0*Qaux(0)*std::pow(amrex::Math::powi<2>(Q(2))*t0 + amrex::Math::powi<2>(Q(3))*t0, 1.0/2.0)/amrex::Math::powi<2>(300.0);
         res(0,0) = 0;
         res(1,0) = 0;
-        res(2,0) = -Q(2)*t1;
-        res(3,0) = -Q(3)*t1;
+        res(2,0) = 0;
+        res(3,0) = 0;
         return res;
     }
         

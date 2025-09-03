@@ -188,7 +188,7 @@ int main (int argc, char* argv[])
     int   max_grid_size_x = 32,  max_grid_size_y = 32, max_grid_size_z = 1;
     Real  phy_bb_x0 = 0., phy_bb_y0 = 0., phy_bb_x1 = 1., phy_bb_y1 = 1.;
     Real  plot_dt_interval = 0.1;
-    int   test_case = 0, identifier = 0;
+    int   test_case = 0, identifier = 0, warmup_steps = 5;
     Real  time_end = 1.0, dt = 1.0e-4, CFL = 0.5, dtmin=1.0e-7, dtmax=1.e-2;
     bool  adapt_dt = false;
     
@@ -225,6 +225,7 @@ int main (int argc, char* argv[])
         pp.query("cfl",      CFL);
         pp.query("dtmin",       dtmin);
         pp.query("dtmax",       dtmax);
+        pp.query("warmup_steps", warmup_steps);
 
     }
     
@@ -349,7 +350,7 @@ int main (int argc, char* argv[])
         Qaux.FillBoundary(geom.periodicity());
 
         Real max_abs_ev = computeMaxAbsEigenvalue(Q, Qaux);
-        if (adapt_dt && iteration > 5) 
+        if (adapt_dt && iteration > warmup_steps) 
             {
                 dt = CFL * cell_size / max_abs_ev;
                 dt = amrex::min(dt, dtmax);
@@ -358,7 +359,41 @@ int main (int argc, char* argv[])
         amrex::Print() << "  Evolve: abs_max_ev: " << max_abs_ev << " dt: " << dt << "\n";
 
 
+        amrex::Real dt_scale = 1.;
+        for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
+        {
+            // We will loop over all cells in this box
+            const Box& bx = mfi.validbox();
 
+
+            // These define the pointers we can pass to the GPU
+            const Array4<      Real>& Q_arr        = Q.array(mfi);
+            const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
+            const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
+
+            ParallelFor(bx, [&dt_scale, &Q_arr, &Qtmp_arr, &Qaux_arr, dx, dt] AMREX_GPU_DEVICE (int i, int j, int k)
+            {
+                VecQ dQ = make_flux(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
+                amrex::Real hnew = Q_arr(i, j, k, idx_h) + dt * dQ(idx_h);
+                amrex::Real hold = Q_arr(i, j, k, idx_h);
+                if (hold > eps && hnew < 0)
+                {
+                    dt_scale = amrex::min(dt_scale, (hold-hnew)/hold);
+
+                }
+                dt_scale = std::isnan(dt_scale)? 1. : dt_scale;
+                dt_scale = std::isinf(dt_scale)? 1. : dt_scale;
+
+                for (int n=0; n<Model::n_dof_q; n++)
+                {
+                    Qtmp_arr(i,j,k,n) = dQ(n);
+                }
+            });
+        }
+        ParallelDescriptor::ReduceRealMin(dt_scale);
+        dt = dt * dt_scale;
+        dt = amrex::max(dt, dtmin);
+        amrex::Print() << "  Evolve: dt_scale: " << dt_scale << " new dt: " << dt << "\n";
         for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
         {
             // We will loop over all cells in this box
@@ -372,10 +407,9 @@ int main (int argc, char* argv[])
 
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                VecQ dQ = make_flux(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
-                    Qtmp_arr(i,j,k,n) = Q_arr(i, j, k, n) + dt*dQ(n);
+                    Q_arr(i,j,k,n) += dt* Qtmp_arr(i, j, k, n);
                 }
             });
         }
@@ -396,11 +430,12 @@ int main (int argc, char* argv[])
 
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                VecQ dQ = make_rhs_explicit(i, j, Qtmp_arr, Qaux_arr, dx[0], dx[1], dt);
+                VecQ Q_chezy = make_rhs_explicit(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
+                VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
-                    Q_arr(i,j,k,n) = dQ(n);
-                    // Q_arr(i,j,k,n) = Qtmp_arr(i,j,k,n) + dt*dQ(n);
+                    Q_arr(i,j,k,n) = Q_chezy(n);
+                    Q_arr(i,j,k,n) = Q_arr(i,j,k,n) + dt*dQ(n);
                 }
             });
             // Qtmp.FillBoundary(geom.periodicity());
