@@ -64,7 +64,7 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
             Real factor = h / (amrex::max(h, eps));
             // Real factor = h > eps? 1. : 0.;
             // factor = 0.;
-            Q_arr(i,j,k,1) = h;
+            Q_arr(i,j,k,idx_h) = h;
             // for (int n=2; n<Model::n_dof_q; ++n)
             // {
             //     Q_arr(i,j,k,n) *= factor;

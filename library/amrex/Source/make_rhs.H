@@ -45,16 +45,16 @@ make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex
     // VecQ fy_lo = rusanov(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_yp, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
     // VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
 
-    // VecQ fx_lo = price_c(Qij, Qx_hi, Qauxij, Qauxx_hi, normal_xp, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
-    // VecQ fx_hi = price_c(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
-    // VecQ fy_lo = price_c(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_yp, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
-    // VecQ fy_hi = price_c(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    VecQ fx_lo = price_c(Qij, Qx_hi, Qauxij, Qauxx_hi, normal_xp, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    VecQ fx_hi = price_c(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    VecQ fy_lo = price_c(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_yp, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    VecQ fy_hi = price_c(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
 
     // https://doi.org/10.1090%2FS0025-5718-09-02317-5
-    VecQ fx_lo = rusanov(Qx_hi,Qij, Qauxx_hi, Qauxij, normal_xp, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
-    VecQ fx_hi = rusanov(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
-    VecQ fy_lo = rusanov(Qy_hi, Qij, Qauxy_hi, Qauxij, normal_yp, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
-    VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    // VecQ fx_lo = rusanov(Qx_hi,Qij, Qauxx_hi, Qauxij, normal_xp, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fx_hi = rusanov(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fy_lo = rusanov(Qy_hi, Qij, Qauxy_hi, Qauxij, normal_yp, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    // VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
 
     VecQ rhs = -(fx_hi + fx_lo) - (fy_hi + fy_lo) + Model::source(Qij, Qauxij);
     // VecQ rhs = Model::source(Qij, Qauxij);
