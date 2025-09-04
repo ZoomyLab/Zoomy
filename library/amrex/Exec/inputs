@@ -8,7 +8,7 @@ output.identifier       = 0
 output.plot_dt_interval = 1.
 
 # ---------------- solver --------------
-solver.time_end  = 30.
+solver.time_end  = 100.
 solver.dt        = 0.000001
 solver.adapt_dt  = true
 solver.cfl       = 0.45
