@@ -489,13 +489,17 @@ int main (int argc, char* argv[])
 
             ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                VecQ Q_chezy = make_rhs_explicit(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt, max_velocity);
                 VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
                 for (int n=0; n<Ncomp; n++)
                 {
-                    Q_arr(i,j,k,n) = Q_chezy(n);
                     Q_arr(i,j,k,n) = Q_arr(i,j,k,n) + dt*dQ(n);
                 }
+                VecQ Q_chezy = make_rhs_explicit(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt, max_velocity);
+                for (int n=0; n<Ncomp; n++)
+                {
+                    Q_arr(i,j,k,n) = Q_chezy(n);
+                }
+
             });
             // Qtmp.FillBoundary(geom.periodicity());
 
