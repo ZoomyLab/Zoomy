@@ -182,8 +182,8 @@ class ShallowMomentsTopo(Model):
         for d in range(1, self.dimension):
             A += self.normal[d] * self.quasilinear_matrix()[d]
         b, h, alpha, beta, hinv = self.get_primitives()
-        alpha_erase = alpha[1:] if self.level >= 2 else []
-        beta_erase = beta[1:] if self.level >= 2 else []
+        alpha_erase = alpha[2:] if self.level >= 2 else []
+        beta_erase = beta[2:] if self.level >= 2 else []
         for alpha_i in alpha_erase:
             A = A.subs(alpha_i, 0)
         for beta_i in beta_erase:
@@ -230,8 +230,8 @@ class ShallowMomentsTopo(Model):
         ub = 0
         vb = 0
         for i in range(1 + self.level):
-            ub += alpha[i] * self.basisfunctions.eval(i, 0)
-            vb += beta[i] * self.basisfunctions.eval(i, 0)
+            ub += alpha[i]
+            vb += beta[i]
         for k in range(1, 1 + self.level):
             out[1+1 + k] += (
                 -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
@@ -316,8 +316,5 @@ class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
         h = self.variables[1]
         evs = self.substitute_precomputed_denominator(self.ref_model.eigenvalues(), self.variables[1], self.aux_variables.hinv)
         for i in range(self.n_variables):
-            evs[i] = Piecewise((evs[i], h > 1e-4), (0, True))
+            evs[i] = Piecewise((evs[i], h > 1e-8), (0, True))
         return evs
-    
-    def interpolate_3d(self):
-        return self.substitute_precomputed_denominator(self.ref_model.interpolate_3d(), self.variables[1], self.aux_variables.hinv)

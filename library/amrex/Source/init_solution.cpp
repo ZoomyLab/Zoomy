@@ -3,7 +3,7 @@
 
 using namespace amrex;
 
-static void readRasterIntoComponent (const std::string& filename,
+void readRasterIntoComponent (const std::string& filename,
                                      const Geometry&    geom,
                                      MultiFab&          mf,
                                      int                comp)
@@ -57,16 +57,16 @@ static void readRasterIntoComponent (const std::string& filename,
         });
     }
 
+    amrex::Gpu::streamSynchronize();
+
     if (ParallelDescriptor::IOProcessor())
         amrex::Print() << "✓ loaded '" << filename << "' into component "
                        << comp << " (" << nx << "×" << ny << ")\n";
 }
 
 
-void init_solution(const std::string&  filename,
-                   const Geometry&     geom,
-                   MultiFab&           solution,
-                   int                 comp)
+void init_solution(const Geometry&     geom,
+                   MultiFab&           solution)
 {
     GpuArray<Real,AMREX_SPACEDIM> dx = geom.CellSizeArray();
 
@@ -89,6 +89,5 @@ void init_solution(const std::string&  filename,
         });
     } // mfi
     //
-    readRasterIntoComponent(filename, geom, solution, comp);
 }
 

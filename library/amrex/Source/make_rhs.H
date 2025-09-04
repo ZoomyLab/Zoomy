@@ -13,7 +13,7 @@
 AMREX_GPU_DEVICE
 AMREX_FORCE_INLINE
 VecQ
-make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy)
+make_flux (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
 {
     int n_dof = Model::n_dof_q;
     int n_dof_aux = Model::n_dof_qaux;
@@ -40,12 +40,85 @@ make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex
     Vec2 normal_yp = makeSmallMatrix<2, 1>({0., +1.});
     Vec2 normal_ym = makeSmallMatrix<2, 1>({0., -1.});
 
-    VecQ fx_lo = rusanov(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xp, +1, dx*dy, dy, Model::quasilinear_matrix_x);
-    VecQ fx_hi = rusanov(Qij, Qx_hi, Qauxij, Qauxx_hi, normal_xm, -1, dx*dy, dy, Model::quasilinear_matrix_x);
-    VecQ fy_lo = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_yp, +1, dx*dy, dx, Model::quasilinear_matrix_y);
-    VecQ fy_hi = rusanov(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_ym, -1, dx*dy, dx, Model::quasilinear_matrix_y);
+    // VecQ fx_lo = rusanov(Qij, Qx_hi, Qauxij, Qauxx_hi, normal_xp, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fx_hi = rusanov(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fy_lo = rusanov(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_yp, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    // VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
 
-    VecQ rhs = -(fx_hi + fx_lo) - (fy_hi + fy_lo) + Model::source(Qij, Qauxij);
+    // VecQ fx_lo = price_c(Qij, Qx_hi, Qauxij, Qauxx_hi, normal_xp, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fx_hi = price_c(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    // VecQ fy_lo = price_c(Qij, Qy_hi, Qauxij, Qauxy_hi, normal_yp, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    // VecQ fy_hi = price_c(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+
+    // https://doi.org/10.1090%2FS0025-5718-09-02317-5
+    VecQ fx_lo = rusanov(Qx_hi,Qij, Qauxx_hi, Qauxij, normal_xp, -1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    VecQ fx_hi = rusanov(Qij, Qx_lo, Qauxij, Qauxx_lo, normal_xm, +1, dx*dy, dx*dy, dy, Model::quasilinear_matrix_x, dt);
+    VecQ fy_lo = rusanov(Qy_hi, Qij, Qauxy_hi, Qauxij, normal_yp, -1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+    VecQ fy_hi = rusanov(Qij, Qy_lo, Qauxij, Qauxy_lo, normal_ym, +1, dx*dy, dx*dy, dx, Model::quasilinear_matrix_y, dt);
+
+    VecQ rhs = -(fx_hi + fx_lo) - (fy_hi + fy_lo) ;
+
+
+    return rhs;
+}
+
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+VecQ
+make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+{
+    int n_dof = Model::n_dof_q;
+    int n_dof_aux = Model::n_dof_qaux;
+    VecQ Qij;
+    VecQaux Qauxij;
+    for (int k=0;k<n_dof; ++k) {
+        Qij(k,0)   = sol_array(i,j,0,k);
+    }
+
+    for (int k=0;k<n_dof_aux; ++k) {
+        Qauxij(k,0)   = sol_array_aux(i,j,0,k);
+    }
+    VecQ rhs = VecQ::Zero();
+    // rhs = Model::source(Qij, Qauxij);
+    return rhs;
+}
+
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+VecQ
+make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+{
+    int n_dof = Model::n_dof_q;
+    int n_dof_aux = Model::n_dof_qaux;
+    VecQ Qij;
+    VecQaux Qauxij;
+    for (int k=0;k<n_dof; ++k) {
+        Qij(k,0)   = sol_array(i,j,0,k);
+    }
+
+    for (int k=0;k<n_dof_aux; ++k) {
+        Qauxij(k,0)   = sol_array_aux(i,j,0,k);
+    }
+    VecQ rhs = Qij;
+    return rhs;
+    amrex::Real h = Qij(idx_h,0);
+    amrex::Real hinv = Qauxij(0,0);
+
+    amrex::Real q = hinv * std::sqrt(Qij(2, 0) * Qij(2, 0) + Qij(3, 0) * Qij(3, 0));
+
+    q = amrex::min(q, 1000.);
+    amrex::Real Cf = 9.81 / 30. / 30.;
+
+    // amrex::Real factor = (h + amrex::max(h, eps) / (2*h + 1.e-10));
+    amrex::Real factor = 1.;
+    int level = (Model::n_dof_q-2)/Model::dimension;
+    int offset = level+1;
+    rhs(2, 0) = Qij(2, 0) / (1. + dt * factor * Cf * q );
+    rhs(2+offset, 0) = Qij(2+offset, 0) / (1. + dt *factor * Cf * q);
+    rhs(2, 0) = h < eps ? 0. : rhs(2, 0);
+    rhs(2+offset, 0) = h < eps ? 0. : rhs(2+offset, 0);
+    if (std::isnan(rhs(2, 0)) || std::isinf(rhs(2, 0))) rhs(2, 0) = 0.;
+    if (std::isnan(rhs(2+offset, 0)) || std::isinf(rhs(2+offset, 0))) rhs(2+offset, 0) = 0.;
 
     return rhs;
 }

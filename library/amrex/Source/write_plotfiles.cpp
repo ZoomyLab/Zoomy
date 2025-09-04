@@ -111,7 +111,7 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
             }
 
 
-            for (int n=0;n<5; ++n) {
+            for (int n=0;n<6; ++n) {
                 sol_3d_arr(i, j, k, n) = Q3d(n, 0);
             }
         });
@@ -130,11 +130,11 @@ void write_plotfiles (const int identifier, const int step, MultiFab& solution, 
     // Next we write the plotfile which interprets the results to create a full 3D field 
     // using what we know about the basis functions.  This arbitrarily is set to have 8 cells in the vertical
     //
-    //write_plotfiles_2d (identifier ,step, solution, geom, time);
+    write_plotfiles_2d (identifier ,step, solution, geom, time);
 
     //
     // Next we write the plotfile which interprets the results to create a full 3D field 
     // using what we know about the basis functions.  This arbitrarily is set to have 8 cells in the vertical
     //
-    write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
+    // write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
 }
