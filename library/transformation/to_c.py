@@ -1,5 +1,5 @@
 import os
-from sympy import MatrixSymbol, fraction, cancel, Matrix, symbols
+from sympy import MatrixSymbol, fraction, cancel, Matrix, symbols, radsimp, powsimp
 import sympy as sp
 from copy import deepcopy
 
@@ -127,7 +127,7 @@ class AmrexPrinter(CXX11CodePrinter):
             dim = len(expr)
             return [self.create_function(f"{name}_{dir}", expr[i], n_dof_q, n_dof_qaux) for i, dir in enumerate(['x', 'y', 'z'][:dim])]
         res_shape = expr.shape
-        body = self.convert_expression_body(expr, target=target)
+        body = self.convert_expression_body((expr), target=target)
         text = f"""
     AMREX_GPU_HOST_DEVICE
     AMREX_FORCE_INLINE
@@ -212,7 +212,7 @@ class AmrexPrinter(CXX11CodePrinter):
         dim =  model.dimension
         module_functions = []
         module_functions += self.create_function('flux', model.flux(), n_dof, n_dof_qaux)
-        module_functions += self.create_function('flux_jacobian', model.flux(), n_dof, n_dof_qaux)
+        module_functions += self.create_function('flux_jacobian', model.flux_jacobian(), n_dof, n_dof_qaux)
         module_functions += self.create_function('nonconservative_matrix', model.nonconservative_matrix(), n_dof, n_dof_qaux)
         module_functions += self.create_function('quasilinear_matrix', model.quasilinear_matrix(), n_dof, n_dof_qaux)
         module_functions.append(self.create_function_normal('eigenvalues', model.eigenvalues(), n_dof, n_dof_qaux, dim))

@@ -20,7 +20,7 @@ public:
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
         res(0,0) = 0;
         res(1,0) = Q(2);
-        res(2,0) = (1.0/2.0)*1.0*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(2));
+        res(2,0) = (1.0/2.0)*0.975192553619061*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(2));
         res(3,0) = Qaux(0)*Q(2)*Q(3);
         return res;
     }
@@ -37,7 +37,7 @@ public:
         res(0,0) = 0;
         res(1,0) = Q(3);
         res(2,0) = Qaux(0)*Q(2)*Q(3);
-        res(3,0) = (1.0/2.0)*1.0*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(3));
+        res(3,0) = (1.0/2.0)*0.975192553619061*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(3));
         return res;
     }
         
@@ -45,15 +45,28 @@ public:
 
     AMREX_GPU_HOST_DEVICE
     AMREX_FORCE_INLINE
-    static amrex::SmallMatrix<amrex::Real,4,1>
+    static amrex::SmallMatrix<amrex::Real,4,4>
     flux_jacobian_x ( amrex::SmallMatrix<amrex::Real,4,1> const& Q,
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
-        auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
+        auto res = amrex::SmallMatrix<amrex::Real,4,4>{};
+        amrex::Real t0 = Qaux(0)*Q(2);
         res(0,0) = 0;
-        res(1,0) = Q(2);
-        res(2,0) = (1.0/2.0)*1.0*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(2));
-        res(3,0) = Qaux(0)*Q(2)*Q(3);
+        res(0,1) = 0;
+        res(0,2) = 0;
+        res(0,3) = 0;
+        res(1,0) = 0;
+        res(1,1) = 0;
+        res(1,2) = 1;
+        res(1,3) = 0;
+        res(2,0) = 0;
+        res(2,1) = 0.975192553619061*9.81*Q(1);
+        res(2,2) = 2*t0;
+        res(2,3) = 0;
+        res(3,0) = 0;
+        res(3,1) = 0;
+        res(3,2) = Qaux(0)*Q(3);
+        res(3,3) = t0;
         return res;
     }
         
@@ -61,15 +74,28 @@ public:
 
     AMREX_GPU_HOST_DEVICE
     AMREX_FORCE_INLINE
-    static amrex::SmallMatrix<amrex::Real,4,1>
+    static amrex::SmallMatrix<amrex::Real,4,4>
     flux_jacobian_y ( amrex::SmallMatrix<amrex::Real,4,1> const& Q,
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
-        auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
+        auto res = amrex::SmallMatrix<amrex::Real,4,4>{};
+        amrex::Real t0 = Qaux(0)*Q(3);
         res(0,0) = 0;
-        res(1,0) = Q(3);
-        res(2,0) = Qaux(0)*Q(2)*Q(3);
-        res(3,0) = (1.0/2.0)*1.0*9.81*amrex::Math::powi<2>(Q(1)) + Qaux(0)*amrex::Math::powi<2>(Q(3));
+        res(0,1) = 0;
+        res(0,2) = 0;
+        res(0,3) = 0;
+        res(1,0) = 0;
+        res(1,1) = 0;
+        res(1,2) = 0;
+        res(1,3) = 1;
+        res(2,0) = 0;
+        res(2,1) = 0;
+        res(2,2) = t0;
+        res(2,3) = Qaux(0)*Q(2);
+        res(3,0) = 0;
+        res(3,1) = 0.975192553619061*9.81*Q(1);
+        res(3,2) = 0;
+        res(3,3) = 2*t0;
         return res;
     }
         
@@ -90,7 +116,7 @@ public:
         res(1,1) = 0;
         res(1,2) = 0;
         res(1,3) = 0;
-        res(2,0) = 1.0*9.81*Q(1);
+        res(2,0) = 0.975192553619061*9.81*Q(1);
         res(2,1) = 0;
         res(2,2) = 0;
         res(2,3) = 0;
@@ -122,7 +148,7 @@ public:
         res(2,1) = 0;
         res(2,2) = 0;
         res(2,3) = 0;
-        res(3,0) = 1.0*9.81*Q(1);
+        res(3,0) = 0.975192553619061*9.81*Q(1);
         res(3,1) = 0;
         res(3,2) = 0;
         res(3,3) = 0;
@@ -138,7 +164,7 @@ public:
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,4>{};
-        amrex::Real t0 = 1.0*9.81*Q(1);
+        amrex::Real t0 = 0.975192553619061*9.81*Q(1);
         amrex::Real t1 = amrex::Math::powi<2>(Qaux(0));
         amrex::Real t2 = Qaux(0)*Q(2);
         res(0,0) = 0;
@@ -171,7 +197,7 @@ public:
         auto res = amrex::SmallMatrix<amrex::Real,4,4>{};
         amrex::Real t0 = amrex::Math::powi<2>(Qaux(0));
         amrex::Real t1 = Qaux(0)*Q(3);
-        amrex::Real t2 = 1.0*9.81*Q(1);
+        amrex::Real t2 = 0.975192553619061*9.81*Q(1);
         res(0,0) = 0;
         res(0,1) = 0;
         res(0,2) = 0;
@@ -201,15 +227,12 @@ public:
     amrex::SmallMatrix<amrex::Real,2,1> const& normal) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
-        amrex::Real t0 = normal(0)*Q(2);
-        amrex::Real t1 = normal(1)*Q(3);
-        amrex::Real t2 = amrex::Math::powi<2>(Qaux(0));
-        amrex::Real t3 = std::pow(1.0*9.81*amrex::Math::powi<5>(Q(1)), 1.0/2.0)*std::pow(amrex::Math::powi<2>(normal(0)) + amrex::Math::powi<2>(normal(1)), 1.0/2.0);
-        amrex::Real t4 = Q(1)*t0 + Q(1)*t1;
+        amrex::Real t0 = normal(0)*Q(2) + normal(1)*Q(3);
+        amrex::Real t1 = std::pow(Q(1), 3.0/2.0)*std::pow(0.975192553619061*9.81, 1.0/2.0)*std::pow(amrex::Math::powi<2>(normal(0)) + amrex::Math::powi<2>(normal(1)), 1.0/2.0);
         res(0,0) = 0;
-        res(1,0) = Qaux(0)*(t0 + t1);
-        res(2,0) = t2*(t3 + t4);
-        res(3,0) = t2*(-t3 + t4);
+        res(1,0) = Qaux(0)*t0;
+        res(2,0) = Qaux(0)*(t0 - t1);
+        res(3,0) = Qaux(0)*(t0 + t1);
         return res;
 
     }
@@ -279,10 +302,11 @@ public:
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux) noexcept
     {
         auto res = amrex::SmallMatrix<amrex::Real,4,1>{};
+        amrex::Real t0 = 9.81*Q(1);
         res(0,0) = 0;
         res(1,0) = 0;
-        res(2,0) = 0;
-        res(3,0) = 0;
+        res(2,0) = 0.0*t0;
+        res(3,0) = 0.7071067811865475*t0;
         return res;
     }
         

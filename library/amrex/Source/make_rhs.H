@@ -79,14 +79,14 @@ make_rhs (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex
         Qauxij(k,0)   = sol_array_aux(i,j,0,k);
     }
     VecQ rhs = VecQ::Zero();
-    // rhs = Model::source(Qij, Qauxij);
+    rhs = Model::source(Qij, Qauxij);
     return rhs;
 }
 
 AMREX_GPU_DEVICE
 AMREX_FORCE_INLINE
 VecQ
-make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt)
+make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_array, amrex::Array4<amrex::Real const> const& sol_array_aux, amrex::Real dx, amrex::Real dy, amrex::Real dt, amrex::Real max_velocity)
 {
     int n_dof = Model::n_dof_q;
     int n_dof_aux = Model::n_dof_qaux;
@@ -100,23 +100,23 @@ make_rhs_explicit (int i, int j, amrex::Array4<amrex::Real const> const& sol_arr
         Qauxij(k,0)   = sol_array_aux(i,j,0,k);
     }
     VecQ rhs = Qij;
-    return rhs;
+    // return rhs;
     amrex::Real h = Qij(idx_h,0);
     amrex::Real hinv = Qauxij(0,0);
 
     amrex::Real q = hinv * std::sqrt(Qij(2, 0) * Qij(2, 0) + Qij(3, 0) * Qij(3, 0));
 
-    q = amrex::min(q, 1000.);
+    q = amrex::min(q, max_velocity);
     amrex::Real Cf = 9.81 / 30. / 30.;
 
     // amrex::Real factor = (h + amrex::max(h, eps) / (2*h + 1.e-10));
     amrex::Real factor = 1.;
-    int level = (Model::n_dof_q-2)/Model::dimension;
+    int level = (Model::n_dof_q-2) / Model::dimension -1;
     int offset = level+1;
     rhs(2, 0) = Qij(2, 0) / (1. + dt * factor * Cf * q );
     rhs(2+offset, 0) = Qij(2+offset, 0) / (1. + dt *factor * Cf * q);
-    rhs(2, 0) = h < eps ? 0. : rhs(2, 0);
-    rhs(2+offset, 0) = h < eps ? 0. : rhs(2+offset, 0);
+    // rhs(2, 0) = h < eps ? 0. : rhs(2, 0);
+    // rhs(2+offset, 0) = h < eps ? 0. : rhs(2+offset, 0);
     if (std::isnan(rhs(2, 0)) || std::isinf(rhs(2, 0))) rhs(2, 0) = 0.;
     if (std::isnan(rhs(2+offset, 0)) || std::isinf(rhs(2+offset, 0))) rhs(2+offset, 0) = 0.;
 
