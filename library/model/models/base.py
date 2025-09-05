@@ -142,6 +142,7 @@ class Model:
     n_aux_variables: int = field(init=False)
     n_parameters: int = field(init=False)
     variables: Zstruct = field(init=False, default=1)
+    positive_variables: Union[dict, list, None] = field(default=None)
     aux_variables: Zstruct = field(default=0)
     parameter_values: FArray = field(init=False)
     normal: Matrix = field(init=False)
@@ -153,7 +154,7 @@ class Model:
         updated_default_parameters = {**self._default_parameters, **self.parameters.as_dict()}
 
         # Use object.__setattr__ because class is frozen
-        object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q"))
+        object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q", self.positive_variables))
         object.__setattr__(self, "aux_variables", register_sympy_attribute(self.aux_variables, "qaux"))
         # object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
 
@@ -494,7 +495,7 @@ class Model:
         A = self.normal[0] * self.quasilinear_matrix()[0]
         for d in range(1, self.dimension):
             A += self.normal[d] * self.quasilinear_matrix()[d]
-        return eigenvalue_dict_to_matrix(A.eigenvals())
+        return self._simplify(eigenvalue_dict_to_matrix(A.eigenvals()))
     
     def left_eigenvectors(self):
         return zeros(self.n_variables, self.n_variables)
@@ -523,21 +524,37 @@ class Model:
         else:
             return expr
 
+def transform_positive_variable_intput_to_list(argument, positive, n_variables):
+    out = [False for _ in range(n_variables)]
+    if positive is None:
+        return out
+    if type(positive) == type({}):
+        assert type(argument) == type(positive)
+        for i, a in enumerate(argument.keys()):
+            if a in positive.keys():
+                out[i] = positive[a]
+    if type(positive) == list:
+        for i in positive:
+            out[i] = True
+    return out
 
-def register_sympy_attribute(argument, string_identifier="q_"):
+def register_sympy_attribute(argument, string_identifier="q_", positives=None):
     if type(argument) == int:
+        positive = transform_positive_variable_intput_to_list(argument, positives, argument)
         attributes = {
             string_identifier + str(i): sympy.symbols(
-                string_identifier + str(i), real=True
+                string_identifier + str(i), real=True, positive=positive[i]
             )
             for i in range(argument)
         }
     elif type(argument) == type({}):
+        positive = transform_positive_variable_intput_to_list(argument, positives, len(argument))
         attributes = {
-            name: sympy.symbols(str(name), real=True) for name in argument.keys()
+            name: sympy.symbols(str(name), real=True, positive=pos) for name, pos in zip(argument.keys(), positive)
         }
     elif type(argument) == list:
-        attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
+        positive = transform_positive_variable_intput_to_list(argument, positives, len(argument))
+        attributes = {name: sympy.symbols(str(name), real=True, positive=pos) for name, pos in zip(argument, positive)}
     else:
         assert False
     return Zstruct(**attributes)

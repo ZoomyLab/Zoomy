@@ -44,7 +44,7 @@ double computeLocalMaxAbsEigenvalue(const VecQ& Q, const VecQaux& Qaux, const Ve
     return sM;
 }
 
-void update_q(MultiFab& Q, const MultiFab& Qaux)
+void update_q(MultiFab& Q, const MultiFab& Qaux, Real max_velocity)
 {
 
     for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
@@ -71,15 +71,18 @@ void update_q(MultiFab& Q, const MultiFab& Qaux)
             }
             else
             {
-                if (std::abs(Q_arr(i, j, k, 2)) > 500. * h )
+                int level = (Model::n_dof_q-2) / Model::dimension-1;
+                int offset = level+1;
+                if (std::abs(Q_arr(i, j, k, 2)) > max_velocity * h )
                 {
-                    Q_arr(i,j,k,2) = amrex::min(500. * h, Q_arr(i,j,k,2));
-                    Q_arr(i,j,k,2) = amrex::max(-500. * h, Q_arr(i,j,k,2));
+
+                    Q_arr(i,j,k,2) = amrex::min(max_velocity * h, Q_arr(i,j,k,2));
+                    Q_arr(i,j,k,2) = amrex::max(-max_velocity * h, Q_arr(i,j,k,2));
                 }
-                if (std::abs(Q_arr(i, j, k, 3)) > 500. * h )
+                if (std::abs(Q_arr(i, j, k, 2+offset)) > max_velocity * h )
                 {
-                    Q_arr(i,j,k,3) = amrex::min(500. * h, Q_arr(i,j,k,3));
-                    Q_arr(i,j,k,3) = amrex::max(-500. * h, Q_arr(i,j,k,3));
+                    Q_arr(i,j,k,2+offset) = amrex::min(max_velocity * h, Q_arr(i,j,k,2+offset));
+                    Q_arr(i,j,k,2+offset) = amrex::max(-max_velocity * h, Q_arr(i,j,k,2+offset));
                 }
             }
 
@@ -137,7 +140,7 @@ void update_qaux(const MultiFab& Q, MultiFab& Qaux)
             Real h = Q_arr(i,j,k,idx_h);
             h = h > 0 ? h : 0.;
             Real hinv = 2 / (h+(amrex::max(h, eps)));
-            hinv = h < eps ? 0. : hinv;
+            // hinv = h < eps ? 0. : hinv;
 
             Qaux_arr(i,j,k,0) = hinv;
             // if (h < eps)
@@ -187,7 +190,16 @@ double compute_flux_and_save_dt(const MultiFab& Q, MultiFab& Qtmp, const MultiFa
             Real s = 1.0;
             if (hnew < 0.0) {
                 s = hold / (hold - hnew);
-                if (amrex::isnan(hnew) || amrex::isinf(s)) s = 0.;
+                if (amrex::isnan(hnew) || amrex::isinf(s) || s == 0.) 
+                {
+                    s = 0.;
+                    // amrex::Print() << "hnew " << hnew << "\n";
+                    // for (int n=0; n<Model::n_dof_q; ++n)
+                    // {
+                    //     amrex::Print() << "Q " << n << " " << Q_arr(i,j,k,n) << "\n";
+                    // }
+
+                }
             }
             return s;   // one-component tuple
         });
@@ -261,6 +273,7 @@ int main (int argc, char* argv[])
     int   test_case = 0, identifier = 0, warmup_steps = 5;
     Real  time_end = 1.0, dt = 1.0e-4, CFL = 0.5, dtmin=1.0e-7, dtmax=1.e-2;
     bool  adapt_dt = false;
+    Real max_velocity = 100.;
     
     int   dem_field = 0, release_field = 1;
     std::string dem_file, release_file;
@@ -296,6 +309,7 @@ int main (int argc, char* argv[])
         pp.query("dtmin",       dtmin);
         pp.query("dtmax",       dtmax);
         pp.query("warmup_steps", warmup_steps);
+        pp.query("max_velocity", max_velocity);
 
     }
     
@@ -414,7 +428,7 @@ int main (int argc, char* argv[])
         // Qaux.FillBoundary(geom.periodicity());
 
 
-        update_q(Q, Qaux);
+        update_q(Q, Qaux, max_velocity);
         update_qaux(Q, Qaux);
 
         Q.FillBoundary(geom.periodicity());
@@ -458,34 +472,38 @@ int main (int argc, char* argv[])
                 }
             });
         }
-        update_q(Q, Qaux);
+        update_q(Q, Qaux, max_velocity);
         update_qaux(Q, Qaux);
         Q.FillBoundary(geom.periodicity());
         Qaux.FillBoundary(geom.periodicity());
-        // for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
-        // {
-        //     // We will loop over all cells in this box
-        //     const Box& bx = mfi.validbox();
+        for ( MFIter mfi(Q); mfi.isValid(); ++mfi )
+        {
+            // We will loop over all cells in this box
+            const Box& bx = mfi.validbox();
 
 
-        //     // These define the pointers we can pass to the GPU
-        //     const Array4<      Real>& Q_arr        = Q.array(mfi);
-        //     const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
-        //     const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
+            // These define the pointers we can pass to the GPU
+            const Array4<      Real>& Q_arr        = Q.array(mfi);
+            const Array4<      Real>& Qtmp_arr        = Qtmp.array(mfi);
+            const Array4<      Real>& Qaux_arr  = Qaux.array(mfi);
 
-        //     ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
-        //     {
-        //         VecQ Q_chezy = make_rhs_explicit(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
-        //         VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
-        //         for (int n=0; n<Ncomp; n++)
-        //         {
-        //             Q_arr(i,j,k,n) = Q_chezy(n);
-        //             Q_arr(i,j,k,n) = Q_arr(i,j,k,n) + dt*dQ(n);
-        //         }
-        //     });
+            ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+            {
+                VecQ dQ = make_rhs(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt);
+                for (int n=0; n<Ncomp; n++)
+                {
+                    Q_arr(i,j,k,n) = Q_arr(i,j,k,n) + dt*dQ(n);
+                }
+                VecQ Q_chezy = make_rhs_explicit(i, j, Q_arr, Qaux_arr, dx[0], dx[1], dt, max_velocity);
+                for (int n=0; n<Ncomp; n++)
+                {
+                    Q_arr(i,j,k,n) = Q_chezy(n);
+                }
+
+            });
             // Qtmp.FillBoundary(geom.periodicity());
 
-        // } // mfi
+        } // mfi
     };
 
     // Start the timer for the whole loop

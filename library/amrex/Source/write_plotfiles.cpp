@@ -91,7 +91,8 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
 
         ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k)
         {
-            Real z = (k+0.5); // We have arbitrarily set "dz" = 1 
+            Real dz = 1. / ifac;
+            Real z = (k) * dz;
                     //
             VecQ Q;
             VecQaux Qaux;
@@ -102,14 +103,11 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
                 Q(n, 0) = sol_2d_arr(i, j, 0, n);
             }
             for (int n=0;n<n_dof_aux; ++n) {
-                Qaux(n, 0) = sol_2d_arr(i, j, 0, n);
+                Qaux(n, 0) = sol_2d_arr_aux(i, j, 0, n);
             }
             
             X = makeSmallMatrix<3, 1>({0., 0., z}); 
-            for (int n=0;n<ifac; ++n) {
-                Q3d = Model::interpolate_3d(Q, Qaux, X);
-            }
-
+            Q3d = Model::interpolate_3d(Q, Qaux, X);
 
             for (int n=0;n<6; ++n) {
                 sol_3d_arr(i, j, k, n) = Q3d(n, 0);
@@ -136,5 +134,5 @@ void write_plotfiles (const int identifier, const int step, MultiFab& solution, 
     // Next we write the plotfile which interprets the results to create a full 3D field 
     // using what we know about the basis functions.  This arbitrarily is set to have 8 cells in the vertical
     //
-    // write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
+    write_plotfiles_3d (identifier, step, solution, solution_aux,geom, time);
 }

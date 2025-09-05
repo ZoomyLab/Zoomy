@@ -11,7 +11,8 @@ from sympy import legendre
 from sympy import lambdify
 
 from attrs import define, field
-from typing import Union
+import attr
+from typing import Union, Dict, List
 
 
 from library.model.models.base import (
@@ -30,6 +31,7 @@ class ShallowMomentsTopo(Model):
     dimension: int = 2
     level: int
     variables: Union[list, int] = field(init=False)
+    positive_variables: Union[List[int], Dict[str, int], None] = attr.ib(default=attr.Factory(lambda: [1]))    
     aux_variables: Union[list, int] = field(default=0)
     basisfunctions: Union[Basisfunction, type[Basisfunction]] = field(default=Legendre_shifted)
     basismatrices: Basismatrices = field(init=False)

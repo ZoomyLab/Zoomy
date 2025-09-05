@@ -86,6 +86,8 @@ def transform_tiff(file_path, tilt=False, scale=1., zoom=[None, None]):
     coeffs, _, _, _ = np.linalg.lstsq(A, z_flat, rcond=None)
     
     a0, a1, a2 = coeffs  # plane: z = a0 + a1*x + a2*y
+    
+    print(a0, a1, a2)
 
     # Compute slope magnitude and inclination angle (in radians and degrees)
     slope_x = -a1  # Slope in x direction (downward)

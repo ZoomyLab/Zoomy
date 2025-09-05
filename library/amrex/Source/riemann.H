@@ -100,24 +100,44 @@ rusanov (VecQ Qj, VecQ Qi, VecQaux Qauxj, VecQaux Qauxi, Vec2 normal, amrex::Rea
     VecQ fluctuation = VecQ::Zero();
     int n_dof = Model::n_dof_q;
 
+    if ((Qj(idx_h,0) < eps) && (Qi(idx_h, 0) < eps)) return fluctuation;
+
     // I am a wall from the viewpoint of my neighbor
     // TODO this should become a wall boundary condition
-    if (Qi(idx_h,0) < eps && Qi(idx_b,0) > Qj(idx_h,0) + Qj(idx_b,0)) return fluctuation;
     // My neighbor a wall for me
     // TODO this should become a wall boundary condition
     if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0)) return fluctuation;
-    // if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0))
-    // {
-    //     Qj(idx_b, 0) = Qi(idx_b, 0);
-    //     Qj(idx_h, 0) = Qi(idx_h, 0);
-    //     Qj(2,2) = std::abs(normal(0)) > 0 ? -Qi(2,2) : 0.;
-    //     Qj(3,2) = std::abs(normal(1)) > 0 ? -Qi(3,2) : 0.;
+    if (Qi(idx_h,0) < eps && Qi(idx_b,0) > Qj(idx_h,0) + Qj(idx_b,0)) return fluctuation;
 
+    
+    // if (sign == -1)
+    // {
+    //     if (Qi(idx_h,0) < eps && Qi(idx_b,0) > Qj(idx_h,0) + Qj(idx_b,0)) return fluctuation;
+    //     if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0))
+    //     {
+    //         int level = (Model::n_dof_q-2) / Model::dimension -1;
+    //         int offset = level+1;
+    //         Qj(idx_b, 0) = Qi(idx_b, 0);
+    //         Qj(idx_h, 0) = Qi(idx_h, 0);
+    //         Qj(2, 0) = std::abs(normal(0)) > 0 ? -Qi(2,0) : 0.;
+    //         Qj(2+offset, 0) = std::abs(normal(1)) > 0 ? -Qi(2+offset,0) : 0.;
+    //     }
+    // }
+    // else{
+    //     if (Qj(idx_h,0) < eps && Qj(idx_b,0) > Qi(idx_h,0) + Qi(idx_b,0)) return fluctuation;
+    //     if (Qi(idx_h,0) < eps && Qi(idx_b,0) > Qj(idx_h,0) + Qj(idx_b,0))
+    //     {
+    //         int level = (Model::n_dof_q-2) / Model::dimension -1;
+    //         int offset = level+1;
+    //         Qi(idx_b, 0) = Qj(idx_b, 0);
+    //         Qi(idx_h, 0) = Qj(idx_h, 0);
+    //         Qi(2, 0) = std::abs(normal(0)) > 0 ? -Qj(2,0) : 0.;
+    //         Qi(2+offset, 0) = std::abs(normal(1)) > 0 ? -Qj(2+offset,0) : 0.;
+    //     }
     // }
     // My neighbor is dry 
     // if (Qj(idx_h,0) < eps) return fluctuation;
 // 
-    if ((Qj(idx_h,0) < eps) && (Qi(idx_h, 0) < eps)) return fluctuation;
 
     
     //Qi = wet_dry_fix(Qi);

@@ -101,3 +101,5 @@ data/ca_debrisflow.raw
 data/ca_debrisflow.tif
 data/ca_elev.raw
 data/ca_elev.tif
+web/tutorials/amrex/adjusted_release_artificial.raw
+web/tutorials/amrex/adjusted_release_artificial.tif
