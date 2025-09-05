@@ -54,8 +54,8 @@
   <m2n:sockets acceptor="Fluid2" connector="Fluid1" exchange-directory="/home/ingo/precice-coupling" />
 
   <coupling-scheme:parallel-implicit>
-    <time-window-size value="0.005" />
-    <max-time value="10.0" />
+    <time-window-size value="0.05" />
+    <max-time value="0.5" />
     <participants first="Fluid2" second="Fluid1" />
     <exchange data="Velocity" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" />
     <exchange data="Pressure" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />

@@ -123,7 +123,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             al_sorted  = al[sort_order]
 
             mask      = al_sorted < threshold
-            if not mask.any():
+            if mask.all():
                 return Qnew                                        # no water
 
             i_water   = mask.argmax()
@@ -134,7 +134,9 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             h_of      = np.trapz(al, z)
 
             ve_water  = ve[:i_water, 0]
-            z_water   = (z[:i_water] - z[:i_water].min()) / (z[:i_water].ptp())
+            z_water = z[:i_water]
+            z_water = (z_water-z_water.min()) / (z_water.max()-z_water.min())
+
 
             alpha_coeffs = model_orig.basismatrices.basisfunctions.reconstruct_alpha(
                 ve_water, z_water
@@ -182,7 +184,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     
     @staticmethod
     def get_precice_callback_advance_or_read_checkpoint(interface, checkpoint_path, output_hdf5_path, dt_snapshot, write_all):
-        save_fields = io.get_save_fields(output_hdf5_path, write_all=False)
+        save_fields = io.get_save_fields(output_hdf5_path, write_all=True)
 
         def _cb(Q, Qaux, time, dt, i_snapshot, iteration):
             if interface.requires_reading_checkpoint():
@@ -190,10 +192,9 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             else:
                 time += dt
                 iteration += 1
-
                 i_snapshot = save_fields(time, dt, i_snapshot, Q, Qaux)
-                
-            return jnp.array(Q), jnp.array(Qaux), jnp.float_(time), jnp.float_(iteration)
+
+            return jnp.array(Q), jnp.array(Qaux), jnp.float_(time), jnp.float_(iteration), jnp.float_(i_snapshot)
         return _cb
     
     @staticmethod
@@ -202,6 +203,12 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             if interface.requires_writing_checkpoint():
                 io._save_fields_to_hdf5(checkpoint_path, 0, np.array(time), np.array(Q), np.array(Qaux))
             return None
+        return _cb
+    
+    @staticmethod
+    def get_is_coupling_ongoing(interface):
+        def _cb():
+            return jnp.asarray(interface.is_coupling_ongoing(), dtype=jnp.bool)
         return _cb
 
     # -----------------------------------------------------------------------
@@ -214,7 +221,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     # -----------------------------------------------------------------------
     #  main driver
     # -----------------------------------------------------------------------
-    def solve(self, mesh, model, *, write_output=True):
+    def solve(self, mesh, model, write_output=True):
 
         # ----------------- initial state -----------------------------------
         Q, Qaux                  = self.initialize(mesh, model)
@@ -237,6 +244,12 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
         output_hdf5_path = os.path.join(
                 self.settings.output.directory, f"{self.settings.output.filename}.h5"
             )
+        io.init_output_directory(
+            self.settings.output.directory, self.settings.output.clean_directory
+        )
+        mesh.write_to_hdf5(output_hdf5_path)
+        io.save_settings(self.settings)
+
 
         N             = 243
         z             = np.linspace(0.0, 0.12, N + 1)
@@ -272,6 +285,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
 
         cb_advance_or_read_checkpoint = self.get_precice_callback_advance_or_read_checkpoint(interface, checkpoint_path, output_hdf5_path, dt_snapshot, False)
         cb_write_checkpoint = self.get_precice_callback_write_checkpoint(interface, checkpoint_path)
+        cb_is_coupling_ongoing = self.get_is_coupling_ongoing(interface)
 
         # shape descriptors for io_callback
         shape_vel = jax.ShapeDtypeStruct((N + 1, 3), jnp.float_)
@@ -300,6 +314,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             qaux_desc       = jax.ShapeDtypeStruct(Qaux.shape, Qaux.dtype)
             time_desc       = jax.ShapeDtypeStruct((),          time.dtype)
             iteration_desc  = jax.ShapeDtypeStruct((),          iteration.dtype)
+            
 
             def body(carry):
                 time, Q, Qaux, i_snapshot, iteration = carry
@@ -310,19 +325,19 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
                                     Q, Qaux, time)
                 
 
-                dt  = self.compute_dt(
+                dt_solver  = self.compute_dt(
                     Q, Qaux, parameters, min_inradius, compute_max_eval
                 )
                 dt_precice = jax.experimental.io_callback(cb_get_dt,
                                                         jax.ShapeDtypeStruct((), jnp.float_),
                                                         )
                 
-                dt = jnp.minimum(dt, dt_precice)
+                dt = jnp.minimum(dt_solver, dt_precice)
 
                 vel = jax.experimental.io_callback(cb_read_velocity,
-                                                   shape_vel, dt)
+                                                   shape_vel, 0.0)
                 al  = jax.experimental.io_callback(cb_read_alpha,
-                                                   shape_al,  dt)
+                                                   shape_al,  0.0)
 
                 Q = boundary_operator(time, Q, Qaux, parameters,
                                       z_dev, vel, al, None)
@@ -342,8 +357,8 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
                 # interface.advance(float(dt)) 
                 
 
-                Q, Qaux, time, iteration = jax.experimental.io_callback(cb_advance_or_read_checkpoint,
-                    (q_desc, qaux_desc, time_desc, iteration_desc),
+                Q, Qaux, time, iteration, i_snapshot = jax.experimental.io_callback(cb_advance_or_read_checkpoint,
+                    (q_desc, qaux_desc, time_desc, iteration_desc, iteration_desc),
                     Q3, Qaux, time, dt, i_snapshot, iteration)
                 
 
@@ -352,8 +367,9 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
 
             # run until coupling finished
             (time_end, Q_final, Qaux_final, i_snapshot, iteration) = jax.lax.while_loop(
-                lambda c: jnp.array(interface.is_coupling_ongoing(),
-                                    dtype=bool),
+                lambda c: jax.experimental.io_callback(cb_is_coupling_ongoing,
+                                                        jax.ShapeDtypeStruct((), jnp.bool),
+                                                        ),
                 body,
                 (jnp.array(0.0), Q, Qaux, i_snapshot, iteration)
             )

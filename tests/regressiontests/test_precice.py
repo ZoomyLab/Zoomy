@@ -29,6 +29,7 @@ class MySME(ShallowMoments):
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_smm_1d(
+    settings,
     level=0,
     process="",
     case="",
@@ -47,10 +48,6 @@ def test_smm_1d(
     print("==============================================")
     print("==============================================")
 
-    settings = Settings(
-        name="ShallowMoments",
-        output_dir=f"outputs/ijrewhs_cpl_{level}_{int(c_nut)}{int(c_bl)}{int(c_slipmod)}{int(lamda)}_{case}",
-    )
 
     bcs = BC.BoundaryConditions(
         [
@@ -88,19 +85,25 @@ def test_smm_1d(
     mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
 
     solver = PreciceHyperbolicSolver(
+        settings=settings,
         compute_dt=timestepping.adaptive(CFL=0.9),
         time_end=10,
         config_path=os.path.join(main_dir, f"library/precice_configs/of_to_zoomy.xml"))
 
     # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
     solver.solve(mesh, model)
-    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
 if __name__ == "__main__":
+    settings = Settings(
+    output=Zstruct(
+        directory="outputs/precice", filename="sim", clean_directory=True,
+    ),
+    )
     nut = 0.0000145934315
-    # nut = 0.0000125934315
+    nut = 0.0000125934315
     test_smm_1d(
+        settings,
         level=0,
         process="",
         case="again",
@@ -111,6 +114,8 @@ if __name__ == "__main__":
         nut=nut,
         nut_bl=0.000001,
     )
+    io.generate_vtk(os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))
+
 
     # test_smm_1d(level=6, process='_1', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
     # test_smm_1d(level=4, process='_2', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)
