@@ -3,11 +3,11 @@ import pytest
 from types import SimpleNamespace
 import os
 
-from library.pysolver.solver import *
+from library.fvm.solver import *
 from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-from library.pysolver.ode import RK1
+from library.fvm.ode import RK1
 import library.misc.io as io
 
 # from library.pysolver.reconstruction import GradientMesh
@@ -16,6 +16,12 @@ import library.postprocessing.postprocessing as postprocessing
 import argparse
 
 main_dir = os.getenv("ZOOMY_DIR")
+
+class MySME(ShallowMoments):
+    def source(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        return out
+
 
 
 @pytest.mark.critical
@@ -41,26 +47,6 @@ def test_smm_1d(
 
     settings = Settings(
         name="ShallowMoments",
-        parameters={
-            "g": 9.81,
-            "nu": 0.000001,
-            "rho": 1.000,
-            "lamda": lamda,
-            "C": 30.0,
-            "kst": 100,
-            "eta": 1.0,
-            "c_nut": c_nut,
-            "c_bl": c_bl,
-            "c_slipmod": c_slipmod,
-            "nut": nut,
-            "nut_bl": nut_bl,
-        },
-        reconstruction=recon.constant,
-        num_flux=flux.LLF(),
-        nc_flux=nonconservative_flux.segmentpath(1),
-        compute_dt=timestepping.adaptive(CFL=0.9),
-        time_end=10.0,
-        output_snapshots=100,
         output_dir=f"outputs/ijrewhs_cpl_{level}_{int(c_nut)}{int(c_bl)}{int(c_slipmod)}{int(lamda)}_{case}",
         precice_config_path=os.path.join(
             main_dir, f"of_coupling/precice-config{process}.xml"
@@ -80,26 +66,32 @@ def test_smm_1d(
         high=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
         low=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
     )
-    model = ShallowMoments(
-        fields=2 + level,
-        aux_variables=0,
-        parameters=settings.parameters,
+
+    model = MySME(
+        level=level
+        parameters={
+            "g": 9.81,
+            "nu": 0.000001,
+            "rho": 1.000,
+            "lamda": lamda,
+            "C": 30.0,
+            "kst": 100,
+            "eta": 1.0,
+            "c_nut": c_nut,
+            "c_bl": c_bl,
+            "c_slipmod": c_slipmod,
+            "nut": nut,
+            "nut_bl": nut_bl,
+        },
         boundary_conditions=bcs,
         initial_conditions=ic,
-        # settings={"eigenvalue_mode": "symbolic", "friction": ['newtonian', "slip_mod", "newtonian_turbulent"]},
-        settings={
-            "eigenvalue_mode": "symbolic",
-            "friction": [
-                "newtonian",
-                "newtonian_turbulent",
-                "slip_mod",
-                "newtonian_boundary_layer_classic",
-            ],
-        },
-        # settings={"eigenvalue_mode": "symbolic", "friction": ['manning_mean']},
     )
 
     mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
+
+    solver = HyperbolicSolver(
+        compute_dt=timestepping.adaptive(CFL=0.9),
+        time_end=10)
 
     precice_fvm(mesh, model, settings, ode_solver_source=RK1)
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
