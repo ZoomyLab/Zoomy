@@ -24,9 +24,7 @@ import library.model.initial_conditions as IC
 from library.model.models.basismatrices import Basismatrices
 from library.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
-@define(frozen=True, slots=True, kw_only=True)
-class ShallowMoments(Model):
-    dimension: int = 1
+
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowMoments2d(Model):
@@ -43,7 +41,7 @@ class ShallowMoments2d(Model):
     )
 
     def __attrs_post_init__(self):
-        object.__setattr__(self, "variables", ((self.level+1)*2)+1)
+        object.__setattr__(self, "variables", ((self.level+1)*self.dimension)+1)
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
@@ -70,9 +68,8 @@ class ShallowMoments2d(Model):
         z = self.position[2]
         h = self.variables[0]
         a = [self.variables[1+i]/h for i in range(offset)]
-        b = [self.variables[1+offset+i]/h for i in range(offset)]
         dudx = self.aux_variables.dudx
-        dvdy = self.aux_variables.dvdy
+
         rho_w = 1000.
         g = 9.81
         # rho_3d = rho_w * Piecewise((1., h-z > 0), (0.,True))
@@ -81,7 +78,13 @@ class ShallowMoments2d(Model):
         # w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
         # p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
         u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
-        v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(b, z)
+        if self.dimension == 2:
+            b = [self.variables[1+offset+i]/h for i in range(offset)]
+            dvdy = self.aux_variables.dvdy
+            v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(b, z)
+        else:
+            v_3d = 0
+            dvdy = 0
         out[0] = h
         out[1] = u_3d
         out[2] = v_3d
@@ -96,7 +99,6 @@ class ShallowMoments2d(Model):
         flux_y = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + self.level + 1 : 1 + 2 * (self.level + 1)]
         p = self.parameters
         flux_x[0] = ha[0]
         flux_x[1] = p.g * p.ez * h * h / 2
@@ -111,41 +113,44 @@ class ShallowMoments2d(Model):
                         * self.basismatrices.A[k, i, j]
                         / self.basismatrices.M[k, k]
                     )
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_x[k + 1 + offset] += (
-                        hb[i]
-                        * ha[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
+        if self.dimension == 2:
+            hb = self.variables[1 + self.level + 1 : 1 + 2 * (self.level + 1)]
 
-        flux_y[0] = hb[0]
-        flux_y[1 + offset] = p.g * p.ez * h * h / 2
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_y[k + 1] += (
-                        hb[i]
-                        * ha[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_y[k + 1 + offset] += (
-                        hb[i]
-                        * hb[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_x[k + 1 + offset] += (
+                            hb[i]
+                            * ha[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]
+                            / self.basismatrices.M[k, k]
+                        )
+
+            flux_y[0] = hb[0]
+            flux_y[1 + offset] = p.g * p.ez * h * h / 2
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_y[k + 1] += (
+                            hb[i]
+                            * ha[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]
+                            / self.basismatrices.M[k, k]
+                        )
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_y[k + 1 + offset] += (
+                            hb[i]
+                            * hb[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]
+                            / self.basismatrices.M[k, k]
                     )
         return [flux_x, flux_y]
 
@@ -155,13 +160,11 @@ class ShallowMoments2d(Model):
         nc_y = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + offset + self.level + 1]
         p = self.parameters
         um = ha[0] / h
-        vm = hb[0] / h
+
         for k in range(1, self.level + 1):
             nc_x[k + 1, k + 1] += um
-            nc_y[k + 1, k + 1 + offset] += um
         for k in range(self.level + 1):
             for i in range(1, self.level + 1):
                 for j in range(1, self.level + 1):
@@ -171,31 +174,41 @@ class ShallowMoments2d(Model):
                         * self.basismatrices.B[k, i, j]
                         / self.basismatrices.M[k, k]
                     )
-                    nc_y[k + 1, i + 1 + offset] -= (
-                        ha[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
 
-        for k in range(1, self.level + 1):
-            nc_x[k + 1 + offset, k + 1] += vm
-            nc_y[k + 1 + offset, k + 1 + offset] += vm
-        for k in range(self.level + 1):
-            for i in range(1, self.level + 1):
-                for j in range(1, self.level + 1):
-                    nc_x[k + 1 + offset, i + 1] -= (
-                        hb[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
-                    nc_y[k + 1 + offset, i + 1 + offset] -= (
-                        hb[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
+                        
+        if self.dimension ==  2:
+            hb = self.variables[1 + offset : 1 + offset + self.level + 1]
+            vm = hb[0] / h
+            for k in range(1, self.level + 1):
+                nc_y[k + 1, k + 1 + offset] += um
+            for k in range(self.level + 1):
+                for i in range(1, self.level + 1):
+                    for j in range(1, self.level + 1):
+                        nc_y[k + 1, i + 1 + offset] -= (
+                            ha[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]
+                            / self.basismatrices.M[k, k]
+                        )
+
+            for k in range(1, self.level + 1):
+                nc_x[k + 1 + offset, k + 1] += vm
+                nc_y[k + 1 + offset, k + 1 + offset] += vm
+            for k in range(self.level + 1):
+                for i in range(1, self.level + 1):
+                    for j in range(1, self.level + 1):
+                        nc_x[k + 1 + offset, i + 1] -= (
+                            hb[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]
+                            / self.basismatrices.M[k, k]
+                        )
+                        nc_y[k + 1 + offset, i + 1 + offset] -= (
+                            hb[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]
+                            / self.basismatrices.M[k, k]
+                        )
         return [-nc_x, -nc_y]
 
     def eigenvalues(self):
@@ -212,40 +225,9 @@ class ShallowMoments2d(Model):
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
-    def constraints_implicit(self):
-        assert "dhdx" in vars(self.aux_variables)
-        assert "dhdy" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(1)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        hv = self.variables[2]
-        p = self.parameters
-        dhdt = self.aux_variables.dhdt
-        dhudt = self.aux_variables.dhudt
-        dhvdt = self.aux_variables.dhvdt
-        dhudx = self.aux_variables.dhudx
-        dhudy = self.aux_variables.dhudy
-        dhvdx = self.aux_variables.dhudx
-        dhvdy = self.aux_variables.dhudy
-        out[0] = dhdt + dhudx + dhvdx
-        out[1] = dhudt + dhudx + dhvdx
-        return out
 
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
-        return out
-
-    def topography(self):
-        assert "dhdx" in vars(self.aux_variables)
-        assert "dhdy" in vars(self.aux_variables)
-        offset = self.level + 1
-        out = Matrix([0 for i in range(self.n_variables)])
-        h = self.variables[0]
-        p = self.parameters
-        dhdx = self.aux_variables.dhdx
-        dhdy = self.aux_variables.dhdy
-        out[1] = h * p.g * (p.ex - p.ez * dhdx)
-        out[1 + offset] = h * p.g * (p.ey - p.ez * dhdy)
         return out
 
     def newtonian(self):
@@ -254,7 +236,6 @@ class ShallowMoments2d(Model):
         offset = self.level + 1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         for k in range(1 + self.level):
             for i in range(1 + self.level):
@@ -266,14 +247,19 @@ class ShallowMoments2d(Model):
                     * self.basismatrices.D[i, k]
                     / self.basismatrices.M[k, k]
                 )
-                out[1 + k + offset] += (
-                    -p.nu
-                    / h
-                    * hb[i]
-                    / h
-                    * self.basismatrices.D[i, k]
-                    / self.basismatrices.M[k, k]
-                )
+        if self.dimension == 2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * hb[i]
+                        / h
+                        * self.basismatrices.D[i, k]
+                        / self.basismatrices.M[k, k]
+                    )
+
         return out
 
     def slip_mod(self):
@@ -288,20 +274,23 @@ class ShallowMoments2d(Model):
         offset = self.level+1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1+offset : 1+offset + self.level + 1]
         p = self.parameters
         ub = 0
-        vb = 0
         for i in range(1 + self.level):
             ub += ha[i] / h
-            vb += hb[i] / h
         for k in range(1, 1 + self.level):
             out[1 + k] += (
                 -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
             )
-            out[1+offset+k] += (
-                -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
-            )
+        if self.dimension == 2:
+            hb = self.variables[1+offset : 1+offset + self.level + 1]
+            vb = 0
+            for i in range(1 + self.level):
+                vb += hb[i] / h
+            for k in range(1, 1 + self.level):
+                out[1+offset+k] += (
+                    -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
+                )
         return out
 
     def newtonian_boundary_layer(self):
@@ -309,9 +298,7 @@ class ShallowMoments2d(Model):
         out = Matrix([0 for i in range(self.n_variables)])
         offset = self.level + 1
         h = self.variables[0]
-        h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         phi_0 = [self.basismatrices.eval(i, 0.0) for i in range(self.level + 1)]
         dphidx_0 = [
@@ -329,15 +316,19 @@ class ShallowMoments2d(Model):
                     * phi_0[k]
                     * dphidx_0[i]
                 )
-                out[1 + k + offset] += (
-                    -p.nu
-                    / h
-                    * hb[i]
-                    / h
-                    / self.basismatrices.M[k, k]
-                    * phi_0[k]
-                    * dphidx_0[i]
-                )
+        if self.dimension==2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * hb[i]
+                        / h
+                        / self.basismatrices.M[k, k]
+                        * phi_0[k]
+                        * dphidx_0[i]
+                    )
         return out
 
     def sindy(self):
@@ -561,3 +552,7 @@ if __name__ == "__main__":
     basis = Legendre_shifted(basis=Legendre_shifted(level=2))
     basis.compute_matrices(2)
     print(basis.D)
+
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowMoments(ShallowMoments2d):
+    dimension: int = 1

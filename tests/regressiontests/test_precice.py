@@ -2,13 +2,15 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 import os
+from sympy import Matrix
 
-from library.fvm.solver import *
-from library.model.model import *
+from library.fvm.precice_solver import PreciceHyperbolicSolver
+from library.model.models.shallow_moments import ShallowMoments
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-from library.fvm.ode import RK1
 import library.misc.io as io
+from library.misc.misc import Settings, Zstruct
+import library.fvm.timestepping as timestepping
 
 # from library.pysolver.reconstruction import GradientMesh
 import library.mesh.mesh as petscMesh
@@ -48,9 +50,6 @@ def test_smm_1d(
     settings = Settings(
         name="ShallowMoments",
         output_dir=f"outputs/ijrewhs_cpl_{level}_{int(c_nut)}{int(c_bl)}{int(c_slipmod)}{int(lamda)}_{case}",
-        precice_config_path=os.path.join(
-            main_dir, f"of_coupling/precice-config{process}.xml"
-        ),
     )
 
     bcs = BC.BoundaryConditions(
@@ -58,7 +57,7 @@ def test_smm_1d(
             BC.Extrapolation(physical_tag="left"),
             BC.Wall(
                 physical_tag="right",
-                momentum_field_indices=[[i] for i in range(1, level + 1)],
+                momentum_field_indices=[[1+i] for i in range(0, level + 1)],
             ),
         ]
     )
@@ -66,34 +65,35 @@ def test_smm_1d(
         high=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
         low=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
     )
-
     model = MySME(
-        level=level
-        parameters={
-            "g": 9.81,
-            "nu": 0.000001,
-            "rho": 1.000,
-            "lamda": lamda,
-            "C": 30.0,
-            "kst": 100,
-            "eta": 1.0,
-            "c_nut": c_nut,
-            "c_bl": c_bl,
-            "c_slipmod": c_slipmod,
-            "nut": nut,
-            "nut_bl": nut_bl,
-        },
+        level=level,
+        parameters=Zstruct(
+            g= 9.81,
+            nu= 0.000001,
+            rho= 1.000,
+            lamda= lamda,
+            C= 30.0,
+            kst= 100,
+            eta= 1.0,
+            c_nut= c_nut,
+            c_bl= c_bl,
+            c_slipmod= c_slipmod,
+            nut = nut,
+            nur_bl= nut_bl,
+        ),
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
 
     mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
 
-    solver = HyperbolicSolver(
+    solver = PreciceHyperbolicSolver(
         compute_dt=timestepping.adaptive(CFL=0.9),
-        time_end=10)
+        time_end=10,
+        config_path=os.path.join(main_dir, f"library/precice_configs/of_to_zoomy.xml"))
 
-    precice_fvm(mesh, model, settings, ode_solver_source=RK1)
+    # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
+    solver.solve(mesh, model)
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
 
 
