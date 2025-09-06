@@ -35,6 +35,8 @@ def get_extruded_mesh_type(mesh_type: str) -> str:
         return "hexahedron"
     elif (mesh_type) == "triangle":
         return "wface"
+    elif (mesh_type) == "line":
+        return "quad"
     else:
         assert False
 

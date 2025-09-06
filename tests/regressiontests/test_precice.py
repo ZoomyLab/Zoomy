@@ -92,6 +92,7 @@ def test_smm_1d(
 
     # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
     solver.solve(mesh, model)
+    return model
 
 
 if __name__ == "__main__":
@@ -102,7 +103,7 @@ if __name__ == "__main__":
     )
     nut = 0.0000145934315
     nut = 0.0000125934315
-    test_smm_1d(
+    model = test_smm_1d(
         settings,
         level=0,
         process="",
@@ -115,6 +116,7 @@ if __name__ == "__main__":
         nut_bl=0.000001,
     )
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))
+    postprocessing.vtk_interpolate_3d(model, settings, Nz=20, filename='out_3d')
 
 
     # test_smm_1d(level=6, process='_1', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)

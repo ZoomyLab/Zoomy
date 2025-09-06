@@ -1023,7 +1023,7 @@ class Mesh:
             #    vertex_coordinates, elem, mesh_type
             # )
             # cell_volumes[i_elem] = mesh_util.volume(vertex_coordinates, elem, mesh_type)
-            cell_centers[i_elem] = mesh_util.center(vertex_coordinates.T, elem)
+            cell_centers[i_elem, :dimension] = mesh_util.center(vertex_coordinates.T, elem)
             # cell_face_areas[i_elem, :] = mesh_util.face_areas(
             #    vertex_coordinates, elem, mesh_type
             # )
