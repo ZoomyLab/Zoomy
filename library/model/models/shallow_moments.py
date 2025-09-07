@@ -85,11 +85,13 @@ class ShallowMoments2d(Model):
         else:
             v_3d = 0
             dvdy = 0
-        out[0] = h
-        out[1] = u_3d
-        out[2] = v_3d
-        out[3] = 0
-        out[4] = rho_w * g * h * (1-z)
+        b = 0
+        out[0] = b
+        out[1] = h
+        out[2] = u_3d
+        out[3] = v_3d
+        out[4] = 0
+        out[5] = rho_w * g * h * (1-z)
 
         return out
 
@@ -373,16 +375,20 @@ class ShallowMoments2d(Model):
         h = self.variables[0]
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         for k in range(1 + self.level):
             for i in range(1 + self.level):
                 out[1 + k] += (
                     -1.0 / p.lamda / p.rho * ha[i] / h / self.basismatrices.M[k, k]
                 )
-                out[1 + k + offset] += (
-                    -1.0 / p.lamda / p.rho * hb[i] / h / self.basismatrices.M[k, k]
-                )
+
+        if self.dimension == 2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -1.0 / p.lamda / p.rho
+                    )
         return out
 
     def chezy(self):

@@ -350,6 +350,7 @@ def generate_vtk(
     aux_field_names=None,
     skip_aux=False,
     filename="out",
+    warp=False
 ):
     main_dir = os.getenv("ZOOMY_DIR")
     abs_filepath = os.path.join(main_dir, filepath)
@@ -392,6 +393,7 @@ def generate_vtk(
 
         vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[1], 3))
         vertex_coordinates_3d[:, : mesh.dimension] = mesh.vertex_coordinates.T
+
 
         _write_to_vtk_from_vertices_edges(
             os.path.join(path, output_vtk),

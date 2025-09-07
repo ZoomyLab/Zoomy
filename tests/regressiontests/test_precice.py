@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import os
 from sympy import Matrix
 
-from library.fvm.precice_solver import PreciceHyperbolicSolver
+from library.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional
 from library.model.models.shallow_moments import ShallowMoments
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
@@ -22,6 +22,7 @@ main_dir = os.getenv("ZOOMY_DIR")
 class MySME(ShallowMoments):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
+        # out += self.slip()
         return out
 
 
@@ -67,28 +68,66 @@ def test_smm_1d(
         parameters=Zstruct(
             g= 9.81,
             nu= 0.000001,
-            rho= 1.000,
-            lamda= lamda,
+            lamda = 0.0001,
+            rho=1000,
             C= 30.0,
-            kst= 100,
-            eta= 1.0,
-            c_nut= c_nut,
-            c_bl= c_bl,
-            c_slipmod= c_slipmod,
-            nut = nut,
-            nur_bl= nut_bl,
         ),
         boundary_conditions=bcs,
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 5), 300)
+    mesh = petscMesh.Mesh.create_1d((0.5, 2), 2000)
 
     solver = PreciceHyperbolicSolver(
         settings=settings,
         compute_dt=timestepping.adaptive(CFL=0.9),
         time_end=10,
         config_path=os.path.join(main_dir, f"library/precice_configs/of_to_zoomy.xml"))
+
+    # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
+    solver.solve(mesh, model)
+    return model
+
+@pytest.mark.critical
+@pytest.mark.unfinished
+def test_smm_1d_bidirectional(
+    settings,
+    level=0,
+):
+
+    bcs = BC.BoundaryConditions(
+        [
+            BC.Extrapolation(physical_tag="left"),
+            BC.Wall(
+                physical_tag="right",
+                momentum_field_indices=[[1+i] for i in range(0, level + 1)],
+            ),
+        ]
+    )
+    ic = IC.RP(
+        high=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
+        low=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
+    )
+    model = MySME(
+        level=level,
+        parameters=Zstruct(
+            g= 9.81,
+            nu= 0.000001,
+            rho= 1000.,
+            lamda = 0.0001,
+
+        ),
+        boundary_conditions=bcs,
+        initial_conditions=ic,
+    )
+
+    mesh = petscMesh.Mesh.create_1d((0.5, 5), 500)
+
+    solver = PreciceHyperbolicSolverBidirectional(
+        settings=settings,
+        compute_dt=timestepping.adaptive(CFL=0.9),
+        time_end=10,
+        config_path=os.path.join(main_dir, f"library/precice_configs/of_zoomy_bidirectional.xml"))
 
     # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
     solver.solve(mesh, model)
@@ -103,18 +142,32 @@ if __name__ == "__main__":
     )
     nut = 0.0000145934315
     nut = 0.0000125934315
-    model = test_smm_1d(
-        settings,
-        level=0,
-        process="",
-        case="again",
-        c_nut=1.0,
-        c_bl=1.0,
-        c_slipmod=1,
-        lamda=70,
-        nut=nut,
-        nut_bl=0.000001,
+    
+    # model = test_smm_1d(
+    #     settings,
+    #     level=0,
+    #     process="",
+    #     case="again",
+    #     c_nut=1.0,
+    #     c_bl=1.0,
+    #     c_slipmod=1,
+    #     lamda=70,
+    #     nut=nut,
+    #     nut_bl=0.000001,
+    # )
+    
+    settings = Settings(
+    output=Zstruct(
+        directory="outputs/precice_bidirectional", filename="sim", clean_directory=True,
+    ),
     )
+    
+    model = test_smm_1d_bidirectional(
+        settings,
+        level=2,
+    )
+    
+
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))
     postprocessing.vtk_interpolate_3d(model, settings, Nz=20, filename='out_3d')
 
