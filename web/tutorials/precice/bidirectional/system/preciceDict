@@ -22,7 +22,8 @@ interfaces
     
     readData
     (
-      Pressure
+      AlphaBack
+      VelocityBack
     );
     
     writeData
@@ -35,6 +36,7 @@ interfaces
 
 FF
 {
-  nameP   p_rgh;
+  //nameP   p;
   nameAlpha alpha.water;
+  nameU U;
 }
