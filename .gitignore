@@ -117,3 +117,4 @@ web/tutorials/amrex/adjusted_release_artificial.tif
 9*
 *.log
 dynamicCode
+functionObjects

@@ -11,13 +11,13 @@ scale 1;
 
 
 zmin   0.0;
-zmax  0.5;
+zmax  1.0;
 ymin 0;
 ymax 0.36;
 xmin 0;
-xmax  1.0;
+xmax  0.5;
 
-xcells 1; // per block (5 blocks)
+xcells 30; // per block (5 blocks)
 ycells 72; // per block (5 blocks)
 zcells 30;
 

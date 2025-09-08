@@ -36,6 +36,7 @@
       from="Fluid2-Mesh"
       to="Fluid1-Mesh"
       constraint="consistent" />
+    <export:vtu directory="/home/ingo/Git/Zoomy/outputs/export1" />
   </participant>
 
   <participant name="Fluid2">
@@ -49,27 +50,28 @@
       from="Fluid1-Mesh"
       to="Fluid2-Mesh"
       constraint="consistent" />
+    <export:vtu directory="/home/ingo/Git/Zoomy/outputs/export2" />
   </participant>
 
-  <m2n:sockets acceptor="Fluid1" connector="Fluid2" exchange-directory=".." />
+  <m2n:sockets acceptor="Fluid1" connector="Fluid2" exchange-directory="/home/ingo/precice-coupling" />
 
-  <coupling-scheme:parallel-implicit>
+  <coupling-scheme:parallel-explicit>
     <time-window-size value="0.001" />
     <max-time value="0.5" />
     <participants first="Fluid1" second="Fluid2" />
     <exchange data="Velocity" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" />
     <exchange data="Pressure" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
     <exchange data="Alpha" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" />
-    <max-iterations value="5" />
+    <!-- <max-iterations value="5" />
     <relative-convergence-measure limit="1.0e-5" data="Pressure" mesh="Fluid2-Mesh" />
     <relative-convergence-measure limit="1.0e-5" data="Velocity" mesh="Fluid1-Mesh" />
-    <absolute-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" />
-    <acceleration:IQN-ILS>
+    <absolute-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" /> -->
+    <!-- <acceleration:IQN-ILS>
       <data mesh="Fluid2-Mesh" name="Pressure" />
       <initial-relaxation value="1" />
       <max-used-iterations value="10" />
       <time-windows-reused value="2" />
       <filter type="QR2" limit="1e-4" />
-    </acceleration:IQN-ILS>
-  </coupling-scheme:parallel-implicit>
+    </acceleration:IQN-ILS> -->
+  </coupling-scheme:parallel-explicit>
 </precice-configuration>
