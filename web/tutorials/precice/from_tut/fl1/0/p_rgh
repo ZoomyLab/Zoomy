@@ -20,8 +20,10 @@ boundaryField
 
     outlet
     {
-        type            fixedValue;
-        value           uniform 0;
+        //type            fixedValue;
+        //value           uniform 0;
+        type            coupledPressure;
+        refValue        uniform 0;
     }
 
     wall
