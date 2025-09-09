@@ -202,10 +202,11 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     def get_precice_callback_advance(output_hdf5_path, write_all):
         save_fields = io.get_save_fields(output_hdf5_path, write_all=True)
 
-        def _cb(Q, Qaux, time, dt, i_snapshot, iteration , pressure_dummy):
-            i_snapshot = save_fields(time, dt, i_snapshot, Q, Qaux)
+        def _cb(Q, Qaux, time, dt, i_snapshot, iteration):
+            if time%0.01 < 0.001:
+                i_snapshot = save_fields(time, dt, i_snapshot, Q, Qaux)
 
-            return jnp.array(Q), jnp.array(Qaux), jnp.float_(time), jnp.float_(iteration), jnp.float_(i_snapshot), jnp.array(pressure_dummy)
+            return jnp.array(Q), jnp.array(Qaux), jnp.float_(time), jnp.float_(iteration), jnp.float_(i_snapshot)
         return _cb
 
 
@@ -244,24 +245,23 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     # -----------------------------------------------------------------------
     # run-time boundary conditions
     # -----------------------------------------------------------------------
-    def get_apply_boundary_conditions(self, mesh, model, model_orig):
+    def get_apply_boundary_conditions(self, interface,vertexIds,  mesh, model, model_orig):
 
         bc_hyp      = super().get_apply_boundary_conditions(mesh, model)
-        bc_precice  = self.get_apply_boundary_conditions_precice(mesh, model, model_orig)
+        bc_precice  = self.get_apply_boundary_conditions_precice(interface, vertexIds, mesh, model, model_orig)
 
 
         @partial(jax.named_call, name="boundary_conditions")
-        def apply_boundary_conditions(time, Q, Qaux, parameters,
-                                      z, ve, al, pr):
+        def apply_boundary_conditions(time, Q, Qaux, parameters):
             Q = bc_hyp(time, Q, Qaux, parameters)
             q_shape_dtype = jax.ShapeDtypeStruct(
                 Q.shape,  
                 jnp.asarray(0.0, Q.dtype).dtype
                 )
-            Q = jax.experimental.io_callback(
+            Q =     jax.experimental.io_callback(
                 bc_precice,
                 q_shape_dtype,
-                Q, z, ve, al, pr)         
+                Q)         
             return Q
 
         return apply_boundary_conditions
@@ -269,50 +269,79 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     # -----------------------------------------------------------------------
     #   Boundary condition that uses the coupling data
     # -----------------------------------------------------------------------
-    def get_apply_boundary_conditions_precice(self, mesh, model, model_orig):
+    def get_apply_boundary_conditions_precice(self,interface, vertexIDs,  mesh, model, model_orig):
+        grid = self.get_grid()
+        meshName      = "Fluid2-Mesh"
+        
+        z, dz = self.get_z()
 
-        def apply_bc_numpy(Qnew, z, ve, al, pr, threshold=0.55):
+
+        def apply_bc_numpy(Qnew):
             Qnew = np.array(Qnew)   
-            z = np.array(z)
-            ve = np.array(ve)
-            al = np.array(al)
-            pr = np.array(pr)
             
-            idx       = Qnew.shape[1] - 2
-            q_ghost   = Qnew[:, idx]
-            h         = q_ghost[0]
+            
+            
+            
+            ve = interface.read_data(meshName, "Velocity", vertexIDs, 0.0)
+            al = interface.read_data(meshName, "Alpha", vertexIDs, 0.0)
+            prB = interface.read_data(meshName, "PressureBack", vertexIDs, 0.0)
 
-            sort_order = z.argsort()
-            al_sorted  = al[sort_order]
+            u_right = Qnew[1,0] / Qnew[0,0]
 
-            mask      = al_sorted < threshold
-            if mask.all():
-                # assert False
-                return Qnew                                        # no water
+            u_left = (al * ve[:,2]).mean()
+            
+            if abs(u_left) > abs(u_right):
+                sub_right = (u_left >= 0.)
+            else:
+                sub_right = (u_right >=0.0)
+            
+            h_of = np.trapz(al, z)
+            h = Qnew[0,0]
+            if h < 1e-6 or h_of < 1e-6 or np.isnan(h) or np.isnan(h_of):
+                return Qnew
+            alpha = Qnew[1:, 0] / h
+            i_water = int(h/dz)
+            i_water_of = int(h_of/dz)
+            
+            veB = np.zeros_like(ve)
 
-            i_water   = mask.argmax()
+            if i_water_of > 0:
+                Z = np.linspace(0, 1, i_water_of)
+                U_water = model_orig.basismatrices.basisfunctions.reconstruct_velocity_profile(alpha, Z)
+                
+                veB[:i_water_of,2] = U_water
+                veB[i_water_of,2] = U_water[-1]
+            
+            alB = np.where(z <= h, 1., 0.)
+            alB[i_water] = (h - i_water*dz)/dz
+            
+            rho = al * 1000.
+            pressure = rho * 9.81 * h
+                    
+            sub_right = True
+            if sub_right:
+                ve_water = ve[:i_water_of, 2]
+                Z_of = np.linspace(dz/2, 1-dz/2, i_water_of)
+                alpha_coeffs = model_orig.basismatrices.basisfunctions.reconstruct_alpha(
+                    ve_water, Z_of
+                )
+                
+                q_ghost   = Qnew[:, 0]
+                levels   = model_orig.level
+                q_ghost[1 : 2 + levels] = h_of * alpha_coeffs[: levels + 1]
+                Qnew[:, -2] = q_ghost
+            else:
+                q_ghost   = Qnew[:, 0]
+                c = np.abs(u_right) / np.sqrt(9.81 * h) 
+                if False:
+                    q_ghost[0] = h_of
+                Qnew[:, -2] = q_ghost
+            
+            interface.write_data(meshName, "AlphaBack", vertexIDs, alB)
+            interface.write_data(meshName, "VelocityBack", vertexIDs, veB)
+            interface.write_data(meshName, "Pressure", vertexIDs, pressure)
 
-            h_a, h_b  = z[i_water],  z[i_water - 1]
-            a_a, a_b  = al[i_water], al[i_water - 1]
-            h_lin     = h_b + (h_a - h_b) / (a_a - a_b) * (threshold - a_b)
-            h_of      = np.trapz(al, z)
-            ve_water  = ve[:i_water, 2]
-            z_water = z[:i_water]
-            z_water = (z_water-z_water.min()) / (z_water.max()-z_water.min())
-            dz = z[1]-z[0]
-            i_water = int(h_of/dz)
-            z_water = z[:i_water]
-            ve_water = ve[:i_water, 2]
 
-            z_water /= z_water.max()
-            alpha_coeffs = model_orig.basismatrices.basisfunctions.reconstruct_alpha(
-                ve_water, z_water
-            )
-            # q_ghost[0] = h_of
-            q_ghost[0] = Qnew[0,0]
-            levels   = model_orig.level
-            q_ghost[1 : 2 + levels] = h_of * alpha_coeffs[: levels + 1]
-            Qnew[:, idx] = q_ghost
             return jnp.array(Qnew)
 
         return apply_bc_numpy
@@ -557,9 +586,9 @@ class PreciceHyperbolicSolverBidirectional(PreciceHyperbolicSolver):
         cb_read_velocity  = self.get_precice_callback_reader(
             interface, meshName, vertexIDs, velocityName
         )
-        # cb_read_pressureBack  = self.get_precice_callback_reader(
-        #     interface, meshName, vertexIDs, pressureBackName
-        # )
+        cb_read_pressureBack  = self.get_precice_callback_reader(
+            interface, meshName, vertexIDs, pressureBackName
+        )
         cb_read_alpha     = self.get_precice_callback_reader(
             interface, meshName, vertexIDs, alphaName
         )
@@ -986,6 +1015,24 @@ class PreciceHyperbolicSolverAUP(PreciceHyperbolicSolver):
     
 @define(frozen=True, slots=True, kw_only=True)            
 class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
+
+    def get_interface_size(self):
+        return 36, 0.12
+
+    def get_z(self):
+        N, z_max = self.get_interface_size()
+        dz = z_max/N
+        z = np.arange(dz/2, z_max, dz)
+        return z, dz
+
+    def get_grid(self):
+        N, z_max = self.get_interface_size()
+        z, dz = self.get_z()
+        grid = np.zeros((N, 3))
+        grid[:, 0] = 0
+        grid[:, 1] = z
+        grid[:, 2] = 0.5
+        return grid
     
     def solve(self, mesh, model, write_output=True):
 
@@ -1019,19 +1066,10 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
         mesh.write_to_hdf5(output_hdf5_path)
         io.save_settings(self.settings)
 
-
-        N             = 243
-        z             = np.linspace(0.0, 0.12, N + 1)
-
-        # convert grid to numpy here (preCICE wants np)
-        grid = np.zeros((N + 1, 3))
-        grid[:, 0] = 0
-        grid[:, 1] = z
-        grid[:, 2] = 0.5
+        meshName = "Fluid2-Mesh"
+        grid = self.get_grid()
         vertexIDs   = interface.set_mesh_vertices(meshName, grid)
-        
-        write_checkpoint = False
-        read_checkpoint = False
+
 
         interface.initialize()                           # handshake
 
@@ -1039,44 +1077,16 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
         Q      = jax.device_put(Q)
         Qaux   = jax.device_put(Qaux)
         mesh   = jax.device_put(mesh)
-        z_dev  = jax.device_put(z)                       # constant over time
 
         # ------------------ callbacks --------------------------------------
-        cb_read_velocity  = self.get_precice_callback_reader(
-            interface, meshName, vertexIDs, velocityName
-        )
-        # cb_read_pressureBack  = self.get_precice_callback_reader(
-        #     interface, meshName, vertexIDs, pressureBackName
-        # )
-        cb_read_alpha     = self.get_precice_callback_reader(
-            interface, meshName, vertexIDs, alphaName
-        )
-        cb_write_pressure = self.get_precice_callback_writer_pressure(
-            interface, meshName, vertexIDs, pressureName
-        )
-        # cb_write_alpha = self.get_precice_callback_writer_alpha(
-        #     interface, meshName, vertexIDs, alphaBackName
-        # )
-        # cb_write_velocity = self.get_precice_callback_writer_velocity(
-        #     interface, meshName, vertexIDs, velocityBackName
-        # )
-        
+        cb_advance = self.get_precice_callback_advance(output_hdf5_path, False)
         cb_advance_dt     = self.get_precice_callback_advance_dt(interface)
         cb_get_dt         = self.get_precice_callback_get_dt(interface)
+        cb_is_coupling_ongoing = self.get_is_coupling_ongoing(interface)
+        cb_checkpointing = self.get_precice_callback_checkpointing(interface, checkpoint_path)
         
         dt_snapshot = self.time_end / (self.settings.output.snapshots - 1)
 
-        cb_advance_or_read_checkpoint = self.get_precice_callback_advance_or_read_checkpoint(interface, checkpoint_path, output_hdf5_path, dt_snapshot, False)
-        cb_read_checkpoint = self.get_precice_read_checkpoint(interface, checkpoint_path)
-        cb_advance = self.get_precice_callback_advance(output_hdf5_path, False)
-        cb_write_checkpoint = self.get_precice_callback_write_checkpoint(interface, checkpoint_path)
-        cb_is_coupling_ongoing = self.get_is_coupling_ongoing(interface)
-        
-        cb_checkpointing = self.get_precice_callback_checkpointing(interface, checkpoint_path)
-
-        # shape descriptors for io_callback
-        shape_vel = jax.ShapeDtypeStruct((N + 1, 3), jnp.float_)
-        shape_al  = jax.ShapeDtypeStruct((N + 1,),  jnp.float_)
         
 
 
@@ -1088,7 +1098,7 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
             min_inradius = jnp.min(mesh.cell_inradius)
             flux_operator      = self.get_flux_operator(mesh, model)
             source_operator    = self.get_compute_source(mesh, model)
-            boundary_operator  = self.get_apply_boundary_conditions(mesh, model, model_orig)
+            boundary_operator  = self.get_apply_boundary_conditions(interface, vertexIDs, mesh, model, model_orig)
             compute_max_eval   = self.get_compute_max_abs_eigenvalue(mesh, model)
 
 
@@ -1104,24 +1114,18 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
             iteration_desc  = jax.ShapeDtypeStruct((),          iteration.dtype)
             boolean         = jax.ShapeDtypeStruct((), jnp.bool_)
             floating       = jax.ShapeDtypeStruct((), jnp.float_)    
+            # shape descriptors for io_callback
+            N, z_max = self.get_interface_size()
+            shape_vel = jax.ShapeDtypeStruct((N, 3), jnp.float_)
+            shape_al  = jax.ShapeDtypeStruct((N,),  jnp.float_)
             
 
             while(interface.is_coupling_ongoing()):
-                
-                # read_checkpoint, Q, Qaux, time = jax.experimental.io_callback(cb_read_checkpoint,
-                #     (boolean, q_desc, qaux_desc, time_desc),
-                #     Q, Qaux, time, read_checkpoint)
                 
                 Q, Qaux, time, iteration, i_snapshot = jax.experimental.io_callback(cb_checkpointing,
                     (q_desc, qaux_desc, time_desc, floating, floating),
                     Q, Qaux, time, iteration, i_snapshot, dt)
                                
-                # # we need to return a vairiable otherwise jax jit will remove this call
-                # write_checkpoint = jax.experimental.io_callback(cb_write_checkpoint,
-                #                     boolean,
-                #                     Q, Qaux, time)
-                
-
 
                 dt_solver  = self.compute_dt(
                     Q, Qaux, parameters, min_inradius, compute_max_eval
@@ -1132,39 +1136,20 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
                 
                 dt = jnp.minimum(dt_solver, dt_precice)
 
-                vel = jax.experimental.io_callback(cb_read_velocity,
-                                                   shape_vel, 0.0)
-                al  = jax.experimental.io_callback(cb_read_alpha,
-                                                   shape_al,  0.0)
-                # pr_back = jax.experimental.io_callback(cb_read_pressureBack,
-                #                                    shape_al, 0.0)
 
-                Q = boundary_operator(time, Q, Qaux, parameters,
-                                      z_dev, vel, al, None)
+                Q0 = boundary_operator(time, Q, Qaux, parameters)
 
-                Q1 = ode.RK1(flux_operator, Q, Qaux, parameters, dt)
+                Q1 = ode.RK1(flux_operator, Q0, Qaux, parameters, dt)
                 Q2 = ode.RK1(source_operator, Q1, Qaux, parameters, dt)
-                Q3 = boundary_operator(time, Q2, Qaux, parameters,
-                                       z_dev, vel, al, None)
+                Q3 = boundary_operator(time, Q2, Qaux, parameters)
 
-                pressure = jax.experimental.io_callback(cb_write_pressure,
-                                                  shape_al,
-                                                  Q3, al)
-                # _ = jax.experimental.io_callback(cb_write_alpha,
-                #                                   None,
-                #                                   Q3, al)
-                # _ = jax.experimental.io_callback(cb_write_velocity,
-                #                                   None,
-                #                                   Q3, al, vel)
-          
-                # interface.advance(float(dt)) 
                 dt = jax.experimental.io_callback(cb_advance_dt,
                             floating,
                             dt)
 
-                Q, Qaux, time, interation, i_snapshot, pressure = jax.experimental.io_callback(cb_advance, 
-                    (q_desc, qaux_desc, time_desc, iteration_desc, iteration_desc, shape_al),
-                    Q3, Qaux, time, dt, i_snapshot, iteration, pressure)
+                Q, Qaux, time, interation, i_snapshot = jax.experimental.io_callback(cb_advance, 
+                    (q_desc, qaux_desc, time_desc, iteration_desc, iteration_desc),
+                    Q3, Qaux, time, dt, i_snapshot, iteration)
                 
                 jax.debug.print("Time: {t}, dt: {dt}", t=time, dt=dt)
             return Q, Qaux

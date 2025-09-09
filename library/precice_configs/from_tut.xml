@@ -55,17 +55,17 @@
 
   <m2n:sockets acceptor="Fluid1" connector="Fluid2" exchange-directory="/home/ingo/precice-coupling" />
 
-  <coupling-scheme:parallel-explicit>
+  <coupling-scheme:parallel-implicit>
     <time-window-size value="0.001" />
-    <max-time value="0.5" />
+    <max-time value="3.0" />
     <participants first="Fluid1" second="Fluid2" />
     <exchange data="Velocity" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" />
     <exchange data="Pressure" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
     <exchange data="Alpha" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" />
-    <!-- <max-iterations value="5" />
+    <max-iterations value="5" />
     <relative-convergence-measure limit="1.0e-5" data="Pressure" mesh="Fluid2-Mesh" />
     <relative-convergence-measure limit="1.0e-5" data="Velocity" mesh="Fluid1-Mesh" />
-    <absolute-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" /> -->
+    <absolute-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" />
     <!-- <acceleration:IQN-ILS>
       <data mesh="Fluid2-Mesh" name="Pressure" />
       <initial-relaxation value="1" />
@@ -73,5 +73,5 @@
       <time-windows-reused value="2" />
       <filter type="QR2" limit="1e-4" />
     </acceleration:IQN-ILS> -->
-  </coupling-scheme:parallel-explicit>
+  </coupling-scheme:parallel-implicit>
 </precice-configuration>
