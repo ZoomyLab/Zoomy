@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import os
 from sympy import Matrix
 
+
 from library.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional, PreciceHyperbolicSolverAUP, PreciceTestSolver, PreciceHyperbolicSolverAUP_while
 from library.model.models.shallow_moments import ShallowMoments
 import library.model.initial_conditions as IC
@@ -149,10 +150,12 @@ def test_smm_1d_from_tut(
             ),
         ]
     )
-    ic = IC.RP(
-        high=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
-        low=lambda n_field: np.array([0.02, 0.0] + [0.0 for l in range(level)]),
-    )
+    
+    def custom_ic(x):
+        Q = np.zeros(2, dtype=float)
+        Q[0] = np.where(x[0] > 0.7, 0.06, 0.06)
+        return Q
+    ic = IC.UserFunction(custom_ic)
     model = MySME(
         level=level,
         parameters=Zstruct(
@@ -166,13 +169,14 @@ def test_smm_1d_from_tut(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 5), 500)
+    mesh = petscMesh.Mesh.create_1d((0.5, 1), 500)
 
     solver = PreciceHyperbolicSolverAUP_while(
         settings=settings,
         compute_dt=timestepping.adaptive(CFL=0.9),
+        # compute_dt = timestepping.constant(dt=0.001),
         time_end=10,
-        config_path=os.path.join(main_dir, f"library/precice_configs/from_tut.xml"))
+        config_path=os.path.join(main_dir, f"library/precice_configs/of_zoomy_bidirectional.xml"))
 
     # precice_fvm(mesh, model, settings, ode_solver_source=RK1)
     _, _,  = solver.solve(mesh, model)
@@ -212,7 +216,7 @@ def test_precice(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 5), 500)
+    mesh = petscMesh.Mesh.create_1d((0.5, 1), 500)
 
     solver = PreciceTestSolver(
         settings=settings,
