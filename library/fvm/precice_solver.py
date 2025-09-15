@@ -294,6 +294,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
                 sub_right = (u_left >= 0.)
             else:
                 sub_right = (u_right >=0.0)
+
             
             h_of = np.trapz(al, z)
             h = Qnew[0,0]
@@ -318,7 +319,6 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
             rho = al * 1000.
             pressure = rho * 9.81 * h
                     
-            sub_right = True
             if sub_right:
                 ve_water = ve[:i_water_of, 2]
                 Z_of = np.linspace(dz/2, 1-dz/2, i_water_of)

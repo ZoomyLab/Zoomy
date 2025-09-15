@@ -79,7 +79,7 @@
     <exchange data="VelocityBack" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
     <exchange data="AlphaBack" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
     <max-iterations value="50" />
-    <!-- <relative-convergence-measure limit="1.0e-5" data="Velocity" mesh="Fluid1-Mesh" /> -->
+    <relative-convergence-measure limit="1.0e-5" data="Velocity" mesh="Fluid1-Mesh" />
     <relative-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" />
     <!-- <relative-convergence-measure limit="1.0e-5" data="PressureBack" mesh="Fluid1-Mesh" /> -->
     <!-- <relative-convergence-measure limit="1.0e-5" data="Pressure" mesh="Fluid2-Mesh" /> -->

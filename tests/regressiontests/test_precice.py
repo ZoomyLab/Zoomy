@@ -24,6 +24,10 @@ class MySME(ShallowMoments):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         # out += self.slip()
+        out += self.slip_mod()
+        # out += self.newtonian()
+        # out += self.newtonian_turbulent()
+        # out += self.newtonian_boundary_layer_classic()
         return out
 
 
@@ -69,9 +73,9 @@ def test_smm_1d(
         parameters=Zstruct(
             g= 9.81,
             nu= 0.000001,
-            lamda = 0.0001,
+            lamda = 7.,
             rho=1000,
-            C= 30.0,
+            c_slipmod= 1.0,
         ),
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -99,10 +103,12 @@ def test_smm_1d_bidirectional(
     bcs = BC.BoundaryConditions(
         [
             BC.Extrapolation(physical_tag="left"),
-            BC.Wall(
-                physical_tag="right",
-                momentum_field_indices=[[1+i] for i in range(0, level + 1)],
-            ),
+            BC.Right(physical_tag="left"),
+
+            # BC.Wall(
+            #     physical_tag="right",
+            #     momentum_field_indices=[[1+i] for i in range(0, level + 1)],
+            # ),
         ]
     )
     ic = IC.RP(
@@ -144,16 +150,20 @@ def test_smm_1d_from_tut(
     bcs = BC.BoundaryConditions(
         [
             BC.Extrapolation(physical_tag="left"),
-            BC.Wall(
-                physical_tag="right",
-                momentum_field_indices=[[1+i] for i in range(0, level + 1)],
-            ),
+
+            BC.Extrapolation(physical_tag="right"),
+            # BC.Wall(
+            #     physical_tag="right",
+            #     momentum_field_indices=[[1+i] for i in range(0, level + 1)],
+            # ),
         ]
     )
     
     def custom_ic(x):
-        Q = np.zeros(2, dtype=float)
-        Q[0] = np.where(x[0] > 0.7, 0.06, 0.06)
+        Q = np.zeros(2+level, dtype=float)
+        Q[0] = np.where(x[0] > 0.7, 0.06, 0.02)
+        Q[1]  = -1.5
+
         return Q
     ic = IC.UserFunction(custom_ic)
     model = MySME(
@@ -161,9 +171,14 @@ def test_smm_1d_from_tut(
         parameters=Zstruct(
             g= 9.81,
             nu= 0.000001,
-            rho= 1000.,
-            lamda = 0.0001,
-
+            lamda = 1.,
+            rho=1000,
+            c_slipmod= 1.0,
+            c_nut=1.0,
+            nut = 0.0000125934315,
+            c_bl=1.0,
+            nut_bl=0.0000145934315,
+            eta=1,
         ),
         boundary_conditions=bcs,
         initial_conditions=ic,
@@ -263,15 +278,16 @@ if __name__ == "__main__":
     #     level=2,
     # )
     
+    level=0
     settings = Settings(
     output=Zstruct(
-        directory="outputs/precice_from_tut", filename="sim", clean_directory=True,
+        directory=f"outputs/precice_from_tut_{level}", filename="sim", clean_directory=True,
     ),
     )
     
     model = test_smm_1d_from_tut(
         settings,
-        level=0,
+        level=level,
     )
     
     # settings = Settings(

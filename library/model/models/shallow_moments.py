@@ -231,6 +231,110 @@ class ShallowMoments2d(Model):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         return out
+    
+    def newtonian_turbulent(self):
+        p = self.parameters
+        nut1 = [
+            1.06245397e-05,
+            -8.64966128e-06,
+            -4.24655215e-06,
+            1.51861028e-06,
+            2.25140517e-06,
+            1.81867029e-06,
+            -1.02154323e-06,
+            -1.78795289e-06,
+            -5.07515843e-07,
+        ]
+        nut2 = np.array(
+            [
+                0.21923893,
+                -0.04171894,
+                -0.05129916,
+                -0.04913612,
+                -0.03863209,
+                -0.02533469,
+                -0.0144186,
+                -0.00746847,
+                -0.0031811,
+                -0.00067986,
+                0.0021782,
+            ]
+        )
+        nut2 = nut2 / nut2[0] * 1.06245397 * 10 ** (-5)
+        nut3 = [
+            1.45934315e-05,
+            -1.91969629e-05,
+            5.80456268e-06,
+            -5.13207491e-07,
+            2.29489571e-06,
+            -1.24361978e-06,
+            -2.78720732e-06,
+            -2.01469118e-07,
+            1.24957663e-06,
+        ]
+        nut4 = [
+            1.45934315e-05,
+            -1.45934315e-05 * 3 / 4,
+            -1.45934315e-05 * 1 / 4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        nut5 = [p.nut, -p.nut * 3 / 4, -p.nut * 1 / 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        nut = nut5
+        out = Matrix([0 for i in range(self.n_variables)])
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
+        p = self.parameters
+        for k in range(1 + self.level):
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    out[1 + k] += (
+                        -p.c_nut
+                        * nut[j]
+                        / h
+                        * ha[i]
+                        / h
+                        * self.basismatrices.DT[k, i, j]
+                        / self.basismatrices.M[k, k]
+                    )
+        return out
+    
+    def newtonian_boundary_layer_classic(self):
+        assert "nu" in vars(self.parameters)
+        assert "eta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
+        p = self.parameters
+        phi_0 = [
+            self.basismatrices.basisfunctions.eval(i, 0.0)
+            for i in range(self.level + 1)
+        ]
+        dphidx_0 = [
+            (diff(self.basismatrices.basisfunctions.eval(i, x), x)).subs(x, 0.0)
+            for i in range(self.level + 1)
+        ]
+        tau_bot = 0
+        for i in range(1 + self.level):
+            tau_bot += ha[i] / h * dphidx_0[i]
+        for k in range(1 + self.level):
+            out[k + 1] = (
+                -p.c_bl
+                * p.eta
+                * (p.nu + p.nut_bl)
+                / h
+                * tau_bot
+                * phi_0[k]
+                / self.basismatrices.M[k, k]
+            )
+        return out
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
