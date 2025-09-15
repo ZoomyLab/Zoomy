@@ -1,0 +1,119 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     interFoam;
+
+startFrom       startTime;
+
+startTime       0.0;
+
+stopAt          endTime;
+
+endTime         1.;
+
+deltaT          0.001;
+
+writeControl timeStep;
+
+writeInterval 10;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  6;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable no;
+
+adjustTimeStep  no;
+
+maxCo           1;
+
+maxAlphaCo      1;
+
+maxDeltaT       1;
+
+libs (
+    "libpreciceAdapterFunctionObject.so"
+    "libutilityFunctionObjects.so"
+);
+
+functions
+{
+    preCICE_Adapter
+    {
+        type  preciceAdapterFunctionObject;
+        errors strict;
+    }
+
+    enforceAlpha
+    {
+        type coded;
+        libs (utilityFunctionObjects);
+
+        codeInclude
+        #{
+            #include "cellSet.H"
+        #};
+    
+        // Name of on-the-fly generated functionObject
+        name updateAlpha;
+        codeWrite
+        #{
+            // Lookup U
+            const volScalarField& alpha_vol = mesh().lookupObject<volScalarField>("alpha_vol");
+            volScalarField& alpha = mesh().lookupObject<volScalarField>("alpha.water");
+    
+            // Write
+            //mag(U)().write();
+            cellSet cset(mesh, "box1");
+            forAllConstIter(cellSet, cset, iter)
+            {
+                const label c = iter.key();
+                //alpha[c] = 0.5*(alpha[c] + alpha_vol[c]);
+                alpha[c] = 1.0;
+            }
+
+        #};
+    }   
+
+    //enforceAlpha
+    //{
+    //    type codedFunctionObject;
+    //    executeControl timeStep;   // execute every time step
+    //    executeInterval 1;
+
+    //    codeInclude
+    //    #{
+    //        #include "cellSet.H"
+    //    #};
+
+    //    codeEnd
+    //    #{
+    //        volScalarField& alpha =
+    //            const_cast<volScalarField&>(mesh.lookupObject<volScalarField>("alpha.water"));
+    //        const volScalarField& alpha_vol =
+    //            mesh.lookupObject<volScalarField>("alpha_vol");
+    //        cellSet cset(mesh, "box1");
+    //        forAllConstIter(cellSet, cset, iter)
+    //        {
+    //            const label c = iter.key();
+    //            //alpha[c] = 0.5*(alpha[c] + alpha_vol[c]);
+    //            alpha[c] = 1.0;
+    //        }
+    //        alpha.correctBoundaryConditions();
+    //    #};
+    //}
+}
+
