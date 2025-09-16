@@ -44,7 +44,6 @@ firedrake/swe.pvd
 firedrake/solution
 firedrake/solution.pvd
 conda-env
-openfoam
 swe.pvd
 swe/swe_0.vtu
 precice-profiling
