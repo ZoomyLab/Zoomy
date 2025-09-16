@@ -15,12 +15,12 @@ h_inflow = 0.03;
 width = 0.05 *Sqrt(2)/2;
 z_in = 0.02;
 
-//transfinite_scaling = 2;
+transfinite_scaling = 1;
 //transfinite_scaling = 5;
 //transfinite_scaling = 10;
 //transfinite_scaling = 15;
 
-transfinite_scaling = 5;
+//transfinite_scaling = 5;
 
 
 scale = 0.0125;
@@ -65,6 +65,7 @@ trans_dz_connector =  trans_dz_in;
 trans_dz_channel_p1_w= transfinite_scaling *  6;
 trans_dz_channel_p2_w = transfinite_scaling *  6;
 
+//offset = 0;
 offset = 1230000;
 
 
@@ -472,7 +473,6 @@ Transfinite Surface { offset+720024 };
 //Transfinite Surface { offset+720025 };
 
 
-//Recombine Surface "*";
 
 Curve Loop(offset+68001) = {-(offset+82), offset+221, offset+182, -(offset+232)};
 Surface (offset+78001) = {offset+68001};
@@ -528,14 +528,7 @@ Transfinite Volume {offset+98006};
 //Volume(offset+98007) = {offset+88007};
 //Transfinite Volume {offset+98007};
 
-
-
-
-Physical Surface("inflow", offset+82000) = {offset+72000};
-Physical Surface("wall_side", offset+820013) = {offset+72001, offset+72002, offset+72005, offset+72006, offset+70009, offset+72010, offset+72011, offset+72012,offset+72015, offset+72018, offset+72019, offset+72020, offset+72021, offset+72009, offset+720018, offset+720019};
-Physical Surface("wall_bottom", offset+820002) = {offset+72003, offset+72007, offset+720022, offset+72099};
-Physical Surface("wall_top", offset+820003) = {offset+72004, offset+72008};
-//Physical Surface("outflow", offset+820004) = {offset+720024};
+Recombine Surface "*";
 
 Translate {-0.60, -0.0, width} { 
   Surface{:};

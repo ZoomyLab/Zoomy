@@ -6,7 +6,7 @@ dx_offset_channel = 2 * dx_width_wall + dx_width_gap;
 l_inflow = 0.1;
 dx_width_front = 0.1;
 dx_width_back = 0.1;
-l_channel = 12.09 - dx_width_front - dx_width_back;
+l_channel = 2.09 - dx_width_front - dx_width_back;
 alpha = 45;
 
 h_water = 0.1;
@@ -28,6 +28,7 @@ bump_z = bump_base/1;
 
 scale_z = 2.;
 transfinite_scale = 1;
+//transfinite_scale = 5;
 
 s_a = Sin(alpha * Pi / 180);
 c_a = Cos(alpha * Pi / 180);
@@ -44,7 +45,6 @@ N_layers_air = N_layers * height_air/(height_air + height_water);
 /* scale = 0.0625; */
 scale = 0.03125;
 
-transfinite_scale = 5;
 res_coarse = transfinite_scale * 3.;
 res = res_coarse * 10.;
 res_fine = res * 1.0;
@@ -1107,7 +1107,3 @@ Transfinite Volume {98018};
 
 Recombine Surface "*";
 
-//Physical Surface("inflow") = {41009};
-Physical Surface("side_wall") = {40019, 40012, 40023, 40034, 40045, 40056, 40067, 40078, 41011, 41012, 41013, 41014, 41015, 41016, 41017, 41018, 40119, 40123, 40145, 40167, 41008, 41021, 40312, 40233, 40323, 40334, 40245, 40345, 40356, 40267, 40367, 41028, 40378};
-Physical Surface("bottom_wall") = {20019, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20009, 20010, 20011, 20012, 20012, 20014, 20015, 20016, 20017, 20018};
-Physical Surface("top_wall") = {2020019, 2020001, 2020002, 2020003, 2020004, 2020005, 2020006, 2020007, 2020008, 2020009, 2020010, 2020011, 2020012, 2020013, 2020014, 2020015, 2020016, 2020017, 2020018};
