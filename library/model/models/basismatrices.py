@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import sympy
 from sympy import integrate, diff, Matrix
 from sympy.abc import x
 from time import time as get_time
@@ -21,10 +22,14 @@ class Basismatrices:
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         failed = False
         try:
+            self.phib = np.load(os.path.join(path, "phib.npy"))
             self.M = np.load(os.path.join(path, "M.npy"))
+            self.Minv = np.load(os.path.join(path, "Minv.npy"))
             self.A = np.load(os.path.join(path, "A.npy"))
             self.B = np.load(os.path.join(path, "B.npy"))
             self.D = np.load(os.path.join(path, "D.npy"))
+            self.Dxi = np.load(os.path.join(path, "Dxi.npy"))
+            self.Dxi2 = np.load(os.path.join(path, "Dxi2.npy"))
             self.DD = np.load(os.path.join(path, "DD.npy"))
             self.D1 = np.load(os.path.join(path, "D1.npy"))
             self.DT = np.load(os.path.join(path, "DT.npy"))
@@ -36,35 +41,58 @@ class Basismatrices:
         main_dir = os.getenv("ZOOMY_DIR")
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         os.makedirs(path, exist_ok=True)
+        np.save(os.path.join(path, "phib"), self.phib)
         np.save(os.path.join(path, "M"), self.M)
+        np.save(os.path.join(path, "Minv"), self.Minv)
         np.save(os.path.join(path, "A"), self.A)
         np.save(os.path.join(path, "B"), self.B)
         np.save(os.path.join(path, "D"), self.D)
+        np.save(os.path.join(path, "Dxi"), self.Dxi)
+        np.save(os.path.join(path, "Dxi2"), self.Dxi2)
         np.save(os.path.join(path, "DD"), self.DD)
         np.save(os.path.join(path, "D1"), self.D1)
         np.save(os.path.join(path, "DT"), self.DT)
+        
+    def compute_Minv(self, level):
+        M = sympy.zeros(level+1, level+1)
+        for i in range(level+1):
+            for j in range(level+1):
+                M[i,j] = self._M(i,j)
+        Minv = M.inv()
+        return Minv
 
     def _compute_matrices(self, level):
         start = get_time()
         # object is key here, as we need to have a symbolic representation of the fractions.
+        self.phib = np.empty((level + 1), dtype=object)
         self.M = np.empty((level + 1, level + 1), dtype=object)
+        self.Minv = np.empty((level + 1, level + 1), dtype=object)
         self.A = np.empty((level + 1, level + 1, level + 1), dtype=object)
         self.B = np.empty((level + 1, level + 1, level + 1), dtype=object)
         self.D = np.empty((level + 1, level + 1), dtype=object)
+        self.Dxi = np.empty((level + 1, level + 1), dtype=object)
+        self.Dxi2 = np.empty((level + 1, level + 1), dtype=object)
+
         self.DD = np.empty((level + 1, level + 1), dtype=object)
         self.D1 = np.empty((level + 1, level + 1), dtype=object)
         self.DT = np.empty((level + 1, level + 1, level + 1), dtype=object)
 
         for k in range(level + 1):
+            self.phib[k] = self._phib(k)
             for i in range(level + 1):
                 self.M[k, i] = self._M(k, i)
                 self.D[k, i] = self._D(k, i)
+                self.Dxi[k, i] = self._Dxi(k, i)
+                self.Dxi2[k, i] = self._Dxi2(k, i)
+
                 self.DD[k, i] = self._DD(k, i)
                 self.D1[k, i] = self._D1(k, i)
                 for j in range(level + 1):
                     self.A[k, i, j] = self._A(k, i, j)
                     self.B[k, i, j] = self._B(k, i, j)
                     self.DT[k, i, j] = self._DT(k, i, j)
+            
+        self.Minv = self.compute_Minv(level)
 
     def compute_matrices(self, level):
         failed = True
@@ -229,6 +257,13 @@ class Basismatrices:
             return f_2d
         else:
             assert False
+            
+    """ 
+    Compute phi_k(@xi=0)
+    """
+
+    def _phib(self, k):
+        return self.basisfunctions.eval(k, 0.0)
 
     """ 
     Compute <phi_k, phi_i>
@@ -236,7 +271,7 @@ class Basismatrices:
 
     def _M(self, k, i):
         return integrate(
-            self.basisfunctions.eval(k, x) * self.basisfunctions.eval(i, x), (x, 0, 1)
+            self.basisfunctions.weight() * self.basisfunctions.eval(k, x) * self.basisfunctions.eval(i, x), (x, 0, 1)
         )
 
     """ 
@@ -245,7 +280,7 @@ class Basismatrices:
 
     def _A(self, k, i, j):
         return integrate(
-            self.basisfunctions.eval(k, x)
+            self.basisfunctions.weight() * self.basisfunctions.eval(k, x)
             * self.basisfunctions.eval(i, x)
             * self.basisfunctions.eval(j, x),
             (x, 0, 1),
@@ -257,7 +292,7 @@ class Basismatrices:
 
     def _B(self, k, i, j):
         return integrate(
-            diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
             * integrate(self.basisfunctions.eval(j, x), x)
             * self.basisfunctions.eval(i, x),
             (x, 0, 1),
@@ -269,8 +304,27 @@ class Basismatrices:
 
     def _D(self, k, i):
         return integrate(
-            diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x),
+            (x, 0, 1),
+        )
+        
+    """ 
+    Compute <(phi')_k, (phi')_j * xi>
+    """
+    def _Dxi(self, k, i):
+        return integrate(
+            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            * diff(self.basisfunctions.eval(i, x), x) * x,
+            (x, 0, 1),
+        )
+        """ 
+    Compute <(phi')_k, (phi')_j * xi**2>
+    """
+    def _Dxi2(self, k, i):
+        return integrate(
+            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            * diff(self.basisfunctions.eval(i, x), x) * x * x,
             (x, 0, 1),
         )
 
@@ -280,7 +334,7 @@ class Basismatrices:
 
     def _D1(self, k, i):
         return integrate(
-            self.basisfunctions.eval(k, x) * diff(self.basisfunctions.eval(i, x), x),
+            self.basisfunctions.weight() * self.basisfunctions.eval(k, x) * diff(self.basisfunctions.eval(i, x), x),
             (x, 0, 1),
         )
 
@@ -290,7 +344,7 @@ class Basismatrices:
 
     def _DD(self, k, i):
         return integrate(
-            self.basisfunctions.eval(k, x)
+            self.basisfunctions.weight() * self.basisfunctions.eval(k, x)
             * diff(diff(self.basisfunctions.eval(i, x), x), x),
             (x, 0, 1),
         )
@@ -302,7 +356,7 @@ class Basismatrices:
 
     def _DT(self, k, i, j):
         return integrate(
-            diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x)
             * self.basisfunctions.eval(j, x),
             (x, 0, 1),

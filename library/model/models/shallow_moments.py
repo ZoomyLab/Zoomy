@@ -3,7 +3,7 @@ import numpy.polynomial.legendre as L
 import numpy.polynomial.chebyshev as C
 from scipy.optimize import least_squares as lsq
 import sympy
-from sympy import Matrix, Piecewise
+from sympy import Matrix, Piecewise, sqrt
 from sympy.abc import x
 
 from sympy import integrate, diff
@@ -56,6 +56,21 @@ class ShallowMoments2d(Model):
         basismatrices = Basismatrices(self.basisfunctions)
         basismatrices.compute_matrices(self.level)
         object.__setattr__(self, "basismatrices", basismatrices)
+        
+    def _apply_Minv(self, A):
+        offset = self.level+1
+        if A.shape[1] == 1:
+            for d in range(self.dimension):
+                    a = A[1+d*offset : 1+(d+1)*offset, 0]
+                    A[1+d*offset : 1+(d+1)*offset, 0] = self.basismatrices.Minv @ a
+        else:
+            for d1 in range(self.dimension):
+                for d2 in range(self.dimension):
+                    a = A[1+d1*offset : 1+(d1+1)*offset, 1+d2*offset:1+(d2+1)*offset]
+                    A[1+d1*offset : 1+(d1+1)*offset, 1+d2*offset:1+(d2+1)*offset] = self.basismatrices.Minv @ a
+        return A
+            
+        
 
 
 
@@ -78,10 +93,19 @@ class ShallowMoments2d(Model):
         # w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
         # p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
         u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
+        b = 0
         if self.dimension == 2:
+            a = [self.variables[1+i]/h for i in range(offset)]
             b = [self.variables[1+offset+i]/h for i in range(offset)]
+            dudy = self.aux_variables.dudy
+            u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
             dvdy = self.aux_variables.dvdy
             v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(b, z)
+        elif self.dimension == 1:
+            a = [self.variables[1+i]/h for i in range(offset)]
+            dudx = self.aux_variables.dudx
+            u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
+            v_3d = 0
         else:
             v_3d = 0
             dvdy = 0
@@ -113,7 +137,6 @@ class ShallowMoments2d(Model):
                         * ha[j]
                         / h
                         * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
                     )
         if self.dimension == 2:
             hb = self.variables[1 + self.level + 1 : 1 + 2 * (self.level + 1)]
@@ -127,7 +150,6 @@ class ShallowMoments2d(Model):
                             * ha[j]
                             / h
                             * self.basismatrices.A[k, i, j]
-                            / self.basismatrices.M[k, k]
                         )
 
             flux_y[0] = hb[0]
@@ -141,7 +163,6 @@ class ShallowMoments2d(Model):
                             * ha[j]
                             / h
                             * self.basismatrices.A[k, i, j]
-                            / self.basismatrices.M[k, k]
                         )
             for k in range(self.level + 1):
                 for i in range(self.level + 1):
@@ -152,9 +173,8 @@ class ShallowMoments2d(Model):
                             * hb[j]
                             / h
                             * self.basismatrices.A[k, i, j]
-                            / self.basismatrices.M[k, k]
                     )
-        return [flux_x, flux_y]
+        return [self._apply_Minv(flux_x), self._apply_Minv(flux_y)]
 
     def nonconservative_matrix(self):
         offset = self.level + 1
@@ -174,7 +194,6 @@ class ShallowMoments2d(Model):
                         ha[j]
                         / h
                         * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
                     )
 
                         
@@ -190,7 +209,6 @@ class ShallowMoments2d(Model):
                             ha[j]
                             / h
                             * self.basismatrices.B[k, i, j]
-                            / self.basismatrices.M[k, k]
                         )
 
             for k in range(1, self.level + 1):
@@ -203,15 +221,13 @@ class ShallowMoments2d(Model):
                             hb[j]
                             / h
                             * self.basismatrices.B[k, i, j]
-                            / self.basismatrices.M[k, k]
                         )
                         nc_y[k + 1 + offset, i + 1 + offset] -= (
                             hb[j]
                             / h
                             * self.basismatrices.B[k, i, j]
-                            / self.basismatrices.M[k, k]
                         )
-        return [-nc_x, -nc_y]
+        return [-self._apply_Minv(nc_x), -self._apply_Minv(nc_y)]
 
     def eigenvalues(self):
         # we delete heigher order moments (level >= 2) for analytical eigenvalues
@@ -302,9 +318,8 @@ class ShallowMoments2d(Model):
                         * ha[i]
                         / h
                         * self.basismatrices.DT[k, i, j]
-                        / self.basismatrices.M[k, k]
                     )
-        return out
+        return self._apply_Minv(out)
     
     def newtonian_boundary_layer_classic(self):
         assert "nu" in vars(self.parameters)
@@ -332,9 +347,8 @@ class ShallowMoments2d(Model):
                 / h
                 * tau_bot
                 * phi_0[k]
-                / self.basismatrices.M[k, k]
             )
-        return out
+        return self._apply_Minv(out)
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
@@ -351,7 +365,6 @@ class ShallowMoments2d(Model):
                     * ha[i]
                     / h
                     * self.basismatrices.D[i, k]
-                    / self.basismatrices.M[k, k]
                 )
         if self.dimension == 2:
             hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
@@ -363,10 +376,83 @@ class ShallowMoments2d(Model):
                         * hb[i]
                         / h
                         * self.basismatrices.D[i, k]
-                        / self.basismatrices.M[k, k]
                     )
 
-        return out
+        return self._apply_Minv(out)
+    
+    def newtonian_turbulent_algebraic(self):
+        assert "nu" in vars(self.parameters)
+        assert "l_bl" in vars(self.parameters)
+        assert "l_turb" in vars(self.parameters)
+        assert "kappa" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        offset = self.level + 1
+        h = self.variables[0]
+        a = [_ha / h for _ha in self.variables[1 : 1 + self.level + 1]]
+        p = self.parameters
+        dU_dx = a[0] / (p.l_turb * h)
+        abs_dU_dx = sympy.Piecewise((dU_dx, dU_dx >=0), (-dU_dx, True))
+        for k in range(1 + self.level):
+            out[1 + k] += (
+                -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dU_dx) * p.l_bl * ( 1-p.l_bl)) * dU_dx * self.basismatrices.phib[k] / h
+            )
+            for i in range(1 + self.level):
+                out[1 + k] += (
+                    -p.nu
+                    / h
+                    * a[i]
+                    * self.basismatrices.D[i, k]
+                )
+                out[1 + k] += (
+                    -p.kappa * sympy.sqrt(p.nu * abs_dU_dx)
+                    / h
+                    * a[i]
+                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])
+                )
+        if self.dimension == 2:
+            b = [_hb / h for _hb in self.variables[1 + offset : 1 + self.level + 1 + offset] ]
+            dV_dy = b[0] / (p.l_turb * h)
+            abs_dV_dy = sympy.Piecewise((dV_dy, dV_dy >=0), (-dV_dy, True))
+            for k in range(1 + self.level):
+                out[1 + k + offset] += (
+                    -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dV_dy) * p.l_bl * ( 1-p.l_bl)) * dV_dy * self.basismatrices.phib[k] / h
+                )
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * b[i]
+                        * self.basismatrices.D[i, k]
+                    )
+                    out[1 + k + offset] += (
+                    -p.kappa * sympy.sqrt(p.nu * abs_dV_dy)
+                    / h
+                    * b[i]
+                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])
+                )
+
+        return self._apply_Minv(out)
+    
+    def regress_against_power_profile(self):
+        """
+        :gui:
+            - requires_parameter: ('lamda', 0.0)
+            - requires_parameter: ('rho', 1.0)
+        """
+        assert "r_pp" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        offset = self.level+1
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
+        p = self.parameters
+        ub = 0
+        for i in range(1 + self.level):
+            ub += ha[i] / h
+        for k in range(1, 1 + self.level):
+            out[1 + k] += (
+                -p.r_pp * sympy.Piecewise((ub, ub >=0), (-ub, True)) * (ha[i] - ha[0]*self.basismatrices.project_power_law_profile(k))
+            )
+        return self._apply_Minv(out)
 
     def slip_mod(self):
         """
@@ -386,7 +472,7 @@ class ShallowMoments2d(Model):
             ub += ha[i] / h
         for k in range(1, 1 + self.level):
             out[1 + k] += (
-                -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
+                -p.c_slipmod / p.lamda / p.rho * ub 
             )
         if self.dimension == 2:
             hb = self.variables[1+offset : 1+offset + self.level + 1]
@@ -395,9 +481,9 @@ class ShallowMoments2d(Model):
                 vb += hb[i] / h
             for k in range(1, 1 + self.level):
                 out[1+offset+k] += (
-                    -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
+                    -1.0 * p.c_slipmod / p.lamda / p.rho * vb
                 )
-        return out
+        return self._apply_Minv(out)
 
     def newtonian_boundary_layer(self):
         assert "nu" in vars(self.parameters)
@@ -418,7 +504,6 @@ class ShallowMoments2d(Model):
                     / h
                     * ha[i]
                     / h
-                    / self.basismatrices.M[k, k]
                     * phi_0[k]
                     * dphidx_0[i]
                 )
@@ -431,11 +516,10 @@ class ShallowMoments2d(Model):
                         / h
                         * hb[i]
                         / h
-                        / self.basismatrices.M[k, k]
                         * phi_0[k]
                         * dphidx_0[i]
                     )
-        return out
+        return self._apply_Minv(out)
 
     def sindy(self):
         assert "nu" in vars(self.parameters)
@@ -469,7 +553,7 @@ class ShallowMoments2d(Model):
             + p.C7 * sympy.Abs(ha[0] / h) ** (7 / 3)
             + p.C8 * sympy.Abs(ha[1] / h) ** (7 / 3)
         )
-        return out
+        return self._apply_Minv(out)
 
     def slip(self):
         assert "lamda" in vars(self.parameters)
@@ -483,7 +567,7 @@ class ShallowMoments2d(Model):
         for k in range(1 + self.level):
             for i in range(1 + self.level):
                 out[1 + k] += (
-                    -1.0 / p.lamda / p.rho * ha[i] / h / self.basismatrices.M[k, k]
+                    -1.0 / p.lamda / p.rho * ha[i] / h 
                 )
 
         if self.dimension == 2:
@@ -493,30 +577,42 @@ class ShallowMoments2d(Model):
                     out[1 + k + offset] += (
                         -1.0 / p.lamda / p.rho
                     )
-        return out
+        return self._apply_Minv(out)
 
     def chezy(self):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level + 1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         tmp = 0
-        for i in range(1 + self.level):
-            for j in range(1 + self.level):
-                tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
-        sqrt = sympy.sqrt(tmp)
-        for k in range(1 + self.level):
-            for l in range(1 + self.level):
-                out[1 + k] += (
-                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * ha[l] * sqrt / h
-                )
-                out[1 + k + offset] += (
-                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * hb[l] * sqrt / h
-                )
-        return out
+        if self.dimension == 1:
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    tmp += ha[i] * ha[j] / h / h
+            sqrt = sympy.sqrt(tmp)
+            for k in range(1 + self.level):
+                for l in range(1 + self.level):
+                    out[1 + k] += (
+                        -1.0 / (p.C**2) * ha[l] * sqrt / h
+                    )
+        if self.dimension == 2:
+            offset = self.level + 1
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
+            sqrt = sympy.sqrt(tmp)
+            for k in range(1 + self.level):
+                for l in range(1 + self.level):
+                    out[1 + k] += (
+                        -1.0 / (p.C**2) * ha[l] * sqrt / h
+                    )
+                    out[1 + k + offset] += (
+                        -1.0 / (p.C**2) * hb[l] * sqrt / h
+                    )
+
+        return self._apply_Minv(out)
 
 
 def reconstruct_uvw(Q, grad, lvl, phi, psi):

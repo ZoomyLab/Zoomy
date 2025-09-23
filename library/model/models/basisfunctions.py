@@ -7,6 +7,7 @@ from sympy.abc import x
 from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
+from sympy.functions.special.polynomials import chebyshevt
 
 
 class Basisfunction:
@@ -16,6 +17,9 @@ class Basisfunction:
         x = Symbol("x")
         b = lambda k, x: x**k
         return [b(k, x) for k in range(self.level + 1)]
+    
+    def weight(self):
+        return 1
 
     def __init__(self, level=0, **kwargs):
         self.level = level
@@ -66,13 +70,22 @@ class Basisfunction:
         alpha = np.zeros(n_basis)
         for i in range(n_basis):
             b = lambdify(x, self.get(i))
-            nom = np.trapz(velocities * b(z), z)
+            nom = np.trapz(velocities * b(z) * self.weight(), z)
             if type(b(z)) == int:
                 den = b(z) ** 2
             else:
                 den = np.trapz((b(z) * b(z)).reshape(z.shape), z)
             res = nom / den
             alpha[i] = res
+        return alpha
+    
+    def project_onto_basis(self, Y):
+        Z = np.linspace(0, 1, Y.shape[0])
+        n_basis = len(self.basis)
+        alpha = np.zeros(n_basis)
+        for i in range(n_basis):
+            b = lambdify(x, self.get(i))
+            alpha[i] = np.trapz(Y * b(Z) * self.weight(), Z)
         return alpha
 
     def get_diff_basis(self):
@@ -90,6 +103,29 @@ class Legendre_shifted(Basisfunction):
     def basis_definition(self):
         x = Symbol("x")
         b = lambda k, x: legendre(k, 2 * x - 1) * (-1) ** (k)
+        return [b(k, x) for k in range(self.level + 1)]
+    
+class Chebyshevt_shifted(Basisfunction):
+    name = "Chebyshevt_shifted"
+    
+    def weight(self):
+        return 1/sympy.sqrt(x*(1-x))
+
+    def basis_definition(self):
+        x = Symbol("x")
+        b = lambda k, x: chebyshevt(k, 2 * x - 1) * chebyshevt(k, -1)
+        return [b(k, x) for k in range(self.level + 1)]
+    
+class Legendre_DN(Basisfunction):
+    name = "Legendre_DN - satifying no-slip and no-stress. This is a non-SWE basis"
+
+    def basis_definition(self):
+        x = Symbol("x")
+        def b(k, x):
+            alpha = (2*k+3) / (k+2)**2
+            beta = -((k+1)/(k+2))**2
+            return (legendre(k, 2 * x - 1) ) + alpha * (legendre(k+1, 2 * x - 1) ) + beta * (legendre(k+2, 2 * x - 1))
+        #normalizing makes no sence, as b(k, 0) = 0 by construction
         return [b(k, x) for k in range(self.level + 1)]
 
 

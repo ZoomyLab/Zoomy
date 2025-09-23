@@ -570,7 +570,35 @@ class HyperbolicSolver(Solver):
                         Q1,
                         Qaux,
                         parameters,
-                        dt,
+                        dt/5,
+                    )
+                    Q2 = ode.RK1(
+                        source_operator,
+                        Q2,
+                        Qaux,
+                        parameters,
+                        dt/5,
+                    )
+                    Q2 = ode.RK1(
+                        source_operator,
+                        Q2,
+                        Qaux,
+                        parameters,
+                        dt/5,
+                    )
+                    Q2 = ode.RK1(
+                        source_operator,
+                        Q2,
+                        Qaux,
+                        parameters,
+                        dt/5,
+                    )
+                    Q2 = ode.RK1(
+                        source_operator,
+                        Q2,
+                        Qaux,
+                        parameters,
+                        dt/5,
                     )
                     # Q2 = Q1
 
