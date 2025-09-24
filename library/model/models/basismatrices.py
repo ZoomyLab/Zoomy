@@ -24,7 +24,6 @@ class Basismatrices:
         try:
             self.phib = np.load(os.path.join(path, "phib.npy"))
             self.M = np.load(os.path.join(path, "M.npy"))
-            self.Minv = np.load(os.path.join(path, "Minv.npy"))
             self.A = np.load(os.path.join(path, "A.npy"))
             self.B = np.load(os.path.join(path, "B.npy"))
             self.D = np.load(os.path.join(path, "D.npy"))
@@ -43,7 +42,6 @@ class Basismatrices:
         os.makedirs(path, exist_ok=True)
         np.save(os.path.join(path, "phib"), self.phib)
         np.save(os.path.join(path, "M"), self.M)
-        np.save(os.path.join(path, "Minv"), self.Minv)
         np.save(os.path.join(path, "A"), self.A)
         np.save(os.path.join(path, "B"), self.B)
         np.save(os.path.join(path, "D"), self.D)
@@ -53,20 +51,13 @@ class Basismatrices:
         np.save(os.path.join(path, "D1"), self.D1)
         np.save(os.path.join(path, "DT"), self.DT)
         
-    def compute_Minv(self, level):
-        M = sympy.zeros(level+1, level+1)
-        for i in range(level+1):
-            for j in range(level+1):
-                M[i,j] = self._M(i,j)
-        Minv = M.inv()
-        return Minv
+
 
     def _compute_matrices(self, level):
         start = get_time()
         # object is key here, as we need to have a symbolic representation of the fractions.
         self.phib = np.empty((level + 1), dtype=object)
         self.M = np.empty((level + 1, level + 1), dtype=object)
-        self.Minv = np.empty((level + 1, level + 1), dtype=object)
         self.A = np.empty((level + 1, level + 1, level + 1), dtype=object)
         self.B = np.empty((level + 1, level + 1, level + 1), dtype=object)
         self.D = np.empty((level + 1, level + 1), dtype=object)
@@ -92,7 +83,6 @@ class Basismatrices:
                     self.B[k, i, j] = self._B(k, i, j)
                     self.DT[k, i, j] = self._DT(k, i, j)
             
-        self.Minv = self.compute_Minv(level)
 
     def compute_matrices(self, level):
         failed = True
@@ -263,7 +253,7 @@ class Basismatrices:
     """
 
     def _phib(self, k):
-        return self.basisfunctions.eval(k, 0.0)
+        return self.basisfunctions.eval(k, self.basisfunctions.bounds()[0])
 
     """ 
     Compute <phi_k, phi_i>
@@ -271,7 +261,7 @@ class Basismatrices:
 
     def _M(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * self.basisfunctions.eval(k, x) * self.basisfunctions.eval(i, x), (x, 0, 1)
+            self.basisfunctions.weight(x) * self.basisfunctions.eval(k, x) * self.basisfunctions.eval(i, x), (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1])
         )
 
     """ 
@@ -280,10 +270,10 @@ class Basismatrices:
 
     def _A(self, k, i, j):
         return integrate(
-            self.basisfunctions.weight() * self.basisfunctions.eval(k, x)
+            self.basisfunctions.weight(x) * self.basisfunctions.eval(k, x)
             * self.basisfunctions.eval(i, x)
             * self.basisfunctions.eval(j, x),
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
     """ 
@@ -292,10 +282,10 @@ class Basismatrices:
 
     def _B(self, k, i, j):
         return integrate(
-            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight(x) * diff(self.basisfunctions.eval(k, x), x)
             * integrate(self.basisfunctions.eval(j, x), x)
             * self.basisfunctions.eval(i, x),
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
     """ 
@@ -304,9 +294,9 @@ class Basismatrices:
 
     def _D(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight(x) * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x),
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
         
     """ 
@@ -314,18 +304,18 @@ class Basismatrices:
     """
     def _Dxi(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight(x) * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x) * x,
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
         """ 
     Compute <(phi')_k, (phi')_j * xi**2>
     """
     def _Dxi2(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight(x) * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x) * x * x,
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
     """ 
@@ -334,8 +324,8 @@ class Basismatrices:
 
     def _D1(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * self.basisfunctions.eval(k, x) * diff(self.basisfunctions.eval(i, x), x),
-            (x, 0, 1),
+            self.basisfunctions.weight(x) * self.basisfunctions.eval(k, x) * diff(self.basisfunctions.eval(i, x), x),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
     """ 
@@ -344,9 +334,9 @@ class Basismatrices:
 
     def _DD(self, k, i):
         return integrate(
-            self.basisfunctions.weight() * self.basisfunctions.eval(k, x)
+            self.basisfunctions.weight(x) * self.basisfunctions.eval(k, x)
             * diff(diff(self.basisfunctions.eval(i, x), x), x),
-            (x, 0, 1),
+           (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
     """ 
@@ -356,10 +346,10 @@ class Basismatrices:
 
     def _DT(self, k, i, j):
         return integrate(
-            self.basisfunctions.weight() * diff(self.basisfunctions.eval(k, x), x)
+            self.basisfunctions.weight(x) * diff(self.basisfunctions.eval(k, x), x)
             * diff(self.basisfunctions.eval(i, x), x)
             * self.basisfunctions.eval(j, x),
-            (x, 0, 1),
+            (x, self.basisfunctions.bounds()[0], self.basisfunctions.bounds()[1]),
         )
 
 
