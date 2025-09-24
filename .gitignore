@@ -119,3 +119,6 @@ dynamicCode
 functionObjects
 web/tutorials/precice/from_tut/fl1.save
 processor*
+core*
+*.neu
+*.msh
