@@ -27,7 +27,7 @@ bump_channel_y = bump_base/1;
 bump_z = bump_base/1;
 
 scale_z = 2.;
-transfinite_scale = 1;
+transfinite_scale = 5;
 //transfinite_scale = 5;
 
 s_a = Sin(alpha * Pi / 180);

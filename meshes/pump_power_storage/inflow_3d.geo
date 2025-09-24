@@ -15,7 +15,7 @@ h_inflow = 0.03;
 width = 0.05 *Sqrt(2)/2;
 z_in = 0.02;
 
-transfinite_scaling = 1;
+transfinite_scaling = 5;
 //transfinite_scaling = 5;
 //transfinite_scaling = 10;
 //transfinite_scaling = 15;
