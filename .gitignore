@@ -122,3 +122,4 @@ processor*
 core*
 *.neu
 *.msh
+simulations/hydropower/of_momentFoam.zip
