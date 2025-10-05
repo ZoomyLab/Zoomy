@@ -312,3 +312,4 @@ class BoundaryConditions:
                 time, X, dX, Q, Qaux, parameters, normal
             ).T
         return out
+

@@ -169,6 +169,10 @@ class Model:
         object.__setattr__(self, "n_aux_variables", self.aux_variables.length())
         object.__setattr__(self, "n_parameters", self.parameters.length())
         
+    def print_boundary_conditions(self):
+        inputs = self.get_boundary_conditions_matrix_inputs()
+        return self.boundary_conditions.get_boundary_function_matrix(*inputs)
+        
     def get_boundary_conditions_matrix_inputs(self):
         """
         Returns the inputs for the boundary conditions matrix.
