@@ -126,3 +126,6 @@ simulations/hydropower/of_momentFoam.zip
 
 tmux_session
 compile_commands.json
+library/zoomyFoam/Make/linux64GccDPInt32Opt/zoomyFoam.C.dep
+library/zoomyFoam/Make/linux64GccDPInt32Opt/zoomyFoam.o
+library/zoomyFoam/Make/linux64GccDPInt32Opt
