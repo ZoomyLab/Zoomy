@@ -11,7 +11,7 @@ from attr import define, field
 from typing import Union, Optional, Callable, List, Dict
 
 from library.misc.custom_types import IArray, FArray
-import library.mesh.fvm_mesh as fvm_mesh
+import library.mesh.mesh as mesh
 from library.mesh.mesh_util import center
 from library.misc.misc import (
     project_in_x_y_and_recreate_Q,
@@ -131,15 +131,13 @@ class Wall(BoundaryCondition):
 
     def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
         q = Matrix(Q)
-        n = Matrix(normal)
-        dim = normal.length()
         n_variables = Q.length()
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
+        dim = momentum_list[0].shape[0]
+        n = Matrix(normal[:dim])
         zero = 10 ** (-20) * q[0]
-        h = q[0]
-        p = parameters
         out = Matrix([zero for i in range(n_variables)])
-        out[0] = h
+        out = q
         momentum_list_wall = []
         for momentum in momentum_list:
             normal_momentum_coef = momentum.dot(n)
@@ -283,6 +281,10 @@ class BoundaryConditions:
         mesh = self.resolve_periodic_bcs(mesh)
         self.initialized = True
         return mesh
+    
+    def map_physical_id_to_function_index(self, mesh):
+        dict_tag_to_name = {int(k): str(v) for k, v in zip(mesh.boundary_conditions_sorted_physical_tags, mesh.boundary_conditions_sorted_names)}
+        
 
     def get_precice_boundary_indices_to_bc_name(self, mesh):
         dict_physical_name_to_index = {
@@ -300,3 +302,14 @@ class BoundaryConditions:
     def get_boundary_function_list(self):
         assert self.initialized
         return self.boundary_functions
+    
+    def get_boundary_function_matrix(self, time, X, dX, Q, Qaux, parameters, normal):
+        n_variables = Q.length()
+        n_bcs = len(self.boundary_conditions)
+        out = Matrix.zeros(n_bcs, n_variables)
+        for i, bc in enumerate(self.boundary_conditions):
+            out[i, :] = bc.get_boundary_condition_function(
+                time, X, dX, Q, Qaux, parameters, normal
+            ).T
+        return out
+

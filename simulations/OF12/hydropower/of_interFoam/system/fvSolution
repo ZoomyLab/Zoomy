@@ -1,0 +1,121 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+
+solvers
+{
+    "alpha.water.*"
+    {
+        nAlphaCorr      1;
+        nAlphaSubCycles 4;
+        cAlpha          2;
+        //cAlpha          0;
+        //alphaApplyPrevCorr no;
+
+        //MULESCorr       yes;
+        //nLimiterIter    5;
+
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-10;
+        relTol          0;
+    }
+
+    "pcorr.*"
+    {
+        solver          GAMG;
+        tolerance       1e-8;
+        relTol          0;
+        smoother        DICGaussSeidel;
+    }
+
+    p_rgh
+    {
+        solver          GAMG;
+        smoother        DICGaussSeidel;
+        tolerance       1e-07;
+        relTol          0.0;
+    }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;
+    }
+    "U"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-07;
+        relTol          0;
+        maxIter         200;
+    }
+    "UFinal"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-07;
+        relTol          0;
+        maxIter         200;
+    }
+
+    "(k|epsilon)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-08;
+        relTol          0;
+    }
+    "(k|epsilon)Final"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-10;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    momentumPredictor           yes;
+    nOuterCorrectors            2;
+    nCorrectors                 1;
+    nNonOrthogonalCorrectors    0;
+    turbOnFinalIterOnly         false;
+    residualControl
+    {
+        p_rgh
+        {
+            tolerance   1e-3;
+            relTol      0;
+        }
+        U
+        {
+            tolerance   1e-4;
+            relTol      0;
+        }
+        "(k|epsilon)"
+        {
+            tolerance   1e-4;
+            relTol      0;
+        }
+        // Match your phase names exactly:
+        "(alpha\\.water|alpha\\.air)"
+        {
+            tolerance   1e-6;
+            relTol      0;
+        }
+    }
+}
+
+relaxationFactors
+{
+    equations
+    {
+        ".*" 1;
+    }
+}

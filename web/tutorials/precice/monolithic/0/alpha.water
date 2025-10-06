@@ -1,0 +1,100 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      alpha.water;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "$FOAM_CASE/Parameters"
+dimensions      [0 0 0 0 0 0 0];
+
+//internalField uniform 0;
+
+internalField   #codeStream
+{
+        codeInclude
+        #{
+                #include "fvMesh.H"
+        #};
+
+        codeOptions
+        #{
+                -I$(LIB_SRC)/finiteVolume/lnInclude \
+                -I$(LIB_SRC)/meshTools/lnInclude
+        #};
+
+        codeLibs
+        #{
+                -lfiniteVolume -lmeshTools
+        #};
+	code
+        #{
+                const IOdictionary& d = static_cast<const IOdictionary&>(dict);
+                const fvMesh& mesh = refCast<const fvMesh>(d.db());
+
+                const vectorField& cellMidpoints = mesh.cellCentres();
+                const scalarField y(cellMidpoints.component(vector::Y));
+                const scalarField x(cellMidpoints.component(vector::X));
+
+		scalarField alpha(y.size(), 0);
+		forAll(alpha, i)
+		{
+                    if (x[i] > 0.2 && x[i] < 0.3)
+                    {
+                        //if (y[i] < 0.04)
+                        //{
+                        //    alpha[i] = 1;
+                        //}
+                    }
+                    if(y[i] < $waterHeight)
+		    {
+		         alpha[i] = 1;
+		    }
+		}
+
+                alpha.writeEntry("", os);
+        #};
+};
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+	value		uniform 1;
+    }
+    outlet
+    {
+        type            zeroGradient;
+        //type            fixedGradient;
+        //gradient        uniform 0;
+        //type                fixedValue;
+        //value               uniform 0;
+    }
+    walls
+    {
+        type            zeroGradient;
+    }
+
+    atmosphere
+    {
+        type            inletOutlet;
+        inletValue      uniform 0;
+        value           uniform 0;
+    }
+
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

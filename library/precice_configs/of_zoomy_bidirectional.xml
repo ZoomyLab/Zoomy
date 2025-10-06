@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<precice-configuration>
+  <log>
+    <sink
+      filter="%Severity% > debug and %Rank% = 0"
+      format="---[precice] %ColorizedSeverity% %Message%"
+      enabled="true" />
+  </log>
+
+  <data:vector name="Velocity" />
+  <data:scalar name="Alpha" />
+  <data:scalar name="Pressure" />
+  <data:vector name="VelocityBack" />
+  <data:scalar name="AlphaBack" />
+  <data:scalar name="PressureBack" />
+
+  <mesh name="Fluid1-Mesh" dimensions="3">
+    <use-data name="Velocity" />
+    <use-data name="Alpha" />
+    <use-data name="Pressure" />
+    <use-data name="VelocityBack" />
+    <use-data name="AlphaBack" />
+    <use-data name="PressureBack" />
+  </mesh>
+
+  <mesh name="Fluid2-Mesh" dimensions="3">
+    <use-data name="Velocity" />
+    <use-data name="Alpha" />
+    <use-data name="Pressure" />
+    <use-data name="VelocityBack" />
+    <use-data name="AlphaBack" />
+    <use-data name="PressureBack" />
+  </mesh>
+
+  <participant name="Fluid1">
+    <provide-mesh name="Fluid1-Mesh" />
+    <receive-mesh name="Fluid2-Mesh" from="Fluid2" />
+    <write-data name="Velocity" mesh="Fluid1-Mesh" />
+    <write-data name="Alpha" mesh="Fluid1-Mesh" />
+    <write-data name="PressureBack" mesh="Fluid1-Mesh" />
+    <read-data name="Pressure" mesh="Fluid1-Mesh" />
+    <read-data name="VelocityBack" mesh="Fluid1-Mesh" />
+    <read-data name="AlphaBack" mesh="Fluid1-Mesh" />
+    <mapping:nearest-neighbor
+      direction="read"
+      from="Fluid2-Mesh"
+      to="Fluid1-Mesh"
+      constraint="consistent" />
+    <export:vtu directory="/home/ingo/Git/Zoomy/outputs/export1" />
+  </participant>
+
+  <participant name="Fluid2">
+    <provide-mesh name="Fluid2-Mesh" />
+    <receive-mesh name="Fluid1-Mesh" from="Fluid1" />
+    <read-data name="Velocity" mesh="Fluid2-Mesh" />
+    <read-data name="Alpha" mesh="Fluid2-Mesh" />
+    <read-data name="PressureBack" mesh="Fluid2-Mesh" />
+    <write-data name="Pressure" mesh="Fluid2-Mesh" />
+    <write-data name="AlphaBack" mesh="Fluid2-Mesh" />
+    <write-data name="VelocityBack" mesh="Fluid2-Mesh" />
+    <mapping:nearest-neighbor
+      direction="read"
+      from="Fluid1-Mesh"
+      to="Fluid2-Mesh"
+      constraint="consistent" />
+    <export:vtu directory="/home/ingo/Git/Zoomy/outputs/export2" />
+  </participant>
+
+  <m2n:sockets acceptor="Fluid2" connector="Fluid1" exchange-directory="/home/ingo/precice-coupling" />
+
+  <coupling-scheme:parallel-implicit>
+    <time-window-size value="0.001" />
+    <max-time value="0.5" />
+    <participants first="Fluid2" second="Fluid1" />
+    <exchange data="Velocity" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" initialize="no" />
+    <exchange data="Alpha" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" initialize="no" />
+    <exchange data="PressureBack" mesh="Fluid1-Mesh" from="Fluid1" to="Fluid2" initialize="no" />
+    <exchange data="Pressure" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
+    <exchange data="VelocityBack" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
+    <exchange data="AlphaBack" mesh="Fluid2-Mesh" from="Fluid2" to="Fluid1" />
+    <max-iterations value="50" />
+    <relative-convergence-measure limit="1.0e-5" data="Velocity" mesh="Fluid1-Mesh" />
+    <relative-convergence-measure limit="1.0e-5" data="Alpha" mesh="Fluid1-Mesh" />
+    <!-- <relative-convergence-measure limit="1.0e-5" data="PressureBack" mesh="Fluid1-Mesh" /> -->
+    <!-- <relative-convergence-measure limit="1.0e-5" data="Pressure" mesh="Fluid2-Mesh" /> -->
+    <!-- <relative-convergence-measure limit="1.0e-5" data="VelocityBack" mesh="Fluid2-Mesh" /> -->
+    <relative-convergence-measure limit="1.0e-5" data="AlphaBack" mesh="Fluid2-Mesh" />
+  </coupling-scheme:parallel-implicit>
+</precice-configuration>

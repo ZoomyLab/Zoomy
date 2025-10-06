@@ -3,8 +3,10 @@ import numpy as np
 import os
 from copy import deepcopy
 from ctypes import cdll
+import dolfinx
 
 import sympy
+
 from sympy import (
     Matrix,
     lambdify,
@@ -57,7 +59,7 @@ def vectorize_constant_sympy_expressions(expr, Q, Qaux):
 
 
 @define(kw_only=True, slots=True, frozen=True)
-class RuntimeModel:
+class JaxRuntimeModel:
     name: str = field()
     n_variables: int = field()
     n_aux_variables: int = field()
@@ -103,6 +105,8 @@ class RuntimeModel:
             interpolate_3d=pde.interpolate_3d,
             bcs=bcs,
         )
+        
+
 
 
 
@@ -128,7 +132,7 @@ class Model:
 
     time: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("t", real=True))
     distance: sympy.Symbol = field(init=False, factory=lambda: sympy.symbols("dX", real=True))
-    position_3d: Zstruct = field(init=False, factory=lambda: register_sympy_attribute(3, "X"))
+    position: Zstruct = field(init=False, factory=lambda: register_sympy_attribute(3, "X"))
 
     _simplify: Callable = field(factory=lambda: default_simplify)
 
@@ -138,20 +142,21 @@ class Model:
     n_aux_variables: int = field(init=False)
     n_parameters: int = field(init=False)
     variables: Zstruct = field(init=False, default=1)
+    positive_variables: Union[dict, list, None] = field(default=None)
     aux_variables: Zstruct = field(default=0)
     parameter_values: FArray = field(init=False)
     normal: Matrix = field(init=False)
-    position: Zstruct = field(init=False)
+    # position: Zstruct = field(init=False)
     
 
 
     def __attrs_post_init__(self):
-        updated_default_parameters = {**self._default_parameters, **self.parameters}
+        updated_default_parameters = {**self._default_parameters, **self.parameters.as_dict()}
 
         # Use object.__setattr__ because class is frozen
-        object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q"))
+        object.__setattr__(self, "variables", register_sympy_attribute(self.variables, "q", self.positive_variables))
         object.__setattr__(self, "aux_variables", register_sympy_attribute(self.aux_variables, "qaux"))
-        object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
+        # object.__setattr__(self, "position", register_sympy_attribute(self.dimension, "X"))
 
         object.__setattr__(self, "parameters", register_sympy_attribute(updated_default_parameters, "p"))
         object.__setattr__(self, "parameter_values", register_parameter_values(updated_default_parameters))
@@ -163,6 +168,38 @@ class Model:
         object.__setattr__(self, "n_variables", self.variables.length())
         object.__setattr__(self, "n_aux_variables", self.aux_variables.length())
         object.__setattr__(self, "n_parameters", self.parameters.length())
+        
+    def print_boundary_conditions(self):
+        inputs = self.get_boundary_conditions_matrix_inputs()
+        return self.boundary_conditions.get_boundary_function_matrix(*inputs)
+        
+    def get_boundary_conditions_matrix_inputs(self):
+        """
+        Returns the inputs for the boundary conditions matrix.
+        """
+        return (
+            self.time,
+            self.position,
+            self.distance,
+            self.variables,
+            self.aux_variables,
+            self.parameters,
+            self.normal,
+        )
+        
+    def get_boundary_conditions_matrix_inputs_as_list(self):
+        """
+        Returns the inputs for the boundary conditions matrix where the Zstructs are converted to lists.
+        """
+        return [
+            self.time,
+            self.position.get_list(),
+            self.distance,
+            self.variables.get_list(),
+            self.aux_variables.get_list(),
+            self.parameters.get_list(),
+            self.normal.get_list(),
+        ]
 
 
     def _get_boundary_conditions(self, printer="jax"):
@@ -288,6 +325,45 @@ class Model:
                 jnp.array(l_eigenvalues(Q, Qaux, param, normal)), axis=1
             )
 
+        l_left_eigenvectors = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+                self.normal.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.left_eigenvectors(), self.variables, self.aux_variables
+            ),
+            printer,
+        )
+
+        def left_eigenvectors(Q, Qaux, param, normal):
+            return jnp.squeeze(
+                jnp.array(l_left_eigenvectors(Q, Qaux, param, normal)), axis=1
+            )
+
+
+        l_right_eigenvectors = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+                self.normal.get_list(),
+            ],
+            vectorize_constant_sympy_expressions(
+                self.right_eigenvectors(), self.variables, self.aux_variables
+            ),
+            printer,
+        )
+
+        def right_eigenvectors(Q, Qaux, param, normal):
+            return jnp.squeeze(
+                jnp.array(l_right_eigenvectors(Q, Qaux, param, normal)), axis=1
+            )
+            
+        
+
         l_source = lambdify(
             [
                 self.variables.get_list(),
@@ -348,7 +424,7 @@ class Model:
 
         l_interpolate_3d = lambdify(
             [
-                self.position_3d.get_list(),
+                self.position.get_list(),
                 self.variables.get_list(),
                 self.aux_variables.get_list(),
                 self.parameters.get_list(),
@@ -416,30 +492,73 @@ class Model:
         return zeros(self.n_variables, 1)
     
     def interpolate_3d(self):
-        return zeros(5, 1)
+        return zeros(6, 1)
 
 
     def eigenvalues(self):
         A = self.normal[0] * self.quasilinear_matrix()[0]
         for d in range(1, self.dimension):
             A += self.normal[d] * self.quasilinear_matrix()[d]
-        return eigenvalue_dict_to_matrix(A.eigenvals())
+        return self._simplify(eigenvalue_dict_to_matrix(A.eigenvals()))
+    
+    def left_eigenvectors(self):
+        return zeros(self.n_variables, self.n_variables)
+    
+    def right_eigenvectors(self):
+        return zeros(self.n_variables, self.n_variables)
+    
+    def substitute_precomputed_denominator(self, expr, sym, sym_inv):
+        if isinstance(expr, sympy.MatrixBase):
+            return expr.applyfunc(lambda e: self.substitute_precomputed_denominator(e, sym, sym_inv))
 
+        num, den = sympy.fraction(expr)
+        if den.has(sym):
+            # split into (part involving sym, part not involving sym)
+            den_sym, den_rest = den.as_independent(sym, as_Add=False)
+            # careful: as_independent returns (independent, dependent)
+            # so we need to swap naming
+            den_rest, den_sym = den_sym, den_rest
 
-def register_sympy_attribute(argument, string_identifier="q_"):
+            # replace sym by sym_inv in the sym-dependent part
+            den_sym_repl = den_sym.xreplace({sym: sym_inv})
+
+            return self.substitute_precomputed_denominator(num, sym, sym_inv) * den_sym_repl / den_rest
+        elif expr.args:
+            return expr.func(*[self.substitute_precomputed_denominator(arg, sym, sym_inv) for arg in expr.args])
+        else:
+            return expr
+
+def transform_positive_variable_intput_to_list(argument, positive, n_variables):
+    out = [False for _ in range(n_variables)]
+    if positive is None:
+        return out
+    if type(positive) == type({}):
+        assert type(argument) == type(positive)
+        for i, a in enumerate(argument.keys()):
+            if a in positive.keys():
+                out[i] = positive[a]
+    if type(positive) == list:
+        for i in positive:
+            out[i] = True
+    return out
+
+def register_sympy_attribute(argument, string_identifier="q_", positives=None):
     if type(argument) == int:
+        positive = transform_positive_variable_intput_to_list(argument, positives, argument)
         attributes = {
             string_identifier + str(i): sympy.symbols(
-                string_identifier + str(i), real=True
+                string_identifier + str(i), real=True, positive=positive[i]
             )
             for i in range(argument)
         }
     elif type(argument) == type({}):
+        positive = transform_positive_variable_intput_to_list(argument, positives, len(argument))
         attributes = {
-            name: sympy.symbols(str(name), real=True) for name in argument.keys()
+            name: sympy.symbols(str(name), real=True, positive=pos) for name, pos in zip(argument.keys(), positive)
         }
     elif type(argument) == list:
-        attributes = {name: sympy.symbols(str(name), real=True) for name in argument}
+        positive = transform_positive_variable_intput_to_list(argument, positives, len(argument))
+        attributes = {name: sympy.symbols(str(name), real=True, positive=pos) for name, pos in zip(argument, positive)}
     else:
         assert False
     return Zstruct(**attributes)

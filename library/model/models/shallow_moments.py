@@ -3,7 +3,7 @@ import numpy.polynomial.legendre as L
 import numpy.polynomial.chebyshev as C
 from scipy.optimize import least_squares as lsq
 import sympy
-from sympy import Matrix, Piecewise
+from sympy import Matrix, Piecewise, sqrt
 from sympy.abc import x
 
 from sympy import integrate, diff
@@ -25,6 +25,7 @@ from library.model.models.basismatrices import Basismatrices
 from library.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
 
+
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowMoments2d(Model):
     dimension: int = 2
@@ -40,7 +41,7 @@ class ShallowMoments2d(Model):
     )
 
     def __attrs_post_init__(self):
-        object.__setattr__(self, "variables", (self.level+1*2)+1)
+        object.__setattr__(self, "variables", ((self.level+1)*self.dimension)+1)
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
@@ -55,35 +56,48 @@ class ShallowMoments2d(Model):
         basismatrices = Basismatrices(self.basisfunctions)
         basismatrices.compute_matrices(self.level)
         object.__setattr__(self, "basismatrices", basismatrices)
+        
 
 
 
     def interpolate_3d(self):
-        out = Matrix([0 for i in range(5)])
+        out = Matrix([0 for i in range(6)])
         level = self.level
         offset = level+1
-        x = self.position_3d[0]
-        y = self.position_3d[1]
-        z = self.position_3d[2]
+        x = self.position[0]
+        y = self.position[1]
+        z = self.position[2]
         h = self.variables[0]
         a = [self.variables[1+i]/h for i in range(offset)]
-        b = [self.variables[1+offset+i]/h for i in range(offset)]
-        dudx = self.aux_variables.dudx
-        dvdy = self.aux_variables.dvdy
+        dhdx = self.aux_variables[0]
+        dadx = [self.aux_variables[1+i] for i in range(offset)]
+        
+        psi = [self.basisfunctions.eval_psi(k, z) for k in range(level+1)]
+        phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
+
         rho_w = 1000.
         g = 9.81
-        # rho_3d = rho_w * Piecewise((1., h-z > 0), (0.,True))
-        # u_3d = u*Piecewise((1, h-z > 0), (0, True))
-        # v_3d = v*Piecewise((1, h-z > 0), (0, True))
-        # w_3d = (-h * dudx - h * dvdy )*Piecewise((1, h-z > 0), (0, True))
-        # p_3d = rho_w * g * Piecewise((h-z, h-z > 0), (0, True))
         u_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(a, z)
-        v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(b, z)
-        out[0] = h
-        out[1] = u_3d
-        out[2] = v_3d
-        out[3] = 0
-        out[4] = rho_w * g * h * (1-z)
+        v_3d = 0
+        b = 0
+        dbdx = 0
+        def dot(a, b):
+            s = 0
+            for i in range(len(a)):
+                s += a[i] * b[i]
+            return s
+        w_3d = - dhdx * dot(a,psi) - h * dot(dadx,psi) + dot(a, phi) * (z * dhdx + dbdx)
+        if self.dimension == 2:
+            beta = [self.variables[1+offset+i]/h for i in range(offset)]
+            v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(beta, z)
+
+        b = 0
+        out[0] = b
+        out[1] = h
+        out[2] = u_3d
+        out[3] = v_3d
+        out[4] = w_3d
+        out[5] = rho_w * g * h * (1-z)
 
         return out
 
@@ -93,7 +107,6 @@ class ShallowMoments2d(Model):
         flux_y = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + self.level + 1 : 1 + 2 * (self.level + 1)]
         p = self.parameters
         flux_x[0] = ha[0]
         flux_x[1] = p.g * p.ez * h * h / 2
@@ -105,44 +118,43 @@ class ShallowMoments2d(Model):
                         ha[i]
                         * ha[j]
                         / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
+                        * self.basismatrices.A[k, i, j] / self.basismatrices.M[k, k]
                     )
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_x[k + 1 + offset] += (
-                        hb[i]
-                        * ha[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
+        if self.dimension == 2:
+            hb = self.variables[1 + self.level + 1 : 1 + 2 * (self.level + 1)]
 
-        flux_y[0] = hb[0]
-        flux_y[1 + offset] = p.g * p.ez * h * h / 2
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_y[k + 1] += (
-                        hb[i]
-                        * ha[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
-        for k in range(self.level + 1):
-            for i in range(self.level + 1):
-                for j in range(self.level + 1):
-                    # TODO avoid devision by zero
-                    flux_y[k + 1 + offset] += (
-                        hb[i]
-                        * hb[j]
-                        / h
-                        * self.basismatrices.A[k, i, j]
-                        / self.basismatrices.M[k, k]
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_x[k + 1 + offset] += (
+                            hb[i]
+                            * ha[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]/ self.basismatrices.M[k, k]
+                        )
+
+            flux_y[0] = hb[0]
+            flux_y[1 + offset] = p.g * p.ez * h * h / 2
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_y[k + 1] += (
+                            hb[i]
+                            * ha[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]/ self.basismatrices.M[k, k]
+                        )
+            for k in range(self.level + 1):
+                for i in range(self.level + 1):
+                    for j in range(self.level + 1):
+                        # TODO avoid devision by zero
+                        flux_y[k + 1 + offset] += (
+                            hb[i]
+                            * hb[j]
+                            / h
+                            * self.basismatrices.A[k, i, j]/ self.basismatrices.M[k, k]
                     )
         return [flux_x, flux_y]
 
@@ -152,47 +164,51 @@ class ShallowMoments2d(Model):
         nc_y = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + offset + self.level + 1]
         p = self.parameters
         um = ha[0] / h
-        vm = hb[0] / h
+
         for k in range(1, self.level + 1):
             nc_x[k + 1, k + 1] += um
-            nc_y[k + 1, k + 1 + offset] += um
         for k in range(self.level + 1):
             for i in range(1, self.level + 1):
                 for j in range(1, self.level + 1):
                     nc_x[k + 1, i + 1] -= (
                         ha[j]
                         / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
-                    nc_y[k + 1, i + 1 + offset] -= (
-                        ha[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
+                        * self.basismatrices.B[k, i, j]/ self.basismatrices.M[k, k]
                     )
 
-        for k in range(1, self.level + 1):
-            nc_x[k + 1 + offset, k + 1] += vm
-            nc_y[k + 1 + offset, k + 1 + offset] += vm
-        for k in range(self.level + 1):
-            for i in range(1, self.level + 1):
-                for j in range(1, self.level + 1):
-                    nc_x[k + 1 + offset, i + 1] -= (
-                        hb[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
-                    nc_y[k + 1 + offset, i + 1 + offset] -= (
-                        hb[j]
-                        / h
-                        * self.basismatrices.B[k, i, j]
-                        / self.basismatrices.M[k, k]
-                    )
+                        
+        if self.dimension ==  2:
+            hb = self.variables[1 + offset : 1 + offset + self.level + 1]
+            vm = hb[0] / h
+            for k in range(1, self.level + 1):
+                nc_y[k + 1, k + 1 + offset] += um
+            for k in range(self.level + 1):
+                for i in range(1, self.level + 1):
+                    for j in range(1, self.level + 1):
+                        nc_y[k + 1, i + 1 + offset] -= (
+                            ha[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]/ self.basismatrices.M[k, k]
+                        )
+
+            for k in range(1, self.level + 1):
+                nc_x[k + 1 + offset, k + 1] += vm
+                nc_y[k + 1 + offset, k + 1 + offset] += vm
+            for k in range(self.level + 1):
+                for i in range(1, self.level + 1):
+                    for j in range(1, self.level + 1):
+                        nc_x[k + 1 + offset, i + 1] -= (
+                            hb[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]
+                        )
+                        nc_y[k + 1 + offset, i + 1 + offset] -= (
+                            hb[j]
+                            / h
+                            * self.basismatrices.B[k, i, j]/ self.basismatrices.M[k, k]
+                        )
         return [-nc_x, -nc_y]
 
     def eigenvalues(self):
@@ -209,41 +225,120 @@ class ShallowMoments2d(Model):
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
 
-    def constraints_implicit(self):
-        assert "dhdx" in vars(self.aux_variables)
-        assert "dhdy" in vars(self.aux_variables)
-        out = Matrix([0 for i in range(1)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        hv = self.variables[2]
-        p = self.parameters
-        dhdt = self.aux_variables.dhdt
-        dhudt = self.aux_variables.dhudt
-        dhvdt = self.aux_variables.dhvdt
-        dhudx = self.aux_variables.dhudx
-        dhudy = self.aux_variables.dhudy
-        dhvdx = self.aux_variables.dhudx
-        dhvdy = self.aux_variables.dhudy
-        out[0] = dhdt + dhudx + dhvdx
-        out[1] = dhudt + dhudx + dhvdx
-        return out
 
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         return out
-
-    def topography(self):
-        assert "dhdx" in vars(self.aux_variables)
-        assert "dhdy" in vars(self.aux_variables)
-        offset = self.level + 1
+    
+    def gravity(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        out[1] = -self.parameters.g * self.parameters.ex * self.variables[0]
+        if self.dimension == 2:
+            offset = self.level + 1
+            out[1 + offset] = -self.parameters.g * self.parameters.ey * self.variables[0]
+        return out
+    
+    def newtonian_turbulent(self):
+        p = self.parameters
+        nut1 = [
+            1.06245397e-05,
+            -8.64966128e-06,
+            -4.24655215e-06,
+            1.51861028e-06,
+            2.25140517e-06,
+            1.81867029e-06,
+            -1.02154323e-06,
+            -1.78795289e-06,
+            -5.07515843e-07,
+        ]
+        nut2 = np.array(
+            [
+                0.21923893,
+                -0.04171894,
+                -0.05129916,
+                -0.04913612,
+                -0.03863209,
+                -0.02533469,
+                -0.0144186,
+                -0.00746847,
+                -0.0031811,
+                -0.00067986,
+                0.0021782,
+            ]
+        )
+        nut2 = nut2 / nut2[0] * 1.06245397 * 10 ** (-5)
+        nut3 = [
+            1.45934315e-05,
+            -1.91969629e-05,
+            5.80456268e-06,
+            -5.13207491e-07,
+            2.29489571e-06,
+            -1.24361978e-06,
+            -2.78720732e-06,
+            -2.01469118e-07,
+            1.24957663e-06,
+        ]
+        nut4 = [
+            1.45934315e-05,
+            -1.45934315e-05 * 3 / 4,
+            -1.45934315e-05 * 1 / 4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        nut5 = [p.nut, -p.nut * 3 / 4, -p.nut * 1 / 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        nut = nut5
         out = Matrix([0 for i in range(self.n_variables)])
         h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
         p = self.parameters
-        dhdx = self.aux_variables.dhdx
-        dhdy = self.aux_variables.dhdy
-        out[1] = h * p.g * (p.ex - p.ez * dhdx)
-        out[1 + offset] = h * p.g * (p.ey - p.ez * dhdy)
-        return out
+        for k in range(1 + self.level):
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    out[1 + k] += (
+                        -p.c_nut
+                        * nut[j]
+                        / h
+                        * ha[i]
+                        / h
+                        * self.basismatrices.DT[k, i, j]/ self.basismatrices.M[k, k]
+                    )
+        return  out
+    
+    def newtonian_boundary_layer_classic(self):
+        assert "nu" in vars(self.parameters)
+        assert "eta" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
+        p = self.parameters
+        phi_0 = [
+            self.basismatrices.basisfunctions.eval(i, 0.0)
+            for i in range(self.level + 1)
+        ]
+        dphidx_0 = [
+            (diff(self.basismatrices.basisfunctions.eval(i, x), x)).subs(x, 0.0)
+            for i in range(self.level + 1)
+        ]
+        tau_bot = 0
+        for i in range(1 + self.level):
+            tau_bot += ha[i] / h * dphidx_0[i]
+        for k in range(1 + self.level):
+            out[k + 1] = (
+                -p.c_bl
+                * p.eta
+                * (p.nu + p.nut_bl)
+                / h
+                * tau_bot
+                * phi_0[k]/ self.basismatrices.M[k, k]
+            )
+        return  out
 
     def newtonian(self):
         assert "nu" in vars(self.parameters)
@@ -251,7 +346,6 @@ class ShallowMoments2d(Model):
         offset = self.level + 1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         for k in range(1 + self.level):
             for i in range(1 + self.level):
@@ -260,17 +354,97 @@ class ShallowMoments2d(Model):
                     / h
                     * ha[i]
                     / h
-                    * self.basismatrices.D[i, k]
-                    / self.basismatrices.M[k, k]
+                    * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
                 )
-                out[1 + k + offset] += (
+        if self.dimension == 2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * hb[i]
+                        / h
+                        * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                    )
+
+        return out
+    
+    def newtonian_turbulent_algebraic(self):
+        assert "nu" in vars(self.parameters)
+        assert "l_bl" in vars(self.parameters)
+        assert "l_turb" in vars(self.parameters)
+        assert "kappa" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        offset = self.level + 1
+        h = self.variables[0]
+        a = [_ha / h for _ha in self.variables[1 : 1 + self.level + 1]]
+        p = self.parameters
+        dU_dx = a[0] / (p.l_turb * h)
+        abs_dU_dx = sympy.Piecewise((dU_dx, dU_dx >=0), (-dU_dx, True))
+        for k in range(1 + self.level):
+            out[1 + k] += (
+                -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dU_dx) * p.l_bl * ( 1-p.l_bl)) * dU_dx * self.basismatrices.phib[k] / h/ self.basismatrices.M[k, k]
+            )
+            for i in range(1 + self.level):
+                out[1 + k] += (
                     -p.nu
                     / h
-                    * hb[i]
-                    / h
-                    * self.basismatrices.D[i, k]
-                    / self.basismatrices.M[k, k]
+                    * a[i]
+                    * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
                 )
+                out[1 + k] += (
+                    -p.kappa * sympy.sqrt(p.nu * abs_dU_dx)
+                    / h
+                    * a[i]
+                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])/ self.basismatrices.M[k, k]
+                )
+        if self.dimension == 2:
+            b = [_hb / h for _hb in self.variables[1 + offset : 1 + self.level + 1 + offset] ]
+            dV_dy = b[0] / (p.l_turb * h)
+            abs_dV_dy = sympy.Piecewise((dV_dy, dV_dy >=0), (-dV_dy, True))
+            for k in range(1 + self.level):
+                out[1 + k + offset] += (
+                    -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dV_dy) * p.l_bl * ( 1-p.l_bl)) * dV_dy * self.basismatrices.phib[k] / h/ self.basismatrices.M[k, k]
+                )
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * b[i]
+                        * self.basismatrices.D[i, k]/ self.basismatrices.M[k, k]
+                    )
+                    out[1 + k + offset] += (
+                    -p.kappa * sympy.sqrt(p.nu * abs_dV_dy)
+                    / h
+                    * b[i]
+                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])/ self.basismatrices.M[k, k]
+                )
+
+        return out
+    
+    def regress_against_power_profile(self):
+        """
+        :gui:
+            - requires_parameter: ('lamda', 0.0)
+            - requires_parameter: ('rho', 1.0)
+        """
+        assert "r_pp" in vars(self.parameters)
+        out = Matrix([0 for i in range(self.n_variables)])
+        offset = self.level+1
+        h = self.variables[0]
+        ha = self.variables[1 : 1 + self.level + 1]
+        p = self.parameters
+        ub = 0
+        Z = np.linspace(0,1,100)
+        U = 1-(1-Z)**8
+        power_profile_coefs = self.basisfunctions.project_onto_basis(U)
+        for i in range(1 + self.level):
+            ub += ha[i] / h
+        for k in range(1, 1 + self.level):
+            out[1 + k] += (
+                -p.r_pp * sympy.Piecewise((ub, ub >=0), (-ub, True)) * (ha[i] - ha[0]*power_profile_coefs[i])/ self.basismatrices.M[k, k]
+            )
         return out
 
     def slip_mod(self):
@@ -285,20 +459,23 @@ class ShallowMoments2d(Model):
         offset = self.level+1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1+offset : 1+offset + self.level + 1]
         p = self.parameters
         ub = 0
-        vb = 0
         for i in range(1 + self.level):
             ub += ha[i] / h
-            vb += hb[i] / h
         for k in range(1, 1 + self.level):
             out[1 + k] += (
-                -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
+                -p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
             )
-            out[1+offset+k] += (
-                -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
-            )
+        if self.dimension == 2:
+            hb = self.variables[1+offset : 1+offset + self.level + 1]
+            vb = 0
+            for i in range(1 + self.level):
+                vb += hb[i] / h
+            for k in range(1, 1 + self.level):
+                out[1+offset+k] += (
+                    -1.0 * p.c_slipmod / p.lamda / p.rho * vb/ self.basismatrices.M[k, k]
+                )
         return out
 
     def newtonian_boundary_layer(self):
@@ -306,9 +483,7 @@ class ShallowMoments2d(Model):
         out = Matrix([0 for i in range(self.n_variables)])
         offset = self.level + 1
         h = self.variables[0]
-        h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         phi_0 = [self.basismatrices.eval(i, 0.0) for i in range(self.level + 1)]
         dphidx_0 = [
@@ -322,19 +497,21 @@ class ShallowMoments2d(Model):
                     / h
                     * ha[i]
                     / h
-                    / self.basismatrices.M[k, k]
                     * phi_0[k]
-                    * dphidx_0[i]
+                    * dphidx_0[i]/ self.basismatrices.M[k, k]
                 )
-                out[1 + k + offset] += (
-                    -p.nu
-                    / h
-                    * hb[i]
-                    / h
-                    / self.basismatrices.M[k, k]
-                    * phi_0[k]
-                    * dphidx_0[i]
-                )
+        if self.dimension==2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -p.nu
+                        / h
+                        * hb[i]
+                        / h
+                        * phi_0[k]
+                        * dphidx_0[i]/ self.basismatrices.M[k, k]
+                    )
         return out
 
     def sindy(self):
@@ -379,39 +556,55 @@ class ShallowMoments2d(Model):
         h = self.variables[0]
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         for k in range(1 + self.level):
             for i in range(1 + self.level):
                 out[1 + k] += (
                     -1.0 / p.lamda / p.rho * ha[i] / h / self.basismatrices.M[k, k]
                 )
-                out[1 + k + offset] += (
-                    -1.0 / p.lamda / p.rho * hb[i] / h / self.basismatrices.M[k, k]
-                )
+
+        if self.dimension == 2:
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for k in range(1 + self.level):
+                for i in range(1 + self.level):
+                    out[1 + k + offset] += (
+                        -1.0 / p.lamda / p.rho/ self.basismatrices.M[k, k]
+                    )
         return out
 
     def chezy(self):
         assert "C" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level + 1
         h = self.variables[0]
         ha = self.variables[1 : 1 + self.level + 1]
-        hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
         p = self.parameters
         tmp = 0
-        for i in range(1 + self.level):
-            for j in range(1 + self.level):
-                tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
-        sqrt = sympy.sqrt(tmp)
-        for k in range(1 + self.level):
-            for l in range(1 + self.level):
-                out[1 + k] += (
-                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * ha[l] * sqrt / h
-                )
-                out[1 + k + offset] += (
-                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * hb[l] * sqrt / h
-                )
+        if self.dimension == 1:
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    tmp += ha[i] * ha[j] / h / h
+            sqrt = sympy.sqrt(tmp)
+            for k in range(1 + self.level):
+                for l in range(1 + self.level):
+                    out[1 + k] += (
+                        -1.0 / (p.C**2) * ha[l] * sqrt / h/ self.basismatrices.M[k, k]
+                    )
+        if self.dimension == 2:
+            offset = self.level + 1
+            hb = self.variables[1 + offset : 1 + self.level + 1 + offset]
+            for i in range(1 + self.level):
+                for j in range(1 + self.level):
+                    tmp += ha[i] * ha[j] / h / h + hb[i] * hb[j] / h / h
+            sqrt = sympy.sqrt(tmp)
+            for k in range(1 + self.level):
+                for l in range(1 + self.level):
+                    out[1 + k] += (
+                        -1.0 / (p.C**2) * ha[l] * sqrt / h/ self.basismatrices.M[k, k]
+                    )
+                    out[1 + k + offset] += (
+                        -1.0 / (p.C**2) * hb[l] * sqrt / h/ self.basismatrices.M[k, k]
+                    )
+
         return out
 
 
@@ -558,3 +751,7 @@ if __name__ == "__main__":
     basis = Legendre_shifted(basis=Legendre_shifted(level=2))
     basis.compute_matrices(2)
     print(basis.D)
+
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowMoments(ShallowMoments2d):
+    dimension: int = 1

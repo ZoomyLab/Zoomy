@@ -7,7 +7,7 @@ class ModelAnalyser():
     def __init__(self, model):
         self.model = model
         self.t = model.time
-        x, y, z = model.position_3d
+        x, y, z = model.position
         self.x = x
         self.y = y
         self.z = z
@@ -24,7 +24,7 @@ class ModelAnalyser():
         display(Latex(latex_block))
             
     def get_time_space(self):
-        x, y, z = self.model.position_3d
+        x, y, z = self.model.position
         t = self.model.time
         return t, x, y, z
     

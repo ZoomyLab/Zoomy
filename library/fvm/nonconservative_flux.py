@@ -147,7 +147,7 @@ def segmentpath(integration_order=3):
         for i in range(n_variables):
             # I[i, i, :] = 1.
             I = I.at[i, i, :].set(1.0)
-
+            
         Am = (
             0.5 * Bint
             - (svA * svB) / (svA + svB) * 1.0 / (dt * vol_face) * I
@@ -258,8 +258,131 @@ def segmentpath(integration_order=3):
 
         # return -0.5 * Bint@(Qj-Qi), False
         return -0.5 * np.einsum("ij..., j...->i...", Bint, (Qj - Qi)), False
+    
 
+        # @jax.jit
+    def nc_flux_jax(Qi, Qj, Qauxi, Qauxj, parameters, normal, Vi, Vj, Vij, dt, model):
+        
+        # ---------------------------------------------------------------------------
+        # 3-point Gauss integration on [0,1]
+        # ---------------------------------------------------------------------------
+
+        wi = jnp.array(weights)
+        xi = jnp.array(samples)
+        
+        index_h = 1
+        index_topography = 0
+        
+        def _get_A(model):
+            n_dir = len(model.quasilinear_matrix)   # 1, 2 or 3
+
+            def A(q, qaux, n):                      # q : (n_dof,)
+                # evaluate the matrices A_d
+                mats = [model.quasilinear_matrix[d](q, qaux, parameters)  for d in range(n_dir)]
+                mats = jnp.stack(mats, axis=0)      # (n_dir, n_dof, n_dof)
+                return jnp.einsum('d,dij->ij', n, mats)
+
+            return A
+        
+        get_A = _get_A(model)
+    
+        # ---------------------------------------------------------------------------
+        # ONE face-and-cell contribution (not yet batched) ---------------------------
+        # ---------------------------------------------------------------------------
+        eps = 1e-4
+        def _rusanov_single(Qi, Qj,
+                            Qauxi, Qauxj,
+                            normal,
+                            Vi, Vj, Vij):
+
+            n_dof = Qi.shape[0]
+
+            # -- very same wet/dry & wall checks as in the original ----------------
+            # cond1 = (Qi[index_h] < eps) & (Qi[index_topography] > Qj[index_h] + Qj[index_topography])
+            # cond2 = (Qj[index_h] < eps) & (Qj[index_topography] > Qi[index_h] + Qi[index_topography])
+            # dry   = cond1 | cond2
+            dry = (Qi[index_h] < eps) & (Qj[index_h] < eps)
+
+            
+
+
+            def _compute():                         # executed only if not dry
+                dQ     =  Qj    - Qi
+                dQaux  =  Qauxj - Qauxi
+
+                # ------------------------------------------------------
+                # 1)   path integral   A_int = ∫₀¹ A(q(s),qaux(s),n) ds
+                # ------------------------------------------------------
+                q_path     = Qi[:, None]    + xi * dQ    [:, None]    # (n_dof , 3)
+                qaux_path  = Qauxi[:, None] + xi * dQaux[:, None]     # (n_aux , 3)
+
+                # evaluate A for the three quadrature points
+                A_mats = jax.vmap(get_A, in_axes=(1, 1, None))(q_path, qaux_path, normal)
+                A_int  = jnp.tensordot(wi, A_mats, axes=1)           # (n_dof, n_dof)
+
+                # ------------------------------------------------------
+                # 2)   spectral radius along n
+                # ------------------------------------------------------
+                ev_i = model.eigenvalues(Qi, Qauxi, parameters, normal)  # (n_dof,)
+                ev_j = model.eigenvalues(Qj, Qauxj, parameters, normal)
+                sM   = jnp.max(jnp.maximum(jnp.abs(ev_i), jnp.abs(ev_j)))
+
+                # ------------------------------------------------------
+                # 3)   Rusanov fluctuation that leaves cell "i"
+                # ------------------------------------------------------
+                Id = jnp.eye(n_dof, dtype=Qi.dtype)
+                # Id = Id.at[index_topography, index_topography].set(0.0)
+                # Id = Id.at[index_h, index_h].set(0.0)
+
+                # Id = Id.at[index_h, index_topography].set(1.0)
+                Am   = 0.5 * (A_int - sM * Id)
+                flux = (Am @ dQ) * (Vij / Vi)
+                return flux
+
+            # return jax.lax.cond(dry,
+            #                     lambda: jnp.zeros_like(Qi),
+            #                     _compute)
+            return jax.lax.cond(dry,
+                    _compute,
+                    _compute)
+
+
+        # ---------------------------------------------------------------------------
+        # batched wrapper ------------------------------------------------------------
+        # ---------------------------------------------------------------------------
+        @jax.jit
+        def rusanov_batched(Qi, Qj,
+                            Qauxi, Qauxj,
+                            normal,
+                            Vi, Vj, Vij,
+                            ):
+            """
+            Vectorised (vmap) Rusanov fluctuation.
+
+            Shapes
+            ------
+            Qi, Qj            : (n_dof , N)        states for the two cells
+            Qauxi, Qauxj      : (n_aux , N)
+            normal            : (dim   , N)  or (dim,)   oriented outward for cell "i"
+            Vi                : (N,)   or scalar         cell volume
+            Vij               : (N,)   or scalar         face measure
+            """
+
+            # vmapping is along the "cell/face" axis (=1 for Q*, =0 for Vi,Vij)
+            flux = jax.vmap(_rusanov_single,
+                            in_axes=(1, 1,   # Qi , Qj
+                                    1, 1,   # Qauxi, Qauxj
+                                    1,      # normal
+                                    0, 0, 0))(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vi)
+            return flux.T
+
+        flux = rusanov_batched(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij)
+        return flux,  False
+
+    ### OLD
     # return nc_flux
     # return nc_flux_vectorized
     # return nc_flux_quasilinear_componentwise
-    return nc_flux_quasilinear
+    ### JAX
+    # return nc_flux_quasilinear
+    return nc_flux_jax

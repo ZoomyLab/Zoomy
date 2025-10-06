@@ -15,8 +15,11 @@ def extrude_points(points, Z):
 
 
 def extrude_element_vertices(element_vertices, n_vertices, Nz):
+
     n_elements = element_vertices.shape[0]
     n_vertices_per_element = element_vertices.shape[1]
+    if n_vertices_per_element == 2:
+        return extrude_element_vertices_line(element_vertices, n_vertices, Nz)
     element_vertices_ext = np.empty(
         (n_elements * Nz, 2 * n_vertices_per_element), dtype=int
     )
@@ -27,6 +30,23 @@ def extrude_element_vertices(element_vertices, n_vertices, Nz):
                 element_vertices[i, :] + iz * n_vertices
             )
             element_vertices_ext[i + offset, n_vertices_per_element:] = (
+                element_vertices[i, :] + (iz + 1) * n_vertices
+            )
+    return element_vertices_ext
+
+def extrude_element_vertices_line(element_vertices, n_vertices, Nz):
+    n_elements = element_vertices.shape[0]
+    n_vertices_per_element = 2
+    element_vertices_ext = np.empty(
+        (n_elements * Nz, 2 * n_vertices_per_element), dtype=int
+    )
+    for i in range(n_elements):
+        for iz in range(Nz):
+            offset = iz * n_elements
+            element_vertices_ext[i + offset, [0, 3]] = (
+                element_vertices[i, :] + iz * n_vertices
+            )
+            element_vertices_ext[i + offset, [1,2]] = (
                 element_vertices[i, :] + (iz + 1) * n_vertices
             )
     return element_vertices_ext

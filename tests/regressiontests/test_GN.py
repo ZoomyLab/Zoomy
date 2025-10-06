@@ -59,7 +59,7 @@ def solve(
     mesh = convert_mesh_to_jax(mesh)
 
 
-    pde, bcs = solver.transform_in_place(model)
+    pde, bcs = solver.to_jax(model)
 
     output_hdf5_path = os.path.join(settings.output.directory, f"{settings.name}.h5")
     save_fields = io.get_save_fields(output_hdf5_path, settings.output_write_all)

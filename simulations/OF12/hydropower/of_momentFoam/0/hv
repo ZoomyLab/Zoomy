@@ -1,0 +1,47 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      hv;
+}
+
+dimensions      [0 0 0 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            zeroGradient;
+        //type            fixedValue;
+	//value		uniform 0.0;
+    }
+
+    side_wall
+    {
+        type            zeroGradient;
+        //type            fixedValue;
+	//value		uniform 0.0;
+    }
+
+    bottom_wall
+    {
+        type            zeroGradient;
+        //type            fixedValue;
+	//value		uniform 0.0;
+    }
+
+    outlet
+    {
+        type            zeroGradient;
+        //type            fixedValue;
+	//value		uniform 0.0;
+    }
+
+    defaultFaces
+    {
+        type            empty;
+    }
+}
