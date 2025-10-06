@@ -62,11 +62,11 @@ website:
             - tutorials/vam/simple.ipynb
         - section: "SME"
           contents:
-            - tutorials/amrex/simple.ipynb
-            - tutorials/amrex/minimal.ipynb
+            - tutorials/sme/simple.ipynb
+            - tutorials/sme/minimal.ipynb
         - section: "AMReX"
           contents:
-            - tutorials/code_printers/from_DEM.ipynb
+            - tutorials/amrex/from_DEM.ipynb
         - section: "Code Printers"
           contents:
             - tutorials/code_printers/to_amrex.ipynb
