@@ -56,25 +56,25 @@ website:
             - tutorials/swe/simple.ipynb
         - section: "Poisson"
           contents:
-            - tutorials/poisson/*.ipynb
+            - tutorials/poisson/simple.ipynb
         - section: "VAM"
           contents:
             - tutorials/vam/simple.ipynb
         - section: "SME"
           contents:
-            - tutorials/sme/simple.ipynb
-            - tutorials/sme/minimal.ipynb
+            - tutorials/amrex/simple.ipynb
+            - tutorials/amrex/minimal.ipynb
         - section: "AMReX"
           contents:
-            - tutorials/sme/from_DEM.ipynb
+            - tutorials/code_printers/from_DEM.ipynb
         - section: "Code Printers"
           contents:
-            - tutorials/sme/to_amrex.ipynb
-            - tutorials/sme/to_openfoam.ipynb
-            - tutorials/sme/to_ufl.ipynb
+            - tutorials/code_printers/to_amrex.ipynb
+            - tutorials/code_printers/to_openfoam.ipynb
+            - tutorials/code_printers/to_ufl.ipynb
         - section: "DolfinX"
           contents:
-            - tutorials/sme/dolfinx_demo.ipynb
+            - tutorials/dolfinx/dolfinx_demo.ipynb
     - id: documentation 
       title: "Documentation"
       style: "floating"
