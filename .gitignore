@@ -123,3 +123,6 @@ core*
 *.neu
 *.msh
 simulations/hydropower/of_momentFoam.zip
+
+tmux_session
+compile_commands.json

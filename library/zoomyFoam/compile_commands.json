@@ -1,7 +1,0 @@
-[
-    {
-        "command": "c++ -c -std=c++14 -m64 -DLIB_NAME=libNULL.so -Dlinux64 -DWM_ARCH_OPTION=64 -DWM_DP -DWM_LABEL_SIZE=32 -Wall -Wextra -Wold-style-cast -Wnon-virtual-dtor -Wno-unused-parameter -Wno-invalid-offsetof -Wno-attributes -O3 -DNoRepository -ftemplate-depth-100 -I/home/jonas/OpenFOAM/OpenFOAM-12/src/finiteVolume/lnInclude -I/home/jonas/OpenFOAM/OpenFOAM-12/src/meshTools/lnInclude -IlnInclude -I. -I/home/jonas/OpenFOAM/OpenFOAM-12/src/OpenFOAM/lnInclude -I/home/jonas/OpenFOAM/OpenFOAM-12/src/OSspecific/POSIX/lnInclude -fPIC -o Make/linux64GccDPInt32Opt/shallowTest.o shallowTest.C",
-        "directory": "/home/jonas/OpenFOAM/jonas-12/shallowTest",
-        "file": "/home/jonas/OpenFOAM/jonas-12/shallowTest/shallowTest.C"
-    }
-]
