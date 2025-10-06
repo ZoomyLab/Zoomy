@@ -1,3 +1,8 @@
+repo-url: https://github.com/mbd-rwth/Zoomy
+repo-actions: [edit, issue]
+repo-branch: main
+repo-subdir: web
+repo-link-target: "_blank"
 
 project:
   type: website
@@ -94,12 +99,6 @@ website:
       - text: "Legal notice and data protection" 
         href: legal.qmd
 
-repo-url: https://github.com/mbd-rwth/Zoomy/tree/main/web
-repo-url: https://github.com/mbd-rwth/Zoomy
-repo-actions: [edit, issue]
-repo-branch: main
-repo-subdir: web
-repo-link-target: "_blank"
 
 
 format:
