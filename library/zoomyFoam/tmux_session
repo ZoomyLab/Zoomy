@@ -1,0 +1,21 @@
+#!/bin/bash
+
+SESH="ShallowMoment-Foam"
+
+SESSIONEXISTS=$(tmux list-sessions | grep ^$SESH)
+
+# Only create tmux session if it doesn't already exist
+if [ "$SESSIONEXISTS" = "" ]; then
+	tmux new-session -d -s $SESH
+	# tmux send-keys -t $SESH:1 'cd src' C-m
+	tmux send-keys -t $SESH:1 'source ~/OpenFOAM/OpenFOAM-12/etc/bashrc' C-m
+	tmux send-keys -t $SESH:1 'vim shallowTest.C' C-m
+	tmux new-window -t $SESH
+	tmux send-keys -t $SESH:2 'source ~/OpenFOAM/OpenFOAM-12/etc/bashrc' C-m
+	tmux new-window -t $SESH
+	tmux send-keys -t $SESH:3 'source /opt/openfoam12/etc/bashrc' C-m
+	tmux send-keys -t $SESH:3 'cd $FOAM_RUN/of_momentFoam' C-m
+	tmux selectw -t $SESH:1
+fi
+
+tmux switch-client -t "$SESH" 2>/dev/null || tmux attach-session -t "$SESH"
