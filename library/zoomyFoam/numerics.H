@@ -1,6 +1,9 @@
 #include "List.H"
+#include "Map.H"
+#include "UList.H"
 #include "VectorSpace.H"
 #include "fvMesh.H"
+#include "label.H"
 #include "polyPatch.H"
 #include "scalar.H"
 #include "vector.H"
@@ -8,6 +11,7 @@
 #include "surfaceFields.H"
 #include "scalarField.H"
 #include "Model.h"
+#include "word.H"
 
 namespace numerics
 {
@@ -20,11 +24,18 @@ inline void correctBoundaryQ
     const Foam::scalar& time
 )
 {
+    Foam::HashTable<Foam::label, Foam::word> patchNameToPatchIndex;
+    forAll(Model::map_boundary_tag_to_function_index, patchI)
+    {
+        patchNameToPatchIndex.insert(Model::map_boundary_tag_to_function_index[patchI], patchI);
+    }
+
     const Foam::fvMesh& mesh = Q[0]->mesh();
     forAll(mesh.boundaryMesh(), foamPatchI)
     {
-        const Foam::label patchI = foamPatchI; // change to actual value with patch mapping
         const Foam::polyPatch& p = mesh.boundaryMesh()[foamPatchI];
+        const Foam::label patchI = patchNameToPatchIndex[p.name()];
+
         forAll(p, localFaceI)
         {
             const Foam::label& cellI = p.faceCells()[localFaceI];
