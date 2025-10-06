@@ -95,7 +95,7 @@ website:
         href: legal.qmd
 
 
-  repo-url: https://github.com/mbd-rwth/Zoomy/web
+  repo-url: https://github.com/mbd-rwth/Zoomy
   repo-actions: [edit, issue]
   repo-branch: main
   repo-link-target: "_blank"
