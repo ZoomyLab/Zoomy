@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 
     scalar Co = readScalar(runTime.controlDict().lookup("maxCo"));
     scalar dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
-    numerics::correctBoundaryQ(Q);
+    numerics::correctBoundaryQ(Q, Qaux, runTime.value());
 
     while (runTime.loop())
     {
@@ -153,17 +153,17 @@ int main(int argc, char *argv[])
         dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
         runTime.setDeltaT(dt);
         
-        //numerics::updateNumericalQuasilinearFlux(F_in, F_out, Q, Qaux);
-        numerics::updateNumericalFlux(F_in, Q, Qaux);
+        numerics::updateNumericalQuasilinearFlux(F_in, F_out, Q, Qaux);
+        //numerics::updateNumericalFlux(F_in, Q, Qaux);
         forAll(Q, QI)
         {
             fvScalarMatrix
             (
-                //fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvc::div(*F_out[QI]) - fvm::laplacian(diffusivity, *Q[QI])
                 fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                // fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvm::laplacian(diffusivity, *Q[QI])
             ).solve();
         }
-        numerics::correctBoundaryQ(Q);
+        numerics::correctBoundaryQ(Q, Qaux, runTime.value());
         runTime.write();
     }
 
