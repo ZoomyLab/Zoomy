@@ -53,16 +53,28 @@ website:
         - tutorials/index.qmd
         - section: "Shallow Water"
           contents:
-            - tutorials/swe/*.ipynb
+            - tutorials/swe/simple.ipynb
         - section: "Poisson"
           contents:
             - tutorials/poisson/*.ipynb
         - section: "VAM"
           contents:
-            - tutorials/vam/*.ipynb
+            - tutorials/vam/simple.ipynb
         - section: "SME"
           contents:
-            - tutorials/sme/*.ipynb
+            - tutorials/sme/simple.ipynb
+            - tutorials/sme/minimal.ipynb
+        - section: "AMReX"
+          contents:
+            - tutorials/sme/from_DEM.ipynb
+        - section: "Code Printers"
+          contents:
+            - tutorials/sme/to_amrex.ipynb
+            - tutorials/sme/to_openfoam.ipynb
+            - tutorials/sme/to_ufl.ipynb
+        - section: "DolfinX"
+          contents:
+            - tutorials/sme/dolfinx_demo.ipynb
     - id: documentation 
       title: "Documentation"
       style: "floating"
