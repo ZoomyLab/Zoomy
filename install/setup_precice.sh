@@ -1,0 +1,7 @@
+#!/bin/bash
+
+export CPATH="$CONDA_PREFIX/include:$CPATH"
+export LIBRARY_PATH="$CONDA_PREFIX/lib:$LIBRARY_PATH"
+export PKG_CONFIG_PATH="$CONDA_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+export PATH="$CONDA_PREFIX/bin:$PATH"
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"

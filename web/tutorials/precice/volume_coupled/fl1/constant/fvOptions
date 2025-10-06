@@ -1,0 +1,71 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+
+overlapCoupling
+{
+    type            vectorCodedSource;
+    selectionMode   cellSet;
+    cellSet         box1;
+
+    fields          (U);
+    name            SchwarzCoupling;
+
+    codeConstrain
+    #{
+        return;
+    #};
+
+    codeCorrect
+    #{
+
+        const volVectorField* UextPtr =
+            mesh_.foundObject<volVectorField>("U_vol")
+            ? &mesh_.lookupObject<volVectorField>("U_vol")
+            : nullptr;
+	Info<< "SchwarzCoupling: foundObject(U_vol) = "
+	    << (UextPtr ? "true" : "false") << endl;
+        return;
+    #};
+
+    // Add implicit source to the momentum equation
+    codeAddSup
+    #{
+	Info<< "SchwarzCoupling: codeAddSup called at time "
+	        << mesh_.time().value() << endl;
+        const scalar alpha = 0.5;
+        const scalar dt    = mesh_.time().deltaT().value();
+    
+        const volVectorField* UextPtr =
+            mesh_.foundObject<volVectorField>("U_vol")
+            ? &mesh_.lookupObject<volVectorField>("U_vol")
+            : nullptr;
+
+    
+        if (!UextPtr) return; // nothing to do until U_vol exists
+        const volVectorField& U_ext = *UextPtr;
+
+    
+        const labelList& cells = this->cells();
+        const scalar c = alpha / dt;
+    
+        for (const label cell : cells)
+        {
+            const scalar w = 1.0;
+            // Add source directly to the equation matrix:
+            eqn.source()[cell] += c * w * U_ext[cell];  // RHS
+            eqn.diag()[cell]   += -c * w;               // LHS (implicit)
+        }
+    #};
+
+
+    // nothing special for density-weighted source
+    codeAddSupRho
+    #{
+        return;
+    #};
+}

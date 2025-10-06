@@ -28,10 +28,10 @@ dependencies:
   - panel
   - pygments
   - swashes  # from lrntct channel
-
   - pip:
-    - pyprog  # if this isn't on conda-forge
+    - pyprog 
     - watchfiles
     - tol-colors
     - python-dotenv
+    - Cython
 

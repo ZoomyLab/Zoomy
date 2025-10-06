@@ -1,0 +1,109 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+
+alphaCoupling
+{
+    type            scalarCodedSource;
+    selectionMode   cellSet;
+    cellSet         box1;
+
+    fields          (alpha.water);
+    name            alphaCoupling;
+
+    codeConstrain #{ 
+        return; 
+        //const volScalarField& alpha_vol =
+        //    mesh_.lookupObject<volScalarField>("alpha_vol");
+        //volScalarField& alpha =
+        //    mesh_.lookupObject<volScalarField>("alpha.water");
+        //const labelList& cells = this->cells();
+        //for (auto cell : cells)
+        //{
+        //    alpha[cell] = 1.;
+        //    //alpha[cell] = alpha_vol[cell];
+        //}
+    #};
+
+    codeCorrect
+    #{
+    	//return;
+        const labelList& cells = this->cells();
+        const volScalarField& alpha_vol =
+            mesh_.lookupObject<volScalarField>("alpha_vol");
+        for (auto cell : cells)
+        {
+            fld[cell] = 1.;
+            //fld[cell] = alpha_vol[cell];
+        }
+    #};
+
+    codeAddSup #{
+    	return;
+        const scalar alphaRelax = 5000.0; // relaxation strength
+        const scalar dt  = mesh_.time().deltaTValue();
+        const volScalarField& alpha_vol =
+            mesh_.lookupObject<volScalarField>("alpha_vol");
+
+        // Optional spatial weight field for smooth blending
+        const volScalarField* wPtr =
+            mesh_.foundObject<volScalarField>("w_overlap")
+            ? &mesh_.lookupObject<volScalarField>("w_overlap")
+            : nullptr;
+
+        const labelList& cells = this->cells();
+
+        for (label cell : cells)
+        {
+            const scalar w = wPtr ? (*wPtr)[cell] : 1.0;
+            const scalar c = alphaRelax / dt;
+
+            //this->Su()[cell] += c * w * alpha_vol[cell];
+            this->Su()[cell] += c * w * 1.;
+            this->Sp()[cell] += -c * w;
+        }
+    //return; #};
+
+    codeAddSupRho #{ return; #};
+}
+
+//codedSource
+//{
+//    type            vectorCodedSource;
+//    selectionMode   cellSet;
+//    cellSet         box1;
+//
+//    fields          (U);
+//    name            sourceTime;
+//
+//    codeConstrain //constrain
+//    #{
+//        return;
+//    #};
+//
+//    codeCorrect //correct
+//    #{
+//        const labelList& cells = this->cells();
+//        const volVectorField& U_vol = mesh_.lookupObject<volVectorField>("U_vol");
+//        for(auto cell : cells)
+//        {
+//            fld[cell].x() = U_vol[cell].x();
+//            fld[cell].y() = U_vol[cell].y();
+//            fld[cell].z() = U_vol[cell].z();
+//        }
+//    #};
+//
+//    codeAddSup // source term
+//    #{
+//        return;
+//    #};
+//
+//    codeAddSupRho
+//    #{
+//        return;
+//    #};
+//}

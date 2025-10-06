@@ -1,0 +1,9 @@
+waterHeight	0.02;
+
+// mesh parameters //
+skewCellHeight	0.016; //height of bottom block of cells. Will be slightly adjusted to keep a cell boundary at exactly the waterHeight
+l	0.5; //channel length
+l1	0.3; //channel length
+h       0.12; //channel height
+dy	0.001; //cell height
+dx_to_dy	7.;

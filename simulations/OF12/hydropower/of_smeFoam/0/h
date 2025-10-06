@@ -1,0 +1,83 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      h;
+}
+
+#include "$FOAM_CASE/Parameters"
+dimensions      [0 0 0 0 0 0 0];
+
+internalField   #codeStream
+{
+        codeInclude
+        #{
+                #include "fvMesh.H"
+        #};
+
+        codeOptions
+        #{
+                -I$(LIB_SRC)/finiteVolume/lnInclude \
+                -I$(LIB_SRC)/meshTools/lnInclude
+        #};
+
+        codeLibs
+        #{
+                -lfiniteVolume -lmeshTools
+        #};
+	code
+        #{
+                const IOdictionary& d = static_cast<const IOdictionary&>(dict);
+                const fvMesh& mesh = refCast<const fvMesh>(d.db());
+
+                const vectorField& cellMidpoints = mesh.cellCentres();
+                const scalarField y(cellMidpoints.component(vector::Y));
+                const scalarField x(cellMidpoints.component(vector::X));
+                //const scalarField z(cellMidpoints.component(vector::Z));
+
+		scalarField h(x.size(), 0.1);
+		forAll(h, i)
+		{
+                    if(x[i] < 0.5)
+		    {
+		         h[i] = 0.2;
+		    }
+                    else
+                    {
+		         h[i] = 0.4;
+                    }
+		}
+
+                h.writeEntry("", os);
+        #};
+};
+
+boundaryField
+{
+    inlet
+    {
+        type            zeroGradient;
+
+    }
+
+    side_wall
+    {
+        type            zeroGradient;
+    }
+
+    bottom_wall
+    {
+        type            zeroGradient;
+    }
+
+    outlet
+    {
+        type            zeroGradient;
+    }
+
+    defaultFaces
+    {
+        type            empty;
+    }
+}
