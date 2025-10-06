@@ -98,6 +98,7 @@ website:
   repo-url: https://github.com/mbd-rwth/Zoomy
   repo-actions: [edit, issue]
   repo-branch: main
+  repo-subdir: web
   repo-link-target: "_blank"
 
 format:
