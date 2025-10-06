@@ -165,6 +165,7 @@ class Periodic(BoundaryCondition):
 class BoundaryConditions:
     boundary_conditions: list[BoundaryCondition]
     boundary_functions: List[Callable] = []
+    list_sorted_function_names: List[str] = []
     initialized: bool = False
 
     @classmethod
@@ -278,13 +279,14 @@ class BoundaryConditions:
         #         function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
         #         periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]
         self.boundary_functions = list(dict_index_to_function.values())
+        self.list_sorted_function_names = list(mesh.boundary_conditions_sorted_names)
         mesh = self.resolve_periodic_bcs(mesh)
         self.initialized = True
         return mesh
     
     def map_physical_id_to_function_index(self, mesh):
         dict_tag_to_name = {int(k): str(v) for k, v in zip(mesh.boundary_conditions_sorted_physical_tags, mesh.boundary_conditions_sorted_names)}
-        
+            
 
     def get_precice_boundary_indices_to_bc_name(self, mesh):
         dict_physical_name_to_index = {

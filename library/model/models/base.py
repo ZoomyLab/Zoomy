@@ -169,9 +169,22 @@ class Model:
         object.__setattr__(self, "n_aux_variables", self.aux_variables.length())
         object.__setattr__(self, "n_parameters", self.parameters.length())
         
+    def initialize_boundary_conditions(self, mesh):
+        self.boundary_conditions.initialize(
+            mesh,
+            self.time,
+            self.position,
+            self.distance,
+            self.variables,
+            self.aux_variables,
+            self.parameters,
+            self.normal,
+        )
+        
     def print_boundary_conditions(self):
         inputs = self.get_boundary_conditions_matrix_inputs()
         return self.boundary_conditions.get_boundary_function_matrix(*inputs)
+    
         
     def get_boundary_conditions_matrix_inputs(self):
         """

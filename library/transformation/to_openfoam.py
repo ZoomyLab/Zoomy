@@ -22,7 +22,7 @@ class FoamPrinter(CXX11CodePrinter):
         self.map_Q = {k: f"Q[{i}]" for i, k in enumerate(model.variables.values())}
         self.map_Qaux = {k: f"Qaux[{i}]" for i, k in enumerate(model.aux_variables.values())}
         self.map_param = {k: str(float(model.parameter_values[i])) for i, k in enumerate(model.parameters.values())}
-
+        
         # Map normal/position to n.x(), n.y(), n.z()
         self.map_normal = {k: ["n.x()", "n.y()", "n.z()"][i] for i, k in enumerate(model.normal.values())}
         self.map_position = {k: ["X.x()", "X.y()", "X.z()"][i] for i, k in enumerate(model.position.values())}
@@ -67,7 +67,7 @@ class FoamPrinter(CXX11CodePrinter):
         return f"Foam::List<Foam::List<Foam::scalar>>({rows}, Foam::List<Foam::scalar>({cols}, 0.0))"
 
     # --- Header / Footer --------------------------------------------------
-    def create_file_header(self, n_dof_q, n_dof_qaux, dim):
+    def create_file_header(self, n_dof_q, n_dof_qaux, dim, list_sorted_function_names):
         return textwrap.dedent(f"""\
         #pragma once
         #include "List.H"
@@ -79,6 +79,7 @@ class FoamPrinter(CXX11CodePrinter):
         constexpr int n_dof_q    = {n_dof_q};
         constexpr int n_dof_qaux = {n_dof_qaux};
         constexpr int dimension  = {dim};
+        constexpr Foam::List<string> map_boundary_tag_to_function_index{{ {", ".join(f'"{item}"' for item in list_sorted_function_names)} }};
         """)
 
     def create_file_footer(self):
@@ -180,7 +181,7 @@ inline Foam::List<Foam::List<Foam::scalar>> {name}(
                 model.variables, model.aux_variables, model.parameters, model.normal),
             n_dof, n_dof_qaux, dim))
 
-        return self.create_file_header(n_dof, n_dof_qaux, dim) + "\n".join(funcs) + self.create_file_footer()
+        return self.create_file_header(n_dof, n_dof_qaux, dim, model.boundary_conditions.list_sorted_function_names) + "\n".join(funcs) + self.create_file_footer()
 
 
 def write_code(model, settings):
