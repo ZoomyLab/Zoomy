@@ -12,17 +12,27 @@ See our [Documentation](https://mbd-rwth.github.io/Zoomy/) for details on
 * examples
 * ...
 
+## License
+The Zoomy code is free open-source software,
+licensed under version 3 or later of the GNU General Public License.
+See the file [LICENSE](LICENSE) for full copying permissions.
+
+## BibTex Citation
+
+T.b.d.
+
+
 ## Installation
 
 ### Conda/Mamba
 
-#### CPU (Linux / Mac)
+#### CPU/GPU (Linux / Mac)
 
 **Installation**
 
 ```
 cd install
-conda env create -f env-zoomy.yml
+conda env create -f install/zoomy.yml
 ./conda_config_setup.sh
 ```
 
@@ -30,20 +40,6 @@ conda env create -f env-zoomy.yml
 
 ```
 conda activate zoomy
-```
-
-#### GPU (Linux / Mac)
-
-```
-cd install
-conda env create -f env-zoomy-gpu.yml
-./conda_config_setup.sh
-```
-
-**Activation**
-
-```
-conda activate zoomy-gpu
 ```
 
 ### Docker
@@ -56,7 +52,7 @@ T.b.d
 
 ### Manual installation
 
-See the `install/environment.yml`or the `install/environment-gpu.yml` for a complete list of requirements. Once the requirements are fulfilled, simply clone the repository.
+See the `install/zoomy.yml` for a complete list of requirements. Once the requirements are fulfilled, simply clone the repository.
 
 The following environment variables need to be set 
 
@@ -68,19 +64,33 @@ PETSC_DIR=/path/to/petsc/installation
 PETSC_ARCH=architecture used for compiling petsc
 ```
 
+### External dependencies
 
-## License
-The Zoomy code is free open-source software,
-licensed under version 3 or later of the GNU General Public License.
-See the file [LICENSE](LICENSE) for full copying permissions.
+#### DolfinX
+
+T.b.d.
+
+#### OpenFoam
+
+T.b.d.
+
+#### AMReX
+
+T.b.d.
+
+#### PreCICE
+
+T.b.d.
+
 
 
 ## Publications
 
 T.b.d.
 
-## BibTex Citation
 
-T.b.d.
+## Dependencies and acknowledgements
+
+This 
 
 
