@@ -79,7 +79,7 @@ class FoamPrinter(CXX11CodePrinter):
         constexpr int n_dof_q    = {n_dof_q};
         constexpr int n_dof_qaux = {n_dof_qaux};
         constexpr int dimension  = {dim};
-        constexpr Foam::List<string> map_boundary_tag_to_function_index{{ {", ".join(f'"{item}"' for item in list_sorted_function_names)} }};
+        constexpr Foam::List<Foam::word> map_boundary_tag_to_function_index{{ {", ".join(f'"{item}"' for item in list_sorted_function_names)} }};
         """)
 
     def create_file_footer(self):
