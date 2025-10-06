@@ -105,13 +105,29 @@ int main(int argc, char *argv[])
         );
     }
 
-    List<surfaceScalarField*> F(Q.size());
-    forAll(F, FI)
+    List<surfaceScalarField*> F_in(Q.size());
+    List<surfaceScalarField*> F_out(Q.size());
+    forAll(F_in, FI)
     {
-        F[FI] = new surfaceScalarField (
+        F_in[FI] = new surfaceScalarField (
             IOobject
             (
-                "F" + std::to_string(FI),
+                "F_in" + std::to_string(FI),
+                runTime.name(),
+                mesh,
+                IOobject::NO_READ,
+                IOobject::AUTO_WRITE
+            ),
+            mesh,
+            dimensionedScalar("", Q[FI]->dimensions() * dimVelocity * dimArea, 0)
+        );
+    }
+    forAll(F_out, FI)
+    {
+        F_out[FI] = new surfaceScalarField (
+            IOobject
+            (
+                "F_in" + std::to_string(FI),
                 runTime.name(),
                 mesh,
                 IOobject::NO_READ,
@@ -137,12 +153,14 @@ int main(int argc, char *argv[])
         dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
         runTime.setDeltaT(dt);
         
-        numerics::updateNumericalFlux(F, Q, Qaux);
+        //numerics::updateNumericalQuasilinearFlux(F_in, F_out, Q, Qaux);
+        numerics::updateNumericalFlux(F_in, Q, Qaux);
         forAll(Q, QI)
         {
             fvScalarMatrix
             (
-                fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                //fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvc::div(*F_out[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvm::laplacian(diffusivity, *Q[QI])
             ).solve();
         }
         numerics::correctBoundaryQ(Q);
