@@ -53,17 +53,16 @@ website:
         - tutorials/index.qmd
         - section: "Shallow Water"
           contents:
-            - tutorials/swe/simple.ipynb
+            - tutorials/swe/*.ipynb
         - section: "Poisson"
           contents:
-            - tutorials/poisson/simple.ipynb
+            - tutorials/poisson/*.ipynb
         - section: "VAM"
           contents:
-            - tutorials/vam/simple.ipynb
+            - tutorials/vam/*.ipynb
         - section: "SME"
           contents:
-            - tutorials/sme/simple.ipynb
-            - tutorials/sme/minimal.ipynb
+            - tutorials/sme/*.ipynb
     - id: documentation 
       title: "Documentation"
       style: "floating"
