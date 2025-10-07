@@ -42,10 +42,11 @@ Description
 #include "surfaceFields.H"
 #include "List.H"
 #include "numerics.H"
-#include "volFields.H"
 #include "zeroGradientFvPatchFields.H"
 #include "fixedValueFvPatchFields.H"
+#include "emptyFvPatchFields.H"
 #include "Model.h"
+#include "init.H"
 
 using namespace Foam;
 
@@ -66,6 +67,7 @@ int main(int argc, char *argv[])
         << "Create mesh for time = "
         << runTime.name() << Foam::nl << Foam::endl;
 
+
     fvMesh mesh
     (
         IOobject
@@ -79,35 +81,8 @@ int main(int argc, char *argv[])
 
     List<volScalarField*> Q (Model::n_dof_q);
     List<volScalarField*> Qaux (Model::n_dof_qaux);
-    forAll(Q, QI)
-    {
-        Q[QI] = new volScalarField (
-            IOobject
-            (
-                "Q" + std::to_string(QI),
-                runTime.name(),
-                mesh,
-                IOobject::NO_READ,
-                IOobject::AUTO_WRITE
-            ),
-            mesh
-        );
-        forAll(Q[QI]->boundaryField(), patchI)
-        {
-            // Replace the patch field object with a fixedValue type
-            Q[QI]->boundaryFieldRef().set
-            (
-                patchI,
-                new fixedValueFvPatchScalarField
-                (
-                    Q[QI]->boundaryField()[patchI].patch(),
-                    Q[QI]->internalField()
-                )
-            );
-        
-            Q[QI]->boundaryFieldRef()[patchI] == 1.0;
-        }
-    }
+    List<surfaceScalarField*> F(Q.size());
+    initialize_fields(runTime.name(), mesh, Q, Qaux, F);
 
     // Set initial condition based on position
     forAll(Q[0]->internalField(), cellI)
@@ -117,69 +92,7 @@ int main(int argc, char *argv[])
         Q[0]->internalFieldRef()[cellI] = 1.0;
         if (x > 5) Q[0]->internalFieldRef()[cellI] = 1.2;
     }   
-
-    forAll(Qaux, QauxI)
-    {
-        Qaux[QauxI] = new volScalarField (
-            IOobject
-            (
-                "Qaux" + std::to_string(QauxI),
-                runTime.name(),
-                mesh,
-                IOobject::NO_READ,
-                IOobject::AUTO_WRITE
-            ),
-            mesh
-        );
-        forAll(Qaux[QauxI]->boundaryField(), patchI)
-        {
-            // Replace the patch field object with a fixedValue type
-            Qaux[QauxI]->boundaryFieldRef().set
-            (
-                patchI,
-                new fixedValueFvPatchScalarField
-                (
-                    Qaux[QauxI]->boundaryField()[patchI].patch(),
-                    Qaux[QauxI]->internalField()
-                )
-            );
-        
-            Qaux[QauxI]->boundaryFieldRef()[patchI] == 1.0;
-        }
-    }
-
-    List<surfaceScalarField*> F_in(Q.size());
-    List<surfaceScalarField*> F_out(Q.size());
-    forAll(F_in, FI)
-    {
-        F_in[FI] = new surfaceScalarField (
-            IOobject
-            (
-                "F_in" + std::to_string(FI),
-                runTime.name(),
-                mesh,
-                IOobject::NO_READ,
-                IOobject::AUTO_WRITE
-            ),
-            mesh,
-            dimensionedScalar("", Q[FI]->dimensions() * dimVelocity * dimArea, 0)
-        );
-    }
-    forAll(F_out, FI)
-    {
-        F_out[FI] = new surfaceScalarField (
-            IOobject
-            (
-                "F_in" + std::to_string(FI),
-                runTime.name(),
-                mesh,
-                IOobject::NO_READ,
-                IOobject::AUTO_WRITE
-            ),
-            mesh,
-            dimensionedScalar("", Q[FI]->dimensions() * dimVelocity * dimArea, 0)
-        );
-    }
+    runTime.write();
 
     surfaceScalarField minInradius = numerics::computeFaceMinInradius(mesh, runTime);
 
@@ -189,23 +102,28 @@ int main(int argc, char *argv[])
     scalar dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
     numerics::correctBoundaryQ(Q, Qaux, runTime.value());
 
+
     while (runTime.loop())
     {
         Info<< nl << "Time = " << runTime.userTimeName() << nl << endl;
 
+        Info << "dt" << endl;
         dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
         runTime.setDeltaT(dt);
         
-        numerics::updateNumericalQuasilinearFlux(F_in, F_out, Q, Qaux);
-        //numerics::updateNumericalFlux(F_in, Q, Qaux);
+        Info << "flux" << endl;
+        numerics::updateNumericalQuasilinearFlux(F, Q, Qaux);
+        //numerics::updateNumericalFlux(F, Q, Qaux);
+        Info << "solve" << endl;
         forAll(Q, QI)
         {
             fvScalarMatrix
             (
-                fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvm::laplacian(diffusivity, *Q[QI])
-                // fvm::ddt(*Q[QI]) + fvc::div(*F_in[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                // fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
             ).solve();
         }
+        Info << "bc" << endl;
         numerics::correctBoundaryQ(Q, Qaux, runTime.value());
         runTime.write();
     }
