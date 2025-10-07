@@ -4,6 +4,7 @@
 #include "VectorSpace.H"
 #include "fvMesh.H"
 #include "label.H"
+#include "messageStream.H"
 #include "polyPatch.H"
 #include "scalar.H"
 #include "vector.H"
@@ -230,6 +231,10 @@ inline void updateNumericalQuasilinearFlux
     forAll(mesh.boundaryMesh(), patchI)
     {
         const Foam::polyPatch& p = mesh.boundaryMesh()[patchI];
+        if (findIndex(Model::map_boundary_tag_to_function_index, p.name()) == -1)
+        {
+            continue;
+        }
         forAll(p, localFaceI)
         {
             const Foam::label& cellI = p.faceCells()[localFaceI];

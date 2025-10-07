@@ -8,7 +8,7 @@ namespace Model
 constexpr int n_dof_q    = 3;
 constexpr int n_dof_qaux = 2;
 constexpr int dimension  = 2;
-const  Foam::List<Foam::word> map_boundary_tag_to_function_index{ "bottom", "top", "inlet", "outlet" };
+const  Foam::List<Foam::word> map_boundary_tag_to_function_index{ "front_wall", "back_wall", "inflow", "outflow" };
 
 inline Foam::List<Foam::List<Foam::scalar>> flux_x(
     const Foam::List<Foam::scalar>& Q,

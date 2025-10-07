@@ -48,7 +48,7 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
                     )
                 );
         
-                Q[QI]->boundaryFieldRef()[patchI] == 1.0;
+                Q[QI]->boundaryFieldRef()[patchI] = 1.0;
             }
             else
             {
@@ -61,6 +61,7 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
                         Q[QI]->internalField()
                     )
                 );
+                Q[QI]->boundaryFieldRef()[patchI] = 1.0;
             }
         }
     }
