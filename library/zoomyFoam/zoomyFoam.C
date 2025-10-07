@@ -90,8 +90,8 @@ int main(int argc, char *argv[])
     {
         const point& C = mesh.C()[cellI];   // cell center
         scalar x = C.x();
-        Q[0]->internalFieldRef()[cellI] = 1.0;
-        if (x > 5) Q[0]->internalFieldRef()[cellI] = 1.2;
+        Q[0]->internalFieldRef()[cellI] = 1.35;
+        if (x > 5) Q[0]->internalFieldRef()[cellI] = 1.4;
     }   
     forAll(Q, QI)
     {
@@ -122,19 +122,30 @@ int main(int argc, char *argv[])
         Info << "dt" << endl;
         dt = numerics::compute_dt(Q, Qaux, minInradius, Co);
         runTime.setDeltaT(dt);
+
+        Info << "dt= " << dt << endl;
         
         Info << "flux" << endl;
         numerics::updateNumericalQuasilinearFlux(F, Q, Qaux);
-        //numerics::updateNumericalFlux(F, Q, Qaux);
         Info << "solve" << endl;
         forAll(Q, QI)
         {
             fvScalarMatrix
             (
-                fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                //fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
+                fvm::ddt(*Q[QI]) + fvc::div(*F[QI])
                 // fvm::ddt(*Q[QI]) + fvc::div(*F[QI]) - fvm::laplacian(diffusivity, *Q[QI])
             ).solve();
         }
+        //const scalarField& V = mesh.V();
+        //forAll(Q, QI)
+        //{
+        //    volScalarField divFlux = fvc::div(*F[QI]);
+        //    forAll((*Q[QI]), i)
+        //    {
+        //        (*Q[QI])[i] -= dt * divFlux[i] / V[i] ;
+        //    }
+        //}
         Info << "bc" << endl;
         numerics::correctBoundaryQ(Q, Qaux, runTime.value());
         runTime.write();

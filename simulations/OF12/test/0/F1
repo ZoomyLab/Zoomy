@@ -8,13 +8,13 @@
 FoamFile
 {
     format      ascii;
-    class       volScalarField;
+    class       surfaceScalarField;
     location    "0";
-    object      Qaux1;
+    object      F1;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [];
+dimensions      [0 3 -1 0 0 0 0];
 
 internalField   uniform 0;
 
@@ -22,19 +22,23 @@ boundaryField
 {
     inlet
     {
-        type            zeroGradient;
+        type            calculated;
+        value           uniform 0;
     }
     outlet
     {
-        type            zeroGradient;
+        type            calculated;
+        value           uniform 0;
     }
     side_wall
     {
-        type            zeroGradient;
+        type            calculated;
+        value           uniform 0;
     }
     bottom_wall
     {
-        type            zeroGradient;
+        type            calculated;
+        value           uniform 0;
     }
 }
 

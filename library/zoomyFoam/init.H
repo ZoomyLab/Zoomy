@@ -33,10 +33,13 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
             mesh,
             dimensionedScalar(name, dimless, scalar(0.0))
         );
+    }
+    forAll(Q, QI)
+    {
         forAll(Q[QI]->boundaryField(), patchI)
         {
             const word& patchName = mesh.boundary()[patchI].name();
-            if (findIndex(Model::map_boundary_tag_to_function_index, patchName) != -1)
+            if (findIndex(Model::map_boundary_tag_to_function_index, patchName))
             {
                 Q[QI]->boundaryFieldRef().set
                 (
@@ -61,7 +64,6 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
                         Q[QI]->internalField()
                     )
                 );
-                Q[QI]->boundaryFieldRef()[patchI] = 1.0;
             }
         }
     }
@@ -81,10 +83,13 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
             mesh,
             dimensionedScalar(name, dimless, scalar(0.0))
         );
+    }
+    forAll(Qaux, QauxI)
+    {
         forAll(Qaux[QauxI]->boundaryField(), patchI)
         {
             const word& patchName = mesh.boundary()[patchI].name();
-            if (findIndex(Model::map_boundary_tag_to_function_index, patchName) != -1)
+            if (findIndex(Model::map_boundary_tag_to_function_index, patchName))
             {
                 Qaux[QauxI]->boundaryFieldRef().set
                 (

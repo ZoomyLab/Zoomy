@@ -10,35 +10,143 @@ FoamFile
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      Q0;
+    object      Q1;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [];
 
-internalField   uniform 1.35;
+internalField   uniform 0;
 
 boundaryField
 {
-    inlet
+    front_wall
     {
-        type            fixedValue;
-        value           uniform 0;
+        type            empty;
     }
-    outlet
+    back_wall
     {
         type            fixedValue;
-        value           uniform 0;
+        value           nonuniform List<scalar> 
+99
+(
+4.6579e-310
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+)
+;
     }
-    side_wall
+    inflow
     {
         type            fixedValue;
-        value           uniform 0;
+        value           nonuniform List<scalar> 9(0.0112233 0 0 0.0112233 0 0 0.0112233 0 0);
     }
-    bottom_wall
+    outflow
     {
         type            fixedValue;
-        value           uniform 0;
+        value           nonuniform List<scalar> 9(0 0.0112233 0 0 0.0112233 0 0 0.0112233 0);
+    }
+    defaultFaces
+    {
+        type            fixedValue;
+        patchType       empty;
+        value           nonuniform List<scalar> 0();
     }
 }
 

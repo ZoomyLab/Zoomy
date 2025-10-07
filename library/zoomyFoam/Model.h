@@ -271,23 +271,18 @@ inline Foam::List<Foam::List<Foam::scalar>> boundary_conditions(
     const Foam::scalar& dX)
 {
     auto res = Foam::List<Foam::List<Foam::scalar>>(4, Foam::List<Foam::scalar>(3, 0.0));
-    Foam::scalar t0 = n.y()*Q[2];
-        Foam::scalar t1 = 1.0*n.x()*Q[1] + 1.0*t0;
-        Foam::scalar t2 = 1.0*n.x()*Q[1] + 1.0*t0;
-        Foam::scalar t3 = -n.x()*t1 - n.x()*t2 + 1.0*Q[1];
-        Foam::scalar t4 = -n.y()*t1 - n.y()*t2 + 1.0*Q[2];
-        res[0][0] = Q[0];
-        res[0][1] = t3;
-        res[0][2] = t4;
-        res[1][0] = Q[0];
-        res[1][1] = t3;
-        res[1][2] = t4;
-        res[2][0] = Q[0];
-        res[2][1] = t3;
-        res[2][2] = t4;
-        res[3][0] = Q[0];
-        res[3][1] = t3;
-        res[3][2] = t4;
+    res[0][0] = Q[0];
+    res[0][1] = Q[1];
+    res[0][2] = Q[2];
+    res[1][0] = Q[0];
+    res[1][1] = Q[1];
+    res[1][2] = Q[2];
+    res[2][0] = Q[0];
+    res[2][1] = Q[1];
+    res[2][2] = Q[2];
+    res[3][0] = Q[0];
+    res[3][1] = Q[1];
+    res[3][2] = Q[2];
     return res;
 }
         
