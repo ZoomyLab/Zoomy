@@ -29,6 +29,7 @@ Description
 \*---------------------------------------------------------------------------*/
 
 #include <string>
+#include "UList.H"
 #include "argList.H"
 #include "dimensionSets.H"
 #include "dimensionedScalar.H"
@@ -92,7 +93,18 @@ int main(int argc, char *argv[])
         Q[0]->internalFieldRef()[cellI] = 1.0;
         if (x > 5) Q[0]->internalFieldRef()[cellI] = 1.2;
     }   
-    runTime.write();
+    forAll(Q, QI)
+    {
+        Q[QI]->write();
+    }
+    forAll(Qaux, QauxI)
+    {
+        Qaux[QauxI]->write();
+    }
+    forAll(F, FI)
+    {
+        F[FI]->write();
+    }
 
     surfaceScalarField minInradius = numerics::computeFaceMinInradius(mesh, runTime);
 
