@@ -16,6 +16,17 @@
 namespace numerics
 {
 
+
+Foam::HashTable<Foam::label, Foam::word> get_map_patchNameToPatchIndex()
+{
+    Foam::HashTable<Foam::label, Foam::word> patchNameToPatchIndex;
+    forAll(Model::map_boundary_tag_to_function_index, patchI)
+    {
+        patchNameToPatchIndex.insert(Model::map_boundary_tag_to_function_index[patchI], patchI);
+    }
+    return patchNameToPatchIndex;
+}
+
 // set Q to enforce zero gradient
 inline void correctBoundaryQ
 (
@@ -24,43 +35,42 @@ inline void correctBoundaryQ
     const Foam::scalar& time
 )
 {
-    Foam::HashTable<Foam::label, Foam::word> patchNameToPatchIndex;
-    forAll(Model::map_boundary_tag_to_function_index, patchI)
-    {
-        patchNameToPatchIndex.insert(Model::map_boundary_tag_to_function_index[patchI], patchI);
-    }
 
+    auto patchNameToPatchIndex = get_map_patchNameToPatchIndex();
     const Foam::fvMesh& mesh = Q[0]->mesh();
     forAll(mesh.boundaryMesh(), foamPatchI)
     {
         const Foam::polyPatch& p = mesh.boundaryMesh()[foamPatchI];
-        const Foam::label patchI = patchNameToPatchIndex[p.name()];
-
-        forAll(p, localFaceI)
+        if (patchNameToPatchIndex.found(p.name()))
         {
-            const Foam::label& cellI = p.faceCells()[localFaceI];
-            const Foam::vector& n = p.faceNormals()[localFaceI];
-            const Foam::vector& X = mesh.cellCentres()[cellI];
-            const Foam::scalar dX = Foam::mag(p.faceCentres()[localFaceI] - mesh.cellCentres()[cellI]);
+            const Foam::label patchI = patchNameToPatchIndex[p.name()];
 
-            Foam::List<Foam::scalar> localQ(Q[0]->size());
-            forAll(Q, QI)
+            forAll(p, localFaceI)
             {
-                localQ[QI]= (*Q[QI])[cellI];
-            }
+                const Foam::label& cellI = p.faceCells()[localFaceI];
+                const Foam::vector& n = p.faceNormals()[localFaceI];
+                const Foam::vector& X = mesh.cellCentres()[cellI];
+                const Foam::scalar dX = Foam::mag(p.faceCentres()[localFaceI] - mesh.cellCentres()[cellI]);
 
-            Foam::List<Foam::scalar> localQaux(Qaux[0]->size());
-            forAll(Qaux, QauxI)
-            {
-                localQ[QauxI]= (*Q[QauxI])[cellI];
-            }
+                Foam::List<Foam::scalar> localQ(Q[0]->size());
+                forAll(Q, QI)
+                {
+                    localQ[QI]= (*Q[QI])[cellI];
+                }
 
-            const Foam::List<Foam::List<Foam::scalar>> bc =
-                Model::boundary_conditions(localQ, localQaux, n, X, time, dX);
+                Foam::List<Foam::scalar> localQaux(Qaux[0]->size());
+                forAll(Qaux, QauxI)
+                {
+                    localQ[QauxI]= (*Q[QauxI])[cellI];
+                }
 
-            forAll(Q, QI)
-            {
-                Q[QI]->boundaryFieldRef()[foamPatchI][localFaceI] = bc[patchI][QI];
+                const Foam::List<Foam::List<Foam::scalar>> bc =
+                    Model::boundary_conditions(localQ, localQaux, n, X, time, dX);
+
+                forAll(Q, QI)
+                {
+                    Q[QI]->boundaryFieldRef()[foamPatchI][localFaceI] = bc[patchI][QI];
+                }
             }
         }
     }
@@ -183,8 +193,7 @@ inline Foam::List<Foam::scalar> localNumericalFlux
 
 inline void updateNumericalQuasilinearFlux
 (
-    Foam::List<Foam::surfaceScalarField*>& F_in,
-    Foam::List<Foam::surfaceScalarField*>& F_out,
+    Foam::List<Foam::surfaceScalarField*>& F,
     const Foam::List<Foam::volScalarField*>& Q,
     const Foam::List<Foam::volScalarField*>& Qaux
 )
@@ -210,20 +219,14 @@ inline void updateNumericalQuasilinearFlux
             Qauxr[QauxI] = (*Qaux[QauxI])[nei];
         }
 
-        const Foam::List<Foam::scalar> flux_in = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
-        const Foam::List<Foam::scalar> flux_out = localNumericalFlux(Qr, Ql, Qauxr, Qauxl, n);
-        forAll(F_in, FI)
+        const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
+        forAll(F, FI)
         {
-            (*F_in[FI])[faceI] = flux_in[FI] * mesh.magSf()[faceI];
-        }
-        forAll(F_out, FI)
-        {
-            (*F_out[FI])[faceI] = flux_out[FI] * mesh.magSf()[faceI];
+            (*F[FI])[faceI] = flux[FI] * mesh.magSf()[faceI];
         }
     }
 
     // iterate over external faces
-    // assume Ql = Qr
     forAll(mesh.boundaryMesh(), patchI)
     {
         const Foam::polyPatch& p = mesh.boundaryMesh()[patchI];
@@ -247,15 +250,10 @@ inline void updateNumericalQuasilinearFlux
             }
 
 
-            const Foam::List<Foam::scalar> flux_in = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
-            const Foam::List<Foam::scalar> flux_out = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
-            forAll(F_in, FI)
+            const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
+            forAll(F, FI)
             {
-                F_in[FI]->boundaryFieldRef()[patchI][localFaceI] = flux_in[FI]* mesh.magSf()[localFaceI];
-            }
-            forAll(F_out, FI)
-            {
-                F_out[FI]->boundaryFieldRef()[patchI][localFaceI] = flux_out[FI]* mesh.magSf()[localFaceI];
+                F[FI]->boundaryFieldRef()[patchI][localFaceI] = flux[FI]* mesh.magSf()[localFaceI];
             }
         }
     }
