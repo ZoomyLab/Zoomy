@@ -53,13 +53,13 @@ inline void correctBoundaryQ
                 const Foam::vector& X = mesh.cellCentres()[cellI];
                 const Foam::scalar dX = Foam::mag(p.faceCentres()[localFaceI] - mesh.cellCentres()[cellI]);
 
-                Foam::List<Foam::scalar> localQ(Q[0]->size());
+                Foam::List<Foam::scalar> localQ(Model::n_dof_q);
                 forAll(Q, QI)
                 {
                     localQ[QI]= (*Q[QI])[cellI];
                 }
 
-                Foam::List<Foam::scalar> localQaux(Qaux[0]->size());
+                Foam::List<Foam::scalar> localQaux(Model::n_dof_qaux);
                 forAll(Qaux, QauxI)
                 {
                     localQ[QauxI]= (*Q[QauxI])[cellI];
@@ -187,7 +187,7 @@ inline Foam::List<Foam::scalar> localNumericalFlux
 
     for (int i = 0; i < Model::n_dof_q; ++i) 
     {
-        flux[i] = 0.5 * (flux_x_l[i][0] * n.x() + flux_y_l[i][0] * n.y() + flux_x_r[i][0] * n.x() + flux_y_r[i][0] * n.y()) - lam * (Qr[i] - Ql[i]);
+        flux[i] = 0.5 * (flux_x_l[i][0] * n.x() + flux_y_l[i][0] * n.y() + flux_x_r[i][0] * n.x() + flux_y_r[i][0] * n.y()) - 0.5 * lam * (Qr[i] - Ql[i]);
     }
     return flux;
 }
@@ -230,13 +230,12 @@ inline void updateNumericalQuasilinearFlux
     // iterate over external faces
     forAll(mesh.boundaryMesh(), patchI)
     {
+        auto patchNameToPatchIndex = get_map_patchNameToPatchIndex();
         const Foam::polyPatch& p = mesh.boundaryMesh()[patchI];
-        if (findIndex(Model::map_boundary_tag_to_function_index, p.name()) == -1)
+        if (patchNameToPatchIndex.found(p.name()))
         {
-            continue;
-        }
-        forAll(p, localFaceI)
-        {
+            forAll(p, localFaceI)
+            {
             const Foam::label& cellI = p.faceCells()[localFaceI];
             const Foam::vector& n = p.faceNormals()[localFaceI];
             Foam::List<Foam::scalar> Ql(Q.size());
@@ -255,11 +254,12 @@ inline void updateNumericalQuasilinearFlux
             }
 
 
-            const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
+            const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Ql, Qauxl, Qauxr, n);
             forAll(F, FI)
             {
                 F[FI]->boundaryFieldRef()[patchI][localFaceI] = flux[FI]* mesh.magSf()[localFaceI];
             }
+        }
         }
     }
 }
@@ -353,17 +353,18 @@ Foam::surfaceScalarField computeFaceMinInradius(const Foam::fvMesh& mesh, const 
 
     forAll(cells, celli)
     {
-        const Foam::cell& c = cells[celli];
+        //const Foam::cell& c = cells[celli];
 
-        Foam::scalar S = 0.0;
-        forAll(c, fi)
-        {
-            const int faceI = c[fi];
-            S += magSf[faceI];
-        }
+        //Foam::scalar S = 0.0;
+        //forAll(c, fi)
+        //{
+        //    const int faceI = c[fi];
+        //    S += magSf[faceI];
+        //}
 
         // Simple inradius approximation
-        cellInradius[celli] = 3.0 * V[celli] / S;
+        //cellInradius[celli] = 3.0 * V[celli] / S;
+        cellInradius[celli] = 0.01;
     }
 
     const Foam::labelUList& own = mesh.owner();

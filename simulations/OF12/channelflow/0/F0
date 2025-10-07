@@ -8,45 +8,43 @@
 FoamFile
 {
     format      ascii;
-    class       polyBoundaryMesh;
-    location    "constant/polyMesh";
-    object      boundary;
+    class       surfaceScalarField;
+    location    "0";
+    object      F0;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-5
-(
+dimensions      [0 3 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
     front_wall
     {
-        type            patch;
-        nFaces          99;
-        startFace       1674;
+        type            calculated;
+        value           uniform 0;
     }
     back_wall
     {
-        type            patch;
-        nFaces          99;
-        startFace       1773;
+        type            calculated;
+        value           uniform 0;
     }
     inflow
     {
-        type            patch;
-        nFaces          9;
-        startFace       1872;
+        type            calculated;
+        value           uniform 0;
     }
     outflow
     {
-        type            patch;
-        nFaces          9;
-        startFace       1881;
+        type            calculated;
+        value           uniform 0;
     }
     defaultFaces
     {
         type            empty;
-        inGroups        List<word> 1(empty);
-        nFaces          1782;
-        startFace       1890;
     }
-)
+}
+
 
 // ************************************************************************* //
