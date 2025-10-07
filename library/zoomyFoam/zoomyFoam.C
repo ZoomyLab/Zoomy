@@ -42,6 +42,9 @@ Description
 #include "surfaceFields.H"
 #include "List.H"
 #include "numerics.H"
+#include "volFields.H"
+#include "zeroGradientFvPatchFields.H"
+#include "fixedValueFvPatchFields.H"
 #include "Model.h"
 
 using namespace Foam;
@@ -84,12 +87,37 @@ int main(int argc, char *argv[])
                 "Q" + std::to_string(QI),
                 runTime.name(),
                 mesh,
-                IOobject::MUST_READ,
+                IOobject::NO_READ,
                 IOobject::AUTO_WRITE
             ),
             mesh
         );
+        forAll(Q[QI]->boundaryField(), patchI)
+        {
+            // Replace the patch field object with a fixedValue type
+            Q[QI]->boundaryFieldRef().set
+            (
+                patchI,
+                new fixedValueFvPatchScalarField
+                (
+                    Q[QI]->boundaryField()[patchI].patch(),
+                    Q[QI]->internalField()
+                )
+            );
+        
+            Q[QI]->boundaryFieldRef()[patchI] == 1.0;
+        }
     }
+
+    // Set initial condition based on position
+    forAll(Q[0]->internalField(), cellI)
+    {
+        const point& C = mesh.C()[cellI];   // cell center
+        scalar x = C.x();
+        Q[0]->internalFieldRef()[cellI] = 1.0;
+        if (x > 5) Q[0]->internalFieldRef()[cellI] = 1.2;
+    }   
+
     forAll(Qaux, QauxI)
     {
         Qaux[QauxI] = new volScalarField (
@@ -98,11 +126,26 @@ int main(int argc, char *argv[])
                 "Qaux" + std::to_string(QauxI),
                 runTime.name(),
                 mesh,
-                IOobject::MUST_READ,
+                IOobject::NO_READ,
                 IOobject::AUTO_WRITE
             ),
             mesh
         );
+        forAll(Qaux[QauxI]->boundaryField(), patchI)
+        {
+            // Replace the patch field object with a fixedValue type
+            Qaux[QauxI]->boundaryFieldRef().set
+            (
+                patchI,
+                new fixedValueFvPatchScalarField
+                (
+                    Qaux[QauxI]->boundaryField()[patchI].patch(),
+                    Qaux[QauxI]->internalField()
+                )
+            );
+        
+            Qaux[QauxI]->boundaryFieldRef()[patchI] == 1.0;
+        }
     }
 
     List<surfaceScalarField*> F_in(Q.size());
