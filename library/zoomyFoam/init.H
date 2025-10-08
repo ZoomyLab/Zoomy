@@ -39,7 +39,7 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
         forAll(Q[QI]->boundaryField(), patchI)
         {
             const word& patchName = mesh.boundary()[patchI].name();
-            if (findIndex(Model::map_boundary_tag_to_function_index, patchName))
+            if (findIndex(Model::map_boundary_tag_to_function_index, patchName) != -1)
             {
                 Q[QI]->boundaryFieldRef().set
                 (
@@ -89,7 +89,7 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
         forAll(Qaux[QauxI]->boundaryField(), patchI)
         {
             const word& patchName = mesh.boundary()[patchI].name();
-            if (findIndex(Model::map_boundary_tag_to_function_index, patchName))
+            if (findIndex(Model::map_boundary_tag_to_function_index, patchName) != -1)
             {
                 Qaux[QauxI]->boundaryFieldRef().set
                 (
