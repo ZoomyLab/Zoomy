@@ -207,8 +207,8 @@ inline void updateNumericalQuasilinearFlux
         const Foam::label& own = mesh.faceOwner()[faceI];
         const Foam::label& nei = mesh.faceNeighbour()[faceI];
 
-        Foam::List<Foam::scalar> Ql(Q.size()), Qr(Q.size());
-        Foam::List<Foam::scalar> Qauxl(Qaux.size()), Qauxr(Qaux.size());
+        Foam::List<Foam::scalar> Ql(Model::n_dof_q), Qr(Model::n_dof_q);
+        Foam::List<Foam::scalar> Qauxl(Model::n_dof_qaux), Qauxr(Model::n_dof_qaux);
         forAll(Q, QI)
         {
             Ql[QI] = (*Q[QI])[own];
@@ -228,106 +228,53 @@ inline void updateNumericalQuasilinearFlux
     }
 
     // iterate over external faces
+    //
+    const Foam::polyMesh& pMesh = mesh;
+
     forAll(mesh.boundaryMesh(), patchI)
     {
         auto patchNameToPatchIndex = get_map_patchNameToPatchIndex();
         const Foam::polyPatch& p = mesh.boundaryMesh()[patchI];
+
+        Foam::Info << "patch " << p.name()
+            << " start=" << p.start()
+            << " size=" << p.size()
+            << " size SF " << mesh.magSf().size()
+            << " nInternalFaces=" << mesh.nInternalFaces()
+            << " nFaces=" << mesh.nFaces() << Foam::endl;
+
         if (patchNameToPatchIndex.found(p.name()))
         {
             forAll(p, localFaceI)
             {
-            const Foam::label& cellI = p.faceCells()[localFaceI];
-            const Foam::vector& n = p.faceNormals()[localFaceI];
-            Foam::List<Foam::scalar> Ql(Q.size());
-            Foam::List<Foam::scalar> Qauxl(Qaux.size());
-            Foam::List<Foam::scalar> Qr(Q.size());
-            Foam::List<Foam::scalar> Qauxr(Qaux.size());
-            forAll(Q, QI)
-            {
-                Ql[QI] = (*Q[QI])[cellI];
-                Qr[QI] = Q[QI]->boundaryFieldRef()[patchI][localFaceI];
-            }
-            forAll(Qaux, QauxI)
-            {
-                Qauxl[QauxI] = (*Qaux[QauxI])[cellI];
-                Qauxr[QauxI] = (*Qaux[QauxI])[cellI]; // is still wrong
-            }
+                const Foam::label& cellI = p.faceCells()[localFaceI];
+                const Foam::vector& n = p.faceNormals()[localFaceI];
+                Foam::List<Foam::scalar> Ql(Model::n_dof_q);
+                Foam::List<Foam::scalar> Qauxl(Model::n_dof_qaux);
+                Foam::List<Foam::scalar> Qr(Model::n_dof_q);
+                Foam::List<Foam::scalar> Qauxr(Model::n_dof_qaux);
+                forAll(Q, QI)
+                {
+                    Ql[QI] = (*Q[QI])[cellI];
+                    Qr[QI] = Q[QI]->boundaryFieldRef()[patchI][localFaceI];
+                }
+                forAll(Qaux, QauxI)
+                {
+                    Qauxl[QauxI] = (*Qaux[QauxI])[cellI];
+                    Qauxr[QauxI] = Qaux[QauxI]->boundaryFieldRef()[patchI][localFaceI];
+                }
 
 
-            const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Ql, Qauxl, Qauxr, n);
-            forAll(F, FI)
-            {
-                F[FI]->boundaryFieldRef()[patchI][localFaceI] = flux[FI]* mesh.magSf()[localFaceI];
+                const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
+                forAll(F, FI)
+                {
+                    F[FI]->boundaryFieldRef()[patchI][localFaceI] = flux[FI] * pMesh.magFaceAreas()[p.start() + localFaceI];
+                }
             }
-        }
         }
     }
 }
 
-
-// inline void updateNumericalFlux
-// (
-//     Foam::List<Foam::surfaceScalarField*>& F,
-//     const Foam::List<Foam::volScalarField*>& Q,
-//     const Foam::List<Foam::volScalarField*>& Qaux
-// )
-// {
-//     const Foam::fvMesh& mesh = Q[0]->mesh();
-//
-//     // iterate over internal faces
-//     for (int faceI = 0; faceI < mesh.nInternalFaces(); ++faceI) {
-//         const Foam::vector n = mesh.Sf()[faceI] / mesh.magSf()[faceI];
-//         const Foam::label& own = mesh.faceOwner()[faceI];
-//         const Foam::label& nei = mesh.faceNeighbour()[faceI];
-//
-//         Foam::List<Foam::scalar> Ql(Q.size()), Qr(Q.size());
-//         Foam::List<Foam::scalar> Qauxl(Qaux.size()), Qauxr(Qaux.size());
-//         forAll(Q, QI)
-//         {
-//             Ql[QI] = (*Q[QI])[own];
-//             Qr[QI] = (*Q[QI])[nei];
-//         }
-//         forAll(Qaux, QauxI)
-//         {
-//             Qauxl[QauxI] = (*Qaux[QauxI])[own];
-//             Qauxr[QauxI] = (*Qaux[QauxI])[nei];
-//         }
-//
-//         const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Qr, Qauxl, Qauxr, n);
-//         forAll(F, FI)
-//         {
-//             (*F[FI])[faceI] = flux[FI] * mesh.magSf()[faceI];
-//         }
-//     }
-//
-//     // iterate over external faces
-//     // assume Ql = Qr
-//     forAll(mesh.boundaryMesh(), patchI)
-//     {
-//         const Foam::polyPatch& p = mesh.boundaryMesh()[patchI];
-//         forAll(p, localFaceI)
-//         {
-//             const Foam::label& cellI = p.faceCells()[localFaceI];
-//             const Foam::vector& n = p.faceNormals()[localFaceI];
-//             Foam::List<Foam::scalar> Ql(Q.size());
-//             Foam::List<Foam::scalar> Qauxl(Q.size());
-//             forAll(Q, QI)
-//             {
-//                 Ql[QI] = (*Q[QI])[cellI];
-//             }
-//             forAll(Qaux, QauxI)
-//             {
-//                 Qauxl[QauxI] = (*Qaux[QauxI])[cellI];
-//             }
-//
-//             const Foam::List<Foam::scalar> flux = localNumericalFlux(Ql, Ql, Qauxl, Qauxl, n);
-//             forAll(F, FI)
-//             {
-//                 F[FI]->boundaryFieldRef()[patchI][localFaceI] = flux[FI]* mesh.magSf()[localFaceI];
-//             }
-//         }
-//     }
-// }
 
 Foam::surfaceScalarField computeFaceMinInradius(const Foam::fvMesh& mesh, const Foam::Time& runTime)
 {
@@ -364,7 +311,7 @@ Foam::surfaceScalarField computeFaceMinInradius(const Foam::fvMesh& mesh, const 
 
         // Simple inradius approximation
         //cellInradius[celli] = 3.0 * V[celli] / S;
-        cellInradius[celli] = 0.01;
+        cellInradius[celli] = 1./8;
     }
 
     const Foam::labelUList& own = mesh.owner();
