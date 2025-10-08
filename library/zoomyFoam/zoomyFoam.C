@@ -46,7 +46,7 @@ Description
 #include "zeroGradientFvPatchFields.H"
 #include "fixedValueFvPatchFields.H"
 #include "emptyFvPatchFields.H"
-#include "Model.h"
+#include "Model.H"
 #include "init.H"
 
 using namespace Foam;
