@@ -11,7 +11,7 @@
 #include "volFields.H"
 #include "surfaceFields.H"
 #include "scalarField.H"
-#include "Model.h"
+#include "Model.H"
 #include "word.H"
 
 namespace numerics

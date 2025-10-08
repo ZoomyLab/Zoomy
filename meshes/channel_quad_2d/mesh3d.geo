@@ -58,8 +58,7 @@ Recombine Surface "*";
 Recombine Volume "*";
 
 
-Physical Surface("front_wall", 5002) = {2002};
-Physical Surface("back_wall", 5003) = {2003};
+Physical Surface("wall", 5002) = {2002, 2003};
 Physical Surface("inflow", 5004) = {2004};
 Physical Surface("outflow", 5005) = {2005};
 

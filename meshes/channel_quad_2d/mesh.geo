@@ -19,9 +19,8 @@ Plane Surface(2000) = {1000};
 Transfinite Surface {2000};
 Recombine Surface {2000};
 
-Physical Curve("bottom", 3000) = {111};
-Physical Curve("top", 3001) = {112};
-Physical Curve("left", 3002) = {113};
-Physical Curve("right", 3003) = {114};
+Physical Curve("wall", 3000) = {111, 112};
+Physical Curve("inflow", 3002) = {113};
+Physical Curve("outflow", 3003) = {114};
 
 Physical Surface("surface", 4000) = {2000};

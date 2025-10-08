@@ -9,7 +9,7 @@
 #include "zeroGradientFvPatchFields.H"
 #include "fixedValueFvPatchFields.H"
 #include "emptyFvPatchFields.H"
-#include "Model.h"
+#include "Model.H"
 
 using namespace Foam;
 

@@ -79,7 +79,7 @@ class FoamPrinter(CXX11CodePrinter):
         constexpr int n_dof_q    = {n_dof_q};
         constexpr int n_dof_qaux = {n_dof_qaux};
         constexpr int dimension  = {dim};
-        constexpr Foam::List<Foam::word> map_boundary_tag_to_function_index{{ {", ".join(f'"{item}"' for item in list_sorted_function_names)} }};
+        const Foam::List<Foam::word> map_boundary_tag_to_function_index{{ {", ".join(f'"{item}"' for item in list_sorted_function_names)} }};
         """)
 
     def create_file_footer(self):
@@ -190,6 +190,6 @@ def write_code(model, settings):
     main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(main_dir, settings.output.directory, ".foam_interface")
     os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, "Model.h")
+    file_path = os.path.join(path, "Model.H")
     with open(file_path, "w+") as f:
         f.write(code)
