@@ -1,45 +1,45 @@
-name: sms
+name: zoomy
 channels:
   - conda-forge
+  - lrntct
+
 dependencies:
   - python=3.12
+  - sympy>=1.13.3
+  - attrs
+  - numpy
+  - ipython
+  - ipykernel
+  - matplotlib
+  - pytest
+  - meshio
+  - scipy
+  - h5py
+  - petsc
+  - petsc4py
+  - pyvista
+  - trame
+  - trame-vtk
+  - trame-vuetify
+  - seaborn
+  - jax
+  - jaxlib
+  - jaxopt
+  - panel
+  - pygments
+  - swashes  # from lrntct channel
+  - pyswashes
+  - fenics-dolfinx 
+  - gmsh
+  - python-gmsh
+  - jupytext
+  - precice
+  - rasterio
   - pip
   - pip:
-    - sympy>=1.13.3
-    - attrs
-    - numpy
-    - ipython
-    - ipykernel
-    - matplotlib
-    - pytest
-    - meshio
-    - scipy
-    - h5py
-    - pyprog
-    - mpi4py
-    - petsc
-    - petsc4py
-    - pyvista
-    - trame
-    - trame-vtk
-    - trame-vuetify
-    - seaborn
-    - jax
-    - jaxlib
-    - jaxopt
-    - panel
+    - pyprog 
     - watchfiles
-    - pygments
-    # - pyprecice
     - tol-colors
-    - dotenv
-    - loguru
-    - removestar
-    - xprof
-variables:
-  PETSC_DIR: '/home/ingo/Git/petsc'
-  PETSC_ARCH: 'linux-gnu'
-  ZOOMY_DIR: '/home/ingo/Git/sms'
-  PYTHONPATH: ':/home/ingo/Git/sms'
-
+    - python-dotenv
+    - Cython
 
