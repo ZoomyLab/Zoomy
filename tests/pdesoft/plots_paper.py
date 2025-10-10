@@ -150,7 +150,7 @@ def plot_swe(path='outputs/sme_0/ShallowMoments.h5'):
     fig_width =  472 / 72
     fig_height = fig_width * 0.618
     path = os.path.join(main_dir, path )
-    Q, Qaux, time = load_fields_from_hdf5(path)
+    Q, Qaux, time = load_fields_from_hdf5(path, i_snapshot=-1)
     mesh = load_mesh_from_hdf5(path)
     n_inner = mesh.n_inner_cells
     x = mesh.cell_centers[0, :n_inner]

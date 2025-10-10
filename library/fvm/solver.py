@@ -321,8 +321,7 @@ class Solver():
         )
         raise NotImplementedError("Solver.solve() must be implemented in derived classes.")
 
-
-    
+ 
 @define(frozen=True, slots=True, kw_only=True)            
 class HyperbolicSolver(Solver):
     settings: Zstruct = field(factory=lambda: Settings.default())
@@ -347,9 +346,8 @@ class HyperbolicSolver(Solver):
         return Q, Qaux
 
     def get_compute_max_abs_eigenvalue(self, mesh, model):
-        
-        @jax.jit
-        @partial(jax.named_call, name="max_abs_eigenvalue")
+        # @jax.jit
+        # @partial(jax.named_call, name="max_abs_eigenvalue")
         def compute_max_abs_eigenvalue(Q, Qaux, parameters):
             max_abs_eigenvalue = -jnp.inf
             i_cellA = mesh.face_cells[0]
@@ -358,26 +356,185 @@ class HyperbolicSolver(Solver):
             qB = Q[:, i_cellB]
             qauxA = Qaux[:, i_cellA]
             qauxB = Qaux[:, i_cellB]
-
             normal = mesh.face_normals
-
             evA = model.eigenvalues(qA, qauxA, parameters, normal)
             evB = model.eigenvalues(qB, qauxB, parameters, normal)
-            
-            # filterA = jnp.where(qA[1] < 10**(-4), 0., 1.)
-            # filterA = jnp.stack(filterA*evA.shape[0], axis=0)
-            # filterB = jnp.where(qB[1] < 10**(-4), 0., 1.)
-            # filterB = jnp.stack([filterB]*evB.shape[0], axis=0)
-            # evA *= filterA
-            # evB *= filterB
-
-
-
             max_abs_eigenvalue = jnp.maximum(jnp.abs(evA).max(), jnp.abs(evB).max())
-
             return max_abs_eigenvalue
-
         return compute_max_abs_eigenvalue
+
+    def get_flux_operator(self, mesh, model):
+        # @jax.jit
+        # @partial(jax.named_call, name="Flux")
+        def flux_operator(dt, Q, Qaux, parameters, dQ):
+            compute_num_flux = self.num_flux
+            compute_nc_flux = self.nc_flux
+            # Initialize dQ as zeros using jax.numpy
+            dQ = jnp.zeros_like(dQ)
+
+            iA = mesh.face_cells[0]
+            iB = mesh.face_cells[1]
+
+            qA = Q[:, iA]
+            qB = Q[:, iB]
+            qauxA = Qaux[:, iA]
+            qauxB = Qaux[:, iB]
+            normals = mesh.face_normals
+            face_volumes = mesh.face_volumes
+            cell_volumesA = mesh.cell_volumes[iA]
+            cell_volumesB = mesh.cell_volumes[iB]
+            svA = mesh.face_subvolumes[:, 0]
+            svB = mesh.face_subvolumes[:, 1]
+
+            nc_flux, failed = compute_nc_flux(
+                qA,
+                qB,
+                qauxA,
+                qauxB,
+                parameters,
+                normals,
+                svA,
+                svB,
+                face_volumes,
+                dt,
+                model,
+            )
+            flux_out = nc_flux * face_volumes / cell_volumesA
+            flux_in = nc_flux * face_volumes / cell_volumesB
+
+            dQ = dQ.at[:, iA].subtract(flux_out)
+            dQ = dQ.at[:, iB].add(flux_in)
+            return dQ
+        return flux_operator
+
+   
+    # @jax.jit
+    # @partial(jax.named_call, name="hyperbolic solver")
+    def solve(self, mesh, model, write_output=True):
+        Q, Qaux = self.initialize(mesh, model)
+        
+        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
+        
+        # init once with dummy values for dt
+        Qaux = self.update_qaux(Q, Qaux, Q, Qaux, mesh, model, parameters, 0.0, 1.0)
+
+        
+        if write_output:
+            output_hdf5_path = os.path.join(
+                self.settings.output.directory, f"{self.settings.output.filename}.h5"
+            )
+            save_fields = io.get_save_fields(output_hdf5_path, write_all=False)
+        else:
+            def save_field(time, time_stamp, i_snapshot, Q, Qaux):
+                return i_snapshot
+            
+        Q = jax.device_put(Q)
+        Qaux = jax.device_put(Qaux)
+        mesh = jax.device_put(mesh)
+
+        def run(Q, Qaux, parameters, model):
+            iteration = 0.0
+            time = 0.0
+
+            i_snapshot = 0.0
+            dt_snapshot = self.time_end / (self.settings.output.snapshots - 1)
+            if write_output:
+                io.init_output_directory(
+                    self.settings.output.directory, self.settings.output.clean_directory
+                )
+                mesh.write_to_hdf5(output_hdf5_path)
+                io.save_settings(self.settings)
+            i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
+
+            Qnew = Q
+
+            min_inradius = jnp.min(mesh.cell_inradius)
+
+            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, model)
+            flux_operator = self.get_flux_operator(mesh, model)
+            source_operator = self.get_compute_source(mesh, model)
+            boundary_operator = self.get_apply_boundary_conditions(mesh, model)
+            Qnew = boundary_operator(time, Qnew, Qaux, parameters)
+
+
+            # @jax.jit
+            # @partial(jax.named_call, name="time loop")
+            def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
+                loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
+
+                @partial(jax.named_call, name="time_step")
+                def loop_body(init_value):
+                    time, iteration, i_snapshot, Qnew, Qauxnew = init_value
+                    
+                    Q = Qnew
+                    Qaux = Qauxnew
+                
+                    dt = self.compute_dt(
+                        Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
+                    )
+
+                    Q1 = ode.RK1(flux_operator, Q, Qaux, parameters, dt)
+                    Q2 = ode.RK1(
+                        source_operator,
+                        Q1,
+                        Qaux,
+                        parameters,
+                        dt,
+                    )
+
+                    Q3 = boundary_operator(time, Q2, Qaux, parameters)
+                    
+                    # Update solution and time
+                    time += dt
+                    iteration += 1
+
+                    time_stamp = (i_snapshot) * dt_snapshot
+                    
+                    Qnew = self.update_q(Q3, Qaux, mesh, model, parameters)
+                    Qauxnew = self.update_qaux(Qnew, Qaux, Q, Qaux, mesh, model, parameters, time, dt)
+
+
+                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qauxnew)
+
+                    jax.experimental.io_callback(
+                        log_callback_hyperbolic,                 
+                        None,                          
+                        iteration, time, dt, time_stamp 
+                    )
+                    
+                    return (time, iteration, i_snapshot, Qnew, Qauxnew)
+
+                def proceed(loop_val):
+                    time, iteration, i_snapshot, Qnew, Qaux = loop_val
+                    return time < self.time_end
+
+                (time, iteration, i_snapshot, Qnew, Qauxnew) = jax.lax.while_loop(
+                    proceed, loop_body, loop_val
+                )
+
+                return Qnew
+
+            Qnew = time_loop(time, iteration, i_snapshot, Qnew, Qaux)
+            return Qnew, Qaux
+
+        time_start = gettime()
+        Qnew, Qaux = run(Q, Qaux, parameters, model)
+        jax.experimental.io_callback(
+            log_callback_execution_time,                 
+            None,                          
+            gettime() - time_start 
+        )
+        return Qnew, Qaux
+
+    
+@define(frozen=True, slots=True, kw_only=True)            
+class HyperbolicSolverNonSymmetric(HyperbolicSolver):
+    settings: Zstruct = field(factory=lambda: Settings.default())
+    compute_dt: Callable = field(factory=lambda: timestepping.adaptive(CFL=0.45))
+    num_flux: Callable = field(factory=lambda: flux.Zero())
+    nc_flux: Callable = field(factory=lambda: nonconservative_flux.segmentpath())
+    time_end: float = 0.1
+
 
     def get_flux_operator(self, mesh, model):
         @jax.jit
@@ -461,14 +618,14 @@ class HyperbolicSolver(Solver):
 
                 fluxA_contribution = jnp.where(
                     iA_masked,
-                    (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
-                    # (nc_fluxA)[:, faces],
+                    # (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
+                    (nc_fluxA)[:, faces],
                     zeros,
                 )
                 fluxB_contribution = jnp.where(
                     iB_masked,
-                    (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
-                    # (nc_fluxB)[:, faces],
+                    # (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
+                    (nc_fluxB)[:, faces],
                     zeros,
                 )
 
@@ -498,155 +655,6 @@ class HyperbolicSolver(Solver):
             return dQ
 
         return flux_operator
-
-    
-
-    def solve(self, mesh, model, write_output=True):
-        Q, Qaux = self.initialize(mesh, model)
-        
-        Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
-        
-        # init once with dummy values for dt
-        Qaux = self.update_qaux(Q, Qaux, Q, Qaux, mesh, model, parameters, 0.0, 1.0)
-
-        
-        if write_output:
-            output_hdf5_path = os.path.join(
-                self.settings.output.directory, f"{self.settings.output.filename}.h5"
-            )
-            save_fields = io.get_save_fields(output_hdf5_path, write_all=False)
-        else:
-            def save_field(time, time_stamp, i_snapshot, Q, Qaux):
-                return i_snapshot
-            
-        Q = jax.device_put(Q)
-        Qaux = jax.device_put(Qaux)
-        mesh = jax.device_put(mesh)
-
-        def run(Q, Qaux, parameters, model):
-            iteration = 0.0
-            time = 0.0
-
-            i_snapshot = 0.0
-            dt_snapshot = self.time_end / (self.settings.output.snapshots - 1)
-            if write_output:
-                io.init_output_directory(
-                    self.settings.output.directory, self.settings.output.clean_directory
-                )
-                mesh.write_to_hdf5(output_hdf5_path)
-                io.save_settings(self.settings)
-            i_snapshot = save_fields(time, 0.0, i_snapshot, Q, Qaux)
-
-            Qnew = Q
-
-            min_inradius = jnp.min(mesh.cell_inradius)
-
-            compute_max_abs_eigenvalue = self.get_compute_max_abs_eigenvalue(mesh, model)
-            flux_operator = self.get_flux_operator(mesh, model)
-            source_operator = self.get_compute_source(mesh, model)
-            boundary_operator = self.get_apply_boundary_conditions(mesh, model)
-
-            @jax.jit
-            @partial(jax.named_call, name="time loop")
-            def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
-                loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
-
-                @partial(jax.named_call, name="time_step")
-                def loop_body(init_value):
-                    time, iteration, i_snapshot, Qnew, Qauxnew = init_value
-                    
-                    Q = Qnew
-                    Qaux = Qauxnew
-                
-                    dt = self.compute_dt(
-                        Q, Qaux, parameters, min_inradius, compute_max_abs_eigenvalue
-                    )
-
-                    Q1 = ode.RK1(flux_operator, Q, Qaux, parameters, dt)
-                    # Q1 = Q
-
-                    Q2 = ode.RK1(
-                        source_operator,
-                        Q1,
-                        Qaux,
-                        parameters,
-                        dt/5,
-                    )
-                    Q2 = ode.RK1(
-                        source_operator,
-                        Q2,
-                        Qaux,
-                        parameters,
-                        dt/5,
-                    )
-                    Q2 = ode.RK1(
-                        source_operator,
-                        Q2,
-                        Qaux,
-                        parameters,
-                        dt/5,
-                    )
-                    Q2 = ode.RK1(
-                        source_operator,
-                        Q2,
-                        Qaux,
-                        parameters,
-                        dt/5,
-                    )
-                    Q2 = ode.RK1(
-                        source_operator,
-                        Q2,
-                        Qaux,
-                        parameters,
-                        dt/5,
-                    )
-                    # Q2 = Q1
-
-                    Q3 = boundary_operator(time, Q2, Qaux, parameters)
-                    # Q3 = Q2
-                    
-                    # Update solution and time
-                    time += dt
-                    iteration += 1
-
-                    time_stamp = (i_snapshot) * dt_snapshot
-                    
-                    Qnew = self.update_q(Q3, Qaux, mesh, model, parameters)
-                    Qauxnew = self.update_qaux(Qnew, Qaux, Q, Qaux, mesh, model, parameters, time, dt)
-
-
-                    i_snapshot = save_fields(time, time_stamp, i_snapshot, Qnew, Qauxnew)
-
-                    
-                    jax.experimental.io_callback(
-                        log_callback_hyperbolic,                 
-                        None,                          
-                        iteration, time, dt, time_stamp 
-                    )
-                    
-                    return (time, iteration, i_snapshot, Qnew, Qauxnew)
-
-                def proceed(loop_val):
-                    time, iteration, i_snapshot, Qnew, Qaux = loop_val
-                    return time < self.time_end
-
-                (time, iteration, i_snapshot, Qnew, Qauxnew) = jax.lax.while_loop(
-                    proceed, loop_body, loop_val
-                )
-
-                return Qnew
-
-            Qnew = time_loop(time, iteration, i_snapshot, Qnew, Qaux)
-            return Qnew, Qaux
-
-        time_start = gettime()
-        Qnew, Qaux = run(Q, Qaux, parameters, model)
-        jax.experimental.io_callback(
-            log_callback_execution_time,                 
-            None,                          
-            gettime() - time_start 
-        )
-        return Qnew, Qaux
 
 
 @define(frozen=True, slots=True, kw_only=True)

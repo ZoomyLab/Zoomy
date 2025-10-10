@@ -15,6 +15,7 @@ from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.misc.custom_types import FArray
 from library.model.models.base import Model
+
 from library.misc.misc import Zstruct
 
 @define(frozen=True, slots=True, kw_only=True)
@@ -23,13 +24,18 @@ class ShallowWaterEquations(Model):
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowWaterEquations(Model):
-    dimension: int = 2
-    variables: Zstruct = field(init=False, default=dimension + 1)
+    dimension: int=1
+    variables: Zstruct = field(default=3)
     aux_variables: Zstruct = field(default=2)
     _default_parameters: dict = field(
         init=False,
         factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0}
         )
+    
+    def __attrs_post_init__(self):
+        if type(self.variables)==int:
+            object.__setattr__(self, "variables",self.dimension+1)
+        super().__attrs_post_init__()
 
 
     def interpolate_3d(self):
@@ -48,6 +54,8 @@ class ShallowWaterEquations(Model):
         out[3] = 0
         out[4] = rho_w * g * h * (1-z)
         return out
+
+        
 
     def flux(self):
         dim = self.dimension
