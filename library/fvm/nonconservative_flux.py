@@ -270,7 +270,7 @@ def segmentpath(integration_order=3):
         wi = jnp.array(weights)
         xi = jnp.array(samples)
         
-        index_h = 1
+        index_h = 0
         index_topography = 0
         
         def _get_A(model):
@@ -336,7 +336,7 @@ def segmentpath(integration_order=3):
 
                 # Id = Id.at[index_h, index_topography].set(1.0)
                 Am   = 0.5 * (A_int - sM * Id)
-                flux = (Am @ dQ) * (Vij / Vi)
+                flux = (Am @ dQ)
                 return flux
 
             # return jax.lax.cond(dry,
@@ -350,7 +350,7 @@ def segmentpath(integration_order=3):
         # ---------------------------------------------------------------------------
         # batched wrapper ------------------------------------------------------------
         # ---------------------------------------------------------------------------
-        @jax.jit
+        # @jax.jit
         def rusanov_batched(Qi, Qj,
                             Qauxi, Qauxj,
                             normal,
@@ -373,7 +373,7 @@ def segmentpath(integration_order=3):
                             in_axes=(1, 1,   # Qi , Qj
                                     1, 1,   # Qauxi, Qauxj
                                     1,      # normal
-                                    0, 0, 0))(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vi)
+                                    0, 0, 0))(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij)
             return flux.T
 
         flux = rusanov_batched(Qi, Qj, Qauxi, Qauxj, normal, Vi, Vj, Vij)

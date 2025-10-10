@@ -785,8 +785,6 @@ class Mesh:
             label = gdm.getLabelValue("Face Sets", e)
             face_volume, face_center, face_normal = gdm.computeCellGeometryFVM(
                 e)
-            face_center = gdm.computeCellGeometryFVM(e)[1]
-
             face_vertices = get_face_vertices(dim, gdm, vgStart, e)
             face_vertices_coords = vertex_coordinates[face_vertices]
             _face_cells = gdm.getSupport(e)
