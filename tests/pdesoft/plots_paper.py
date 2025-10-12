@@ -5,7 +5,7 @@ import tol_colors as tc
 import seaborn as sns
 import pyswashes
 
-from library.misc.io import load_fields_from_hdf5, load_mesh_from_hdf5
+from library.python.misc.io import load_fields_from_hdf5, load_mesh_from_hdf5
 
 
 sns.set_context("paper", font_scale=1.5)

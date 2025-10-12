@@ -7,7 +7,7 @@ from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.pysolver.ode import RK1
-import library.misc.io as io
+import library.python.misc.io as io
 
 
 @pytest.mark.critical

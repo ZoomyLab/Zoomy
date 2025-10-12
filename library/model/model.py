@@ -11,7 +11,7 @@ from library.model.models.shallow_water_topo import ShallowWaterTopo, ShallowWat
 # from library.model.models.shallow_moments_sediment import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-from library.mesh.fvm_mesh import Mesh
+from library.python.mesh.fvm_mesh import Mesh
 
 
 def create_default_mesh_and_model(

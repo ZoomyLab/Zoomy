@@ -13,10 +13,10 @@ from types import SimpleNamespace
 
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
-from library.misc.custom_types import FArray
+from library.python.misc.custom_types import FArray
 from library.model.models.base import Model
 
-from library.misc.misc import Zstruct
+from library.python.misc.misc import Zstruct
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowWaterEquations(Model):

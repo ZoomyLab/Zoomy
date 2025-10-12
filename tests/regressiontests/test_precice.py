@@ -5,16 +5,16 @@ import os
 from sympy import Matrix
 
 
-from library.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional, PreciceHyperbolicSolverAUP, PreciceTestSolver, PreciceHyperbolicSolverAUP_while
+from library.python.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional, PreciceHyperbolicSolverAUP, PreciceTestSolver, PreciceHyperbolicSolverAUP_while
 from library.model.models.shallow_moments import ShallowMoments
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-import library.misc.io as io
-from library.misc.misc import Settings, Zstruct
-import library.fvm.timestepping as timestepping
+import library.python.misc.io as io
+from library.python.misc.misc import Settings, Zstruct
+import library.python.fvm.timestepping as timestepping
 
 # from library.pysolver.reconstruction import GradientMesh
-import library.mesh.mesh as petscMesh
+import library.python.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 import argparse
 

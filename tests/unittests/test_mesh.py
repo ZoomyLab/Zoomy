@@ -1,9 +1,9 @@
 import pytest
 import os
 
-# from library.mesh.fvm_mesh import *
-from library.mesh.mesh import Mesh
-import library.misc.io as io
+# from library.python.mesh.fvm_mesh import *
+from library.python.mesh.mesh import Mesh
+import library.python.misc.io as io
 
 
 @pytest.mark.critical

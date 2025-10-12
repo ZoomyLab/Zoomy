@@ -15,7 +15,7 @@ from attrs import define, field
 
 import numpy.typing as npt
 
-from library.mesh.mesh import Mesh
+from library.python.mesh.mesh import Mesh
 import library.transformation.to_ufl as trafo
 from library.dolfinx.mesh import load_mesh, evaluate_on_all_facets_midpoint
 

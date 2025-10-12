@@ -25,8 +25,8 @@ from attrs import define, field
 
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
-from library.misc.custom_types import FArray
-from library.misc.misc import Zstruct
+from library.python.misc.custom_types import FArray
+from library.python.misc.misc import Zstruct
 from library.model.sympy2c import create_module
 
 init_printing()
@@ -80,10 +80,14 @@ class JaxRuntimeModel:
     left_eigenvectors: Optional[Callable] = field(default=None)
     right_eigenvectors: Optional[Callable] = field(default=None)
 
-    @classmethod
-    def from_model(cls, model):
+    def get_pde_and_bc(model):
         pde = model._get_pde()
         bcs = model._get_boundary_conditions()
+        return pde, bcs
+
+    @classmethod
+    def from_model(cls, model):
+        pde, bcs = cls.get_pde_and_bc(model)
         return cls(
             name=model.name,
             dimension=model.dimension,
@@ -105,7 +109,13 @@ class JaxRuntimeModel:
             interpolate_3d=pde.interpolate_3d,
             bcs=bcs,
         )
-        
+
+@define(kw_only=True, slots=True, frozen=True)
+class NumpyRuntimeModel(JaxRuntimeModel):
+    def get_pde_and_bc(model):
+        pde = model._get_pde(printer='numpy')
+        bcs = model._get_boundary_conditions(printer='numpy')
+        return pde, bcs
 
 
 
@@ -185,6 +195,22 @@ class Model:
         inputs = self.get_boundary_conditions_matrix_inputs()
         return self.boundary_conditions.get_boundary_function_matrix(*inputs)
     
+    def squeeze(self, printer='jax'):
+        if printer == 'jax':
+            return jnp.squeeze
+        elif printer == 'numpy':
+            return np.squeeze
+        else:
+            assert False
+    
+    def array(self, printer='jax'):
+        if printer == 'jax':
+            return jnp.array
+        elif printer == 'numpy':
+            return np.array
+        else:
+            assert False
+    
         
     def get_boundary_conditions_matrix_inputs(self):
         """
@@ -242,8 +268,8 @@ class Model:
                 qaux,
                 p,
                 n,
-                func=func_bc: jnp.squeeze(
-                    jnp.array(func(time, position, distance, q, qaux, p, n)), axis=1
+                func=func_bc: self.squeeze(printer=printer)(
+                    self.array(printer=printer)(func(time, position, distance, q, qaux, p, n)), axis=1
                 )
             )
             bcs.append(f)
@@ -267,8 +293,8 @@ class Model:
         ]
         # the f=l_flux[d] part is necessary, because of https://stackoverflow.com/questions/46535577/initialising-a-list-of-lambda-functions-in-python/46535637#46535637
         flux = [
-            lambda Q, Qaux, param, f=l_flux[d]: jnp.squeeze(
-                np.array(f(Q, Qaux, param)), axis=1
+            lambda Q, Qaux, param, f=l_flux[d]: self.squeeze(printer=printer)(
+                self.array(printer=printer)(f(Q, Qaux, param)), axis=1
             )
             for d in range(self.dimension)
         ]
@@ -352,8 +378,8 @@ class Model:
         )
 
         def left_eigenvectors(Q, Qaux, param, normal):
-            return jnp.squeeze(
-                jnp.array(l_left_eigenvectors(Q, Qaux, param, normal)), axis=1
+            return self.squeeze(printer=printer)(
+                self.array(printer=printer)(l_left_eigenvectors(Q, Qaux, param, normal)), axis=1
             )
 
 
@@ -371,8 +397,8 @@ class Model:
         )
 
         def right_eigenvectors(Q, Qaux, param, normal):
-            return jnp.squeeze(
-                jnp.array(l_right_eigenvectors(Q, Qaux, param, normal)), axis=1
+            return self.squeeze(printer=printer)(
+                self.array(printer=printer)(l_right_eigenvectors(Q, Qaux, param, normal)), axis=1
             )
             
         
@@ -390,7 +416,7 @@ class Model:
         )
 
         def source(Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_source(Q, Qaux, param)), axis=1)
+            return self.squeeze(printer=printer)(self.array(printer=printer)(l_source(Q, Qaux, param)), axis=1)
 
 
         l_source_jacobian = lambdify(
@@ -418,7 +444,7 @@ class Model:
             printer,
         )
         def source_implicit(Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_source_implicit(Q, Qaux, param)), axis=1)
+            return self.squeeze(printer=printer)(self.array(printer=printer)(l_source_implicit(Q, Qaux, param)), axis=1)
         
         l_residual = lambdify(
             [
@@ -432,7 +458,7 @@ class Model:
             printer,
         )
         def residual(Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_residual(Q, Qaux, param)), axis=1)
+            return self.squeeze(printer=printer)(self.array(printer=printer)(l_residual(Q, Qaux, param)), axis=1)
 
 
         l_interpolate_3d = lambdify(
@@ -448,7 +474,7 @@ class Model:
             printer,
         )
         def interpolate_3d(X, Q, Qaux, param):
-            return jnp.squeeze(jnp.array(l_interpolate_3d(X, Q, Qaux, param)), axis=1)
+            return self.squeeze(printer=printer)(self.array(printer=printer)(l_interpolate_3d(X, Q, Qaux, param)), axis=1)
 
 
 

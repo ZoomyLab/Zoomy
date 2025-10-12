@@ -1,4 +1,4 @@
-# fvm.solver.Settings { #library.fvm.solver.Settings }
+# fvm.solver.Settings { #library.python.fvm.solver.Settings }
 
 ```python
 fvm.solver.Settings()

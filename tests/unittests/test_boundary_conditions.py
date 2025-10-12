@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from library.model.boundary_conditions import *
-from library.mesh.fvm_mesh import Mesh
+from library.python.mesh.fvm_mesh import Mesh
 
 
 # @pytest.mark.critical

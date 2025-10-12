@@ -1,13 +1,13 @@
 import os
 from library.model.models import *
-from library.fvm.solver import *
-import library.fvm.flux
-import library.fvm.reconstruction
-import library.fvm.nonconservative_flux
-import library.fvm.timestepping
-import library.mesh.mesh as petscMesh
+from library.python.fvm.solver import *
+import library.python.fvm.flux
+import library.python.fvm.reconstruction
+import library.python.fvm.nonconservative_flux
+import library.python.fvm.timestepping
+import library.python.mesh.mesh as petscMesh
 
-import library.misc.io
+import library.python.misc.io
 
 
 def run(model_class, ic, bcs, mesh, solver, settings, **param):

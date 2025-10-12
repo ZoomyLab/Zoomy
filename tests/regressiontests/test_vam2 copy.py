@@ -5,17 +5,17 @@ from jax import numpy as jnp
 import pytest
 from time import time as gettime
 
-from library.fvm.solver import Solver, Settings
-from library.fvm.ode import RK1
-import library.fvm.reconstruction as recon
-import library.fvm.timestepping as timestepping
-import library.fvm.flux as flux
-import library.fvm.nonconservative_flux as nc_flux
+from library.python.fvm.solver import Solver, Settings
+from library.python.fvm.ode import RK1
+import library.python.fvm.reconstruction as recon
+import library.python.fvm.timestepping as timestepping
+import library.python.fvm.flux as flux
+import library.python.fvm.nonconservative_flux as nc_flux
 
 
 
-import library.mesh.mesh as petscMesh
-from library.mesh.mesh import convert_mesh_to_jax
+import library.python.mesh.mesh as petscMesh
+from library.python.mesh.mesh import convert_mesh_to_jax
 
 import numpy as np
 from sympy import Matrix, sqrt
@@ -26,8 +26,8 @@ from functools import partial
 from library.model.model import Model
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-import library.misc.io as io
-from library.mesh.mesh import compute_derivatives
+import library.python.misc.io as io
+from library.python.mesh.mesh import compute_derivatives
 from library.model import *
 from library.model.models.base import (
     register_sympy_attribute,

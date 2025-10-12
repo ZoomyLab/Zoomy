@@ -11,7 +11,7 @@ from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
 
-from library.misc.misc import Zstruct
+from library.python.misc.misc import Zstruct
 from library.model.models.base import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,

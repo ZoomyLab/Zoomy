@@ -29,12 +29,12 @@ from dolfinx import mesh as dolfinx_mesh
 import numpy.typing as npt
 
 
-from library.fvm.solver import Settings
+from library.python.fvm.solver import Settings
 from library.model.models.shallow_water import ShallowWaterEquations
-from library.mesh.mesh import Mesh
+from library.python.mesh.mesh import Mesh
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-from library.misc.misc import Zstruct
+from library.python.misc.misc import Zstruct
 import library.transformation.to_ufl as trafo
 
 def compute_facet_distances(mesh: mesh.Mesh) -> fem.Function:

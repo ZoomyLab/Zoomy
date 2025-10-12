@@ -5,12 +5,12 @@ import attr
 from attr import define
 from typing import Callable, Optional
 
-from library.misc.custom_types import FArray
-from library.mesh.fvm_mesh import Mesh
-import library.misc.io as io
-import library.misc.interpolation as interpolate_mesh
+from library.python.misc.custom_types import FArray
+from library.python.mesh.fvm_mesh import Mesh
+import library.python.misc.io as io
+import library.python.misc.interpolation as interpolate_mesh
 
-# from library.mesh import Mesh2D
+# from library.python.mesh import Mesh2D
 
 
 @define(slots=True, frozen=True)

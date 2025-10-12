@@ -7,8 +7,8 @@ from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.pysolver.ode import RK1, RK2, RK3
-import library.misc.io as io
-import library.mesh.mesh as petscMesh
+import library.python.misc.io as io
+import library.python.mesh.mesh as petscMesh
 
 
 @pytest.mark.critical
