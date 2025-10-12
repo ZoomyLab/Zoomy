@@ -6,7 +6,7 @@ from typing import Callable
 from functools import partial
 import timeit
 
-from library.misc.static_class import register_static_pytree
+from library.python.misc.static_class import register_static_pytree
 
 
 N = 1000000

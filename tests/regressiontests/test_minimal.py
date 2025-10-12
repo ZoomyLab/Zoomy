@@ -13,12 +13,12 @@ from sympy import cos, pi
 # import library.pysolver.reconstruction as recon
 # import library.pysolver.timestepping as timestepping
 
-from library.fvm.solver import Solver, Settings
-from library.fvm.ode import RK1
-import library.fvm.reconstruction as recon
-import library.fvm.timestepping as timestepping
-import library.fvm.flux as flux
-import library.fvm.nonconservative_flux as nc_flux
+from library.python.fvm.solver import Solver, Settings
+from library.python.fvm.ode import RK1
+import library.python.fvm.reconstruction as recon
+import library.python.fvm.timestepping as timestepping
+import library.python.fvm.flux as flux
+import library.python.fvm.nonconservative_flux as nc_flux
 from library.model.boundary_conditions import BoundaryCondition
 from library.model.models.basisfunctions import Basisfunction, Legendre_shifted
 from library.model.models.basismatrices import Basismatrices
@@ -26,13 +26,13 @@ from library.model.models.basismatrices import Basismatrices
 from library.model.model import *
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
-import library.misc.io as io
-from library.mesh.mesh import compute_derivatives
+import library.python.misc.io as io
+from library.python.mesh.mesh import compute_derivatives
 
 
-import library.mesh.mesh as petscMesh
+import library.python.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
-from library.mesh.mesh import convert_mesh_to_jax
+from library.python.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 

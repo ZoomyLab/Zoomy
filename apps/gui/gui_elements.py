@@ -9,7 +9,7 @@ from panel.viewable import Viewer
 import param
 import os
 
-import library.mesh.mesh as petscMesh
+import library.python.mesh.mesh as petscMesh
 
 from apps.gui.docstring_crawler import get_class_docstring
 from apps.gui.mesh.load_gmsh import load_gmsh

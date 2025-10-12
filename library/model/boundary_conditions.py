@@ -10,10 +10,10 @@ from sympy import Matrix
 from attr import define, field
 from typing import Union, Optional, Callable, List, Dict
 
-from library.misc.custom_types import IArray, FArray
-import library.mesh.mesh as mesh
-from library.mesh.mesh_util import center
-from library.misc.misc import (
+from library.python.misc.custom_types import IArray, FArray
+import library.python.mesh.mesh as mesh
+from library.python.mesh.mesh_util import center
+from library.python.misc.misc import (
     project_in_x_y_and_recreate_Q,
     projection_in_normal_and_transverse_direction,
 )

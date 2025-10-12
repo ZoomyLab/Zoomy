@@ -2,9 +2,9 @@ import jax.numpy as jnp
 import os
 import numpy as np
 
-import library.mesh.mesh as petscMesh
-from library.mesh.mesh import compute_derivatives
-from library.mesh.mesh import convert_mesh_to_jax
+import library.python.mesh.mesh as petscMesh
+from library.python.mesh.mesh import compute_derivatives
+from library.python.mesh.mesh import convert_mesh_to_jax
 
 def test_1d():
     N = 10
