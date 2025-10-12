@@ -12,6 +12,7 @@ dependencies:
   - ipykernel
   - matplotlib
   - pytest
+  - pytest-html
   - meshio
   - scipy
   - h5py
