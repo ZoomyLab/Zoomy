@@ -36,6 +36,7 @@ dependencies:
   - precice
   - rasterio
   - pip
+  - jupyter-cache
   - pip:
     - pyprog 
     - watchfiles

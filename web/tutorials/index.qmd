@@ -1,8 +1,3 @@
 # Tutorials
 
-## Up to date?
-
-```{bash}
-./../../test/test_tutorials.sh
-```
 
