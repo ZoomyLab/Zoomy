@@ -7,110 +7,105 @@ from sympy import Symbol, Matrix, lambdify, transpose, Abs, sqrt
 
 from sympy import zeros, ones
 
-from attr import define
+from attr import define, field
 from typing import Optional
 from types import SimpleNamespace
 
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.python.misc.custom_types import FArray
-from library.model.models.shallow_water import ShallowWater, ShallowWater2d
-from library.model.models.base import eigenvalue_dict_to_matrix
+from library.model.models.base import Model, eigenvalue_dict_to_matrix
 
+from library.python.misc.misc import Zstruct
 
-@define(slots=True, frozen=False, kw_only=True)
-class ShallowWaterTopo(ShallowWater):
-    def __init__(
-        self,
-        boundary_conditions,
-        initial_conditions,
-        dimension=1,
-        fields=3,
-        aux_variables=0,
-        parameters={},
-        _default_parameters={"g": 1.0, "ex": 0.0, "ez": 1.0},
-        settings={},
-        settings_default={"topography": False, "friction": []},
-    ):
-        super().__init__(
-            dimension=dimension,
-            fields=fields,
-            aux_variables=aux_variables,
-            parameters=parameters,
-            _default_parameters=_default_parameters,
-            boundary_conditions=boundary_conditions,
-            initial_conditions=initial_conditions,
-            settings=settings,
-            settings_default=settings_default,
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowWaterEquationsWithTopo1D(Model):
+    dimension: int = 1
+    variables: Zstruct = field(default=3)
+    aux_variables: Zstruct = field(default=0)
+
+@define(frozen=True, slots=True, kw_only=True)
+class ShallowWaterEquationsWithTopo(Model):
+    dimension: int=2
+    variables: Zstruct = field(default=4)
+    aux_variables: Zstruct = field(default=0)
+    _default_parameters: dict = field(
+        init=False,
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0}
         )
+    
+    def __attrs_post_init__(self):
+        if type(self.variables)==int:
+            object.__setattr__(self, "variables",self.dimension+2)
+        super().__attrs_post_init__()
+        
+    def compute_hinv(self):
+        h = self.variables[1]
+        return 1 / h
+        
+    def get_primitives(self):
+        dim = self.dimension
+        b = self.variables[0]
+        h = self.variables[1]
+        hinv = self.compute_hinv()
+        U = [self.variables[2 + i] * hinv for i in range(dim)]
+        return b, h, U, hinv
+
+
+    def interpolate_3d(self):
+        out = Matrix([0 for i in range(5)])
+        dim = self.dimension
+        x = self.position[0]
+        y = self.position[1]
+        z = self.position[2]
+        b, h, U, hinv = self.get_primitives()
+        rho_w = 1000.
+        g = 9.81
+        out[0] = h
+        out[1] = U[0]
+        out[2] = 0 if dim == 1 else U[1]
+        out[3] = 0
+        out[4] = rho_w * g * h * (1-z)
+        return out
+
+        
 
     def flux(self):
-        flux = Matrix([0 for i in range(self.n_variables)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        p = self.parameters
-        flux[0] = hu
-        flux[1] = hu**2 / h
-        return [flux]
-
-    def nonconservative_matrix(self):
-        nc = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        p = self.parameters
-        nc[1, 0] = -p.g * p.ez * h
-        nc[1, 2] = -p.g * p.ez * h
-        return [nc]
-
-
-class ShallowWaterTopo2d(ShallowWater2d):
-    def __init__(
-        self,
-        boundary_conditions,
-        initial_conditions,
-        dimension=2,
-        fields=3,
-        aux_variables=0,
-        parameters={},
-        _default_parameters={"g": 1.0, "ex": 0.0, "ey": 0.0, "ez": 1.0},
-        settings={},
-        settings_default={"topography": False, "friction": []},
-    ):
-        super().__init__(
-            dimension=dimension,
-            fields=fields,
-            aux_variables=aux_variables,
-            parameters=parameters,
-            _default_parameters=_default_parameters,
-            boundary_conditions=boundary_conditions,
-            initial_conditions=initial_conditions,
-            settings=settings,
-            settings_default=settings_default,
-        )
-
-    def flux(self):
-        fx = Matrix([0 for i in range(self.n_variables)])
-        fy = Matrix([0 for i in range(self.n_variables)])
-        h = self.variables[0]
-        hu = self.variables[1]
-        hv = self.variables[2]
-        p = self.parameters
-        fx[0] = hu
-        fx[1] = hu**2 / h
-        fx[2] = hu * hv / h
-        fy[0] = hv
-        fy[1] = hu * hv / h
-        fy[2] = hv**2 / h
-        return [fx, fy]
-
+        dim = self.dimension
+        h = self.variables[1]
+        U = Matrix([hu / h for hu in self.variables[2:2+dim]])
+        g = self.parameters.g
+        I = Matrix.eye(dim)
+        F = Matrix.zeros(self.variables.length(), dim)
+        F[1, :] = (h * U).T
+        F[2:, :] = h * U * U.T + g/2 * h**2 * I
+        return [F[:, d] for d in range(dim)]
+    
     def nonconservative_matrix(self):
         nc_x = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
         nc_y = Matrix([[0 for i in range(self.n_variables)] for j in range(self.n_variables)])
-        h = self.variables[0]
-        hu = self.variables[1]
+        b, h, U, hinv = self.get_primitives()
         p = self.parameters
-        nc_x[1, 0] = -p.g * p.ez * h
-        nc_x[1, 3] = -p.g * p.ez * h
-        nc_y[2, 0] = -p.g * p.ez * h
-        nc_y[2, 3] = -p.g * p.ez * h
-        return [nc_x, nc_y]
+        nc_x[1, 0] = p.g * h 
+        nc_y[1, 0] = p.g * h
+        return [nc_x, nc_y][:self.dimension]
+
+    
+    def source(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        return out
+    
+    def chezy(self):
+        assert "C" in vars(self.parameters)
+        dim = self.dimension
+        out = Matrix([0 for i in range(self.n_variables)])
+        h = self.variables[0]
+        hU = self.variables[1:1+dim]
+        U = Matrix([hu / h for hu in hU])
+        p = self.parameters
+        u_sq = sqrt(U.dot(U))
+        out[2:2+dim] = -1.0 / p.C**2 * U * u_sq
+        return out
+    
+        return self._simplify(eigenvalue_dict_to_matrix(A.eigenvals()))
+    

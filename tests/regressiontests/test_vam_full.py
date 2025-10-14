@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from sympy import cos, pi
 from time import time as gettime
 
-from library.python.fvm.solver import Solver, Settings
+from library.python.fvm.solver_jax import Solver, Settings
 from library.python.fvm.ode import RK1
 import library.python.fvm.reconstruction as recon
 import library.python.fvm.timestepping as timestepping

@@ -16,8 +16,8 @@ from attrs import define, field
 import numpy.typing as npt
 
 from library.python.mesh.mesh import Mesh
-import library.transformation.to_ufl as trafo
-from library.dolfinx.mesh import load_mesh, evaluate_on_all_facets_midpoint
+import library.python.transformation.to_ufl as trafo
+from library.dg.dolfinx.mesh import load_mesh, evaluate_on_all_facets_midpoint
 
 
 @define(frozen=True, slots=True, kw_only=True)            
@@ -161,7 +161,7 @@ class Solver():
         
         domain, cell_tags, facet_tags, unique_facet_tags, facet_boundary_function_id, min_inradius = load_mesh(path_to_mesh)
         
-        model = trafo.FenicsXRuntimeModel.from_model(domain, model)
+        model = trafo.UFLRuntimeModel.from_model(domain, model)
         
         ### Parameters
         gx = dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(self, 0))

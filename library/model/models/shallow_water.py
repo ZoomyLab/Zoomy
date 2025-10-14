@@ -81,7 +81,7 @@ class ShallowWaterEquations(Model):
         U = Matrix([hu / h for hu in hU])
         p = self.parameters
         u_sq = sqrt(U.dot(U))
-        out[1:1+dim] = -1.0 / p.C**2 * U * u_sq
+        out[1:1+dim, 0] = -1.0 / p.C**2 * U * u_sq
         return out
 
 
