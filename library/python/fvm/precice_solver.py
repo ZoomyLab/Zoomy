@@ -37,7 +37,7 @@ import library.python.misc.transformation as transformation
 import library.python.fvm.ode as ode
 import library.python.fvm.timestepping as timestepping
 from library.model.models.base import JaxRuntimeModel
-import library.python.fvm.solver as solver
+import library.python.fvm.solver_jax as solver
 
 
 def precice_callback_read(interface, meshName, vertexIDs, dataName, dt):

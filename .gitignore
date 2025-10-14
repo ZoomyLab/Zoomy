@@ -130,3 +130,4 @@ library/zoomyFoam/Make/linux64GccDPInt32Opt/zoomyFoam.C.dep
 library/zoomyFoam/Make/linux64GccDPInt32Opt/zoomyFoam.o
 library/zoomyFoam/Make/linux64GccDPInt32Opt
 library/zoomyFoam/Make/linux64GccDPInt32Debug
+install/petsc

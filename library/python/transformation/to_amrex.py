@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from library.python.misc.misc import Zstruct
 from library.model.sympy2c import create_module
-from library.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
+from library.python.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
 
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter

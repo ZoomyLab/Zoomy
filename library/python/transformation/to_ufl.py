@@ -18,7 +18,7 @@ from mpi4py import MPI
 
 from library.python.misc.misc import Zstruct
 from library.model.sympy2c import create_module
-from library.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
+from library.python.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
 
 ufl_map = {
     "math.exp": ufl.exp,
@@ -190,7 +190,6 @@ def to_ufl(model, settings):
     ufl_vars = [Q[i] for i in range(3)] + [parameters[0]]
     
     a = sympy_matrix_to_ufl(flux[0], list_matrix_symbols, ufl_vars)
-    print(a)
     return a
 
 
@@ -287,7 +286,7 @@ def get_lambda_function_boundary(model, function):
 #     return bc_funcs
     
 @define(kw_only=True, slots=True, frozen=True)
-class FenicsXRuntimeModel:
+class UFLRuntimeModel:
     name: str = field()
     n_variables: int = field()
     n_aux_variables: int = field()

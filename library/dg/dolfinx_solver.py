@@ -30,13 +30,13 @@ import numpy.typing as npt
 
 from attrs import define, field
 
-from library.python.fvm.solver import Settings
+from library.python.fvm.solver_jax import Settings
 from library.model.models.shallow_water import ShallowWaterEquations
 from library.python.mesh.mesh import Mesh
 import library.model.initial_conditions as IC
 import library.model.boundary_conditions as BC
 from library.python.misc.misc import Zstruct
-import library.transformation.to_ufl as trafo
+import library.python.transformation.to_ufl as trafo
 
 from library.model.sympy2c_new import *
 from sympy import symbols
@@ -54,24 +54,46 @@ import basix.quadrature as bxquad
 
 
 def load_mesh(path_to_mesh):
-    mesh = Mesh.from_gmsh(path_to_mesh)
-    min_inradius = np.min(mesh.cell_inradius)
-    tags = [int(v) for v in mesh.boundary_conditions_sorted_physical_tags]
-    tags.sort()
-    map_tag_to_id = {v: i for i, v in enumerate(tags)}
+    comm = MPI.COMM_WORLD
+
+    print(comm.rank, " rank")
+
+    if comm.rank == 0:
+        print(comm.rank, " read")
+
+        # Run custom serial-only mesh parser
+        mesh_serial = Mesh.from_gmsh(path_to_mesh)
+        min_inradius = float(np.min(mesh_serial.cell_inradius))
+        tags = [int(v) for v in mesh_serial.boundary_conditions_sorted_physical_tags]
+        tags.sort()
+        map_tag_to_id = {v: i for i, v in enumerate(tags)}
+        print(comm.rank, " done reading")
+
+    else:
+        print(comm.rank, " idle")
+        min_inradius = None
+        map_tag_to_id = None
+
+    # Broadcast the scalar and the dict to all ranks
+    min_inradius = comm.bcast(min_inradius, root=0)
+    map_tag_to_id = comm.bcast(map_tag_to_id, root=0)
+    print(comm.rank, " min_inradius")
     
     mesh, cell_tags, facet_tags = gmshio.read_from_msh(
         path_to_mesh, MPI.COMM_WORLD, 0, gdim=2
     )
+    print(comm.rank, " read_msh")
+
     unique_facet_tags = np.unique(facet_tags.values)
     facet_boundary_function_id = np.array([map_tag_to_id[tag] for tag in facet_tags.values[:]])
     return mesh, cell_tags, facet_tags, unique_facet_tags, facet_boundary_function_id, min_inradius
 
 
-def create_function_space(domain):
-    elem_Q = basix.ufl.element("DG", domain.topology.cell_name(), 0, shape=(3,))
+def create_function_space(domain, model):
+    assert model.n_aux_variables > 0
+    elem_Q = basix.ufl.element("DG", domain.topology.cell_name(), 0, shape=(model.n_variables,))
     space_Q = fem.functionspace(domain, elem_Q)
-    elem_Qaux= basix.ufl.element("DG", domain.topology.cell_name(), 0, shape=(2,))
+    elem_Qaux= basix.ufl.element("DG", domain.topology.cell_name(), 0, shape=(model.n_aux_variables,))
     space_Qaux = fem.functionspace(domain, elem_Qaux)
     return space_Q, space_Qaux
 
@@ -235,6 +257,9 @@ class DolfinxHyperbolicSolver():
 
     def numerical_flux(self, model, Ql, Qr, Qauxl, Qauxr, parameters, n, domain):
         return ufl.dot(0.5 *(model.flux(Ql, Qauxl, parameters)+ model.flux(Qr, Qauxr, parameters)), n)- 0.5 * 0.5*(self.max_abs_eigenvalue(model, Ql, Qauxl, n, domain) + self.max_abs_eigenvalue(model, Qr, Qauxr, n, domain) )* self.IdentityMatrix * (Qr- Ql)
+    
+    def source(self, model, Q, Qaux, parameters, domain):
+        return ufl.as_vector(model.source(Q, Qaux, parameters)[:,0])
 
     def extract_scalar_fields(self, Q):
         n_dofs = Q.function_space.num_sub_spaces
@@ -272,9 +297,11 @@ class DolfinxHyperbolicSolver():
         global_max_eigenvalue = MPI.COMM_WORLD.allreduce( local_max_eigenvalue, op=MPI.MAX)
         
         dt = self.CFL * reference_cell_diameter / global_max_eigenvalue
+
         
         if np.isnan(dt) or np.isinf(dt) or dt < 10**(-6):
             dt = 10**(-6)
+            
 
         return dt
 
@@ -295,13 +322,11 @@ class DolfinxHyperbolicSolver():
         dS = ufl.Measure("dS", domain=domain)
         # facet_tags = generate_facets_tags(domain, P0, P1)
         ds = ufl.Measure("ds", domain=domain, subdomain_data=facet_tags)
-        dx = ufl.dx
-
+        dx = ufl.Measure("dx", domain=domain)
 
         # implicit/explicit switch
-        q = q_n
-        qaux = qaux_n
-        # q_ghost = ufl.Function(functionspace)
+        q = q_np
+        qaux = qaux_np
 
 
         # We would like to have gradients of the bottom topography. However, DG0 is constant in each cell, resulting in zero gradients.
@@ -319,18 +344,14 @@ class DolfinxHyperbolicSolver():
         # weak formulation
         weak_form =  ufl.dot(test_q, (trial_q-q)/dt) * dx
         weak_form += ufl.dot((test_q("+") - test_q("-")), 
-                            self.numerical_flux(model, q("+"), q("-"), qaux("+"), qaux("-"), parameters, n("+"), domain)) * dS
+                            self.numerical_flux(model, q_n("+"), q_n("-"), qaux_n("+"), qaux_n("-"), parameters, n("+"), domain)) * dS
         # weak_form += ufl.dot((test_q), numerical_flux(q, q_extrapolation, n)) * (ds(1) + ds(2) + ds(3) + ds(4))
         for i, tag in enumerate(unique_facet_tags):
-            # q_ghost.interpolate(boundary_functions[i](q))
             #TODO dX is wrong
             dX = x[0]
-            weak_form += ufl.dot((test_q), self.numerical_flux(model, q, model.bcs(t, x, dX, q, qaux, parameters, n)[i,:], qaux, qaux,parameters, n, domain)) * ds(tag)
-            # weak_form += ufl.dot((test_q), numerical_flux(q, q, n)) * ds(tag)
+            weak_form += ufl.dot((test_q), self.numerical_flux(model, q_n, model.bcs(t, x, dX, q_n, qaux_n, parameters, n)[i,:], qaux_n, qaux_n,parameters, n, domain)) * ds(tag)
 
-        #################TODO#################################
-        weak_form += 0
-        ######################################################
+        weak_form += ufl.dot(test_q, self.source(model, q, qaux, parameters, domain)) * dx
 
 
         weak_form_lhs = fem.form(ufl.lhs(weak_form))
@@ -356,7 +377,7 @@ class DolfinxHyperbolicSolver():
         
         domain, cell_tags, facet_tags, unique_facet_tags, facet_boundary_function_id, min_inradius = load_mesh(path_to_mesh)
         ic = model.initial_conditions.function
-        model = trafo.FenicsXRuntimeModel.from_model(domain, model)
+        model = trafo.UFLRuntimeModel.from_model(domain, model)
         
         ### Parameters
         gx = dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(0))
@@ -366,7 +387,7 @@ class DolfinxHyperbolicSolver():
         
         reference_edge_length = min_inradius
         
-        functionspace, functionspace_qaux = create_function_space(domain)
+        functionspace, functionspace_qaux = create_function_space(domain, model)
         parameters = model.parameters
         
         
@@ -537,7 +558,7 @@ class PreciceDolfinxHyperbolicSolver(DolfinxHyperbolicSolver):
         
         domain, cell_tags, facet_tags, unique_facet_tags, facet_boundary_function_id, min_inradius = load_mesh(path_to_mesh)
         ic = model.initial_conditions.function
-        model = trafo.FenicsXRuntimeModel.from_model(domain, model)
+        model = trafo.UFLRuntimeModel.from_model(domain, model)
         
         ### Parameters
         gx = dolfinx.fem.Constant(domain, dolfinx.default_scalar_type(0))
@@ -547,7 +568,7 @@ class PreciceDolfinxHyperbolicSolver(DolfinxHyperbolicSolver):
         
         reference_edge_length = min_inradius
         
-        functionspace, functionspace_qaux = create_function_space(domain)
+        functionspace, functionspace_qaux = create_function_space(domain, model)
         parameters = model.parameters
         
         
