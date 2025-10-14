@@ -4,4 +4,4 @@
 
 | | |
 | --- | --- |
-| [fvm.solver.Settings](fvm.solver.Settings.qmd#library.python.fvm.solver.Settings) |  |
+| [fvm.solver_jax.Settings](fvm.solver_jax.Settings.qmd#library.python.fvm.solver_jax.Settings) |  |

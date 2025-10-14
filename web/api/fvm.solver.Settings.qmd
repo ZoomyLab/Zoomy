@@ -1,6 +1,6 @@
-# fvm.solver.Settings { #library.python.fvm.solver.Settings }
+# fvm.solver_jax.Settings { #library.python.fvm.solver_jax.Settings }
 
 ```python
-fvm.solver.Settings()
+fvm.solver_jax.Settings()
 ```
 
