@@ -1,0 +1,8 @@
+name: zoomy
+channels:
+  - conda-forge
+
+dependencies:
+  - petsc
+  - petsc4py
+  - fenics-dolfinx 

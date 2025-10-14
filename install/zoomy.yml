@@ -4,7 +4,7 @@ channels:
   - lrntct
 
 dependencies:
-  - python=3.12
+  - python>=3.13
   - sympy>=1.13.3
   - attrs
   - numpy
@@ -16,26 +16,21 @@ dependencies:
   - meshio
   - scipy
   - h5py
-  - petsc
-  - petsc4py
   - pyvista
   - trame
   - trame-vtk
   - trame-vuetify
   - seaborn
-  - jax
-  - jaxlib
-  - jaxopt
   - panel
   - pygments
   - swashes  # from lrntct channel
   - pyswashes
-  - fenics-dolfinx 
   - gmsh
   - python-gmsh
   - jupytext
   - precice
   - rasterio
+  - openmpi-mpicc
   - pip
   - jupyter-cache
   - pip:
