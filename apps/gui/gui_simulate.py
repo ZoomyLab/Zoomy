@@ -1,6 +1,6 @@
 import os
 from library.model.models import *
-from library.python.fvm.solver import *
+from library.python.fvm.solver_jax import *
 import library.python.fvm.flux
 import library.python.fvm.reconstruction
 import library.python.fvm.nonconservative_flux
