@@ -1,0 +1,22 @@
+name: zoomy-pyodide
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - sympy>=1.13.3
+  - attrs
+  - pytest
+  - pytest-html
+  - meshio
+  - panel        # client-side only
+  - pygments
+  - jupytext
+  - jupyter-cache
+  - seaborn
+  - trame
+  - trame-vuetify
+  - pip
+  - pip:
+    - pyprog
+    - tol-colors
+    - python-dotenv
