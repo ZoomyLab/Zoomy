@@ -1,1 +1,1 @@
-{"project": "library", "version": "0.0.9999", "count": 1, "items": [{"name": "library.python.fvm.solver.Settings", "domain": "py", "role": "class", "priority": "1", "uri": "api/fvm.solver.Settings.html#library.python.fvm.solver.Settings", "dispname": "-"}]}
+{"project": "library", "version": "0.0.9999", "count": 1, "items": [{"name": "library.python.fvm.solver_jax.Settings", "domain": "py", "role": "class", "priority": "1", "uri": "api/fvm.solver_jax.Settings.html#library.python.fvm.solver_jax.Settings", "dispname": "-"}]}

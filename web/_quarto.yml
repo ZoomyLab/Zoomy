@@ -11,7 +11,7 @@ quartodoc:
     - title: 
       desc: Test
       contents:
-        - fvm.solver.Settings
+        - fvm.solver_jax.Settings
 
 
 website:
