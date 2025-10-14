@@ -1,8 +1,8 @@
-# Zoomy
+# oomy
 
 Flexible modeling and simulation software for free-surface flows.
 
-![](web/images/overview2.png){fig-align="center" width="682"}
+![](web/images/overview2.png)
 
 Zoomy's main objective is to provide a convenient modeling interface for complex free-surface flow models. Zoomy transitions from a **symbolic** modeling layer to **numerical** layer, compatible with a multitude of numerical solvers, e.g. Numpy, Jax, Firedrake, FenicsX, OpenFOAM and AMReX. Additionally, we support the PreCICE coupling framework in many of our numerical implementations, to allow for a convenient integration of our solver with your existing code.
 
