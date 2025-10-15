@@ -115,6 +115,8 @@ web/tutorials/amrex/adjusted_release_artificial.tif
 8*
 9*
 *.log
+yPlus
+**/0/uniform/
 dynamicCode
 functionObjects
 web/tutorials/precice/from_tut/fl1.save

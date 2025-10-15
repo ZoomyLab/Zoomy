@@ -6,9 +6,11 @@ FoamFile
     object      controlDict;
 }
 
-application     interFoam;
+application     foamRun;
 
-startFrom       startTime;
+solver          incompressibleVoF;
+
+startFrom       latestTime;
 
 startTime       0.0;
 
@@ -44,5 +46,11 @@ maxAlphaCo      0.2;
 
 maxDeltaT       1;
 
-writeObjects (nut k epsilon);
+
+libs ();
+
+functions
+{
+    #includeFunc yPlus
+}
 
