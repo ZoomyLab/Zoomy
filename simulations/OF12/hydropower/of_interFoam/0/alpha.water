@@ -49,7 +49,7 @@ internalField   #codeStream
 		    }
 		}
 
-                alpha.writeEntry("", os);
+                writeEntry(os, "", alpha);
         #};
 };
 

@@ -32,9 +32,8 @@ boundaryField
 
     top_wall
     {
-        type            totalPressure;
+        type            prghTotalPressure;
         p0              uniform 0;
-        value           uniform 0;
     }
 
     defaultFaces

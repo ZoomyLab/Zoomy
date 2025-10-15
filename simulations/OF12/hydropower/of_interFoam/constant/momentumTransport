@@ -1,0 +1,24 @@
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      momentumTransport;
+}
+
+//simulationType  laminar;
+simulationType  RAS;
+RAS
+{
+    RASModel    kEpsilon;
+    turbulence  on;
+    printCoeffs on;
+
+    //kEpsilonCoefs
+    //{
+    //    Cmu         0.09;
+    //    C1          1.44;
+    //    C2          1.92;
+    //    sigmak      1.0;
+    //    sigmaEps    1.3;
+    //}
+}
