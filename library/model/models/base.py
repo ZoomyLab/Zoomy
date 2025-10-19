@@ -67,6 +67,8 @@ class JaxRuntimeModel:
     parameters: FArray = field()
     flux: list[Callable] = field()
     flux_jacobian: list[Callable] = field()
+    dflux: list[Callable] = field()
+    dflux_jacobian: list[Callable] = field()
     source: Callable = field()
     source_jacobian: Callable = field()
     nonconservative_matrix: list[Callable] = field()
@@ -95,8 +97,10 @@ class JaxRuntimeModel:
             n_aux_variables=model.n_aux_variables,
             n_parameters=model.n_parameters,
             parameters=model.parameter_values,
-            flux=pde.flux,
-            flux_jacobian=pde.flux_jacobian,
+            flux=pde.dflux,
+            flux_jacobian=pde.dflux_jacobian,
+            dflux=pde.flux,
+            dflux_jacobian=pde.flux_jacobian,
             source=pde.source,
             source_jacobian=pde.source_jacobian,
             nonconservative_matrix=pde.nonconservative_matrix,
@@ -308,6 +312,37 @@ class Model:
             printer,
         )
         flux_jacobian = l_flux_jacobian
+        
+        l_dflux = [
+            lambdify(
+                (
+                    self.variables.get_list(),
+                    self.aux_variables.get_list(),
+                    self.parameters.get_list(),
+                ),
+                vectorize_constant_sympy_expressions(
+                    self.dflux()[d], self.variables, self.aux_variables
+                ),
+                printer,
+            )
+            for d in range(self.dimension)
+        ]
+        dflux = [
+            lambda Q, Qaux, param, f=l_dflux[d]: self.squeeze(printer=printer)(
+                self.array(printer=printer)(f(Q, Qaux, param)), axis=1
+            )
+            for d in range(self.dimension)
+        ]
+        l_dflux_jacobian = lambdify(
+            [
+                self.variables.get_list(),
+                self.aux_variables.get_list(),
+                self.parameters.get_list(),
+            ],
+            self.dflux_jacobian(),
+            printer,
+        )
+        dflux_jacobian = l_dflux_jacobian
 
         l_nonconservative_matrix = [
             lambdify(
@@ -483,6 +518,8 @@ class Model:
         d = {
             "flux": flux,
             "flux_jacobian": flux_jacobian,
+            "dflux": dflux,
+            "dflux_jacobian": dflux_jacobian,
             "nonconservative_matrix": nonconservative_matrix,
             "quasilinear_matrix": quasilinear_matrix,
             "eigenvalues": eigenvalues,
@@ -498,6 +535,9 @@ class Model:
 
     def flux(self):
         return [Matrix(self.variables[:]) for d in range(self.dimension)]
+    
+    def dflux(self):
+        return [0 for d in range(self.dimension)]
 
     def nonconservative_matrix(self):
         return [zeros(self.n_variables, self.n_variables) for d in range(self.dimension)]
@@ -509,6 +549,12 @@ class Model:
         """ generated automatically unless explicitly provided """
         return [ self._simplify(
                 Matrix(self.flux()[d]).jacobian(self.variables),
+            ) for d in range(self.dimension) ]
+        
+    def dflux_jacobian(self):
+        """ generated automatically unless explicitly provided """
+        return [ self._simplify(
+                Matrix(self.dflux()[d]).jacobian(self.variables),
             ) for d in range(self.dimension) ]
 
     def quasilinear_matrix(self):

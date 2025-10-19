@@ -28,6 +28,19 @@ class FoamPrinter(CXX11CodePrinter):
         self.map_position = {k: ["X.x()", "X.y()", "X.z()"][i] for i, k in enumerate(model.position.values())}
 
         self._std_regex = re.compile(r'std::([A-Za-z_]\w*)')
+        
+        self._argument_table = {"Q": "const Foam::List<Foam::scalar>& Q",
+        "Qaux": "const Foam::List<Foam::scalar>& Qaux",
+        "n": "const Foam::vector& n",
+        "X": "const Foam::vector& X",
+        "time": "const Foam::scalar& time",
+        "dX": "const Foam::scalar& dX",
+        "z": "const Foam::scalar& z"
+        }
+                   
+    def get_function_arguments(self, arguments):
+        out = ",\n".join([self._argument_table[arg] for arg in arguments])
+        return out
 
     # --- Symbol printing --------------------------------------------------
     def _print_Symbol(self, s):
@@ -84,6 +97,24 @@ class FoamPrinter(CXX11CodePrinter):
 
     def create_file_footer(self):
         return "\n} // namespace Model\n"
+    
+    def create_generic_function(self, name, expr, arguments, n_dof_q, n_dof_qaux, target='res'):
+        if isinstance(expr, list):
+            dim = len(expr)
+            return [self.create_function(f"{name}_{d}", expr[i], n_dof_q, n_dof_qaux)
+                    for i, d in enumerate(['x', 'y', 'z'][:dim])]
+
+        rows, cols = expr.shape
+        body = self.convert_expression_body(expr, target)
+        return f"""
+inline Foam::List<Foam::List<Foam::scalar>> {name}(
+    {self.get_function_arguments(arguments)})
+{{
+    auto {target} = {self.createMatrix(rows, cols)};
+    {body}
+    return {target};
+}}
+        """
 
     # --- Function generators ---------------------------------------------
     def create_function(self, name, expr, n_dof_q, n_dof_qaux, target='res'):
@@ -158,13 +189,15 @@ inline Foam::List<Foam::List<Foam::scalar>> {name}(
         """
 
     # --- Full model generation ------------------------------------------
-    def create_model(self, model):
+    def create_model(self, model, additional_writes=None):
         n_dof = model.n_variables
         n_dof_qaux = model.n_aux_variables
         dim = model.dimension
         funcs = []
         funcs += self.create_function('flux', model.flux(), n_dof, n_dof_qaux)
         funcs += self.create_function('flux_jacobian', model.flux_jacobian(), n_dof, n_dof_qaux)
+        funcs += self.create_function('dflux', model.dflux(), n_dof, n_dof_qaux)
+        funcs += self.create_function('dflux_jacobian', model.dflux_jacobian(), n_dof, n_dof_qaux)
         funcs += self.create_function('nonconservative_matrix', model.nonconservative_matrix(), n_dof, n_dof_qaux)
         funcs += self.create_function('quasilinear_matrix', model.quasilinear_matrix(), n_dof, n_dof_qaux)
         funcs.append(self.create_function_normal('eigenvalues', model.eigenvalues(), n_dof, n_dof_qaux, dim))
@@ -180,13 +213,17 @@ inline Foam::List<Foam::List<Foam::scalar>> {name}(
                 model.time, model.position, model.distance,
                 model.variables, model.aux_variables, model.parameters, model.normal),
             n_dof, n_dof_qaux, dim))
+        if additional_writes is not None:
+            for a in additional_writes:
+                funcs.append(self.create_generic_function(
+                    a['name'], a['expression'], a['arguments'], n_dof, n_dof_qaux))
 
         return self.create_file_header(n_dof, n_dof_qaux, dim, model.boundary_conditions.list_sorted_function_names) + "\n".join(funcs) + self.create_file_footer()
 
 
-def write_code(model, settings):
+def write_code(model, settings, additional_writes=None):
     printer = FoamPrinter(model)
-    code = printer.create_model(model)
+    code = printer.create_model(model, additional_writes=additional_writes)
     main_dir = os.getenv("ZOOMY_DIR")
     path = os.path.join(main_dir, settings.output.directory, ".foam_interface")
     os.makedirs(path, exist_ok=True)
