@@ -23,11 +23,13 @@ from library.model.models.base import Model
 from library.model.models.basismatrices import Basismatrices
 from library.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
+from sympy.integrals.quadrature import gauss_legendre
+
 
     
 
 @define(frozen=True, slots=True, kw_only=True)
-class ShallowMomentsTopo(Model):
+class SMET(Model):
     dimension: int = 2
     level: int
     variables: Union[list, int] = field(init=False)
@@ -38,7 +40,7 @@ class ShallowMomentsTopo(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000},
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000., 'nu': 1e-6, 'kappa': 0.41},
     )
 
     def __attrs_post_init__(self):
@@ -230,60 +232,84 @@ class ShallowMomentsTopo(Model):
         for beta_i in beta_erase:
             A = A.subs(beta_i, 0)
         return eigenvalue_dict_to_matrix(A.eigenvals())
+    
 
+    def Sij(self):
+        out = sympy.zeros(self.dimension, self.dimension)
+        z = sympy.Symbol('z')
+        level = self.level
+        offset = level+1
+        phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
+        
+        if self.dimension == 1:
+            dUdx = self.aux_variables[2:2+offset]
+            dUdx = sum([dUdx[k] * phi[k] for k in range(level+1)])
+            gradU = [[dUdx]]
+        elif self.dimension ==2:
+            dUdx = self.aux_variables[2:2+offset]
+            dUdx = sum([dUdx[k] * phi[k] for k in range(level+1)])
+            dVdx = self.aux_variables[2+offset:2+2*offset]
+            dVdx = sum([dVdx[k] * phi[k] for k in range(level+1)])
+            dUdy = self.aux_variables[2+2*offset:2+3*offset]
+            dUdy = sum([dUdy[k] * phi[k] for k in range(level+1)])
+            dVdy = self.aux_variables[2+3*offset:2+4*offset]
+            dVdy = sum([dVdy[k] * phi[k] for k in range(level+1)])
+            gradU = [[dUdx, dUdy], [dVdx, dVdy]]
+        else:
+            assert False
+
+        for d1 in range(self.dimension):
+            for d2 in range(self.dimension):
+                out[d1, d2] = 0.5 * (gradU[d1][d2] + gradU[d2][d1])
+
+        return out
+    
+    def abs_Sij(self):
+        Sij = self.Sij()
+        out = 0
+        for i in range(self.dimension):
+            for j in range(self.dimension):
+                out += Sij[i,j]**2
+        out = sympy.sqrt(2 * out)
+        return out
+    
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         return out
-
-    def newtonian(self):
-        assert "nu" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level + 1
-        b, h, alpha, beta, hinv = self.get_primitives()
-        p = self.parameters
-        for k in range(1 + self.level):
-            for i in range(1 + self.level):
-                out[1+1 + k] += (
-                    -p.nu
-                    * alpha[i]
-                    * hinv
-                    * self.basismatrices.D[i, k]
-                    / self.basismatrices.M[k, k]
-                )
-                if self.dimension == 2:
-                    out[1+1 + k + offset] += (
-                        -p.nu
-                        * beta[i]
-                        * hinv
-                        * self.basismatrices.D[i, k]
-                        / self.basismatrices.M[k, k]
-                    )
-        return out
-
-    def slip_mod(self):
-        assert "lamda" in vars(self.parameters)
-        assert "rho" in vars(self.parameters)
-        assert "c_slipmod" in vars(self.parameters)
-
-        out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level+1
-        b, h, alpha, beta, hinv = self.get_primitives()
-        p = self.parameters
-        ub = 0
-        vb = 0
-        for i in range(1 + self.level):
-            ub += alpha[i]
-            vb += beta[i]
-        for k in range(1, 1 + self.level):
-            out[2 + k] += (
-                -1.0 * p.c_slipmod / p.lamda / p.rho * ub / self.basismatrices.M[k, k]
-            )
-            if self.dimension == 2:
-                out[2+offset+k] += (
-                    -1.0 * p.c_slipmod / p.lamda / p.rho * vb / self.basismatrices.M[k, k]
-                )
-        return out
-
+    
+    def dflux(self):
+        """
+        diffusive flux due to the Smagorinsky model
+        """
+        dflux = [sympy.zeros(self.n_variables, 1) for d in range(self.dimension)]
+        z = sympy.Symbol('z')
+        level = self.level
+        offset = level+1
+        phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
+        rho = self.parameters.rho
+        dX = self.distance
+        Cs = self.parameters.Cs
+        
+        xi, wi = gauss_legendre(4, 8)
+        xi = [0.5 * (x + 1) for x in xi]
+        wi = [0.5 * w for w in wi]
+        
+        h = self.variables[1]
+        abs_Sij = self.abs_Sij()
+        Sij = self.Sij()
+        
+        integral = 0
+        for i in range(len(xi)):
+                zi = xi[i]
+                integral += wi[i] * 2 * rho * (Cs * dX)**2 * abs_Sij * h
+        for k in range(level+1):
+            for d1 in range(self.dimension):
+                for d2 in range(self.dimension):
+                    dflux[d1][2 + d2 * offset + k, 0] += integral.subs(z, zi) * phi[k].subs(z, zi)  * Sij[d1, d2].subs(z, zi)
+        for k in range(level+1):
+            for d in range(self.dimension):
+                dflux[d][2+k, 0] /= self.basismatrices.M[k, k]
+        return [dflux[d] for d in range(self.dimension)]
 
     def slip(self):
         assert "lamda" in vars(self.parameters)
@@ -303,93 +329,14 @@ class ShallowMomentsTopo(Model):
                     )
         return out
 
-    def chezy(self):
-        assert "C" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level + 1
-        b, h, alpha, beta, hinv = self.get_primitives()
-        p = self.parameters
-        tmp = 0
-        for i in range(1 + self.level):
-            for j in range(1 + self.level):
-                tmp += alpha[i] * alpha[j]  + beta[i] * beta[j]
-        sqrt = sympy.sqrt(tmp)
-        for k in range(1 + self.level):
-            for l in range(1 + self.level):
-                out[1 + k] += (
-                    -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * alpha[l] * sqrt
-                )
-                if self.dimension == 2:
-                    out[1 + k + offset] += (
-                        -1.0 / (p.C**2 * self.basismatrices.M[k, k]) * beta[l] * sqrt
-                    )
-        return out
-    
-    def gravity(self):
-        out = Matrix([0 for i in range(self.n_variables)])
-        out[2] = -self.parameters.g * self.parameters.ex * self.variables[0]
-        if self.dimension == 2:
-            offset = self.level + 1
-            out[2 + offset] = -self.parameters.g * self.parameters.ey * self.variables[0]
-        return out
-    
-    def newtonian_turbulent_algebraic(self):
-        assert "nu" in vars(self.parameters)
-        assert "l_bl" in vars(self.parameters)
-        assert "l_turb" in vars(self.parameters)
-        assert "kappa" in vars(self.parameters)
-        out = Matrix([0 for i in range(self.n_variables)])
-        offset = self.level + 1
-        
-        b, h, a, b, hinv = self.get_primitives()
-        
-        p = self.parameters
-        dU_dx = a[0] / (p.l_turb * h)
-        abs_dU_dx = sympy.Piecewise((dU_dx, dU_dx >=0), (-dU_dx, True))
-        for k in range(1 + self.level):
-            out[1 + k] += (
-                -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dU_dx) * p.l_bl * ( 1-p.l_bl)) * dU_dx * self.basismatrices.phib[k] * hinv
-            )
-            for i in range(1 + self.level):
-                out[1 + k] += (
-                    -p.nu * hinv
-                    * a[i]
-                    * self.basismatrices.D[i, k]
-                )
-                out[1 + k] += (
-                    -p.kappa * sympy.sqrt(p.nu * abs_dU_dx) * hinv
-                    * a[i]
-                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])
-                )
-        if self.dimension == 2:
-            dV_dy = b[0] / (p.l_turb * h)
-            abs_dV_dy = sympy.Piecewise((dV_dy, dV_dy >=0), (-dV_dy, True))
-            for k in range(1 + self.level):
-                out[1 + k + offset] += (
-                    -(p.nu + p.kappa * sympy.sqrt(p.nu * abs_dV_dy) * p.l_bl * ( 1-p.l_bl)) * dV_dy * self.basismatrices.phib[k] *hinv
-                )
-                for i in range(1 + self.level):
-                    out[1 + k + offset] += (
-                        -p.nu
-                        / h
-                        * b[i]
-                        * self.basismatrices.D[i, k]
-                    )
-                    out[1 + k + offset] += (
-                    -p.kappa * sympy.sqrt(p.nu * abs_dV_dy) * hinv
-                    * b[i]
-                    * (self.basismatrices.Dxi[i, k] - self.basismatrices.Dxi2[i, k])
-                )
-
-        return out
 
 @define(frozen=True, slots=True, kw_only=True)
-class ShallowMomentsTopoNumerical(ShallowMomentsTopo):
+class SMETNum(SMET):
     ref_model: Model = field(init=False)
     
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        object.__setattr__(self, "ref_model", ShallowMomentsTopo(level=self.level, dimension=self.dimension, boundary_conditions=self.boundary_conditions))
+        object.__setattr__(self, "ref_model", SMET(level=self.level, dimension=self.dimension, boundary_conditions=self.boundary_conditions))
 
     def flux(self):
         return [self.substitute_precomputed_denominator(f, self.variables[1], self.aux_variables.hinv) for f in self.ref_model.flux()]      

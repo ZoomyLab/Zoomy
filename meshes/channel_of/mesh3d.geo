@@ -1,11 +1,10 @@
 scale = 1;
-dx = 101/scale;
-dy = 11/scale;
-dz = 11/scale;
+dx = 100/scale;
+dy = 10/scale;
+dz = 10/scale;
 
-x0 = 8;
-x1 = 18;
-
+x0 = 0;
+x1 = 10;
 Point(10) = {x0, 0,  0, scale};
 Point(11) = {x1, 0,  0, scale};
 Point(20) = {x0, 1, 0, scale};

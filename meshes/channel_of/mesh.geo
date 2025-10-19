@@ -1,11 +1,9 @@
 scale = 1;
-dx = 101/scale;
-dy = 11/scale;
-dz = 11/scale;
+dx = 100/scale;
+dy = 10/scale;
 
 x0 = 8;
 x1 = 18;
-
 Point(10) = {x0, 0,  0, scale};
 Point(11) = {x1, 0,  0, scale};
 Point(20) = {x0, 1, 0, scale};
@@ -49,7 +47,7 @@ Plane Surface(2003) = {1003};
 Plane Surface(2004) = {1004};
 Plane Surface(2005) = {1005};
 
-Transfinite Line {311, 312, 313, 314 } = dz;
+Transfinite Line {311, 312, 313, 314 } = 1;
 Transfinite Line {111, 112, 211, 212} = dx;
 Transfinite Line {114, 214, 113, 213} = dy;
 
@@ -62,10 +60,7 @@ Recombine Surface "*";
 Recombine Volume "*";
 
 
-Physical Surface("top", 5000) = {2000};
-Physical Surface("bottom", 5001) = {2001};
-Physical Surface("front_wall", 5002) = {2002};
-Physical Surface("back_wall", 5003) = {2003};
+Physical Surface("wall", 5002) = {2002, 2003};
 Physical Surface("inflow", 5004) = {2004};
 Physical Surface("outflow", 5005) = {2005};
 

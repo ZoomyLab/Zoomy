@@ -15,7 +15,7 @@ using namespace Foam;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField*>& Q, List<volScalarField*>& Qaux, List<surfaceScalarField*>& F)
+void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField*>& Q, List<volScalarField*>& Qaux, List<surfaceScalarField*>& Dp, List<surfaceScalarField*>& Dm)
 {
 
     forAll(Q, QI)
@@ -115,19 +115,34 @@ void initialize_fields(word runTimeName, const fvMesh& mesh, List<volScalarField
             }
         }
     }
-    forAll(F, FI)
+    forAll(Dp, DpI)
     {
-        F[FI] = new surfaceScalarField (
+        Dp[DpI] = new surfaceScalarField (
             IOobject
             (
-                "F" + std::to_string(FI),
+                "Dp" + std::to_string(DpI),
                 runTimeName,
                 mesh,
                 IOobject::NO_READ,
                 IOobject::AUTO_WRITE
             ),
             mesh,
-            dimensionedScalar("", Q[FI]->dimensions() * dimVelocity * dimArea, 0)
+            dimensionedScalar("", Q[DpI]->dimensions() * dimVelocity * dimArea, 0)
+        );
+    }
+    forAll(Dm, DmI)
+    {
+        Dm[DmI] = new surfaceScalarField (
+            IOobject
+            (
+                "Dm" + std::to_string(DmI),
+                runTimeName,
+                mesh,
+                IOobject::NO_READ,
+                IOobject::AUTO_WRITE
+            ),
+            mesh,
+            dimensionedScalar("", Q[DmI]->dimensions() * dimVelocity * dimArea, 0)
         );
     }
 }
