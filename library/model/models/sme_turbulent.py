@@ -37,6 +37,7 @@ class SMET(Model):
     aux_variables: Union[list, int] = field(default=0)
     basisfunctions: Union[Basisfunction, type[Basisfunction]] = field(default=Legendre_shifted)
     basismatrices: Basismatrices = field(init=False)
+    order_numerical_integration: int = 4
 
     _default_parameters: dict = field(
         init=False,
@@ -45,7 +46,7 @@ class SMET(Model):
 
     def __attrs_post_init__(self):
         object.__setattr__(self, "variables", ((self.level+1)*self.dimension)+2)
-        object.__setattr__(self, "aux_variables", 2*((self.level+1)*self.dimension+2))
+        object.__setattr__(self, "aux_variables", 2*((self.level+1)*self.dimension+2)+2+self.aux_variables)
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
@@ -71,24 +72,63 @@ class SMET(Model):
         beta = [hb[i] * hinv for i in range(offset)]
         return [b, h, alpha, beta, hinv]
 
+    def get_gradient(self):
+        offset = self.level + 1
+        z = sympy.Symbol('z')
+        phi = [self.basisfunctions.eval(k, z) for k in range(self.level+1)]
+        
+        
+        if self.dimension == 1:
+            grad_b = [self.aux_variables[0]]
+            grad_h = [self.aux_variables[1]]
+            dalpha_dx = self.aux_variables[2:2+offset]
+            dU_dx = sum([dalpha_dx[k] * phi[k] for k in range(self.level+1)])
+            grad_alpha = [dalpha_dx]
+            grad_beta = [0 for i in range(offset)]
+            grad_U = [[dU_dx, 0], [0, 0]]
+        elif self.dimension == 2:
+            gradient_offset = self.n_variables
+            grad_b = [self.aux_variables[0], self.aux_variables[0+gradient_offset]]
+            grad_h = [self.aux_variables[1], self.aux_variables[1+gradient_offset]]
+            dalpha_dx = self.aux_variables[2:2+offset]
+            dalpha_dy = self.aux_variables[2+gradient_offset: 2+gradient_offset+offset]
+            dU_dx = sum([dalpha_dx[k] * phi[k] for k in range(self.level+1)])
+            dU_dy = sum([dalpha_dy[k] * phi[k] for k in range(self.level+1)])
+            grad_alpha = [dalpha_dx, dalpha_dy]
+            
+            dbeta_dx = self.aux_variables[2+offset: 2+2*offset]
+            dbeta_dy = self.aux_variables[2+offset+gradient_offset: 2+2*offset+gradient_offset]
+            dV_dx = sum([dbeta_dx[k] * phi[k] for k in range(self.level+1)])
+            dV_dy = sum([dbeta_dy[k] * phi[k] for k in range(self.level+1)])
+            grad_beta = [dbeta_dx, dbeta_dy]
+            grad_U = [[dU_dx, dU_dy], [dV_dx, dV_dy]]
+        else:
+            assert False
+
+
+
+        return grad_b, grad_h, grad_alpha, grad_beta, grad_U
+        
+    def get_ustar(self):
+        gradient_offset = self.n_variables
+
+        if self.dimension == 1:
+            u_star = self.aux_variables[gradient_offset]
+        elif self.dimension == 2:
+            u_star = self.aux_variables[2*gradient_offset: 2*gradient_offset+2]
+        return u_star
 
     def interpolate_3d(self):
         out = Matrix([0 for i in range(6)])
         level = self.level
         offset = level+1
-        offset_aux = self.n_variables
+        offset_aux = self.n_aux_variables
         x = self.position[0]
         y = self.position[1]
         z = self.position[2]
         
         b, h, alpha, beta, hinv = self.get_primitives()
-        dbdx = self.aux_variables[0]
-        dhdx = self.aux_variables[1]
-        dbdy = self.aux_variables[offset_aux]
-        dhdy = self.aux_variables[1+offset_aux]
-        dalphadx = [self.aux_variables[2+i] for i in range(offset)]
-        if self.dimension == 2:
-            dbetady = [self.aux_variables[2+i+offset_aux] for i in range(offset)]
+        grad_b, grad_h, grad_alpha, grad_beta, grad_U = self.get_gradient()
         
         psi = [self.basisfunctions.eval_psi(k, z) for k in range(level+1)]
         phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
@@ -102,10 +142,10 @@ class SMET(Model):
             for i in range(len(a)):
                 s += a[i] * b[i]
             return s
-        w_3d = - dhdx * dot(alpha,psi) - h * dot(dalphadx,psi) + dot(alpha, phi) * (z * dhdx + dbdx)
+        w_3d = - grad_h[0] * dot(alpha,psi) - h * dot(grad_alpha[0],psi) + dot(alpha, phi) * (z * grad_h[0] + grad_b[0])
         if self.dimension == 2:
             v_3d = self.basismatrices.basisfunctions.reconstruct_velocity_profile_at(beta, z)
-            w_3d += - dhdy * dot(beta,psi) - h * dot(dbetady,psi) + dot(beta, phi) * (z * dhdy + dbdy)
+            w_3d += - grad_h[1] * dot(beta,psi) - h * dot(grad_beta[1],psi) + dot(beta, phi) * (z * grad_h[1] + grad_b[1])
 
         out[0] = b
         out[1] = h
@@ -236,31 +276,11 @@ class SMET(Model):
 
     def Sij(self):
         out = sympy.zeros(self.dimension, self.dimension)
-        z = sympy.Symbol('z')
-        level = self.level
-        offset = level+1
-        phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
-        
-        if self.dimension == 1:
-            dUdx = self.aux_variables[2:2+offset]
-            dUdx = sum([dUdx[k] * phi[k] for k in range(level+1)])
-            gradU = [[dUdx]]
-        elif self.dimension ==2:
-            dUdx = self.aux_variables[2:2+offset]
-            dUdx = sum([dUdx[k] * phi[k] for k in range(level+1)])
-            dVdx = self.aux_variables[2+offset:2+2*offset]
-            dVdx = sum([dVdx[k] * phi[k] for k in range(level+1)])
-            dUdy = self.aux_variables[2+2*offset:2+3*offset]
-            dUdy = sum([dUdy[k] * phi[k] for k in range(level+1)])
-            dVdy = self.aux_variables[2+3*offset:2+4*offset]
-            dVdy = sum([dVdy[k] * phi[k] for k in range(level+1)])
-            gradU = [[dUdx, dUdy], [dVdx, dVdy]]
-        else:
-            assert False
 
+        grad_b, grad_h, grad_alpha, grad_beta, grad_U = self.get_gradient()
         for d1 in range(self.dimension):
             for d2 in range(self.dimension):
-                out[d1, d2] = 0.5 * (gradU[d1][d2] + gradU[d2][d1])
+                out[d1, d2] = 0.5 * (grad_U[d1][d2] + grad_U[d2][d1])
 
         return out
     
@@ -273,14 +293,37 @@ class SMET(Model):
         out = sympy.sqrt(2 * out)
         return out
     
-    def source(self):
-        out = Matrix([0 for i in range(self.n_variables)])
+    def Szj(self):
+        out = sympy.zeros(self.dimension)
+
+        b, h, alpha, beta, hinv = self.get_primitives()
+        dphi_dz = self.basisfunctions.get_diff_basis()
+        
+        for k in range(self.level+1):
+            out[0] += alpha[k] * dphi_dz[k]
+        if self.dimension == 2:
+            for k in range(self.level+1):
+                out[1] += beta[k] * dphi_dz[k]
         return out
     
+    def source(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        out += self.mixing_length_vertical()
+        
+        return out
+    
+    
     def dflux(self):
+        return self.smagorinsky_dflux()
+    
+    def smagorinsky_dflux(self):
         """
         diffusive flux due to the Smagorinsky model
         """
+        assert "rho" in vars(self.parameters)
+        assert "Cs" in vars(self.parameters)
+        assert "rho" in vars(self.parameters)
+
         dflux = [sympy.zeros(self.n_variables, 1) for d in range(self.dimension)]
         z = sympy.Symbol('z')
         level = self.level
@@ -290,44 +333,117 @@ class SMET(Model):
         dX = self.distance
         Cs = self.parameters.Cs
         
-        xi, wi = gauss_legendre(4, 8)
+        xi, wi = gauss_legendre(self.order_numerical_integration, 8)
         xi = [0.5 * (x + 1) for x in xi]
         wi = [0.5 * w for w in wi]
-        
-        h = self.variables[1]
+        b, h, alpha, beta, hinv = self.get_primitives()
+
         abs_Sij = self.abs_Sij()
         Sij = self.Sij()
         
-        integral = 0
         for i in range(len(xi)):
-                zi = xi[i]
-                integral += wi[i] * 2 * rho * (Cs * dX)**2 * abs_Sij * h
-        for k in range(level+1):
-            for d1 in range(self.dimension):
-                for d2 in range(self.dimension):
-                    dflux[d1][2 + d2 * offset + k, 0] += integral.subs(z, zi) * phi[k].subs(z, zi)  * Sij[d1, d2].subs(z, zi)
+            zi = xi[i]
+            for k in range(level+1):
+                for d1 in range(self.dimension):
+                    for d2 in range(self.dimension):
+                        dflux[d1][2 + d2 * offset + k, 0] += wi[i] * h*  phi[k].subs(z, zi) * 2 * rho * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)
         for k in range(level+1):
             for d in range(self.dimension):
                 dflux[d][2+k, 0] /= self.basismatrices.M[k, k]
         return [dflux[d] for d in range(self.dimension)]
+    
 
-    def slip(self):
-        assert "lamda" in vars(self.parameters)
+
+        
+    def smagorinsky_source(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        z = sympy.Symbol('z')
+        level = self.level
+        offset = level+1
+        phi = self.basisfunctions.basis
+        dphi_dz = self.basisfunctions.get_diff_basis()
+        rho = self.parameters.rho
+        dX = self.distance
+        Cs = self.parameters.Cs
+        
+        xi, wi = gauss_legendre(self.order_numerical_integration, 8)
+        xi = [0.5 * (x + 1) for x in xi]
+        wi = [0.5 * w for w in wi]
+        b, h, alpha, beta, hinv = self.get_primitives()
+        grad_b, grad_h, grad_alpha, grad_beta, grad_U = self.get_gradient()
+        sigma = [grad_b[0] + z * grad_h[0], grad_b[1] + z * grad_h[1]]
+        
+        
+        abs_Sij = self.abs_Sij()
+        Sij = self.Sij()
+        
+        u_star = self.get_ustar()
+        taub = [rho * u_star[d]**2 for d in range(self.dimension)]
+        for d in range(self.dimension):
+            for k in range(1 + self.level):
+                out[2+k + d*offset] += sigma[d].subs(z, 0) * taub[d] * phi[k].subs(z, 0)
+            
+        
+        for i in range(len(xi)):
+            zi = xi[i]
+            for k in range(level+1):
+                for d1 in range(self.dimension):
+                    for d2 in range(self.dimension):
+                        out[2 + d2 * offset + k, 0] += wi[i] * sigma[d1].subs(z, zi) *  2 * rho * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)  * dphi_dz[k].subs(z, zi)
+
+        
+    
+    def mixing_length_numerical_term(self):
+        assert "kappa" in vars(self.parameters)
+        out = 0
+        b, h, alpha, beta, hinv = self.get_primitives()
+        p = self.parameters
+        z = sympy.Symbol('z')
+        phi = [self.basisfunctions.eval(k, z) for k in range(self.level+1)]
+        u = sum([alpha[k] * phi[k] for k in range(self.level+1)])
+        v = sum([beta[k] * phi[k] for k in range(self.level+1)] )
+        U = [u,v][:self.dimension]
+        
+        for d1 in range(self.dimension):
+            for d2 in range(self.dimension):
+                out += U[d1] * U[d2]
+                
+        eps = 1e-10
+        out += eps
+        out = sympy.sqrt(out)
+        out *= (p.kappa * z * (1-z))**2
+        return out
+
+
+    def mixing_length_vertical(self):
         assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_variables)])
         offset = self.level + 1
         b, h, alpha, beta, hinv = self.get_primitives()
         p = self.parameters
-        for k in range(1 + self.level):
-            for i in range(1 + self.level):
-                out[1+1 + k] += (
-                    -1.0 / p.lamda / p.rho * alpha[i] / self.basismatrices.M[k, k]
-                )
-                if self.dimension == 2:
-                    out[1+1 + k + offset] += (
-                        -1.0 / p.lamda / p.rho * beta[i] / self.basismatrices.M[k, k]
-                    )
+        z = sympy.Symbol('z')
+        phi = [self.basisfunctions.eval(k, z) for k in range(self.level+1)]
+        dphi_dz = self.basisfunctions.get_diff_basis()
+        
+        Szj = self.Szj()
+
+
+        u_star = self.get_ustar()
+        taub = [p.rho * u_star[d]**2 for d in range(self.dimension)]
+        for d in range(self.dimension):
+            for k in range(1 + self.level):
+                out[2+k + d*offset] += taub[d] * phi[k].subs(z, 0)
+            
+        xi, wi = gauss_legendre(self.order_numerical_integration, 8)
+        xi = [0.5 * (x + 1) for x in xi]
+        wi = [0.5 * w for w in wi]
+        
+        for d in range(self.dimension):
+            for i in range(len(xi)):
+                for k in range(self.level+1):
+                    out[2+k+d*offset] -= wi[i] * self.mixing_length_numerical_term().subs(z, xi[i]) * Szj[d].subs(z, xi[i]) * dphi_dz[k].subs(z, xi[i])
         return out
+    
 
 
 @define(frozen=True, slots=True, kw_only=True)
