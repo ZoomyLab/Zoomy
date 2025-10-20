@@ -105,7 +105,7 @@ class Basisfunction:
 
     def get_diff_basis(self):
         db = [diff(b, z) for i, b in enumerate(self.basis)]
-        self.basis = db
+        return db
 
 
 class Monomials(Basisfunction):
