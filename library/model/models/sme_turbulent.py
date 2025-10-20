@@ -14,6 +14,8 @@ from attrs import define, field
 import attr
 from typing import Union, Dict, List
 
+from sympy.functions.elementary.exponential import LambertW
+
 
 from library.model.models.base import (
     register_sympy_attribute,
@@ -41,12 +43,13 @@ class SMET(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000., 'nu': 1e-6, 'kappa': 0.41},
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000., 'nu': 1e-6, 'kappa': 0.41, 'B': 5.2, 'Cs': 0.17, 'yp': 30.0},
     )
 
     def __attrs_post_init__(self):
         object.__setattr__(self, "variables", ((self.level+1)*self.dimension)+2)
-        object.__setattr__(self, "aux_variables", 2*((self.level+1)*self.dimension+2)+2+self.aux_variables)
+        # [dQ_dx, dQ_dy, deltaX, user-defined]
+        object.__setattr__(self, "aux_variables", 2*((self.level+1)*self.dimension+2)+1+self.aux_variables)
         super().__attrs_post_init__()
         aux_variables = self.aux_variables
         aux_var_list = aux_variables.keys()
@@ -110,13 +113,32 @@ class SMET(Model):
         return grad_b, grad_h, grad_alpha, grad_beta, grad_U
         
     def get_ustar(self):
-        gradient_offset = self.n_variables
+        p = self.parameters
+        b, h, alpha, beta, hinv = self.get_primitives()
+        phi = self.basisfunctions.basis
+        z = sympy.Symbol('z')
+        Re_min = 30
+        Up = sum([alpha[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
+        ReU = (Up * p.yp) / p.nu
 
-        if self.dimension == 1:
-            u_star = self.aux_variables[gradient_offset]
-        elif self.dimension == 2:
-            u_star = self.aux_variables[2*gradient_offset: 2*gradient_offset+2]
-        return u_star
+        U_star = sympy.Piecewise((sympy.sqrt(Up * p.nu / p.yp), ReU < Re_min), (p.kappa * Up / (LambertW((p.kappa * Up * p.yp / p.nu) * sympy.exp(p.kappa * p.B))), True))
+        V_star = 0
+        if self.dimension == 2:
+            Vp = sum([beta[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
+            ReV = (Vp * p.yp) / p.nu
+            V_star = sympy.Piecewise((sympy.sqrt(Vp * p.nu / p.yp), ReV < Re_min), (p.kappa * Vp / (LambertW((p.kappa * Vp * p.yp / p.nu) * sympy.exp(p.kappa * p.B))), True))
+        
+        # Vp = sum([beta[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
+        # return [Up, Vp]
+
+
+        return [U_star, V_star]
+    
+    
+    def get_deltaX(self):
+        gradient_offset = self.n_variables
+        return self.aux_variables[2*gradient_offset]
+
 
     def interpolate_3d(self):
         out = Matrix([0 for i in range(6)])
@@ -309,6 +331,7 @@ class SMET(Model):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         out += self.mixing_length_vertical()
+        out += self.smagorinsky_source()
         
         return out
     
@@ -320,17 +343,14 @@ class SMET(Model):
         """
         diffusive flux due to the Smagorinsky model
         """
-        assert "rho" in vars(self.parameters)
         assert "Cs" in vars(self.parameters)
-        assert "rho" in vars(self.parameters)
 
         dflux = [sympy.zeros(self.n_variables, 1) for d in range(self.dimension)]
         z = sympy.Symbol('z')
         level = self.level
         offset = level+1
         phi = [self.basisfunctions.eval(k, z) for k in range(level+1)]
-        rho = self.parameters.rho
-        dX = self.distance
+        dX = self.get_deltaX()
         Cs = self.parameters.Cs
         
         xi, wi = gauss_legendre(self.order_numerical_integration, 8)
@@ -346,7 +366,7 @@ class SMET(Model):
             for k in range(level+1):
                 for d1 in range(self.dimension):
                     for d2 in range(self.dimension):
-                        dflux[d1][2 + d2 * offset + k, 0] += wi[i] * h*  phi[k].subs(z, zi) * 2 * rho * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)
+                        dflux[d1][2 + d2 * offset + k, 0] += wi[i] * h*  phi[k].subs(z, zi) * 2 * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)
         for k in range(level+1):
             for d in range(self.dimension):
                 dflux[d][2+k, 0] /= self.basismatrices.M[k, k]
@@ -362,8 +382,7 @@ class SMET(Model):
         offset = level+1
         phi = self.basisfunctions.basis
         dphi_dz = self.basisfunctions.get_diff_basis()
-        rho = self.parameters.rho
-        dX = self.distance
+        dX = self.get_deltaX()
         Cs = self.parameters.Cs
         
         xi, wi = gauss_legendre(self.order_numerical_integration, 8)
@@ -378,7 +397,7 @@ class SMET(Model):
         Sij = self.Sij()
         
         u_star = self.get_ustar()
-        taub = [rho * u_star[d]**2 for d in range(self.dimension)]
+        taub = [u_star[d]**2 for d in range(self.dimension)]
         for d in range(self.dimension):
             for k in range(1 + self.level):
                 out[2+k + d*offset] += sigma[d].subs(z, 0) * taub[d] * phi[k].subs(z, 0)
@@ -389,7 +408,8 @@ class SMET(Model):
             for k in range(level+1):
                 for d1 in range(self.dimension):
                     for d2 in range(self.dimension):
-                        out[2 + d2 * offset + k, 0] += wi[i] * sigma[d1].subs(z, zi) *  2 * rho * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)  * dphi_dz[k].subs(z, zi)
+                        out[2 + d2 * offset + k] += wi[i] * sigma[d1].subs(z, zi) *  2 * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)  * dphi_dz[k].subs(z, zi)
+        return out
 
         
     
@@ -416,7 +436,6 @@ class SMET(Model):
 
 
     def mixing_length_vertical(self):
-        assert "rho" in vars(self.parameters)
         out = Matrix([0 for i in range(self.n_variables)])
         offset = self.level + 1
         b, h, alpha, beta, hinv = self.get_primitives()
@@ -427,9 +446,8 @@ class SMET(Model):
         
         Szj = self.Szj()
 
-
         u_star = self.get_ustar()
-        taub = [p.rho * u_star[d]**2 for d in range(self.dimension)]
+        taub = [u_star[d]**2 for d in range(self.dimension)]
         for d in range(self.dimension):
             for k in range(1 + self.level):
                 out[2+k + d*offset] += taub[d] * phi[k].subs(z, 0)
@@ -442,7 +460,7 @@ class SMET(Model):
             for i in range(len(xi)):
                 for k in range(self.level+1):
                     out[2+k+d*offset] -= wi[i] * self.mixing_length_numerical_term().subs(z, xi[i]) * Szj[d].subs(z, xi[i]) * dphi_dz[k].subs(z, xi[i])
-        return out
+        return -out
     
 
 

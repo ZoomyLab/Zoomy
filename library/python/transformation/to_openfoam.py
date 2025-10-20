@@ -37,6 +37,23 @@ class FoamPrinter(CXX11CodePrinter):
         "dX": "const Foam::scalar& dX",
         "z": "const Foam::scalar& z"
         }
+        
+    def create_lambertw(self):
+        return textwrap.dedent("""\
+        inline Foam::scalar lambertw(const Foam::scalar x)
+            {
+                // valid for x > -exp(-1)
+                Foam::scalar w = (x < 1.0 ? x : log(1.0 + x));  // good initial guess
+                for (int i = 0; i < 5; ++i)
+                {
+                    Foam::scalar ew = exp(w);
+                    Foam::scalar wew = w * ew;
+                    Foam::scalar diff = wew - x;
+                    w -= diff / (ew * (w + 1.0) - (w + 2.0) * diff / (2.0 * w + 2.0));
+                }
+                return w;
+            }
+    """)
                    
     def get_function_arguments(self, arguments):
         out = ",\n".join([self._argument_table[arg] for arg in arguments])
@@ -62,6 +79,10 @@ class FoamPrinter(CXX11CodePrinter):
                 return f"(1.0 / Foam::pow({self._print(base)}, {abs(n)}))"
             return f"Foam::pow({self._print(base)}, {n})"
         return f"Foam::pow({self._print(base)}, {self._print(exp)})"
+    
+    # Print as a plain C function call "lambertw(...)"
+    def _print_LambertW(self, expr):
+        return f"lambertw({self._print(expr.args[0])})"
 
     # --- Expression conversion --------------------------------------------
     def convert_expression_body(self, expr, target='res'):
@@ -194,6 +215,7 @@ inline Foam::List<Foam::List<Foam::scalar>> {name}(
         n_dof_qaux = model.n_aux_variables
         dim = model.dimension
         funcs = []
+        funcs.append(self.create_lambertw())
         funcs += self.create_function('flux', model.flux(), n_dof, n_dof_qaux)
         funcs += self.create_function('flux_jacobian', model.flux_jacobian(), n_dof, n_dof_qaux)
         funcs += self.create_function('dflux', model.dflux(), n_dof, n_dof_qaux)
