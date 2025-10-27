@@ -126,7 +126,7 @@ class Wall(BoundaryCondition):
     """
 
     momentum_field_indices: List[List[int]] = [[1, 2]]
-    permeability: float = 1.0
+    permeability: float = 0.0
     wall_slip: float = 1.0
 
     def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
@@ -144,13 +144,26 @@ class Wall(BoundaryCondition):
             transverse_momentum = momentum - normal_momentum_coef * n
             momentum_wall = (
                 self.wall_slip * transverse_momentum
-                - self.permeability * normal_momentum_coef * n
+                - (1-self.permeability) * normal_momentum_coef * n
             )
             momentum_list_wall.append(momentum_wall)
         for l, momentum_wall in zip(self.momentum_field_indices, momentum_list_wall):
             for i_k, k in enumerate(l):
                 out[k] = momentum_wall[i_k]
         return out
+    
+@define(slots=True, frozen=False, kw_only=True)
+class RoughWall(Wall):
+    CsW: float = 0.5  # roughness constant
+    Ks: float = 0.001  # roughness height
+    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+        slip_length = dX * sympy.ln((dX * self.CsW)/self.Ks)
+        # wall_slip = (1-2*dX/slip_length)
+        # wall_slip = sympy.Min(sympy.Max(wall_slip, 0.0), 1.0)
+        f = dX / slip_length
+        wall_slip = (1-f) / (1+f)
+        self.wall_slip = wall_slip
+        return super().get_boundary_condition_function(time, X, dX, Q, Qaux, parameters, normal)
 
 
 @define(slots=True, frozen=False, kw_only=True)
