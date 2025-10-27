@@ -43,7 +43,7 @@ class SMET(Model):
 
     _default_parameters: dict = field(
         init=False,
-        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000., 'nu': 1e-6, 'kappa': 0.41, 'B': 5.2, 'Cs': 0.17, 'yp': 30.0},
+        factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "eps_low_water": 1e-6, "rho": 1000., 'nu': 1e-6, 'kappa': 0.41, 'B': 5.2, 'Cs': 0.17, 'yp': 0.1, 'CsW': 0.5, 'Ks': 0.001},
     )
 
     def __attrs_post_init__(self):
@@ -111,28 +111,86 @@ class SMET(Model):
 
 
         return grad_b, grad_h, grad_alpha, grad_beta, grad_U
-        
+    
+    def get_Up(self):
+        b, h, alpha, beta, hinv = self.get_primitives()
+        phi = self.basisfunctions.basis
+        z = sympy.Symbol('z')
+
+        # velocity components at bottom (z=0)
+        Up = sum(alpha[k] * phi[k].subs(z, 0) for k in range(self.level + 1))
+        Vp = 0
+        if self.dimension == 2:
+            Vp = sum(beta[k] * phi[k].subs(z, 0) for k in range(self.level + 1))
+        return [Up, Vp]
+    
     def get_ustar(self):
         p = self.parameters
         b, h, alpha, beta, hinv = self.get_primitives()
         phi = self.basisfunctions.basis
         z = sympy.Symbol('z')
-        Re_min = 30
-        Up = sum([alpha[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
-        ReU = (Up * p.yp) / p.nu
 
-        U_star = sympy.Piecewise((sympy.sqrt(Up * p.nu / p.yp), ReU < Re_min), (p.kappa * Up / (LambertW((p.kappa * Up * p.yp / p.nu) * sympy.exp(p.kappa * p.B))), True))
-        V_star = 0
-        if self.dimension == 2:
-            Vp = sum([beta[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
-            ReV = (Vp * p.yp) / p.nu
-            V_star = sympy.Piecewise((sympy.sqrt(Vp * p.nu / p.yp), ReV < Re_min), (p.kappa * Vp / (LambertW((p.kappa * Vp * p.yp / p.nu) * sympy.exp(p.kappa * p.B))), True))
+        [Up, Vp] = self.get_Up()
+
+        # magnitude
+        Umag = sympy.sqrt(Up**2 + Vp**2)
+        ReU = (Umag * p.yp) / p.nu
+
         
-        # Vp = sum([beta[k] * phi[k].subs(z, 0) for k in range(self.level+1)])
-        # return [Up, Vp]
+        # smooth-wall fallback if Ks ~ 0
+        smooth = (p.Ks < 1e-8)
+
+        u_star = sympy.Piecewise(
+            # viscous sublayer
+            (sympy.sqrt(Umag * p.nu / p.yp), ReU < 30),
+            # rough wall (OpenFOAM form)
+            (p.kappa * Umag / sympy.log((p.yp * p.CsW) / p.Ks), sympy.Not(smooth)),
+            # smooth wall (Lambert W)
+            (p.kappa * Umag / sympy.LambertW((p.kappa * Umag * p.yp / p.nu)
+                                        * sympy.exp(p.kappa * p.B)), True)
+        )
 
 
-        return [U_star, V_star]
+        return u_star
+    
+
+    def get_taub(self):
+        
+        p = self.parameters
+        b, h, alpha, beta, hinv = self.get_primitives()
+        phi = self.basisfunctions.basis
+        z = sympy.Symbol('z')
+
+        [Up, Vp] = self.get_Up()
+        Umag = sympy.sqrt(Up**2 + Vp**2)
+
+        u_star = self.get_ustar()
+
+        eps = 1e-12
+        # tangential direction (normalized velocity vector)
+        t_hat_x = Up / (Umag + eps)
+        t_hat_y = Vp / (Umag + eps)
+
+        # shear stress components (vector form)
+        tau_zx = - u_star**2 * t_hat_x
+        tau_zy = - u_star**2 * t_hat_y
+        
+        # tau_zx = - 1e-4 * (Up - 0) /0.001
+        # tau_zy = - 1e-4 * (Vp - 0) /0.001
+        return [tau_zx, tau_zy]
+    
+    def get_taub_linear_gradient(self):
+        
+        p = self.parameters
+        b, h, alpha, beta, hinv = self.get_primitives()
+        phi = self.basisfunctions.basis
+        z = sympy.Symbol('z')
+
+        [Up, Vp] = self.get_Up()
+        
+        tau_zx = - (p.nu + self.lm().subs(z, 0) * self.abs_Sij().subs(z, 0)) * (Up - 0) / p.yp
+        tau_zy = - (p.nu + self.lm().subs(z, 0) * self.abs_Sij().subs(z,0)) * (Vp - 0) / p.yp
+        return [tau_zx, tau_zy]
     
     
     def get_deltaX(self):
@@ -331,10 +389,32 @@ class SMET(Model):
     def source(self):
         out = Matrix([0 for i in range(self.n_variables)])
         out += self.mixing_length_vertical()
+        # out += self.mixing_length_vertical_linear_gradient()
         out += self.smagorinsky_source()
-        
         return out
     
+    def source_implicit(self):
+        out = sympy.zeros(self.n_variables, self.n_variables)
+        # out += self.taub_implicit()
+        return out
+    
+    def taub_implicit(self):
+        out = sympy.zeros(self.n_variables, self.n_variables)
+        b, h, alpha, beta, hinv = self.get_primitives()
+        phi = self.basisfunctions.basis
+        z = sympy.Symbol('z')
+        u_star = self.get_ustar()
+        Up = self.get_Up()
+        magU = sympy.sqrt(Up[0]**2 + Up[1]**2)
+        eps = 10**(-8)
+        for d in range(self.dimension):
+            term = u_star**2 / h /(magU+eps) 
+            for k in range(self.level+1):
+                for i in range(self.level+1):
+                    ik = 2 + k + d * (self.level + 1)
+                    ii = 2 + i + d * (self.level + 1)
+                    out[ik, ii] +=  term * phi[k].subs(z, 0) * phi[i].subs(z, 0) / self.basismatrices.M[k, k]
+        return out
     
     def dflux(self):
         return self.smagorinsky_dflux()
@@ -396,11 +476,10 @@ class SMET(Model):
         abs_Sij = self.abs_Sij()
         Sij = self.Sij()
         
-        u_star = self.get_ustar()
-        taub = [u_star[d]**2 for d in range(self.dimension)]
+        taub = self.get_taub()
         for d in range(self.dimension):
             for k in range(1 + self.level):
-                out[2+k + d*offset] += sigma[d].subs(z, 0) * taub[d] * phi[k].subs(z, 0)
+                out[2+k + d*offset] += sigma[d].subs(z, 0) * taub[d] * phi[k].subs(z, 0) / self.basismatrices.M[k, k]
             
         
         for i in range(len(xi)):
@@ -408,16 +487,19 @@ class SMET(Model):
             for k in range(level+1):
                 for d1 in range(self.dimension):
                     for d2 in range(self.dimension):
-                        out[2 + d2 * offset + k] += wi[i] * sigma[d1].subs(z, zi) *  2 * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)  * dphi_dz[k].subs(z, zi)
+                        out[2 + d2 * offset + k] -= wi[i] * sigma[d1].subs(z, zi) *  2 * (Cs * dX)**2 * abs_Sij.subs(z, zi) * Sij[d1, d2].subs(z, zi)  * dphi_dz[k].subs(z, zi) / self.basismatrices.M[k, k]
         return out
 
-        
+    def lm(self):
+        p = self.parameters
+        b, h, alpha, beta, hinv = self.get_primitives()
+        z = sympy.Symbol('z')
+        return p.kappa * (z + p.yp) * (1 - z)
     
     def mixing_length_numerical_term(self):
         assert "kappa" in vars(self.parameters)
         out = 0
         b, h, alpha, beta, hinv = self.get_primitives()
-        p = self.parameters
         z = sympy.Symbol('z')
         phi = [self.basisfunctions.eval(k, z) for k in range(self.level+1)]
         u = sum([alpha[k] * phi[k] for k in range(self.level+1)])
@@ -431,7 +513,7 @@ class SMET(Model):
         eps = 1e-10
         out += eps
         out = sympy.sqrt(out)
-        out *= (p.kappa * z * (1-z))**2
+        out *= (self.lm())**2
         return out
 
 
@@ -446,11 +528,10 @@ class SMET(Model):
         
         Szj = self.Szj()
 
-        u_star = self.get_ustar()
-        taub = [u_star[d]**2 for d in range(self.dimension)]
+        taub = self.get_taub()
         for d in range(self.dimension):
             for k in range(1 + self.level):
-                out[2+k + d*offset] += taub[d] * phi[k].subs(z, 0)
+                out[2+k + d*offset] += taub[d] * phi[k].subs(z, 0) / self.basismatrices.M[k, k]
             
         xi, wi = gauss_legendre(self.order_numerical_integration, 8)
         xi = [0.5 * (x + 1) for x in xi]
@@ -459,8 +540,36 @@ class SMET(Model):
         for d in range(self.dimension):
             for i in range(len(xi)):
                 for k in range(self.level+1):
-                    out[2+k+d*offset] -= wi[i] * self.mixing_length_numerical_term().subs(z, xi[i]) * Szj[d].subs(z, xi[i]) * dphi_dz[k].subs(z, xi[i])
-        return -out
+                    out[2+k+d*offset] -= wi[i] * self.mixing_length_numerical_term().subs(z, xi[i]) * Szj[d].subs(z, xi[i]) * dphi_dz[k].subs(z, xi[i]) / self.basismatrices.M[k, k]
+                    
+        return out
+    
+    def mixing_length_vertical_linear_gradient(self):
+        out = Matrix([0 for i in range(self.n_variables)])
+        offset = self.level + 1
+        b, h, alpha, beta, hinv = self.get_primitives()
+        p = self.parameters
+        z = sympy.Symbol('z')
+        phi = [self.basisfunctions.eval(k, z) for k in range(self.level+1)]
+        dphi_dz = self.basisfunctions.get_diff_basis()
+        
+        Szj = self.Szj()
+
+        taub = self.get_taub_linear_gradient()
+        for d in range(self.dimension):
+            for k in range(1 + self.level):
+                out[2+k + d*offset] += taub[d] * phi[k].subs(z, 0) / self.basismatrices.M[k, k]
+            
+        xi, wi = gauss_legendre(self.order_numerical_integration, 8)
+        xi = [0.5 * (x + 1) for x in xi]
+        wi = [0.5 * w for w in wi]
+        
+        for d in range(self.dimension):
+            for i in range(len(xi)):
+                for k in range(self.level+1):
+                    out[2+k+d*offset] -= wi[i] * self.mixing_length_numerical_term().subs(z, xi[i]) * Szj[d].subs(z, xi[i]) * dphi_dz[k].subs(z, xi[i]) / self.basismatrices.M[k, k]
+                    
+        return out
     
 
 
