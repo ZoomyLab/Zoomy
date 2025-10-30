@@ -88,7 +88,7 @@ def to_ufl(model, settings):
     flux = deepcopy(model.flux())
     flux_jacobian = deepcopy(model.flux_jacobian())
     source = deepcopy(model.source())
-    source_jacobian = deepcopy(regularize_denominator(model.source_jacobian()))
+    source_jacobian_wrt_variables = deepcopy(regularize_denominator(model.source_jacobian_wrt_variables()))
     nonconservative_matrix = deepcopy(model.nonconservative_matrix())
     quasilinear_matrix = deepcopy(model.quasilinear_matrix())
     eigenvalues = deepcopy(model.eigenvalues())
@@ -96,8 +96,8 @@ def to_ufl(model, settings):
     right_eigenvectors = deepcopy(model.right_eigenvectors())
     source_implicit = deepcopy(model.source_implicit())
     residual = deepcopy(model.residual())
-    interpolate_3d = deepcopy(model.interpolate_3d())
-    boundary_conditions = deepcopy(model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, normal))
+    project_2d_to_3d = deepcopy(model.project_2d_to_3d())
+    boundary_conditions = deepcopy(model.boundary_conditions.get_boundary_condition_function(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, normal))
 
     # make all dimension dependent functions 3d to simplify the C part of the interface
     if model.dimension == 1:
@@ -118,12 +118,12 @@ def to_ufl(model, settings):
     # aggregate all expressions that are substituted and converted to UFL into the right data structure
     list_matrix_symbols = [Q, Qaux, parameters]
     list_attributes = [model.variables, model.aux_variables, model.parameters]
-    list_expressions = flux + flux_jacobian + nonconservative_matrix + quasilinear_matrix + [source, source_jacobian, source_implicit, residual, interpolate_3d]
+    list_expressions = flux + flux_jacobian + nonconservative_matrix + quasilinear_matrix + [source, source_jacobian_wrt_variables, source_implicit, residual, project_2d_to_3d]
     list_expression_names = ['flux_x', 'flux_y', 'flux_z', 
                              'flux_jacobian_x', 'flux_jacobian_y', 'flux_jacobian_z',
                              'nonconservative_matrix_x', 'nonconservative_matrix_y', 'nonconservative_matrix_z',
                              'quasilinear_matrix_x', 'quasilinear_matrix_y', 'quasilinear_matrix_z',
-                             'source', 'source_jacobian', 'source_implicit', 'residual']
+                             'source', 'source_jacobian_wrt_variables', 'source_implicit', 'residual']
     
     list_matrix_symbols_incl_normal = [Q, Qaux, parameters, normal]
     list_attributes_incl_normal = [model.variables, model.aux_variables, model.parameters, model.normal]
@@ -136,8 +136,8 @@ def to_ufl(model, settings):
     
     list_matrix_symbols_incl_position = [Q, Qaux, parameters, position]
     list_attributes_incl_position = [model.variables, model.aux_variables, model.parameters, model.position]
-    list_expressions_incl_position = [interpolate_3d]
-    list_expression_names_incl_position = ['interpolate_3d']
+    list_expressions_incl_position = [project_2d_to_3d]
+    list_expression_names_incl_position = ['project_2d_to_3d']
     
     list_matrix_symbols_bc = [time, position, distance, Q, Qaux, parameters, normal]
     list_attributes_bc = [model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal]
@@ -194,7 +194,7 @@ def to_ufl(model, settings):
 
 
 def get_ufl_boundary_functions(model):
-    boundary_function_matrix = model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs())
+    boundary_function_matrix = model.boundary_conditions.get_boundary_condition_function(*model.get_boundary_conditions_matrix_inputs())
     n_bcs = boundary_function_matrix.shape[0]
     bc_funcs = []
     for i in range(n_bcs):
@@ -269,7 +269,7 @@ def get_lambda_function_boundary(model, function):
     return f
 
 # def get_ufl_boundary_functions(model):
-#     boundary_function_matrix = model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs())
+#     boundary_function_matrix = model.boundary_conditions.get_boundary_condition_function(*model.get_boundary_conditions_matrix_inputs())
 #     n_bcs = boundary_function_matrix.shape[0]
 #     bc_funcs = []
 #     for i in range(n_bcs):
@@ -295,13 +295,13 @@ class UFLRuntimeModel:
     flux: Callable = field()
     flux_jacobian: Callable = field()
     source: Callable = field()
-    source_jacobian: Callable = field()
+    source_jacobian_wrt_variables: Callable = field()
     nonconservative_matrix: Callable = field()
     quasilinear_matrix: Callable = field()
     eigenvalues: Callable = field()
     source_implicit: Callable = field()
     residual: Callable = field()
-    interpolate_3d: Callable = field()
+    project_2d_to_3d: Callable = field()
     bcs: Callable = field()
     dimension: int = field()
     left_eigenvectors: Callable = field(default=None)
@@ -322,7 +322,7 @@ class UFLRuntimeModel:
             flux=get_lambda_function(model, Matrix.hstack(*model.flux())),
             flux_jacobian=get_lambda_function(model, Matrix.hstack(*model.flux_jacobian())),
             source=get_lambda_function(model, model.source()),
-            source_jacobian=get_lambda_function(model, model.source_jacobian()),
+            source_jacobian_wrt_variables=get_lambda_function(model, model.source_jacobian_wrt_variables()),
             nonconservative_matrix=get_lambda_function(model, Matrix.hstack(*model.nonconservative_matrix())),
             quasilinear_matrix=get_lambda_function(model, Matrix.hstack(*model.quasilinear_matrix())),
             eigenvalues=get_lambda_function_with_normal(model, model.eigenvalues()),
@@ -330,6 +330,6 @@ class UFLRuntimeModel:
             right_eigenvectors=get_lambda_function_with_normal(model, model.right_eigenvectors()),
             source_implicit=get_lambda_function(model, model.source_implicit()),
             residual=get_lambda_function(model, model.residual()),
-            interpolate_3d=get_lambda_function_with_position(model, model.interpolate_3d()),
-            bcs=get_lambda_function_boundary(model, model.boundary_conditions.get_boundary_function_matrix(*model.get_boundary_conditions_matrix_inputs()))
+            project_2d_to_3d=get_lambda_function_with_position(model, model.project_2d_to_3d()),
+            bcs=get_lambda_function_boundary(model, model.boundary_conditions.get_boundary_condition_function(*model.get_boundary_conditions_matrix_inputs()))
         )

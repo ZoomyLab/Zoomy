@@ -117,13 +117,10 @@ def segmentpath(integration_order=3, scheme='rusanov', backend='jax'):
         index_topography = 0
         
         def _get_A(model):
-            n_dir = len(model.quasilinear_matrix)   # 1, 2 or 3
-
             def A(q, qaux, n):                      # q : (n_dof,)
                 # evaluate the matrices A_d
-                mats = [model.quasilinear_matrix[d](q, qaux, parameters)  for d in range(n_dir)]
-                mats = jnp.stack(mats, axis=0)      # (n_dir, n_dof, n_dof)
-                return jnp.einsum('d,dij->ij', n, mats)
+                _A = model.quasilinear_matrix(q, qaux, parameters)
+                return jnp.einsum('d,ijd->ij', n, _A)
 
             return A
         

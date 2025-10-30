@@ -10,11 +10,11 @@ from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
 
-from library.model.models.base import (
+from library.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.model.models.base import Model
+from library.model.basemodel import Model
 import library.model.initial_conditions as IC
 
 class CoupledConstrained(Model):

@@ -360,7 +360,7 @@ public:
     AMREX_GPU_HOST_DEVICE
     AMREX_FORCE_INLINE
     static amrex::SmallMatrix<amrex::Real,6,1>
-    interpolate_3d ( amrex::SmallMatrix<amrex::Real,4,1> const& Q,
+    project_2d_to_3d ( amrex::SmallMatrix<amrex::Real,4,1> const& Q,
     amrex::SmallMatrix<amrex::Real,1,1> const& Qaux,
     amrex::SmallMatrix<amrex::Real,3,1> const& X) noexcept
     {

@@ -29,10 +29,10 @@ import library.model.boundary_conditions as BC
 import library.python.misc.io as io
 from library.python.mesh.mesh import compute_derivatives
 from library.model import *
-from library.model.models.base import (
+from library.model.basemodel import (
     register_sympy_attribute,
 )
-from library.model.models.base import Model
+from library.model.basemodel import Model
 import library.model.initial_conditions as IC
 from library.model.models.basisfunctions import *
 from library.model.models.basismatrices import *

@@ -11,7 +11,7 @@ import library.python.misc.io as io
 from library.python.misc.logger_config import logger
 from library.model.models.shallow_moments import reconstruct_uvw
 
-def vtk_interpolate_3d(
+def vtk_project_2d_to_3d(
     model, settings, Nz=10, start_at_time=0, scale_h=1.0, filename='out_3d'
 ):
     main_dir = os.getenv("ZOOMY_DIR")
@@ -45,12 +45,12 @@ def vtk_interpolate_3d(
 
         #for i_elem, (q, qaux) in enumerate(zip(Q.T, Qaux.T)):
         #    for iz, z in enumerate(Z):
-        #        rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
+        #        rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.project_2d_to_3d(np.array([0, 0, z]), q, qaux, parameters)
         for iz, z in enumerate(Z):
         
-            #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.interpolate_3d(np.array([0, 0, z]), q, qaux, parameters)
+            #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.project_2d_to_3d(np.array([0, 0, z]), q, qaux, parameters)
             # rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), 0] = Q[0, :mesh.n_inner_cells]
-            Qnew = pde.interpolate_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], model.parameter_values).T
+            Qnew = pde.project_2d_to_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], model.parameter_values).T
             rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew
 
         # rhoUVWP[mesh.n_inner_cells:mesh.n_inner_cells+mesh.n_inner_cells, 0] = Q[0, :mesh.n_inner_cells]

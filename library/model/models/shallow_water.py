@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from library.model.boundary_conditions import BoundaryConditions, Extrapolation
 from library.model.initial_conditions import InitialConditions, Constant
 from library.python.misc.custom_types import FArray
-from library.model.models.base import Model
+from library.model.basemodel import Model
 
 from library.python.misc.misc import Zstruct
 
@@ -38,7 +38,7 @@ class ShallowWaterEquations(Model):
         super().__attrs_post_init__()
 
 
-    def interpolate_3d(self):
+    def project_2d_to_3d(self):
         out = Matrix([0 for i in range(5)])
         dim = self.dimension
         x = self.position[0]

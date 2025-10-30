@@ -17,11 +17,11 @@ from typing import Union, Dict, List
 from sympy.functions.elementary.exponential import LambertW
 
 
-from library.model.models.base import (
+from library.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.model.models.base import Model
+from library.model.basemodel import Model
 from library.model.models.basismatrices import Basismatrices
 from library.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
@@ -198,7 +198,7 @@ class SMET(Model):
         return self.aux_variables[2*gradient_offset]
 
 
-    def interpolate_3d(self):
+    def project_2d_to_3d(self):
         out = Matrix([0 for i in range(6)])
         level = self.level
         offset = level+1

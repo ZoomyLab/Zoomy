@@ -45,10 +45,10 @@ class BoundaryCondition:
                     index = len(map_boundary_function_name_to_index)
                     map_boundary_function_name_to_index[boundary_tag_name] = index
                     map_boundary_index_to_function[index] = (
-                        self.get_boundary_condition_function()
+                        self.compute_boundary_condition()
                     )
 
-    def get_boundary_condition_function(self):
+    def compute_boundary_condition(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             print(
                 "BoundaryCondition is a virtual class. Use one if its derived classes!"
@@ -60,7 +60,7 @@ class BoundaryCondition:
 
 @define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
-    def get_boundary_condition_function(self):
+    def compute_boundary_condition(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             return Q
 
@@ -71,7 +71,7 @@ class Extrapolation(BoundaryCondition):
 class InflowOutflow(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
-    def get_boundary_condition_function(self):
+    def compute_boundary_condition(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             Qout = np.array(Q)
             for k, v in self.prescribe_fields.items():
@@ -83,7 +83,7 @@ class InflowOutflow(BoundaryCondition):
 
 @define(slots=True, frozen=False, kw_only=True)
 class Wall(BoundaryCondition):
-    def get_boundary_condition_function(self):
+    def compute_boundary_condition(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             Qn, Qt = projection_in_normal_and_transverse_direction(
                 Q, momentum_eqns, normal
@@ -98,7 +98,7 @@ class Wall(BoundaryCondition):
 class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
 
-    def get_boundary_condition_function(self):
+    def compute_boundary_condition(self):
         def f(Q: FArray, normal: FArray, momentum_eqns: List[int]):
             return Q
 
@@ -126,7 +126,7 @@ class Periodic(BoundaryCondition):
                     if self.periodic_to_physical_tag == j_boundary_tag_name:
                         if hits == j_hits:
                             # map_required_elements[i_edge] = mesh.boundary_face_corresponding_element[j_edge]
-                            # map_functions[i_edge] = self.get_boundary_condition_function()
+                            # map_functions[i_edge] = self.compute_boundary_condition()
                             map_required_elements[i_edge] = (
                                 mesh.boundary_face_corresponding_element[j_edge]
                             )
@@ -142,7 +142,7 @@ class Periodic(BoundaryCondition):
                                     boundary_tag_name
                                 ] = index
                                 map_boundary_index_to_function[index] = (
-                                    self.get_boundary_condition_function()
+                                    self.compute_boundary_condition()
                                 )
                                 map_functions[i_edge] = (
                                     map_boundary_function_name_to_index[

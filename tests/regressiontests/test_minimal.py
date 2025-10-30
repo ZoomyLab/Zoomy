@@ -159,7 +159,7 @@ def test_smm_2d():
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
-    postprocessing.vtk_interpolate_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), scale_h=100.)
+    postprocessing.vtk_project_2d_to_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), scale_h=100.)
 
 
 def test_jax_jit_grad():
@@ -625,7 +625,7 @@ def test_smm_junction():
     Qnew, Qaux = solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
 
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
-    postprocessing.vtk_interpolate_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), Nz=20)
+    postprocessing.vtk_project_2d_to_3d(model, settings.output.directory,  os.path.join(settings.output.directory, f"{settings.name}.h5"), Nz=20)
 
 
 if __name__ == "__main__":
