@@ -79,7 +79,7 @@ def test_source_1d():
         == "Matrix([[0], [-g*nu**2*q1*Abs(q1/q0)**2.33333333333333 + g*q0*(-dhdx*ez + ex) - nu*q1/q0]])"
     )
     assert (
-        str(model.sympy_source_jacobian)
+        str(model.sympy_source_jacobian_wrt_variables)
         == "Matrix([[0, 0], [2.33333333333333*g*nu**2*q1**2*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0**2 + g*(-dhdx*ez + ex) + nu*q1/q0**2, -g*nu**2*Abs(q1/q0)**2.33333333333333 - 2.33333333333333*g*nu**2*q1*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0 - nu/q0]])"
     )
 
@@ -111,7 +111,7 @@ def test_source_2d():
         == "Matrix([[0], [-g*nu**2*q1*Abs(q1/q0)**2.33333333333333 + g*q0*(-dhdx*ez + ex) - nu*q1/q0], [-g*nu**2*q2*Abs(q2/q0)**2.33333333333333 + g*q0*(-dhdy*ez + ey) - nu*q2/q0]])"
     )
     assert (
-        str(model.sympy_source_jacobian)
+        str(model.sympy_source_jacobian_wrt_variables)
         == "Matrix([[0, 0, 0], [2.33333333333333*g*nu**2*q1**2*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0**2 + g*(-dhdx*ez + ex) + nu*q1/q0**2, -g*nu**2*Abs(q1/q0)**2.33333333333333 - 2.33333333333333*g*nu**2*q1*Abs(q1/q0)**1.33333333333333*sign(q1/q0)/q0 - nu/q0, 0], [2.33333333333333*g*nu**2*q2**2*Abs(q2/q0)**1.33333333333333*sign(q2/q0)/q0**2 + g*(-dhdy*ez + ey) + nu*q2/q0**2, 0, -g*nu**2*Abs(q2/q0)**2.33333333333333 - 2.33333333333333*g*nu**2*q2*Abs(q2/q0)**1.33333333333333*sign(q2/q0)/q0 - nu/q0]])"
     )
 

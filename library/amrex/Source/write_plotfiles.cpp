@@ -107,7 +107,7 @@ write_plotfiles_3d (const int identifier, const int step, MultiFab const& soluti
             }
             
             X = makeSmallMatrix<3, 1>({0., 0., z}); 
-            Q3d = Model::interpolate_3d(Q, Qaux, X);
+            Q3d = Model::project_2d_to_3d(Q, Qaux, X);
 
             for (int n=0;n<6; ++n) {
                 sol_3d_arr(i, j, k, n) = Q3d(n, 0);

@@ -16,7 +16,7 @@ from library.model.initial_conditions import InitialConditions, Constant
 from library.python.misc.custom_types import FArray
 
 # from library.python.misc import vectorize  # type: ignore
-from library.model.models.base import Model
+from library.model.basemodel import Model
 
 
 class Advection(Model):

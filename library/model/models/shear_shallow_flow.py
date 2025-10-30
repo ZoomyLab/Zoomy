@@ -17,11 +17,11 @@ from sympy import bspline_basis, bspline_basis_set
 from sympy.abc import x
 import h5py
 
-from library.model.models.base import (
+from library.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.model.models.base import Model
+from library.model.basemodel import Model
 
 
 

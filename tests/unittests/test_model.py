@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from library.python.misc.misc import *
-from library.model.models.base import *
+from library.model.basemodel import *
 import library.model.boundary_conditions as BC
 import library.model.initial_conditions as IC
 from library.python.mesh.fvm_mesh import *
@@ -51,7 +51,7 @@ def test_model_initialization(dimension):
             c_model.nonconservative_matrix[d](Q[i], Qaux[i], parameters, NC[d][i])
             c_model.quasilinear_matrix[d](Q[i], Qaux[i], parameters, A[d][i])
         c_model.source(Q[i], Qaux[i], parameters, S[i])
-        c_model.source_jacobian(Q[i], Qaux[i], parameters, dS[i])
+        c_model.source_jacobian_wrt_variables(Q[i], Qaux[i], parameters, dS[i])
 
     for d in range(dimension):
         assert np.allclose(F[d], Q)

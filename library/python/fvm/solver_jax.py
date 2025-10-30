@@ -35,7 +35,7 @@ from library.python.mesh.mesh import convert_mesh_to_jax
 from library.python.misc.misc import Zstruct, Settings
 import library.python.fvm.ode as ode
 import library.python.fvm.timestepping as timestepping
-from library.model.models.base import JaxRuntimeModel
+from library.python.transformation.to_jax import JaxRuntimeModel
 
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
@@ -49,7 +49,8 @@ def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
 
 def log_callback_poisson(iteration, res):
     logger.debug(f"Newton iterations: {iteration}, final residual norm: {
-                 jnp.linalg.norm(res):.3e}")
+                 jnp.linalg.norm(res):.3e}"
+                )
     return None
 
 
@@ -189,7 +190,7 @@ class Solver():
         jax_mesh = convert_mesh_to_jax(mesh)
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         parameters = jnp.asarray(model.parameter_values)
-        runtime_model = JaxRuntimeModel.from_model(model)
+        runtime_model = JaxRuntimeModel(model)
         return Q, Qaux, parameters, jax_mesh, runtime_model
 
     def get_compute_source(self, mesh, model):

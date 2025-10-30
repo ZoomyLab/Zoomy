@@ -6,6 +6,7 @@ from copy import deepcopy
 import sympy
 import sympy as sym
 from sympy import Matrix
+from sympy import NDimArray as Arr
 
 from attr import define, field
 from typing import Union, Optional, Callable, List, Dict
@@ -16,8 +17,10 @@ from library.python.mesh.mesh_util import center
 from library.python.misc.misc import (
     project_in_x_y_and_recreate_Q,
     projection_in_normal_and_transverse_direction,
+    Zstruct
 )
 
+from library.model.basefunction import Function
 
 @define(slots=True, frozen=False, kw_only=True)
 class BoundaryCondition:
@@ -27,23 +30,23 @@ class BoundaryCondition:
     Default implementation. The required data for the 'ghost cell' is the data from the interior cell. Can be overwritten e.g. to implement periodic boundary conditions.
     """
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         print("BoundaryCondition is a virtual class. Use one if its derived classes!")
         assert False
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Matrix(Q)
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        return Arr(Q)
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class InflowOutflow(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        Qout = Matrix(Q)
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        Qout = Arr(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = eval(v)
         return Qout
@@ -52,8 +55,8 @@ class InflowOutflow(BoundaryCondition):
 class Lambda(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        Qout = Matrix(Q)
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        Qout = Arr(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = v(time, X, dX, Q, Qaux, parameters, normal)
         return Qout
@@ -79,43 +82,17 @@ class FromData(BoundaryCondition):
     prescribe_fields: dict[int, np.ndarray]
     timeline: np.ndarray
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         # Extrapolate all fields
-        Qout = Matrix(Q)
+        Qout = Arr(Q)
 
         # Set the fields which are prescribed in boundary condition dict
         time_start = get_time()
         for k, v in self.prescribe_fields.items():
-            # interp_func = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
             interp_func = _sympy_interpolate_data(time, self.timeline, v)
             Qout[k] = 2 * interp_func - Q[k]
         return Qout
 
-@define(slots=True, frozen=False, kw_only=True)
-class PreciceCoupling(BoundaryCondition):
-    dirichlet_fields: dict[str, int]
-    dirichlet_vector_fields: dict[str, int]
-
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Matrix(Q)
-
-
-@define(slots=True, frozen=False, kw_only=True)
-class FromDataGhost(BoundaryCondition):
-    prescribe_fields: dict[int, np.ndarray]
-    timeline: np.ndarray
-
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        # Extrapolate all fields
-        Qout = Matrix(Q)
-
-        # Set the fields which are prescribed in boundary condition dict
-        time_start = get_time()
-        for k, v in self.prescribe_fields.items():
-            # interp_func = sympy.functions.special.bsplines.interpolating_spline(1, time, self.timeline, v)
-            interp_func = _sympy_interpolate_data(time, self.timeline, v)
-            Qout[k] = interp_func
-        return Qout
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -129,14 +106,13 @@ class Wall(BoundaryCondition):
     permeability: float = 0.0
     wall_slip: float = 1.0
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        q = Matrix(Q)
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        q = Matrix(Q.get_list())
         n_variables = Q.length()
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
         dim = momentum_list[0].shape[0]
         n = Matrix(normal[:dim])
-        zero = 10 ** (-20) * q[0]
-        out = Matrix([zero for i in range(n_variables)])
+        out = Matrix.zeros(n_variables)
         out = q
         momentum_list_wall = []
         for momentum in momentum_list:
@@ -156,175 +132,51 @@ class Wall(BoundaryCondition):
 class RoughWall(Wall):
     CsW: float = 0.5  # roughness constant
     Ks: float = 0.001  # roughness height
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         slip_length = dX * sympy.ln((dX * self.CsW)/self.Ks)
         # wall_slip = (1-2*dX/slip_length)
         # wall_slip = sympy.Min(sympy.Max(wall_slip, 0.0), 1.0)
         f = dX / slip_length
         wall_slip = (1-f) / (1+f)
         self.wall_slip = wall_slip
-        return super().get_boundary_condition_function(time, X, dX, Q, Qaux, parameters, normal)
+        return super().compute_boundary_condition(time, X, dX, Q, Qaux, parameters, normal)
 
 
 @define(slots=True, frozen=False, kw_only=True)
 class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
 
-    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Matrix(Q)
+    def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        return Arr(Q)
 
 
-@define(slots=True, frozen=False)
+@define(slots=True, frozen=True)
 class BoundaryConditions:
-    boundary_conditions: list[BoundaryCondition]
-    boundary_functions: List[Callable] = []
-    list_sorted_function_names: List[str] = []
-    initialized: bool = False
-
-    @classmethod
-    def dummy(cls):
-        return [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    _boundary_conditions: List[BoundaryCondition]
+    _boundary_functions: List[Callable] = field(init=False)
+    _boundary_tags: List[str] = field(init=False)
     
-    def resolve_periodic_bcs(self, mesh):
-        """
-        Goal: if 'apply_boundary_condition' is called, the ghost cell value is computed, given an input cell value funtion.
-              In case of a periodic BC, this is NOT the adjacent cell. So I need to change the 'boundary_face_cell' for the periodic
-              cells to point to the right data location!
-              This is why we only overwrite the 'mesh.boundary_face_cell' in the end.
-              Furthermore, I CANNOT alter any ordering! However, I need to sort the two boundaries such that the e.g.
-              left and right border are mapped correctly, as the boundary cells are not ordered.
-              As ghost/inner cells is confusing here, I rather like to use 'from' and 'to', as 'from' data from which bc is copied and 'to' stands for the boundary where it is copied to. As we only change the cells where the data is taken from (from the adjacent to the periodic cell), we only alter the 'boundary_face_cell' in the end.
-        """
-        dict_physical_name_to_index = {
-            v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)
-        }
-        dict_function_index_to_physical_tag = {
-            i: v for i, v in enumerate(mesh.boundary_conditions_sorted_physical_tags)
-        }
+        
+    def __attrs_post_init__(self):
+        tags_unsorted = [bc.physical_tag for bc in self._boundary_conditions]
+        order = np.argsort(tags_unsorted)
+        object.__setattr__(self, "_boundary_functions", [self._boundary_conditions[i].compute_boundary_condition for i in order])
+        object.__setattr__(self, "_boundary_tags", [self._boundary_conditions[i].physical_tag for i in order])
+        object.__setattr__(self, "_boundary_conditions", [self._boundary_conditions[i] for i in order])
 
-        mesh_copy = deepcopy(mesh)
-
-        for i_bc, bc in enumerate(self.boundary_conditions):
-            if type(bc) == Periodic:
-                from_physical_tag = dict_function_index_to_physical_tag[
-                    dict_physical_name_to_index[bc.periodic_to_physical_tag]
-                ]
-                to_physical_tag = dict_function_index_to_physical_tag[
-                    dict_physical_name_to_index[bc.physical_tag]
-                ]
-
-                mask_face_from = mesh.boundary_face_physical_tags == from_physical_tag
-                mask_face_to = mesh.boundary_face_physical_tags == to_physical_tag
-
-                # I want to copy from boundary_face_cells to boundary_face_ghosts!
-                from_cells = mesh.boundary_face_cells[mask_face_from]
-                to_cells = mesh.boundary_face_ghosts[mask_face_to]
-
-                from_coords = mesh.cell_centers[:, from_cells]
-                to_coords = mesh.cell_centers[:, to_cells]
-
-                # sort not dimension by dimension, but most significant dimension to least significant dimension
-                # determine significance by max difference
-                significance_per_dimension = [
-                    from_coords[d, :].max() - from_coords[d, :].min()
-                    for d in range(mesh.dimension)
-                ]
-                _significance_per_dimension = [
-                    to_coords[d, :].max() - to_coords[d, :].min()
-                    for d in range(mesh.dimension)
-                ]
-                # reverse the order of lexsort such that the most important is first IS NOT NEEDED, since lexsort starts sorting by the last entry in the list
-                sort_order_significance = np.lexsort([significance_per_dimension])
-
-                # sort_order_from = np.lexsort([from_coords[d, :] for d in range(mesh.dimension)])
-                # sort_order_to = np.lexsort([to_coords[d, :] for d in range(mesh.dimension)])
-                from_cells_sort_order = np.lexsort(
-                    [from_coords[d, :] for d in sort_order_significance]
-                )
-                to_cells_sort_order = np.lexsort(
-                    [to_coords[d, :] for d in sort_order_significance]
-                )
-
-                # advanded indexing creates copies. So I need to construct indexing sets to overwrite the content of
-                # mesh.boundary_face_ghosts[to_cells_boundary_face_index][sort_order_to]
-
-                # generates indices from 0 to number of ghost_cells (total)
-                indices = np.array(list(range(mask_face_to.shape[0])))
-                # masks away all cells that do not belong to this tag
-                indices_to = indices[mask_face_to]
-                # sort the indices
-                indices_to_sort = indices_to[to_cells_sort_order]
-
-                indices_from = indices[mask_face_from]
-                indices_from_sort = indices_from[from_cells_sort_order]
-
-                mesh.boundary_face_cells[indices_to_sort] = (
-                    mesh_copy.boundary_face_cells[indices_from_sort]
-                )
-                # mesh.boundary_face_cells = mesh.boundary_face_cells.at[indices_to_sort].set(
-                #     mesh_copy.boundary_face_cells[indices_from_sort]
-                # )
-
-                # if not np.allclose(
-                #     from_coords[sort_order_significance[-1], from_cells_sort_order],
-                #     to_coords[sort_order_significance[-1], to_cells_sort_order],
-                # ):
-                #     print(
-                #         "WARNING: Periodic boundary condition detected for incompatible mesh. The periodic sides of the mesh does not have the same face layout."
-                #     )
-        return mesh
-
-    def initialize(self, mesh, time, X, dX, Q, Qaux, parameters, normal):
-        dict_physical_name_to_index = {
-            v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)
-        }
-        dict_index_to_function = {
-            i: None for i, v in enumerate(mesh.boundary_conditions_sorted_names)
-        }
-        periodic_bcs_ghosts = []
-        for i_bc, bc in enumerate(self.boundary_conditions):
-            dict_index_to_function[dict_physical_name_to_index[bc.physical_tag]] = (
-                bc.get_boundary_condition_function(
-                    time, X, dX, Q, Qaux, parameters, normal
-                )
-            )
-        #     if type(bc) == Periodic:
-        #         function_index = dict_physical_name_to_index[bc.periodic_to_physical_tag]
-        #         periodics_bcs_from = mesh.boundary_face_ghosts[mesh.boundary_face_function_numbers == function_index ]
-        self.boundary_functions = list(dict_index_to_function.values())
-        self.list_sorted_function_names = list(mesh.boundary_conditions_sorted_names)
-        mesh = self.resolve_periodic_bcs(mesh)
-        self.initialized = True
-        return mesh
     
-    def map_physical_id_to_function_index(self, mesh):
-        dict_tag_to_name = {int(k): str(v) for k, v in zip(mesh.boundary_conditions_sorted_physical_tags, mesh.boundary_conditions_sorted_names)}
-            
-
-    def get_precice_boundary_indices_to_bc_name(self, mesh):
-        dict_physical_name_to_index = {
-            v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)
-        }
-        dict_index_to_physical_name = {
-            v: i for i, v in enumerate(mesh.boundary_conditions_sorted_names)
-        }
-        out = {}
-        for i_bc, bc in enumerate(self.boundary_conditions):
-            if type(bc) == PreciceCoupling:
-                out = {**out, dict_physical_name_to_index[bc]: bc}
-        return out
-
-    def get_boundary_function_list(self):
-        assert self.initialized
-        return self.boundary_functions
-    
-    def get_boundary_function_matrix(self, time, X, dX, Q, Qaux, parameters, normal):
-        n_variables = Q.length()
-        n_bcs = len(self.boundary_conditions)
-        out = Matrix.zeros(n_bcs, n_variables)
-        for i, bc in enumerate(self.boundary_conditions):
-            out[i, :] = bc.get_boundary_condition_function(
-                time, X, dX, Q, Qaux, parameters, normal
-            ).T
-        return out
+    def get_boundary_condition_function(self, time, X, dX, Q, Qaux, parameters, normal):
+        bc_idx = sympy.Symbol("bc_idx", integer=True)
+        bc_func = sympy.Piecewise(
+        *(
+            (func(time, X, dX, Q, Qaux, parameters, normal), sympy.Eq(bc_idx, i))
+            for i, func in enumerate(self._boundary_functions)
+        )
+        )
+        func = Function(
+            name="boundary_conditions",
+            args=Zstruct(idx=bc_idx, time=time, position=X, distance=dX, variables=Q, aux_variables=Qaux, parameters=parameters, normal=normal),
+            definition = bc_func
+        )
+        return func
 

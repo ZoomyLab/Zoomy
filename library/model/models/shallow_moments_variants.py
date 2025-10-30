@@ -15,11 +15,11 @@ from typing import Union
 
 
 
-from library.model.models.base import (
+from library.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.model.models.base import Model
+from library.model.basemodel import Model
 import library.model.initial_conditions as IC
 from library.model.models.basismatrices import Basismatrices, Legendre_shifted, Basisfunction
 
@@ -1007,7 +1007,7 @@ class ShallowMoments2d(Model):
 
 
 
-    def interpolate_3d(self):
+    def project_2d_to_3d(self):
         out = Matrix([0 for i in range(5)])
         level = self.level
         offset = level+1

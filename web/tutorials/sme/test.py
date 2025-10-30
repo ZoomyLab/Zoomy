@@ -139,7 +139,7 @@ Qnew, Qaux = solver.solve(mesh, model)
 # ## Visualization
 
 io.generate_vtk(os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))
-# postprocessing.vtk_interpolate_3d(model, settings, Nz=20, filename='out_3d')
+# postprocessing.vtk_project_2d_to_3d(model, settings, Nz=20, filename='out_3d')
 
 # +
 # visu.pyvista_3d(settings.output.directory, scale=1.0)

@@ -303,7 +303,7 @@ if __name__ == "__main__":
     
 
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))
-    postprocessing.vtk_interpolate_3d(model, settings, Nz=20, filename='out_3d')
+    postprocessing.vtk_project_2d_to_3d(model, settings, Nz=20, filename='out_3d')
 
 
     # test_smm_1d(level=6, process='_1', case='again', c_nut = 1., c_bl=1., c_slipmod=1, lamda=70, nut=nut, nut_bl=0.000001)

@@ -31,7 +31,7 @@ from library.python.misc.misc import Zstruct, Settings
 import library.python.misc.transformation as transformation
 import library.python.fvm.ode as ode
 import library.python.fvm.timestepping as timestepping
-from library.model.models.base import NumpyRuntimeModel
+from library.model.basemodel import NumpyRuntimeModel
 
 
 @define(frozen=True, slots=True, kw_only=True)            
@@ -81,9 +81,9 @@ class Solver():
 
         return compute_source
 
-    def get_compute_source_jacobian(self, mesh, model):
+    def get_compute_source_jacobian_wrt_variables(self, mesh, model):
         def compute_source(dt, Q, Qaux, parameters, dQ):
-            dQ = model.source_jacobian(
+            dQ = model.source_jacobian_wrt_variables(
                     Q[:, : mesh.n_inner_cells],
                     Qaux[:, : mesh.n_inner_cells],
                     parameters,

@@ -221,8 +221,8 @@ class AmrexPrinter(CXX11CodePrinter):
         module_functions.append(self.create_function('source', model.source(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('residual', model.residual(), n_dof, n_dof_qaux))
         module_functions.append(self.create_function('source_implicit', model.source_implicit(), n_dof, n_dof_qaux))
-        module_functions.append(self.create_function_interpolate('interpolate_3d', model.interpolate_3d(), n_dof, n_dof_qaux))
-        module_functions.append(self.create_function_boundary('boundary_conditions', model.boundary_conditions.get_boundary_function_matrix(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal), n_dof, n_dof_qaux, dim))
+        module_functions.append(self.create_function_interpolate('project_2d_to_3d', model.project_2d_to_3d(), n_dof, n_dof_qaux))
+        module_functions.append(self.create_function_boundary('boundary_conditions', model.boundary_conditions.get_boundary_condition_function(model.time, model.position, model.distance, model.variables, model.aux_variables, model.parameters, model.normal), n_dof, n_dof_qaux, dim))
         full = self.create_file_header(n_dof, n_dof_qaux, dim) + '\n\n' + '\n\n'.join(module_functions) + self.create_file_footer()
         return full
     
