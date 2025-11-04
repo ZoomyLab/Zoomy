@@ -1,41 +1,23 @@
-import os
 import numpy as np
-from sympy.utilities.lambdify import lambdify
-import sympy
 from mpi4py import MPI
 from dolfinx.io import gmshio
+
 # import gmsh
 # import dolfinx
 from dolfinx import fem
 import basix
-import tqdm
-from petsc4py import PETSc
 import ufl
+
 # import pyvista
-from  dolfinx.fem import petsc
 # import sys
 # from dolfinx import mesh
-from ufl import (
-    TestFunction,
-    TrialFunction,
-    dx,
-    inner,
-)
-import dolfinx
-from dolfinx.fem.petsc import LinearProblem
-from dolfinx.mesh import locate_entities_boundary, meshtags
 from dolfinx import mesh as dolfinx_mesh
 
 import numpy.typing as npt
 
 
-from library.python.fvm.solver_jax import Settings
-from library.model.models.shallow_water import ShallowWaterEquations
-from library.python.mesh.mesh import Mesh
-import library.model.initial_conditions as IC
-import library.model.boundary_conditions as BC
-from library.python.misc.misc import Zstruct
-import library.python.transformation.to_ufl as trafo
+from library.zoomy_core.mesh.mesh import Mesh
+
 
 def compute_facet_distances(mesh: mesh.Mesh) -> fem.Function:
     """
@@ -57,17 +39,19 @@ def compute_facet_distances(mesh: mesh.Mesh) -> fem.Function:
 
     # --- Cell centers ---
     cell2v = mesh.topology.connectivity(tdim, 0).array.reshape(-1, tdim + 1)
-    cell_coords = coords[cell2v, :]            # (num_cells, tdim+1, tdim)
-    cell_centers = cell_coords.mean(axis=1)    # (num_cells, tdim)
+    cell_coords = coords[cell2v, :]  # (num_cells, tdim+1, tdim)
+    cell_centers = cell_coords.mean(axis=1)  # (num_cells, tdim)
 
     # --- Facet centers ---
     facet2v = mesh.topology.connectivity(fdim, 0).array.reshape(-1, tdim)
-    facet_coords = coords[facet2v, :]          # (num_facets, tdim, tdim)
+    facet_coords = coords[facet2v, :]  # (num_facets, tdim, tdim)
     facet_centers = facet_coords.mean(axis=1)  # (num_facets, tdim)
 
     # --- Map each facet to a neighboring cell ---
     facet2cell_conn = mesh.topology.connectivity(fdim, tdim)
-    facet_to_cell = np.array([c[0] if len(c) > 0 else -1 for c in facet2cell_conn.links()])
+    facet_to_cell = np.array(
+        [c[0] if len(c) > 0 else -1 for c in facet2cell_conn.links()]
+    )
     valid_facets = facet_to_cell >= 0
 
     # --- Compute distances ---
@@ -91,21 +75,30 @@ def load_mesh(path_to_mesh):
     tags = [int(v) for v in mesh.boundary_conditions_sorted_physical_tags]
     tags.sort()
     map_tag_to_id = {v: i for i, v in enumerate(tags)}
-    
+
     mesh, cell_tags, facet_tags = gmshio.read_from_msh(
         path_to_mesh, MPI.COMM_WORLD, 0, gdim=2
     )
     unique_facet_tags = np.unique(facet_tags.values)
-    facet_boundary_function_id = np.array([map_tag_to_id[tag] for tag in facet_tags.values[:]])
-    return mesh, cell_tags, facet_tags, unique_facet_tags, facet_boundary_function_id, min_inradius
+    facet_boundary_function_id = np.array(
+        [map_tag_to_id[tag] for tag in facet_tags.values[:]]
+    )
+    return (
+        mesh,
+        cell_tags,
+        facet_tags,
+        unique_facet_tags,
+        facet_boundary_function_id,
+        min_inradius,
+    )
 
 
 def evaluate_on_all_interior_facets_midpoint(
-        expr : ufl.core.expr.Expr,
-        domain : dolfinx_mesh.Mesh,
-        side : str = "+"
-) -> tuple[npt.NDArray[np.floating],  # X_mid  (N, gdim)
-           npt.NDArray[np.inexact]]:   # values (N, …)
+    expr: ufl.core.expr.Expr, domain: dolfinx_mesh.Mesh, side: str = "+"
+) -> tuple[
+    npt.NDArray[np.floating],  # X_mid  (N, gdim)
+    npt.NDArray[np.inexact],
+]:  # values (N, …)
     """
     Mid-point evaluation of `expr` on *all* interior facets owned by this
     MPI rank.
@@ -134,53 +127,54 @@ def evaluate_on_all_interior_facets_midpoint(
     n_loc_facets = domain.topology.index_map(fdim).size_local
 
     interior_facets = np.array(
-        [f for f in range(n_loc_facets) if len(f_to_c.links(f)) == 2],
-        dtype=np.int32)
+        [f for f in range(n_loc_facets) if len(f_to_c.links(f)) == 2], dtype=np.int32
+    )
 
     if interior_facets.size == 0:
         # nothing on this rank
         shape_val = expr.ufl_shape or ()
-        return (np.empty((0, domain.geometry.dim)),
-                np.empty((0, *shape_val)))
+        return (np.empty((0, domain.geometry.dim)), np.empty((0, *shape_val)))
 
     # --- reference mid-point of one facet -----------------------------
     facet_type = basix.cell.subentity_types(domain.basix_cell())[fdim][0]
     xi_facet_mid = basix.cell.geometry(facet_type).mean(axis=0)
 
     xi_cell = np.zeros((1, tdim))
-    xi_cell[0, :xi_facet_mid.shape[0]] = xi_facet_mid
+    xi_cell[0, : xi_facet_mid.shape[0]] = xi_facet_mid
 
-    expr_comp  = fem.Expression(expr, xi_cell)
+    expr_comp = fem.Expression(expr, xi_cell)
     coord_comp = fem.Expression(ufl.SpatialCoordinate(domain), xi_cell)
 
     # --- (cell, local_facet) pairs for interior facets ----------------
     cell_facet = fem.compute_integration_domains(
-        fem.IntegralType.interior_facet, domain.topology, interior_facets, fdim)
+        fem.IntegralType.interior_facet, domain.topology, interior_facets, fdim
+    )
 
     # --- evaluate (+ and - in one call) --------------------------------
-    values_2 = expr_comp.eval(domain, cell_facet)     # shape (2N, …)
-    X_2      = coord_comp.eval(domain, cell_facet)    # shape (2N, gdim)
+    values_2 = expr_comp.eval(domain, cell_facet)  # shape (2N, …)
+    X_2 = coord_comp.eval(domain, cell_facet)  # shape (2N, gdim)
 
     # UFL/FFC order: first cell → “+”, second cell → “-”
-    val_plus  = values_2[0::2]
+    val_plus = values_2[0::2]
     val_minus = values_2[1::2]
-    X_mid     = X_2[0::2]        # same coordinates twice
+    X_mid = X_2[0::2]  # same coordinates twice
 
     if side == "+":
         values = val_plus
     elif side == "-":
         values = val_minus
-    else:                         # "avg"
-        values = 0.5*(val_plus + val_minus)
+    else:  # "avg"
+        values = 0.5 * (val_plus + val_minus)
 
     return X_mid, values
 
 
 def evaluate_on_all_exterior_facets_midpoint(
-        expr   : ufl.core.expr.Expr,
-        domain : dolfinx_mesh.Mesh
-) -> tuple[npt.NDArray[np.floating],  # X_mid  (N, gdim)
-           npt.NDArray[np.inexact]]:   # values (N, …)
+    expr: ufl.core.expr.Expr, domain: dolfinx_mesh.Mesh
+) -> tuple[
+    npt.NDArray[np.floating],  # X_mid  (N, gdim)
+    npt.NDArray[np.inexact],
+]:  # values (N, …)
     """
     Mid-point evaluation of `expr` on all boundary (exterior) facets
     owned by this rank.
@@ -193,38 +187,38 @@ def evaluate_on_all_exterior_facets_midpoint(
     n_loc_facets = domain.topology.index_map(fdim).size_local
 
     exterior_facets = np.array(
-        [f for f in range(n_loc_facets) if len(f_to_c.links(f)) == 1],
-        dtype=np.int32)
+        [f for f in range(n_loc_facets) if len(f_to_c.links(f)) == 1], dtype=np.int32
+    )
 
     if exterior_facets.size == 0:
         shape_val = expr.ufl_shape or ()
-        return (np.empty((0, domain.geometry.dim)),
-                np.empty((0, *shape_val)))
+        return (np.empty((0, domain.geometry.dim)), np.empty((0, *shape_val)))
 
     facet_type = basix.cell.subentity_types(domain.basix_cell())[fdim][0]
     xi_facet_mid = basix.cell.geometry(facet_type).mean(axis=0)
 
     xi_cell = np.zeros((1, tdim))
-    xi_cell[0, :xi_facet_mid.shape[0]] = xi_facet_mid
+    xi_cell[0, : xi_facet_mid.shape[0]] = xi_facet_mid
 
-    expr_comp  = fem.Expression(expr, xi_cell)
+    expr_comp = fem.Expression(expr, xi_cell)
     coord_comp = fem.Expression(ufl.SpatialCoordinate(domain), xi_cell)
 
     cell_facet = fem.compute_integration_domains(
-        fem.IntegralType.exterior_facet, domain.topology, exterior_facets, fdim)
+        fem.IntegralType.exterior_facet, domain.topology, exterior_facets, fdim
+    )
 
-    values = expr_comp.eval(domain, cell_facet)   # shape (N, …)
-    X_mid  = coord_comp.eval(domain, cell_facet)  # shape (N, gdim)
+    values = expr_comp.eval(domain, cell_facet)  # shape (N, …)
+    X_mid = coord_comp.eval(domain, cell_facet)  # shape (N, gdim)
 
     return X_mid, values
 
 
 def evaluate_on_all_facets_midpoint(
-        expr   : ufl.core.expr.Expr,
-        domain : dolfinx_mesh.Mesh,
-        side   : str = "+"
-) -> tuple[npt.NDArray[np.floating],  # X_mid_all  (N_tot, gdim)
-           npt.NDArray[np.inexact]]:   # values_all (N_tot, …)
+    expr: ufl.core.expr.Expr, domain: dolfinx_mesh.Mesh, side: str = "+"
+) -> tuple[
+    npt.NDArray[np.floating],  # X_mid_all  (N_tot, gdim)
+    npt.NDArray[np.inexact],
+]:  # values_all (N_tot, …)
     """
     Mid-point evaluation on *all* facets owned by this rank.
 
@@ -234,11 +228,10 @@ def evaluate_on_all_facets_midpoint(
     Returns concatenated arrays of coordinates and values.
     """
 
-    X_int,  val_int  = evaluate_on_all_interior_facets_midpoint(expr, domain, side)
-    X_ext,  val_ext  = evaluate_on_all_exterior_facets_midpoint(expr, domain)
+    X_int, val_int = evaluate_on_all_interior_facets_midpoint(expr, domain, side)
+    X_ext, val_ext = evaluate_on_all_exterior_facets_midpoint(expr, domain)
 
-    X_all   = np.vstack((X_int, X_ext))
-    values  = np.concatenate((val_int, val_ext), axis=0)
+    X_all = np.vstack((X_int, X_ext))
+    values = np.concatenate((val_int, val_ext), axis=0)
 
     return X_all, values
-

@@ -4,4 +4,4 @@
 
 | | |
 | --- | --- |
-| [fvm.solver_jax.Settings](fvm.solver_jax.Settings.qmd#library.python.fvm.solver_jax.Settings) |  |
+| [fvm.solver_jax.Settings](fvm.solver_jax.Settings.qmd#library.zoomy_core.fvm.solver_jax.Settings) |  |

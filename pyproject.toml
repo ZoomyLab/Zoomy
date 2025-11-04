@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "zoomy"
+name = "zoomy_core"
 version = "0.1.0"
 description = "A simulation software for dimensionally-reduced free surface flows."
 readme = "README.md"
@@ -13,10 +13,10 @@ license = { text = "GNU" }
 authors = [
   { name = "Ingo Steldermann", email = "steldermann@mbd.rwth-aachen.de" }
 ]
-keywords = ["simulation", "pyodide", "shallow flow", "free surface flow", "shallow moments", "shallow water", "VAM"]
+keywords = ["simulation", "shallow flow", "free surface flow", "shallow moments", "shallow water", "VAM"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: GNU License",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Operating System :: OS Independent",
   "Framework :: Jupyter",
 ]
@@ -26,32 +26,18 @@ dependencies = [
   "sympy>=1.13.3",
   "numpy",
   "scipy",
-  "matplotlib",
-  "seaborn",
-  "pytest",
-  "pytest-html",
-  "ipython",
-  "ipykernel",
-  "pygments",
-  "panel",
-  "jupytext",
-  "jupyter-cache",
-  "python-dotenv",
-  "tol-colors",
-  "pyprog",
 ]
 
 
 [project.optional-dependencies]
-viz = [
+gui = [
   "pyvista",
   "trame",
   "trame-vtk",
   "trame-vuetify",
+  "panel",
 ]
-io = [
-  "meshio",
-  "rasterio",
+hdf5 = [
   "h5py",
 ]
 coupling = [
@@ -64,14 +50,18 @@ testing = [
 mesh = [
   "gmsh",
   "python-gmsh",
+  "meshio",
+  "rasterio"
 ]
 dev = [
   "watchfiles",
   "Cython",
+  "pytest", 
+  "pytest-html"
 ]
 
-# Example: pip install zoomy[viz,io]
-# Example: pip install zoomy[dev]
+# Example: pip install zoomy_core[viz,io]
+# Example: pip install zoomy_core[dev]
 
 [project.urls]
 Homepage = "https://github.com/mbd-rwth/Zoomy"
@@ -81,5 +71,7 @@ Issues = "https://github.com/mbd-rwth/Zoomy/issues"
 
 
 [tool.setuptools.packages.find]
-include = ["library/model", "library/python"]
+where = ["library"]
+include = ["zoomy_core"]
+
 

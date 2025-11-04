@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from library.model.initial_conditions import *
+from library.zoomy_core.model.initial_conditions import *
 
 
 @pytest.mark.critical

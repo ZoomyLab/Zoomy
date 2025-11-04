@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
-from library.python.misc.misc import *
-from library.model.models.advection import Advection
-import library.model.boundary_conditions as BC
-import library.model.initial_conditions as IC
-from library.python.mesh.fvm_mesh import *
-from library.model.model import create_default_mesh_and_model
+from library.zoomy_core.misc.misc import *
+from library.zoomy_core.model.models.advection import Advection
+import library.zoomy_core.model.boundary_conditions as BC
+import library.zoomy_core.model.initial_conditions as IC
+from library.zoomy_core.mesh.fvm_mesh import *
+from library.zoomy_core.model.model import create_default_mesh_and_model
 
 
 @pytest.mark.critical

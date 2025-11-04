@@ -1,9 +1,9 @@
 import pytest
 import os
 
-# from library.python.mesh.fvm_mesh import *
-from library.python.mesh.mesh import Mesh
-import library.python.misc.io as io
+# from library.zoomy_core.mesh.fvm_mesh import *
+from library.zoomy_core.mesh.mesh import Mesh
+import library.zoomy_core.misc.io as io
 
 
 @pytest.mark.critical
