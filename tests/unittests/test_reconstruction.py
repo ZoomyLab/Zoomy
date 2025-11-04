@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.model.model import *
+from library.zoomy_core.model.model import *
 import library.pysolver.reconstruction as reconstruction
 
 

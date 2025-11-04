@@ -1,11 +1,8 @@
 import firedrake as fd
 import ufl
-from library.python.fvm.solver_jax import Settings
+from library.zoomy_core.fvm.solver_jax import Settings
 from attrs import field
-from library.python.misc.misc import Zstruct
-
-
-
+from library.zoomy_core.misc.misc import Zstruct
 
 
 class FiredrakeHyperbolicSolver:
@@ -13,18 +10,21 @@ class FiredrakeHyperbolicSolver:
         settings: Zstruct = field(factory=lambda: Settings.default())
         self.CFL = CFL
         self.time_end = time_end
-        IdentityMatrix = field(factory = lambda : ufl.as_tensor([[1, 0, 0],
-                                                        [0, 1, 0],
-                                                        [0, 0, 1]]))
-        
+        IdentityMatrix = field(
+            factory=lambda: ufl.as_tensor([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        )
+
     def __attrs_post_init__(self):
         defaults = Settings.default()
         defaults.update(self.settings)
-        object.__setattr__(self, 'settings', defaults)
+        object.__setattr__(self, "settings", defaults)
 
     def numerical_flux(self, model, Ql, Qr, Qauxl, Qauxr, parameters, n, mesh):
-        return fd.dot(0.5*(model.flux(Ql, Qauxl, parameters)+model.flux(Qr, Qauxr, parameters)), n) \
-               - 0.5*self.max_abs_eigenvalue(model, Ql, Qauxl, n, mesh)*(Qr - Ql)
+        return fd.dot(
+            0.5
+            * (model.flux(Ql, Qauxl, parameters) + model.flux(Qr, Qauxr, parameters)),
+            n,
+        ) - 0.5 * self.max_abs_eigenvalue(model, Ql, Qauxl, n, mesh) * (Qr - Ql)
 
     def max_abs_eigenvalue(self, model, Q, Qaux, n, mesh):
         ev = model.eigenvalues(Q, Qaux, model.parameters, n)
@@ -50,16 +50,30 @@ class FiredrakeHyperbolicSolver:
         test_q = fd.TestFunction(V)
         trial_q = fd.TrialFunction(V)
 
-        weak_form = fd.dot(test_q, (trial_q - Qn)/dt)*fd.dx
-        weak_form += fd.dot(test_q('+') - test_q('-'),
-            self.numerical_flux(model, Qn('+'), Qn('-'), Qaux('+'), Qaux('-'),
-                                model.parameters, n('+'), mesh)) * fd.dS
+        weak_form = fd.dot(test_q, (trial_q - Qn) / dt) * fd.dx
+        weak_form += (
+            fd.dot(
+                test_q("+") - test_q("-"),
+                self.numerical_flux(
+                    model,
+                    Qn("+"),
+                    Qn("-"),
+                    Qaux("+"),
+                    Qaux("-"),
+                    model.parameters,
+                    n("+"),
+                    mesh,
+                ),
+            )
+            * fd.dS
+        )
 
         a = fd.lhs(weak_form)
         L = fd.rhs(weak_form)
         problem = fd.LinearVariationalProblem(a, L, Qnp1)
-        solver = fd.LinearVariationalSolver(problem,
-            solver_parameters={"ksp_type": "bcgs", "pc_type": "jacobi"})
+        solver = fd.LinearVariationalSolver(
+            problem, solver_parameters={"ksp_type": "bcgs", "pc_type": "jacobi"}
+        )
 
         outfile = fd.File("sim_firedrake.pvd")
         outfile.write(Qn, time=float(t))
@@ -67,5 +81,5 @@ class FiredrakeHyperbolicSolver:
         while float(t) < self.time_end:
             solver.solve()
             Qn.assign(Qnp1)
-            t.assign(float(t)+float(dt))
+            t.assign(float(t) + float(dt))
             outfile.write(Qn, time=float(t))

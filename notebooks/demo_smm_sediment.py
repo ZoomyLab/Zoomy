@@ -52,15 +52,15 @@ main_dir = os.getenv("ZOOMY_DIR")
 import pytest
 from types import SimpleNamespace
 
-from library.model.model import *
+from library.zoomy_core.model.model import *
 from library.pysolver.solver import *
 from library.pysolver.solver import jax_fvm_unsteady_semidiscrete as fvm_unsteady
-import library.model.initial_conditions as IC
-import library.model.boundary_conditions as BC
+import library.zoomy_core.model.initial_conditions as IC
+import library.zoomy_core.model.boundary_conditions as BC
 from library.pysolver.ode import RK1
-import library.python.misc.io as io
+import library.zoomy_core.misc.io as io
 from library.pysolver.reconstruction import GradientMesh
-import library.python.mesh.mesh as petscMesh
+import library.zoomy_core.mesh.mesh as petscMesh
 import library.postprocessing.postprocessing as postprocessing
 
 # -

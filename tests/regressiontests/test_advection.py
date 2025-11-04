@@ -3,12 +3,12 @@ import pytest
 from types import SimpleNamespace
 
 from library.pysolver.solver import *
-from library.model.model import *
-import library.model.initial_conditions as IC
-import library.model.boundary_conditions as BC
+from library.zoomy_core.model.model import *
+import library.zoomy_core.model.initial_conditions as IC
+import library.zoomy_core.model.boundary_conditions as BC
 from library.pysolver.ode import RK1, RK2, RK3
-import library.python.misc.io as io
-import library.python.mesh.mesh as petscMesh
+import library.zoomy_core.misc.io as io
+import library.zoomy_core.mesh.mesh as petscMesh
 
 
 @pytest.mark.critical

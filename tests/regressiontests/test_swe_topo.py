@@ -6,11 +6,11 @@ import os
 from copy import deepcopy as copy
 
 from library.pysolver.solver import *
-from library.model.model import *
-import library.model.initial_conditions as IC
-import library.model.boundary_conditions as BC
+from library.zoomy_core.model.model import *
+import library.zoomy_core.model.initial_conditions as IC
+import library.zoomy_core.model.boundary_conditions as BC
 from library.pysolver.ode import *
-import library.python.misc.io as io
+import library.zoomy_core.misc.io as io
 import library.postprocessing.postprocessing as postprocessing
 
 

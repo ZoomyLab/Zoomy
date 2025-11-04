@@ -58,14 +58,14 @@ from dolfinx import mesh as dolfinx_mesh
 import numpy.typing as npt
 
 
-from library.python.fvm.solver_numpy import Settings
-from library.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
-from library.model.models.shallow_water import ShallowWaterEquations
-from library.python.mesh.mesh import Mesh
-import library.model.initial_conditions as IC
-import library.model.boundary_conditions as BC
-from library.python.misc.misc import Zstruct
-import library.python.transformation.to_ufl as trafo
+from library.zoomy_core.fvm.solver_numpy import Settings
+from library.zoomy_core.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
+from library.zoomy_core.model.models.shallow_water import ShallowWaterEquations
+from library.zoomy_core.mesh.mesh import Mesh
+import library.zoomy_core.model.initial_conditions as IC
+import library.zoomy_core.model.boundary_conditions as BC
+from library.zoomy_core.misc.misc import Zstruct
+import library.zoomy_core.transformation.to_ufl as trafo
 import library.dg.dolfinx_solver as dg
 
 
