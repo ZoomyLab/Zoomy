@@ -46,6 +46,7 @@ class NumpyRuntimeModel:
         "squeeze": np.squeeze,
     }
     printer = "numpy"
+    
 
     # ------------------------------------------------------------------
 
