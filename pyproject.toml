@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "zoomy"
+version = "0.1.0"
+description = "A simulation software for dimensionally-reduced free surface flows."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GNU" }
+authors = [
+  { name = "Ingo Steldermann", email = "steldermann@mbd.rwth-aachen.de" }
+]
+keywords = ["simulation", "pyodide", "shallow flow", "free surface flow", "shallow moments", "shallow water", "VAM"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU License",
+  "Operating System :: OS Independent",
+  "Framework :: Jupyter",
+]
+
+dependencies = [
+  "attrs",
+  "sympy>=1.13.3",
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "seaborn",
+  "pytest",
+  "pytest-html",
+  "ipython",
+  "ipykernel",
+  "pygments",
+  "panel",
+  "jupytext",
+  "jupyter-cache",
+  "python-dotenv",
+  "tol-colors",
+  "pyprog",
+]
+
+
+[project.optional-dependencies]
+viz = [
+  "pyvista",
+  "trame",
+  "trame-vtk",
+  "trame-vuetify",
+]
+io = [
+  "meshio",
+  "rasterio",
+  "h5py",
+]
+coupling = [
+  "precice",
+]
+testing = [
+  "swashes",
+  "pyswashes",
+]
+mesh = [
+  "gmsh",
+  "python-gmsh",
+]
+dev = [
+  "watchfiles",
+  "Cython",
+]
+
+# Example: pip install zoomy[viz,io]
+# Example: pip install zoomy[dev]
+
+[project.urls]
+Homepage = "https://github.com/mbd-rwth/Zoomy"
+Documentation = "https://mbd-rwth.github.io/Zoomy"
+Source = "https://github.com/mbd-rwth/Zoomy"
+Issues = "https://github.com/mbd-rwth/Zoomy/issues"
+
+
+[tool.setuptools.packages.find]
+include = ["library/model", "library/python"]
+
