@@ -23,12 +23,12 @@ import numpy.typing as npt
 
 from attrs import define, field
 
-from library.zoomy_core.fvm.solver_jax import Settings
-from library.zoomy_core.mesh.mesh import Mesh
-from library.zoomy_core.misc.misc import Zstruct
-import library.zoomy_core.transformation.to_ufl as trafo
+from zoomy_core.fvm.solver_jax import Settings
+from zoomy_core.mesh.mesh import Mesh
+from zoomy_core.misc.misc import Zstruct
+import zoomy_core.transformation.to_ufl as trafo
 
-from library.zoomy_core.model.sympy2c_new import *
+from zoomy_core.model.sympy2c_new import *
 
 
 def load_mesh(path_to_mesh):

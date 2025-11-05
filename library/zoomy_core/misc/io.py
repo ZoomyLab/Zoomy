@@ -17,11 +17,11 @@ try:
 except ImportError:
     _HAVE_H5PY = False
 
-# import library.zoomy_core.mesh.fvm_mesh as fvm_mesh
-from library.zoomy_core.mesh.mesh import Mesh
-import library.zoomy_core.mesh.mesh_util as mesh_util
-from library.zoomy_core.misc.misc import Zstruct, Settings
-from library.zoomy_core.misc.logger_config import logger
+# import zoomy_core.mesh.fvm_mesh as fvm_mesh
+from zoomy_core.mesh.mesh import Mesh
+import zoomy_core.mesh.mesh_util as mesh_util
+from zoomy_core.misc.misc import Zstruct, Settings
+from zoomy_core.misc.logger_config import logger
 
 
 def init_output_directory(path, clean):

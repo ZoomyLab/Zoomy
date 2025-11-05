@@ -12,7 +12,7 @@ from typing import Callable
 from attrs import define, field
 
 
-from library.zoomy_core.misc.logger_config import logger
+from zoomy_core.misc.logger_config import logger
 
 
 # WARNING: I get a segmentation fault if I do not include
@@ -28,15 +28,15 @@ from library.zoomy_core.misc.logger_config import logger
 #    logger.warning(err)
 
 
-import library.zoomy_core.fvm.flux as flux
-import library.zoomy_core.fvm.nonconservative_flux as nonconservative_flux
-import library.zoomy_core.misc.io as io
-import library.zoomy_core_jax.misc.io as jax_io
-from library.zoomy_core.mesh.mesh import convert_mesh_to_jax
-from library.zoomy_core.misc.misc import Zstruct, Settings
-import library.zoomy_core.fvm.ode as ode
-import library.zoomy_core.fvm.timestepping as timestepping
-from library.zoomy_core.transformation.to_jax import JaxRuntimeModel
+import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.nonconservative_flux as nonconservative_flux
+import zoomy_core.misc.io as io
+import zoomy_core_jax.misc.io as jax_io
+from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_core.misc.misc import Zstruct, Settings
+import zoomy_core.fvm.ode as ode
+import zoomy_core.fvm.timestepping as timestepping
+from zoomy_core.transformation.to_jax import JaxRuntimeModel
 
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):

@@ -8,9 +8,9 @@ from sympy import Matrix
 from attr import define, field
 from typing import Callable, List
 
-from library.zoomy_core.misc.misc import Zstruct, ZArray
+from zoomy_core.misc.misc import Zstruct, ZArray
 
-from library.zoomy_core.model.basefunction import Function
+from zoomy_core.model.basefunction import Function
 
 
 @define(slots=True, frozen=False, kw_only=True)

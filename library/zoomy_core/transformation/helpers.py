@@ -1,6 +1,6 @@
 from sympy import MatrixSymbol, fraction, cancel, Matrix
 
-from library.zoomy_core.misc.misc import Zstruct
+from zoomy_core.misc.misc import Zstruct
 
 def regularize_denominator(expr, regularization_constant = 10**(-4), regularize = False):
     if not regularize:

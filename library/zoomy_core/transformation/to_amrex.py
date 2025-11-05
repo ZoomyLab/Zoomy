@@ -3,9 +3,9 @@ from sympy import MatrixSymbol, fraction, cancel, Matrix, symbols, radsimp, pows
 import sympy as sp
 from copy import deepcopy
 
-from library.zoomy_core.misc.misc import Zstruct
-from library.zoomy_core.model.sympy2c import create_module
-from library.zoomy_core.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
+from zoomy_core.misc.misc import Zstruct
+from zoomy_core.model.sympy2c import create_module
+from zoomy_core.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
 
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter

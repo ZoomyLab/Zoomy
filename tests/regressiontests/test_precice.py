@@ -5,17 +5,17 @@ import os
 from sympy import Matrix
 
 
-from library.zoomy_core.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional, PreciceHyperbolicSolverAUP, PreciceTestSolver, PreciceHyperbolicSolverAUP_while
-from library.zoomy_core.model.models.shallow_moments import ShallowMoments
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.misc.misc import Settings, Zstruct
-import library.zoomy_core.fvm.timestepping as timestepping
+from zoomy_core.fvm.precice_solver import PreciceHyperbolicSolver, PreciceHyperbolicSolverBidirectional, PreciceHyperbolicSolverAUP, PreciceTestSolver, PreciceHyperbolicSolverAUP_while
+from zoomy_core.model.models.shallow_moments import ShallowMoments
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+import zoomy_core.misc.io as io
+from zoomy_core.misc.misc import Settings, Zstruct
+import zoomy_core.fvm.timestepping as timestepping
 
-# from library.pysolver.reconstruction import GradientMesh
-import library.zoomy_core.mesh.mesh as petscMesh
-import library.postprocessing.postprocessing as postprocessing
+# from pysolver.reconstruction import GradientMesh
+import zoomy_core.mesh.mesh as petscMesh
+import postprocessing.postprocessing as postprocessing
 import argparse
 
 main_dir = os.getenv("ZOOMY_DIR")

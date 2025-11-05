@@ -11,7 +11,7 @@ from typing import Callable
 from attrs import define, field
 
 
-from library.zoomy_core.misc.logger_config import logger
+from zoomy_core.misc.logger_config import logger
 
 
 # WARNING: I get a segmentation fault if I do not include petsc4py before precice
@@ -26,13 +26,13 @@ except (ModuleNotFoundError, Exception) as err:
     logger.warning(err)
 
 
-import library.zoomy_core.fvm.flux as flux
-import library.zoomy_core.fvm.nonconservative_flux as nonconservative_flux
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.misc.misc import Zstruct, Settings
-import library.zoomy_core.fvm.ode as ode
-import library.zoomy_core.fvm.timestepping as timestepping
-import library.zoomy_core.fvm.solver_jax as solver
+import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.nonconservative_flux as nonconservative_flux
+import zoomy_core.misc.io as io
+from zoomy_core.misc.misc import Zstruct, Settings
+import zoomy_core.fvm.ode as ode
+import zoomy_core.fvm.timestepping as timestepping
+import zoomy_core.fvm.solver_jax as solver
 
 
 def precice_callback_read(interface, meshName, vertexIDs, dataName, dt):

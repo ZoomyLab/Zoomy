@@ -4,7 +4,7 @@ try:
 except ImportError:
     import numpy as jnp
 
-from library.zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 
 
 

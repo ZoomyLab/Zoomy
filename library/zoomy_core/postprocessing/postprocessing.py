@@ -8,10 +8,10 @@ try:
 except ImportError:
     _HAVE_H5PY = False
 
-import library.zoomy_core.mesh.mesh as petscMesh
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.misc.logger_config import logger
-from library.zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+import zoomy_core.mesh.mesh as petscMesh
+import zoomy_core.misc.io as io
+from zoomy_core.misc.logger_config import logger
+from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 
 def vtk_project_2d_to_3d(
     model, settings, start_at_time=0, scale_h=1.0, filename='out_3d'

@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.zoomy_core.model.model import *
-import library.pysolver.reconstruction as reconstruction
+from zoomy_core.model.model import *
+import pysolver.reconstruction as reconstruction
 
 
 @pytest.mark.critical

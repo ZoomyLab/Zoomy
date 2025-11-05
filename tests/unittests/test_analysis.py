@@ -1,7 +1,7 @@
 
 from sympy import symbols, Matrix, diff, exp, I, Rational
-from library.zoomy_core.model.model import *
-from library.zoomy_core.model.analysis import linear_stability_analysis
+from zoomy_core.model.model import *
+from zoomy_core.model.analysis import linear_stability_analysis
 
 def test_linear_stability_analysis():
     

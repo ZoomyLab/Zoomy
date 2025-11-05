@@ -1,4 +1,4 @@
-from library.zoomy_core.model.models.shallow_moments import (IC, Matrix, Model, eigenvalue_dict_to_matrix,
+from zoomy_core.model.models.shallow_moments import (IC, Matrix, Model, eigenvalue_dict_to_matrix,
                                                   register_sympy_attribute, sympy)
 
 

@@ -15,13 +15,13 @@ import attr
 from typing import Union, Dict, List
 
 
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.zoomy_core.model.basemodel import Model
-from library.zoomy_core.model.models.basismatrices import Basismatrices
-from library.zoomy_core.model.models.basisfunctions import Legendre_shifted, Basisfunction
+from zoomy_core.model.basemodel import Model
+from zoomy_core.model.models.basismatrices import Basismatrices
+from zoomy_core.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
 
     

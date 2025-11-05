@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from library.zoomy_core.misc.misc import *
+from zoomy_core.misc.misc import *
 
 @pytest.mark.unittest
 def test_Zstruct():

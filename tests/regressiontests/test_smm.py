@@ -2,16 +2,16 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-from library.pysolver.solver import *
-from library.zoomy_core.model.model import *
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-from library.pysolver.ode import RK1
-import library.zoomy_core.misc.io as io
+from pysolver.solver import *
+from zoomy_core.model.model import *
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+from pysolver.ode import RK1
+import zoomy_core.misc.io as io
 
-# from library.pysolver.reconstruction import GradientMesh
-import library.zoomy_core.mesh.mesh as petscMesh
-import library.postprocessing.postprocessing as postprocessing
+# from pysolver.reconstruction import GradientMesh
+import zoomy_core.mesh.mesh as petscMesh
+import postprocessing.postprocessing as postprocessing
 import argparse
 
 

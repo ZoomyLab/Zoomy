@@ -15,14 +15,14 @@ from typing import Union
 
 
 
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.zoomy_core.model.basemodel import Model
-import library.zoomy_core.model.initial_conditions as IC
-from library.zoomy_core.model.models.basismatrices import Basismatrices
-from library.zoomy_core.model.models.basisfunctions import Legendre_shifted, Basisfunction
+from zoomy_core.model.basemodel import Model
+import zoomy_core.model.initial_conditions as IC
+from zoomy_core.model.models.basismatrices import Basismatrices
+from zoomy_core.model.models.basisfunctions import Legendre_shifted, Basisfunction
 
 
 

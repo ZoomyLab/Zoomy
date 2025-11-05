@@ -29,12 +29,12 @@ from typing import Union
 import numpy as np
 from attr import define
 
-import library.zoomy_core.mesh.mesh_extrude as extrude
-import library.zoomy_core.mesh.mesh_util as mesh_util
-from library.zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
-from library.zoomy_core.misc.custom_types import CArray, FArray, IArray
-from library.zoomy_core.misc.static_class import register_static_pytree
-from library.zoomy_core.model.boundary_conditions import Periodic
+import zoomy_core.mesh.mesh_extrude as extrude
+import zoomy_core.mesh.mesh_util as mesh_util
+from zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
+from zoomy_core.misc.custom_types import CArray, FArray, IArray
+from zoomy_core.misc.static_class import register_static_pytree
+from zoomy_core.model.boundary_conditions import Periodic
 
 # petsc4py.init(sys.argv)
 
