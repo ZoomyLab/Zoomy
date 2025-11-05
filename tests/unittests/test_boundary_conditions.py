@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from library.zoomy_core.model.boundary_conditions import *
-from library.zoomy_core.mesh.fvm_mesh import Mesh
+from zoomy_core.model.boundary_conditions import *
+from zoomy_core.mesh.fvm_mesh import Mesh
 
 
 # @pytest.mark.critical

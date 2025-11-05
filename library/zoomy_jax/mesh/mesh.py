@@ -18,14 +18,14 @@ from attr import define
 from typing import Union, Any
 
 
-from library.zoomy_core.misc.custom_types import IArray, FArray, CArray
-from library.zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
-import library.zoomy_core.mesh.mesh_extrude as extrude
-import library.zoomy_core.mesh.mesh_util as mesh_util
-from library.zoomy_core.misc.static_class import register_static_pytree
-from library.zoomy_core.model.boundary_conditions import Periodic
+from zoomy_core.misc.custom_types import IArray, FArray, CArray
+from zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
+import zoomy_core.mesh.mesh_extrude as extrude
+import zoomy_core.mesh.mesh_util as mesh_util
+from zoomy_core.misc.static_class import register_static_pytree
+from zoomy_core.model.boundary_conditions import Periodic
 
-from library.zoomy_core.mesh.mesh import (
+from zoomy_core.mesh.mesh import (
     Mesh,
     find_derivative_indices,
     get_physical_boundary_labels,

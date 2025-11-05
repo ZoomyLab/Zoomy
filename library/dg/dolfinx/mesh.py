@@ -16,7 +16,7 @@ from dolfinx import mesh as dolfinx_mesh
 import numpy.typing as npt
 
 
-from library.zoomy_core.mesh.mesh import Mesh
+from zoomy_core.mesh.mesh import Mesh
 
 
 def compute_facet_distances(mesh: mesh.Mesh) -> fem.Function:

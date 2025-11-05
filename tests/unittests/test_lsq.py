@@ -2,9 +2,9 @@ import jax.numpy as jnp
 import os
 import numpy as np
 
-import library.zoomy_core.mesh.mesh as petscMesh
-from library.zoomy_core.mesh.mesh import compute_derivatives
-from library.zoomy_core.mesh.mesh import convert_mesh_to_jax
+import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.mesh.mesh import convert_mesh_to_jax
 
 def test_1d():
     N = 10

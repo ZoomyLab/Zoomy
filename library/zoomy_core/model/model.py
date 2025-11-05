@@ -2,14 +2,14 @@ import os
 import numpy as np
 from typing import Union, Type
 
-from library.zoomy_core.model.basemodel import Model
-from library.zoomy_core.model.models.advection import Advection
+from zoomy_core.model.basemodel import Model
+from zoomy_core.model.models.advection import Advection
 #
 
-# from library.zoomy_core.model.models.shallow_moments_sediment import *
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-from library.zoomy_core.mesh.fvm_mesh import Mesh
+# from zoomy_core.model.models.shallow_moments_sediment import *
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+from zoomy_core.mesh.fvm_mesh import Mesh
 
 
 def create_default_mesh_and_model(

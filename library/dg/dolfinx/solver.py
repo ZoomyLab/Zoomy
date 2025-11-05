@@ -13,8 +13,8 @@ from dolfinx import mesh as mesh
 from attrs import define
 
 
-import library.zoomy_core.transformation.to_ufl as trafo
-from library.dg.dolfinx.mesh import load_mesh, evaluate_on_all_facets_midpoint
+import zoomy_core.transformation.to_ufl as trafo
+from dg.dolfinx.mesh import load_mesh, evaluate_on_all_facets_midpoint
 
 
 @define(frozen=True, slots=True, kw_only=True)

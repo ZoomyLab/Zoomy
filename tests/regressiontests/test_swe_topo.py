@@ -5,13 +5,13 @@ import concurrent.futures
 import os
 from copy import deepcopy as copy
 
-from library.pysolver.solver import *
-from library.zoomy_core.model.model import *
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-from library.pysolver.ode import *
-import library.zoomy_core.misc.io as io
-import library.postprocessing.postprocessing as postprocessing
+from pysolver.solver import *
+from zoomy_core.model.model import *
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+from pysolver.ode import *
+import zoomy_core.misc.io as io
+import postprocessing.postprocessing as postprocessing
 
 
 @pytest.mark.critical

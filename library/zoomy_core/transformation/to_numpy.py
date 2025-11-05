@@ -2,7 +2,7 @@ from typing import Callable
 import numpy as np
 from attrs import define, field
 
-from library.zoomy_core.misc.custom_types import FArray
+from zoomy_core.misc.custom_types import FArray
 
 
 @define(kw_only=False, slots=True, frozen=True)

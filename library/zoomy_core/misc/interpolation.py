@@ -3,8 +3,8 @@ from sympy import integrate, diff
 from sympy.abc import x
 from sympy import lambdify
 
-import library.zoomy_core.mesh.mesh_util as mesh_util
-# from library.zoomy_core.model.models.shallow_moments import Basis
+import zoomy_core.mesh.mesh_util as mesh_util
+# from zoomy_core.model.models.shallow_moments import Basis
 
 
 def _find_bounding_element(mesh, position):

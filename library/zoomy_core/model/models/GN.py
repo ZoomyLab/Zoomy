@@ -11,13 +11,13 @@ from sympy import legendre
 from sympy import lambdify, Rational
 
 
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.zoomy_core.model.basemodel import Model
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
+from zoomy_core.model.basemodel import Model
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
 
 class GN(Model):
     def __init__(

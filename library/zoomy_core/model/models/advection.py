@@ -11,12 +11,12 @@ from attr import define
 from typing import Optional
 from types import SimpleNamespace
 
-from library.zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
-from library.zoomy_core.model.initial_conditions import InitialConditions, Constant
-from library.zoomy_core.misc.custom_types import FArray
+from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
+from zoomy_core.model.initial_conditions import InitialConditions, Constant
+from zoomy_core.misc.custom_types import FArray
 
-# from library.zoomy_core.misc import vectorize  # type: ignore
-from library.zoomy_core.model.basemodel import Model
+# from zoomy_core.misc import vectorize  # type: ignore
+from zoomy_core.model.basemodel import Model
 
 
 class Advection(Model):

@@ -6,11 +6,11 @@ from attrs import define, field
 from sympy import init_printing, powsimp, zeros
 
 
-from library.zoomy_core.model.boundary_conditions import BoundaryConditions
-from library.zoomy_core.model.initial_conditions import Constant, InitialConditions
-from library.zoomy_core.misc.custom_types import FArray
-from library.zoomy_core.misc.misc import Zstruct, ZArray
-from library.zoomy_core.model.basefunction import Function
+from zoomy_core.model.boundary_conditions import BoundaryConditions
+from zoomy_core.model.initial_conditions import Constant, InitialConditions
+from zoomy_core.misc.custom_types import FArray
+from zoomy_core.misc.misc import Zstruct, ZArray
+from zoomy_core.model.basefunction import Function
 
 init_printing()
 

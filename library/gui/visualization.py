@@ -10,7 +10,7 @@ try:
 except ImportError:
     _HAVE_PYVISTA = False
 
-import library.zoomy_core.misc.io as io
+import zoomy_core.misc.io as io
 
 if _HAVE_PYVISTA:
     pn.extension("vtk")

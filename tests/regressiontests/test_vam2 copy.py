@@ -5,17 +5,17 @@ from jax import numpy as jnp
 import pytest
 from time import time as gettime
 
-from library.zoomy_core.fvm.solver_jax import Solver, Settings
-from library.zoomy_core.fvm.ode import RK1
-import library.zoomy_core.fvm.reconstruction as recon
-import library.zoomy_core.fvm.timestepping as timestepping
-import library.zoomy_core.fvm.flux as flux
-import library.zoomy_core.fvm.nonconservative_flux as nc_flux
+from zoomy_core.fvm.solver_jax import Solver, Settings
+from zoomy_core.fvm.ode import RK1
+import zoomy_core.fvm.reconstruction as recon
+import zoomy_core.fvm.timestepping as timestepping
+import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.nonconservative_flux as nc_flux
 
 
 
-import library.zoomy_core.mesh.mesh as petscMesh
-from library.zoomy_core.mesh.mesh import convert_mesh_to_jax
+import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh.mesh import convert_mesh_to_jax
 
 import numpy as np
 from sympy import Matrix, sqrt
@@ -23,19 +23,19 @@ from functools import partial
 
 
 
-from library.zoomy_core.model.model import Model
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.mesh.mesh import compute_derivatives
-from library.zoomy_core.model import *
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.model import Model
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+import zoomy_core.misc.io as io
+from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.model import *
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
 )
-from library.zoomy_core.model.basemodel import Model
-import library.zoomy_core.model.initial_conditions as IC
-from library.zoomy_core.model.models.basisfunctions import *
-from library.zoomy_core.model.models.basismatrices import *
+from zoomy_core.model.basemodel import Model
+import zoomy_core.model.initial_conditions as IC
+from zoomy_core.model.models.basisfunctions import *
+from zoomy_core.model.models.basismatrices import *
 
 
 class VAMHyperbolic(Model):

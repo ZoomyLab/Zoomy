@@ -3,7 +3,7 @@ import panel as pn
 
 from apps.guiv2.basicelements import Card, Section
 from apps.gui.docstring_crawler import get_class_docstring
-from library.zoomy_core.model.models.shallow_moments import ShallowMoments
+from zoomy_core.model.models.shallow_moments import ShallowMoments
 
 pn.extension('katex')
 

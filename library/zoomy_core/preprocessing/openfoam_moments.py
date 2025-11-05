@@ -16,9 +16,9 @@ try:
 except ImportError:
     _HAVE_PYVISTA = False
 
-from library.zoomy_core.mesh.fvm_mesh import Mesh
-from library.zoomy_core.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
-import library.zoomy_core.misc.io as io
+from zoomy_core.mesh.fvm_mesh import Mesh
+from zoomy_core.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
+import zoomy_core.misc.io as io
 
 
 main_dir = os.getenv("ZOOMY_DIR")

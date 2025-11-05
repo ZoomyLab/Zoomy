@@ -58,15 +58,15 @@ from dolfinx import mesh as dolfinx_mesh
 import numpy.typing as npt
 
 
-from library.zoomy_core.fvm.solver_numpy import Settings
-from library.zoomy_core.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
-from library.zoomy_core.model.models.shallow_water import ShallowWaterEquations
-from library.zoomy_core.mesh.mesh import Mesh
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-from library.zoomy_core.misc.misc import Zstruct
-import library.zoomy_core.transformation.to_ufl as trafo
-import library.dg.dolfinx_solver as dg
+from zoomy_core.fvm.solver_numpy import Settings
+from zoomy_core.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
+from zoomy_core.model.models.shallow_water import ShallowWaterEquations
+from zoomy_core.mesh.mesh import Mesh
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+from zoomy_core.misc.misc import Zstruct
+import zoomy_core.transformation.to_ufl as trafo
+import dg.dolfinx_solver as dg
 
 
 # + [markdown] vscode={"languageId": "raw"}

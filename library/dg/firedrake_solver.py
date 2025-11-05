@@ -1,8 +1,8 @@
 import firedrake as fd
 import ufl
-from library.zoomy_core.fvm.solver_jax import Settings
+from zoomy_core.fvm.solver_jax import Settings
 from attrs import field
-from library.zoomy_core.misc.misc import Zstruct
+from zoomy_core.misc.misc import Zstruct
 
 
 class FiredrakeHyperbolicSolver:

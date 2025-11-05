@@ -7,17 +7,17 @@ from attr import define
 from typing import Callable
 from attrs import define, field
 
-from library.zoomy_core.misc.logger_config import logger
+from zoomy_core.misc.logger_config import logger
 
 
 
-import library.zoomy_core.fvm.flux as flux
-import library.zoomy_core.fvm.nonconservative_flux as nonconservative_flux
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.misc.misc import Zstruct, Settings
-import library.zoomy_core.fvm.ode as ode
-import library.zoomy_core.fvm.timestepping as timestepping
-from library.zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.nonconservative_flux as nonconservative_flux
+import zoomy_core.misc.io as io
+from zoomy_core.misc.misc import Zstruct, Settings
+import zoomy_core.fvm.ode as ode
+import zoomy_core.fvm.timestepping as timestepping
+from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 
 
 @define(frozen=True, slots=True, kw_only=True)            

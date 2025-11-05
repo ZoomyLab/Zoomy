@@ -3,10 +3,10 @@ from sympy import Matrix
 
 # from sympy import *
 
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
 )
-from library.zoomy_core.model.basemodel import Model
+from zoomy_core.model.basemodel import Model
 
 
 

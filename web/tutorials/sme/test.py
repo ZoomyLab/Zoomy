@@ -40,29 +40,29 @@ from types import SimpleNamespace
 from sympy import cos, pi, Piecewise
 import sympy as sp
 
-from library.zoomy_core.fvm.solver_jax import HyperbolicSolver, Settings
-from library.zoomy_core.fvm.ode import RK1
-import library.zoomy_core.fvm.reconstruction as recon
-import library.zoomy_core.fvm.timestepping as timestepping
-import library.zoomy_core.fvm.flux as flux
-import library.zoomy_core.fvm.nonconservative_flux as nc_flux
-from library.zoomy_core.model.boundary_conditions import BoundaryCondition
-from library.zoomy_core.model.models.basisfunctions import Basisfunction, Legendre_shifted
-from library.zoomy_core.model.models.basismatrices import Basismatrices
-from library.zoomy_core.misc.misc import Zstruct
+from zoomy_core.fvm.solver_jax import HyperbolicSolver, Settings
+from zoomy_core.fvm.ode import RK1
+import zoomy_core.fvm.reconstruction as recon
+import zoomy_core.fvm.timestepping as timestepping
+import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.nonconservative_flux as nc_flux
+from zoomy_core.model.boundary_conditions import BoundaryCondition
+from zoomy_core.model.models.basisfunctions import Basisfunction, Legendre_shifted
+from zoomy_core.model.models.basismatrices import Basismatrices
+from zoomy_core.misc.misc import Zstruct
 
-from library.zoomy_core.model.models.shallow_moments import ShallowMoments2d, ShallowMoments
-import library.zoomy_core.model.initial_conditions as IC
-import library.zoomy_core.model.boundary_conditions as BC
-import library.zoomy_core.misc.io as io
-from library.zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.model.models.shallow_moments import ShallowMoments2d, ShallowMoments
+import zoomy_core.model.initial_conditions as IC
+import zoomy_core.model.boundary_conditions as BC
+import zoomy_core.misc.io as io
+from zoomy_core.mesh.mesh import compute_derivatives
 from tests.pdesoft import plots_paper
-import library.postprocessing.visualization as visu
+import postprocessing.visualization as visu
 
 
-import library.zoomy_core.mesh.mesh as petscMesh
-import library.postprocessing.postprocessing as postprocessing
-from library.zoomy_core.mesh.mesh import convert_mesh_to_jax
+import zoomy_core.mesh.mesh as petscMesh
+import postprocessing.postprocessing as postprocessing
+from zoomy_core.mesh.mesh import convert_mesh_to_jax
 import argparse
 # -
 

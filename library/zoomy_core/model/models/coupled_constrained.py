@@ -10,12 +10,12 @@ from sympy import integrate, diff
 from sympy import legendre
 from sympy import lambdify
 
-from library.zoomy_core.model.basemodel import (
+from zoomy_core.model.basemodel import (
     register_sympy_attribute,
     eigenvalue_dict_to_matrix,
 )
-from library.zoomy_core.model.basemodel import Model
-import library.zoomy_core.model.initial_conditions as IC
+from zoomy_core.model.basemodel import Model
+import zoomy_core.model.initial_conditions as IC
 
 class CoupledConstrained(Model):
     def __init__(

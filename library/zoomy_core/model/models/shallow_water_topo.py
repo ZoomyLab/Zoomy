@@ -11,12 +11,12 @@ from attr import define, field
 from typing import Optional
 from types import SimpleNamespace
 
-from library.zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
-from library.zoomy_core.model.initial_conditions import InitialConditions, Constant
-from library.zoomy_core.misc.custom_types import FArray
-from library.zoomy_core.model.basemodel import Model, eigenvalue_dict_to_matrix
+from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
+from zoomy_core.model.initial_conditions import InitialConditions, Constant
+from zoomy_core.misc.custom_types import FArray
+from zoomy_core.model.basemodel import Model, eigenvalue_dict_to_matrix
 
-from library.zoomy_core.misc.misc import Zstruct
+from zoomy_core.misc.misc import Zstruct
 
 @define(frozen=True, slots=True, kw_only=True)
 class ShallowWaterEquationsWithTopo1D(Model):

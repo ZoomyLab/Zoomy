@@ -2,12 +2,12 @@ import numpy as np
 from attr import define
 from typing import Callable, Optional
 
-from library.zoomy_core.misc.custom_types import FArray
-from library.zoomy_core.mesh.mesh import Mesh
-import library.zoomy_core.misc.io as io
-import library.zoomy_core.misc.interpolation as interpolate_mesh
+from zoomy_core.misc.custom_types import FArray
+from zoomy_core.mesh.mesh import Mesh
+import zoomy_core.misc.io as io
+import zoomy_core.misc.interpolation as interpolate_mesh
 
-# from library.zoomy_core.mesh import Mesh2D
+# from zoomy_core.mesh import Mesh2D
 
 
 @define(slots=True, frozen=True)

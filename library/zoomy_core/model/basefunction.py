@@ -4,7 +4,7 @@ import sympy as sp
 from attrs import define, field
 from sympy import lambdify
 
-from library.zoomy_core.misc.misc import Zstruct
+from zoomy_core.misc.misc import Zstruct
 
 def listify(expr):
     if type(expr) is sp.Piecewise:
