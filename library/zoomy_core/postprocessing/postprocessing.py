@@ -14,10 +14,11 @@ from library.zoomy_core.misc.logger_config import logger
 from library.zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 
 def vtk_project_2d_to_3d(
-    model, settings, Nz=10, start_at_time=0, scale_h=1.0, filename='out_3d'
+    model, settings, start_at_time=0, scale_h=1.0, filename='out_3d'
 ):
     if not _HAVE_H5PY:
         raise ImportError("h5py is required for vtk_project_2d_to_3d function.")
+    Nz = model.number_of_points_3d
     main_dir = os.getenv("ZOOMY_DIR")
     path_to_simulation = os.path.join(main_dir, os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))    
     sim = h5py.File(path_to_simulation, "r")
@@ -50,12 +51,13 @@ def vtk_project_2d_to_3d(
         #for i_elem, (q, qaux) in enumerate(zip(Q.T, Qaux.T)):
         #    for iz, z in enumerate(Z):
         #        rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.project_2d_to_3d(np.array([0, 0, z]), q, qaux, parameters)
+
         for iz, z in enumerate(Z):
-        
+            Qnew = pde.project_2d_to_3d(z, Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], model.parameter_values).T
+
             #rhoUVWP[i_elem + (iz * mesh.n_cells), :] = pde.project_2d_to_3d(np.array([0, 0, z]), q, qaux, parameters)
             # rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), 0] = Q[0, :mesh.n_inner_cells]
-            Qnew = pde.project_2d_to_3d(np.array([0, 0, z]), Q[:, :mesh.n_inner_cells], Qaux[:, :mesh.n_inner_cells], model.parameter_values).T
-            rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew
+            rhoUVWP[(iz * mesh.n_inner_cells):((iz+1) * mesh.n_inner_cells), :] = Qnew[iz, :]
 
         # rhoUVWP[mesh.n_inner_cells:mesh.n_inner_cells+mesh.n_inner_cells, 0] = Q[0, :mesh.n_inner_cells]
 

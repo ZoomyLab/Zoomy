@@ -291,7 +291,7 @@ class Model:
                 name="project_2d_to_3d",
                 definition=self.project_2d_to_3d(),
                 args=Zstruct(
-                    Z=self.z_3d,
+                    Z=self.position[2],
                     variables=self.variables,
                     aux_variables=self.aux_variables,
                     parameters=self.parameters,
@@ -354,9 +354,13 @@ class Model:
         # NC = ZArray.zeros(
         #     self.n_variables, self.n_variables, self.dimension
         # )
+        JacF = ZArray(sympy.derive_by_array(self.flux(), self.variables.get_list()))
+        for d in range(self.dimension):
+            JacF_d = JacF[:, :, d]
+            JacF_d = ZArray(JacF_d.tomatrix().T)
+            JacF[:, :, d] = JacF_d
         return self._simplify(
-            sympy.derive_by_array(self.flux(), self.variables.get_list())
-            + self.nonconservative_matrix(),
+            JacF + self.nonconservative_matrix()
         )
 
     def source_jacobian_wrt_variables(self):
