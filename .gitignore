@@ -134,3 +134,6 @@ library/zoomyFoam/Make/linux64GccDPInt32Opt
 library/zoomyFoam/Make/linux64GccDPInt32Debug
 install/petsc
 .serial_mesh
+
+dist
+library/zoomy_core.egg-info

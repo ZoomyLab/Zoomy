@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zoomy_core"
-version = "0.1.0"
+version = "0.1.4"
 description = "A simulation software for dimensionally-reduced free surface flows."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,7 @@ dependencies = [
   "sympy>=1.13.3",
   "numpy",
   "scipy",
+  "loguru",
 ]
 
 
@@ -72,6 +73,6 @@ Issues = "https://github.com/mbd-rwth/Zoomy/issues"
 
 [tool.setuptools.packages.find]
 where = ["library"]
-include = ["zoomy_core"]
+include = ["zoomy_core*"]
 
 
