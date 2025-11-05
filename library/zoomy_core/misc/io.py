@@ -1,11 +1,18 @@
 import os
 import numpy as np
-import meshio
 import json
 import shutil
 
 try:
+    import meshio
+
+    _HAVE_MESHIO = True
+except:
+    _HAVE_MESHIO = False
+
+try:
     import h5py
+
     _HAVE_H5PY = True
 except ImportError:
     _HAVE_H5PY = False
@@ -15,7 +22,6 @@ from library.zoomy_core.mesh.mesh import Mesh
 import library.zoomy_core.mesh.mesh_util as mesh_util
 from library.zoomy_core.misc.misc import Zstruct, Settings
 from library.zoomy_core.misc.logger_config import logger
-
 
 
 def init_output_directory(path, clean):
@@ -30,11 +36,13 @@ def init_output_directory(path, clean):
             else:
                 os.remove(os.path.join(path, f))
 
+
 def get_hdf5_type(value):
     out = type(value)
     if isinstance(value, str):
         out = h5py.string_dtype()
     return out
+
 
 def write_dict_to_hdf5(group, d):
     for key, value in d.items():
@@ -47,12 +55,14 @@ def write_dict_to_hdf5(group, d):
             group.create_dataset(key, data=value)
         elif isinstance(value, type(np.ndarray)):
             group.create_dataset(key, data=value)
-        elif hasattr(value, "as_dict"): 
+        elif hasattr(value, "as_dict"):
             subgroup = group.create_group(key)
             write_dict_to_hdf5(subgroup, value.as_dict())
         else:
-            logger.warning(f"Skipping unsupported type for key: {key} -> {type(value)}")
-            
+            logger.warning(f"Skipping unsupported type for key: {
+                           key} -> {type(value)}")
+
+
 def load_hdf5_to_dict(group):
     d = {}
     for key, value in group.items():
@@ -60,11 +70,12 @@ def load_hdf5_to_dict(group):
             d[key] = load_hdf5_to_dict(value)
         elif isinstance(value, h5py.Dataset):
             if value.dtype == h5py.string_dtype():
-                d[key] = value[()].decode('utf-8')
-            else:  
+                d[key] = value[()].decode("utf-8")
+            else:
                 d[key] = value[()]
         else:
-            logger.warning(f"Skipping unsupported type for key: {key} -> {type(value)}")
+            logger.warning(f"Skipping unsupported type for key: {
+                           key} -> {type(value)}")
 
     return d
 
@@ -74,16 +85,18 @@ def save_settings(settings):
     filepath = os.path.join(main_dir, settings.output.directory)
     with h5py.File(os.path.join(filepath, "settings.h5"), "w") as f:
         write_dict_to_hdf5(f, settings.as_dict(recursive=True))
-        
+
+
 def load_settings(filepath):
     main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
     with h5py.File(os.path.join(filepath, "settings.h5"), "r") as f:
         d = load_hdf5_to_dict(f)
-        
-    settings = Settings.from_dict(d)                
+
+    settings = Settings.from_dict(d)
     return settings
-        
+
+
 def load_settings2(filepath):
     main_dir = os.getenv("ZOOMY_DIR")
     filepath = os.path.join(main_dir, filepath)
@@ -91,19 +104,21 @@ def load_settings2(filepath):
         model = f["model"]
         solver = f["solver"]
         output = f["output"]
-        
+
         d_model = {}
-        if 'parameters' in model:
+        if "parameters" in model:
             parameters = {k: v[()] for k, v in model["parameters"].items()}
             parameters = Zstruct(**parameters)
         for k in model.keys():
-            if k != 'parameters':
+            if k != "parameters":
                 v = model[k][()]
                 if isinstance(v, (str, int, float, bool)):
                     d_model[k] = v
                 else:
-                    raise ValueError(f"Unsupported type for model attribute {k}: {type(v)}")
-        d_model['parameters'] = parameters
+                    raise ValueError(
+                        f"Unsupported type for model attribute {k}: {type(v)}"
+                    )
+        d_model["parameters"] = parameters
         model = Zstruct(**d_model)
         d_solver = {}
         for k in solver.keys():
@@ -111,21 +126,24 @@ def load_settings2(filepath):
             if isinstance(v, (str, int, float, bool)):
                 d_solver[k] = v
             else:
-                raise ValueError(f"Unsupported type for solver attribute {k}: {type(v)}")
+                raise ValueError(
+                    f"Unsupported type for solver attribute {k}: {type(v)}"
+                )
         solver = Zstruct(**d_solver)
-        
+
         d_output = {}
         for k in output.keys():
             v = output[k][()]
             if isinstance(v, (str, int, float, bool)):
                 d_output[k] = v
             else:
-                raise ValueError(f"Unsupported type for output attribute {k}: {type(v)}")
+                raise ValueError(
+                    f"Unsupported type for output attribute {k}: {type(v)}"
+                )
         output = Zstruct(**d_output)
-        
+
         settings = Settings(model=model, solver=solver, output=output)
-                
-                
+
         # parameters = {k: v[()] for k, v in f["parameters"].items()}
         # name = f["name"][()]
         # output_dir = f["output_dir"][()]
@@ -160,13 +178,15 @@ def _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux=None, overwrite=Tru
             if overwrite:
                 del fields[group_name]
             else:
-                raise ValueError(f"Group {group_name} already exists in {filepath}")
+                raise ValueError(
+                    f"Group {group_name} already exists in {filepath}")
         attrs = fields.create_group(group_name)
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
         if Qaux is not None:
             attrs.create_dataset("Qaux", data=Qaux)
     return i_snapshot + 1.0
+
 
 def get_save_fields_simple(_filepath, write_all, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
@@ -184,14 +204,17 @@ def get_save_fields_simple(_filepath, write_all, overwrite=True):
                 if overwrite:
                     del fields[group_name]
                 else:
-                    raise ValueError(f"Group {group_name} already exists in {filepath}")
+                    raise ValueError(
+                        f"Group {group_name} already exists in {filepath}")
             attrs = fields.create_group(group_name)
             attrs.create_dataset("time", data=time, dtype=float)
             attrs.create_dataset("Q", data=Q)
             if Qaux is not None:
                 attrs.create_dataset("Qaux", data=Qaux)
         return i_snapshot + 1.0
+
     return _save_hdf5
+
 
 def _save_hdf5(_filepath, i_snapshot, time, Q, Qaux, overwrite=True):
     i_snap = int(i_snapshot)
@@ -208,7 +231,8 @@ def _save_hdf5(_filepath, i_snapshot, time, Q, Qaux, overwrite=True):
             if overwrite:
                 del fields[group_name]
             else:
-                raise ValueError(f"Group {group_name} already exists in {filepath}")
+                raise ValueError(
+                    f"Group {group_name} already exists in {filepath}")
         attrs = fields.create_group(group_name)
         attrs.create_dataset("time", data=time, dtype=float)
         attrs.create_dataset("Q", data=Q)
@@ -216,19 +240,25 @@ def _save_hdf5(_filepath, i_snapshot, time, Q, Qaux, overwrite=True):
             attrs.create_dataset("Qaux", data=Qaux)
     return i_snapshot + 1.0
 
+
 def get_save_fields(_filepath, write_all=False, overwrite=True):
     if _HAVE_H5PY:
-        def save(time, next_write_at, i_snapshot, Q, Qaux):   
+
+        def save(time, next_write_at, i_snapshot, Q, Qaux):
             if write_all or time >= next_write_at:
-                return _save_hdf5(_filepath, i_snapshot, time, Q, Qaux, overwrite=overwrite)
+                return _save_hdf5(
+                    _filepath, i_snapshot, time, Q, Qaux, overwrite=overwrite
+                )
             else:
                 return i_snapshot
     else:
-        def save(time, next_write_at, i_snapshot, Q, Qaux):   
+
+        def save(time, next_write_at, i_snapshot, Q, Qaux):
             if write_all or time >= next_write_at:
                 return i_snapshot + 1
             else:
                 return i_snapshot
+
     return save
 
 
@@ -239,6 +269,7 @@ def save_fields_test(a):
 
     _save_fields_to_hdf5(filepath, i_snapshot, time, Q, Qaux)
     return i_snapshot + 1
+
 
 def load_mesh_from_hdf5(filepath):
     mesh = Mesh.from_hdf5(filepath)
@@ -292,6 +323,10 @@ def _write_to_vtk_from_vertices_edges(
     point_fields=None,
     point_field_names=None,
 ):
+    if not _HAVE_MESHIO:
+        raise RuntimeError(
+            "_write_to_vtk_from_vertices_edges requires meshio, which is not available."
+        )
     assert (
         mesh_type == "triangle"
         or mesh_type == "quad"
@@ -306,13 +341,15 @@ def _write_to_vtk_from_vertices_edges(
         if field_names is None:
             field_names = [str(i) for i in range(fields.shape[0])]
         for i_fields, _ in enumerate(fields):
-            d_fields[field_names[i_fields]] = [fields[i_fields, :n_inner_elements]]
+            d_fields[field_names[i_fields]] = [
+                fields[i_fields, :n_inner_elements]]
     point_d_fields = {}
     if point_fields is not None:
         if point_field_names is None:
             point_field_names = [str(i) for i in range(point_fields.shape[0])]
         for i_fields, _ in enumerate(point_fields):
-            point_d_fields[point_field_names[i_fields]] = point_fields[i_fields]
+            point_d_fields[point_field_names[i_fields]
+                           ] = point_fields[i_fields]
     meshout = meshio.Mesh(
         vertex_coordinates,
         [(mesh_util.convert_mesh_type_to_meshio_mesh_type(mesh_type), cell_vertices)],
@@ -331,7 +368,7 @@ def generate_vtk(
     aux_field_names=None,
     skip_aux=False,
     filename="out",
-    warp=False
+    warp=False,
 ):
     main_dir = os.getenv("ZOOMY_DIR")
     abs_filepath = os.path.join(main_dir, filepath)
@@ -367,14 +404,14 @@ def generate_vtk(
         if field_names is None:
             field_names = [str(i) for i in range(Q.shape[0])]
         if aux_field_names is None:
-            aux_field_names = ["aux_{}".format(str(i)) for i in range(Qaux.shape[0])]
+            aux_field_names = ["aux_{}".format(
+                str(i)) for i in range(Qaux.shape[0])]
 
         fields = np.concatenate((Q, Qaux), axis=0)
         field_names = field_names + aux_field_names
 
         vertex_coordinates_3d = np.zeros((mesh.vertex_coordinates.shape[1], 3))
         vertex_coordinates_3d[:, : mesh.dimension] = mesh.vertex_coordinates.T
-
 
         _write_to_vtk_from_vertices_edges(
             os.path.join(path, output_vtk),
@@ -397,5 +434,5 @@ def generate_vtk(
     # finalize vtk
     with open(os.path.join(path, f"{full_filepath_out}.vtk.series"), "w") as f:
         json.dump(vtk_timestamp_file, f)
-        
+
     file.close()
