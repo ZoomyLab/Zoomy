@@ -64,8 +64,8 @@ def test_smm_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag=tag, momentum_field_indices=[[i] for i in range(1, level+1)])
-            BC.Extrapolation(physical_tag=tag)
+            # BC.Wall(tag=tag, momentum_field_indices=[[i] for i in range(1, level+1)])
+            BC.Extrapolation(tag=tag)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -124,10 +124,10 @@ def test_smm_2d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.Wall(physical_tag="left"),
-            BC.Wall(physical_tag="right"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.Wall(tag="left"),
+            BC.Wall(tag="right"),
         ]
     )
 
@@ -187,10 +187,10 @@ def test_jax_jit_grad():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.Wall(physical_tag="left"),
-            BC.Wall(physical_tag="right"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.Wall(tag="left"),
+            BC.Wall(tag="right"),
         ]
     )
 
@@ -287,10 +287,10 @@ def test_jax_jit_grad_minimal():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.Wall(physical_tag="left"),
-            BC.Wall(physical_tag="right"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.Wall(tag="left"),
+            BC.Wall(tag="right"),
         ]
     )
 
@@ -387,12 +387,12 @@ def test_reconstruction():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            # BC.Extrapolation(physical_tag="top"),
-            # BC.Extrapolation(physical_tag="bottom"),
-            BC.Lambda(physical_tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 11.0}),
-            BC.Lambda(physical_tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 12.0}),
+            BC.Periodic(tag="top", periodic_to_physical_tag='bottom'),
+            BC.Periodic(tag="bottom", periodic_to_physical_tag='top'),
+            # BC.Extrapolation(tag="top"),
+            # BC.Extrapolation(tag="bottom"),
+            BC.Lambda(tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 11.0}),
+            BC.Lambda(tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 12.0}),
 
         ]
     )
@@ -450,10 +450,10 @@ def test_reconstruction_faces():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="top"),
-            BC.Extrapolation(physical_tag="bottom"),
-            BC.Extrapolation(physical_tag="left"),
-            BC.Extrapolation(physical_tag="right"),
+            BC.Extrapolation(tag="top"),
+            BC.Extrapolation(tag="bottom"),
+            BC.Extrapolation(tag="left"),
+            BC.Extrapolation(tag="right"),
         ]
     )
 
@@ -512,10 +512,10 @@ def test_implicit():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Lambda(physical_tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: 1.}),
-            BC.Lambda(physical_tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: -1.}),
+            BC.Periodic(tag="top", periodic_to_physical_tag='bottom'),
+            BC.Periodic(tag="bottom", periodic_to_physical_tag='top'),
+            BC.Lambda(tag="left", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: 1.}),
+            BC.Lambda(tag="right", prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: -1./pi + t, 1: lambda t, x, dx, q, qaux, p, n: -1.}),
         ]
     )
 
@@ -592,8 +592,8 @@ def test_smm_junction():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Lambda(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.Wall(physical_tag="wall"),
+            BC.Lambda(tag="inflow", prescribe_fields=inflow_dict),
+            BC.Wall(tag="wall"),
         ]
     )
 

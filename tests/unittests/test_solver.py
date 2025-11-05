@@ -29,7 +29,7 @@ def test_advection_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -69,7 +69,7 @@ def test_advection_2d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -113,7 +113,7 @@ def test_advection_3d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )

@@ -25,7 +25,7 @@ def create_default_mesh_and_model(
     ic = IC.Constant()
 
     bc_tags = ["left", "right", "top", "bottom"][: 2 * dimension]
-    bcs = BC.BoundaryConditions([BC.Wall(physical_tag=tag) for tag in bc_tags])
+    bcs = BC.BoundaryConditions([BC.Wall(tag=tag) for tag in bc_tags])
     if dimension == 1:
         mesh = Mesh.create_1d((-1, 1), 10)
     elif dimension == 2:

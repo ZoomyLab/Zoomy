@@ -57,9 +57,9 @@ def test_smm_1d(
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
+            BC.Extrapolation(tag="left"),
             BC.Wall(
-                physical_tag="right",
+                tag="right",
                 momentum_field_indices=[[1+i] for i in range(0, level + 1)],
             ),
         ]
@@ -102,11 +102,11 @@ def test_smm_1d_bidirectional(
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
-            BC.Right(physical_tag="left"),
+            BC.Extrapolation(tag="left"),
+            BC.Right(tag="left"),
 
             # BC.Wall(
-            #     physical_tag="right",
+            #     tag="right",
             #     momentum_field_indices=[[1+i] for i in range(0, level + 1)],
             # ),
         ]
@@ -149,11 +149,11 @@ def test_smm_1d_from_tut(
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
+            BC.Extrapolation(tag="left"),
 
-            BC.Extrapolation(physical_tag="right"),
+            BC.Extrapolation(tag="right"),
             # BC.Wall(
-            #     physical_tag="right",
+            #     tag="right",
             #     momentum_field_indices=[[1+i] for i in range(0, level + 1)],
             # ),
         ]
@@ -207,9 +207,9 @@ def test_precice(
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
+            BC.Extrapolation(tag="left"),
             BC.Wall(
-                physical_tag="right",
+                tag="right",
                 momentum_field_indices=[[1+i] for i in range(0, level + 1)],
             ),
         ]

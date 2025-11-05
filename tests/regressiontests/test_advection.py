@@ -29,7 +29,7 @@ def test_advection_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -70,10 +70,10 @@ def test_reconstruction_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
-        # [BC.Extrapolation(physical_tag=tag) for tag in bc_tags]
+        # [BC.Extrapolation(tag=tag) for tag in bc_tags]
     )
     ic = IC.RP()
     # def custom_ic(x):
@@ -115,18 +115,18 @@ def test_advection_2d(mesh_type):
     bc_tags_periodic_to = ["right", "left", "bottom", "top"]
 
     # bcs = BC.BoundaryConditions(
-    #     [BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
+    #     [BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to) for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)]
     # )
     bcs = BC.BoundaryConditions(
         [
-            # BC.Extrapolation(physical_tag='left'),
-            # BC.Extrapolation(physical_tag='right'),
-            # BC.Extrapolation(physical_tag='bottom'),
-            # BC.Extrapolation(physical_tag='top'),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
+            # BC.Extrapolation(tag='left'),
+            # BC.Extrapolation(tag='right'),
+            # BC.Extrapolation(tag='bottom'),
+            # BC.Extrapolation(tag='top'),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
+            BC.Periodic(tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(tag="top", periodic_to_physical_tag="bottom"),
         ]
     )
 
@@ -191,18 +191,18 @@ def test_advection_3d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            #  BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
-            BC.Extrapolation(physical_tag="left"),
-            #  BC.Periodic(physical_tag='right', periodic_to_physical_tag='left'),
-            BC.Extrapolation(physical_tag="right"),
-            #  BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
-            BC.Extrapolation(physical_tag="top"),
-            #  BC.Periodic(physical_tag='bottom', periodic_to_physical_tag='top'),
-            BC.Extrapolation(physical_tag="bottom"),
-            #  BC.Periodic(physical_tag='front', periodic_to_physical_tag='back'),
-            BC.Extrapolation(physical_tag="front"),
-            #  BC.Periodic(physical_tag='back', periodic_to_physical_tag='front'),
-            BC.Extrapolation(physical_tag="back"),
+            #  BC.Periodic(tag='left', periodic_to_physical_tag='right'),
+            BC.Extrapolation(tag="left"),
+            #  BC.Periodic(tag='right', periodic_to_physical_tag='left'),
+            BC.Extrapolation(tag="right"),
+            #  BC.Periodic(tag='top', periodic_to_physical_tag='bottom'),
+            BC.Extrapolation(tag="top"),
+            #  BC.Periodic(tag='bottom', periodic_to_physical_tag='top'),
+            BC.Extrapolation(tag="bottom"),
+            #  BC.Periodic(tag='front', periodic_to_physical_tag='back'),
+            BC.Extrapolation(tag="front"),
+            #  BC.Periodic(tag='back', periodic_to_physical_tag='front'),
+            BC.Extrapolation(tag="back"),
         ]
     )
     ic = IC.RP3d()
@@ -252,10 +252,10 @@ def test_periodic_bc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
+            BC.Periodic(tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(tag="top", periodic_to_physical_tag="bottom"),
         ]
     )
 
@@ -309,14 +309,14 @@ def test_reconstruction_2d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
-            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            BC.Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
-            BC.Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
-            # BC.Extrapolation(physical_tag="bottom"),
-            # BC.Extrapolation(physical_tag="top"),
+            # BC.Periodic(tag="left", periodic_to_physical_tag='right'),
+            # BC.Periodic(tag="right", periodic_to_physical_tag='left'),
+            BC.Periodic(tag="bottom", periodic_to_physical_tag="top"),
+            BC.Periodic(tag="top", periodic_to_physical_tag="bottom"),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
+            # BC.Extrapolation(tag="bottom"),
+            # BC.Extrapolation(tag="top"),
         ]
     )
 

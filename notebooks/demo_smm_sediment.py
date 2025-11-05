@@ -252,8 +252,8 @@ mesh = petscMesh.Mesh.create_1d((-6, 6), 600)
 
 bcs = BC.BoundaryConditions(
     [
-        BC.Extrapolation(physical_tag="left"),
-        BC.Extrapolation(physical_tag="right"),
+        BC.Extrapolation(tag="left"),
+        BC.Extrapolation(tag="right"),
     ]
 )
 
@@ -583,8 +583,8 @@ plt.show()
 #
 # bcs = BC.BoundaryConditions(
 #     [
-#         BC.Extrapolation(physical_tag='left'),
-#         BC.Extrapolation(physical_tag="right"),
+#         BC.Extrapolation(tag='left'),
+#         BC.Extrapolation(tag="right"),
 #     ]
 # )
 #
@@ -905,10 +905,10 @@ plt.show()
 #
 # bcs = BC.BoundaryConditions(
 #     [
-#         BC.Periodic(physical_tag='left', periodic_to_physical_tag='right'),
-#         BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-#         BC.Periodic(physical_tag='top', periodic_to_physical_tag='bottom'),
-#         BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
+#         BC.Periodic(tag='left', periodic_to_physical_tag='right'),
+#         BC.Periodic(tag="right", periodic_to_physical_tag='left'),
+#         BC.Periodic(tag='top', periodic_to_physical_tag='bottom'),
+#         BC.Periodic(tag="bottom", periodic_to_physical_tag='top'),
 #     ]
 # )
 #

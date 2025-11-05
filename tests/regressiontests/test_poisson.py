@@ -110,8 +110,8 @@ def test_poisson():
     bc_tags_periodic_to = ["right", "left"]
 
     bcs = BC.BoundaryConditions( [
-            BC.Lambda(physical_tag='left', prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 1.}),
-            BC.Lambda(physical_tag='right', prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 2.}),
+            BC.Lambda(tag='left', prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 1.}),
+            BC.Lambda(tag='right', prescribe_fields={0: lambda t, x, dx, q, qaux, p, n: 2.}),
         ]
     )
     

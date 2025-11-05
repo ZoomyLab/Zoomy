@@ -33,7 +33,7 @@ def test_swetopo_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -79,7 +79,7 @@ def test_swetopo_2d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -162,14 +162,14 @@ def test_calibration_1d(inputs):
     outflow_dict = {2: slope(x_plus)}
     bcs = BC.BoundaryConditions(
         [
-            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
         ]
     )
     # bcs = BC.BoundaryConditions(
     #     [
-    #         BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-    #         BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+    #         BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+    #         BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
     #     ]
     # )
 
