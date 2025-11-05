@@ -4,12 +4,11 @@ from time import time as get_time
 
 import sympy
 from sympy import Matrix
-from sympy import NDimArray as Arr
 
 from attr import define, field
 from typing import Callable, List
 
-from library.zoomy_core.misc.misc import Zstruct
+from library.zoomy_core.misc.misc import Zstruct, ZArray
 
 from library.zoomy_core.model.basefunction import Function
 
@@ -30,7 +29,7 @@ class BoundaryCondition:
 @define(slots=True, frozen=False, kw_only=True)
 class Extrapolation(BoundaryCondition):
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Arr(Q)
+        return ZArray(Q)
 
 
 @define(slots=True, frozen=False, kw_only=True)
@@ -38,7 +37,7 @@ class InflowOutflow(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        Qout = Arr(Q)
+        Qout = ZArray(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = eval(v)
         return Qout
@@ -49,7 +48,7 @@ class Lambda(BoundaryCondition):
     prescribe_fields: dict[int, float]
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        Qout = Arr(Q)
+        Qout = ZArray(Q)
         for k, v in self.prescribe_fields.items():
             Qout[k] = v(time, X, dX, Q, Qaux, parameters, normal)
         return Qout
@@ -77,7 +76,7 @@ class FromData(BoundaryCondition):
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         # Extrapolate all fields
-        Qout = Arr(Q)
+        Qout = ZArray(Q)
 
         # Set the fields which are prescribed in boundary condition dict
         time_start = get_time()
@@ -143,7 +142,7 @@ class Periodic(BoundaryCondition):
     periodic_to_physical_tag: str
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        return Arr(Q)
+        return ZArray(Q)
 
 
 @define(slots=True, frozen=True)
@@ -173,7 +172,7 @@ class BoundaryConditions:
         bc_idx = sympy.Symbol("bc_idx", integer=True)
         bc_func = sympy.Piecewise(
             *(
-                (func(time, X, dX, Q, Qaux, parameters, normal), sympy.Eq(bc_idx, i))
+                (func(time, X.get_list(), dX, Q.get_list(), Qaux.get_list(), parameters.get_list(), normal.get_list()), sympy.Eq(bc_idx, i))
                 for i, func in enumerate(self._boundary_functions)
             )
         )
