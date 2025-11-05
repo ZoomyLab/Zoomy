@@ -53,18 +53,18 @@ def test_ssf():
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
         ]
     )
 
@@ -140,18 +140,18 @@ def test_ssf_energy():
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
         ]
     )
 
@@ -230,18 +230,18 @@ def test_ssf_pathconservative():
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            BC.Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-            BC.Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
         ]
     )
 
@@ -341,18 +341,18 @@ def test_ssf_2d():
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="inflow"),
-            # BC.Wall(physical_tag="outflow"),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="inflow"),
+            # BC.Wall(tag="outflow"),
         ]
     )
 

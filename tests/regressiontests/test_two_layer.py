@@ -545,15 +545,15 @@ def test_vam_1d():
 
     bcs1 = BC.BoundaryConditions(
         [
-            # BC.Lambda(physical_tag='left', prescribe_fields={
+            # BC.Lambda(tag='left', prescribe_fields={
             #     1: lambda t, x, dx, q, qaux, p, n: .11197,
             #     #2: lambda t, x, dx, q, qaux, p, n: 0.,
             #     #3: lambda t, x, dx, q, qaux, p, n: 0.,
             #     #4: lambda t, x, dx, q, qaux, p, n: 0.
             # }),
-            BC.Extrapolation(physical_tag='left'),
-            BC.Extrapolation(physical_tag='right')
-            #BC.Lambda(physical_tag='right', prescribe_fields={
+            BC.Extrapolation(tag='left'),
+            BC.Extrapolation(tag='right')
+            #BC.Lambda(tag='right', prescribe_fields={
             #    3: lambda t, x, dx, q, qaux, p, n: 0,
             #    4: lambda t, x, dx, q, qaux, p, n: 0,
             #}),
@@ -562,16 +562,16 @@ def test_vam_1d():
     
     bcs2 = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag='left'),
-            # BC.Lambda(physical_tag='left', prescribe_fields={
+            BC.Extrapolation(tag='left'),
+            # BC.Lambda(tag='left', prescribe_fields={
             #    0: lambda t, x, dx, q, qaux, p, n: 0.,
             #    1: lambda t, x, dx, q, qaux, p, n: 0.
             # }),
-            # BC.Lambda(physical_tag='right', prescribe_fields={
+            # BC.Lambda(tag='right', prescribe_fields={
             #    0: lambda t, x, dx, q, qaux, p, n: 0.,
             #    1: lambda t, x, dx, q, qaux, p, n: 0.
             # }),
-            BC.Extrapolation(physical_tag='right')
+            BC.Extrapolation(tag='right')
         ]
     )
     

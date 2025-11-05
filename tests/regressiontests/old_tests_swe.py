@@ -227,8 +227,8 @@ def test_sweb_wetdry_1d():
     # topo = {"scheme": "topo", "name": "basin"}
     model = ShallowWaterWithBottom(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
+        Wall(tag="left"),
+        Wall(tag="right"),
     ]
     mesh = Mesh1D(number_of_elements=31)
     controller = Controller(model=model, mesh=mesh)
@@ -265,8 +265,8 @@ def test_sweb_basin_wb_simple_1d():
     ic = {"scheme": "func", "name": "basin_lake_at_rest"}
     model = ShallowWaterWithBottom(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
+        Wall(tag="left"),
+        Wall(tag="right"),
     ]
     mesh = Mesh1D(number_of_elements=40)
     controller = Controller(model=model, mesh=mesh)
@@ -289,8 +289,8 @@ def test_sweb_basin_wb_1d():
     ic = {"scheme": "func", "name": "basin"}
     model = ShallowWaterWithBottom(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
+        Wall(tag="left"),
+        Wall(tag="right"),
     ]
     # model.friction_models = ["newtonian"]
     # model.parameters = {"nu": 0.1}
@@ -387,10 +387,10 @@ def test_sweb_custom_boundaries_1d():
     model = ShallowWaterWithBottom()
     model.boundary_conditions = [
         Custom_extrapolation(
-            physical_tag="left", bc_function_dict={0: "lambda t, Q, X: 1.0"}
+            tag="left", bc_function_dict={0: "lambda t, Q, X: 1.0"}
         ),
         Custom_extrapolation(
-            physical_tag="right", bc_function_dict={1: "lambda t, Q, X: 1.0"}
+            tag="right", bc_function_dict={1: "lambda t, Q, X: 1.0"}
         ),
     ]
     controller = Controller(model=model)
@@ -417,10 +417,10 @@ def test_swe_basic_2d():
     ic = {"scheme": "func", "name": "riemann_offset"}
     model = ShallowWater2d(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
-        Wall(physical_tag="bottom"),
-        Wall(physical_tag="top"),
+        Wall(tag="left"),
+        Wall(tag="right"),
+        Wall(tag="bottom"),
+        Wall(tag="top"),
     ]
     mesh = Mesh2D()
     controller = Controller(model=model, mesh=mesh)
@@ -519,13 +519,13 @@ def test_sweb_inflow_outflow_2d():
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.boundary_conditions = [
         Custom_extrapolation(
-            physical_tag="left", bc_function_dict={1: "lambda t, Q, X: 0.1"}
+            tag="left", bc_function_dict={1: "lambda t, Q, X: 0.1"}
         ),
         Custom_extrapolation(
-            physical_tag="right", bc_function_dict={0: "lambda t, Q, X: 1.0"}
+            tag="right", bc_function_dict={0: "lambda t, Q, X: 1.0"}
         ),
-        Wall(physical_tag="bottom"),
-        Wall(physical_tag="top"),
+        Wall(tag="bottom"),
+        Wall(tag="top"),
     ]
     mesh = Mesh2D()
     controller = Controller(model=model, mesh=mesh)
@@ -557,10 +557,10 @@ def test_sweb_wetdry_2d():
     ic = {"scheme": "func", "name": "riemann"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
-        Wall(physical_tag="top"),
-        Wall(physical_tag="bottom"),
+        Wall(tag="left"),
+        Wall(tag="right"),
+        Wall(tag="top"),
+        Wall(tag="bottom"),
     ]
     mesh = Mesh2D()
     controller = Controller(model=model, mesh=mesh)
@@ -593,10 +593,10 @@ def test_sweb_wb_simple_2d():
     ic = {"scheme": "func", "name": "basin_lake_at_rest"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
-        Wall(physical_tag="top"),
-        Wall(physical_tag="bottom"),
+        Wall(tag="left"),
+        Wall(tag="right"),
+        Wall(tag="top"),
+        Wall(tag="bottom"),
     ]
     mesh = Mesh2D()
     controller = Controller(model=model, mesh=mesh)
@@ -615,10 +615,10 @@ def test_sweb_wb_2d():
     ic = {"scheme": "func", "name": "basin_lake_at_rest"}
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
-        Wall(physical_tag="top"),
-        Wall(physical_tag="bottom"),
+        Wall(tag="left"),
+        Wall(tag="right"),
+        Wall(tag="top"),
+        Wall(tag="bottom"),
     ]
     mesh = Mesh2D()
     controller = Controller(model=model, mesh=mesh)
@@ -645,16 +645,16 @@ def test_sweb_mesh_with_hole(mesh_file, mesh_type):
     model = ShallowWaterWithBottom2d(initial_conditions=ic)
     model.boundary_conditions = [
         Custom_extrapolation(
-            physical_tag="left",
+            tag="left",
             bc_function_dict={
                 1: "lambda t, Q, X: 0.3 / Q[0]",
                 2: "lambda t, Q, X: 0.0",
             },
         ),
-        Extrapolation(physical_tag="right"),
-        Wall(physical_tag="top"),
-        Wall(physical_tag="bottom"),
-        Wall(physical_tag="hole"),
+        Extrapolation(tag="right"),
+        Wall(tag="top"),
+        Wall(tag="bottom"),
+        Wall(tag="hole"),
     ]
     model.friction_models = ["newtonian"]
     model.parameters = {"nu": 1.0}
@@ -705,12 +705,12 @@ def test_swe_stiffler_2d():
     model.g = 9.81
     model.boundary_conditions = [
         Custom_extrapolation(
-            physical_tag="outflow",
+            tag="outflow",
             bc_function_dict={0: "lambda t, Q, X: 0.061"},
         ),
-        Wall2D(physical_tag="wall"),
+        Wall2D(tag="wall"),
         Custom_extrapolation(
-            physical_tag="inflow",
+            tag="inflow",
             bc_function_dict={
                 1: "lambda t, Q, X: -0.36 * 0.061 ",
                 2: "lambda t, Q, X: 0. ",
@@ -762,12 +762,12 @@ def test_swe_complex_topography_2d():
     model.friction_models = ["newtonian"]
     model.parameters = {"nu": 0.01}
     model.boundary_conditions = [
-        Extrapolation(physical_tag="left"),
-        Extrapolation(physical_tag="right"),
-        # Extrapolation(physical_tag="bottom"),
-        Extrapolation(physical_tag="top"),
+        Extrapolation(tag="left"),
+        Extrapolation(tag="right"),
+        # Extrapolation(tag="bottom"),
+        Extrapolation(tag="top"),
         Custom_extrapolation(
-            physical_tag="bottom",
+            tag="bottom",
             bc_function_dict={
                 # 0: "lambda t, Q, X: 1.0 + np.sin(5*np.pi*t)",
                 # 0: "lambda t, Q, X: 1.0",
@@ -803,9 +803,9 @@ def test_swe_stiffler_dam_break_2d():
     # model.friction_models = ["chezy", "newtonian"]
     # model.parameters = {"ChezyCoef": 16.0, "nu": 0.1}
     model.boundary_conditions = [
-        Wall2D(physical_tag="wall"),
-        Wall2D(physical_tag="inflow"),
-        Wall2D(physical_tag="outflow"),
+        Wall2D(tag="wall"),
+        Wall2D(tag="inflow"),
+        Wall2D(tag="outflow"),
     ]
     controller = Controller(model=model)
     controller.load_mesh = ["meshes/curved_open_channel/mesh_mid.msh", "quad"]
@@ -832,22 +832,22 @@ def test_swe_nozzle_2d():
     model.n_variables = 4
     model.boundary_conditions = [
         # Custom_extrapolation(
-        #     physical_tag="left",
+        #     tag="left",
         #     bc_function_dict={
         #         1: "lambda t, Q, X: 0.1",
         #         2: "lambda t, Q, X: 0.0",
         #     },
         # ),
         # Custom_extrapolation(
-        #     physical_tag="right",
+        #     tag="right",
         #     bc_function_dict={
         #         0: "lambda t, Q, X: 1.0",
         #     },
         # ),
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
-        Wall(physical_tag="top"),
-        Wall(physical_tag="bottom"),
+        Wall(tag="left"),
+        Wall(tag="right"),
+        Wall(tag="top"),
+        Wall(tag="bottom"),
     ]
     model.g = 9.81
     controller = Controller(model=model)

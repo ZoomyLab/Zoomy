@@ -51,6 +51,7 @@ class Solver():
         return Q, Qaux
         
     def create_runtime(self, Q, Qaux, mesh, model):      
+        mesh.resolve_periodic_bcs(model.boundary_conditions)
         Q, Qaux = np.asarray(Q), np.asarray(Qaux)
         parameters = np.asarray(model.parameter_values)
         runtime_model = NumpyRuntimeModel(model)        

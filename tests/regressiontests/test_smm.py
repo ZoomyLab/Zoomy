@@ -43,7 +43,7 @@ def test_smm_wave():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -109,7 +109,7 @@ def test_smm_analytical():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -170,7 +170,7 @@ def test_smm_1d():
     bcs = BC.BoundaryConditions(
         [
             BC.Wall(
-                physical_tag=tag,
+                tag=tag,
                 momentum_field_indices=[[i] for i in range(1, level + 1)],
             )
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
@@ -213,7 +213,7 @@ def test_sindy_generate_reference_data():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag=tag)
+            BC.Extrapolation(tag=tag)
             for (tag, periodic_to) in zip(bc_tags, bc_periodic_to)
         ]
     )
@@ -258,7 +258,7 @@ def test_smm_2d(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -310,10 +310,10 @@ def test_inflowoutflow_2d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
         ]
     )
     ic = IC.Constant(
@@ -370,14 +370,14 @@ def test_steffler():
     bcs = BC.BoundaryConditions(
         [
             BC.Wall(
-                physical_tag="wall",
+                tag="wall",
                 momentum_field_indices=[
                     [1 + i, 1 + offset + i] for i in range(level + 1)
                 ],
                 wall_slip=0.0,
             ),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
     ic = IC.Constant(
@@ -440,14 +440,14 @@ def test_steffler_small():
     bcs = BC.BoundaryConditions(
         [
             BC.Wall(
-                physical_tag="wall",
+                tag="wall",
                 momentum_field_indices=[
                     [1 + i, 1 + offset + i] for i in range(level + 1)
                 ],
                 wall_slip=0.0,
             ),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
     ic = IC.Constant(
@@ -524,11 +524,11 @@ def test_channel_with_hole_2d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Wall(physical_tag="hole"),
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
+            BC.Wall(tag="hole"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
         ]
     )
 
@@ -594,7 +594,7 @@ def test_smm_grad_2d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -653,7 +653,7 @@ def test_smm_1d_crazy_basis():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -699,7 +699,7 @@ def test_c_solver(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -766,16 +766,16 @@ def test_restart_from_openfoam(level=1):
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
 
@@ -867,16 +867,16 @@ def test_restart_from_openfoam_prediction(
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
 
@@ -951,7 +951,7 @@ def test_spline_strongbc_1d():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -1053,16 +1053,16 @@ def test_restart_from_openfoam_plotter(level=1):
 
     bcs = BC.BoundaryConditions(
         [
-            # BC.Wall(physical_tag="hole"),
-            # BC.Wall(physical_tag="top"),
-            # BC.Wall(physical_tag="bottom"),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields=outflow_dict),
-            # BC.Wall(physical_tag="pillar"),
-            BC.Wall(physical_tag="top"),
-            BC.Wall(physical_tag="bottom"),
-            BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            BC.InflowOutflow(physical_tag="outflow", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="hole"),
+            # BC.Wall(tag="top"),
+            # BC.Wall(tag="bottom"),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="right", prescribe_fields=outflow_dict),
+            # BC.Wall(tag="pillar"),
+            BC.Wall(tag="top"),
+            BC.Wall(tag="bottom"),
+            BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            BC.InflowOutflow(tag="outflow", prescribe_fields=outflow_dict),
         ]
     )
 
@@ -1142,7 +1142,7 @@ def test_petsc(mesh_type):
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Periodic(physical_tag=tag, periodic_to_physical_tag=tag_periodic_to)
+            BC.Periodic(tag=tag, periodic_to_physical_tag=tag_periodic_to)
             for (tag, tag_periodic_to) in zip(bc_tags, bc_tags_periodic_to)
         ]
     )
@@ -1233,20 +1233,20 @@ def test_enforce_w_bc():
     offset = level + 1
     bcs = BC.BoundaryConditions(
         [
-            # BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="outflow", prescribe_fields= outflow_dict),
-            BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
-            # BC.FromData(physical_tag='left', prescribe_fields=data_dict, timeline=timeline),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
-            # BC.Wall(physical_tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
-            # BC.Wall(physical_tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
-            # BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            # BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            BC.Extrapolation(physical_tag="top"),
-            BC.Extrapolation(physical_tag="bottom"),
-            BC.Extrapolation(physical_tag="right"),
-            # BC.Extrapolation(physical_tag="left"),
-            # BC.Extrapolation(physical_tag="right"),
+            # BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="outflow", prescribe_fields= outflow_dict),
+            BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
+            # BC.FromData(tag='left', prescribe_fields=data_dict, timeline=timeline),
+            # BC.InflowOutflow(tag="right", prescribe_fields= outflow_dict),
+            # BC.Wall(tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Wall(tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Periodic(tag="top", periodic_to_physical_tag='bottom'),
+            # BC.Periodic(tag="bottom", periodic_to_physical_tag='top'),
+            BC.Extrapolation(tag="top"),
+            BC.Extrapolation(tag="bottom"),
+            BC.Extrapolation(tag="right"),
+            # BC.Extrapolation(tag="left"),
+            # BC.Extrapolation(tag="right"),
         ]
     )
 
@@ -1356,22 +1356,22 @@ def test_ijshs24():
     offset = level + 1
     bcs = BC.BoundaryConditions(
         [
-            # BC.InflowOutflow(physical_tag="inflow", prescribe_fields=inflow_dict),
-            # BC.InflowOutflow(physical_tag="outflow", prescribe_fields= outflow_dict),
-            # BC.InflowOutflow(physical_tag="left", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="inflow", prescribe_fields=inflow_dict),
+            # BC.InflowOutflow(tag="outflow", prescribe_fields= outflow_dict),
+            # BC.InflowOutflow(tag="left", prescribe_fields=inflow_dict),
             BC.FromData(
-                physical_tag="left", prescribe_fields=data_dict, timeline=timeline
+                tag="left", prescribe_fields=data_dict, timeline=timeline
             ),
-            # BC.InflowOutflow(physical_tag="right", prescribe_fields= outflow_dict),
-            # BC.Wall(physical_tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
-            # BC.Wall(physical_tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
-            # BC.Periodic(physical_tag="top", periodic_to_physical_tag='bottom'),
-            # BC.Periodic(physical_tag="bottom", periodic_to_physical_tag='top'),
-            # BC.Extrapolation(physical_tag="top"),
-            # BC.Extrapolation(physical_tag="bottom"),
-            BC.Extrapolation(physical_tag="right"),
-            # BC.Extrapolation(physical_tag="left"),
-            # BC.Extrapolation(physical_tag="right"),
+            # BC.InflowOutflow(tag="right", prescribe_fields= outflow_dict),
+            # BC.Wall(tag="top", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Wall(tag="bottom", momentum_field_indices=[[1 + i*offset, 1+offset+i*offset] for i in range(level)], wall_slip=0.),
+            # BC.Periodic(tag="top", periodic_to_physical_tag='bottom'),
+            # BC.Periodic(tag="bottom", periodic_to_physical_tag='top'),
+            # BC.Extrapolation(tag="top"),
+            # BC.Extrapolation(tag="bottom"),
+            BC.Extrapolation(tag="right"),
+            # BC.Extrapolation(tag="left"),
+            # BC.Extrapolation(tag="right"),
         ]
     )
 
@@ -1442,10 +1442,10 @@ def test_eccomas_hyperbolicity():
     offset = level + 1
     bcs = BC.BoundaryConditions(
         [
-            # BC.Periodic(physical_tag="left", periodic_to_physical_tag='right'),
-            # BC.Periodic(physical_tag="right", periodic_to_physical_tag='left'),
-            BC.Extrapolation(physical_tag="left"),
-            BC.Extrapolation(physical_tag="right"),
+            # BC.Periodic(tag="left", periodic_to_physical_tag='right'),
+            # BC.Periodic(tag="right", periodic_to_physical_tag='left'),
+            BC.Extrapolation(tag="left"),
+            BC.Extrapolation(tag="right"),
         ]
     )
 

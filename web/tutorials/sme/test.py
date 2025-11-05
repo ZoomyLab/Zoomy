@@ -92,8 +92,8 @@ inflow_dict = {
 
 bcs = BC.BoundaryConditions(
     [
-        BC.Lambda(physical_tag="left", prescribe_fields=inflow_dict),
-        BC.Extrapolation(physical_tag="right"),
+        BC.Lambda(tag="left", prescribe_fields=inflow_dict),
+        BC.Extrapolation(tag="right"),
     ]
 )
 

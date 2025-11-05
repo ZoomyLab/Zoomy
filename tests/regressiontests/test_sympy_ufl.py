@@ -45,8 +45,8 @@ def get_model():
 
     bcs = BC.BoundaryConditions(
         [
-            BC.Extrapolation(physical_tag="left"),
-            BC.Extrapolation(physical_tag="right"),
+            BC.Extrapolation(tag="left"),
+            BC.Extrapolation(tag="right"),
         ]
     )
 

@@ -30,7 +30,7 @@ from library.zoomy_core.mesh.fvm_mesh import Mesh
 # @pytest.mark.critical
 # def test_boundary_condition_initialization():
 #     mesh = Mesh.create_1d((-1, 1), 10)
-#     bc = BoundaryCondition(physical_tag="left")
+#     bc = BoundaryCondition(tag="left")
 #     bc.initialize(mesh)
 # assert bc.initialized
 
@@ -38,7 +38,7 @@ from library.zoomy_core.mesh.fvm_mesh import Mesh
 @pytest.mark.critical
 def test_boundary_condition_extrapolation():
     mesh = Mesh.create_1d((-1, 1), 10)
-    bcs = [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    bcs = [Extrapolation(tag="left"), Extrapolation(tag="right")]
     initialize_bc(bcs, mesh)
     n_ghosts = initialize_ghost_cells(bcs, mesh.n_elements)
     n_all_elements = mesh.n_elements + n_ghosts
@@ -58,8 +58,8 @@ def test_boundary_condition_extrapolation():
 def test_boundary_condition_periodic():
     mesh = Mesh.create_1d((-1, 1), 10)
     bcs = [
-        Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-        Periodic(physical_tag="right", periodic_to_physical_tag="left"),
+        Periodic(tag="left", periodic_to_physical_tag="right"),
+        Periodic(tag="right", periodic_to_physical_tag="left"),
     ]
     n_ghosts = initialize(bcs, mesh)
     n_all_elements = mesh.n_elements + n_ghosts
@@ -79,7 +79,7 @@ def test_boundary_condition_periodic():
 def test_boundary_condition_extrapolation_2d():
     main_dir = os.getenv("ZOOMY_DIR")
     bc_tags = ["left", "right", "top", "bottom"]
-    bcs = [Extrapolation(physical_tag=tag) for tag in bc_tags]
+    bcs = [Extrapolation(tag=tag) for tag in bc_tags]
     mesh = Mesh.load_mesh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -99,8 +99,8 @@ def test_boundary_condition_extrapolation_2d():
 def test_boundary_condition_wall():
     mesh = Mesh.create_1d((-1, 1), 10)
     bcs = [
-        Wall(physical_tag="left", momentum_eqns=[1]),
-        Wall(physical_tag="right", momentum_eqns=[1]),
+        Wall(tag="left", momentum_eqns=[1]),
+        Wall(tag="right", momentum_eqns=[1]),
     ]
     n_ghosts = initialize(bcs, mesh)
     n_all_elements = mesh.n_elements + n_ghosts
@@ -116,7 +116,7 @@ def test_boundary_condition_wall():
 def test_boundary_condition_wall_2d():
     main_dir = os.getenv("ZOOMY_DIR")
     bc_tags = ["left", "right", "top", "bottom"]
-    bcs = [Wall(physical_tag=tag, momentum_eqns=[1, 2]) for tag in bc_tags]
+    bcs = [Wall(tag=tag, momentum_eqns=[1, 2]) for tag in bc_tags]
     mesh = Mesh.load_mesh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"),
         "quad",
@@ -142,11 +142,11 @@ def test_boundary_conditions_collection_class():
     mesh = Mesh.create_1d((-1, 1), 10)
 
     bcs = BoundaryConditions(
-        [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+        [Extrapolation(tag="left"), Extrapolation(tag="right")]
     )
     n_ghosts = bcs.initialize(mesh)
 
-    bcs_list = [Extrapolation(physical_tag="left"), Extrapolation(physical_tag="right")]
+    bcs_list = [Extrapolation(tag="left"), Extrapolation(tag="right")]
     initialize_bc(bcs_list, mesh)
     n_ghosts_list = initialize_ghost_cells(bcs_list, mesh.n_elements)
 

@@ -15,7 +15,7 @@ from library.zoomy_core.model.basefunction import Function
 
 @define(slots=True, frozen=False, kw_only=True)
 class BoundaryCondition:
-    physical_tag: str
+    tag: str
 
     """ 
     Default implementation. The required data for the 'ghost cell' is the data from the interior cell. Can be overwritten e.g. to implement periodic boundary conditions.
@@ -152,7 +152,7 @@ class BoundaryConditions:
     _boundary_tags: List[str] = field(init=False)
 
     def __attrs_post_init__(self):
-        tags_unsorted = [bc.physical_tag for bc in self._boundary_conditions]
+        tags_unsorted = [bc.tag for bc in self._boundary_conditions]
         order = np.argsort(tags_unsorted)
         object.__setattr__(
             self,
@@ -162,7 +162,7 @@ class BoundaryConditions:
         object.__setattr__(
             self,
             "_boundary_tags",
-            [self._boundary_conditions[i].physical_tag for i in order],
+            [self._boundary_conditions[i].tag for i in order],
         )
         object.__setattr__(
             self, "_boundary_conditions", [self._boundary_conditions[i] for i in order]

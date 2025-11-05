@@ -286,8 +286,8 @@ def test_smmb_basin_wb_simple_1d():
     model = ShallowMomentsWithBottom(initial_conditions=ic)
     model.n_variables = 3
     model.boundary_conditions = [
-        Wall(physical_tag="left"),
-        Wall(physical_tag="right"),
+        Wall(tag="left"),
+        Wall(tag="right"),
     ]
     mesh = Mesh1D(number_of_elements=40)
     controller = Controller(model=model, mesh=mesh)
@@ -333,10 +333,10 @@ def test_smm_2d():
     model = ShallowMoments2d(initial_conditions=ic)
     model.n_variables = 5
     model.boundary_conditions = [
-        Extrapolation(physical_tag="left"),
-        Extrapolation(physical_tag="right"),
-        Extrapolation(physical_tag="bottom"),
-        Extrapolation(physical_tag="top"),
+        Extrapolation(tag="left"),
+        Extrapolation(tag="right"),
+        Extrapolation(tag="bottom"),
+        Extrapolation(tag="top"),
     ]
     model.models = ["newtonian", "bc_slip"]
     model.parameters = {"nu": 0.1, "rho": 1.0, "sliplength": 1.0}
@@ -376,10 +376,10 @@ def test_smmb_2d():
     model = ShallowMomentsWithBottom2d(initial_conditions=ic)
     model.n_variables = 6
     model.boundary_conditions = [
-        Extrapolation(physical_tag="left"),
-        Extrapolation(physical_tag="right"),
-        Extrapolation(physical_tag="bottom"),
-        Extrapolation(physical_tag="top"),
+        Extrapolation(tag="left"),
+        Extrapolation(tag="right"),
+        Extrapolation(tag="bottom"),
+        Extrapolation(tag="top"),
     ]
     model.models = ["newtonian", "bc_slip"]
     model.parameters = {"nu": 0.1, "rho": 1.0, "sliplength": 1.0}
@@ -442,7 +442,7 @@ def test_smm_with_hole_2d():
     model.n_variables = 6
     model.boundary_conditions = [
         Custom_extrapolation(
-            physical_tag="left",
+            tag="left",
             bc_function_dict={
                 1: "lambda t, Q, X: 0.3 / Q[0]",
                 2: "lambda t, Q, X: 0.0",
@@ -450,10 +450,10 @@ def test_smm_with_hole_2d():
                 4: "lambda t, Q, X: 0.0",
             },
         ),
-        Extrapolation(physical_tag="right"),
-        Wall2D(physical_tag="bottom"),
-        Wall2D(physical_tag="top"),
-        Wall2D(physical_tag="hole"),
+        Extrapolation(tag="right"),
+        Wall2D(tag="bottom"),
+        Wall2D(tag="top"),
+        Wall2D(tag="hole"),
     ]
     # model.models = ["newtonian", "bc_slip"]
     model.models = ["bc_slip"]
@@ -495,10 +495,10 @@ def test_smmb_basin_wb_2d():
     model = ShallowMomentsWithBottom2d(initial_conditions=ic)
     model.n_variables = 6
     model.boundary_conditions = [
-        Wall2D(physical_tag="left"),
-        Wall2D(physical_tag="right"),
-        Wall2D(physical_tag="bottom"),
-        Wall2D(physical_tag="top"),
+        Wall2D(tag="left"),
+        Wall2D(tag="right"),
+        Wall2D(tag="bottom"),
+        Wall2D(tag="top"),
     ]
     # model.models = ["newtonian", "bc_slip"]
     model.models = []

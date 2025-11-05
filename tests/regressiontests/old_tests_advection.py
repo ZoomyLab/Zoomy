@@ -61,10 +61,10 @@ def test_advection_2d(numerical_flux_func, mesh_filename, mesh_type):
     model = Advection2d(initial_conditions=ic)
     model.advection_speed = [0.0, 1.0]
     model.boundary_conditions = [
-        Periodic(physical_tag="left", periodic_to_physical_tag="right"),
-        Periodic(physical_tag="right", periodic_to_physical_tag="left"),
-        Periodic(physical_tag="bottom", periodic_to_physical_tag="top"),
-        Periodic(physical_tag="top", periodic_to_physical_tag="bottom"),
+        Periodic(tag="left", periodic_to_physical_tag="right"),
+        Periodic(tag="right", periodic_to_physical_tag="left"),
+        Periodic(tag="bottom", periodic_to_physical_tag="top"),
+        Periodic(tag="top", periodic_to_physical_tag="bottom"),
     ]
     mesh = Mesh2D(filename=mesh_filename, type=mesh_type)
     controller = Controller(model=model, mesh=mesh)

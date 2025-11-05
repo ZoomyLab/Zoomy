@@ -79,14 +79,14 @@ import library.dg.dolfinx_solver as dg
 velocity_fields = [[2,3]]
 bcs = BC.BoundaryConditions(
     [
-        # BC.Extrapolation(physical_tag="top"),
-        # BC.Extrapolation(physical_tag="bottom"),
-        # BC.Extrapolation(physical_tag="left"),
-        # BC.Extrapolation(physical_tag="right"),
-        BC.Wall(physical_tag="top", momentum_field_indices=velocity_fields),
-        BC.Wall(physical_tag="bottom", momentum_field_indices=velocity_fields),
-        BC.Wall(physical_tag="left", momentum_field_indices=velocity_fields),
-        BC.Wall(physical_tag="right", momentum_field_indices=velocity_fields),
+        # BC.Extrapolation(tag="top"),
+        # BC.Extrapolation(tag="bottom"),
+        # BC.Extrapolation(tag="left"),
+        # BC.Extrapolation(tag="right"),
+        BC.Wall(tag="top", momentum_field_indices=velocity_fields),
+        BC.Wall(tag="bottom", momentum_field_indices=velocity_fields),
+        BC.Wall(tag="left", momentum_field_indices=velocity_fields),
+        BC.Wall(tag="right", momentum_field_indices=velocity_fields),
     ]
 )
 
