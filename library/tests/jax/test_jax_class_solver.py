@@ -6,14 +6,12 @@ from typing import Callable
 from functools import partial
 import timeit
 
-from zoomy_core.misc.static_class import register_static_pytree
 
 
 N = 1000000
 NT = 1000
 
 
-@register_static_pytree
 @define(slots=True, frozen=True)
 class Mesh:
     n_elements = N

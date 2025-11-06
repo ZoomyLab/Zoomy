@@ -33,7 +33,6 @@ import zoomy_core.mesh.mesh_extrude as extrude
 import zoomy_core.mesh.mesh_util as mesh_util
 from zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
 from zoomy_core.misc.custom_types import CArray, FArray, IArray
-from zoomy_core.misc.static_class import register_static_pytree
 from zoomy_core.model.boundary_conditions import Periodic
 
 # petsc4py.init(sys.argv)
@@ -364,7 +363,6 @@ def _fill_neighborhood(dm, neighbors, max_neighbors, cStart=0):
         return _fill_neighborhood(dm, neighbors, max_neighbors, cStart=cStart)
 
 
-@register_static_pytree
 @define(slots=True, frozen=True)
 class Mesh:
     dimension: int
