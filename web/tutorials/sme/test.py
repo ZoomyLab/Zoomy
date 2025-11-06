@@ -40,7 +40,7 @@ from types import SimpleNamespace
 from sympy import cos, pi, Piecewise
 import sympy as sp
 
-from zoomy_core.fvm.solver_jax import HyperbolicSolver, Settings
+from zoomy_jax.fvm.solver_jax import HyperbolicSolver, Settings
 from zoomy_core.fvm.ode import RK1
 import zoomy_core.fvm.reconstruction as recon
 import zoomy_core.fvm.timestepping as timestepping

@@ -32,7 +32,7 @@ import zoomy_core.misc.io as io
 from zoomy_core.misc.misc import Zstruct, Settings
 import zoomy_core.fvm.ode as ode
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.fvm.solver_jax as solver
+import zoomy_jax.fvm.solver_jax as solver
 
 
 def precice_callback_read(interface, meshName, vertexIDs, dataName, dt):

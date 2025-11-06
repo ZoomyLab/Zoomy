@@ -4,7 +4,6 @@ from time import time as gettime
 import jax
 from functools import partial
 import jax.numpy as jnp
-import numpy as np
 from jax.scipy.sparse.linalg import gmres
 # from jaxopt import Broyden
 
@@ -14,30 +13,16 @@ from attrs import define, field
 
 from zoomy_core.misc.logger_config import logger
 
-
-# WARNING: I get a segmentation fault if I do not include
-# petsc4py before precice
-# try:
-#    from petsc4py import PETSc
-# except ModuleNotFoundError as err:
-#    logger.warning(err)
-#
-# try:
-#    import precice
-# except (ModuleNotFoundError, Exception) as err:
-#    logger.warning(err)
-
-
-import zoomy_core.fvm.flux as flux
-import zoomy_core.fvm.nonconservative_flux as nonconservative_flux
+import zoomy_jax.fvm.flux as fvmflux
+import zoomy_jax.fvm.nonconservative_flux as nonconservative_flux
 import zoomy_core.misc.io as io
-import zoomy_core_jax.misc.io as jax_io
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+import zoomy_jax.misc.io as jax_io
 from zoomy_core.misc.misc import Zstruct, Settings
-import zoomy_core.fvm.ode as ode
+import zoomy_jax.fvm.ode as ode
 import zoomy_core.fvm.timestepping as timestepping
+from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNumpy
 from zoomy_core.transformation.to_jax import JaxRuntimeModel
-
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
     if iteration % log_every == 0:
@@ -159,41 +144,19 @@ def newton_solver(residual):
 
 
 @define(frozen=True, slots=True, kw_only=True)
-class Solver():
-    settings: Zstruct = field(factory=lambda: Settings.default())
-
-    def __attrs_post_init__(self):
-        defaults = Settings.default()
-        defaults.update(self.settings)
-        object.__setattr__(self, 'settings', defaults)
-
-    def initialize(self, mesh, model):
-        model.boundary_conditions.initialize(
-            mesh,
-            model.time,
-            model.position,
-            model.distance,
-            model.variables,
-            model.aux_variables,
-            model.parameters,
-            model.normal,
-        )
-
-        n_variables = model.n_variables
-        n_cells = mesh.n_cells
-        n_aux_variables = model.aux_variables.length()
-
-        Q = np.empty((n_variables, n_cells), dtype=float)
-        Qaux = np.empty((n_aux_variables, n_cells), dtype=float)
-        return Q, Qaux
-
+class HyperbolicSolver(HyperbolicSolverNumpy):
+    flux: fvmflux.Flux = field(factory=lambda: fvmflux.Zero())
+    nc_flux: nonconservative_flux.NonconservativeFlux = field(
+        factory=lambda: nonconservative_flux.Rusanov()
+    )
+    
     def create_runtime(self, Q, Qaux, mesh, model):
         jax_mesh = convert_mesh_to_jax(mesh)
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         parameters = jnp.asarray(model.parameter_values)
         runtime_model = JaxRuntimeModel(model)
         return Q, Qaux, parameters, jax_mesh, runtime_model
-
+    
     def get_compute_source(self, mesh, model):
         @jax.jit
         @partial(jax.named_call, name="source")
@@ -224,62 +187,54 @@ class Solver():
 
         return compute_source
 
+
     def get_apply_boundary_conditions(self, mesh, model):
-        runtime_bcs = tuple(model.bcs)
+        """
+        Returns a JAX-compatible function that applies boundary
+        conditions using the new unified `model.boundary_conditions`.
+        """
 
         @jax.jit
-        @partial(jax.named_call, name="boudnary_conditions")
+        @partial(jax.named_call, name="apply_boundary_conditions")
         def apply_boundary_conditions(time, Q, Qaux, parameters):
             """
-            Applies boundary conditions to the solution arrays Q and Qaux using JAX's functional updates.
+            JAX version of the boundary condition application.
 
-            Parameters:
-                mesh: Mesh object containing boundary face information.
-                time: Current simulation time.
-                Q: JAX array of shape (Q_dim, n_cells), solution variables.
-                Qaux: JAX array of auxiliary solution variables.
-                parameters: Dictionary of simulation parameters.
-                runtime_bcs: List of JAX-compatible boundary condition functions.
+            Mirrors the NumPy logic:
+                - Loops over boundary faces
+                - Computes distance, position, normal, etc.
+                - Calls `model.boundary_conditions(...)`
+                - Updates ghost cells in Q
+
+            Args:
+                time: scalar
+                Q: (Q_dim, n_cells)
+                Qaux: (Qaux_dim, n_cells)
+                parameters: model parameters (pytree)
 
             Returns:
-                Updated Q array with boundary conditions applied to ghost cells.
+                Updated Q with ghost cells set by boundary conditions.
             """
 
             def loop_body(i, Q):
-                """
-                Body function for jax.lax.fori_loop to apply boundary conditions iteratively.
-
-                Parameters:
-                    i: Current index in the loop.
-                    Q: Current state of the solution array.
-
-                Returns:
-                    Updated Q after applying the boundary condition for face i.
-                """
-                # Extract boundary face index and corresponding BC function
+                # Extract face and BC info
                 i = jnp.asarray(i, dtype=jnp.int32)
                 i_face = mesh.boundary_face_face_indices[i]
-                # TODO make this numpy indiced!
                 i_bc_func = mesh.boundary_face_function_numbers[i]
 
-                # Extract solution variables for the boundary cell
-                q_cell = Q[:, mesh.boundary_face_cells[i]]  # Shape: (Q_dim,)
+                # Local state
+                q_cell = Q[:, mesh.boundary_face_cells[i]]
                 qaux_cell = Qaux[:, mesh.boundary_face_cells[i]]
 
-                # Get geometric information
+                # Geometry
                 normal = mesh.face_normals[:, i_face]
                 position = mesh.face_centers[i_face, :]
-                position_ghost = mesh.cell_centers[:,
-                                                   mesh.boundary_face_ghosts[i]]
+                position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]
+                distance = jnp.linalg.norm(position - position_ghost)
 
-                # Compute distance between face and ghost cell
-                distance = jnp.linalg.norm(position - position_ghost)  # Scalar
-
-                # Apply boundary condition function to compute ghost cell values
-                # Ensure bc_func returns a JAX-compatible array with shape (Q_dim,)
-                q_ghost = jax.lax.switch(
+                # Call the unified boundary condition function
+                q_ghost = model.boundary_conditions(
                     i_bc_func,
-                    runtime_bcs,
                     time,
                     position,
                     distance,
@@ -289,67 +244,19 @@ class Solver():
                     normal,
                 )
 
-                # Update Q at ghost cell using functional update
                 Q = Q.at[:, mesh.boundary_face_ghosts[i]].set(q_ghost)
-
                 return Q
 
-            # Initialize Q_updated as Q and apply boundary conditions using fori_loop
-            Q_updated = jax.lax.fori_loop(
-                0, mesh.n_boundary_faces, loop_body, Q)
-
+            # Loop over boundary faces
+            Q_updated = jax.lax.fori_loop(0, mesh.n_boundary_faces, loop_body, Q)
             return Q_updated
 
         return apply_boundary_conditions
 
-    def update_q(self, Q, Qaux, mesh, model, parameters):
-        """
-        Update variables before the solve step.
-        """
-        # This is a placeholder implementation. Replace with actual logic as needed.
-        return Q
-
-    def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
-        """
-        Update auxiliary variables
-        """
-        # This is a placeholder implementation. Replace with actual logic as needed.
-        return Qaux
-
-    def solve(self, mesh, model):
-        logger.error(
-            "Solver.solve() is not implemented. Please implement this method in the derived class."
-        )
-        raise NotImplementedError(
-            "Solver.solve() must be implemented in derived classes.")
-
-
-@define(frozen=True, slots=True, kw_only=True)
-class HyperbolicSolver(Solver):
-    settings: Zstruct = field(factory=lambda: Settings.default())
-    compute_dt: Callable = field(
-        factory=lambda: timestepping.adaptive(CFL=0.45))
-    num_flux: Callable = field(factory=lambda: flux.Zero())
-    nc_flux: Callable = field(
-        factory=lambda: nonconservative_flux.segmentpath())
-    time_end: float = 0.1
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        defaults = Settings.default()
-        defaults.output.update(Zstruct(snapshots=10))
-        defaults.update(self.settings)
-        object.__setattr__(self, 'settings', defaults)
-
-    def initialize(self, mesh, model):
-        Q, Qaux = super().initialize(mesh, model)
-        Q = model.initial_conditions.apply(mesh.cell_centers, Q)
-        Qaux = model.aux_initial_conditions.apply(mesh.cell_centers, Qaux)
-        return Q, Qaux
 
     def get_compute_max_abs_eigenvalue(self, mesh, model):
-        # @jax.jit
-        # @partial(jax.named_call, name="max_abs_eigenvalue")
+        @jax.jit
+        @partial(jax.named_call, name="max_abs_eigenvalue")
         def compute_max_abs_eigenvalue(Q, Qaux, parameters):
             max_abs_eigenvalue = -jnp.inf
             i_cellA = mesh.face_cells[0]
@@ -367,11 +274,13 @@ class HyperbolicSolver(Solver):
         return compute_max_abs_eigenvalue
 
     def get_flux_operator(self, mesh, model):
-        # @jax.jit
-        # @partial(jax.named_call, name="Flux")
+        compute_num_flux = self.flux.get_flux_operator(model)
+        compute_nc_flux = self.nc_flux.get_flux_operator(model)
+        
+        @jax.jit
+        @partial(jax.named_call, name="Flux")
         def flux_operator(dt, Q, Qaux, parameters, dQ):
-            compute_num_flux = self.num_flux
-            compute_nc_flux = self.nc_flux
+
             # Initialize dQ as zeros using jax.numpy
             dQ = jnp.zeros_like(dQ)
 
@@ -389,7 +298,7 @@ class HyperbolicSolver(Solver):
             svA = mesh.face_subvolumes[:, 0]
             svB = mesh.face_subvolumes[:, 1]
 
-            Dp, Dm, failed = compute_nc_flux(
+            Dp, Dm = compute_nc_flux(
                 qA,
                 qB,
                 qauxA,
@@ -400,7 +309,6 @@ class HyperbolicSolver(Solver):
                 svB,
                 face_volumes,
                 dt,
-                model,
             )
             flux_out = Dm * face_volumes / cell_volumesA
             flux_in = Dp * face_volumes / cell_volumesB
@@ -412,7 +320,6 @@ class HyperbolicSolver(Solver):
 
     # @jax.jit
     # @partial(jax.named_call, name="hyperbolic solver")
-
     def solve(self, mesh, model, write_output=True):
         Q, Qaux = self.initialize(mesh, model)
 
@@ -462,9 +369,8 @@ class HyperbolicSolver(Solver):
             boundary_operator = self.get_apply_boundary_conditions(mesh, model)
             Qnew = boundary_operator(time, Qnew, Qaux, parameters)
 
-            # @jax.jit
-            # @partial(jax.named_call, name="time loop")
-
+            @jax.jit
+            @partial(jax.named_call, name="time loop")
             def time_loop(time, iteration, i_snapshot, Qnew, Qaux):
                 loop_val = (time, iteration, i_snapshot, Qnew, Qaux)
 
@@ -532,212 +438,3 @@ class HyperbolicSolver(Solver):
             gettime() - time_start
         )
         return Qnew, Qaux
-
-
-@define(frozen=True, slots=True, kw_only=True)
-class HyperbolicSolverNonSymmetric(HyperbolicSolver):
-    settings: Zstruct = field(factory=lambda: Settings.default())
-    compute_dt: Callable = field(
-        factory=lambda: timestepping.adaptive(CFL=0.45))
-    num_flux: Callable = field(factory=lambda: flux.Zero())
-    nc_flux: Callable = field(
-        factory=lambda: nonconservative_flux.segmentpath())
-    time_end: float = 0.1
-
-    def get_flux_operator(self, mesh, model):
-        @jax.jit
-        @partial(jax.named_call, name="Flux")
-        def flux_operator(dt, Q, Qaux, parameters, dQ):
-            compute_num_flux = self.num_flux
-            compute_nc_flux = self.nc_flux
-            # Initialize dQ as zeros using jax.numpy
-            dQ = jnp.zeros_like(dQ)
-
-            iA = mesh.face_cells[0]
-            iB = mesh.face_cells[1]
-
-            qA = Q[:, iA]
-            qB = Q[:, iB]
-            qauxA = Qaux[:, iA]
-            qauxB = Qaux[:, iB]
-            normals = mesh.face_normals
-            face_volumes = mesh.face_volumes
-            cell_volumesA = mesh.cell_volumes[iA]
-            cell_volumesB = mesh.cell_volumes[iB]
-            svA = mesh.face_subvolumes[:, 0]
-            svB = mesh.face_subvolumes[:, 1]
-
-            # Compute non-conservative fluxes
-            nc_fluxA, failedA = compute_nc_flux(
-                qA,
-                qB,
-                qauxA,
-                qauxB,
-                parameters,
-                normals,
-                svA,
-                svB,
-                face_volumes,
-                dt,
-                model,
-            )
-
-            nc_fluxB, failedB = compute_nc_flux(
-                qB,
-                qA,
-                qauxB,
-                qauxA,
-                parameters,
-                -normals,
-                svB,
-                svA,
-                face_volumes,
-                dt,
-                model,
-            )
-
-            @partial(jax.named_call, name="update_dQ_body")
-            def update_dQ_body(
-                loop_idx,
-                dQ,
-                mesh,
-                iA,
-                iB,
-                nc_fluxA,
-                nc_fluxB,
-                face_volumes,
-                cell_volumesA,
-                cell_volumesB,
-            ):
-                faces = mesh.cell_faces[loop_idx]
-                inner_range = jnp.arange(mesh.n_inner_cells)
-
-                iA_faces = iA[faces]
-                iB_faces = iB[faces]
-
-                dim = nc_fluxA.shape[0]
-
-                zeros = jnp.zeros(mesh.n_inner_cells)
-
-                iA_masked = iA_faces == inner_range
-                iA_masked = jnp.repeat(
-                    iA_masked[jnp.newaxis], repeats=dim, axis=0)
-                iB_masked = iB_faces == inner_range
-                iB_masked = jnp.repeat(
-                    iB_masked[jnp.newaxis], repeats=dim, axis=0)
-
-                fluxA_contribution = jnp.where(
-                    iA_masked,
-                    # (nc_fluxA * face_volumes / cell_volumesA)[:, faces],
-                    (nc_fluxA)[:, faces],
-                    zeros,
-                )
-                fluxB_contribution = jnp.where(
-                    iB_masked,
-                    # (nc_fluxB * face_volumes / cell_volumesB)[:, faces],
-                    (nc_fluxB)[:, faces],
-                    zeros,
-                )
-
-                fA = fluxA_contribution
-                fB = fluxB_contribution
-
-                dQ = dQ.at[:, inner_range].subtract(fA)
-                dQ = dQ.at[:, inner_range].subtract(fB)
-
-                return dQ
-
-            def loop_body(loop_idx, dQ):
-                return update_dQ_body(
-                    loop_idx,
-                    dQ,
-                    mesh,
-                    iA,
-                    iB,
-                    nc_fluxA,
-                    nc_fluxB,
-                    face_volumes,
-                    cell_volumesA,
-                    cell_volumesB,
-                )
-
-            dQ = jax.lax.fori_loop(0, mesh.cell_faces.shape[0], loop_body, dQ)
-            return dQ
-
-        return flux_operator
-
-
-@define(frozen=True, slots=True, kw_only=True)
-class PoissonSolver(Solver):
-
-    def get_residual(self, Qaux, Qold, Qauxold, parameters, mesh, model, boundary_operator, time, dt):
-        def residual(Q):
-            qaux = self.update_qaux(
-                Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt)
-            q = boundary_operator(time, Q, qaux, parameters)
-            res = model.residual(q, qaux, parameters)
-            # res = res.at[:, mesh.n_inner_cells:].set((10*(q-Q)**2)[:, mesh.n_inner_cells:])
-            res = res.at[:, mesh.n_inner_cells:].set(0.0)
-            return res
-        return residual
-
-    @jax.jit
-    @partial(jax.named_call, name="poission_solver")
-    def solve(self, mesh, model, write_output=True):
-        Q, Qaux = self.initialize(mesh, model)
-        Q, Qaux, parameters, mesh, model = self.create_runtime(
-            Q, Qaux, mesh, model)
-
-        # dummy values for a consistent interface
-        i_snapshot = 0.0
-        time = 0.0
-        time_next_snapshot = 0.0
-        dt = 0.0
-
-        Qold = Q
-        Qauxold = Qaux
-
-        boundary_operator = self.get_apply_boundary_conditions(mesh, model)
-
-        Q = boundary_operator(time, Q, Qaux, parameters)
-        Qaux = self.update_qaux(
-            Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt
-        )
-
-        if write_output:
-            io.init_output_directory(
-                self.settings.output.directory, self.settings.output.clean_directory
-            )
-            output_hdf5_path = os.path.join(
-                self.settings.output.directory, f"{
-                    self.settings.output.filename}.h5"
-            )
-            mesh.write_to_hdf5(output_hdf5_path)
-            save_fields = jax_io.get_save_fields(
-                output_hdf5_path, True
-            )
-        else:
-            def save_fields(time, time_next_snapshot, i_snapshot, Q, Qaux):
-                return i_snapshot
-
-        residual = self.get_residual(
-            Qaux, Qold, Qauxold, parameters, mesh, model, boundary_operator, time, dt)
-        newton_solve = newton_solver(residual)
-
-        time_start = gettime()
-
-        Q = newton_solve(Q)
-
-        Qaux = self.update_qaux(
-            Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt
-        )
-
-        i_snapshot = save_fields(time, time_next_snapshot, i_snapshot, Q, Qaux)
-
-        jax.experimental.io_callback(
-            log_callback_execution_time,
-            None,
-            gettime() - time_start
-        )
-
-        return Q, Qaux

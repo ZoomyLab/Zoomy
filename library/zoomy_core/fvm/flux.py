@@ -1,97 +1,52 @@
 import numpy as np
 
-"""
-Dummy flux
-"""
+
+class Flux:
+    def get_flux_operator(self, model):
+        pass
 
 
-def Zero():
-    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props=None):
-        Qout = np.zeros_like(Qi)
-        return Qout, False
+class Zero(Flux):
+    def get_flux_operator(self, model):
+        def compute(Qi, Qj, Qauxi, Qauxj, parameters, normal, Vi, Vj, Vij, dt):
+            return np.zeros_like(Qi)
 
-    return flux
-
-
-"""
-Lax-Friedrichs flux implementation
-"""
+        return compute
 
 
-def LF():
-    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props=None):
-        assert mesh_props is not None
-        dt_dx = mesh_props.dt_dx
-        Qout = np.zeros_like(Qi)
-        flux = model_functions.flux
-        dim = normal.shape[0]
-        num_eq = Qi.shape[0]
-        for d in range(dim):
-            Fi = flux[d](Qi, Qauxi, param)
-            Fj = flux[d](Qj, Qauxj, param)
-            Qout += 0.5 * (Fi + Fj) * normal[d]
-        Qout -= 0.5 * dt_dx * (Qj - Qi)
-        return Qout, False
-
-    return flux
-
-
-"""
-Rusanov (local Lax-Friedrichs) flux implementation
-"""
-
-
-def LLF():
-    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props=None):
-        EVi = model_functions.eigenvalues(Qi, Qauxi, param, normal)
-        EVj = model_functions.eigenvalues(Qj, Qauxj, param, normal)
-        assert not np.isnan(EVi).any()
-        assert not np.isnan(EVj).any()
-        smax = np.max(np.abs(np.vstack([EVi, EVj])))
-        Qout = np.zeros_like(Qi)
-        flux = model_functions.flux
-        dim = normal.shape[0]
-        num_eq = Qi.shape[0]
-        for d in range(dim):
-            Fi = flux[d](Qi, Qauxi, param)
-            Fj = flux[d](Qj, Qauxj, param)
-            Qout += 0.5 * (Fi + Fj) * normal[d]
-        Qout -= 0.5 * smax * (Qj - Qi)
-        return Qout, False
-
-    return flux
-
-
-"""
-Rusanov (local Lax-Friedrichs) flux implementation
-with topography fix (e.g. for model SWEtopo)
-with WB fix for lake at rest
-"""
-
-
-def LLF_wb():
-    def flux(Qi, Qj, Qauxi, Qauxj, param, normal, model_functions, mesh_props=None):
-        IWB = np.eye(Qi.shape[0])
-        IWB[-1, :] = 0.0
-        IWB[0, -1] = 0.0
-        EVi = np.zeros_like(Qi)
-        EVj = np.zeros_like(Qj)
-        EVi = model_functions.eigenvalues(Qi, Qauxi, param, normal)
-        EVj = model_functions.eigenvalues(Qj, Qauxj, param, normal)
-        assert not np.isnan(EVi).any()
-        assert not np.isnan(EVj).any()
-        smax = np.max(np.abs(np.vstack([EVi, EVj])))
-        Qout = np.zeros_like(Qi)
-        flux = model_functions.flux
-        dim = normal.shape[0]
-        num_eq = Qi.shape[0]
-        Fi = np.zeros((num_eq))
-        Fj = np.zeros((num_eq))
-        for d in range(dim):
-            flux[d](Qi, Qauxi, param, Fi)
-            flux[d](Qj, Qauxj, param, Fj)
-            Qout += 0.5 * (Fi + Fj) * normal[d]
-        Qout -= 0.5 * smax * IWB @ (Qj - Qi)
-        return Qout, False
-
-    return flux
+class LaxFriedrichs(Flux):    
+    """
+    Lax-Friedrichs flux implementation
+    """
+    def get_flux_operator(self, model):
+        def compute(Qi, Qj, Qauxi, Qauxj, parameters, normal, Vi, Vj, Vij, dt):
+            Fi = np.einsum("id..., d...-> i...", model.flux(Qi, Qauxi, parameters), normal)
+            Fj = np.einsum("id..., d...-> i...", model.flux(Qj, Qauxj, parameters), normal)
+            Qout = 0.5 * (Fi + Fj)
+            Qout -= 0.5 * dt / (Vi + Vj) * (Qj - Qi)
+            return Qout
+        return compute
+    
+class Rusanov(Flux):
+    def __init__(self, identity_matrix=None):
+        if not identity_matrix:
+            self.Id = lambda n: np.eye(n)
+        else:
+            self.Id = identity_matrix
+    """
+    Rusanov (local Lax-Friedrichs) flux implementation
+    """
+    def get_flux_operator(self, model):
+        Id_single = self.Id(model.n_variables)
+        def compute(Qi, Qj, Qauxi, Qauxj, parameters, normal, Vi, Vj, Vij, dt):
+            EVi = model.eigenvalues(Qi, Qauxi, parameters, normal)
+            EVj = model.eigenvalues(Qj, Qauxj, parameters, normal)
+            smax = np.max(np.abs(np.hstack([EVi, EVj])))
+            Id = np.stack([Id_single]*Qi.shape[1], axis=2)  # (n_eq, n_eq, n_points)
+            Fi = np.einsum("id..., d...-> i...", model.flux(Qi, Qauxi, parameters), normal)
+            Fj = np.einsum("id..., d...-> i...", model.flux(Qj, Qauxj, parameters), normal)
+            Qout = 0.5 * (Fi + Fj)
+            Qout -= 0.5 * smax * np.einsum("ij..., jk...-> ik...", Id, (Qj - Qi))
+            return Qout
+        return compute 
+            
