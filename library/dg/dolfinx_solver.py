@@ -23,7 +23,7 @@ import numpy.typing as npt
 
 from attrs import define, field
 
-from zoomy_core.fvm.solver_jax import Settings
+from zoomy_jax.fvm.solver_jax import Settings
 from zoomy_core.mesh.mesh import Mesh
 from zoomy_core.misc.misc import Zstruct
 import zoomy_core.transformation.to_ufl as trafo

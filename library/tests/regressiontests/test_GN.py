@@ -8,7 +8,7 @@ from sympy import cos, pi
 import sympy
 from time import time as gettime
 
-from zoomy_core.fvm.solver_jax import Solver, Settings
+from zoomy_jax.fvm.solver_jax import Solver, Settings
 from zoomy_core.fvm.ode import RK1
 import zoomy_core.fvm.reconstruction as recon
 import zoomy_core.fvm.timestepping as timestepping

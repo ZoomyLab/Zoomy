@@ -1,4 +1,3 @@
-
 import attrs
 from functools import partial
 from typing import Any, Tuple, Type
@@ -7,8 +6,11 @@ import attr
 try:
     import jax
     import jax.numpy as jnp
+
     _HAVE_JAX = True
 except ImportError:
+    import numpy as jnp
+
     _HAVE_JAX = False
 
 

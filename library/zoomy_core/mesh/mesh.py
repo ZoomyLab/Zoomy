@@ -99,7 +99,7 @@ def find_derivative_indices(full_monomials_arr, requested_derivs_arr):
 
 
 def compute_derivatives(u, mesh, derivatives_multi_index=None):
-    A_glob = mesh.lsq_gradQ  # shape (n_cells, n_monomials, n_neighbors)
+    A_glob = mesh.lsq_gradQ  # shape (n_cells, n_neighbors, n_monomials)
     neighbors = mesh.lsq_neighbors  # list of neighbors per cell
     mon_indices = mesh.lsq_monomial_multi_index  # shape (n_monomials, dim)
     # scale_factors = scale_lsq_derivative(mon_indices)
@@ -120,7 +120,7 @@ def compute_derivatives(u, mesh, derivatives_multi_index=None):
         A_loc = A_glob[i]
         neighbor_idx = neighbors[i]
         u_i = u[i]
-        out[i, :] = reconstruct_cell(A_loc, neighbor_idx, u_i)
+        out[i, :] = reconstruct_cell(A_loc, neighbor_idx, u_i)[indices]
 
     return out
 
@@ -705,7 +705,8 @@ class Mesh:
         cell_centers = np.zeros((n_cells, 3), dtype=float)
         # I create cell_volumes of size n_cells because then I can avoid an if clause in the numerical flux computation. The values will be delted after using apply_boundary_conditions anyways
         cell_volumes = np.ones((n_cells), dtype=float)
-        cell_inradius = compute_cell_inradius(dm)
+        cell_inradius = np.zeros((n_cells), dtype=float)
+        cell_inradius[:n_inner_cells] = compute_cell_inradius(dm)
         for i_c, c in enumerate(range(cStart, cEnd)):
             cell_volume, cell_center, cell_normal = dm.computeCellGeometryFVM(
                 c)
@@ -789,11 +790,14 @@ class Mesh:
                     * ((face_center - cell_centers[_face_cell, :dim]) @ face_normal)
                     * face_normal
                 )
+                cell_inradius[_face_ghost] = cell_inradius[_face_cell]
+                cell_volumes[_face_ghost] = cell_volumes[_face_cell]
                 # subvolumes of the ghost cell are computes wrongly. In this case, copy the value from the inner cell.
                 if _face_cells[0] > _face_cells[1]:
                     _face_subvolume[0] = _face_subvolume[1]
                 else:
                     _face_subvolume[1] = _face_subvolume[0]
+                
 
             face_centers.append(face_center)
             _face_cells = gdm.getSupport(e) - cStart

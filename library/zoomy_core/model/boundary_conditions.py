@@ -98,12 +98,12 @@ class Wall(BoundaryCondition):
     wall_slip: float = 1.0
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        q = Matrix(Q.get_list())
-        n_variables = Q.length()
+        q = ZArray(Q)
+        n_variables = q.shape[0]
         momentum_list = [Matrix([q[k] for k in l]) for l in self.momentum_field_indices]
         dim = momentum_list[0].shape[0]
         n = Matrix(normal[:dim])
-        out = Matrix.zeros(n_variables)
+        out = ZArray.zeros(n_variables)
         out = q
         momentum_list_wall = []
         for momentum in momentum_list:

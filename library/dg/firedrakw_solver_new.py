@@ -3,7 +3,7 @@ import ufl
 import numpy as np
 from mpi4py import MPI
 
-from zoomy_core.fvm.solver_jax import Settings
+from zoomy_jax.fvm.solver_jax import Settings
 from attrs import field
 from zoomy_core.misc.misc import Zstruct
 

@@ -1,4 +1,4 @@
-# fvm.solver_jax.Settings { #zoomy_core.fvm.solver_jax.Settings }
+# fvm.solver_jax.Settings { #zoomy_jax.fvm.solver_jax.Settings }
 
 ```python
 fvm.solver_jax.Settings()

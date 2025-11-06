@@ -11,7 +11,7 @@ from zoomy_core.misc.logger_config import logger
 
 
 
-import zoomy_core.fvm.flux as flux
+import zoomy_core.fvm.flux as fvmflux
 import zoomy_core.fvm.nonconservative_flux as nonconservative_flux
 import zoomy_core.misc.io as io
 from zoomy_core.misc.misc import Zstruct, Settings
@@ -80,21 +80,6 @@ class Solver():
         return compute_source
     
     def get_apply_boundary_conditions(self, mesh, model):
-        # runtime_bcs = tuple(model.bcs)
-
-        # def apply_boundary_conditions(time, Q, Qaux, parameters):
-        #     for i in range(mesh.n_boundary_faces):
-        #         i_face = mesh.boundary_face_face_indices[i]
-        #         i_bc_func = mesh.boundary_face_function_numbers[i]
-        #         q_cell = Q[:, mesh.boundary_face_cells[i]]  # Shape: (Q_dim,)
-        #         qaux_cell = Qaux[:, mesh.boundary_face_cells[i]]
-        #         normal = mesh.face_normals[:, i_face]
-        #         position = mesh.face_centers[i_face, :]
-        #         position_ghost = mesh.cell_centers[:, mesh.boundary_face_ghosts[i]]
-        #         distance = np.linalg.norm(position - position_ghost)
-        #         q_ghost = runtime_bcs[i_bc_func](time, position, distance, q_cell, qaux_cell, parameters, normal)
-        #         Q[:,  mesh.boundary_face_ghosts[i]] = q_ghost
-        #     return Q
         
         def apply_boundary_conditions(time, Q, Qaux, parameters):
             for i in range(mesh.n_boundary_faces):
@@ -137,8 +122,10 @@ class Solver():
 class HyperbolicSolver(Solver):
     settings: Zstruct = field(factory=lambda: Settings.default())
     compute_dt: Callable = field(factory=lambda: timestepping.adaptive(CFL=0.45))
-    num_flux: Callable = field(factory=lambda: flux.Zero())
-    nc_flux: Callable = field(factory=lambda: nonconservative_flux.segmentpath())
+    flux: fvmflux.Flux = field(factory=lambda: fvmflux.Zero())
+    nc_flux: nonconservative_flux.NonconservativeFlux = field(
+        factory=lambda: nonconservative_flux.Rusanov()
+    )
     time_end: float = 0.1
 
 
@@ -173,9 +160,10 @@ class HyperbolicSolver(Solver):
         return compute_max_abs_eigenvalue
 
     def get_flux_operator(self, mesh, model):
+        compute_num_flux = self.flux.get_flux_operator(model)
+        compute_nc_flux = self.nc_flux.get_flux_operator(model)
         def flux_operator(dt, Q, Qaux, parameters, dQ):
-            compute_num_flux = self.num_flux
-            compute_nc_flux = self.nc_flux
+
             # Initialize dQ as zeros using jax.numpy
             dQ = np.zeros_like(dQ)
 
@@ -193,7 +181,7 @@ class HyperbolicSolver(Solver):
             svA = mesh.face_subvolumes[:, 0]
             svB = mesh.face_subvolumes[:, 1]
 
-            Dp, Dm, failed = compute_nc_flux(
+            Dp, Dm = compute_nc_flux(
                 qA,
                 qB,
                 qauxA,
@@ -204,13 +192,15 @@ class HyperbolicSolver(Solver):
                 svB,
                 face_volumes,
                 dt,
-                model,
             )
             flux_out = Dm * face_volumes / cell_volumesA
             flux_in = Dp * face_volumes / cell_volumesB
 
-            dQ[:, iA]-= flux_out
-            dQ[:, iB]-= flux_in
+        
+            # dQ[:, iA]-= flux_out does not guarantee correct accumulation
+            # dQ[:, iB]-= flux_in
+            np.add.at(dQ, (slice(None), iA), -flux_out)
+            np.add.at(dQ, (slice(None), iB), -flux_in)
             return dQ
         return flux_operator
 
@@ -231,6 +221,7 @@ class HyperbolicSolver(Solver):
         else:
             def save_fields(time, time_stamp, i_snapshot, Q, Qaux):
                 return i_snapshot
+            
 
         def run(Q, Qaux, parameters, model):
             iteration = 0.0
@@ -257,6 +248,7 @@ class HyperbolicSolver(Solver):
 
 
             cell_inradius_face = np.minimum(mesh.cell_inradius[mesh.face_cells[0, :]], mesh.cell_inradius[mesh.face_cells[1,:]])
+            cell_inradius_face = cell_inradius_face.min()
 
             while time < self.time_end:
                 Q = Qnew
