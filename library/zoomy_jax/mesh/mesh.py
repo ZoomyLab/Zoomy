@@ -22,7 +22,6 @@ from zoomy_core.misc.custom_types import IArray, FArray, CArray
 from zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
 import zoomy_core.mesh.mesh_extrude as extrude
 import zoomy_core.mesh.mesh_util as mesh_util
-from zoomy_core.misc.static_class import register_static_pytree
 from zoomy_core.model.boundary_conditions import Periodic
 
 from zoomy_core.mesh.mesh import (

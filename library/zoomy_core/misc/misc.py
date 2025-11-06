@@ -12,7 +12,6 @@ from sympy import MatrixSymbol
 from sympy import MutableDenseNDimArray as ZArray
 
 from zoomy_core.misc.custom_types import FArray
-from zoomy_core.misc.static_class import register_static_pytree
 from zoomy_core.misc.logger_config import logger
 
 
@@ -20,7 +19,6 @@ from zoomy_core.misc.logger_config import logger
 
 
 
-@register_static_pytree
 @define(slots=True, frozen=False, kw_only=True)
 class Zstruct(SimpleNamespace):
     def __init__(self, **kwargs):
@@ -118,7 +116,6 @@ class Zstruct(SimpleNamespace):
         return cls(**d)
 
     
-@register_static_pytree
 @define(slots=True, frozen=False, kw_only=True)
 class Settings(Zstruct):
     """
