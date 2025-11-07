@@ -11,7 +11,7 @@ except ImportError:
     _HAVE_PYVISTA = False
 
 import zoomy_core.misc.io as io
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 if _HAVE_PYVISTA:

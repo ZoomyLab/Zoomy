@@ -12,7 +12,7 @@ import zoomy_core.mesh.mesh as petscMesh
 import zoomy_core.misc.io as io
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 def vtk_project_2d_to_3d(

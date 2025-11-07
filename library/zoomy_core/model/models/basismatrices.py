@@ -9,7 +9,7 @@ from time import time as get_time
 from scipy.optimize import least_squares as lsq
 
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 class Basismatrices:

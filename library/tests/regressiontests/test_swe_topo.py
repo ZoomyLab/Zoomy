@@ -13,7 +13,7 @@ from pysolver.ode import *
 import zoomy_core.misc.io as io
 import postprocessing.postprocessing as postprocessing
 
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 @pytest.mark.critical

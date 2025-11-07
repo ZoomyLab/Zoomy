@@ -28,7 +28,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
 from zoomy_core.mesh.mesh import compute_derivatives
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 import zoomy_core.mesh.mesh as petscMesh

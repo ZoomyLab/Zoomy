@@ -4,7 +4,7 @@ import os
 # from zoomy_core.mesh.fvm_mesh import *
 from zoomy_core.mesh.mesh import Mesh
 import zoomy_core.misc.io as io
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 @pytest.mark.critical

@@ -4,7 +4,7 @@ import textwrap
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter
 
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 class CPrinter(CXX11CodePrinter):

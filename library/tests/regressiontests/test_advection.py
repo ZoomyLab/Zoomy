@@ -9,7 +9,7 @@ import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1, RK2, RK3
 import zoomy_core.misc.io as io
 import zoomy_core.mesh.mesh as petscMesh
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 @pytest.mark.critical

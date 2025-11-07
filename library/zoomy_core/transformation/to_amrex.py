@@ -4,7 +4,7 @@ import sympy as sp
 from copy import deepcopy
 
 from zoomy_core.misc.misc import Zstruct
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 from zoomy_core.model.sympy2c import create_module
 from zoomy_core.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix

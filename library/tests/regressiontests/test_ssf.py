@@ -12,7 +12,7 @@ from pysolver.reconstruction import GradientMesh
 import postprocessing.postprocessing as postprocessing
 import zoomy_core.mesh.mesh as petscMesh
 import argparse
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 @pytest.mark.critical
