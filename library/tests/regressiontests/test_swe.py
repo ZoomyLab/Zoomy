@@ -8,6 +8,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1
 import zoomy_core.misc.io as io
+from zoomy_core import misc as misc
 
 
 @pytest.mark.critical
@@ -88,7 +89,8 @@ def test_swe_2d(mesh_type):
         initial_conditions=ic,
         settings={"friction": ["chezy"], "eigenvalue_mode": "symbolic"},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,

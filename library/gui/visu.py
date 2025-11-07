@@ -4,7 +4,8 @@ import panel as pn
 
 from apps.guiv2.basicelements import Card, Section
 
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 
 pn.extension()
 

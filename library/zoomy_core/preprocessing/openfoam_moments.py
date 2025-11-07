@@ -21,7 +21,8 @@ from zoomy_core.misc.io import _save_fields_to_hdf5 as save_fields_to_hdf5
 import zoomy_core.misc.io as io
 
 
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 
 
 def load_file(filename):

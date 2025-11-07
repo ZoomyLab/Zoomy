@@ -9,6 +9,7 @@ import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1, RK2, RK3
 import zoomy_core.misc.io as io
 import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core import misc as misc
 
 
 @pytest.mark.critical
@@ -153,7 +154,8 @@ def test_advection_2d(mesh_type):
         initial_conditions=ic,
         settings={},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
@@ -215,7 +217,8 @@ def test_advection_3d(mesh_type):
         initial_conditions=ic,
         settings={},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = Mesh.load_gmsh(
     #     os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
@@ -276,7 +279,8 @@ def test_periodic_bc(mesh_type):
         settings={"friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type))
     )
@@ -358,7 +362,8 @@ def test_reconstruction_2d(mesh_type):
         settings={"friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type))
     )

@@ -12,6 +12,7 @@ from pysolver.reconstruction import GradientMesh
 import postprocessing.postprocessing as postprocessing
 import zoomy_core.mesh.mesh as petscMesh
 import argparse
+from zoomy_core import misc as misc
 
 
 @pytest.mark.critical
@@ -26,7 +27,8 @@ def test_ssf():
     phi = 22.76
     Cr = 0.00035
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShearShallowFlow",
         parameters={"g": g, "Cr": Cr, "theta": theta, "phi": phi},
@@ -88,7 +90,8 @@ def test_ssf():
         # settings={"friction": ["newtonian"]},
         # settings={"friction": ["friction_paper"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
 
     # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
     mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
@@ -113,7 +116,8 @@ def test_ssf_energy():
     phi = 22.76
     Cr = 0.00035
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShearShallowFlowEnergy",
         parameters={"g": g, "Cr": Cr, "theta": theta, "phi": phi},
@@ -177,7 +181,8 @@ def test_ssf_energy():
         # settings={"friction": ["newtonian"]},
         settings={"friction": ["friction_paper"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
 
     # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
     mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
@@ -202,7 +207,8 @@ def test_ssf_pathconservative():
     phi = 22.76
     Cr = 0.00035
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         parameters={"g": g, "Cf": Cf, "theta": theta, "phi": phi, "Cr": Cr},
         reconstruction=recon.constant,
@@ -292,7 +298,8 @@ def test_ssf_pathconservative():
         # settings={"friction": []},
         # settings={"friction": ["friction_paper"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
 
     # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
     mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
@@ -314,7 +321,8 @@ def test_ssf_2d():
     phi = 22.76
     Cr = 0.00035
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShearShallowFlow2d",
         parameters={"g": g, "Cr": Cr, "theta": theta, "phi": phi},
@@ -374,7 +382,8 @@ def test_ssf_2d():
         settings={"friction": ["friction_paper"]},
         # settings={},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = Mesh.load_gmsh(
     # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),

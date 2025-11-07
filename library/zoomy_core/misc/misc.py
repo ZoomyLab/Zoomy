@@ -16,6 +16,11 @@ from zoomy_core.misc.logger_config import logger
 
 
 
+def get_main_directory():
+    main_dir = os.getenv("ZOOMY_DIR")
+    if main_dir is None:
+        main_dir = ""
+    return main_dir
 
 
 

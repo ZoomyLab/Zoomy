@@ -28,6 +28,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
 from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core import misc as misc
 
 
 import zoomy_core.mesh.mesh as petscMesh
@@ -148,7 +149,8 @@ def test_smm_2d():
         settings={},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         #os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/channel_quad_2d/mesh.msh")
@@ -211,7 +213,8 @@ def test_jax_jit_grad():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -311,7 +314,8 @@ def test_jax_jit_grad_minimal():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -414,7 +418,8 @@ def test_reconstruction():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -474,7 +479,8 @@ def test_reconstruction_faces():
         # settings={"eigenvalue_mode": "symbolic", "friction": []},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
@@ -538,7 +544,8 @@ def test_implicit():
         settings={},
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         # os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
@@ -614,7 +621,8 @@ def test_smm_junction():
         basis=Basismatrices(basis=Legendre_shifted(level=level+1)),
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
         # os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")

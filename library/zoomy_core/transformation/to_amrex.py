@@ -4,6 +4,8 @@ import sympy as sp
 from copy import deepcopy
 
 from zoomy_core.misc.misc import Zstruct
+from zoomy_core import misc as misc
+
 from zoomy_core.model.sympy2c import create_module
 from zoomy_core.transformation.helpers import regularize_denominator, substitute_sympy_attributes_with_symbol_matrix
 
@@ -230,7 +232,8 @@ class AmrexPrinter(CXX11CodePrinter):
 def write_code(model, settings):
     printer = AmrexPrinter(model)
     expr = printer.create_model(model)
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     path = os.path.join(main_dir, settings.output.directory, ".amrex_interface")
     os.makedirs(path, exist_ok=True)
     path = os.path.join(path, "Model.h")

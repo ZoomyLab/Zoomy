@@ -4,6 +4,9 @@ import textwrap
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter
 
+from zoomy_core import misc as misc
+
+
 class FoamPrinter(CXX11CodePrinter):
     """
     Convert SymPy expressions to OpenFOAM 12 compatible C++ code.
@@ -246,7 +249,8 @@ inline Foam::List<Foam::List<Foam::scalar>> {name}(
 def write_code(model, settings, additional_writes=None):
     printer = FoamPrinter(model)
     code = printer.create_model(model, additional_writes=additional_writes)
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     path = os.path.join(main_dir, settings.output.directory, ".foam_interface")
     os.makedirs(path, exist_ok=True)
     file_path = os.path.join(path, "Model.H")

@@ -13,6 +13,8 @@ from pysolver.ode import *
 import zoomy_core.misc.io as io
 import postprocessing.postprocessing as postprocessing
 
+from zoomy_core import misc as misc
+
 
 @pytest.mark.critical
 @pytest.mark.unfinished
@@ -100,7 +102,8 @@ def test_swetopo_2d(mesh_type):
         initial_conditions=ic,
         settings={"friction": ["chezy"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
         mesh_type,

@@ -6,11 +6,13 @@ import seaborn as sns
 import pyswashes
 
 from zoomy_core.misc.io import load_fields_from_hdf5, load_mesh_from_hdf5
+import zoomy_core.misc.misc as misc
 
 
 sns.set_context("paper", font_scale=1.5)
 sns.set_style("whitegrid")
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 
 sns.set_palette(tc.colorsets['bright'])
 def vam_analytical_eta(): 

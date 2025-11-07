@@ -48,7 +48,8 @@ seaborn.set_context("talk")
 from IPython.display import Math
 import sympy as sym
 
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 import pytest
 from types import SimpleNamespace
 
