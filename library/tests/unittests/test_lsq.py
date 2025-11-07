@@ -5,7 +5,7 @@ import numpy as np
 import zoomy_core.mesh.mesh as petscMesh
 from zoomy_core.mesh.mesh import compute_derivatives
 from zoomy_core.mesh.mesh import convert_mesh_to_jax
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 def test_1d():

@@ -21,7 +21,7 @@ except ImportError:
 from zoomy_core.mesh.mesh import Mesh
 import zoomy_core.mesh.mesh_util as mesh_util
 from zoomy_core.misc.misc import Zstruct, Settings
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 from zoomy_core.misc.logger_config import logger
 
 

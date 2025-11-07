@@ -9,7 +9,7 @@ import yaml
 
 import importlib.util
 
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 def import_module_from_path(path):

@@ -8,7 +8,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1
 import zoomy_core.misc.io as io
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 # from pysolver.reconstruction import GradientMesh

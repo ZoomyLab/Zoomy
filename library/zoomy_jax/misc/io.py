@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import h5py
 
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 def get_save_fields(_filepath, write_all=False, overwrite=True):

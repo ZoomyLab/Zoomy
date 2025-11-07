@@ -34,7 +34,7 @@ import zoomy_core.mesh.mesh_util as mesh_util
 from zoomy_core.mesh.mesh_util import compute_subvolume, get_extruded_mesh_type
 from zoomy_core.misc.custom_types import CArray, FArray, IArray
 from zoomy_core.model.boundary_conditions import Periodic
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 # petsc4py.init(sys.argv)

@@ -3,7 +3,7 @@ import pytest
 
 from zoomy_core.model.boundary_conditions import *
 from zoomy_core.mesh.fvm_mesh import Mesh
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 # @pytest.mark.critical

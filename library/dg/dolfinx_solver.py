@@ -27,7 +27,7 @@ from zoomy_jax.fvm.solver_jax import Settings
 from zoomy_core.mesh.mesh import Mesh
 from zoomy_core.misc.misc import Zstruct
 import zoomy_core.transformation.to_ufl as trafo
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 

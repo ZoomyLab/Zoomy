@@ -12,7 +12,7 @@ from attrs import define, field
 
 
 from zoomy_core.misc.logger_config import logger
-from zoomy_core import misc as misc
+from zoomy_core.misc import misc as misc
 
 
 # WARNING: I get a segmentation fault if I do not include petsc4py before precice
