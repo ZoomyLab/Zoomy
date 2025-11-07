@@ -3,11 +3,14 @@ import jax
 import jax.numpy as jnp
 import h5py
 
+from zoomy_core import misc as misc
+
 
 def get_save_fields(_filepath, write_all=False, overwrite=True):
     def _save_hdf5(i_snapshot, time, Q, Qaux):
         i_snap = int(i_snapshot)
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         filepath = os.path.join(main_dir, _filepath)
 
         with h5py.File(filepath, "a") as f:

@@ -8,6 +8,8 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1
 import zoomy_core.misc.io as io
+from zoomy_core import misc as misc
+
 
 # from pysolver.reconstruction import GradientMesh
 import zoomy_core.mesh.mesh as petscMesh
@@ -279,7 +281,8 @@ def test_smm_2d(mesh_type):
         settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
     )
@@ -330,7 +333,8 @@ def test_inflowoutflow_2d():
         initial_conditions=ic,
         settings={"friction": []},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), "quad"
     )
@@ -355,7 +359,8 @@ def test_steffler():
         output_dir="outputs/steffler",
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh")
     )
@@ -425,7 +430,8 @@ def test_steffler_small():
         output_dir="outputs/test",
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_coarse.msh")
     )
@@ -508,7 +514,8 @@ def test_channel_with_hole_2d():
         output_dir=args.path,
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/channel_2d_hole/mesh_fine.msh"), "triangle"
     )
@@ -615,7 +622,8 @@ def test_smm_grad_2d():
         initial_conditions=ic,
         settings={"friction": ["chezy"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
@@ -720,7 +728,8 @@ def test_c_solver(mesh_type):
         initial_conditions=ic,
         settings={"friction": ["chezy", "newtonian"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
         mesh_type,
@@ -735,7 +744,8 @@ def test_c_solver(mesh_type):
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_restart_from_openfoam(level=1):
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034 * 10 ** (-6)},
@@ -804,7 +814,8 @@ def test_restart_from_openfoam(level=1):
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = Mesh.load_gmsh(
     # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -837,7 +848,8 @@ def test_restart_from_openfoam(level=1):
 def test_restart_from_openfoam_prediction(
     level=1, coefs=[1.957, -16.829, 3.119, 8.151, 0, -4.466, 0.061, 3.444]
 ):
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShallowMoments2d",
         parameters={
@@ -905,7 +917,8 @@ def test_restart_from_openfoam_prediction(
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = Mesh.load_gmsh(
         #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
         #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -1022,7 +1035,8 @@ def test_spline_strongbc_1d():
 @pytest.mark.critical
 @pytest.mark.unfinished
 def test_restart_from_openfoam_plotter(level=1):
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = Settings(
         name="ShallowMoments2d",
         parameters={"g": 9.81, "C": 30.0, "nu": 1.034 * 10 ** (-6)},
@@ -1091,7 +1105,8 @@ def test_restart_from_openfoam_plotter(level=1):
         # settings={},
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = Mesh.load_gmsh(
     # #     os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"),
     # #     # os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"),
@@ -1170,7 +1185,8 @@ def test_petsc(mesh_type):
         initial_conditions=ic,
         settings={"friction": ["chezy", "newtonian"]},
     )
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type))
@@ -1280,7 +1296,8 @@ def test_enforce_w_bc():
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
     )
@@ -1403,7 +1420,8 @@ def test_ijshs24():
         basis=Basis(basis=Legendre_shifted(order=level)),
     )
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.create_1d((0, 10), 500)
 
     jax_fvm_unsteady_semidiscrete(
@@ -1572,7 +1590,8 @@ def test_eccomas_hyperbolicity():
     )
     model_SSF_energy.name = "ShearShallowFlowEnergy"
 
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
 
     print("SMM-WS")

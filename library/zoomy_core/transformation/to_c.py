@@ -4,6 +4,9 @@ import textwrap
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter
 
+from zoomy_core import misc as misc
+
+
 class CPrinter(CXX11CodePrinter):
     """
     Convert SymPy expressions to C code.
@@ -173,7 +176,8 @@ inline double* {name}(
 def write_code(model, settings):
     printer = CPrinter(model)
     code = printer.create_model(model)
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     path = os.path.join(main_dir, settings.output.directory, ".c_interface")
     os.makedirs(path, exist_ok=True)
     file_path = os.path.join(path, "Model.H")

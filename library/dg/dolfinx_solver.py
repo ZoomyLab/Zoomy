@@ -27,8 +27,9 @@ from zoomy_jax.fvm.solver_jax import Settings
 from zoomy_core.mesh.mesh import Mesh
 from zoomy_core.misc.misc import Zstruct
 import zoomy_core.transformation.to_ufl as trafo
+from zoomy_core import misc as misc
 
-from zoomy_core.model.sympy2c_new import *
+
 
 
 def load_mesh(path_to_mesh):
@@ -481,7 +482,8 @@ class DolfinxHyperbolicSolver:
 
         num_timesteps = int(self.time_end / dt.value)
 
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
 
         # VTK writer
         os.makedirs(
@@ -724,7 +726,8 @@ class PreciceDolfinxHyperbolicSolver(DolfinxHyperbolicSolver):
 
         num_timesteps = int(self.time_end / dt.value)
 
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
 
         # VTK writer
         os.makedirs(

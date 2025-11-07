@@ -12,6 +12,8 @@ import zoomy_core.mesh.mesh as petscMesh
 import zoomy_core.misc.io as io
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+from zoomy_core import misc as misc
+
 
 def vtk_project_2d_to_3d(
     model, settings, start_at_time=0, scale_h=1.0, filename='out_3d'
@@ -19,7 +21,8 @@ def vtk_project_2d_to_3d(
     if not _HAVE_H5PY:
         raise ImportError("h5py is required for vtk_project_2d_to_3d function.")
     Nz = model.number_of_points_3d
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     path_to_simulation = os.path.join(main_dir, os.path.join(settings.output.directory, f"{settings.output.filename}.h5"))    
     sim = h5py.File(path_to_simulation, "r")
     settings = io.load_settings(settings.output.directory)

@@ -11,6 +11,8 @@ except ImportError:
     _HAVE_PYVISTA = False
 
 import zoomy_core.misc.io as io
+from zoomy_core import misc as misc
+
 
 if _HAVE_PYVISTA:
     pn.extension("vtk")
@@ -20,7 +22,8 @@ def pyvista_3d(folder, filename='out_3d', scale=1.):
     if not _HAVE_PYVISTA:
         raise ImportError("pyvista is required for pyvista_3d function.")
     # Set up
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     settings = io.load_settings(os.path.join(main_dir, folder))
     output_dir = os.path.join(main_dir, settings.output.directory)
     vtk_files = sorted(glob(os.path.join(output_dir, f"{filename}.*.vtk")))

@@ -18,7 +18,8 @@ import zoomy_core.mesh.mesh as petscMesh
 import postprocessing.postprocessing as postprocessing
 import argparse
 
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 
 class MySME(ShallowMoments):
     def source(self):

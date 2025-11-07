@@ -12,6 +12,7 @@ from attrs import define, field
 
 
 from zoomy_core.misc.logger_config import logger
+from zoomy_core import misc as misc
 
 
 # WARNING: I get a segmentation fault if I do not include petsc4py before precice
@@ -378,7 +379,8 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
         # ----------------- preCICE bootstrap -------------------------------
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         interface = precice.Participant(
             "Fluid2", os.path.join(main_dir, self.config_path), 0, 1
         )
@@ -547,7 +549,8 @@ class PreciceHyperbolicSolverBidirectional(PreciceHyperbolicSolver):
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
         # ----------------- preCICE bootstrap -------------------------------
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         interface = precice.Participant(
             "Fluid2", os.path.join(main_dir, self.config_path), 0, 1
         )
@@ -727,7 +730,8 @@ class PreciceTestSolver(PreciceHyperbolicSolver):
         Q, Qaux = self.initialize(mesh, model)
         # Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         interface = precice.Participant(
             "Fluid2", os.path.join(main_dir, self.config_path), 0, 1
         )
@@ -822,7 +826,8 @@ class PreciceHyperbolicSolverAUP(PreciceHyperbolicSolver):
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
         # ----------------- preCICE bootstrap -------------------------------
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         interface = precice.Participant(
             "Fluid2", os.path.join(main_dir, self.config_path), 0, 1
         )
@@ -1061,7 +1066,8 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
         # ----------------- preCICE bootstrap -------------------------------
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         interface = precice.Participant(
             "Fluid2", os.path.join(main_dir, self.config_path), 0, 1
         )

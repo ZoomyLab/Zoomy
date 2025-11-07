@@ -116,7 +116,8 @@ print(model.quasilinear_matrix()[0])
 print(model.source())
 print(model.eigenvalues())
 
-main_dir = os.getenv("ZOOMY_DIR")
+main_dir = misc.get_main_directory()
+
 mesh = petscMesh.Mesh.create_1d([0, 100], 500)
 
 mesh = convert_mesh_to_jax(mesh)

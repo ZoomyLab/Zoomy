@@ -9,6 +9,8 @@ import yaml
 
 import importlib.util
 
+from zoomy_core import misc as misc
+
 
 def import_module_from_path(path):
     spec = importlib.util.spec_from_file_location(
@@ -57,5 +59,6 @@ def get_gui_tags(path):
 
 
 if __name__ == "__main__":
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     browse_all_gui_tags(os.path.join(main_dir, "library"))

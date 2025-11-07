@@ -5,9 +5,11 @@ from sympy import integrate, diff, Matrix
 from sympy.abc import z
 from time import time as get_time
 
+
 from scipy.optimize import least_squares as lsq
 
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core import misc as misc
 
 
 class Basismatrices:
@@ -18,7 +20,8 @@ class Basismatrices:
         self.cache_subdir = f"basismatrices/{basis.name}/{basis.level}"
 
     def load_cached_matrices(self):
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         failed = False
         try:
@@ -37,7 +40,8 @@ class Basismatrices:
         return failed
 
     def save_cached_matrices(self):
-        main_dir = os.getenv("ZOOMY_DIR")
+        main_dir = misc.get_main_directory()
+
         path = os.path.join(os.path.join(main_dir, self.cache_dir), self.cache_subdir)
         os.makedirs(path, exist_ok=True)
         np.save(os.path.join(path, "phib"), self.phib)

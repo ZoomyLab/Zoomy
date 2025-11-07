@@ -5,6 +5,8 @@ import numpy as np
 import zoomy_core.mesh.mesh as petscMesh
 from zoomy_core.mesh.mesh import compute_derivatives
 from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_core import misc as misc
+
 
 def test_1d():
     N = 10
@@ -23,7 +25,8 @@ def test_1d():
     # print(d2Q_dx2)
     
 def test_2d():
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     mesh = petscMesh.Mesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), lsq_degree=2
     )

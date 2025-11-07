@@ -10,6 +10,7 @@ from zoomy_core.model.models.advection import Advection
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh.fvm_mesh import Mesh
+from zoomy_core import misc as misc
 
 
 def create_default_mesh_and_model(
@@ -20,7 +21,8 @@ def create_default_mesh_and_model(
     parameters: Union[int, list, dict] = 0,
     settings: dict = {},
 ):
-    main_dir = os.getenv("ZOOMY_DIR")
+    main_dir = misc.get_main_directory()
+
     assert main_dir != ""
     ic = IC.Constant()
 
