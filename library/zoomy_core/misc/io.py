@@ -381,8 +381,7 @@ def generate_vtk(
     filename="out",
     warp=False,
 ):
-    main_dir = main_dir = misc.get_main_directory()
-
+    main_dir =  misc.get_main_directory()
     abs_filepath = os.path.join(main_dir, filepath)
     path = os.path.dirname(abs_filepath)
     full_filepath_out = os.path.join(path, filename)
@@ -442,9 +441,8 @@ def generate_vtk(
                 "time": time,
             }
         )
-
     # finalize vtk
-    with open(os.path.join(path, f"{full_filepath_out}.vtk.series"), "w") as f:
+    with open(os.path.join(path, f"{filename}.vtk.series"), "w") as f:
         json.dump(vtk_timestamp_file, f)
 
     file.close()
