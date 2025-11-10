@@ -1,0 +1,43 @@
+{
+  "name": "Zoomy Firedrake",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash",
+
+    // Use the correct Python interpreter in the container
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+
+    // Let VS Code find the Zoomy library automatically
+    "python.analysis.extraPaths": ["/workspace/library"],
+
+    // Open notebooks relative to project root
+    "jupyter.notebookFileRoot": "${workspaceFolder}"
+  },
+
+  "extensions": [
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "ms-toolsai.jupyter-keymap",
+    "ms-toolsai.jupyter-renderers",
+    "ms-toolsai.vscode-jupyter-slideshow",
+    "ms-toolsai.vscode-jupyter-cell-tags",
+    "ms-toolsai.vscode-jupyter-powertools"
+  ],
+
+  // Add PYTHONPATH so imports like `import library.zoomy_firedrake` work
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/library:${PYTHONPATH}"
+  },
+
+  // Enable notebook widgets (matplotlib sliders, ipywidgets, etc.)
+  "postCreateCommand": "jupyter nbextension enable --py widgetsnbextension --sys-prefix",
+
+  // Optional: set the container user
+  "remoteUser": "root"
+}
