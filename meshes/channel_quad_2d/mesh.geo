@@ -1,10 +1,11 @@
-scale = 0.125;
+scale = 1;
+scaled = scale * 0.125;
 
-Point(10) = {0, 0,  0, scale};
-Point(11) = {10, 0,  0, scale};
+Point(10) = {0, 0,  0, scaled};
+Point(11) = {10, 0,  0, scaled};
 
-Point(20) = {0, 1, 0, scale};
-Point(21) = {10, 1, 0, scale};
+Point(20) = {0, 1, 0, scaled};
+Point(21) = {10, 1, 0, scaled};
 
 
 Line(111) = {10, 11};
