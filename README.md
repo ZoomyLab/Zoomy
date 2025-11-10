@@ -26,40 +26,75 @@ T.b.d.
 
 ## Installation
 
-### Conda/Mamba
+### Getting started in seconds
+
+A good way to have an **interactive** first impression of Zoomy is to use one of the following options
+
+#### JupyterLite
+
+t.b.d
+
+#### Cloud-based GUI
+
+t.b.d.
+
+### Manual installation
+
+#### Cloning the repository
+
+You can either clone the repo with all related subrepositories via
+
+```
+git clone --recurse-submodules https://github.com/zoomy-lab/Zoomy.git
+```
+
+**or** you can start by cloning the main repository (Zoomy) and selected subrepositories, e.g.
+
+```
+git clone https://github.com/zoomy-lab/Zoomy.git
+cd Zoomy
+git submodule update --init meshes
+git submodule update --init library/zoomy_core
+git submodule update --init library/zoomy_jax
+```
+
+The different subrepositories are listed at [ZoomyLab](https://github.com/zoomy-lab)
+
+
+
+#### Installating with Conda/Mamba
 
 The project is composed out of different environment files. We start by installing the base and than adding 'flavors', depdening on the solver backend that you want to use.
 
-#### Default solver (Linux / Mac)
 
 **Base Installation**
 
 ```         
-cd install
 conda env create -f install/zoomy.yml
-./conda_config_setup.sh
 ```
 
-**Mesh support for Numpy/Jax solver**
+**Core (Pre/Postprocessing/NumPy solver)**
+
+```         
+conda env update -f install/env-core.yml
+```
+
+**Unstructured mesh support for Numpy/Jax solver**
 
 ```         
 conda env update -f install/env-mesh.yml
 ```
 
-\*\* CPU/GPU solver with JAX\*\*
+**JAX solver**
 
 ```         
 conda env update -f install/env-jax.yml
 ```
 
-#### FenicsX (Linux / Mac)
-
-**Base Installation**
+**FenicsX solver**
 
 ```         
-cd install
-conda env create -f install/zoomy.yml
-./conda_config_setup.sh
+conda env update -f install/env-fenicsx.yml
 ```
 
 **FenicsX**
@@ -134,7 +169,7 @@ T.b.d
 
 ### Manual installation
 
-See the `install/zoomy.yml` for a complete list of requirements. Once the requirements are fulfilled, simply clone the repository.
+See the `install/*.yml` for a complete list of requirements. Once the requirements are fulfilled, clone this repository and submodules.
 
 The following environment variables need to be set
 
