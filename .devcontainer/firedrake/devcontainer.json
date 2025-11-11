@@ -1,25 +1,34 @@
 {
   "name": "Zoomy Firedrake",
+
+  // --- Base image or Dockerfile ---
   "build": {
     "dockerfile": "Dockerfile"
   },
 
+  // --- Workspace mounting (shared with host) ---
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
 
+  // --- Match container user to host user dynamically ---
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+
+  // --- Python and Jupyter settings ---
   "settings": {
     "terminal.integrated.shell.linux": "/bin/bash",
 
-    // Use the correct Python interpreter in the container
+    // Use correct interpreter
     "python.defaultInterpreterPath": "/usr/bin/python3",
 
-    // Let VS Code find the Zoomy library automatically
+    // Let VS Code find Zoomy submodules automatically
     "python.analysis.extraPaths": ["/workspace/library"],
 
     // Open notebooks relative to project root
     "jupyter.notebookFileRoot": "${workspaceFolder}"
   },
 
+  // --- Common extensions for development and notebooks ---
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",
@@ -30,14 +39,28 @@
     "ms-toolsai.vscode-jupyter-powertools"
   ],
 
-  // Add PYTHONPATH so imports like `import library.zoomy_firedrake` work
+  // --- Environment variables ---
   "containerEnv": {
     "PYTHONPATH": "/workspace/library:${PYTHONPATH}"
   },
 
-  // Enable notebook widgets (matplotlib sliders, ipywidgets, etc.)
-  "postCreateCommand": "jupyter nbextension enable --py widgetsnbextension --sys-prefix",
+  // --- Post-create setup commands ---
+  "postCreateCommand": "pip install zoomy-core && jupyter nbextension enable --py widgetsnbextension --sys-prefix",
 
-  // Optional: set the container user
-  "remoteUser": "root"
+  // --- Add built-in features (Git + GitHub CLI + SSH agent forwarding) ---
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/ssh-client:1": {}
+  },
+
+  // --- Recommended: Forward your SSH keys for private GitHub access ---
+  "mounts": [
+    "source=${env:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+  ],
+
+  "remoteEnv": {
+    "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=no"
+  }
 }
+
