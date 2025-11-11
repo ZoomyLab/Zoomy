@@ -137,3 +137,5 @@ install/petsc
 
 dist
 library/zoomy_core.egg-info
+
+*.pvd
