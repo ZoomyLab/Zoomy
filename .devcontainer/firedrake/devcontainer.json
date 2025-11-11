@@ -31,6 +31,7 @@
   // --- Common extensions for development and notebooks ---
   "extensions": [
     "ms-python.python",
+    "ms-python.vscode-pylance",
     "ms-toolsai.jupyter",
     "ms-toolsai.jupyter-keymap",
     "ms-toolsai.jupyter-renderers",
@@ -45,14 +46,8 @@
   },
 
   // --- Post-create setup commands ---
-  "postCreateCommand": "pip install zoomy-core && jupyter nbextension enable --py widgetsnbextension --sys-prefix",
-
-  // --- Add built-in features (Git + GitHub CLI + SSH agent forwarding) ---
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/ssh-client:1": {}
-  },
+  "postCreateCommand": "pip install zoomy-core ipywidgets ipykernel && python3 -m ipykernel install --user --name firedrake --display-name 'Python (Firedrake)'",
+  
 
   // --- Recommended: Forward your SSH keys for private GitHub access ---
   "mounts": [
