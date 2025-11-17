@@ -1,0 +1,61 @@
+{
+  "name": "Zoomy Firedrake VI-AMR",
+
+  // --- Base image or Dockerfile ---
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  // --- Workspace mounting (shared with host) ---
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+  // --- Match container user to host user dynamically ---
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+
+  // --- Python and Jupyter settings ---
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash",
+
+    // Use correct interpreter
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+
+    // Let VS Code find Zoomy submodules automatically
+    "python.analysis.extraPaths": ["/workspace/library"],
+
+    // Open notebooks relative to project root
+    "jupyter.notebookFileRoot": "${workspaceFolder}"
+  },
+
+  // --- Common extensions for development and notebooks ---
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter",
+    "ms-toolsai.jupyter-keymap",
+    "ms-toolsai.jupyter-renderers",
+    "ms-toolsai.vscode-jupyter-slideshow",
+    "ms-toolsai.vscode-jupyter-cell-tags",
+    "ms-toolsai.vscode-jupyter-powertools"
+  ],
+
+  // --- Environment variables ---
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/library:${PYTHONPATH}"
+  },
+
+  // --- Post-create setup commands ---
+  "postCreateCommand": "pip install --break-system-packages  zoomy-core ipywidgets ipykernel && python3 -m ipykernel install --user --name firedrake --display-name 'Python (Firedrake)'",
+  
+
+  // --- Recommended: Forward your SSH keys for private GitHub access ---
+  "mounts": [
+    "source=${env:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+  ],
+
+  "remoteEnv": {
+    "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=no"
+  }
+}
+
