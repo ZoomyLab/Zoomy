@@ -49,9 +49,9 @@ RUN cd /opt/petsc && \
 RUN pip install --no-cache-dir --force-reinstall \
     /opt/petsc/src/binding/petsc4py
 
-# Clone and install the animate package from mesh-adaptation
-RUN git clone https://github.com/mesh-adaptation/animate.git /opt/animate && \
-    pip install --no-cache-dir -e /opt/animate
+# # Clone and install the animate package from mesh-adaptation
+# RUN git clone https://github.com/mesh-adaptation/animate.git /opt/animate && \
+#     pip install --no-cache-dir -e /opt/animate
 
 # --- Install Python dependencies ---
 RUN python3 -m pip install --no-cache-dir \
