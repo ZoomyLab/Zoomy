@@ -200,15 +200,15 @@ bcs = BC.BoundaryConditions(
     ]
 )
 
- ### Initial condition
+### Initial condition
 def ic_q(x):
     R = 3
     r = np.sqrt((x[0])**2 + (x[1])**2)
     # b = 0.1 * x[0] + 0.5 * np.sin(2 * np.pi * x[0] / 5)
     # b = 0.3 * x[0]
-    b = r**2 / 100 * 3
-    # b = 0
-    h = np.where(r <= R, 2., 1) -b
+    # b = r**2 / 100 * 3
+    b = 0
+    h = np.where(r <= R, 2., 0.) -b
     h = np.where(h <= 0, 0, h)
     return np.array([b, h , 0.*x[0], 0.*x[0]])
 
@@ -228,7 +228,7 @@ import ufl
 IdentityMatrix = ufl.as_tensor([[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
 # solver = dg.FiredrakeHyperbolicSolver(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix)
-solver = dg_amr.FiredrakeHyperbolicSolverAMR(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix)
+solver = dg_amr.FiredrakeHyperbolicSolverAMR(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix, refine_every=20, enable_amr=True)
 
 # %%
 main_dir = misc.get_main_directory()
