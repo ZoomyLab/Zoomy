@@ -25,3 +25,6 @@
 [submodule "data"]
 	path = data
 	url = git@github.com:zoomy-lab/data.git
+[submodule "library/firedrake_animate"]
+	path = data
+	url = git@github.com:zoomy-lab/firedrake_animate.git

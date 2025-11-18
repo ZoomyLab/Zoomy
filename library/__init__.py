@@ -9,6 +9,7 @@ __all__ = [
     "zoomy_foam",
     "zoomy_gui",
     "zoomy_jax",
+    "firedrake_animate",
 ]
 
 for _name in __all__:
