@@ -1,10 +1,13 @@
 {
-  "name": "Firedrake + AMR + Animate Dev",
+  "name": "Firedrake + AMR",
+
   "build": {
     "dockerfile": "Dockerfile",
-    "context": ".."
+    "context": "${localWorkspaceFolder}"
   },
+
   "remoteUser": "root",
+
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
 
@@ -12,14 +15,17 @@
     "ghcr.io/devcontainers/features/common-utils:2": {}
   },
 
-  "runArgs": [
-    "--network=host",
-    // "--gpus=all"
-  ],
 
   "settings": {
     "terminal.integrated.defaultProfile.linux": "bash",
     "python.pythonPath": "/opt/firedrake/bin/python"
+  },
+
+
+  // Add local library modules to the Python path
+  "remoteEnv": {
+    "PYTHONPATH": "/opt/firedrake:/workspace/library:${PYTHONPATH}",
+    "ZOOMY_DIR": "/workspace"
   },
 
   "extensions": [
@@ -41,11 +47,5 @@
     }
   },
 
-  "postCreateCommand": "echo 'Dev container ready: Firedrake + PETSc with MMG/ParMMG/Pragmatic + Animate installed.'",
-
-  "forwardPorts": [8888, 8000, 8080],
-  "remoteEnv": {
-    "PYTHONPATH": "/opt/firedrake:/workspace/library:${PYTHONPATH}",
-    "ZOOMY_DIR": "/workspace"
-  }
+  "forwardPorts": [8888, 8000, 8080]
 }

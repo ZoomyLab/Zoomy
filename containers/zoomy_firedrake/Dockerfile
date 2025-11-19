@@ -33,7 +33,7 @@ RUN cd /opt/petsc && \
         --download-mumps \
         --download-scalapack \
         --download-parmetis \
-        --download-superlu_dist \ 
+        --download-superlu_dist \
         --download-pastix \
         --download-metis \
         --download-mmg \
@@ -49,28 +49,25 @@ RUN cd /opt/petsc && \
 RUN pip install --no-cache-dir --force-reinstall \
     /opt/petsc/src/binding/petsc4py
 
-# # Clone and install the animate package from mesh-adaptation
-# RUN git clone https://github.com/mesh-adaptation/animate.git /opt/animate && \
-#     pip install --no-cache-dir -e /opt/animate
-
 # --- Install Python dependencies ---
 RUN python3 -m pip install --no-cache-dir \
-      zoomy-core \
       jupyterlab \
       notebook \
       ipywidgets \
       matplotlib \
       pandas
 
+# Install all pip packages in the 'library' directory as editable packages
+RUN for d in library/*; do \
+      if [ -f "$d/pyproject.toml" ]; then \
+        echo "Found package in $d, installing..."; \
+        python3 -m pip install -e "$d" --config-settings editable_mode=strict; \
+      fi; \
+    done
+
+
+
 
 # Clean up
 RUN rm -rf /var/lib/apt/lists/*
 
-# Run basic Firedrake smoke test
-# RUN python3 - <<EOF
-# import firedrake as fd
-# mesh = fd.UnitSquareMesh(4, 4)
-# V = fd.FunctionSpace(mesh, "CG", 1)
-# u = fd.Function(V).interpolate(fd.sin(fd.pi*fd.x)*fd.sin(fd.pi*fd.y))
-# print("Firedrake setup worked.")
-# EOF
