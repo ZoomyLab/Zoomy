@@ -46,8 +46,9 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.misc.misc import Zstruct, ZArray
 import zoomy_core.misc.misc as misc
-import zoomy_firedrake.firedrake_solver as dg
 import zoomy_firedrake.firedrake_solver_animate_amr as dg_amr
+import zoomy_firedrake.firedrake_solver as dg
+
 
 
 # %%
@@ -57,7 +58,7 @@ class SWE(Model):
     variables: Zstruct = field(init=False)
     aux_variables: Zstruct = field(default=1)
     _default_parameters: dict = field(
-        init=False, factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "rho": 1000.0, "n": 0.1, "eps":1e-4}
+        init=False, factory=lambda: {"g": 9.81, "ex": 0.0, "ey": 0.0, "ez": 1.0, "rho": 1000.0, "n": 0., "eps":1e-4}
     )
     
     def __attrs_post_init__(self):
@@ -115,14 +116,15 @@ class SWE(Model):
         eps = 1e-4
         dim = self.dimension
         _, _, U, _ = self.get_primitives()
+        hU = Matrix(self.variables[2 : 2 + dim])
         hinv = self.aux_variables[0]
         # Uold = Matrix(self.aux_variables[1 : 1 + dim])
         g = self.parameters.g
         n = self.parameters.n
-        abs_u = sqrt(U.dot(U) + eps)
+        abs_hu = sqrt(hU.dot(hU) + eps)
         S = Matrix.zeros(self.n_variables, 1)
         # S[2:, 0] = -n**2 * g * hinv**(1/3) * U[:, 0] * abs_u
-        S[2:, 0] = n**2 * g  * (hinv**(1/3) + eps) * U[:, 0] * abs_u
+        S[2:, 0] = n**2 * g  * (hinv**(7/3) + eps) * hU[:, 0] * abs_hu
         return ZArray(S).reshape(self.n_variables,)
     
 @define(frozen=True, slots=True, kw_only=True)
@@ -220,15 +222,15 @@ model = NumericSWE(
     initial_conditions=ic,
 )
 
-settings = Settings(name="Firedrake", output=Zstruct(directory="outputs/firedrake", snapshots=100000, filename='dg', clean_directory=True))
+settings = Settings(name="Firedrake", output=Zstruct(directory="outputs/firedrake", snapshots=10000, filename='dg', clean_directory=True))
 
 
 # %%
 import ufl 
 IdentityMatrix = ufl.as_tensor([[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
-# solver = dg.FiredrakeHyperbolicSolver(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix)
-solver = dg_amr.FiredrakeHyperbolicSolverAMR(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix, refine_every=20, enable_amr=True)
+solver = dg.FiredrakeHyperbolicSolver(settings=settings, time_end = 10.0, CFL=0.2, IdentityMatrix=IdentityMatrix)
+# solver = dg_amr.FiredrakeHyperbolicSolverAMR(settings=settings, time_end = 10.0, CFL=0.45, IdentityMatrix=IdentityMatrix, refine_every=20, enable_amr=False)
 
 # %%
 main_dir = misc.get_main_directory()
