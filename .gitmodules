@@ -1,30 +1,30 @@
 [submodule "library/zoomy_core"]
 	path = library/zoomy_core
-	url = git@github.com:zoomy-lab/zoomy-core.git
+	url = git@github.com:ZoomyLab/zoomy-core.git
 [submodule "library/zoomy_amrex"]
 	path = library/zoomy_amrex
-	url = git@github.com:zoomy-lab/zoomy-amrex.git
+	url = git@github.com:ZoomyLab/zoomy-amrex.git
 [submodule "library/zoomy_fenicsx"]
 	path = library/zoomy_fenicsx
-	url = git@github.com:zoomy-lab/zoomy-fenicsx.git
+	url = git@github.com:ZoomyLab/zoomy-fenicsx.git
 [submodule "library/zoomy_firedrake"]
 	path = library/zoomy_firedrake
-	url = git@github.com:zoomy-lab/zoomy-firedrake.git
+	url = git@github.com:ZoomyLab/zoomy-firedrake.git
 [submodule "library/zoomy_jax"]
 	path = library/zoomy_jax
-	url = git@github.com:zoomy-lab/zoomy-jax.git
+	url = git@github.com:ZoomyLab/zoomy-jax.git
 [submodule "library/zoomy_foam"]
 	path = library/zoomy_foam
-	url = git@github.com:zoomy-lab/zoomy-foam.git
+	url = git@github.com:ZoomyLab/zoomy-foam.git
 [submodule "library/zoomy_gui"]
 	path = library/zoomy_gui
-	url = git@github.com:zoomy-lab/zoomy-gui.git
+	url = git@github.com:ZoomyLab/zoomy-gui.git
 [submodule "meshes"]
 	path = meshes
-	url = git@github.com:zoomy-lab/meshes.git
+	url = git@github.com:ZoomyLab/meshes.git
 [submodule "data"]
 	path = data
-	url = git@github.com:zoomy-lab/data.git
+	url = git@github.com:ZoomyLab/data.git
 [submodule "library/firedrake_animate"]
-	path = data
-	url = git@github.com:zoomy-lab/firedrake_animate.git
+	path = library/firedrake_animate
+	url = git@github.com:ZoomyLab/firedrake_animate.git
