@@ -6,5 +6,3 @@ dependencies:
   - jaxlib
   - jaxopt
   - pip
-  - pip:
-    - -e ../library/zoomy_jax

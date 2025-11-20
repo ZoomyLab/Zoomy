@@ -9,6 +9,7 @@ __all__ = [
     "zoomy_foam",
     "zoomy_gui",
     "zoomy_jax",
+    "zoomy_tests"
     "firedrake_animate",
 ]
 

@@ -28,6 +28,13 @@ RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
     micromamba clean --all --yes
 
 
+# Create environment
+RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
+    micromamba env update -n zoomy -f /tmp/zoomy_jax.yml && \
+    micromamba env update -n zoomy -f /tmp/meshes.yml && \
+    micromamba clean --all --yes
+
+
 #########################################
 # Stage 2: Runtime Image
 #########################################
