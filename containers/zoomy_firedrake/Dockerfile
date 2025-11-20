@@ -57,16 +57,6 @@ RUN python3 -m pip install --no-cache-dir \
       matplotlib \
       pandas
 
-# Install all pip packages in the 'library' directory as editable packages
-RUN for d in library/*; do \
-      if [ -f "$d/pyproject.toml" ]; then \
-        echo "Found package in $d, installing..."; \
-        python3 -m pip install -e "$d" --config-settings editable_mode=strict; \
-      fi; \
-    done
-
-
-
 
 # Clean up
 RUN rm -rf /var/lib/apt/lists/*
