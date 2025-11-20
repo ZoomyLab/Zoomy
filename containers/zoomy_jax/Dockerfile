@@ -3,32 +3,30 @@
 #########################################
 
 FROM ubuntu:22.04 AS builder
-
 SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     curl bzip2 ca-certificates git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install micromamba
+# -------------------------------------------------------
+# Install micromamba with a custom root prefix (/opt/zoomy)
+# -------------------------------------------------------
 RUN curl -Ls https://micro.mamba.pm/install.sh | bash
 ENV PATH=/root/.local/bin:$PATH
-ENV MAMBA_ROOT_PREFIX=/root/micromamba
+
+# IMPORTANT: Install micromamba environment directly into /opt/zoomy
+ENV MAMBA_ROOT_PREFIX=/opt/zoomy
 ARG MAMBA_NO_BASHRC=1
 
-# Copy env YAMLs
+# Copy environment YAMLs
 COPY install/Zoomy.yml /tmp/Zoomy.yml
 COPY install/zoomy_jax.yml /tmp/zoomy_jax.yml
 COPY install/meshes.yml /tmp/meshes.yml
 
-# Create environment
-RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
-    micromamba env update -n zoomy -f /tmp/zoomy_jax.yml && \
-    micromamba env update -n zoomy -f /tmp/meshes.yml && \
-    micromamba clean --all --yes
-
-
-# Create environment
+# Create the environment directly in /opt/zoomy/envs/zoomy
 RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
     micromamba env update -n zoomy -f /tmp/zoomy_jax.yml && \
     micromamba env update -n zoomy -f /tmp/meshes.yml && \
@@ -39,27 +37,24 @@ RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
 # Stage 2: Runtime Image
 #########################################
 
-FROM debian:bookworm-slim
-
+FROM ubuntu:22.04
 SHELL ["/bin/bash", "-c"]
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime libs needed for scientific conda packages
 RUN apt-get update && apt-get install -y \
     bash ca-certificates \
+    libgfortran5 libstdc++6 libc6 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy the environment folder directly
-COPY --from=builder /root/micromamba/envs/zoomy /opt/zoomy
+# Copy the entire micromamba root (already in correct path)
+COPY --from=builder /opt/zoomy /opt/zoomy
 
-# Strip unnecessary files to reduce size
-RUN find /opt/zoomy -type d -name "__pycache__" -exec rm -rf {} + || true && \
-    find /opt/zoomy -type f -name "*.pyc" -delete && \
-    find /opt/zoomy -type d -name "tests" -exec rm -rf {} + || true && \
-    rm -rf /opt/zoomy/share || true && \
-    rm -rf /opt/zoomy/doc || true && \
-    rm -rf /opt/zoomy/lib/python*/site-packages/*/tests || true
+# Add the environment to PATH
+ENV PATH=/opt/zoomy/envs/zoomy/bin:$PATH
 
-# Add environment to PATH
-ENV PATH=/opt/zoomy/bin:$PATH
+# Set CONDA_PREFIX for safety (some packages check it)
+ENV CONDA_PREFIX=/opt/zoomy/envs/zoomy
 
 CMD ["/bin/bash"]
-
