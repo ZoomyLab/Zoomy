@@ -1,50 +1,58 @@
-FROM ubuntu:latest
+#########################################
+# Stage 1: Builder
+#########################################
+
+FROM ubuntu:22.04 AS builder
 
 SHELL ["/bin/bash", "-c"]
 
-# ---------------------------------------------------------------------
-# 1. System packages
-# ---------------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
-    curl bzip2 vim wget git ca-certificates \
+    curl bzip2 ca-certificates git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ---------------------------------------------------------------------
-# 2. Install micromamba
-# ---------------------------------------------------------------------
+# Install micromamba
+RUN curl -Ls https://micro.mamba.pm/install.sh | bash
+ENV PATH=/root/.local/bin:$PATH
+ENV MAMBA_ROOT_PREFIX=/root/micromamba
+ARG MAMBA_NO_BASHRC=1
 
-RUN mkdir -p /opt/micromamba/bin && \
-    curl -L https://micro.mamba.pm/api/micromamba/linux-64/latest \
-    | tar -xvj --strip-components=1 -C /opt/micromamba/bin bin/micromamba
+# Copy env YAMLs
+COPY install/Zoomy.yml /tmp/Zoomy.yml
+COPY install/zoomy_jax.yml /tmp/zoomy_jax.yml
+COPY install/meshes.yml /tmp/meshes.yml
 
-ENV MAMBA_ROOT_PREFIX=/opt/micromamba
-ENV PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
+# Create environment
+RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
+    micromamba env update -n zoomy -f /tmp/zoomy_jax.yml && \
+    micromamba env update -n zoomy -f /tmp/meshes.yml && \
+    micromamba clean --all --yes
 
-RUN echo ". /opt/micromamba/etc/profile.d/micromamba.sh" >> /etc/bash.bashrc && \
-    echo "micromamba activate zoomy" >> /etc/bash.bashrc
 
+#########################################
+# Stage 2: Runtime Image
+#########################################
 
-# Copy environment files into the image
-COPY install/zoomy.yml /tmp/zoomy.yml
-COPY install/env-jax.yml /tmp/env-jax.yml
-COPY install/env-mesh.yml /tmp/env-mesh.yml
+FROM debian:bookworm-slim
 
-# ---------------------------------------------------------------------
-# 3. Create and update the environment (zoomy)
-# ---------------------------------------------------------------------
-RUN micromamba create -y -n zoomy -f /tmp/zoomy.yml && \
-    micromamba env update -n zoomy -f /tmp/env-jax.yml && \
-    micromamba env update -n zoomy -f /tmp/env-mesh.yml
+SHELL ["/bin/bash", "-c"]
 
-# ---------------------------------------------------------------------
-# 4. Auto-activate environment on container start
-# ---------------------------------------------------------------------
-# Add activation to bashrc
-RUN echo "micromamba activate zoomy" >> ~/.bashrc
+RUN apt-get update && apt-get install -y \
+    bash ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# For interactive shells, ensure non-login shells also activate
-ENV MAMBA_DEFAULT_ENV=zoomy
-ENV MAMBA_EXE="$MAMBA_ROOT_PREFIX/bin/micromamba"
+# Copy the environment folder directly
+COPY --from=builder /root/micromamba/envs/zoomy /opt/zoomy
 
-# Default command
+# Strip unnecessary files to reduce size
+RUN find /opt/zoomy -type d -name "__pycache__" -exec rm -rf {} + || true && \
+    find /opt/zoomy -type f -name "*.pyc" -delete && \
+    find /opt/zoomy -type d -name "tests" -exec rm -rf {} + || true && \
+    rm -rf /opt/zoomy/share || true && \
+    rm -rf /opt/zoomy/doc || true && \
+    rm -rf /opt/zoomy/lib/python*/site-packages/*/tests || true
+
+# Add environment to PATH
+ENV PATH=/opt/zoomy/bin:$PATH
+
 CMD ["/bin/bash"]
+

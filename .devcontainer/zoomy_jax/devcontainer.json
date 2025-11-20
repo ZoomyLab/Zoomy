@@ -1,0 +1,51 @@
+{
+  "name": "Firedrake + AMR",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "${localWorkspaceFolder}"
+  },
+
+  "remoteUser": "root",
+
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+
+
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "python.pythonPath": "/opt/firedrake/bin/python"
+  },
+
+
+  // Add local library modules to the Python path
+  "remoteEnv": {
+    "PYTHONPATH": "/opt/firedrake:/workspace/library:${PYTHONPATH}",
+    "ZOOMY_DIR": "/workspace"
+  },
+
+  "extensions": [
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "ms-azuretools.vscode-docker",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "oderwat.indent-rainbow",
+    "ms-vsliveshare.vsliveshare"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+
+  "forwardPorts": [8888, 8000, 8080]
+}

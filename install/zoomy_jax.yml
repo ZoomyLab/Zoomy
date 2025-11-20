@@ -1,4 +1,3 @@
-name: zoomy
 channels:
   - conda-forge
 
@@ -6,3 +5,6 @@ dependencies:
   - jax
   - jaxlib
   - jaxopt
+  - pip
+  - pip:
+    - -e ../library/zoomy_jax
