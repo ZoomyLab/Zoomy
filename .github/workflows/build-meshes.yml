@@ -1,0 +1,67 @@
+name: Build Meshes and Upload to Release
+
+on:
+  push:
+    paths:
+      - "meshes/**/*.geo"
+      - "meshes/blacklist.txt"
+
+jobs:
+  build-meshes:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # Required for creating releases + uploading assets
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install gmsh
+      run: sudo apt-get update && sudo apt-get install -y gmsh
+
+    - name: Determine changed .geo files (excluding blacklist)
+      id: changed
+      run: |
+        CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'meshes/**/*.geo')
+
+        echo "Changed GEO files:"
+        echo "$CHANGED"
+
+        # read blacklist file
+        BLACKLIST=$(cat meshes/blacklist.txt | tr '\n' ' ')
+
+        FILTERED=""
+        for f in $CHANGED; do
+          SKIP=0
+          for b in $BLACKLIST; do
+            [[ "$f" == "$b" ]] && SKIP=1
+          done
+          [[ $SKIP == 0 ]] && FILTERED="$FILTERED $f"
+        done
+
+        echo "Filtered GEO files:"
+        echo "$FILTERED"
+
+        echo "files=$FILTERED" >> $GITHUB_OUTPUT
+
+    - name: Run mesh generation
+      if: steps.changed.outputs.files != ''
+      run: |
+        for f in ${{ steps.changed.outputs.files }}; do
+          DIR=$(dirname "$f")
+          echo "Running run.sh in $DIR"
+          (cd "$DIR" && chmod +x run.sh && ./run.sh)
+        done
+
+    - name: Create Release
+      if: steps.changed.outputs.files != ''
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: meshes-${{ github.sha }}
+        name: "Meshes generated for commit ${{ github.sha }}"
+        files: |
+          meshes/**/*.msh
+          meshes/**/*.vtk
+          meshes/**/*.vtu
+          meshes/**/*.h5
+

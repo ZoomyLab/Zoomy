@@ -14,11 +14,11 @@
     "terminal.integrated.defaultProfile.linux": "bash",
     "python.pythonPath": "/opt/firedrake/bin/python"
   },
-  // Add local library modules to the Python path
   "remoteEnv": {
-    "PYTHONPATH": "/opt/firedrake:/workspace/library:${PYTHONPATH}",
+    "PYTHONPATH": "/opt/firedrake:",
     "ZOOMY_DIR": "/workspace"
   },
+  "postCreateCommand": "pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_tests",
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",
