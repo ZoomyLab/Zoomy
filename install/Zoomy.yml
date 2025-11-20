@@ -4,7 +4,7 @@ channels:
   - lrntct
 
 dependencies:
-  - python>=3.13
+  - python=3.11
   - sympy>=1.13.3
   - attrs
   - numpy
@@ -39,4 +39,6 @@ dependencies:
     - tol-colors
     - python-dotenv
     - Cython
+    - -e ../library/zoomy_core
+    - -e ../library/zoomy_tests
 

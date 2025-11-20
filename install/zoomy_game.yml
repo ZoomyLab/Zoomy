@@ -1,4 +1,3 @@
-name: sms-game
 channels:
   - conda-forge
 dependencies:
