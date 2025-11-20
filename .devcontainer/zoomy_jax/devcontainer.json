@@ -1,33 +1,24 @@
 {
-  "name": "Firedrake + AMR",
-
+  "name": "Zoomy + JAX",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "${localWorkspaceFolder}"
   },
-
   "remoteUser": "root",
-
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
-
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {}
   },
-
-
   "settings": {
     "terminal.integrated.defaultProfile.linux": "bash",
     "python.pythonPath": "/opt/firedrake/bin/python"
   },
-
-
-  // Add local library modules to the Python path
   "remoteEnv": {
-    "PYTHONPATH": "/opt/firedrake:/workspace/library:${PYTHONPATH}",
+    "PYTHONPATH": "/opt/firedrake:",
     "ZOOMY_DIR": "/workspace"
   },
-
+  "postCreateCommand": "pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_jax -e /workspace/library/zoomy_tests",
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",
@@ -37,7 +28,6 @@
     "oderwat.indent-rainbow",
     "ms-vsliveshare.vsliveshare"
   ],
-
   "customizations": {
     "vscode": {
       "settings": {
@@ -46,6 +36,9 @@
       }
     }
   },
-
-  "forwardPorts": [8888, 8000, 8080]
+  "forwardPorts": [
+    8888,
+    8000,
+    8080
+  ]
 }

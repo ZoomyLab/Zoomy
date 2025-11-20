@@ -1,13 +1,13 @@
 name: Build and Publish Containers
 
 on:
-  push:
-    paths:
-      - "containers/**"
+  # push:
+  #   paths:
+  #     - "containers/**"
   workflow_dispatch:
     inputs:
       container:
-        description: "Build specific container (folder name)"
+        description: "Build a specific container (folder name)"
         required: false
       bump:
         description: "Bump version (major/minor)"
@@ -15,40 +15,72 @@ on:
         default: "minor"
 
 jobs:
-  detect-changes:
+
+  load-dockers:
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.detect.outputs.containers }}
+      list: ${{ steps.load.outputs.list }}
     steps:
       - uses: actions/checkout@v4
 
-      # Find which container directories changed
+      # Read .github/dockers.txt into JSON list for later use
+      - id: load
+        run: |
+          mapfile -t arr < .github/dockers.txt
+
+          # convert to ["a","b","c"]
+          json="[$(printf '"%s",' "${arr[@]}" | sed 's/,$//')]"
+
+          echo "Loaded docker folders: $json"
+          echo "list=$json" >> $GITHUB_OUTPUT
+
+
+  detect-containers:
+    runs-on: ubuntu-latest
+    needs: load-dockers
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
       - id: detect
         run: |
-          changed=""
-          for d in containers/*; do
-            if git diff --quiet HEAD~1 HEAD -- "$d"; then
+          # Manual trigger: user specified container=X
+          if [ -n "${{ github.event.inputs.container }}" ]; then
+            echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Auto-detecting changed containers..."
+
+          changed=()
+          # iterate over list from dockers.txt
+          for c in $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]'); do
+            if git diff --quiet HEAD~1 HEAD -- "containers/$c/Dockerfile"; then
               continue
             else
-              changed="$changed $(basename $d)"
+              changed+=("\"$c\"")
             fi
           done
-          echo "containers=$changed"
-          echo "containers=$changed" >> $GITHUB_OUTPUT
+
+          # convert bash array → JSON
+          json="[$(IFS=,; echo "${changed[*]}")]"
+          echo "Changed: $json"
+          echo "changed=$json" >> $GITHUB_OUTPUT
+
 
   build:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.changed != ''
     runs-on: ubuntu-latest
+    needs: detect-containers
+    if: needs.detect-containers.outputs.changed != '[]'
     strategy:
       matrix:
-        container: ${{ fromJSON(format('["{0}"]', needs.detect-changes.outputs.changed)) }}
+        container: ${{ fromJson(needs.detect-containers.outputs.changed) }}
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
 
-      # Login to GitHub Container Registry
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -56,38 +88,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Compute next version (MAJOR.MINOR only)
       - id: bump
         run: |
           version_file="containers/${{ matrix.container }}/VERSION"
           version=$(cat "$version_file")
 
           IFS='.' read -r major minor <<< "$version"
-
           bump="${{ github.event.inputs.bump || 'minor' }}"
 
-          case $bump in
+          case "$bump" in
             major) major=$((major+1)); minor=0 ;;
             minor) minor=$((minor+1)) ;;
           esac
 
           new="$major.$minor"
           echo "$new" > "$version_file"
-
           echo "version=$new" >> $GITHUB_OUTPUT
 
-      # Build image
       - name: Build image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/zoomy_${{ matrix.container }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/zoomy-${{ matrix.container }}"
           VERSION="${{ steps.bump.outputs.version }}"
 
           docker build \
             -t "$IMAGE:$VERSION" \
             -t "$IMAGE:latest" \
-            containers/${{ matrix.container }}
+            "containers/${{ matrix.container }}"
 
-      # Push image
       - name: Push image
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/zoomy-${{ matrix.container }}"
@@ -96,9 +123,9 @@ jobs:
           docker push "$IMAGE:$VERSION"
           docker push "$IMAGE:latest"
 
-      # Commit updated VERSION file
       - name: Commit version bump
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Bump ${{ matrix.container }} to version ${ { steps.bump.outputs.version } }"
+          commit_message: "Bump ${{ matrix.container }} to version ${{ steps.bump.outputs.version }}"
           file_pattern: "containers/${{ matrix.container }}/VERSION"
+

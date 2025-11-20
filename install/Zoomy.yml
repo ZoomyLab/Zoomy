@@ -1,4 +1,5 @@
 name: zoomy
+
 channels:
   - conda-forge
   - lrntct
@@ -39,6 +40,4 @@ dependencies:
     - tol-colors
     - python-dotenv
     - Cython
-    - -e ../library/zoomy_core
-    - -e ../library/zoomy_tests
 
