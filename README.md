@@ -85,7 +85,7 @@ Clone the repository (see above) and open the repository in your IDE / VS-Code. 
 * 'Dev Container' extension in VS-Code
 
 **Restrictions**:
-* On Windows, you need to use Linux Containers for Docker. This requires the usage of WSL.
+* On Windows, you need to use Linux Containers for Docker.
 
 
 ### Docker images
@@ -96,7 +96,7 @@ We offer Docker containers for
 * Zoomy + Firedrake: `docker pull docker push ghcr.io/zoomylab/zoomy_firedrake:latest`
 
 **Restrictions**:
-* On Windows, you need to use Linux Containers for Docker. This requires the usage of WSL.
+* On Windows, you need to use Linux Containers for Docker.
 
 ### Conda / Mamba / Micromamba installation
 
