@@ -26,26 +26,36 @@ T.b.d.
 
 ## Installation
 
+ZoomyLab consists of a 
+
+* Base repository (Zoomy): Symbolic Layer (Models), Pre/Postprocessing, NumPy solver
+* Solver backends, each with it's own (sub-)repository
+    * JAX (zoomy_jax)
+    * Firedrake (zoomy_firedrake)
+    * FenicsX (zoomy_fenicsx)
+    * AMReX (zoomy_amrex)
+* Utility backend
+    * meshes (currently GMSH mesh definition files)
+    * data (data repository for large scale test cases)
+
 ### Getting started in seconds
 
 A good way to have an **interactive** first impression of Zoomy is to use one of the following options
 
 #### JupyterLite
 
-t.b.d
+WIP
 
 #### Cloud-based GUI
 
-t.b.d.
+WIP
 
-### Manual installation
-
-#### Cloning the repository
+### Cloning the repository
 
 You can either clone the repo with all related subrepositories via
 
 ```
-git clone --recurse-submodules https://github.com/zoomy-lab/Zoomy.git
+git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
 ```
 
 **or** you can start by cloning the main repository (Zoomy) and selected subrepositories, e.g.
@@ -62,151 +72,98 @@ The different subrepositories are listed at [ZoomyLab](https://github.com/zoomy-
 
 
 
-#### Installating with Conda/Mamba
 
-The project is composed out of different environment files. We start by installing the base and than adding 'flavors', depdening on the solver backend that you want to use.
+### Devcontainers / Usage directly in VS-Code
+
+Clone the repository (see above) and open the repository in your IDE / VS-Code. A pop-up will appear if you want to open the workspace in a container. You can choose between:
+
+* Zoomy + Jax
+* Zoomy + Firedrake
+
+**Requirements**:
+* Docker installation
+* 'Dev Container' extension in VS-Code
+
+**Restrictions**:
+* On Windows, you need to use Linux Containers for Docker. This requires the usage of WSL.
 
 
-**Base Installation**
+### Docker images
 
-```         
-conda env create -f install/zoomy.yml
+We offer Docker containers for
+
+* Zoomy + JAX: `docker pull docker push ghcr.io/zoomylab/zoomy_jax:latest`
+* Zoomy + Firedrake: `docker pull docker push ghcr.io/zoomylab/zoomy_firedrake:latest`
+
+**Restrictions**:
+* On Windows, you need to use Linux Containers for Docker. This requires the usage of WSL.
+
+### Conda / Mamba / Micromamba installation
+
+1. Clone the repository (see above)
+2. Install Zoomy and the respective solver backends, e.g.
+
+* Zoomy (Numpy solver backend + GMSH support): 
+
 ```
-
-**Core (Pre/Postprocessing/NumPy solver)**
-
-```         
-conda env update -f install/env-core.yml
-```
-
-**Unstructured mesh support for Numpy/Jax solver**
-
-```         
-conda env update -f install/env-mesh.yml
-```
-
-**JAX solver**
-
-```         
-conda env update -f install/env-jax.yml
-```
-
-**FenicsX solver**
-
-```         
-conda env update -f install/env-fenicsx.yml
-```
-
-**FenicsX**
-
-```         
-conda env update -f install/env-fenicsx.yml
-```
-
-#### Firedrake (Linux / Mac)
-
-**Base Installation**
-
-```         
-cd install
-conda env create -f install/zoomy.yml
-./conda_config_setup.sh
-```
-
-**Firedrake**
-
-Activate the environment before installing any Firedrake dependencies.
-
-```         
+conda env create -f install/Zoomy.yml
 conda activate zoomy
+conda env update -f install/meshes.yml
 ```
 
-Mainly follow the instructions on the [Firedrake Webpage](https://www.firedrakeproject.org/install.html#install-firedrake).
+* Zoomy + JAX (Numpy + JAX solver backend + GMSH support)
 
-Deviating from the instructions on the webpage, we use
-
-```         
-python3 ../firedrake-configure --show-petsc-configure-options --with-pnetcdf=0 | xargs -L1 ./configure
+```
+conda env create -f install/Zoomy.yml
+conda activate zoomy
+conda env update -f install/zoomy_jax.yml
+conda env update -f install/meshes.yml
 ```
 
-to compile PetSc without PNetCDF and then install Firedrake inside our conda environment
 
-```         
-pip install --no-binary h5py 'firedrake[check]'
-```
+### Advanced
 
-#### AMReX (Linux / Mac)
-
-**Base Installation**
-
-```         
-cd install
-conda env create -f install/zoomy.yml
-./conda_config_setup.sh
-```
-
-**AMReX**
+#### AMReX
 
 Note that the AMReX installation is *completely indepdenent* and the AMReX solver does not depend on the Conda/Mamba environment. Follow the instructions on the [AMReX Webpage](https://amrex-codes.github.io/amrex/docs_html/Introduction.html)
 
+WIP 
+
 #### OpenFOAM 12 (Linux / Mac)
 
-T.b.d
-
-**Activation**
-
-```         
-conda activate zoomy
-```
-
-### Docker
-
-T.b.d
-
-### Apptainer
-
-T.b.d
-
-### Manual installation
-
-See the `install/*.yml` for a complete list of requirements. Once the requirements are fulfilled, clone this repository and submodules.
-
-The following environment variables need to be set
-
-```{bash}
-PYTHONPATH=/path/to/Zoomy
-ZOOMY_DIR=/path/to/Zoomy
-JAX_ENABLE_X64=True
-PETSC_DIR=/path/to/petsc/installation
-PETSC_ARCH=architecture used for compiling petsc
-```
-
-### External dependencies
+WIP
 
 #### PreCICE
 
-T.b.d.
+WIP
 
-### Working in Jupyter Notebooks
 
-Make sure to export the environment variables
+#### Manual installation
+
+
+See the `install/*.yml` for a complete list of requirements. 
+
+TODO: complete list of dependencies
+
+#### Environment variables
+
+The following environment variables can be set 
 
 ```{bash}
-PYTHONPATH=/path/to/Zoomy
-ZOOMY_DIR=/path/to/Zoomy
-JAX_ENABLE_X64=True //(if you use JAX)
+ZOOMY_DIR=/path/to/Zoomy 
+JAX_ENABLE_X64=True
 PETSC_DIR=/path/to/petsc/installation
 PETSC_ARCH=architecture used for compiling petsc
 ```
 
 ## Testing
 
-T.b.d.
+WIP
 
 ## Publications
 
-T.b.d.
+WIP
 
 ## Dependencies and acknowledgements
 
-This
+WIP
