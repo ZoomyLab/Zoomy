@@ -136,8 +136,10 @@ install/petsc
 .serial_mesh
 
 dist
-library/zoomy_core.egg-info
 
 *.pvd
 *.vtu
 *.vtk
+
+*.egg-info
+web/_freeze/
