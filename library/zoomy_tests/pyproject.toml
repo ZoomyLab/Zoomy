@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zoomy_test"
+version = "0.1.0"
+description = "Test data generation utilities for the Zoomy simulation framework."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Your Name", email = "your.email@example.com" }
+]
+keywords = ["zoomy", "simulation", "testdata", "mesh", "fields"]
+
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+dependencies = [
+  "matplotlib",
+  "numpy",
+  "tol-colors",
+  "seaborn",
+  "pyswashes",
+  # Local Zoomy core dependency
+  "zoomy_core>=0.1.14",
+]
+
+[project.urls]
+Homepage = "https://github.com/mbd-rwth/Zoomy"
+Source = "https://github.com/mbd-rwth/Zoomy"
+Issues = "https://github.com/mbd-rwth/Zoomy/issues"
+
+[tool.setuptools.packages.find]
+include = ["zoomy_test*"]

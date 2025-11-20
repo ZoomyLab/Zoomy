@@ -56,7 +56,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
 from zoomy_core.mesh.mesh import compute_derivatives
-from tests.pdesoft import plots_paper
+from zoomy_tests.swashes import plots_paper
 import postprocessing.visualization as visu
 
 
