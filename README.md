@@ -109,6 +109,7 @@ We offer Docker containers for
 conda env create -f install/Zoomy.yml
 conda activate zoomy
 conda env update -f install/meshes.yml
+python3 -m pip install library/zoomy_core
 ```
 
 * Zoomy + JAX (Numpy + JAX solver backend + GMSH support)
@@ -118,6 +119,8 @@ conda env create -f install/Zoomy.yml
 conda activate zoomy
 conda env update -f install/zoomy_jax.yml
 conda env update -f install/meshes.yml
+python3 -m pip install library/zoomy_core
+python3 -m pip install library/zoomy_jax
 ```
 
 
