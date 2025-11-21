@@ -1,0 +1,25 @@
+{
+  "jupyter-lite-schema-version": 0,
+  "jupyter-lite": {
+    "title": "Zoomy",
+    "favicon": "assets/logo.svg",
+    "logo": "assets/logo.svg",
+
+    "pyodide": {
+      "packages": [
+        "zoomy_core",
+        "meshio"
+      ]
+    },
+
+    "contents": {
+      "notebooks": "notebooks"
+    },
+
+    "lab": {
+      "extraCssFiles": [
+        "assets/theme.css"
+      ]
+    }
+  }
+}
