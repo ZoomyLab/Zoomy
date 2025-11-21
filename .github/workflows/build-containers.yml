@@ -34,9 +34,15 @@ jobs:
 
       - id: load
         run: |
-          # FIX 2: robust entire-file-to-JSON-array
-          jq -R . < .github/workflows/dockers.txt | jq -s . > /tmp/dockers.json
-          echo "list=$(cat /tmp/dockers.json)" >> $GITHUB_OUTPUT
+          # read lines, strip trailing commas/spaces, convert to compact JSON array
+          list=$(
+            sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
+            | jq -R . \
+            | jq -sc .
+          )
+      
+          echo "Loaded docker folders: $list"
+          echo "list=$list" >> $GITHUB_OUTPUT
 
 
   detect-containers:
