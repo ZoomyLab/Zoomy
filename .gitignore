@@ -143,3 +143,4 @@ dist
 
 *.egg-info
 web/_freeze/
+*.whl
