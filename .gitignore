@@ -144,3 +144,5 @@ dist
 *.egg-info
 web/_freeze/
 *.whl
+jupyter-lite/.jupyterlite.doit.db
+.jupyterlite.doit.db
