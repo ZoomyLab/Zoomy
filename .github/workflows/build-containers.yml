@@ -1,8 +1,8 @@
 name: Build and publish Containers
 
 permissions:
-  contents: write      # for committing VERSION bump
-  packages: write      # for pushing to GHCR
+  contents: write
+  packages: write
 
 on:
   push:
@@ -18,7 +18,7 @@ on:
         required: false
         default: "minor"
 
-# prevent concurrent version-bump commits
+# FIX 4+5: prevent simultaneous version bump commits
 concurrency:
   group: container-version-bump
   cancel-in-progress: false
@@ -34,14 +34,12 @@ jobs:
 
       - id: load
         run: |
-          # read lines, strip trailing commas/spaces, convert to compact JSON array
+          # FIX 2: Robust JSON array generation (one-line compact JSON)
           list=$(
             sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
             | jq -R . \
             | jq -sc .
           )
-      
-          echo "Loaded docker folders: $list"
           echo "list=$list" >> $GITHUB_OUTPUT
 
 
@@ -60,7 +58,7 @@ jobs:
           # FIX 3: safer scripting
           set -eo pipefail
 
-          # Manual override by workflow_dispatch
+          # manual override
           if [ -n "${{ github.event.inputs.container }}" ]; then
             echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
             exit 0
@@ -68,7 +66,7 @@ jobs:
 
           changed=()
 
-          # Handle case where HEAD~1 does not exist (first commit in branch)
+          # Safe fallback for HEAD~1 (first commit)
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             base=HEAD~1
           else
@@ -81,8 +79,8 @@ jobs:
             fi
           done
 
-          changed_json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -s .)
-          echo "changed=$changed_json" >> $GITHUB_OUTPUT
+          json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+          echo "changed=$json" >> $GITHUB_OUTPUT
 
 
   build:
@@ -98,7 +96,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set lowercase owner
-        run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+        run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
         env:
           OWNER: ${{ github.repository_owner }}
 
@@ -109,54 +107,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # FIX 6: add Buildx + build cache
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ matrix.container }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-${{ matrix.container }}-
-
+      # Build the existing version (NO BUMP YET)
       - id: build_image
         run: |
           set -eo pipefail
-          IMAGE="ghcr.io/$OWNER_LC/${{ matrix.container }}"
 
-          # read version BEFORE build
+          image="ghcr.io/$OWNER_LC/${{ matrix.container }}"
+
           version_file="containers/${{ matrix.container }}/VERSION"
           version=$(cat "$version_file")
 
           docker build \
             --pull \
-            --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache-new \
             -f "containers/${{ matrix.container }}/Dockerfile" \
-            -t "$IMAGE:$version" \
-            -t "$IMAGE:latest" \
+            -t "$image:$version" \
+            -t "$image:latest" \
             .
 
           echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Push image
         run: |
-          IMAGE="ghcr.io/$OWNER_LC/${{ matrix.container }}"
-          VERSION="${{ steps.build_image.outputs.version }}"
+          image="ghcr.io/$OWNER_LC/${{ matrix.container }}"
+          version="${{ steps.build_image.outputs.version }}"
 
-          docker push "$IMAGE:$VERSION"
-          docker push "$IMAGE:latest"
+          docker push "$image:$version"
+          docker push "$image:latest"
 
-      # FIX 4 + FIX 5:
-      # move version bump AFTER pushing & avoid race by global concurrency above
+      # FIX 4+5: Do version bump AFTER successful push
       - id: bump
         run: |
           version_file="containers/${{ matrix.container }}/VERSION"
-          version=$(cat "$version_file")
+          old=$(cat "$version_file")
 
-          IFS='.' read -r major minor <<< "$version"
+          IFS='.' read -r major minor <<< "$old"
           bump="${{ github.event.inputs.bump || 'minor' }}"
 
           case "$bump" in
@@ -166,6 +150,7 @@ jobs:
 
           new="$major.$minor"
           echo "$new" > "$version_file"
+
           echo "new_version=$new" >> $GITHUB_OUTPUT
 
       - name: Commit version bump
@@ -173,9 +158,3 @@ jobs:
         with:
           commit_message: "Bump ${{ matrix.container }} to version ${{ steps.bump.outputs.new_version }}"
           file_pattern: "containers/${{ matrix.container }}/VERSION"
-
-      # Replace old docker cache with new
-      - name: Move updated Docker layer cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
