@@ -23,10 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Read .github/dockers.txt into JSON list for later use
+      # Read .github/workflows/dockers.txt into JSON list for later use
       - id: load
         run: |
-          mapfile -t arr < .github/dockers.txt
+          mapfile -t arr < .github/workflows/dockers.txt
 
           # convert to ["a","b","c"]
           json="[$(printf '"%s",' "${arr[@]}" | sed 's/,$//')]"
