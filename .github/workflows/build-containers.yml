@@ -106,7 +106,7 @@ jobs:
 
       - name: Build image
         run: |
-          IMAGE="ghcr.io/${{ OWNER_LC }}/${{ matrix.container }}"
+          IMAGE="ghcr.io/$OWNER_LC/${{ matrix.container }}"
           VERSION="${{ steps.bump.outputs.version }}"
 
           docker build \
@@ -116,7 +116,7 @@ jobs:
 
       - name: Push image
         run: |
-          IMAGE="ghcr.io/${{ OWNER_LC }}/${{ matrix.container }}"
+          IMAGE="ghcr.io/$OWNER_LC/${{ matrix.container }}"
           VERSION="${{ steps.bump.outputs.version }}"
 
           docker push "$IMAGE:$VERSION"
