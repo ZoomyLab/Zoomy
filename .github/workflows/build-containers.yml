@@ -100,6 +100,13 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
+      - name: Debug root contents
+        run: |
+          echo "=== ROOT CONTENTS ==="
+          ls -la .
+          echo "=== library CONTENTS ==="
+          ls -la library || echo "library not found"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
