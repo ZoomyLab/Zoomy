@@ -1,4 +1,4 @@
-name: Build and Publish Containers
+name: Build alish Containers
 
 on:
   # push:
@@ -101,7 +101,7 @@ jobs:
 
       - name: Build image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/zoomy-${{ matrix.container }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}"
           VERSION="${{ steps.bump.outputs.version }}"
 
           docker build \
@@ -111,7 +111,7 @@ jobs:
 
       - name: Push image
         run: |
-          IMAGE="ghcr.io/${{ github.repository_owner }}/zoomy-${{ matrix.container }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ matrix.container }}"
           VERSION="${{ steps.bump.outputs.version }}"
 
           docker push "$IMAGE:$VERSION"
