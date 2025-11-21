@@ -47,29 +47,21 @@ jobs:
 
       - id: detect
         run: |
-          # Manual trigger: user specified container=X
           if [ -n "${{ github.event.inputs.container }}" ]; then
             echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
             exit 0
           fi
-
-          echo "Auto-detecting changed containers..."
-
+      
           changed=()
-          # iterate over list from dockers.txt
+      
           for c in $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]'); do
-            if git diff --quiet HEAD~1 HEAD -- "containers/$c/Dockerfile"; then
-              continue
-            else
-              changed+=("\"$c\"")
+            if ! git diff --quiet HEAD~1 HEAD -- "containers/$c/Dockerfile"; then
+              changed+=("$c")
             fi
           done
-
-          # convert bash array → JSON
-          json="[$(IFS=,; echo "${changed[*]}")]"
-          echo "Changed: $json"
-          echo "changed=$json" >> $GITHUB_OUTPUT
-
+      
+          changed_json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -s .)
+          echo "changed=$changed_json" >> $GITHUB_OUTPUT
 
   build:
     runs-on: ubuntu-latest
