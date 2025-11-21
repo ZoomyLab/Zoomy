@@ -1,0 +1,12 @@
+{
+  "jupyter-lite-schema-version": 0,
+  "jupyter-lite": {
+    "title": "Zoomy",
+    "contents": [{
+      "name": "notebooks",
+      "path": "notebooks",
+      "mount_point": "/"
+    }]
+  }
+}
+

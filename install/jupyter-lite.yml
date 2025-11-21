@@ -5,4 +5,8 @@ channels:
 
 dependencies:
   - python=3.11
-  - jupyterlite>=0.4.1
+  - pip
+  - pip:
+      - jupyterlite>=0.4.1
+      - jupyter-lite-pyodide-kernel
+      - jupyter-server  # optional for icons/indexing
