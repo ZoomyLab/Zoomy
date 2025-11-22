@@ -2,11 +2,14 @@
   "jupyter-lite-schema-version": 0,
   "jupyter-lite": {
     "title": "Zoomy",
-    "contents": [{
-      "name": "notebooks",
-      "path": "notebooks",
-      "mount_point": "/"
-    }]
+    "favicon": "assets/favicon.svg",
+    "logo": "assets/logo.svg",
+    "contents": [
+      {
+        "name": "notebooks",
+        "path": "notebooks",
+        "mount_point": "/"
+      }
+    ]
   }
 }
-
