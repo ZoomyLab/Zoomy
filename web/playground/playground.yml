@@ -2,8 +2,13 @@
   description: |
     A browser is all you need to get started!
   tiles:
+    - title: Notebooks NOW
+      subtitle: " - direct in your browser"
+      href: _output/index.html
+      thumbnail: images/playground/jupyterlite.png
+
     - title: Main software 
-      subtitle: GUI for Zoomy
+      subtitle: " - GUI for Zoomy"
       href: no-playground.qmd
       thumbnail: images/playground/gui.png
 
