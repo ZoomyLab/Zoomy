@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>playground</title>
+<title>jupyterlite</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -31,8 +31,6 @@ ul.task-list li input[type="checkbox"] {
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
 <link href="..//images/favicon.svg" rel="icon" type="image/svg+xml">
-<script src="../site_libs/quarto-listing/list.min.js"></script>
-<script src="../site_libs/quarto-listing/quarto-listing.js"></script>
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
@@ -71,35 +69,6 @@ ul.task-list li input[type="checkbox"] {
   }
 }</script>
 <script>
-
-  window.document.addEventListener("DOMContentLoaded", function (_event) {
-    const listingTargetEl = window.document.querySelector('#listing-listing .list');
-    if (!listingTargetEl) {
-      // No listing discovered, do not attach.
-      return; 
-    }
-
-    const options = {
-      valueNames: ['listing-category','listing-description','listing-tiles',{ data: ['index'] },{ data: ['categories'] }],
-      
-      searchColumns: ["listing-category","listing-description","listing-tiles"],
-    };
-
-    window['quarto-listings'] = window['quarto-listings'] || {};
-    window['quarto-listings']['listing-listing'] = new List('listing-listing', options);
-
-    if (window['quarto-listing-loaded']) {
-      window['quarto-listing-loaded']();
-    }
-  });
-
-  window.addEventListener('hashchange',() => {
-    if (window['quarto-listing-loaded']) {
-      window['quarto-listing-loaded']();
-    }
-  })
-  </script>
-<script>
 MathJax = {
   tex: {
     tags: 'ams'
@@ -108,35 +77,6 @@ MathJax = {
 </script>
 <script data-goatcounter="https://ingosteldermann.goatcounter.com/count" async="" src="//gc.zgo.at/count.js"></script>
 
-  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
-
-<script type="text/javascript">
-const typesetMath = (el) => {
-  if (window.MathJax) {
-    // MathJax Typeset
-    window.MathJax.typeset([el]);
-  } else if (window.katex) {
-    // KaTeX Render
-    var mathElements = el.getElementsByClassName("math");
-    var macros = [];
-    for (var i = 0; i < mathElements.length; i++) {
-      var texText = mathElements[i].firstChild;
-      if (mathElements[i].tagName == "SPAN") {
-        window.katex.render(texText.data, mathElements[i], {
-          displayMode: mathElements[i].classList.contains('display'),
-          throwOnError: false,
-          macros: macros,
-          fleqn: false
-        });
-      }
-    }
-  }
-}
-window.Quarto = {
-  typesetMath
-};
-</script>
 
 <link rel="stylesheet" href="../custom.css">
 </head>
@@ -163,7 +103,7 @@ window.Quarto = {
 <span class="menu-text">Software</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link active" href="../playground/playground.html" aria-current="page"> 
+    <a class="nav-link" href="../playground/playground.html"> 
 <span class="menu-text">Playground</span></a>
   </li>  
   <li class="nav-item">
@@ -223,84 +163,15 @@ window.Quarto = {
 
 
 
-<div class="callout callout-style-default callout-warning callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-Warning
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>This page is under construction</p>
-</div>
-</div>
+<section id="notebooks-now" class="level2">
+<h2 class="anchored" data-anchor-id="notebooks-now">Notebooks NOW</h2>
+<iframe src="mylite/_output/index.html" width="100%" height="800px" style="border: 1px solid #ccc; border-radius: 8px;">
+</iframe>
 
 
+</section>
 
-
-<div class="quarto-listing quarto-listing-container-custom" id="listing-listing">
-
-<h2 class="anchored">Playground</h2>
-
-<p>A browser is all you need to get started!
-</p>
-
-<div class="list grid" style="column-gap: 10px;">
-
-  <div class="card border-2 rounded-3 g-col-12 g-col-sm-12 g-col-md-6 mb-2" data-index="0">
-    <div class="card-header py-1 px-2 border-bottom border-1 bg-light">
-      <small class="card-text inline-block">
-        <a href="jupterlite.qmd" class="listing-title">Notebooks NOW</a>
-        
-        <span class="text-muted listing-subtitle"> - direct in your browser</span>
-      </small>
-    </div>
-    <a href="jupterlite.qmd">
-      <img src="../images/playground/jupyterlite.png" alt="" class="card-img-top">
-    </a>
-    
-    
-    
-  </div>
-
-  <div class="card border-2 rounded-3 g-col-12 g-col-sm-12 g-col-md-6 mb-2" data-index="1">
-    <div class="card-header py-1 px-2 border-bottom border-1 bg-light">
-      <small class="card-text inline-block">
-        <a href="../playground/no-playground.html" class="listing-title">Main software</a>
-        
-        <span class="text-muted listing-subtitle"> - GUI for Zoomy</span>
-      </small>
-    </div>
-    <a href="../playground/no-playground.html">
-      <img src="../images/playground/gui.png" alt="" class="card-img-top">
-    </a>
-    
-    
-    
-  </div>
-
-  <div class="card border-2 rounded-3 g-col-12 g-col-sm-12 g-col-md-6 mb-2" data-index="2">
-    <div class="card-header py-1 px-2 border-bottom border-1 bg-light">
-      <small class="card-text inline-block">
-        <a href="../playground/no-playground.html" class="listing-title">Shallow Water Game based on Zoomy</a>
-        
-        <span class="text-muted listing-subtitle"> - interact and play</span>
-      </small>
-    </div>
-    <a href="../playground/no-playground.html">
-      <img src="../images/playground/swe-game.gif" alt="" class="card-img-top">
-    </a>
-    
-    
-    
-  </div>
-
-</div>
-
-<div class="listing-no-matching d-none">No matching items</div>
-</div></main> <!-- /main -->
+</main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
@@ -708,7 +579,7 @@ Warning
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/mbd-rwth/Zoomy/edit/main/web/playground/playground.qmd" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="toc-actions"><ul><li><a href="https://github.com/mbd-rwth/Zoomy/edit/main/web/playground/jupyterlite.qmd" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item">
