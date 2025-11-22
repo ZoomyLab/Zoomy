@@ -1,21 +1,34 @@
+name: pyodide
 channels:
   - conda-forge
 dependencies:
-  - python=3.12
-  - sympy>=1.13.3
-  - attrs
-  - pytest
-  - pytest-html
-  - meshio
-  - panel        # client-side only
-  - pygments
-  - jupytext
-  - jupyter-cache
-  - seaborn
-  - trame
-  - trame-vuetify
+  # Python version must be 3.10+
+  - python=3.10
+
+  # Required system dependencies
+  - git
+  - nodejs>=18          # Needed for the JS part of the build
+  - pkg-config
+  - cmake
+  - make
+  - patch
+  - automake
+  - autoconf
+  - libtool
+
+  # Recommended for better compatibility
+  - wget
+  - llvmdev
+  - cffi
+  - pybind11
+
+  # Required Python build tools
   - pip
   - pip:
-    - pyprog
-    - tol-colors
-    - python-dotenv
+      - build
+      - packaging
+      - setuptools>=65
+      - wheel
+      - pyodide-cli     # Provides "pyodide" command
+      - pyodide-build   # Core Pyodide build machinery
+
