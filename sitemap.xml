@@ -1,115 +1,155 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/playground/no-playground.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/playground/no-playground.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/research.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/research.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/sme/topo.html</loc>
-    <lastmod>2025-10-12T15:49:12.282Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/topo.html</loc>
+    <lastmod>2025-11-20T08:19:33.164Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/sme/non_legendre.html</loc>
-    <lastmod>2025-10-12T15:49:12.286Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/non_legendre.html</loc>
+    <lastmod>2025-11-20T08:19:33.164Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/sme/simple.html</loc>
-    <lastmod>2025-10-12T18:11:49.966Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/simple.html</loc>
+    <lastmod>2025-11-20T08:19:33.172Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/swe/simple_numpy.html</loc>
-    <lastmod>2025-10-12T19:28:58.205Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/swe_minimal.html</loc>
+    <lastmod>2025-11-16T11:20:35.545Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/amrex/from_DEM.html</loc>
-    <lastmod>2025-10-12T15:49:12.366Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/smet.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/dolfinx/dolfinx_demo.html</loc>
-    <lastmod>2025-10-12T15:49:12.334Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/swe.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/code_printers/to_openfoam.html</loc>
-    <lastmod>2025-10-12T15:49:12.342Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/simple_jax.html</loc>
+    <lastmod>2025-11-20T15:38:04.231Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/examples/index.html</loc>
-    <lastmod>2025-10-10T14:21:53.503Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/amrex/from_DEM.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/about.html</loc>
-    <lastmod>2025-10-10T14:21:53.503Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/dolfinx/dolfinx_demo.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/software.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_openfoam.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/docs/logging.html</loc>
-    <lastmod>2025-10-10T14:21:53.503Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_c.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/api/fvm.solver.Settings.html</loc>
-    <lastmod>2025-10-12T15:49:12.478Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam_poisson.html</loc>
+    <lastmod>2025-11-10T14:12:36.650Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/api/index.html</loc>
-    <lastmod>2025-10-12T15:49:12.478Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/legal.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/docs/index.html</loc>
-    <lastmod>2025-10-10T14:21:53.503Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/about.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/publications.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/software.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/legal.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/docs/logging.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/code_printers/to_ufl.html</loc>
-    <lastmod>2025-10-12T15:49:12.346Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/api/fvm.solver.Settings.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/code_printers/to_amrex.html</loc>
-    <lastmod>2025-10-12T15:49:12.338Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/api/index.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/vam/simple.html</loc>
-    <lastmod>2025-10-12T15:49:14.034Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/docs/index.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/swe/simple_jax.html</loc>
-    <lastmod>2025-10-12T19:28:44.273Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/publications.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/openfoam/swe.html</loc>
-    <lastmod>2025-10-12T15:49:12.366Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/jupyter-lite/notebooks/pyodide.html</loc>
+    <lastmod>2025-11-22T10:49:46.454Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/sme/minimal.html</loc>
-    <lastmod>2025-10-12T15:49:12.286Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/examples/index.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/sme/timedependend_bc.html</loc>
-    <lastmod>2025-10-12T15:49:12.298Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam_poisson_hp.html</loc>
+    <lastmod>2025-11-10T14:12:36.650Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/tutorials/poisson/simple.html</loc>
-    <lastmod>2025-10-12T15:49:12.278Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_ufl.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/index.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_amrex.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://mbd-rwth.github.io/Zoomy/playground/playground.html</loc>
-    <lastmod>2025-10-10T14:21:53.527Z</lastmod>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam/simple.html</loc>
+    <lastmod>2025-11-20T08:19:33.172Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/pyodide.html</loc>
+    <lastmod>2025-11-10T14:12:36.650Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/simple_numpy.html</loc>
+    <lastmod>2025-11-20T08:19:33.160Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/sme.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/characteristic_variables.html</loc>
+    <lastmod>2025-11-16T11:19:34.061Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/parabolic_bowl.html</loc>
+    <lastmod>2025-11-17T17:25:48.293Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/minimal.html</loc>
+    <lastmod>2025-11-20T08:19:33.168Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/timedependend_bc.html</loc>
+    <lastmod>2025-11-20T08:19:33.164Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/tutorials/poisson/simple.html</loc>
+    <lastmod>2025-11-20T08:19:33.164Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/index.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ZoomyLab.github.io/zoomy/playground/playground.html</loc>
+    <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
 </urlset>

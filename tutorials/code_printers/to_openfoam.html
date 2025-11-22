@@ -454,14 +454,14 @@ window.Quarto = {
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.fvm.solver <span class="im">import</span> Settings</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.fvm.solver_jax <span class="im">import</span> Settings</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations</span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.initial_conditions <span class="im">as</span> IC</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.boundary_conditions <span class="im">as</span> BC</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.misc.misc <span class="im">import</span> Zstruct</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.transformation.to_openfoam <span class="im">as</span> trafo</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.mesh.mesh <span class="im">as</span> petscMesh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_openfoam <span class="im">as</span> trafo</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.mesh.mesh <span class="im">as</span> petscMesh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
@@ -470,32 +470,31 @@ window.Quarto = {
 <div id="9d8b0a27" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    [</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"top"</span>),</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"bottom"</span>),</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"left"</span>),</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"right"</span>),</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="fl">5.</span>, <span class="fl">0.005</span>, <span class="fl">0.001</span>)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> ShallowWaterEquations(</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="co"># the mesh is necessary to connect the boundary conditions to the mesh tags</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh.msh"</span>)</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>model.initialize_boundary_conditions(mesh)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"wall"</span>),</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"inflow"</span>),</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"outflow"</span>),</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="fl">5.</span>, <span class="fl">0.005</span>, <span class="fl">0.001</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> ShallowWaterEquations(</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="co"># the mesh is necessary to connect the boundary conditions to the mesh tags</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh.msh"</span>)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>model.initialize_boundary_conditions(mesh)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code></code></pre>
 </div>
@@ -512,7 +511,7 @@ window.Quarto = {
 <div id="15516519" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>model.print_boundary_conditions()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="4">
-<p><span class="math inline">\(\displaystyle \left[\begin{matrix}q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\end{matrix}\right]\)</span></p>
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\end{matrix}\right]\)</span></p>
 </div>
 </div>
 </section>
@@ -523,8 +522,53 @@ window.Quarto = {
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>trafo.write_code(model, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-10-06 15:07:50.644</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.python.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
+<pre><span class="ansi-green-fg">2025-10-19 14:10:56.211</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
 </pre>
+</div>
+</div>
+<div class="cell-output cell-output-error">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-red-fg">---------------------------------------------------------------------------</span>
+<span class="ansi-red-fg">AttributeError</span>                            Traceback (most recent call last)
+<span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[5]</span><span class="ansi-green-fg">, line 2</span>
+<span class="ansi-green-fg">      1</span> settings = Settings(name=<span class="ansi-yellow-fg">"</span><span class="ansi-yellow-fg">ShallowWater</span><span class="ansi-yellow-fg">"</span>, output=Zstruct(directory=<span class="ansi-yellow-fg">"</span><span class="ansi-yellow-fg">outputs/trafo</span><span class="ansi-yellow-fg">"</span>, filename=<span class="ansi-yellow-fg">"</span><span class="ansi-yellow-fg">swe.h5</span><span class="ansi-yellow-fg">"</span>))
+<span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">2</span> <span class="ansi-yellow-bg">trafo</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">write_code</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">model</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">settings</span><span class="ansi-yellow-bg">)</span>
+
+<span class="ansi-cyan-fg">File </span><span class="ansi-green-fg">~/Git/Zoomy/library/python/transformation/to_openfoam.py:226</span>, in <span class="ansi-cyan-fg">write_code</span><span class="ansi-blue-fg">(model, settings, additional_writes)</span>
+<span class="ansi-green-fg">    224</span> <span style="font-weight:bold;color:rgb(0,135,0)">def</span><span style="color:rgb(188,188,188)"> </span><span class="ansi-blue-fg">write_code</span>(model, settings, additional_writes=<span style="font-weight:bold;color:rgb(0,135,0)">None</span>):
+<span class="ansi-green-fg">    225</span>     printer = FoamPrinter(model)
+<span class="ansi-green-fg">--&gt; </span><span class="ansi-green-fg">226</span>     code = <span class="ansi-yellow-bg">printer</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">create_model</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">model</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">additional_writes</span><span class="ansi-yellow-bg">=</span><span class="ansi-yellow-bg">additional_writes</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-fg">    227</span>     main_dir = os.getenv(<span class="ansi-yellow-fg">"</span><span class="ansi-yellow-fg">ZOOMY_DIR</span><span class="ansi-yellow-fg">"</span>)
+<span class="ansi-green-fg">    228</span>     path = os.path.join(main_dir, settings.output.directory, <span class="ansi-yellow-fg">"</span><span class="ansi-yellow-fg">.foam_interface</span><span class="ansi-yellow-fg">"</span>)
+
+<span class="ansi-cyan-fg">File </span><span class="ansi-green-fg">~/Git/Zoomy/library/python/transformation/to_openfoam.py:199</span>, in <span class="ansi-cyan-fg">FoamPrinter.create_model</span><span class="ansi-blue-fg">(self, model, additional_writes)</span>
+<span class="ansi-green-fg">    197</span> funcs += <span style="color:rgb(0,135,0)">self</span>.create_function(<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">flux</span><span class="ansi-yellow-fg">'</span>, model.flux(), n_dof, n_dof_qaux)
+<span class="ansi-green-fg">    198</span> funcs += <span style="color:rgb(0,135,0)">self</span>.create_function(<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">flux_jacobian</span><span class="ansi-yellow-fg">'</span>, model.flux_jacobian(), n_dof, n_dof_qaux)
+<span class="ansi-green-fg">--&gt; </span><span class="ansi-green-fg">199</span> funcs += <span style="color:rgb(0,135,0)" class="ansi-yellow-bg">self</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">create_function</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-fg ansi-yellow-bg">'</span><span class="ansi-yellow-fg ansi-yellow-bg">dflux</span><span class="ansi-yellow-fg ansi-yellow-bg">'</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">model</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">dflux</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-bg">)</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">n_dof</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">n_dof_qaux</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-fg">    200</span> funcs += <span style="color:rgb(0,135,0)">self</span>.create_function(<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">dflux_jacobian</span><span class="ansi-yellow-fg">'</span>, model.dflux_jacobian(), n_dof, n_dof_qaux)
+<span class="ansi-green-fg">    201</span> funcs += <span style="color:rgb(0,135,0)">self</span>.create_function(<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">nonconservative_matrix</span><span class="ansi-yellow-fg">'</span>, model.nonconservative_matrix(), n_dof, n_dof_qaux)
+
+<span class="ansi-cyan-fg">File </span><span class="ansi-green-fg">~/Git/Zoomy/library/python/transformation/to_openfoam.py:123</span>, in <span class="ansi-cyan-fg">FoamPrinter.create_function</span><span class="ansi-blue-fg">(self, name, expr, n_dof_q, n_dof_qaux, target)</span>
+<span class="ansi-green-fg">    121</span> <span style="font-weight:bold;color:rgb(0,135,0)">if</span> <span style="color:rgb(0,135,0)">isinstance</span>(expr, <span style="color:rgb(0,135,0)">list</span>):
+<span class="ansi-green-fg">    122</span>     dim = <span style="color:rgb(0,135,0)">len</span>(expr)
+<span class="ansi-green-fg">--&gt; </span><span class="ansi-green-fg">123</span>     <span style="font-weight:bold;color:rgb(0,135,0)">return</span> [<span style="color:rgb(0,135,0)" class="ansi-yellow-bg">self</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">create_function</span><span class="ansi-yellow-bg">(</span><span class="ansi-yellow-fg ansi-yellow-bg">f</span><span class="ansi-yellow-fg ansi-yellow-bg">"</span><span style="font-weight:bold;color:rgb(175,95,135)" class="ansi-yellow-bg">{</span><span class="ansi-yellow-bg">name</span><span style="font-weight:bold;color:rgb(175,95,135)" class="ansi-yellow-bg">}</span><span class="ansi-yellow-fg ansi-yellow-bg">_</span><span style="font-weight:bold;color:rgb(175,95,135)" class="ansi-yellow-bg">{</span><span class="ansi-yellow-bg">d</span><span style="font-weight:bold;color:rgb(175,95,135)" class="ansi-yellow-bg">}</span><span class="ansi-yellow-fg ansi-yellow-bg">"</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">expr</span><span class="ansi-yellow-bg">[</span><span class="ansi-yellow-bg">i</span><span class="ansi-yellow-bg">]</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">n_dof_q</span><span class="ansi-yellow-bg">,</span><span class="ansi-yellow-bg"> </span><span class="ansi-yellow-bg">n_dof_qaux</span><span class="ansi-yellow-bg">)</span>
+<span class="ansi-green-fg">    124</span>             <span style="font-weight:bold;color:rgb(0,135,0)">for</span> i, d <span style="font-weight:bold;color:rgb(175,0,255)">in</span> <span style="color:rgb(0,135,0)">enumerate</span>([<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">x</span><span class="ansi-yellow-fg">'</span>, <span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">y</span><span class="ansi-yellow-fg">'</span>, <span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">z</span><span class="ansi-yellow-fg">'</span>][:dim])]
+<span class="ansi-green-fg">    126</span> rows, cols = expr.shape
+<span class="ansi-green-fg">    127</span> body = <span style="color:rgb(0,135,0)">self</span>.convert_expression_body(expr, target)
+
+<span class="ansi-cyan-fg">File </span><span class="ansi-green-fg">~/Git/Zoomy/library/python/transformation/to_openfoam.py:126</span>, in <span class="ansi-cyan-fg">FoamPrinter.create_function</span><span class="ansi-blue-fg">(self, name, expr, n_dof_q, n_dof_qaux, target)</span>
+<span class="ansi-green-fg">    122</span>             dim = <span style="color:rgb(0,135,0)">len</span>(expr)
+<span class="ansi-green-fg">    123</span>             <span style="font-weight:bold;color:rgb(0,135,0)">return</span> [<span style="color:rgb(0,135,0)">self</span>.create_function(<span class="ansi-yellow-fg">f</span><span class="ansi-yellow-fg">"</span><span style="font-weight:bold;color:rgb(175,95,135)">{</span>name<span style="font-weight:bold;color:rgb(175,95,135)">}</span><span class="ansi-yellow-fg">_</span><span style="font-weight:bold;color:rgb(175,95,135)">{</span>d<span style="font-weight:bold;color:rgb(175,95,135)">}</span><span class="ansi-yellow-fg">"</span>, expr[i], n_dof_q, n_dof_qaux)
+<span class="ansi-green-fg">    124</span>                     <span style="font-weight:bold;color:rgb(0,135,0)">for</span> i, d <span style="font-weight:bold;color:rgb(175,0,255)">in</span> <span style="color:rgb(0,135,0)">enumerate</span>([<span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">x</span><span class="ansi-yellow-fg">'</span>, <span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">y</span><span class="ansi-yellow-fg">'</span>, <span class="ansi-yellow-fg">'</span><span class="ansi-yellow-fg">z</span><span class="ansi-yellow-fg">'</span>][:dim])]
+<span class="ansi-green-fg">--&gt; </span><span class="ansi-green-fg">126</span>         rows, cols = <span class="ansi-yellow-bg">expr</span><span class="ansi-yellow-bg">.</span><span class="ansi-yellow-bg">shape</span>
+<span class="ansi-green-fg">    127</span>         body = <span style="color:rgb(0,135,0)">self</span>.convert_expression_body(expr, target)
+<span class="ansi-green-fg">    128</span>         <span style="font-weight:bold;color:rgb(0,135,0)">return</span> <span class="ansi-yellow-fg">f</span><span class="ansi-yellow-fg">"""</span>
+<span class="ansi-green-fg">    129</span> <span class="ansi-yellow-fg">inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; </span><span style="font-weight:bold;color:rgb(175,95,135)">{</span>name<span style="font-weight:bold;color:rgb(175,95,135)">}</span><span class="ansi-yellow-fg">(</span>
+<span class="ansi-green-fg">    130</span> <span class="ansi-yellow-fg">    const Foam::List&lt;Foam::scalar&gt;&amp; Q,</span>
+<span class="ansi-green-fg">   (...)</span><span class="ansi-green-fg">    136</span> <span style="font-weight:bold;color:rgb(175,95,0)">}}</span>
+<span class="ansi-green-fg">    137</span> <span class="ansi-yellow-fg">        </span><span class="ansi-yellow-fg">"""</span>
+
+<span class="ansi-red-fg">AttributeError</span>: 'int' object has no attribute 'shape'</pre>
 </div>
 </div>
 </div>
@@ -547,7 +591,7 @@ namespace Model
 constexpr int n_dof_q    = 3;
 constexpr int n_dof_qaux = 2;
 constexpr int dimension  = 2;
-constexpr Foam::List&lt;string&gt; map_boundary_tag_to_function_index{ "bottom", "top", "left", "right" };
+const Foam::List&lt;Foam::word&gt; map_boundary_tag_to_function_index{ "wall", "inflow", "outflow" };
 
 inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; flux_x(
     const Foam::List&lt;Foam::scalar&gt;&amp; Q,
@@ -613,6 +657,66 @@ inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; flux_jacobian_y(
         res[2][0] = 9.81*Q[0] - Foam::pow(Q[2], 2)*t0;
         res[2][1] = 0;
         res[2][2] = 2*t2;
+    return res;
+}
+        
+
+inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; dflux_x(
+    const Foam::List&lt;Foam::scalar&gt;&amp; Q,
+    const Foam::List&lt;Foam::scalar&gt;&amp; Qaux)
+{
+    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(3, Foam::List&lt;Foam::scalar&gt;(1, 0.0));
+    res[0][0] = Q[0];
+        res[1][0] = Q[1];
+        res[2][0] = Q[2];
+    return res;
+}
+        
+
+inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; dflux_y(
+    const Foam::List&lt;Foam::scalar&gt;&amp; Q,
+    const Foam::List&lt;Foam::scalar&gt;&amp; Qaux)
+{
+    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(3, Foam::List&lt;Foam::scalar&gt;(1, 0.0));
+    res[0][0] = Q[0];
+        res[1][0] = Q[1];
+        res[2][0] = Q[2];
+    return res;
+}
+        
+
+inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; dflux_jacobian_x(
+    const Foam::List&lt;Foam::scalar&gt;&amp; Q,
+    const Foam::List&lt;Foam::scalar&gt;&amp; Qaux)
+{
+    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(3, Foam::List&lt;Foam::scalar&gt;(3, 0.0));
+    res[0][0] = 1;
+        res[0][1] = 0;
+        res[0][2] = 0;
+        res[1][0] = 0;
+        res[1][1] = 1;
+        res[1][2] = 0;
+        res[2][0] = 0;
+        res[2][1] = 0;
+        res[2][2] = 1;
+    return res;
+}
+        
+
+inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; dflux_jacobian_y(
+    const Foam::List&lt;Foam::scalar&gt;&amp; Q,
+    const Foam::List&lt;Foam::scalar&gt;&amp; Qaux)
+{
+    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(3, Foam::List&lt;Foam::scalar&gt;(3, 0.0));
+    res[0][0] = 1;
+        res[0][1] = 0;
+        res[0][2] = 0;
+        res[1][0] = 0;
+        res[1][1] = 1;
+        res[1][2] = 0;
+        res[2][0] = 0;
+        res[2][1] = 0;
+        res[2][2] = 1;
     return res;
 }
         
@@ -809,7 +913,7 @@ inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; boundary_conditions(
     const Foam::scalar&amp; time,
     const Foam::scalar&amp; dX)
 {
-    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(4, Foam::List&lt;Foam::scalar&gt;(3, 0.0));
+    auto res = Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt;(3, Foam::List&lt;Foam::scalar&gt;(3, 0.0));
     Foam::scalar t0 = n.y()*Q[2];
         Foam::scalar t1 = 1.0*n.x()*Q[1] + 1.0*t0;
         Foam::scalar t2 = 1.0*n.x()*Q[1] + 1.0*t0;
@@ -824,9 +928,6 @@ inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; boundary_conditions(
         res[2][0] = Q[0];
         res[2][1] = t3;
         res[2][2] = t4;
-        res[3][0] = Q[0];
-        res[3][1] = t3;
-        res[3][2] = t4;
     return res;
 }
         
@@ -963,7 +1064,7 @@ inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; boundary_conditions(
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/mbd-rwth\.github\.io\/Zoomy\/");
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

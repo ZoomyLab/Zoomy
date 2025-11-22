@@ -1,1 +1,1 @@
-Sitemap: https://mbd-rwth.github.io/Zoomy/sitemap.xml
+Sitemap: https://ZoomyLab.github.io/zoomy/sitemap.xml

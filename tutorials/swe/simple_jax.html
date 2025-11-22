@@ -423,7 +423,7 @@ Reference
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>The following the model is described in the paper:</p>
+<p>The following verification is based on the paper:</p>
 <pre><code> @article{Delestre_2013, 
  title={SWASHES: a compilation of Shallow Water Analytic Solutions for Hydraulic and Environmental Studies}, 
  volume={72}, 
@@ -440,164 +440,149 @@ Reference
 </div>
 <section id="imports" class="level2">
 <h2 class="anchored" data-anchor-id="imports">Imports</h2>
-<div id="4f583c96" class="cell">
+<div id="4f583c96" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Load packages</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> jax</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> jax <span class="im">import</span> numpy <span class="im">as</span> jnp</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pytest</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> types <span class="im">import</span> SimpleNamespace</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> cos, pi, Matrix</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pytest</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.fvm.solver_jax <span class="im">import</span> HyperbolicSolver, Settings</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.fvm.ode <span class="im">import</span> RK1</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.reconstruction <span class="im">as</span> recon</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.timestepping <span class="im">as</span> timestepping</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.flux <span class="im">as</span> flux</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.nonconservative_flux <span class="im">as</span> nc_flux</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.boundary_conditions <span class="im">import</span> BoundaryCondition</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.base <span class="im">import</span> Model</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> attr <span class="im">import</span> field, define</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="co"># from library.model.model import *</span></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.initial_conditions <span class="im">as</span> IC</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.boundary_conditions <span class="im">as</span> BC</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.misc.io <span class="im">as</span> io</span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.mesh.mesh <span class="im">import</span> compute_derivatives</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.misc.misc <span class="im">import</span> Zstruct</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tests.pdesoft <span class="im">import</span> plots_paper</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.mesh.mesh <span class="im">as</span> petscMesh</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.postprocessing.postprocessing <span class="im">as</span> postprocessing</span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.mesh.mesh <span class="im">import</span> convert_mesh_to_jax</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> argparse</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pytest</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Matrix</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.fvm.solver_jax <span class="im">import</span> HyperbolicSolver, Settings</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.solver_numpy <span class="im">import</span> HyperbolicSolver <span class="im">as</span> NumpyHyperbolicSolver</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.basemodel <span class="im">import</span> Model</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> attr <span class="im">import</span> field, define</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.io <span class="im">as</span> io</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.mesh.mesh <span class="im">import</span> compute_derivatives</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct, ZArray</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_tests.swashes <span class="im">import</span> plots_paper</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm <span class="im">import</span> timestepping</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.misc <span class="im">as</span> misc</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.mesh.mesh <span class="im">as</span> petscMesh</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.postprocessing.postprocessing <span class="im">as</span> postprocessing</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <div id="9155543c" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="at">@define</span>(frozen<span class="op">=</span><span class="va">True</span>, slots<span class="op">=</span><span class="va">True</span>, kw_only<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SWE(Model):</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    dimension: <span class="bu">int</span> <span class="op">=</span> <span class="dv">2</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    variables: Zstruct <span class="op">=</span> field(init<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span>dimension <span class="op">+</span> <span class="dv">1</span>)</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    aux_variables: Zstruct <span class="op">=</span> field(default<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    dimension: <span class="bu">int</span> <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    variables: Zstruct <span class="op">=</span> field(init<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    aux_variables: Zstruct <span class="op">=</span> field(default<span class="op">=</span><span class="dv">1</span>)</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    _default_parameters: <span class="bu">dict</span> <span class="op">=</span> field(</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        init<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        factory<span class="op">=</span><span class="kw">lambda</span>: {<span class="st">"g"</span>: <span class="fl">9.81</span>, <span class="st">"ex"</span>: <span class="fl">0.0</span>, <span class="st">"ey"</span>: <span class="fl">0.0</span>, <span class="st">"ez"</span>: <span class="fl">1.0</span>}</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> interpolate_3d(<span class="va">self</span>):</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Matrix([<span class="dv">0</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6</span>)])</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> <span class="va">self</span>.position[<span class="dv">0</span>]</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> <span class="va">self</span>.position[<span class="dv">1</span>]</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        init<span class="op">=</span><span class="va">False</span>, factory<span class="op">=</span><span class="kw">lambda</span>: {<span class="st">"g"</span>: <span class="fl">9.81</span>, <span class="st">"ex"</span>: <span class="fl">0.0</span>, <span class="st">"ey"</span>: <span class="fl">0.0</span>, <span class="st">"ez"</span>: <span class="fl">1.0</span>}</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> __attrs_post_init__(<span class="va">self</span>):</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">object</span>.<span class="fu">__setattr__</span>(<span class="va">self</span>, <span class="st">"variables"</span>, <span class="va">self</span>.dimension <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().__attrs_post_init__()</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> project_2d_to_3d(<span class="va">self</span>):</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> ZArray.zeros(<span class="dv">6</span>)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
 <span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        z <span class="op">=</span> <span class="va">self</span>.position[<span class="dv">2</span>]</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> [hu <span class="op">/</span> h <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">1</span>:<span class="dv">1</span><span class="op">+</span>dim]]</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        rho_w <span class="op">=</span> <span class="fl">1000.</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="fl">9.81</span></span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">0</span>] <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">1</span>] <span class="op">=</span> h</span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">2</span>] <span class="op">=</span> U[<span class="dv">0</span>]</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">3</span>] <span class="op">=</span> <span class="dv">0</span> <span class="cf">if</span> dim <span class="op">==</span> <span class="dv">1</span> <span class="cf">else</span> U[<span class="dv">1</span>]</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">4</span>] <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">5</span>] <span class="op">=</span> rho_w <span class="op">*</span> g <span class="op">*</span> h <span class="op">*</span> (<span class="dv">1</span><span class="op">-</span>z)</span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> flux(<span class="va">self</span>):</span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> Matrix([hu <span class="op">/</span> h <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">1</span>:<span class="dv">1</span><span class="op">+</span>dim]])</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="va">self</span>.parameters.g</span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>        I <span class="op">=</span> Matrix.eye(dim)</span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>        F <span class="op">=</span> Matrix.zeros(<span class="va">self</span>.variables.length(), dim)</span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">0</span>, :] <span class="op">=</span> (h <span class="op">*</span> U).T</span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">1</span>:, :] <span class="op">=</span> h <span class="op">*</span> U <span class="op">*</span> U.T <span class="op">+</span> g<span class="op">/</span><span class="dv">2</span> <span class="op">*</span> h<span class="op">**</span><span class="dv">2</span> <span class="op">*</span> I</span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> [F[:, d] <span class="cf">for</span> d <span class="kw">in</span> <span class="bu">range</span>(dim)]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        b <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> [hu <span class="op">/</span> h <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">1</span> : <span class="dv">1</span> <span class="op">+</span> dim]]</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        rho_w <span class="op">=</span> <span class="fl">1000.0</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="fl">9.81</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">0</span>] <span class="op">=</span> b</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">1</span>] <span class="op">=</span> h</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">2</span>] <span class="op">=</span> U[<span class="dv">0</span>]</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">3</span>] <span class="op">=</span> <span class="dv">0</span> <span class="cf">if</span> dim <span class="op">==</span> <span class="dv">1</span> <span class="cf">else</span> U[<span class="dv">1</span>]</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">4</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">5</span>] <span class="op">=</span> rho_w <span class="op">*</span> g <span class="op">*</span> h <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> z)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> flux(<span class="va">self</span>):</span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> Matrix([hu <span class="op">/</span> h <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">1</span> : <span class="dv">1</span> <span class="op">+</span> dim]])</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="va">self</span>.parameters.g</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>        I <span class="op">=</span> Matrix.eye(dim)</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        F <span class="op">=</span> Matrix.zeros(<span class="va">self</span>.variables.length(), dim)</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">0</span>, :] <span class="op">=</span> h <span class="op">*</span> U.T</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">1</span>:, :] <span class="op">=</span> h <span class="op">*</span> U <span class="op">*</span> U.T <span class="op">+</span> g <span class="op">/</span> <span class="dv">2</span> <span class="op">*</span> h<span class="op">**</span><span class="dv">2</span> <span class="op">*</span> I</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> F</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div id="9d8b0a27" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    [</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"wall"</span>),</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"inflow"</span>),</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        BC.Wall(physical_tag<span class="op">=</span><span class="st">"outflow"</span>),</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="fl">5.</span>, <span class="fl">0.005</span>, <span class="fl">0.001</span>)</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"wall"</span>),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"inflow"</span>),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"outflow"</span>),</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="fl">5.0</span>, <span class="fl">0.005</span>, <span class="fl">0.001</span>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> SWE(</span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh.msh"</span>)</span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SWESolver(HyperbolicSolver):</span>
-<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_qaux(<span class="va">self</span>, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):</span>
-<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>        dudx <span class="op">=</span> compute_derivatives(Q[<span class="dv">1</span>]<span class="op">/</span>Q[<span class="dv">0</span>], mesh, derivatives_multi_index<span class="op">=</span>[[<span class="dv">0</span>, <span class="dv">0</span>]])[:,<span class="dv">0</span>]</span>
-<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        dvdy <span class="op">=</span> compute_derivatives(Q[<span class="dv">2</span>]<span class="op">/</span>Q[<span class="dv">0</span>], mesh, derivatives_multi_index<span class="op">=</span>[[<span class="dv">0</span>, <span class="dv">1</span>]])[:,<span class="dv">0</span>]</span>
-<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>        Qaux <span class="op">=</span> Qaux.at[<span class="dv">0</span>].<span class="bu">set</span>(dudx)</span>
-<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        Qaux <span class="op">=</span> Qaux.at[<span class="dv">1</span>].<span class="bu">set</span>(dvdy)</span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Qaux</span>
-<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowWater"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/shallow_water_2d"</span>, filename<span class="op">=</span><span class="st">"swe.h5"</span>, clean_directory<span class="op">=</span><span class="va">True</span>))</span>
-<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>solver <span class="op">=</span> SWESolver(time_end<span class="op">=</span><span class="dv">6</span>, settings<span class="op">=</span>settings)</span>
-<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>Qnew, Qaux <span class="op">=</span> solver.solve(mesh, model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> SWE(</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh.msh"</span>)</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SWESolver(NumpyHyperbolicSolver):</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_qaux(<span class="va">self</span>, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dudx = compute_derivatives(Q[1]/Q[0], mesh, derivatives_multi_index=[[0, 0]])[:,0]</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        <span class="co"># dvdy = compute_derivatives(Q[2]/Q[0], mesh, derivatives_multi_index=[[0, 1]])[:,0]</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Qaux = Qaux.at[0].set(dudx)</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Qaux = Qaux.at[1].set(dvdy)</span></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Qaux</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowWater"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/shallow_water_2d"</span>, filename<span class="op">=</span><span class="st">"swe"</span>, clean_directory<span class="op">=</span><span class="va">True</span>))</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>solver <span class="op">=</span> SWESolver(time_end<span class="op">=</span><span class="dv">6</span>, settings<span class="op">=</span>settings, compute_dt<span class="op">=</span>timestepping.adaptive(CFL<span class="op">=</span><span class="fl">0.45</span>),)</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>Qnew, Qaux <span class="op">=</span> solver.solve(mesh, model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code></code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-10-12 20:26:43.179</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.fvm.solver_jax</span>:<span class="ansi-cyan-fg">log_callback_hyperbolic</span>:<span class="ansi-cyan-fg">44</span> - <span class="ansi-bold">iteration: 10, time: 2.246394, dt: 0.209721, next write at time: 2.666667</span>
+<pre><span class="ansi-green-fg">2025-11-20 15:37:08.637</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">197</span> - <span class="ansi-yellow-fg ansi-bold">No 'snapshots' attribute found in output Zstruct. Default: 2</span>
 
-<span class="ansi-green-fg">2025-10-12 20:26:43.193</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.fvm.solver_jax</span>:<span class="ansi-cyan-fg">log_callback_hyperbolic</span>:<span class="ansi-cyan-fg">44</span> - <span class="ansi-bold">iteration: 20, time: 4.293443, dt: 0.202341, next write at time: 4.666667</span>
+<span class="ansi-green-fg">2025-11-20 15:37:10.157</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">run</span>:<span class="ansi-cyan-fg">285</span> - <span class="ansi-bold">iteration: 10, time: 1.123197, dt: 0.104860, next write at time: 6.000000</span>
 
-<span class="ansi-green-fg">2025-10-12 20:26:43.225</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.fvm.solver_jax</span>:<span class="ansi-cyan-fg">log_callback_execution_time</span>:<span class="ansi-cyan-fg">56</span> - <span class="ansi-bold">Finished simulation with in 0.919 seconds</span>
+<span class="ansi-green-fg">2025-11-20 15:37:11.411</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">run</span>:<span class="ansi-cyan-fg">285</span> - <span class="ansi-bold">iteration: 20, time: 2.146722, dt: 0.101170, next write at time: 6.000000</span>
+
+<span class="ansi-green-fg">2025-11-20 15:37:12.496</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">run</span>:<span class="ansi-cyan-fg">285</span> - <span class="ansi-bold">iteration: 30, time: 3.151076, dt: 0.100059, next write at time: 6.000000</span>
+
+<span class="ansi-green-fg">2025-11-20 15:37:13.611</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">run</span>:<span class="ansi-cyan-fg">285</span> - <span class="ansi-bold">iteration: 40, time: 4.148888, dt: 0.099623, next write at time: 6.000000</span>
+
+<span class="ansi-green-fg">2025-11-20 15:37:14.761</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">run</span>:<span class="ansi-cyan-fg">285</span> - <span class="ansi-bold">iteration: 50, time: 5.143900, dt: 0.099419, next write at time: 6.000000</span>
+
+<span class="ansi-green-fg">2025-11-20 15:37:15.662</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.fvm.solver_numpy</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">295</span> - <span class="ansi-bold">Finished simulation with in 6.808 seconds</span>
 </pre>
 </div>
 </div>
 </div>
 <div id="e7446719" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>io.generate_vtk(os.path.join(settings.output.directory, <span class="ss">f"</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>filename<span class="sc">}</span><span class="ss">.h5"</span>))</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>postprocessing.vtk_interpolate_3d(model, settings, Nz<span class="op">=</span><span class="dv">20</span>, filename<span class="op">=</span><span class="st">'out_3d'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>postprocessing.vtk_project_2d_to_3d(model, settings, filename<span class="op">=</span><span class="st">'out_3d'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-10-12 20:26:43.718</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 0/10</span>
+<pre><span class="ansi-green-fg">2025-11-20 15:37:18.638</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_project_2d_to_3d</span>:<span class="ansi-cyan-fg">71</span> - <span class="ansi-bold">Converted snapshot 0/2</span>
 
-<span class="ansi-green-fg">2025-10-12 20:26:43.723</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 1/10</span>
+<span class="ansi-green-fg">2025-11-20 15:37:18.656</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_project_2d_to_3d</span>:<span class="ansi-cyan-fg">71</span> - <span class="ansi-bold">Converted snapshot 1/2</span>
 
-<span class="ansi-green-fg">2025-10-12 20:26:43.726</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 2/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.730</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 3/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.734</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 4/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.737</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 5/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.740</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 6/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.743</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 7/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.746</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 8/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.751</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">62</span> - <span class="ansi-bold">Converted snapshot 9/10</span>
-
-<span class="ansi-green-fg">2025-10-12 20:26:43.811</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_interpolate_3d</span>:<span class="ansi-cyan-fg">65</span> - <span class="ansi-bold">Output is written to: /home/ingo/Git/Zoomy/outputs/shallow_water_2d/out_3d.h5/out_3d.*.vtk</span>
+<span class="ansi-green-fg">2025-11-20 15:37:18.804</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_core.postprocessing.postprocessing</span>:<span class="ansi-cyan-fg">vtk_project_2d_to_3d</span>:<span class="ansi-cyan-fg">74</span> - <span class="ansi-bold">Output is written to: /workspace/outputs/shallow_water_2d/out_3d.h5/out_3d.*.vtk</span>
 </pre>
 </div>
 </div>
@@ -615,7 +600,7 @@ Reference
 </div>
 </div>
 </div>
-<div id="d7d1f1c3" class="cell">
+<div id="d7d1f1c3" class="cell" data-execution_count="6">
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="at">@pytest.mark.nbworking</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> test_working():</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> <span class="va">True</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -749,7 +734,7 @@ Reference
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/mbd-rwth\.github\.io\/Zoomy\/");
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

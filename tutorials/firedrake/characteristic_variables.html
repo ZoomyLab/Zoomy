@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.23">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Ingo Steldermann">
+<meta name="dcterms.date" content="2025-10-13">
+
+<title>Firedrake Demo</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<link href="../..//images/favicon.svg" rel="icon" type="image/svg+xml">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-226bd0f977fa82dfae4534cac220d79a.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-3289a1c0eea969fea9a887a3e7302bd0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="../../site_libs/quarto-contrib/iconify-2.1.0/iconify-icon.min.js"></script>
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script>
+MathJax = {
+  tex: {
+    tags: 'ams'
+  }
+};
+</script>
+<script data-goatcounter="https://ingosteldermann.goatcounter.com/count" async="" src="//gc.zgo.at/count.js"></script>
+
+
+<link rel="stylesheet" href="../../custom.css">
+<link rel="stylesheet" href="../notebook.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../images/logo_no_text.svg" alt="" class="navbar-logo">
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../software.html"> 
+<span class="menu-text">Software</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../playground/playground.html"> 
+<span class="menu-text">Playground</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../docs/index.html"> 
+<span class="menu-text">Documentation</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../tutorials/index.html"> 
+<span class="menu-text">Tutorials</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../publications.html"> 
+<span class="menu-text">Publications</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-bi-github" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="bi bi-github" role="img">
+</i> 
+ <span class="menu-text"></span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-menu-bi-github">    
+        <li>
+    <a class="dropdown-item" href="https://github.com/mbd-rwth/Zoomy">
+ <span class="dropdown-text">Zoomy</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="https://github.com/mbd-rwth">
+ <span class="dropdown-text">MBD</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="https://de.linkedin.com/company/rwth-mbd"> 
+<span class="menu-text"><iconify-icon role="img" inline="" icon="fa6-brands:linkedin" aria-label="Icon linkedin from fa6-brands Iconify.design set." title="Icon linkedin from fa6-brands Iconify.design set."></iconify-icon></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#imports" id="toc-imports" class="nav-link active" data-scroll-target="#imports">Imports</a></li>
+  <li><a href="#transformation-to-ufl-code-medium" id="toc-transformation-to-ufl-code-medium" class="nav-link" data-scroll-target="#transformation-to-ufl-code-medium">Transformation to UFL Code (Medium)</a>
+  <ul class="collapse">
+  <li><a href="#map-from-sympy-to-ufl" id="toc-map-from-sympy-to-ufl" class="nav-link" data-scroll-target="#map-from-sympy-to-ufl">Map from Sympy to UFL</a></li>
+  </ul></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/firedrake/characteristic_variables.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Firedrake Demo</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Ingo Steldermann </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 13, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="imports" class="level2">
+<h2 class="anchored" data-anchor-id="imports">Imports</h2>
+<div id="601a29cb" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Load packages</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Matrix, sqrt, Piecewise</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sympy <span class="im">as</span> sp</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pytest</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> attr <span class="im">import</span> define, field</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> MutableDenseNDimArray <span class="im">as</span> Arr</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.solver_numpy <span class="im">import</span> Settings</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.basemodel <span class="im">import</span> Model</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct, ZArray</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.misc <span class="im">as</span> misc</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_firedrake.firedrake_solver <span class="im">as</span> dg</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div id="4531cffa" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="at">@define</span>(frozen<span class="op">=</span><span class="va">True</span>, slots<span class="op">=</span><span class="va">True</span>, kw_only<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SWE(Model):</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    dimension: <span class="bu">int</span> <span class="op">=</span> <span class="dv">2</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    variables: Zstruct <span class="op">=</span> field(init<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    aux_variables: Zstruct <span class="op">=</span> field(default<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    _default_parameters: <span class="bu">dict</span> <span class="op">=</span> field(</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        init<span class="op">=</span><span class="va">False</span>, factory<span class="op">=</span><span class="kw">lambda</span>: {<span class="st">"g"</span>: <span class="fl">9.81</span>, <span class="st">"ex"</span>: <span class="fl">0.0</span>, <span class="st">"ey"</span>: <span class="fl">0.0</span>, <span class="st">"ez"</span>: <span class="fl">1.0</span>, <span class="st">"rho"</span>: <span class="fl">1000.0</span>, <span class="st">"n"</span>: <span class="fl">0.1</span>, <span class="st">"eps"</span>:<span class="fl">1e-4</span>}</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> __attrs_post_init__(<span class="va">self</span>):</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">object</span>.<span class="fu">__setattr__</span>(<span class="va">self</span>, <span class="st">"variables"</span>, <span class="va">self</span>.dimension <span class="op">+</span> <span class="dv">2</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().__attrs_post_init__()</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> project_2d_to_3d(<span class="va">self</span>):</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> ZArray.zeros(<span class="dv">6</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> <span class="va">self</span>.parameters</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        z <span class="op">=</span> <span class="va">self</span>.position[<span class="dv">2</span>]</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        b <span class="op">=</span> <span class="va">self</span>.aux_variables[<span class="dv">0</span>]</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">1</span>]</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> [hu <span class="op">/</span> h <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">2</span> : <span class="dv">2</span> <span class="op">+</span> dim]]</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">0</span>] <span class="op">=</span> b</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">1</span>] <span class="op">=</span> h</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">2</span>] <span class="op">=</span> U[<span class="dv">0</span>]</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">3</span>] <span class="op">=</span> <span class="dv">0</span> <span class="cf">if</span> dim <span class="op">==</span> <span class="dv">1</span> <span class="cf">else</span> U[<span class="dv">1</span>]</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">4</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">5</span>] <span class="op">=</span> p.rho <span class="op">*</span> p.g <span class="op">*</span> h <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> z)</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_primitives(<span class="va">self</span>):</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        b <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">1</span>]</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        hinv <span class="op">=</span> <span class="dv">1</span><span class="op">/</span>h</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> Matrix([hu <span class="op">*</span> hinv <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">2</span> : <span class="dv">2</span> <span class="op">+</span> dim]])</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> b, h, U, hinv</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> flux(<span class="va">self</span>):</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        b, h, U, hinv <span class="op">=</span> <span class="va">self</span>.get_primitives()</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="va">self</span>.parameters.g</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        I <span class="op">=</span> Matrix.eye(dim)</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        F <span class="op">=</span> Matrix.zeros(<span class="va">self</span>.variables.length(), dim)</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>        <span class="co"># F[1, :] = h * U.T</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">1</span>, :] <span class="op">=</span> sp.Matrix(<span class="va">self</span>.variables[<span class="dv">2</span>: <span class="dv">2</span> <span class="op">+</span> dim]).T</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>        <span class="co"># F[2:, :] = h * U * U.T + g / 2 * h**2 * I</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>        F[<span class="dv">2</span>:, :] <span class="op">=</span> h <span class="op">*</span> U <span class="op">*</span> U.T</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(F)</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> nonconservative_matrix(<span class="va">self</span>):</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>        b, h, U, hinv <span class="op">=</span> <span class="va">self</span>.get_primitives()</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> Matrix([hu <span class="op">*</span> hinv <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">2</span> : <span class="dv">2</span> <span class="op">+</span> dim]])</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="va">self</span>.parameters.g</span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>        N <span class="op">=</span> ZArray.zeros(<span class="va">self</span>.n_variables, <span class="va">self</span>.n_variables, dim)</span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> d <span class="kw">in</span> <span class="bu">range</span>(dim):</span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>            N[<span class="dv">2</span><span class="op">+</span>d, <span class="dv">0</span>, d] <span class="op">=</span> g <span class="op">*</span> h <span class="co"># g * h * grad(b)</span></span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>            N[<span class="dv">2</span><span class="op">+</span>d, <span class="dv">1</span>, d] <span class="op">=</span> g <span class="op">*</span> h <span class="co"># g * h * grad(h)</span></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(N)</span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> <span class="fl">1e-4</span></span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>        _, _, U, _ <span class="op">=</span> <span class="va">self</span>.get_primitives()</span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>        hinv <span class="op">=</span> <span class="va">self</span>.aux_variables[<span class="dv">0</span>]</span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Uold = Matrix(self.aux_variables[1 : 1 + dim])</span></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>        g <span class="op">=</span> <span class="va">self</span>.parameters.g</span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>        n <span class="op">=</span> <span class="va">self</span>.parameters.n</span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>        abs_u <span class="op">=</span> sqrt(U.dot(U) <span class="op">+</span> eps)</span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a>        S <span class="op">=</span> Matrix.zeros(<span class="va">self</span>.n_variables, <span class="dv">1</span>)</span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a>        <span class="co"># S[2:, 0] = -n**2 * g * hinv**(1/3) * U[:, 0] * abs_u</span></span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>        S[<span class="dv">2</span>:, <span class="dv">0</span>] <span class="op">=</span> n<span class="op">**</span><span class="dv">2</span> <span class="op">*</span> g  <span class="op">*</span> (hinv<span class="op">**</span>(<span class="dv">1</span><span class="op">/</span><span class="dv">3</span>) <span class="op">+</span> eps) <span class="op">*</span> U[:, <span class="dv">0</span>] <span class="op">*</span> abs_u</span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(S).reshape(<span class="va">self</span>.n_variables,)</span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a><span class="at">@define</span>(frozen<span class="op">=</span><span class="va">True</span>, slots<span class="op">=</span><span class="va">True</span>, kw_only<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> NumericSWE(SWE):</span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a>    disable_differentiation: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_primitives(<span class="va">self</span>):</span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>        dim <span class="op">=</span> <span class="va">self</span>.dimension</span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>        b <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">0</span>]</span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">1</span>]</span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>        hinv <span class="op">=</span> <span class="va">self</span>.aux_variables[<span class="dv">0</span>]</span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a>        U <span class="op">=</span> Matrix([hu <span class="op">*</span> hinv <span class="cf">for</span> hu <span class="kw">in</span> <span class="va">self</span>.variables[<span class="dv">2</span> : <span class="dv">2</span> <span class="op">+</span> dim]])</span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> b, h, U, hinv</span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> eigenvalues(<span class="va">self</span>):</span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>        ev <span class="op">=</span> <span class="bu">super</span>().eigenvalues()</span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">1</span>]</span>
+<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> sp.Function(<span class="st">'conditional'</span>)(h <span class="op">&gt;</span> <span class="va">self</span>.parameters.eps, ev, ZArray.zeros(<span class="op">*</span>ev.shape))</span>
+<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a>    <span class="co"># def source(self):</span></span>
+<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     delta = self.parameters.eps  # or smaller</span></span>
+<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     h = self.variables[1]</span></span>
+<span id="cb2-96"><a href="#cb2-96" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     smooth = sp.Rational(1,2)*(1 + sp.tanh((h - self.parameters.eps)/delta))</span></span>
+<span id="cb2-97"><a href="#cb2-97" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-98"><a href="#cb2-98" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     S = super().source()</span></span>
+<span id="cb2-99"><a href="#cb2-99" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     zeros = ZArray.zeros(*S.shape)</span></span>
+<span id="cb2-100"><a href="#cb2-100" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-101"><a href="#cb2-101" aria-hidden="true" tabindex="-1"></a>    <span class="co">#     return smooth * S + (1 - smooth) * zeros</span></span>
+<span id="cb2-102"><a href="#cb2-102" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-103"><a href="#cb2-103" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
+<span id="cb2-104"><a href="#cb2-104" aria-hidden="true" tabindex="-1"></a>        delta <span class="op">=</span> <span class="va">self</span>.parameters.eps  <span class="co"># or smaller</span></span>
+<span id="cb2-105"><a href="#cb2-105" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="va">self</span>.variables[<span class="dv">1</span>]</span>
+<span id="cb2-106"><a href="#cb2-106" aria-hidden="true" tabindex="-1"></a>        smooth <span class="op">=</span> sp.Rational(<span class="dv">1</span>,<span class="dv">2</span>)<span class="op">*</span>(<span class="dv">1</span> <span class="op">+</span> sp.tanh((h <span class="op">-</span> <span class="va">self</span>.parameters.eps)<span class="op">/</span>delta))</span>
+<span id="cb2-107"><a href="#cb2-107" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-108"><a href="#cb2-108" aria-hidden="true" tabindex="-1"></a>        S <span class="op">=</span> <span class="bu">super</span>().source()</span>
+<span id="cb2-109"><a href="#cb2-109" aria-hidden="true" tabindex="-1"></a>        S2 <span class="op">=</span> sp.Matrix(S)</span>
+<span id="cb2-110"><a href="#cb2-110" aria-hidden="true" tabindex="-1"></a>        S2 <span class="op">=</span> S2.subs({h: <span class="va">self</span>.parameters.eps})</span>
+<span id="cb2-111"><a href="#cb2-111" aria-hidden="true" tabindex="-1"></a>        Sreg <span class="op">=</span> ZArray.zeros(<span class="op">*</span>S.shape)</span>
+<span id="cb2-112"><a href="#cb2-112" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="va">self</span>.n_variables):</span>
+<span id="cb2-113"><a href="#cb2-113" aria-hidden="true" tabindex="-1"></a>            Sreg[i] <span class="op">=</span> S2[i,<span class="dv">0</span>]</span>
+<span id="cb2-114"><a href="#cb2-114" aria-hidden="true" tabindex="-1"></a>        zeros <span class="op">=</span> ZArray.zeros(<span class="op">*</span>S.shape)</span>
+<span id="cb2-115"><a href="#cb2-115" aria-hidden="true" tabindex="-1"></a>        <span class="co"># return Sreg</span></span>
+<span id="cb2-116"><a href="#cb2-116" aria-hidden="true" tabindex="-1"></a>        <span class="co"># return smooth * S + (1 - smooth) * Sreg</span></span>
+<span id="cb2-117"><a href="#cb2-117" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> sp.Function(<span class="st">'conditional'</span>)(h <span class="op">&gt;</span> <span class="va">self</span>.parameters.eps, <span class="op">-</span>S, zeros)</span>
+<span id="cb2-118"><a href="#cb2-118" aria-hidden="true" tabindex="-1"></a>        <span class="co"># return -S</span></span>
+<span id="cb2-119"><a href="#cb2-119" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-120"><a href="#cb2-120" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source_jacobian_wrt_aux_variables(<span class="va">self</span>):</span>
+<span id="cb2-121"><a href="#cb2-121" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray.zeros(</span>
+<span id="cb2-122"><a href="#cb2-122" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.n_variables</span>
+<span id="cb2-123"><a href="#cb2-123" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-124"><a href="#cb2-124" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-125"><a href="#cb2-125" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source_jacobian_wrt_variables(<span class="va">self</span>):</span>
+<span id="cb2-126"><a href="#cb2-126" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray.zeros(</span>
+<span id="cb2-127"><a href="#cb2-127" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.n_variables</span>
+<span id="cb2-128"><a href="#cb2-128" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-129"><a href="#cb2-129" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb2-130"><a href="#cb2-130" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="transformation-to-ufl-code-medium" class="level1">
+<h1>Transformation to UFL Code (Medium)</h1>
+<section id="map-from-sympy-to-ufl" class="level3">
+<h3 class="anchored" data-anchor-id="map-from-sympy-to-ufl">Map from Sympy to UFL</h3>
+<p>Build an approximation of the left and right eigenvectors for the boundary conditions</p>
+<div id="9d7cb462" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>swe1 <span class="op">=</span> SWE(dimension<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>P, D <span class="op">=</span> sp.Matrix(swe1.quasilinear_matrix()[<span class="dv">1</span>:,<span class="dv">1</span>:,<span class="dv">0</span>]).diagonalize()</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>R <span class="op">=</span> sp.simplify(P)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>D <span class="op">=</span> sp.simplify(D)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>L <span class="op">=</span> sp.simplify(P<span class="op">**-</span><span class="dv">1</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>sp.simplify(R <span class="op">@</span> D <span class="op">@</span> L)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>swe2 <span class="op">=</span> SWE()</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>S <span class="op">=</span> sp.eye(<span class="dv">4</span>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>S[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span>  swe2.normal[<span class="dv">0</span>]</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>S[<span class="dv">3</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="op">-</span>swe2.normal[<span class="dv">1</span>]</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>S[<span class="dv">2</span>, <span class="dv">3</span>] <span class="op">=</span> swe2.normal[<span class="dv">1</span>]</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>S[<span class="dv">3</span>, <span class="dv">3</span>] <span class="op">=</span> swe2.normal[<span class="dv">0</span>]</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>Sinv <span class="op">=</span> S.inv()</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>Q <span class="op">=</span> ZArray(swe2.variables.get_list())</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>SQ <span class="op">=</span> S<span class="op">@</span>sp.Matrix(Q)</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>un <span class="op">=</span> SQ[<span class="dv">2</span>] <span class="op">*</span> swe2.aux_variables[<span class="dv">0</span>]</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="bu">map</span> <span class="op">=</span> {swe1.variables[<span class="dv">1</span>]:SQ[<span class="dv">1</span>], swe1.variables[<span class="dv">2</span>]: SQ[<span class="dv">2</span>]}</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>R <span class="op">=</span> sp.simplify(R.subs(<span class="bu">map</span>))</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>D <span class="op">=</span> sp.simplify(D.subs(<span class="bu">map</span>))</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>L <span class="op">=</span> sp.simplify(L.subs(<span class="bu">map</span>))</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>R2 <span class="op">=</span> sp.eye(<span class="dv">4</span>)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>R2[<span class="dv">1</span>:<span class="dv">3</span>, <span class="dv">1</span>:<span class="dv">3</span>] <span class="op">=</span> R</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>L2 <span class="op">=</span> R2.inv()</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>D2 <span class="op">=</span> sp.zeros(<span class="dv">4</span>,<span class="dv">4</span>)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>D2[<span class="dv">1</span>:<span class="dv">3</span>, <span class="dv">1</span>:<span class="dv">3</span>] <span class="op">=</span> D</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>D2[<span class="dv">3</span>, <span class="dv">3</span>] <span class="op">=</span> un</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>A_approx <span class="op">=</span> sp.simplify(R2 <span class="op">@</span> D2 <span class="op">@</span> L2)</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>Aan <span class="op">=</span> sp.simplify(Sinv <span class="op">@</span> A_approx <span class="op">@</span> S)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>An <span class="op">=</span> sp.simplify(<span class="bu">sum</span>((sp.Matrix(swe2.quasilinear_matrix()[:, :, di]) <span class="op">*</span> swe2.normal[di] <span class="cf">for</span> di <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>)), start<span class="op">=</span>sp.Matrix.zeros(<span class="dv">4</span>,<span class="dv">4</span>)))</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>Anr <span class="op">=</span> sp.simplify(S <span class="op">@</span> An <span class="op">@</span> Sinv)</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>M <span class="op">=</span> np.eye(<span class="dv">4</span>)</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>M[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="op">-</span><span class="dv">1</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>M[<span class="dv">3</span>, <span class="dv">3</span>] <span class="op">=</span> <span class="dv">0</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="f07b3724" class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>slip <span class="op">=</span><span class="dv">1</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span>(BC.CharacteristicReflective(tag<span class="op">=</span><span class="ss">f"</span><span class="sc">{</span>tag<span class="sc">}</span><span class="ss">"</span>, R<span class="op">=</span>R2, L<span class="op">=</span>L2, D<span class="op">=</span>D2, S<span class="op">=</span>S, M<span class="op">=</span>M) <span class="cf">for</span> tag <span class="kw">in</span> [<span class="st">"wall"</span>, <span class="st">"inflow"</span>, <span class="st">"outflow"</span>]),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="wall"),</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="inflow"),</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="outflow"),</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Wall(tag="wall", momentum_field_indices=[[2, 3]], wall_slip=slip),</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Wall(tag="inflow", momentum_field_indices=[[2, 3]], wall_slip=slip),</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Wall(tag="outflow", momentum_field_indices=[[2, 3]], wall_slip=slip),</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a> <span class="co">### Initial condition</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ic_q(x):</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    R <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    r <span class="op">=</span> np.sqrt((x[<span class="dv">0</span>])<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> (x[<span class="dv">1</span>])<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># b = 0.1 * x[0] + 0.5 * np.sin(2 * np.pi * x[0] / 5)</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fl">0.3</span> <span class="op">*</span> x[<span class="dv">0</span>]</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># b = 0</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> np.where(r <span class="op">&lt;=</span> R, <span class="fl">2.</span>, <span class="dv">1</span>) <span class="op">-</span>b</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> np.where(h <span class="op">&lt;=</span> <span class="dv">0</span>, <span class="dv">0</span>, h)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.array([b, h , <span class="fl">0.</span><span class="op">*</span>x[<span class="dv">0</span>], <span class="fl">0.</span><span class="op">*</span>x[<span class="dv">0</span>]])</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(ic_q)</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> NumericSWE(</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"Firedrake"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/firedrake"</span>, snapshots<span class="op">=</span><span class="dv">1000</span>, filename<span class="op">=</span><span class="st">'dg'</span>, clean_directory<span class="op">=</span><span class="va">True</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="6ee88fae" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ufl </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>IdentityMatrix <span class="op">=</span> ufl.as_tensor([[<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>], [<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">0</span>], [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>], [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>]])</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>solver <span class="op">=</span> dg.FiredrakeHyperbolicSolver(settings<span class="op">=</span>settings, time_end <span class="op">=</span> <span class="fl">10.0</span>, CFL<span class="op">=</span><span class="fl">0.45</span>, IdentityMatrix<span class="op">=</span>IdentityMatrix)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="bc54d0a9" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>path_to_mesh <span class="op">=</span> os.path.join(main_dir, <span class="st">"meshes"</span>, <span class="st">"square"</span>, <span class="st">"mesh.msh"</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>solver.solve(path_to_mesh, model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code></code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg">2025-11-16 11:11:17.123</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 10, time: 0.127818, dt: 0.012795, next write at time: 0.110110</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:18.566</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 20, time: 0.255841, dt: 0.012807, next write at time: 0.210210</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:19.986</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 30, time: 0.383938, dt: 0.012812, next write at time: 0.310310</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:21.409</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 40, time: 0.512066, dt: 0.012814, next write at time: 0.410410</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:22.890</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 50, time: 0.640208, dt: 0.012814, next write at time: 0.510511</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:24.185</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 60, time: 0.768353, dt: 0.012814, next write at time: 0.610611</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:25.411</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 70, time: 0.896489, dt: 0.012812, next write at time: 0.710711</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:26.616</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 80, time: 1.024574, dt: 0.012804, next write at time: 0.810811</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:28.024</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 90, time: 1.152510, dt: 0.012783, next write at time: 0.910911</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:29.284</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 100, time: 1.280138, dt: 0.012744, next write at time: 1.011011</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:30.701</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 110, time: 1.407283, dt: 0.012689, next write at time: 1.111111</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:31.934</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 120, time: 1.533821, dt: 0.012625, next write at time: 1.211211</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:33.241</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 130, time: 1.659703, dt: 0.012555, next write at time: 1.311311</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:34.600</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 140, time: 1.784831, dt: 0.012479, next write at time: 1.411411</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:35.932</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 150, time: 1.909242, dt: 0.012411, next write at time: 1.511512</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:37.152</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 160, time: 2.033035, dt: 0.012355, next write at time: 1.611612</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:38.412</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 170, time: 2.156328, dt: 0.012310, next write at time: 1.711712</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:39.598</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 180, time: 2.279231, dt: 0.012276, next write at time: 1.811812</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:40.755</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 190, time: 2.401843, dt: 0.012251, next write at time: 1.911912</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:41.874</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 200, time: 2.524253, dt: 0.012234, next write at time: 2.012012</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:43.134</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 210, time: 2.646542, dt: 0.012226, next write at time: 2.112112</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:44.252</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 220, time: 2.768799, dt: 0.012227, next write at time: 2.212212</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:45.376</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 230, time: 2.891119, dt: 0.012238, next write at time: 2.312312</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:46.471</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 240, time: 3.013591, dt: 0.012256, next write at time: 2.412412</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:47.691</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 250, time: 3.136276, dt: 0.012279, next write at time: 2.512513</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:48.794</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 260, time: 3.259179, dt: 0.012299, next write at time: 2.612613</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:49.869</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 270, time: 3.382170, dt: 0.012300, next write at time: 2.712713</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:51.098</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 280, time: 3.505221, dt: 0.012311, next write at time: 2.812813</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:52.280</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 290, time: 3.628419, dt: 0.012324, next write at time: 2.912913</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:53.447</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 300, time: 3.751679, dt: 0.012327, next write at time: 3.013013</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:54.618</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 310, time: 3.874963, dt: 0.012330, next write at time: 3.113113</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:55.756</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 320, time: 3.998273, dt: 0.012332, next write at time: 3.213213</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:56.904</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 330, time: 4.121614, dt: 0.012336, next write at time: 3.313313</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:58.024</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 340, time: 4.244992, dt: 0.012340, next write at time: 3.413413</span>
+
+<span class="ansi-green-fg">2025-11-16 11:11:59.232</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 350, time: 4.368415, dt: 0.012345, next write at time: 3.513514</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:00.367</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 360, time: 4.491890, dt: 0.012350, next write at time: 3.613614</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:01.470</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 370, time: 4.615427, dt: 0.012357, next write at time: 3.713714</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:02.699</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 380, time: 4.739037, dt: 0.012365, next write at time: 3.813814</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:03.806</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 390, time: 4.862736, dt: 0.012375, next write at time: 3.913914</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:04.922</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 400, time: 4.986546, dt: 0.012387, next write at time: 4.014014</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:06.039</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 410, time: 5.110490, dt: 0.012401, next write at time: 4.114114</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:07.010</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 420, time: 5.234593, dt: 0.012418, next write at time: 4.214214</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:07.968</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 430, time: 5.358869, dt: 0.012436, next write at time: 4.314314</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:08.899</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 440, time: 5.483323, dt: 0.012453, next write at time: 4.414414</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:09.876</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 450, time: 5.607944, dt: 0.012469, next write at time: 4.514515</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:10.899</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 460, time: 5.732659, dt: 0.012471, next write at time: 4.614615</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:11.874</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 470, time: 5.857379, dt: 0.012473, next write at time: 4.714715</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:13.015</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 480, time: 5.982139, dt: 0.012479, next write at time: 4.814815</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:14.177</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 490, time: 6.106969, dt: 0.012487, next write at time: 4.914915</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:15.363</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 500, time: 6.231848, dt: 0.012487, next write at time: 5.015015</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:16.504</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 510, time: 6.356696, dt: 0.012483, next write at time: 5.115115</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:17.724</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 520, time: 6.481509, dt: 0.012480, next write at time: 5.215215</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:18.842</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 530, time: 6.606289, dt: 0.012477, next write at time: 5.315315</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:19.990</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 540, time: 6.731043, dt: 0.012475, next write at time: 5.415415</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:21.110</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 550, time: 6.855784, dt: 0.012474, next write at time: 5.515516</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:22.315</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 560, time: 6.980526, dt: 0.012475, next write at time: 5.615616</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:23.475</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 570, time: 7.105289, dt: 0.012478, next write at time: 5.715716</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:24.587</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 580, time: 7.230091, dt: 0.012483, next write at time: 5.815816</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:25.715</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 590, time: 7.354953, dt: 0.012490, next write at time: 5.915916</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:26.832</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 600, time: 7.479896, dt: 0.012498, next write at time: 6.016016</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:27.813</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 610, time: 7.604937, dt: 0.012509, next write at time: 6.116116</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:28.715</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 620, time: 7.730088, dt: 0.012520, next write at time: 6.216216</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:29.601</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 630, time: 7.855353, dt: 0.012532, next write at time: 6.316316</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:30.485</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 640, time: 7.980695, dt: 0.012535, next write at time: 6.416416</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:31.394</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 650, time: 8.106067, dt: 0.012539, next write at time: 6.516517</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:32.289</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 660, time: 8.231492, dt: 0.012545, next write at time: 6.616617</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:33.186</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 670, time: 8.356989, dt: 0.012553, next write at time: 6.716717</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:34.119</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 680, time: 8.482575, dt: 0.012563, next write at time: 6.816817</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:35.024</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 690, time: 8.608254, dt: 0.012570, next write at time: 6.916917</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:35.938</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 700, time: 8.733966, dt: 0.012572, next write at time: 7.017017</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:36.889</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 710, time: 8.859697, dt: 0.012574, next write at time: 7.117117</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:37.848</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 720, time: 8.985446, dt: 0.012576, next write at time: 7.217217</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:38.801</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 730, time: 9.111218, dt: 0.012578, next write at time: 7.317317</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:39.788</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 740, time: 9.237016, dt: 0.012581, next write at time: 7.417417</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:40.755</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 750, time: 9.362846, dt: 0.012585, next write at time: 7.517518</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:41.774</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 760, time: 9.488716, dt: 0.012589, next write at time: 7.617618</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:42.897</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 770, time: 9.614631, dt: 0.012594, next write at time: 7.717718</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:43.816</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 780, time: 9.740598, dt: 0.012599, next write at time: 7.817818</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:44.774</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 790, time: 9.866620, dt: 0.012605, next write at time: 7.917918</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:45.704</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">515</span> - <span class="ansi-bold">iteration: 800, time: 9.992701, dt: 0.012611, next write at time: 8.018018</span>
+
+<span class="ansi-green-fg">2025-11-16 11:12:45.815</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">zoomy_firedrake.firedrake_solver</span>:<span class="ansi-cyan-fg">solve</span>:<span class="ansi-cyan-fg">520</span> - <span class="ansi-bold">Finished simulation with in 10.005 seconds</span>
+</pre>
+</div>
+</div>
+</div>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Copyright 2025, Ingo Steldermann</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/firedrake/characteristic_variables.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item">
+    <a class="nav-link" href="../../legal.html">
+<p>Legal notice and data protection</p>
+</a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

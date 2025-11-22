@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>no-playground</title>
+<title>vam_poisson_hp</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -19,6 +19,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -81,7 +116,7 @@ MathJax = {
 <link rel="stylesheet" href="../custom.css">
 </head>
 
-<body class="nav-fixed fullcontent quarto-light">
+<body class="nav-fixed quarto-light">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
@@ -156,21 +191,119 @@ MathJax = {
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+        
+    </div>
 <!-- main -->
 <main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"></header>
 
 
 
 
-<section id="no-playground-available" class="level1">
-<h1>No playground available</h1>
-<p>We are sorry. There is currently no playground-server available.</p>
-<p>We usually open public-access only during conferences.</p>
-<p>If you think that you should have access-right now, please contact us <a href="mailto:steldermann@mbd.rwth-aachen.de">steldermann@mbd.rwth-aachen.de</a>.</p>
+<div id="514d36e1-0265-4099-8fe8-ff5fbb70621d" class="cell" data-tags="[]" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Derivative, Function, Matrix, symbols</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="c6486434-5b95-405e-8156-074a2bd0364f" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> replace_multiple(text, old_list, new_list):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> old, new <span class="kw">in</span> <span class="bu">zip</span>(old_list, new_list):</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        text <span class="op">=</span> text.replace(old, new)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> text</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="4445a83e-7534-4757-9f4f-5710a00dfe64" class="cell" data-tags="[]" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>x, dt <span class="op">=</span> symbols(<span class="st">'x dt'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="750e3164-532e-495c-a29e-eb1cff53efd3" class="cell" data-tags="[]" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>h <span class="op">=</span> Function(<span class="st">'h'</span>)(x)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>u0 <span class="op">=</span> Function(<span class="st">'u0'</span>)(x)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>u1 <span class="op">=</span> Function(<span class="st">'u1'</span>)(x)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>w0 <span class="op">=</span> Function(<span class="st">'w0'</span>)(x)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> Function(<span class="st">'b'</span>)(x)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>oldu0 <span class="op">=</span> Function(<span class="st">'oldu0'</span>)(x)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>oldu1 <span class="op">=</span> Function(<span class="st">'oldu1'</span>)(x)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>oldw0 <span class="op">=</span> Function(<span class="st">'oldw0'</span>)(x)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>oldw1 <span class="op">=</span> Function(<span class="st">'oldw1'</span>)(x)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>hp0 <span class="op">=</span> Function(<span class="st">'hp0'</span>)(x)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>hp1 <span class="op">=</span> Function(<span class="st">'hp1'</span>)(x)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="9adbefd3-be23-4d5d-8283-99627be90f8c" class="cell" data-tags="[]" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>tau <span class="op">=</span> Matrix([[<span class="dv">0</span>, </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>               (hp0).diff(x) <span class="op">+</span> <span class="dv">2</span><span class="op">*</span>hp1<span class="op">/</span>h<span class="op">*</span>b.diff(x),</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>               <span class="op">-</span> <span class="dv">2</span><span class="op">*</span>hp1<span class="op">/</span>h,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>               (hp1).diff(x) <span class="op">-</span>(<span class="dv">3</span><span class="op">*</span>hp0<span class="op">/</span>h <span class="op">-</span> hp1<span class="op">/</span>h)<span class="op">*</span>h.diff(x) <span class="op">-</span> <span class="dv">6</span><span class="op">*</span>(hp0<span class="op">/</span>h<span class="op">-</span>hp1<span class="op">/</span>h) <span class="op">*</span> b.diff(x),</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>               <span class="dv">6</span> <span class="op">*</span> (hp0<span class="op">/</span>h<span class="op">-</span>hp1<span class="op">/</span>h)</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>              ]]).T</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="af0ac159-76a1-422d-a36c-0c25288e3c7b" class="cell" data-tags="[]" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>Uk <span class="op">=</span> Matrix([[ h, h <span class="op">*</span> oldu0, h<span class="op">*</span>oldu1, h<span class="op">*</span>oldw0, h<span class="op">*</span>oldw1]]).T</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="2ee296a6-07de-45bb-bc20-1b18285cda20" class="cell" data-tags="[]" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>U <span class="op">=</span> Uk <span class="op">-</span> dt <span class="op">*</span> tau</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="60b01d93-334f-4008-a388-62664d5dacc6" class="cell" data-tags="[]" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>h <span class="op">=</span> U[<span class="dv">0</span>]</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>u0 <span class="op">=</span> U[<span class="dv">1</span>]<span class="op">/</span>h</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>u1 <span class="op">=</span> U[<span class="dv">2</span>]<span class="op">/</span>h</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>w0 <span class="op">=</span> U[<span class="dv">3</span>]<span class="op">/</span>h</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>w1 <span class="op">=</span> U[<span class="dv">4</span>]<span class="op">/</span>h</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="2a31d346-fde4-4072-984f-ce432e982228" class="cell" data-tags="[]" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>I1 <span class="op">=</span> h<span class="op">*</span>u0.diff(x) <span class="op">+</span> <span class="dv">1</span><span class="op">/</span><span class="dv">3</span> <span class="op">*</span> (h<span class="op">*</span>u1).diff(x) <span class="op">+</span> <span class="dv">1</span><span class="op">/</span><span class="dv">3</span> <span class="op">*</span> u1 <span class="op">*</span> h.diff(x) <span class="op">+</span> <span class="dv">2</span><span class="op">*</span>(w0 <span class="op">-</span> u0 <span class="op">*</span> b.diff(x))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="db8d784a-fcfd-44aa-a9bf-923c867e39fe" class="cell" data-tags="[]" data-execution_count="10">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>derivs <span class="op">=</span> <span class="bu">sorted</span>(I1.atoms(Derivative), key<span class="op">=</span><span class="bu">str</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>derivs</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="10">
+<pre><code>[Derivative(b(x), (x, 2)),
+ Derivative(b(x), x),
+ Derivative(h(x), x),
+ Derivative(hp0(x), (x, 2)),
+ Derivative(hp0(x), x),
+ Derivative(hp1(x), x),
+ Derivative(oldu0(x), x),
+ Derivative(oldu1(x), x)]</code></pre>
+</div>
+</div>
+<div id="78801bba-a843-4ae8-9366-1513d6921154" class="cell" data-tags="[]" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>replace_list <span class="op">=</span> [<span class="bu">str</span>(d) <span class="cf">for</span> d <span class="kw">in</span> derivs] <span class="op">+</span> [<span class="st">'oldu0'</span>, <span class="st">'oldu1'</span>, <span class="st">'oldw0'</span>, <span class="st">'oldw1'</span>]</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>subs_list <span class="op">=</span> [<span class="st">'ddbdxx'</span>, <span class="st">'dbdx'</span>, <span class="st">'dhdx'</span>, <span class="st">'ddhp0dxx'</span>, <span class="st">'dhp0dx'</span>, <span class="st">'dhp1dx'</span>, <span class="st">'du0dx'</span>, <span class="st">'du1dx'</span>] <span class="op">+</span> [<span class="st">'u0'</span>, <span class="st">'u1'</span>, <span class="st">'w0'</span>, <span class="st">'w1'</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="0a318cfb-2992-436f-856d-047aaa1e8a5f" class="cell" data-execution_count="12">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>out <span class="op">=</span> replace_multiple(<span class="bu">str</span>(I1), replace_list, subs_list)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>replace_multiple(out, [<span class="st">'(x)'</span>], [<span class="st">''</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="12">
+<pre><code>'0.666666666666667*dt*dhp1dx/h - 0.666666666666667*dt*hp1*dhdx/h**2 - 2*(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dbdx/h + 2*(-dt*(-(3*hp0/h - hp1/h)*dhdx - (6*hp0/h - 6*hp1/h)*dbdx + dhp1dx) + h*w0)/h + 0.333333333333333*(2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h + 0.333333333333333*h*du1dx + 0.333333333333333*u1*dhdx'</code></pre>
+</div>
+</div>
+<div id="8c375a64-6ab2-46a5-b97c-86ae4487353c" class="cell" data-tags="[]" data-execution_count="13">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>I2 <span class="op">=</span> h <span class="op">*</span> u0.diff(x) <span class="op">+</span> u1<span class="op">*</span>h.diff(x) <span class="op">+</span> <span class="dv">2</span><span class="op">*</span>(u1<span class="op">*</span>b.diff(x) <span class="op">-</span> w1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="89277683-1168-4252-b5ac-7d3a90aa36e5" class="cell" data-tags="[]" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>derivs <span class="op">=</span> <span class="bu">sorted</span>(I1.atoms(Derivative), key<span class="op">=</span><span class="bu">str</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>derivs</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="14">
+<pre><code>[Derivative(b(x), (x, 2)),
+ Derivative(b(x), x),
+ Derivative(h(x), x),
+ Derivative(hp0(x), (x, 2)),
+ Derivative(hp0(x), x),
+ Derivative(hp1(x), x),
+ Derivative(oldu0(x), x),
+ Derivative(oldu1(x), x)]</code></pre>
+</div>
+</div>
+<div id="3541aa10-8f55-4f65-90ef-0a29624d6b58" class="cell" data-tags="[]" data-execution_count="15">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>replace_list <span class="op">=</span> [<span class="bu">str</span>(d) <span class="cf">for</span> d <span class="kw">in</span> derivs] <span class="op">+</span> [<span class="st">'oldu0'</span>, <span class="st">'oldu1'</span>, <span class="st">'oldw0'</span>, <span class="st">'oldw1'</span>]</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>subs_list <span class="op">=</span> [<span class="st">'ddbdxx'</span>, <span class="st">'dbdx'</span>, <span class="st">'dhdx'</span>, <span class="st">'ddhp0dxx'</span>, <span class="st">'dhp0dx'</span>, <span class="st">'dhp1dx'</span>, <span class="st">'du0dx'</span>, <span class="st">'du1dx'</span>] <span class="op">+</span> [<span class="st">'u0'</span>, <span class="st">'u1'</span>, <span class="st">'w0'</span>, <span class="st">'w1'</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="dd18e64e-9b43-496e-a7b7-9dfc5b206414" class="cell" data-tags="[]" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>out <span class="op">=</span> replace_multiple(<span class="bu">str</span>(I2), replace_list, subs_list)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>replace_multiple(out, [<span class="st">'(x)'</span>], [<span class="st">''</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="16">
+<pre><code>'-2*(-dt*(6*hp0/h - 6*hp1/h) + h*w1)/h + 2*(2*dt*hp1/h + h*u1)*dbdx/h + (2*dt*hp1/h + h*u1)*dhdx/h + (-(-dt*(dhp0dx + 2*hp1*dbdx/h) + h*u0)*dhdx/h**2 + (-dt*(ddhp0dxx + 2*hp1*ddbdxx/h + 2*dbdx*dhp1dx/h - 2*hp1*dbdx*dhdx/h**2) + h*du0dx + u0*dhdx)/h)*h'</code></pre>
+</div>
+</div>
 
 
-</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -580,7 +713,7 @@ MathJax = {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions"><ul><li><a href="https://github.com/mbd-rwth/Zoomy/edit/main/web/playground/no-playground.qmd" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/vam_poisson_hp.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item">

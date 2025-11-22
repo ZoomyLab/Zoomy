@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Ingo Steldermann">
-<meta name="dcterms.date" content="2025-08-19">
+<meta name="dcterms.date" content="2025-10-13">
 
-<title>Dolfinx Demo</title>
+<title>Transformation to C Code</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -148,7 +148,7 @@ window.Quarto = {
 <link rel="stylesheet" href="../notebook.css">
 </head>
 
-<body class="nav-sidebar floating nav-fixed quarto-light">
+<body class="nav-fixed quarto-light">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
@@ -178,7 +178,7 @@ window.Quarto = {
 <span class="menu-text">Documentation</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link active" href="../../tutorials/index.html" aria-current="page"> 
+    <a class="nav-link" href="../../tutorials/index.html"> 
 <span class="menu-text">Tutorials</span></a>
   </li>  
   <li class="nav-item">
@@ -218,201 +218,33 @@ window.Quarto = {
 </div>
       </div> <!-- /container-fluid -->
     </nav>
-  <nav class="quarto-secondary-nav">
-    <div class="container-fluid d-flex">
-      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
-        <i class="bi bi-layout-text-sidebar-reverse"></i>
-      </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../tutorials/dolfinx/dolfinx_demo.html">DolfinX</a></li><li class="breadcrumb-item"><a href="../../tutorials/dolfinx/dolfinx_demo.html">Dolfinx Demo</a></li></ol></nav>
-        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
-        </a>
-    </div>
-  </nav>
 </header>
 <!-- content -->
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
-  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
-    <div class="pt-lg-2 mt-2 text-left sidebar-header sidebar-header-stacked">
-      <a href="../../index.html" class="sidebar-logo-link">
-      <img src="../../images/logo_no_text.svg" alt="" class="sidebar-logo py-0 d-lg-inline d-none">
-      </a>
-      </div>
-    <div class="sidebar-menu-container"> 
-    <ul class="list-unstyled mt-1">
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Tutorials</span></a>
-  </div>
-</li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
- <span class="menu-text">Shallow Water</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/swe/simple_numpy.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Shallow Water Tutorials 1D with Numpy</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/swe/simple_jax.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Shallow Water Tutorial 2d with JAX</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
- <span class="menu-text">Poisson</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/poisson/simple.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Simple</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
- <span class="menu-text">VAM</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/vam/simple.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Simple</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text">SME</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/sme/simple.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Simple</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/sme/minimal.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Minimal</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
- <span class="menu-text">AMReX</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/amrex/from_DEM.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Simulate from DEM</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
- <span class="menu-text">Code Printers</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/code_printers/to_amrex.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Transformation to C Code</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/code_printers/to_openfoam.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Transformation to OpenFOAM Code</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/code_printers/to_ufl.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Transformation to UFL Code</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
-      <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
- <span class="menu-text">DolfinX</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../../tutorials/dolfinx/dolfinx_demo.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">Dolfinx Demo</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-    </ul>
-    </div>
-</nav>
-<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
         <nav id="TOC" role="doc-toc" class="toc-active">
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#imports" id="toc-imports" class="nav-link active" data-scroll-target="#imports">Imports</a></li>
-  <li><a href="#transformation-to-ufl-code-medium" id="toc-transformation-to-ufl-code-medium" class="nav-link" data-scroll-target="#transformation-to-ufl-code-medium">Transformation to UFL Code (Medium)</a>
+  <li><a href="#transformation-to-c-code-simple" id="toc-transformation-to-c-code-simple" class="nav-link active" data-scroll-target="#transformation-to-c-code-simple">Transformation to C Code (Simple)</a>
   <ul class="collapse">
-  <li><a href="#map-from-sympy-to-ufl" id="toc-map-from-sympy-to-ufl" class="nav-link" data-scroll-target="#map-from-sympy-to-ufl">Map from Sympy to UFL</a></li>
+  <li><a href="#imports" id="toc-imports" class="nav-link" data-scroll-target="#imports">Imports</a></li>
+  <li><a href="#model-definition" id="toc-model-definition" class="nav-link" data-scroll-target="#model-definition">Model definition</a></li>
+  <li><a href="#sympy-model" id="toc-sympy-model" class="nav-link" data-scroll-target="#sympy-model">Sympy Model</a></li>
+  <li><a href="#code-transformation" id="toc-code-transformation" class="nav-link" data-scroll-target="#code-transformation">Code transformation</a></li>
+  <li><a href="#check-the-output" id="toc-check-the-output" class="nav-link" data-scroll-target="#check-the-output">Check the output</a></li>
   </ul></li>
   </ul>
-<div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/dolfinx/dolfinx_demo.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+<div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/code_printers/to_c.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../../tutorials/dolfinx/dolfinx_demo.html">DolfinX</a></li><li class="breadcrumb-item"><a href="../../tutorials/dolfinx/dolfinx_demo.html">Dolfinx Demo</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<div class="quarto-title-block"><div><h1 class="title">Dolfinx Demo</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+<div class="quarto-title-block"><div><h1 class="title">Transformation to C Code</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
 </div>
 
 
@@ -429,7 +261,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">August 19, 2025</p>
+      <p class="date">October 13, 2025</p>
     </div>
   </div>
   
@@ -441,129 +273,385 @@ window.Quarto = {
 </header>
 
 
+<section id="transformation-to-c-code-simple" class="level1">
+<h1>Transformation to C Code (Simple)</h1>
 <section id="imports" class="level2">
 <h2 class="anchored" data-anchor-id="imports">Imports</h2>
-<div id="601a29cb" class="cell">
+<div id="4f583c96" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Load packages</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy.utilities.lambdify <span class="im">import</span> lambdify</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sympy</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mpi4py <span class="im">import</span> MPI</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dolfinx.io <span class="im">import</span> gmshio</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># import gmsh</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># import dolfinx</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dolfinx <span class="im">import</span> fem</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> basix</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> tqdm</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> petsc4py <span class="im">import</span> PETSc</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ufl</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co"># import pyvista</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">from</span>  dolfinx.fem <span class="im">import</span> petsc</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co"># import sys</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co"># from dolfinx import mesh</span></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> ufl <span class="im">import</span> (</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    TestFunction,</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    TrialFunction,</span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    dx,</span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    inner,</span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dolfinx</span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dolfinx.fem.petsc <span class="im">import</span> LinearProblem</span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dolfinx.mesh <span class="im">import</span> locate_entities_boundary, meshtags</span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dolfinx <span class="im">import</span> mesh <span class="im">as</span> dolfinx_mesh</span>
-<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy.typing <span class="im">as</span> npt</span>
-<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.solver_numpy <span class="im">import</span> Settings</span>
-<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations</span>
-<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.mesh.mesh <span class="im">import</span> Mesh</span>
-<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
-<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
-<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
-<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_ufl <span class="im">as</span> trafo</span>
-<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dg.dolfinx_solver <span class="im">as</span> dg</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.fvm.solver_jax <span class="im">import</span> Settings</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_c <span class="im">as</span> trafo</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.mesh.mesh <span class="im">as</span> petscMesh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
-<section id="transformation-to-ufl-code-medium" class="level1">
-<h1>Transformation to UFL Code (Medium)</h1>
-<section id="map-from-sympy-to-ufl" class="level3">
-<h3 class="anchored" data-anchor-id="map-from-sympy-to-ufl">Map from Sympy to UFL</h3>
-<div id="f07b3724" class="cell">
+<section id="model-definition" class="level2">
+<h2 class="anchored" data-anchor-id="model-definition">Model definition</h2>
+<div id="9d8b0a27" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    [</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="top"),</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="bottom"),</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="left"),</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="co"># BC.Extrapolation(tag="right"),</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"top"</span>),</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"bottom"</span>),</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"left"</span>),</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"right"</span>),</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"wall"</span>),</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"inflow"</span>),</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"outflow"</span>),</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">3</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">0</span>] <span class="op">=</span> np.where(x[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="fl">5.</span>, <span class="fl">0.005</span>, <span class="fl">0.001</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a> <span class="co">### Initial condition</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ic_q(x):</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    R <span class="op">=</span> <span class="fl">0.15</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    r <span class="op">=</span> np.sqrt((x[<span class="dv">0</span>] <span class="op">-</span> <span class="fl">0.7</span>)<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> (x[<span class="dv">1</span>] <span class="op">-</span> <span class="fl">0.7</span>)<span class="op">**</span><span class="dv">2</span>)</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="fl">0.1</span><span class="op">*</span>np.sqrt((x[<span class="dv">0</span>] <span class="op">-</span> <span class="fl">3.</span>)<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> (x[<span class="dv">1</span>] <span class="op">-</span> <span class="fl">3.</span>)<span class="op">**</span><span class="dv">2</span>)</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.array([np.where(r <span class="op">&lt;=</span> R, <span class="fl">1.</span>, <span class="fl">0.9</span>), <span class="fl">0.</span><span class="op">*</span>x[<span class="dv">0</span>], <span class="fl">0.</span><span class="op">*</span>x[<span class="dv">0</span>]])</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(ic_q)</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SWE(ShallowWaterEquations):</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> <span class="va">self</span>.chezy()</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out   </span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> SWE(</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    parameters<span class="op">=</span>Zstruct(g<span class="op">=</span><span class="fl">9.81</span>, C<span class="op">=</span><span class="fl">25.</span>),</span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"Dolfinx"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/dolfinx"</span>, filename<span class="op">=</span><span class="st">'dg'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stderr">
-<div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-10-13 11:43:52.035</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
-</pre>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> ShallowWaterEquations(</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="co"># the mesh is necessary to connect the boundary conditions to the mesh tags</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.Mesh.from_gmsh(</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh.msh"</span>)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>model.initialize_boundary_conditions(mesh)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code></code></pre>
 </div>
 </div>
-</div>
-<div id="4873ace0" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model.flux()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="sympy-model" class="level2">
+<h2 class="anchored" data-anchor-id="sympy-model">Sympy Model</h2>
+<div id="4deb8ab5" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model.flux()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="3">
 <p><span class="math inline">\(\displaystyle \left[ \left[\begin{matrix}q_{1}\\\frac{g q_{0}^{2}}{2} + \frac{q_{1}^{2}}{q_{0}}\\\frac{q_{1} q_{2}}{q_{0}}\end{matrix}\right], \  \left[\begin{matrix}q_{2}\\\frac{q_{1} q_{2}}{q_{0}}\\\frac{g q_{0}^{2}}{2} + \frac{q_{2}^{2}}{q_{0}}\end{matrix}\right]\right]\)</span></p>
 </div>
 </div>
-<div id="76c8b9b1" class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model.source()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="15516519" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>model.print_boundary_conditions()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="4">
-<p><span class="math inline">\(\displaystyle \left[\begin{matrix}0\\- \frac{1.0 q_{1} \sqrt{\frac{q_{1}^{2}}{q_{0}^{2}} + \frac{q_{2}^{2}}{q_{0}^{2}}}}{C^{2} q_{0}}\\- \frac{1.0 q_{2} \sqrt{\frac{q_{1}^{2}}{q_{0}^{2}} + \frac{q_{2}^{2}}{q_{0}^{2}}}}{C^{2} q_{0}}\end{matrix}\right]\)</span></p>
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\end{matrix}\right]\)</span></p>
 </div>
 </div>
-<div id="6ee88fae" class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>solver <span class="op">=</span> dg.DolfinxHyperbolicSolver(settings<span class="op">=</span>settings, time_end <span class="op">=</span> <span class="fl">1.</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-<div id="bc54d0a9" class="cell">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">'ZOOMY_DIR'</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>path_to_mesh <span class="op">=</span> os.path.join(main_dir, <span class="st">"meshes"</span>, <span class="st">"channel_quad_2d"</span>, <span class="st">"mesh_coarse.msh"</span>)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>solver.solve(path_to_mesh, model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>
-Info    : Reading '/home/ingo/Git/Zoomy/meshes/channel_quad_2d/mesh_coarse.msh'...
-Info    : 729 nodes
-Info    : 816 elements
-Info    : Done reading '/home/ingo/Git/Zoomy/meshes/channel_quad_2d/mesh_coarse.msh'</code></pre>
-</div>
+</section>
+<section id="code-transformation" class="level2">
+<h2 class="anchored" data-anchor-id="code-transformation">Code transformation</h2>
+<div id="0be9f302" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowWater"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/trafo"</span>, filename<span class="op">=</span><span class="st">"swe.h5"</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>trafo.write_code(model, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Setup  sim , solving PDE:  65%|██████▌   | 0.652917717182038/1.0 [00:01&lt;00:00,  2.45s/it]   </code></pre>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg">2025-10-13 16:22:40.258</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
+</pre>
+</div>
+</div>
+</div>
+</section>
+<section id="check-the-output" class="level2">
+<h2 class="anchored" data-anchor-id="check-the-output">Check the output</h2>
+<div id="28fd7c60" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.c_interface/Model.H'</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+
+namespace Model
+{
+constexpr int n_dof_q    = 3;
+constexpr int n_dof_qaux = 2;
+constexpr int dimension  = 2;
+static const int n_boundary_tags = 3;
+static const char* map_boundary_tag_to_function_index[] = { "wall", "inflow", "outflow" };
+
+inline void flux_x(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 1));
+        res[0] = Q[1];
+        res[1] = (1.0/2.0)*9.81*std::pow(Q[0], 2) + std::pow(Q[1], 2)*t0;
+        res[2] = Q[1]*Q[2]*t0;
+}
+        
+
+inline void flux_y(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 1));
+        res[0] = Q[2];
+        res[1] = Q[1]*Q[2]*t0;
+        res[2] = (1.0/2.0)*9.81*std::pow(Q[0], 2) + std::pow(Q[2], 2)*t0;
+}
+        
+
+inline void flux_jacobian_x(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 2));
+        double t1 = (1.0 / std::pow(Q[0], 1));
+        double t2 = Q[1]*t1;
+        res[0] = 0;
+        res[1] = 1;
+        res[2] = 0;
+        res[3] = 9.81*Q[0] - std::pow(Q[1], 2)*t0;
+        res[4] = 2*t2;
+        res[5] = 0;
+        res[6] = -Q[1]*Q[2]*t0;
+        res[7] = Q[2]*t1;
+        res[8] = t2;
+}
+        
+
+inline void flux_jacobian_y(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 2));
+        double t1 = (1.0 / std::pow(Q[0], 1));
+        double t2 = Q[2]*t1;
+        res[0] = 0;
+        res[1] = 0;
+        res[2] = 1;
+        res[3] = -Q[1]*Q[2]*t0;
+        res[4] = t2;
+        res[5] = Q[1]*t1;
+        res[6] = 9.81*Q[0] - std::pow(Q[2], 2)*t0;
+        res[7] = 0;
+        res[8] = 2*t2;
+}
+        
+
+inline void nonconservative_matrix_x(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+        res[3] = 0;
+        res[4] = 0;
+        res[5] = 0;
+        res[6] = 0;
+        res[7] = 0;
+        res[8] = 0;
+}
+        
+
+inline void nonconservative_matrix_y(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+        res[3] = 0;
+        res[4] = 0;
+        res[5] = 0;
+        res[6] = 0;
+        res[7] = 0;
+        res[8] = 0;
+}
+        
+
+inline void quasilinear_matrix_x(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 2));
+        double t1 = (1.0 / std::pow(Q[0], 1));
+        double t2 = Q[1]*t1;
+        res[0] = 0;
+        res[1] = 1;
+        res[2] = 0;
+        res[3] = 9.81*Q[0] - std::pow(Q[1], 2)*t0;
+        res[4] = 2*t2;
+        res[5] = 0;
+        res[6] = -Q[1]*Q[2]*t0;
+        res[7] = Q[2]*t1;
+        res[8] = t2;
+}
+        
+
+inline void quasilinear_matrix_y(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    double t0 = (1.0 / std::pow(Q[0], 2));
+        double t1 = (1.0 / std::pow(Q[0], 1));
+        double t2 = Q[2]*t1;
+        res[0] = 0;
+        res[1] = 0;
+        res[2] = 1;
+        res[3] = -Q[1]*Q[2]*t0;
+        res[4] = t2;
+        res[5] = Q[1]*t1;
+        res[6] = 9.81*Q[0] - std::pow(Q[2], 2)*t0;
+        res[7] = 0;
+        res[8] = 2*t2;
+}
+        
+
+inline void eigenvalues(
+    const double* Q,
+    const double* Qaux,
+    const double* n,
+    double* res)
+{
+    double t0 = n[0]*Q[1];
+        double t1 = n[1]*Q[2];
+        double t2 = (1.0 / std::pow(Q[0], 2));
+        double t3 = std::pow(9.81*std::pow(Q[0], 5), 1.0/2.0)*std::pow(std::pow(n[0], 2) + std::pow(n[1], 2), 1.0/2.0);
+        double t4 = Q[0]*t0 + Q[0]*t1;
+        res[0] = (t0 + t1)/Q[0];
+        res[1] = t2*(t3 + t4);
+        res[2] = t2*(-t3 + t4);
+}
+        
+
+inline void left_eigenvectors(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+        res[3] = 0;
+        res[4] = 0;
+        res[5] = 0;
+        res[6] = 0;
+        res[7] = 0;
+        res[8] = 0;
+}
+        
+
+inline void right_eigenvectors(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+        res[3] = 0;
+        res[4] = 0;
+        res[5] = 0;
+        res[6] = 0;
+        res[7] = 0;
+        res[8] = 0;
+}
+        
+
+inline void source(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+}
+        
+
+inline void residual(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+}
+        
+
+inline void source_implicit(
+    const double* Q,
+    const double* Qaux,
+    double* res
+    )
+{
+    res[0] = 0;
+        res[1] = 0;
+        res[2] = 0;
+}
+        
+
+inline double* interpolate(
+    const double* Q,
+    const double* Qaux,
+    const double* X,
+    double* res)
+{
+    double t0 = (1.0 / std::pow(Q[0], 1));
+        res[0] = Q[0];
+        res[1] = Q[1]*t0;
+        res[2] = Q[2]*t0;
+        res[3] = 0;
+        res[4] = 9810.0*Q[0]*(1 - X[2]);
+}
+        
+
+inline double* boundary_conditions(
+    const double* Q,
+    const double* Qaux,
+    const double* n,
+    const double* X,
+    const double time,
+    const double dX, 
+    double* res)
+{
+    double t0 = n[1]*Q[2];
+        double t1 = 1.0*n[0]*Q[1] + 1.0*t0;
+        double t2 = 1.0*n[0]*Q[1] + 1.0*t0;
+        double t3 = -n[0]*t1 - n[0]*t2 + 1.0*Q[1];
+        double t4 = -n[1]*t1 - n[1]*t2 + 1.0*Q[2];
+        res[0] = Q[0];
+        res[1] = t3;
+        res[2] = t4;
+        res[3] = Q[0];
+        res[4] = t3;
+        res[5] = t4;
+        res[6] = Q[0];
+        res[7] = t3;
+        res[8] = t4;
+}
+        
+} // namespace Model
+</code></pre>
 </div>
 </div>
 
@@ -1030,7 +1118,7 @@ Info    : Done reading '/home/ingo/Git/Zoomy/meshes/channel_quad_2d/mesh_coarse.
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/dolfinx/dolfinx_demo.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/code_printers/to_c.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item">

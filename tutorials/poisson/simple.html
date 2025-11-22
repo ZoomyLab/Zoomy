@@ -429,29 +429,29 @@ MathJax = {
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> cos, pi</span>
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> time <span class="im">import</span> time <span class="im">as</span> gettime</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.fvm.solver <span class="im">import</span> PoissonSolver, Settings</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.fvm.ode <span class="im">import</span> RK1</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.reconstruction <span class="im">as</span> recon</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.timestepping <span class="im">as</span> timestepping</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.flux <span class="im">as</span> flux</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.fvm.nonconservative_flux <span class="im">as</span> nc_flux</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.poisson <span class="im">import</span> Poisson</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.boundary_conditions <span class="im">import</span> BoundaryCondition</span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.basisfunctions <span class="im">import</span> Basisfunction, Legendre_shifted</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.basismatrices <span class="im">import</span> Basismatrices</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.misc.misc <span class="im">import</span> Zstruct</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.fvm.solver_jax <span class="im">import</span> PoissonSolver, Settings</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.ode <span class="im">import</span> RK1</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.fvm.reconstruction <span class="im">as</span> recon</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.fvm.timestepping <span class="im">as</span> timestepping</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.fvm.flux <span class="im">as</span> flux</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.fvm.nonconservative_flux <span class="im">as</span> nc_flux</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.poisson <span class="im">import</span> Poisson</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.boundary_conditions <span class="im">import</span> BoundaryCondition</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.basisfunctions <span class="im">import</span> Basisfunction, Legendre_shifted</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.basismatrices <span class="im">import</span> Basismatrices</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
 <span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.model.models.poisson <span class="im">import</span> Poisson</span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.initial_conditions <span class="im">as</span> IC</span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.model.boundary_conditions <span class="im">as</span> BC</span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.misc.io <span class="im">as</span> io</span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.mesh.mesh <span class="im">import</span> compute_derivatives</span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tests.pdesoft <span class="im">import</span> plots_paper</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.poisson <span class="im">import</span> Poisson</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.io <span class="im">as</span> io</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.mesh.mesh <span class="im">import</span> compute_derivatives</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_tests.swashes <span class="im">import</span> plots_paper</span>
 <span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.python.mesh.mesh <span class="im">as</span> petscMesh</span>
-<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> library.postprocessing.postprocessing <span class="im">as</span> postprocessing</span>
-<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> library.python.mesh.mesh <span class="im">import</span> convert_mesh_to_jax</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.mesh.mesh <span class="im">as</span> petscMesh</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> postprocessing.postprocessing <span class="im">as</span> postprocessing</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.mesh.mesh <span class="im">import</span> convert_mesh_to_jax</span>
 <span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> argparse</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
@@ -480,8 +480,8 @@ MathJax = {
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>bc_tags_periodic_to <span class="op">=</span> [<span class="st">"right"</span>, <span class="st">"left"</span>]</span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions( [</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        BC.Lambda(physical_tag<span class="op">=</span><span class="st">'left'</span>, prescribe_fields<span class="op">=</span>{<span class="dv">0</span>: <span class="kw">lambda</span> t, x, dx, q, qaux, p, n: <span class="fl">1.</span>}),</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        BC.Lambda(physical_tag<span class="op">=</span><span class="st">'right'</span>, prescribe_fields<span class="op">=</span>{<span class="dv">0</span>: <span class="kw">lambda</span> t, x, dx, q, qaux, p, n: <span class="fl">2.</span>}),</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        BC.Lambda(tag<span class="op">=</span><span class="st">'left'</span>, prescribe_fields<span class="op">=</span>{<span class="dv">0</span>: <span class="kw">lambda</span> t, x, dx, q, qaux, p, n: <span class="fl">1.</span>}),</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        BC.Lambda(tag<span class="op">=</span><span class="st">'right'</span>, prescribe_fields<span class="op">=</span>{<span class="dv">0</span>: <span class="kw">lambda</span> t, x, dx, q, qaux, p, n: <span class="fl">2.</span>}),</span>
 <span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    ]</span>
 <span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
@@ -502,11 +502,11 @@ MathJax = {
 <span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>solver <span class="op">=</span> MyPoissonSolver(settings<span class="op">=</span>settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-08-08 07:54:53.926</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.python.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">136</span> - <span class="ansi-yellow-fg ansi-bold">No 'solver' Zstruct found in Settings. Default: empty Zstruct</span>
+<pre><span class="ansi-green-fg">2025-08-08 07:54:53.926</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">136</span> - <span class="ansi-yellow-fg ansi-bold">No 'solver' Zstruct found in Settings. Default: empty Zstruct</span>
 
-<span class="ansi-green-fg">2025-08-08 07:54:53.927</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.python.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">139</span> - <span class="ansi-yellow-fg ansi-bold">No 'model' Zstruct found in Settings. Default: empty Zstruct</span>
+<span class="ansi-green-fg">2025-08-08 07:54:53.927</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">139</span> - <span class="ansi-yellow-fg ansi-bold">No 'model' Zstruct found in Settings. Default: empty Zstruct</span>
 
-<span class="ansi-green-fg">2025-08-08 07:54:53.927</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.python.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">156</span> - <span class="ansi-yellow-fg ansi-bold">No 'parameters' attribute found in model Zstruct. Default: empty Zstruct</span>
+<span class="ansi-green-fg">2025-08-08 07:54:53.927</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">156</span> - <span class="ansi-yellow-fg ansi-bold">No 'parameters' attribute found in model Zstruct. Default: empty Zstruct</span>
 </pre>
 </div>
 </div>
@@ -520,9 +520,9 @@ MathJax = {
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>io.generate_vtk(os.path.join(settings.output.directory, <span class="ss">f"</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>filename<span class="sc">}</span><span class="ss">.h5"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-08-08 07:54:55.639</span> | <span class="ansi-blue-fg ansi-bold">DEBUG   </span> | <span class="ansi-cyan-fg">library.python.fvm.solver</span>:<span class="ansi-cyan-fg">log_callback_poisson</span>:<span class="ansi-cyan-fg">51</span> - <span class="ansi-blue-fg ansi-bold">Newton iterations: 4, final residual norm: 2.924e-10</span>
+<pre><span class="ansi-green-fg">2025-08-08 07:54:55.639</span> | <span class="ansi-blue-fg ansi-bold">DEBUG   </span> | <span class="ansi-cyan-fg">library.core.fvm.solver_jax</span>:<span class="ansi-cyan-fg">log_callback_poisson</span>:<span class="ansi-cyan-fg">51</span> - <span class="ansi-blue-fg ansi-bold">Newton iterations: 4, final residual norm: 2.924e-10</span>
 
-<span class="ansi-green-fg">2025-08-08 07:54:55.700</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.python.fvm.solver</span>:<span class="ansi-cyan-fg">log_callback_execution_time</span>:<span class="ansi-cyan-fg">55</span> - <span class="ansi-bold">Finished simulation with in 0.997 seconds</span>
+<span class="ansi-green-fg">2025-08-08 07:54:55.700</span> | <span class="ansi-bold">INFO    </span> | <span class="ansi-cyan-fg">library.core.fvm.solver_jax</span>:<span class="ansi-cyan-fg">log_callback_execution_time</span>:<span class="ansi-cyan-fg">55</span> - <span class="ansi-bold">Finished simulation with in 0.997 seconds</span>
 </pre>
 </div>
 </div>
@@ -666,7 +666,7 @@ MathJax = {
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/mbd-rwth\.github\.io\/Zoomy\/");
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
