@@ -36,56 +36,7 @@ This disclaimer is to be regarded as part of the Internet offer from which refer
 
 ### Data protection at a glance
 
-The following information provides a simple overview of what happens to your personal data when you visit this website. Personal data is all data with which you can be personally identified. Detailed information on the subject of data protection can be found in our privacy policy listed below this text.
-
-### Data collection on this website
-
-**Who is responsible for data collection on this website?**
-
-The data processing on this website is carried out by the website operator. You can find its contact details in the section “Note on the controller” in this privacy policy.
-
-**How do we collect your data?**
-
-On the one hand, your data will be collected by you providing it with us. Here it can be e.g. to enter data that you enter in a contact form.
-
-Other data is collected automatically or after your consent when you visit the website by our IT systems. These are mainly technical data (e.g. B. Internet browser, operating system or time of page viewing). This data is collected automatically as soon as you enter this website.
-
-**We use your data?**
-
-Part of the data is collected to ensure error-free provision of the website. Other data can be used to analyse your user behaviour.
-
-**What rights do you have of your data?**
-
-You have the right to obtain information about the origin, recipient and purpose of your stored personal data free of charge at any time. You also have the right to request the correction or deletion of this data. If you have given your consent to data processing, you can revoke this consent at any time for the future. In addition, you have the right to request, in certain circumstances, to request the restriction of the processing of your personal data.
-
-Furthermore, you have the right to lodge a complaint with the competent supervisory authority. You can contact us at any time about this and other questions about data protection.
-
-**Third-party analysis tools and tools**
-
-When you visit this website, your surfing behaviour can be statistically evaluated. This is mainly done with so-called analysis programs. Detailed information on these analysis programs can be found in the following privacy policy.
-
-
-## Hosting
-
-### External hosting
-
-This website is hosted by an external service provider (hoster). The personal data collected on this website is stored on the servers of the hoster. This can be IP addresses, contact requests, meta and communication data, contract data, contact details, names, website access and other data generated via a website.
-
-The hoster is deployed for the purpose of fulfilling the contract to our potential and existing customers (Art. 6 para. 1 lit. b GDPR) and in the interest of a secure, fast and efficient provision of our online offer by a professional provider (Art. 6 para. 1 lit. f GDPR).
-
-Our host will only process your data to the extent necessary to fulfil its performance obligations and follow our instructions regarding this data.
-
-We use the following Hosters:
-
-STRATO GmbH
-
-Otto-Ostrowski-Straße 7
-
-10249 Berlin
-
-**Contract processing**
-
-We have concluded a contract for order processing (AVV) with the above-mentioned provider. This is a contract prescribed by data protection law, which guarantees that they process the personal data of our website visitors only in accordance with our instructions and in compliance with the GDPR.
+We collect no data. GitHub, as a hosting service, might collect data. Please take a look at their Impressum for more details.
 
 ## General information and mandatory information
 
@@ -101,11 +52,11 @@ The responsible body for data processing on this website is:
 
 Ingo Steldermann
 
-Ringstr. 103
+Schinkelstr. 2a
 
-52078 Aachen
+52068 Aachen
 
-E-Mail: info@shallowflow.com
+E-Mail: steldermann@mbd.rwth-aachen.de
 
 The controller is the natural or legal person who, alone or jointly with others, about the purposes and means of the processing of personal data (e.g. B. Names, email addresses o. ethere).
 
@@ -139,40 +90,9 @@ In the event of violations of the GDPR, the data subjects have the right to lodg
 
 You have the right to have data that we process automatically on the basis of your consent or in fulfilment of a contract handed over to you or to a third party in a common, machine-readable format. If you request the direct transfer of the data to another controller, this will only be done if it is technically feasible.
 
-**SSL or TLS encryption**
+**Data collection**
 
-For security reasons and to protect the transmission of confidential content, such as orders or requests that you send to us as the site operator, use SSL or SSL or TLS encryption.
-
-You can recognise an encrypted connection by the fact that the address line of the browser changes from "http://" to "https://" and by the lock icon in your browser line.
-
-If the SSL or TLS encryption is activated, the data you transmit to us cannot be read by third parties.
-
-**Information, research and correction**
-
-Within the scope of the applicable statutory provisions, you have the right to free information about your stored personal data, their origin and recipients and the purpose of the data processing and, if necessary, a right to correction or deletion of this data at any time. You can contact us at any time if you have any further questions about personal data.
-
-**Right to rejecting the processing**
-
-You have the right to request the restriction of the processing of your personal data. You can contact us at any time. The right to restriction of processing exists as a result of cases: If you dispute the accuracy of your personal data stored by us, we usually need time to check this. For the duration of the examination, you have the right to request the restriction of the processing of your personal data. If the processing of your personal data has been unlawful, you may request the restriction of data processing instead of deletion. If we no longer need your personal data, but you need it to exercise, defend or assert legal claims, you have the right to request the restriction of the processing of your personal data instead of deletion.
-
-If you are opposed to Art. 21 para. 1 GDPR, a balance must be made between your interests and our interests. As long as it is not yet clear whose interests prevail, you have the right to request the restriction of the processing of your personal data.
-
-If you have restricted the processing of your personal data, this data may only be processed – with the exception of its storage – with your consent or for the establishment, exercise or defence of legal claims or for the protection of the rights of another natural or legal person or for reasons of important public interest of the European Union or a Member State.
-
-## Data collection on this website
-
-**Server log files**
-
-The provider of the pages automatically collects and stores information in so-called server log files, which your browser automatically transmits to us. These are:
-
-* Browser type and browser version
-* operating system used
-* Referrer URL
-* Host name of the accessing computer
-* Time of the server request
-* IP address
-
-This data will not be combined with other data sources. This data is collected on the basis of Art. 6 para. 1 lit. f GDPR. The website operator has a legitimate interest in the technically error-free presentation and optimization of its website – for this purpose, the server log files must be recorded.
+We collect no data. GitHub, as a hosting service, might collect data. Please take a look at their Impressum for more details.
 
 **Request by e-mail**
 
@@ -182,40 +102,6 @@ The processing of this data is based on Art. 6 para. 1 lit. b GDPR, if your requ
 
 The data sent by you to us via contact requests will remain with us until you request its deletion, revoke your consent to its storage or the purpose for its storage no longer applies (e.g. after completion of your request). Mandatory legal provisions – in particular statutory retention periods – remain unaffected.
 
-## Plugins and tools
 
-**Google Maps**
-
-This page uses the Google Maps map service. The provider is Google Ireland Limited (“Google”), GordonHouse, Barrow Street, Dublin 4, Ireland. To use the functions of Google Maps, it is necessary to store your IP address. This information is usually transmitted to a Google server in the USA and stored there.
-
-The provider of this site has no influence on this data transmission. If Google Maps is enabled, Google can use Google Web Fonts for the purpose of displaying the fonts. When calling Google Maps, your browser loads the required web fonts into your browser cache to display texts and fonts correctly.
-
-The use of Google Maps is in the interest of an appealing presentation of our online offers and an easy findability of the places indicated by us on the website. This represents a legitimate interest in the sense of Art. 6 para. 1 lit. f GDPR. If a corresponding consent has been requested, the processing is carried out exclusively on the basis of Art. 6 para. 1 lit. a GDPR; consent is revokable at any time.
-
-The data transfer to the USA is based on the standard contractual clauses of the EU Commission.
-
-Details can be found here:
-
-https://privacy.google.com/businesses/gdprcontrollerterms/ and
-
-https://privacy.google.com/businesses/gdprcontrollerterms/sccs/.
-
-More information on the handling of user data can be found in Google's privacy policy:
-
-https://policies.google.com/privacy?hl.en.
-
-**Wordfence**
-
-We have included Wordfence on this website. Its provider is Defiant Inc., Defiant, Inc., 800 5th Ave Ste 4100, Seattle, WA 98104, USA (hereinafter Wordfence).
-
-Wordfence is used to protect our website from unwanted access or malicious cyber attacks. For this purpose, our website establishes a permanent connection to the servers of Wordfence, so that Wordfence can match and, if necessary, block its databases with the accesses made on our website.
-
-The use of Wordfence is based on Art. 6 para. 1 lit. f GDPR. The website operator has a legitimate interest in protecting its website from cyber attacks. If a corresponding consent has been requested, the processing is carried out exclusively on the basis of Art. 6 para. 1 lit. a GDPR; consent is revokable at any time.
-
-The data transfer to the USA is based on the standard contractual clauses of the EU Commission.
-
-Details can be found here:
-
-[Wordfence and GDPR – General Data Protection Regulation](https://www.wordfence.com/help/general-data-protection-regulation/)
 
 Source (adapted): https://www.e-recht24.de
