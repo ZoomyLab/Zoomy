@@ -47,7 +47,7 @@ A good way to have an **interactive** first impression of Zoomy is to use one of
 
 #### JupyterLite
 
-WIP
+[Click and Play](https://zoomylab.github.io/Zoomy/jupyter-lite/_output/lab/index.html?path=pyodide.ipynb)
 
 #### Cloud-based GUI
 
