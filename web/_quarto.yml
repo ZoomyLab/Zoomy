@@ -1,6 +1,9 @@
 
 project:
   type: website
+  resources: 
+    - "jupyter-lite/_output/"
+    - "./images/"
 bibliography: bibliography.bib
 
 quartodoc:

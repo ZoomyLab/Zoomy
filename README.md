@@ -64,14 +64,14 @@ git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
 **or** you can start by cloning the main repository (Zoomy) and selected subrepositories, e.g.
 
 ```
-git clone https://github.com/zoomy-lab/Zoomy.git
+git clone https://github.com/ZoomyLab/Zoomy.git
 cd Zoomy
 git submodule update --init meshes
 git submodule update --init library/zoomy_core
 git submodule update --init library/zoomy_jax
 ```
 
-The different subrepositories are listed at [ZoomyLab](https://github.com/zoomy-lab)
+The different subrepositories are listed at [ZoomyLab](https://github.com/ZoomyLab)
 
 
 
