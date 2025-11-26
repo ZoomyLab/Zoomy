@@ -39,7 +39,6 @@ jobs:
 
       - id: load
         run: |
-          # Read list and convert to compact JSON array
           list=$(
             sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
             | jq -R . | jq -sc .
@@ -106,8 +105,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: detect-containers
+
     # Only run if there are containers to build
-    if: ${{ fromJson(needs.detect-containers.outputs.changed).size() > 0 }}
+    # (array indexing is the ONLY valid way to check length)
+    if: ${{ fromJson(needs.detect-containers.outputs.changed)[0] }}
+
     strategy:
       matrix:
         container: ${{ fromJson(needs.detect-containers.outputs.changed) }}
