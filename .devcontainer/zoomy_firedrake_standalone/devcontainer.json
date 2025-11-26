@@ -1,5 +1,5 @@
 {
-  "name": "Zoomy + Firedrake + AMR",
+  "name": "(Standalone) Zoomy + Firedrake + AMR",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "${localWorkspaceFolder}"
