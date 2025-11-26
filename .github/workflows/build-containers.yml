@@ -60,38 +60,37 @@ jobs:
           fetch-depth: 2
           submodules: recursive
 
+
       - id: detect
         run: |
           set -eo pipefail
-
+      
           # Manual override
           if [ -n "${{ github.event.inputs.container }}" ]; then
             echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
             exit 0
           fi
-
+      
+          base="${{ github.event.before }}"
+          head="${{ github.event.after }}"
+      
+          echo "Diffing range: $base -> $head"
+      
           changed=()
-
-          # Determine base commit safely
-          if git rev-parse HEAD~1 >/dev/null 2>&1; then
-            base=HEAD~1
-          else
-            base=HEAD
-          fi
-
+      
           for c in $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]'); do
-            if ! git diff --quiet "$base" HEAD -- "containers/$c/Dockerfile"; then
+            if ! git diff --quiet "$base" "$head" -- "containers/$c/Dockerfile"; then
+              echo "Detected change in: containers/$c/Dockerfile"
               changed+=("$c")
             fi
           done
-
-          # Safe JSON (never [""], never null)
+      
           if [ ${#changed[@]} -eq 0 ]; then
             json='[]'
           else
             json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
           fi
-
+      
           echo "changed=$json" >> $GITHUB_OUTPUT
 
       - name: Debug detected containers
