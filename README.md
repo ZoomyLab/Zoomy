@@ -93,6 +93,15 @@ Clone the repository (see above) and open the repository in your IDE / VS-Code. 
 
 ### Docker images
 
+**Standalone versions**:
+These versions do not allow for changes of the zoomy library.
+
+* Zoomy + JAX: `docker pull docker push ghcr.io/zoomylab/zoomy_jax_standalone:latest`
+* Zoomy + Firedrake: `docker pull docker push ghcr.io/zoomylab/zoomy_firedrake_standalone:latest`
+
+**Development versions**:
+These versions do allow for changes of the zoomy library. They require to 'pip install' the local zoomy libraries or the use of the .devcontainers.
+
 We offer Docker containers for
 
 * Zoomy + JAX: `docker pull docker push ghcr.io/zoomylab/zoomy_jax:latest`
