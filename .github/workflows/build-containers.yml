@@ -22,8 +22,12 @@ concurrency:
   group: container-version-bump
   cancel-in-progress: false
 
+
 jobs:
 
+  # ------------------------------------------------------------
+  # Load list of container folders from dockers.txt
+  # ------------------------------------------------------------
   load-dockers:
     runs-on: ubuntu-latest
     outputs:
@@ -35,37 +39,73 @@ jobs:
 
       - id: load
         run: |
+          # Read list and convert to compact JSON array
           list=$(
             sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
-            | jq -R . \
-            | jq -sc .
+            | jq -R . | jq -sc .
           )
           echo "list=$list" >> $GITHUB_OUTPUT
 
 
+  # ------------------------------------------------------------
+  # Detect which containers changed
+  # ------------------------------------------------------------
   detect-containers:
-  runs-on: ubuntu-latest
-  needs: load-dockers
-  outputs:
-    changed: ${{ steps.detect.outputs.changed }}
-  steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 2
-        submodules: recursive
+    runs-on: ubuntu-latest
+    needs: load-dockers
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          submodules: recursive
 
-    - id: detect
-      run: |
-        # ... detection logic omitted ...
-        echo "changed=$json" >> $GITHUB_OUTPUT
+      - id: detect
+        run: |
+          set -eo pipefail
 
-    - name: Debug detected containers
-      run: echo "Detected containers: ${{ needs.detect-containers.outputs.changed }}"
+          # Manual override
+          if [ -n "${{ github.event.inputs.container }}" ]; then
+            echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          changed=()
+
+          # Determine base commit safely
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            base=HEAD~1
+          else
+            base=HEAD
+          fi
+
+          for c in $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]'); do
+            if ! git diff --quiet "$base" HEAD -- "containers/$c/Dockerfile"; then
+              changed+=("$c")
+            fi
+          done
+
+          # Safe JSON (never [""], never null)
+          if [ ${#changed[@]} -eq 0 ]; then
+            json='[]'
+          else
+            json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+          fi
+
+          echo "changed=$json" >> $GITHUB_OUTPUT
+
+      - name: Debug detected containers
+        run: echo "Detected containers: ${{ steps.detect.outputs.changed }}"
 
 
+  # ------------------------------------------------------------
+  # Build changed containers
+  # ------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     needs: detect-containers
+    # Only run if there are containers to build
     if: ${{ fromJson(needs.detect-containers.outputs.changed).size() > 0 }}
     strategy:
       matrix:
@@ -82,12 +122,12 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
-      - name: Debug root directories
+      - name: Debug folder tree
         run: |
           echo "ROOT:"
           ls -la .
           echo "CONTAINERS:"
-          ls -la containers || echo "no containers folder"
+          ls -la containers || echo "No containers folder"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -96,18 +136,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # -------------------------
+      # Build the container
+      # -------------------------
       - id: build_image
         run: |
           set -eo pipefail
 
           container="${{ matrix.container }}"
-          image="ghcr.io/$OWNER_LC/$container"
           version_file="containers/$container/VERSION"
 
-          echo "VERSION FILE = $version_file"
-          cat "$version_file"
+          echo "Building container: $container"
+          echo "Version file located at: $version_file"
 
           version=$(cat "$version_file")
+          image="ghcr.io/$OWNER_LC/$container"
 
           docker build \
             --pull \
@@ -121,18 +164,21 @@ jobs:
       - name: Push image
         run: |
           container="${{ matrix.container }}"
-          image="ghcr.io/$OWNER_LC/$container"
           version="${{ steps.build_image.outputs.version }}"
+          image="ghcr.io/$OWNER_LC/$container"
 
           docker push "$image:$version"
           docker push "$image:latest"
 
+      # -------------------------
+      # Bump version after push
+      # -------------------------
       - id: bump
         run: |
           container="${{ matrix.container }}"
-          version_file="containers/$container/VERSION"
+          file="containers/$container/VERSION"
+          old=$(cat "$file")
 
-          old=$(cat "$version_file")
           IFS='.' read -r major minor <<< "$old"
           bump="${{ github.event.inputs.bump || 'minor' }}"
 
@@ -142,7 +188,7 @@ jobs:
           esac
 
           new="$major.$minor"
-          echo "$new" > "$version_file"
+          echo "$new" > "$file"
 
           echo "new_version=$new" >> $GITHUB_OUTPUT
 
