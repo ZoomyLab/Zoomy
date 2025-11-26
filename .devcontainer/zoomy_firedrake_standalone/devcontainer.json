@@ -18,7 +18,6 @@
     "PYTHONPATH": "/opt/firedrake:",
     "ZOOMY_DIR": "/workspace"
   },
-  "postCreateCommand": "pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_tests -e /workspace/library/firedrake_animate -e /workspace/library/zoomy_firedrake",
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",
