@@ -18,7 +18,6 @@ on:
         required: false
         default: "minor"
 
-# FIX 4+5: prevent simultaneous version bump commits
 concurrency:
   group: container-version-bump
   cancel-in-progress: false
@@ -36,7 +35,6 @@ jobs:
 
       - id: load
         run: |
-          # FIX 2: Robust JSON array generation (one-line compact JSON)
           list=$(
             sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
             | jq -R . \
@@ -58,10 +56,9 @@ jobs:
 
       - id: detect
         run: |
-          # FIX 3: safer scripting
           set -eo pipefail
 
-          # manual override
+          # Manual override
           if [ -n "${{ github.event.inputs.container }}" ]; then
             echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
             exit 0
@@ -69,7 +66,6 @@ jobs:
 
           changed=()
 
-          # Safe fallback for HEAD~1 (first commit)
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             base=HEAD~1
           else
@@ -82,14 +78,23 @@ jobs:
             fi
           done
 
-          json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+          # SAFE JSON: never produces [""] or null
+          if [ ${#changed[@]} -eq 0 ]; then
+            json='[]'
+          else
+            json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+          fi
+
           echo "changed=$json" >> $GITHUB_OUTPUT
+
+      - name: Debug detected containers
+        run: echo "Detected containers: ${{ steps.detect.outputs.changed }}"
 
 
   build:
     runs-on: ubuntu-latest
     needs: detect-containers
-    if: needs.detect-containers.outputs.changed != '[]'
+    if: ${{ fromJson(needs.detect-containers.outputs.changed).size() > 0 }}
     strategy:
       matrix:
         container: ${{ fromJson(needs.detect-containers.outputs.changed) }}
@@ -105,12 +110,12 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
-      - name: Debug root contents
+      - name: Debug root directories
         run: |
-          echo "=== ROOT CONTENTS ==="
+          echo "ROOT:"
           ls -la .
-          echo "=== library CONTENTS ==="
-          ls -la library || echo "library not found"
+          echo "CONTAINERS:"
+          ls -la containers || echo "no containers folder"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -119,19 +124,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build the existing version (NO BUMP YET)
       - id: build_image
         run: |
           set -eo pipefail
 
-          image="ghcr.io/$OWNER_LC/${{ matrix.container }}"
+          container="${{ matrix.container }}"
+          image="ghcr.io/$OWNER_LC/$container"
+          version_file="containers/$container/VERSION"
 
-          version_file="containers/${{ matrix.container }}/VERSION"
+          echo "VERSION FILE = $version_file"
+          cat "$version_file"
+
           version=$(cat "$version_file")
 
           docker build \
             --pull \
-            -f "containers/${{ matrix.container }}/Dockerfile" \
+            -f "containers/$container/Dockerfile" \
             -t "$image:$version" \
             -t "$image:latest" \
             .
@@ -140,18 +148,19 @@ jobs:
 
       - name: Push image
         run: |
-          image="ghcr.io/$OWNER_LC/${{ matrix.container }}"
+          container="${{ matrix.container }}"
+          image="ghcr.io/$OWNER_LC/$container"
           version="${{ steps.build_image.outputs.version }}"
 
           docker push "$image:$version"
           docker push "$image:latest"
 
-      # FIX 4+5: Do version bump AFTER successful push
       - id: bump
         run: |
-          version_file="containers/${{ matrix.container }}/VERSION"
-          old=$(cat "$version_file")
+          container="${{ matrix.container }}"
+          version_file="containers/$container/VERSION"
 
+          old=$(cat "$version_file")
           IFS='.' read -r major minor <<< "$old"
           bump="${{ github.event.inputs.bump || 'minor' }}"
 
