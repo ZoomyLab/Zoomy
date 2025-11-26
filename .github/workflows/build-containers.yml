@@ -96,7 +96,8 @@ jobs:
           echo "changed=$json" >> $GITHUB_OUTPUT
 
       - name: Debug detected containers
-        run: echo "Detected containers: ${{ steps.detect.outputs.changed }}"
+        run: |
+          echo "Detected containers: ${{ steps.detect.outputs.changed }}"
 
 
   # ------------------------------------------------------------
