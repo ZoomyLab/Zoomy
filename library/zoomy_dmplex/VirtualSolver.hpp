@@ -1,5 +1,5 @@
-#ifndef FVM_SOLVER_HPP
-#define FVM_SOLVER_HPP
+#ifndef VIRTUALSOLVER_HPP
+#define VIRTUALSOLVER_HPP
 
 #include <vector>
 #include <string>
@@ -14,6 +14,7 @@
 #include <petscviewer.h>
 
 #include "PetscHelpers.hpp"
+#include "Numerics.H" // Uses your generated kernel
 
 class VirtualSolver {
 protected:
@@ -60,6 +61,61 @@ public:
     virtual PetscErrorCode Run(int argc, char **argv) = 0;
 
 protected:
+    // --- SHARED TIME STEP CALCULATION ---
+    // Uses the generated Numerics::local_max_abs_eigenvalue kernel
+    PetscReal ComputeTimeStep() {
+        Vec X_local;
+        PetscCall(DMGetLocalVector(dmQ, &X_local));
+        
+        // 1. Get local data (including ghosts)
+        PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_local));
+        PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_local));
+        
+        const PetscScalar *x_ptr;
+        PetscCall(VecGetArrayRead(X_local, &x_ptr));
+        
+        PetscInt cStart, cEnd;
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
+        
+        Real max_eigen_global = 0.0;
+        Real max_eigen_local = 0.0;
+        
+        // Buffers for kernel call
+        Real Qaux[Model<Real>::n_dof_qaux] = {0.0}; 
+        Real res[1]; 
+        
+        // 2. Loop over cells
+        for (PetscInt c = cStart; c < cEnd; ++c) {
+            const Real* Q_cell = &x_ptr[c * Model<Real>::n_dof_q];
+            
+            if (Q_cell[0] < 1e-6) continue; 
+            
+            // 3. Check wave speed in each coordinate direction
+            for (int d = 0; d < Model<Real>::dimension; ++d) {
+                Real n[3] = {0.0, 0.0, 0.0}; 
+                n[d] = 1.0;
+                
+                // Use Generated Kernel
+                Numerics<Real>::local_max_abs_eigenvalue(Q_cell, Qaux, n, res);
+                
+                if (res[0] > max_eigen_local) {
+                    max_eigen_local = res[0];
+                }
+            }
+        }
+        
+        PetscCall(VecRestoreArrayRead(X_local, &x_ptr));
+        PetscCall(DMRestoreLocalVector(dmQ, &X_local));
+        
+        // 4. Global Reduction
+        PetscCallMPI(MPI_Allreduce(&max_eigen_local, &max_eigen_global, 1, MPIU_REAL, MPI_MAX, PETSC_COMM_WORLD));
+        
+        if (max_eigen_global > 1e-12) {
+            return cfl * minRadius / max_eigen_global;
+        }
+        return 1e-4; 
+    }
+
     // --- Setup Routines ---
     PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
         PetscFunctionBeginUser;
@@ -71,7 +127,7 @@ protected:
         PetscCall(SetupInitialConditions());
         PetscFunctionReturn(PETSC_SUCCESS);
     }
-
+    
     PetscErrorCode SetupBaseMesh(PetscInt overlap) {
         PetscFunctionBeginUser;
         PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh));

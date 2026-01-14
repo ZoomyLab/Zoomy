@@ -4,4 +4,4 @@ mpiexec -n 3 ./solver \
     -ts_max_steps 100 \
     -ufv_cfl 0.4 \
     -ts_monitor \
-    -order 2
+    -order 1

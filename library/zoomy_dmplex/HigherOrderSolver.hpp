@@ -1,5 +1,5 @@
-#ifndef MOOD_SOLVER_HPP
-#define MOOD_SOLVER_HPP
+#ifndef HIGHERORDERSOLVER_HPP
+#define HIGHERORDERSOLVER_HPP
 
 #include "VirtualSolver.hpp"
 #include <vector>
@@ -25,7 +25,7 @@ public:
         PetscCall(PetscOptionsGetReal(NULL, NULL, "-ufv_cfl", &cfl, NULL));
         PetscCall(PetscOptionsGetInt(NULL, NULL, "-ts_max_steps", &max_steps, NULL));
 
-        // Use standard architecture (Order 2 requires Overlap 1, which is default)
+        // Use standard architecture
         PetscCall(SetupArchitecture(1));
         
         PetscCall(VecDuplicate(X, &X_old));
@@ -41,7 +41,9 @@ public:
         PetscCall(WriteVTU(step, time));
 
         while (step < max_steps) {
+            // Use base class ComputeTimeStep
             PetscReal dt = ComputeTimeStep();
+
             PetscCall(TSSetTime(ts, time));
             PetscCall(TSSetTimeStep(ts, dt));
             
@@ -51,7 +53,6 @@ public:
             // ---------------------------------------------
             // 1. CANDIDATE STEP (High Order)
             // ---------------------------------------------
-            // Try 2nd Order (Least Squares)
             SetSolverOrder(2);
             PetscCall(TSSetSolution(ts, X));
             PetscCall(TSStep(ts));           
@@ -70,30 +71,19 @@ public:
                 // ---------------------------------------------
                 // 3. FALLBACK STEP (Order 1)
                 // ---------------------------------------------
-                // A. Prepare Low Order Candidate Vector
                 PetscCall(VecCopy(X_old, X_low));
-                
-                // B. Reset TS to start of step
                 PetscCall(TSSetTime(ts, time));     
                 PetscCall(TSSetStepNumber(ts, step));
-                PetscCall(TSSetSolution(ts, X_low)); // TS operates on X_low now
+                PetscCall(TSSetSolution(ts, X_low)); 
                 
-                // C. Switch to 1st Order (Upwind)
                 SetSolverOrder(1);
                 PetscCall(TSStep(ts)); 
                 
-                // D. Blend: Keep X (High Order) but overwrite bad cells with X_low (Low Order)
-                // Note: TS has advanced X_low. X still contains the High Order result from Step 1.
                 PetscCall(BlendSolutions(X, X_low, bad_cells));
-                
-                // E. Update Visualization (Red=2, Blue=1)
                 PetscCall(VecSet(A, 2.0));
                 PetscCall(UpdateAuxVector(A, bad_cells, 1.0));
-                
-                // F. Restore X as the official solution for next step
                 PetscCall(TSSetSolution(ts, X));
             } else {
-                // Perfect step, all 2nd Order
                 PetscCall(VecSet(A, 2.0));
             }
 
@@ -110,53 +100,18 @@ public:
     }
 
 private:
-    PetscReal ComputeTimeStep() {
-        Vec X_local;
-        DMGetLocalVector(dmQ, &X_local);
-        DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_local);
-        DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_local);
-        const PetscScalar *x_ptr;
-        VecGetArrayRead(X_local, &x_ptr);
-        PetscInt cStart, cEnd;
-        DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd); 
-        Real max_eigen_local = 0.0;
-        Real Qaux[Model<Real>::n_dof_qaux] = {0.0}; 
-        std::vector<Real> lam(Model<Real>::n_dof_q); 
-        for (PetscInt c = cStart; c < cEnd; ++c) {
-            const Real* Q_cell = &x_ptr[c * Model<Real>::n_dof_q];
-            if (Q_cell[0] < 1e-6) continue; 
-            for (int d = 0; d < Model<Real>::dimension; ++d) {
-                Real n[3] = {0.0, 0.0, 0.0}; n[d] = 1.0;
-                Model<Real>::eigenvalues(Q_cell, Qaux, n, lam.data());
-                for(Real val : lam) max_eigen_local = std::max(max_eigen_local, std::abs(val));
-            }
-        }
-        VecRestoreArrayRead(X_local, &x_ptr);
-        DMRestoreLocalVector(dmQ, &X_local);
-        Real max_eigen_global;
-        MPI_Allreduce(&max_eigen_local, &max_eigen_global, 1, MPIU_REAL, MPI_MAX, PETSC_COMM_WORLD);
-        if (max_eigen_global > 1e-12) return cfl * minRadius / max_eigen_global;
-        return 1e-4; 
-    }
-
-    // --- ORIGINAL ROBUST LOGIC ---
     void SetSolverOrder(int order) {
         PetscFV fvm;
-        // Retrieve the EXISTING field from the DM (Do not create new one)
         DMGetField(dmQ, 0, NULL, (PetscObject*)&fvm);
         
         if (order >= 2) {
-            // Switch to LeastSquares (Linear Reconstruction)
             PetscFVSetType(fvm, PETSCFVLEASTSQUARES);
-            
-            // Un-limited slopes (we rely on MOOD fallback for stability)
             PetscLimiter lim;
             PetscLimiterCreate(PETSC_COMM_WORLD, &lim);
             PetscLimiterSetType(lim, PETSCLIMITERNONE);
             PetscFVSetLimiter(fvm, lim);
             PetscLimiterDestroy(&lim);
         } else {
-            // Switch to Upwind (Constant Reconstruction)
             PetscFVSetType(fvm, PETSCFVUPWIND);
         }
     }
@@ -222,8 +177,6 @@ private:
         PetscCall(VecGetArrayRead(loc_source, &s_ptr));
         PetscSection section;
         PetscCall(DMGetLocalSection(dmQ, &section));
-        
-        // Loop over bad cells: Overwrite High Order (target) with Low Order (source)
         for (PetscInt c : cells) {
             PetscInt off;
             PetscCall(PetscSectionGetOffset(section, c, &off));
@@ -231,14 +184,10 @@ private:
                 t_ptr[off + d] = s_ptr[off + d];
             }
         }
-        
         PetscCall(VecRestoreArray(loc_target, &t_ptr));
         PetscCall(VecRestoreArrayRead(loc_source, &s_ptr));
-        
-        // Scatter updates back to global x_target
         PetscCall(DMLocalToGlobalBegin(dmQ, loc_target, INSERT_VALUES, x_target));
         PetscCall(DMLocalToGlobalEnd(dmQ, loc_target, INSERT_VALUES, x_target));
-        
         PetscCall(DMRestoreLocalVector(dmQ, &loc_target));
         PetscCall(DMRestoreLocalVector(dmQ, &loc_source));
         PetscFunctionReturn(PETSC_SUCCESS);
