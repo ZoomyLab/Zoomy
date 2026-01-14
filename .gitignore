@@ -146,6 +146,10 @@ web/_freeze/
 *.whl
 jupyter-lite/.jupyterlite.doit.db
 .jupyterlite.doit.db
-library/zoomy_dmplex/zoomy_dmplex.o
-library/zoomy_dmplex/solver
-library/zoomy_dmplex/main.o
+*.o
+solver
+obj_gpu/
+obj_cpu/
+solver_cpu
+solver_gpu
+
