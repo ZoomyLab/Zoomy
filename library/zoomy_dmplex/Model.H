@@ -9,7 +9,7 @@ struct Model {
 
     // --- Constants ---
     static constexpr int n_dof_q    = 3;
-    static constexpr int n_dof_qaux = 2;
+    static constexpr int n_dof_qaux = 1;
     static constexpr int dimension  = 2;
     static constexpr int n_boundary_tags = 3;
 
