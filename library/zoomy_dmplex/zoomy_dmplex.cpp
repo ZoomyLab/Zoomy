@@ -5,10 +5,10 @@ static char help[] = "Simplified 1st Order FVM Solver (Zoomy-Core)\n";
 #include <petscts.h>
 #include <petscfv.h>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <string>
-#include <algorithm>
-#include <set>
+#include <iomanip>
 
 // --- Import Generated Kernels ---
 #include "Model.H"
@@ -28,6 +28,13 @@ private:
     PetscReal   cfl;
     PetscReal   minRadius;
     std::vector<PetscInt> bc_ids_storage; 
+    
+    // Series Output Data
+    struct StepData {
+        PetscInt step;
+        PetscReal time;
+    };
+    std::vector<StepData> time_series;
 
 public:
     FVMSolver() : cfl(0.5), minRadius(0.0) { 
@@ -45,15 +52,12 @@ public:
         PetscFunctionBeginUser;
         PetscCall(PetscOptionsGetReal(NULL, NULL, "-ufv_cfl", &cfl, NULL));
 
-        // 1. Setup Mesh (Distribute + Sanitize + Construct Ghosts)
         PetscCall(SetupMesh());
-        
-        PetscCall(CheckBoundaryConditionCoverage()); 
         PetscCall(SetupDiscretization()); 
         PetscCall(SetupTimeStepping());
         PetscCall(SetupInitialConditions());
 
-        // 2. IMPORTANT: Pre-calculate ghosts before 1st step to avoid "Vacuum" crash
+        // Pre-calculate ghosts to avoid vacuum state at t=0
         PetscCall(UpdateBoundaryGhosts(0.0));
 
         PetscCall(TSSolve(ts, X));
@@ -71,7 +75,7 @@ private:
         PetscCall(DMSetType(dm, DMPLEX));
         PetscCall(DMSetFromOptions(dm)); 
 
-        // A. Distribute (MPI Overlap)
+        // 1. Distribute Mesh (MPI Overlap)
         DM dmDist = NULL;
         PetscInt overlap = 1; 
         PetscCall(DMPlexDistribute(dm, overlap, NULL, &dmDist));
@@ -80,15 +84,9 @@ private:
             dm = dmDist; 
         }
 
-        // B. Sanitize Labels (Crucial before ConstructGhostCells)
-        // Remove vertices from "Face Sets" so ConstructGhosts doesn't get confused
-        PetscCall(SanitizeBoundaryLabel());
-
-        // C. Construct Physical Ghosts (Required for DM_BC_NATURAL_RIEMANN)
-        // This adds a layer of cells on the physical boundary.
+        // 2. Construct Physical Ghosts (Required for Riemann BC)
         {
             DM dmGhost = NULL;
-            // Arguments: dm, labelName, numGhostCells, &dmGhost
             PetscCall(DMPlexConstructGhostCells(dm, "Face Sets", NULL, &dmGhost));
             if (dmGhost) {
                 PetscCall(DMDestroy(&dm));
@@ -96,115 +94,17 @@ private:
             }
         }
 
-        // D. Finalize Adjacency
+        // 3. Finalize Adjacency (Cone + Closure)
         PetscCall(DMSetBasicAdjacency(dm, PETSC_TRUE, PETSC_TRUE));
 
-        PetscCall(DMViewFromOptions(dm, NULL, "-dm_view"));
         PetscCall(DMPlexGetGeometryFVM(dm, NULL, NULL, &minRadius));
-        PetscPrintf(PETSC_COMM_WORLD, "  [Mesh] Min Cell Radius (dx) = %g\n", (double)minRadius);
-
+        
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
     // -------------------------------------------------------------------------
-    // 2. SANITIZE LABELS
+    // 2. DISCRETIZATION
     // -------------------------------------------------------------------------
-    PetscErrorCode SanitizeBoundaryLabel() {
-        PetscFunctionBeginUser;
-        DMLabel label;
-        PetscCall(DMGetLabel(dm, "Face Sets", &label));
-        if (!label) PetscFunctionReturn(PETSC_SUCCESS);
-
-        IS valueIS;
-        PetscCall(DMLabelGetValueIS(label, &valueIS));
-        if (!valueIS) PetscFunctionReturn(PETSC_SUCCESS);
-
-        const PetscInt *values;
-        PetscInt nValues;
-        PetscCall(ISGetLocalSize(valueIS, &nValues));
-        PetscCall(ISGetIndices(valueIS, &values));
-
-        PetscInt fStart, fEnd;
-        PetscCall(DMPlexGetHeightStratum(dm, 1, &fStart, &fEnd));
-
-        PetscInt total_removed = 0;
-
-        for (PetscInt v = 0; v < nValues; ++v) {
-            PetscInt val = values[v];
-            IS pointIS;
-            PetscCall(DMLabelGetStratumIS(label, val, &pointIS));
-            if (!pointIS) continue;
-
-            const PetscInt *points;
-            PetscInt nPoints;
-            PetscCall(ISGetLocalSize(pointIS, &nPoints));
-            PetscCall(ISGetIndices(pointIS, &points));
-
-            for (PetscInt pIdx = 0; pIdx < nPoints; ++pIdx) {
-                PetscInt p = points[pIdx];
-                // Remove if NOT a face (Height 1)
-                // We strictly only want Faces in this label for Ghost Construction
-                if (p < fStart || p >= fEnd) {
-                    PetscCall(DMLabelClearValue(label, p, val));
-                    total_removed++;
-                }
-            }
-            PetscCall(ISRestoreIndices(pointIS, &points));
-            PetscCall(ISDestroy(&pointIS));
-        }
-        PetscCall(ISRestoreIndices(valueIS, &values));
-        PetscCall(ISDestroy(&valueIS));
-
-        PetscPrintf(PETSC_COMM_WORLD, "  [Sanitize] Removed %d invalid points (vertices/cells) from Boundary Label.\n", total_removed);
-        PetscFunctionReturn(PETSC_SUCCESS);
-    }
-
-    // -------------------------------------------------------------------------
-    // 3. BOUNDARY & DISCRETIZATION
-    // -------------------------------------------------------------------------
-    PetscErrorCode CheckBoundaryConditionCoverage() {
-        // (Standard Check - same as before)
-        PetscFunctionBeginUser;
-        auto model_ids_str = Model<Real>::get_boundary_tag_ids();
-        std::set<PetscInt> model_defined_ids;
-        for(const auto& s : model_ids_str) model_defined_ids.insert(std::stoi(s));
-
-        DMLabel label;
-        PetscCall(DMGetLabel(dm, "Face Sets", &label));
-        if (!label) PetscFunctionReturn(PETSC_SUCCESS);
-
-        IS valueIS;
-        PetscCall(DMLabelGetValueIS(label, &valueIS));
-        const PetscInt *mesh_ids;
-        PetscInt n_mesh_ids = 0;
-        if (valueIS) {
-            PetscCall(ISGetLocalSize(valueIS, &n_mesh_ids));
-            PetscCall(ISGetIndices(valueIS, &mesh_ids));
-        }
-
-        std::vector<PetscInt> unknown_ids;
-        for(PetscInt i=0; i<n_mesh_ids; ++i) {
-            if (model_defined_ids.find(mesh_ids[i]) == model_defined_ids.end()) {
-                unknown_ids.push_back(mesh_ids[i]);
-            }
-        }
-
-        if (valueIS) {
-            PetscCall(ISRestoreIndices(valueIS, &mesh_ids));
-            PetscCall(ISDestroy(&valueIS));
-        }
-
-        PetscInt global_err = unknown_ids.empty() ? 0 : 1;
-        PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &global_err, 1, MPIU_INT, MPI_MAX, PETSC_COMM_WORLD));
-
-        if (global_err) {
-            for (auto id : unknown_ids) PetscSynchronizedPrintf(PETSC_COMM_WORLD, "  [Error] Rank %d: Tag %d not in Model.H\n", rank, id);
-            PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
-            SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_USER, "Aborting: Undefined boundaries.");
-        } 
-        PetscFunctionReturn(PETSC_SUCCESS);
-    }
-
     PetscErrorCode SetupDiscretization() {
         PetscFunctionBeginUser;
         PetscFV fvm;
@@ -246,7 +146,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    // 4. TIME STEPPING & UPDATE
+    // 3. TIME STEPPING & OUTPUT
     // -------------------------------------------------------------------------
     static PetscErrorCode PreStepWrapper(TS ts) {
         PetscFunctionBeginUser;
@@ -254,7 +154,7 @@ private:
         PetscCall(TSGetApplicationContext(ts, &ctx));
         FVMSolver* solver = static_cast<FVMSolver*>(ctx);
         
-        // Update ghosts BEFORE dt calc
+        // Update ghosts & Calc dt
         PetscReal time;
         PetscCall(TSGetTime(ts, &time));
         PetscCall(solver->UpdateBoundaryGhosts(time));
@@ -262,16 +162,40 @@ private:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
+    // Monitor to write output.vtu.series file
+    static PetscErrorCode MonitorSeries(TS ts, PetscInt step, PetscReal time, Vec u, void *ctx) {
+        FVMSolver* solver = static_cast<FVMSolver*>(ctx);
+        if (solver->rank == 0) {
+            solver->time_series.push_back({step, time});
+            
+            // Write to output.vtu.series (Standard Paraview JSON format for VTU)
+            std::ofstream f("output.vtu.series");
+            if (f.is_open()) {
+                f << "{\n";
+                f << "  \"file-series-version\" : \"1.0\",\n";
+                f << "  \"files\" : [\n";
+                for (size_t i = 0; i < solver->time_series.size(); ++i) {
+                    f << "    { \"name\" : \"output-" 
+                      << std::setfill('0') << std::setw(3) << solver->time_series[i].step 
+                      << ".vtu\", \"time\" : " << std::scientific << std::setprecision(6) << solver->time_series[i].time << " }";
+                    if (i < solver->time_series.size() - 1) f << ",";
+                    f << "\n";
+                }
+                f << "  ]\n";
+                f << "}\n";
+                f.close();
+            }
+        }
+        return 0;
+    }
+
     PetscErrorCode UpdateBoundaryGhosts(PetscReal time) {
         PetscFunctionBeginUser;
-        // This manually calls the BoundaryAdapter for all boundary faces
-        // ensuring 'xG' (Physical Ghost) is populated.
         Vec locX;
         PetscCall(DMGetLocalVector(dm, &locX));
         PetscCall(DMGlobalToLocalBegin(dm, X, INSERT_VALUES, locX));
         PetscCall(DMGlobalToLocalEnd(dm, X, INSERT_VALUES, locX));
         
-        // FIX: Added the missing 'NULL' argument for locX_t (time derivative)
         PetscCall(DMPlexTSComputeBoundary(dm, time, locX, NULL, NULL));
         
         PetscCall(DMRestoreLocalVector(dm, &locX));
@@ -298,7 +222,6 @@ private:
         
         for (PetscInt c = cStart; c < cEnd; ++c) {
             const Real* Q_cell = &x_ptr[c * Model<Real>::n_dof_q];
-            // Filter dry cells / ghost cells that might be 0
             if (Q_cell[0] < 1e-6) continue; 
 
             for (int d = 0; d < Model<Real>::dimension; ++d) {
@@ -318,7 +241,6 @@ private:
         if (max_eigen_global > 1e-12) dt = cfl * minRadius / max_eigen_global;
         else dt = 1e-4; 
 
-        PetscPrintf(PETSC_COMM_WORLD, "  [Step] Max Eigen: %g | dt: %g\n", (double)max_eigen_global, (double)dt);
         PetscCall(TSSetTimeStep(ts, dt));
         PetscFunctionReturn(PETSC_SUCCESS);
     }
@@ -331,7 +253,11 @@ private:
         PetscCall(TSSetType(ts, TSSSP)); 
         PetscCall(TSSetMaxTime(ts, 1.0));
         PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_STEPOVER));
+        
         PetscCall(TSSetPreStep(ts, PreStepWrapper));
+        
+        // Attach the Series Monitor
+        PetscCall(TSMonitorSet(ts, MonitorSeries, this, NULL)); 
         
         PetscCall(DMTSSetBoundaryLocal(dm, DMPlexTSComputeBoundary, NULL));
         PetscCall(DMTSSetRHSFunctionLocal(dm, DMPlexTSComputeRHSFunctionFVM, NULL));
@@ -340,6 +266,9 @@ private:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
+    // -------------------------------------------------------------------------
+    // 4. HELPERS
+    // -------------------------------------------------------------------------
     PetscErrorCode SetupInitialConditions() {
         PetscFunctionBeginUser;
         PetscCall(DMCreateGlobalVector(dm, &X));
