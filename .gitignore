@@ -147,3 +147,4 @@ web/_freeze/
 jupyter-lite/.jupyterlite.doit.db
 .jupyterlite.doit.db
 library/zoomy_dmplex/zoomy_dmplex.o
+library/zoomy_dmplex/solver
