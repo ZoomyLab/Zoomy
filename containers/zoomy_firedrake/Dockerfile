@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libboost-dev \
     libopenblas-dev \
+    nlohmann-json3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Rebuild PETSc with mesh adaptivity frameworks enabled
