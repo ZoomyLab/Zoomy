@@ -11,29 +11,26 @@
 #include <petscts.h>
 #include <petscfv.h>
 #include <petscds.h>
-#include <petscviewer.h>
+#include <petscviewerhdf5.h> 
 
 #include "PetscHelpers.hpp"
-#include "Numerics.H" // Uses your generated kernel
+#include "Numerics.H"
+#include "Settings.hpp"
 
 class VirtualSolver {
 protected:
+    Settings settings;
+    
     // Core DMs
-    DM          dmMesh;     // Topology
-    DM          dmQ;        // Solution Layout
-    DM          dmAux;      // Auxiliary Layout
-    DM          dmOut;      // Output Layout (Merged)
+    DM dmMesh; DM dmQ; DM dmAux; DM dmOut;
     
     // Core Solver Objects
-    TS          ts;
-    Vec         X;          // Solution Vector
-    Vec         A;          // Aux Vector
-    Vec         X_out;      // Merged Output Buffer
+    TS ts; Vec X; Vec A; Vec X_out;
     
     // Config
     PetscMPIInt rank;
-    PetscReal   cfl;
-    PetscReal   minRadius;
+    PetscReal cfl;
+    PetscReal minRadius;
     std::vector<PetscInt> bc_ids_storage; 
     
     struct StepData { PetscInt step; PetscReal time; };
@@ -57,82 +54,132 @@ public:
         if (dmMesh) DMDestroy(&dmMesh);
     }
 
-    // Main Entry Point
-    virtual PetscErrorCode Run(int argc, char **argv) = 0;
+    virtual PetscErrorCode Run(int argc, char **argv) {
+        PetscFunctionBeginUser;
+        // 1. Load Settings
+        char settings_path[PETSC_MAX_PATH_LEN] = "settings.json";
+        PetscCall(PetscOptionsGetString(NULL, NULL, "-settings", settings_path, PETSC_MAX_PATH_LEN, NULL));
+        settings = Settings::from_json(settings_path);
 
-protected:
-    // --- SHARED TIME STEP CALCULATION ---
-    // Uses the generated Numerics::local_max_abs_eigenvalue kernel
-    PetscReal ComputeTimeStep() {
-        Vec X_local;
-        PetscCall(DMGetLocalVector(dmQ, &X_local));
-        
-        // 1. Get local data (including ghosts)
-        PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_local));
-        PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_local));
-        
-        const PetscScalar *x_ptr;
-        PetscCall(VecGetArrayRead(X_local, &x_ptr));
-        
-        PetscInt cStart, cEnd;
-        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
-        
-        Real max_eigen_global = 0.0;
-        Real max_eigen_local = 0.0;
-        
-        // Buffers for kernel call
-        Real Qaux[Model<Real>::n_dof_qaux] = {0.0}; 
-        Real res[1]; 
-        
-        // 2. Loop over cells
-        for (PetscInt c = cStart; c < cEnd; ++c) {
-            const Real* Q_cell = &x_ptr[c * Model<Real>::n_dof_q];
+        PetscCall(SetupArchitecture(1));
+
+        // 2. Handle Initial Condition / Restart
+        PetscReal time = 0.0;
+        if (settings.io.restart) {
+            PetscCall(LoadH5(settings.io.restart_file, &time));
+        } else if (!settings.io.initial_condition_file.empty()) {
+            PetscReal dummy_t;
+            PetscCall(LoadH5(settings.io.initial_condition_file, &dummy_t));
+            time = 0.0; 
+        } else {
+            PetscCall(SetupInitialConditions()); 
+        }
+
+        // 3. Snapshot Logic
+        PetscReal dt_snap = settings.solver.t_end / settings.io.snapshots;
+        PetscReal next_snap = time + dt_snap;
+        PetscInt snapshot_idx = (PetscInt)(time / dt_snap);
+        PetscInt step = 0;
+
+        PetscCall(UpdateBoundaryGhosts(time));
+        PetscCall(WriteH5(snapshot_idx++, time));
+
+        while (time < settings.solver.t_end) {
+            PetscReal dt = ComputeTimeStep();
             
-            if (Q_cell[0] < 1e-6) continue; 
-            
-            // 3. Check wave speed in each coordinate direction
-            for (int d = 0; d < Model<Real>::dimension; ++d) {
-                Real n[3] = {0.0, 0.0, 0.0}; 
-                n[d] = 1.0;
-                
-                // Use Generated Kernel
-                Numerics<Real>::local_max_abs_eigenvalue(Q_cell, Qaux, n, res);
-                
-                if (res[0] > max_eigen_local) {
-                    max_eigen_local = res[0];
-                }
+            // Limit dt to hit the exact snapshot time
+            dt = std::min(dt, settings.solver.t_end - time);
+            if (next_snap > time) dt = std::min(dt, next_snap - time);
+
+            PetscCall(TakeOneStep(time, dt, step));
+
+            time += dt;
+            step++;
+
+            if (step % 10 == 0 && rank == 0) {
+                 PetscPrintf(PETSC_COMM_WORLD, "Step %3d | Time %.5g | dt %.5g\n", step, (double)time, (double)dt);
             }
+
+            if (time >= next_snap - 1e-9) {
+                PetscCall(WriteH5(snapshot_idx++, time)); 
+                next_snap += dt_snap;
+            }
+            PetscCall(UpdateBoundaryGhosts(time));
         }
-        
-        PetscCall(VecRestoreArrayRead(X_local, &x_ptr));
-        PetscCall(DMRestoreLocalVector(dmQ, &X_local));
-        
-        // 4. Global Reduction
-        PetscCallMPI(MPI_Allreduce(&max_eigen_local, &max_eigen_global, 1, MPIU_REAL, MPI_MAX, PETSC_COMM_WORLD));
-        
-        if (max_eigen_global > 1e-12) {
-            return cfl * minRadius / max_eigen_global;
-        }
-        return 1e-4; 
+        PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // --- Setup Routines ---
+    virtual PetscErrorCode TakeOneStep(PetscReal time, PetscReal dt, PetscInt step) = 0;
+
+protected:
+    void SetSolverOrder(int order) {
+        PetscFV fvm;
+        DMGetField(dmQ, 0, NULL, (PetscObject*)&fvm);
+        if (order >= 2) {
+            PetscFVSetType(fvm, PETSCFVLEASTSQUARES);
+        } else {
+            PetscFVSetType(fvm, PETSCFVUPWIND);
+        }
+    }
+
+    PetscErrorCode WriteH5(PetscInt snapshot_idx, PetscReal time) {
+        PetscFunctionBeginUser;
+        char filename[512];
+        snprintf(filename, sizeof(filename), "%s/%s-%03d.h5", 
+                 settings.io.directory.c_str(), settings.io.filename.c_str(), snapshot_idx);
+        
+        PetscViewer viewer;
+        PetscCall(PetscViewerHDF5Open(PETSC_COMM_WORLD, filename, FILE_MODE_WRITE, &viewer));
+        PetscCall(PetscViewerHDF5PushGroup(viewer, "/"));
+        PetscCall(PetscViewerHDF5WriteAttribute(viewer, NULL, "Time", PETSC_REAL, &time));
+        
+        PetscCall(PetscObjectSetName((PetscObject)X, "Solution"));
+        PetscCall(VecView(X, viewer));
+        if (A) {
+            PetscCall(PetscObjectSetName((PetscObject)A, "Auxiliary"));
+            PetscCall(VecView(A, viewer));
+        }
+        PetscCall(PetscViewerDestroy(&viewer));
+        PetscFunctionReturn(PETSC_SUCCESS);
+    }
+
+    PetscErrorCode LoadH5(const std::string& path, PetscReal* time) {
+        PetscFunctionBeginUser;
+        PetscViewer viewer;
+        PetscCall(PetscViewerHDF5Open(PETSC_COMM_WORLD, path.c_str(), FILE_MODE_READ, &viewer));
+        PetscCall(PetscViewerHDF5PushGroup(viewer, "/"));
+        PetscCall(PetscViewerHDF5ReadAttribute(viewer, NULL, "Time", PETSC_REAL, NULL, time));
+        PetscCall(PetscObjectSetName((PetscObject)X, "Solution"));
+        PetscCall(VecLoad(X, viewer));
+        if (A) {
+            PetscCall(PetscObjectSetName((PetscObject)A, "Auxiliary"));
+            PetscCall(VecLoad(A, viewer));
+        }
+        PetscCall(PetscViewerDestroy(&viewer));
+        PetscFunctionReturn(PETSC_SUCCESS);
+    }
+
     PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
         PetscFunctionBeginUser;
         PetscCall(SetupBaseMesh(overlap));
         PetscCall(SetupPrimaryDM());
         PetscCall(SetupAuxiliaryDM());
-        PetscCall(SetupOutputDM());
+        PetscCall(SetupOutputDM()); 
         PetscCall(SetupTimeStepping());
-        PetscCall(SetupInitialConditions());
         PetscFunctionReturn(PETSC_SUCCESS);
     }
     
     PetscErrorCode SetupBaseMesh(PetscInt overlap) {
         PetscFunctionBeginUser;
-        PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh));
-        PetscCall(DMSetType(dmMesh, DMPLEX));
-        PetscCall(DMSetFromOptions(dmMesh)); 
+        // Use settings.io.mesh_path
+        if (!settings.io.mesh_path.empty()) {
+             PetscCall(DMPlexCreateFromFile(PETSC_COMM_WORLD, settings.io.mesh_path.c_str(), "zoomy_mesh", PETSC_TRUE, &dmMesh));
+        } else {
+             PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh));
+             PetscCall(DMSetType(dmMesh, DMPLEX));
+             PetscCall(DMSetFromOptions(dmMesh)); 
+        }
+
         DM dmDist = NULL;
         PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
@@ -144,6 +191,39 @@ protected:
         PetscCall(DMSetBasicAdjacency(dmMesh, PETSC_TRUE, PETSC_TRUE));
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscFunctionReturn(PETSC_SUCCESS);
+    }
+
+    // [SetupPrimaryDM, SetupAuxiliaryDM, SetupOutputDM, SetupTimeStepping, SetupInitialConditions, UpdateBoundaryGhosts, ComputeTimeStep remain unchanged]
+    // ... (Keep the implementations from your previous file) ...
+    PetscReal ComputeTimeStep() {
+        // ... (Same as your uploaded file) ...
+        Vec X_local;
+        PetscCall(DMGetLocalVector(dmQ, &X_local));
+        PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_local));
+        PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_local));
+        const PetscScalar *x_ptr;
+        PetscCall(VecGetArrayRead(X_local, &x_ptr));
+        PetscInt cStart, cEnd;
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
+        Real max_eigen_global = 0.0;
+        Real max_eigen_local = 0.0;
+        Real Qaux[Model<Real>::n_dof_qaux] = {0.0}; 
+        Real res[1]; 
+        for (PetscInt c = cStart; c < cEnd; ++c) {
+            const Real* Q_cell = &x_ptr[c * Model<Real>::n_dof_q];
+            if (Q_cell[0] < 1e-6) continue; 
+            for (int d = 0; d < Model<Real>::dimension; ++d) {
+                Real n[3] = {0.0, 0.0, 0.0}; 
+                n[d] = 1.0;
+                Numerics<Real>::local_max_abs_eigenvalue(Q_cell, Qaux, n, res);
+                if (res[0] > max_eigen_local) max_eigen_local = res[0];
+            }
+        }
+        PetscCall(VecRestoreArrayRead(X_local, &x_ptr));
+        PetscCall(DMRestoreLocalVector(dmQ, &X_local));
+        PetscCallMPI(MPI_Allreduce(&max_eigen_local, &max_eigen_global, 1, MPIU_REAL, MPI_MAX, PETSC_COMM_WORLD));
+        if (max_eigen_global > 1e-12) return cfl * minRadius / max_eigen_global;
+        return 1e-4; 
     }
 
     PetscErrorCode SetupPrimaryDM() {
@@ -161,11 +241,9 @@ protected:
         }
         PetscCall(DMAddField(dmQ, NULL, (PetscObject)fvm));
         PetscCall(DMCreateDS(dmQ));
-        
         PetscDS prob;
         PetscCall(DMGetDS(dmQ, &prob));
         PetscCall(PetscDSSetRiemannSolver(prob, 0, Zoomy::RiemannAdapter));
-
         DMLabel label;
         PetscCall(DMGetLabel(dmQ, "Face Sets", &label));
         auto names = Model<Real>::get_boundary_tags();
@@ -260,58 +338,6 @@ protected:
         PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, locX));
         PetscCall(DMPlexTSComputeBoundary(dmQ, time, locX, NULL, NULL));
         PetscCall(DMRestoreLocalVector(dmQ, &locX));
-        PetscFunctionReturn(PETSC_SUCCESS);
-    }
-
-    PetscErrorCode WriteVTU(PetscInt step, PetscReal time) {
-        PetscFunctionBeginUser;
-        if (rank == 0) {
-            if (time_series.empty() || time_series.back().step != step) {
-                time_series.push_back({step, time});
-            }
-            std::ofstream f("output.vtu.series");
-            if (f.is_open()) {
-                f << "{\n  \"file-series-version\" : \"1.0\",\n  \"files\" : [\n";
-                for (size_t i = 0; i < time_series.size(); ++i) {
-                    f << "    { \"name\" : \"output-" << std::setfill('0') << std::setw(3) << time_series[i].step << ".vtu\", \"time\" : " << std::scientific << std::setprecision(6) << time_series[i].time << " }";
-                    if (i < time_series.size() - 1) f << ",";
-                    f << "\n";
-                }
-                f << "  ]\n}\n";
-                f.close();
-            }
-        }
-
-        const PetscScalar *x_ptr, *a_ptr;
-        PetscScalar *out_ptr;
-        PetscCall(VecGetArrayRead(X, &x_ptr));
-        PetscCall(VecGetArrayRead(A, &a_ptr));
-        PetscCall(VecGetArray(X_out, &out_ptr));
-        
-        PetscInt nQ = Model<Real>::n_dof_q;
-        PetscInt nAux = Model<Real>::n_dof_qaux;
-        PetscInt localSize;
-        PetscCall(VecGetLocalSize(X, &localSize));
-        PetscInt nCells = localSize / nQ; 
-        
-        for (PetscInt c = 0; c < nCells; ++c) {
-            PetscInt idx_q = c * nQ;
-            PetscInt idx_a = c * nAux;
-            PetscInt idx_out = c * (nQ + nAux);
-            for(int i=0; i<nQ; ++i) out_ptr[idx_out + i] = x_ptr[idx_q + i];
-            for(int i=0; i<nAux; ++i) out_ptr[idx_out + nQ + i] = a_ptr[idx_a + i];
-        }
-
-        PetscCall(VecRestoreArrayRead(X, &x_ptr));
-        PetscCall(VecRestoreArrayRead(A, &a_ptr));
-        PetscCall(VecRestoreArray(X_out, &out_ptr));
-
-        char filename[64];
-        snprintf(filename, 64, "output-%03d.vtu", step);
-        PetscViewer viewer;
-        PetscCall(PetscViewerVTKOpen(PETSC_COMM_WORLD, filename, FILE_MODE_WRITE, &viewer));
-        PetscCall(VecView(X_out, viewer));
-        PetscCall(PetscViewerDestroy(&viewer));
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 };

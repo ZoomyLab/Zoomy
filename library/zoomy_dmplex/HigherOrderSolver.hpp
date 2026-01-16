@@ -20,82 +20,40 @@ public:
         if (X_low) VecDestroy(&X_low);
     }
 
-    PetscErrorCode Run(int argc, char **argv) override {
+    PetscErrorCode TakeOneStep(PetscReal time, PetscReal dt) override {
         PetscFunctionBeginUser;
-        PetscCall(PetscOptionsGetReal(NULL, NULL, "-ufv_cfl", &cfl, NULL));
-        PetscCall(PetscOptionsGetInt(NULL, NULL, "-ts_max_steps", &max_steps, NULL));
-
-        // Use standard architecture
-        PetscCall(SetupArchitecture(1));
-        
-        PetscCall(VecDuplicate(X, &X_old));
-        PetscCall(VecDuplicate(X, &X_low));
-
-        PetscCall(UpdateBoundaryGhosts(0.0));
-
-        PetscReal time = 0.0;
-        PetscInt step = 0;
-        
-        // Initial Output
-        PetscCall(VecSet(A, 2.0)); 
-        PetscCall(WriteVTU(step, time));
-
-        while (step < max_steps) {
-            // Use base class ComputeTimeStep
-            PetscReal dt = ComputeTimeStep();
-
-            PetscCall(TSSetTime(ts, time));
-            PetscCall(TSSetTimeStep(ts, dt));
-            
-            // Backup current state
-            PetscCall(VecCopy(X, X_old));
-            
-            // ---------------------------------------------
-            // 1. CANDIDATE STEP (High Order)
-            // ---------------------------------------------
-            SetSolverOrder(2);
-            PetscCall(TSSetSolution(ts, X));
-            PetscCall(TSStep(ts));           
-            
-            // ---------------------------------------------
-            // 2. VALIDITY CHECK
-            // ---------------------------------------------
-            std::vector<PetscInt> bad_cells;
-            PetscCall(CheckTVD(X_old, X, bad_cells));
-            
-            PetscInt n_bad_local = bad_cells.size();
-            PetscInt n_bad_global = 0;
-            PetscCallMPI(MPI_Allreduce(&n_bad_local, &n_bad_global, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD));
-
-            if (n_bad_global > 0) {
-                // ---------------------------------------------
-                // 3. FALLBACK STEP (Order 1)
-                // ---------------------------------------------
-                PetscCall(VecCopy(X_old, X_low));
-                PetscCall(TSSetTime(ts, time));     
-                PetscCall(TSSetStepNumber(ts, step));
-                PetscCall(TSSetSolution(ts, X_low)); 
-                
-                SetSolverOrder(1);
-                PetscCall(TSStep(ts)); 
-                
-                PetscCall(BlendSolutions(X, X_low, bad_cells));
-                PetscCall(VecSet(A, 2.0));
-                PetscCall(UpdateAuxVector(A, bad_cells, 1.0));
-                PetscCall(TSSetSolution(ts, X));
-            } else {
-                PetscCall(VecSet(A, 2.0));
-            }
-
-            time += dt;
-            step++;
-            
-            PetscPrintf(PETSC_COMM_WORLD, "Step %3d | Time %.5g | dt %.5g | Fallback Cells: %d\n", step, (double)time, (double)dt, n_bad_global);
-            
-            PetscCall(WriteVTU(step, time));
-            PetscCall(UpdateBoundaryGhosts(time));
+        if (!X_old) {
+            PetscCall(VecDuplicate(X, &X_old));
+            PetscCall(VecDuplicate(X, &X_low));
         }
+        
+        // 1. Backup state
+        PetscCall(VecCopy(X, X_old));
 
+        // 2. Candidate High-Order Step
+        SetSolverOrder(2);
+        PetscCall(TSSetTime(ts, time));
+        PetscCall(TSSetTimeStep(ts, dt));
+        PetscCall(TSStep(ts));
+
+        // 3. Validity Check (MOOD)
+        std::vector<PetscInt> bad_cells;
+        PetscCall(CheckTVD(X_old, X, bad_cells));
+        
+        PetscInt n_bad_global;
+        PetscInt n_bad_local = bad_cells.size();
+        PetscCallMPI(MPI_Allreduce(&n_bad_local, &n_bad_global, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD));
+
+        if (n_bad_global > 0) {
+            // 4. Fallback to 1st Order for local blending
+            PetscCall(VecCopy(X_old, X_low));
+            SetSolverOrder(1);
+            PetscCall(TSSetSolution(ts, X_low));
+            PetscCall(TSStep(ts));
+            
+            PetscCall(BlendSolutions(X, X_low, bad_cells));
+            PetscCall(TSSetSolution(ts, X));
+        }
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
@@ -193,26 +151,5 @@ private:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    PetscErrorCode UpdateAuxVector(Vec A, const std::vector<PetscInt>& cells, PetscScalar val) {
-        PetscFunctionBeginUser;
-        Vec locA;
-        PetscCall(DMGetLocalVector(dmAux, &locA));
-        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, locA));
-        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, locA));
-        PetscScalar *a_ptr;
-        PetscCall(VecGetArray(locA, &a_ptr));
-        PetscSection section;
-        PetscCall(DMGetLocalSection(dmAux, &section));
-        for (PetscInt c : cells) {
-            PetscInt off;
-            PetscCall(PetscSectionGetOffset(section, c, &off));
-            a_ptr[off] = val;
-        }
-        PetscCall(VecRestoreArray(locA, &a_ptr));
-        PetscCall(DMLocalToGlobalBegin(dmAux, locA, INSERT_VALUES, A));
-        PetscCall(DMLocalToGlobalEnd(dmAux, locA, INSERT_VALUES, A));
-        PetscCall(DMRestoreLocalVector(dmAux, &locA));
-        PetscFunctionReturn(PETSC_SUCCESS);
-    }
 };
 #endif
