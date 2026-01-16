@@ -1,2 +1,4 @@
 zoomy_jax
+zoomy_jax_standalone
 zoomy_firedrake
+zoomy_firedrake_standalone
