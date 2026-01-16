@@ -1,8 +1,8 @@
 name: Containers
 
 permissions:
-  contents: write
-  packages: write
+  contents: read      # No longer need 'write' since we don't commit back
+  packages: write     # Required to push to GHCR
 
 on:
   push:
@@ -13,20 +13,16 @@ on:
       container:
         description: "Build a specific container (folder name)"
         required: false
-      bump:
-        description: "Bump version (major/minor)"
-        required: false
-        default: "minor"
+      # 'bump' input is removed as it is no longer relevant for stateless versioning
 
 concurrency:
-  group: container-version-bump
+  group: container-build-${{ github.ref }}
   cancel-in-progress: false
-
 
 jobs:
 
   # ------------------------------------------------------------
-  # Load list of container folders from dockers.txt
+  # Job 1: Load list of container folders from dockers.txt
   # ------------------------------------------------------------
   load-dockers:
     runs-on: ubuntu-latest
@@ -39,6 +35,7 @@ jobs:
 
       - id: load
         run: |
+          # Read lines, trim whitespace/commas, convert to JSON array
           list=$(
             sed 's/[[:space:]]*,[[:space:]]*$//' .github/workflows/dockers.txt \
             | jq -R . | jq -sc .
@@ -47,71 +44,181 @@ jobs:
 
 
   # ------------------------------------------------------------
-  # Detect which containers changed
+  # Job 2: Detect changes (Splits into Bases & Standalones)
   # ------------------------------------------------------------
   detect-containers:
     runs-on: ubuntu-latest
     needs: load-dockers
     outputs:
-      changed: ${{ steps.detect.outputs.changed }}
+      bases: ${{ steps.detect.outputs.bases }}
+      standalones: ${{ steps.detect.outputs.standalones }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
           submodules: recursive
 
-
       - id: detect
         run: |
           set -eo pipefail
-      
-          # Manual override
+          
+          # --- 1. Identify Direct Changes ---
+          direct_changes=()
+          
+          # Manual override input
           if [ -n "${{ github.event.inputs.container }}" ]; then
-            echo "changed=[\"${{ github.event.inputs.container }}\"]" >> $GITHUB_OUTPUT
-            exit 0
+            direct_changes+=("${{ github.event.inputs.container }}")
+          else
+            # Git Diff check
+            base="${{ github.event.before }}"
+            head="${{ github.event.after }}"
+            echo "Diffing range: $base -> $head"
+            
+            # Load full list of known containers
+            all_containers=$(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]')
+
+            for c in $all_containers; do
+              # Check if Dockerfile changed
+              if ! git diff --quiet "$base" "$head" -- "containers/$c/Dockerfile"; then
+                 echo "Detected change in: containers/$c/Dockerfile"
+                 direct_changes+=("$c")
+              fi
+            done
           fi
-      
-          base="${{ github.event.before }}"
-          head="${{ github.event.after }}"
-      
-          echo "Diffing range: $base -> $head"
-      
-          changed=()
-      
-          for c in $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]'); do
-            if ! git diff --quiet "$base" "$head" -- "containers/$c/Dockerfile"; then
-              echo "Detected change in: containers/$c/Dockerfile"
-              changed+=("$c")
+
+          # --- 2. Expand Dependencies ---
+          # If 'zoomy_jax' changes, we must also build 'zoomy_jax_standalone'
+          
+          expanded_list=()
+          all_containers_str=" $(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]') "
+
+          for c in "${direct_changes[@]}"; do
+            expanded_list+=("$c")
+            
+            # Check if this is a base container (doesn't end in _standalone)
+            if [[ "$c" != *"_standalone" ]]; then
+               candidate="${c}_standalone"
+               # Check if the standalone version exists in our dockers.txt
+               if [[ "$all_containers_str" == *" $candidate "* ]]; then
+                   echo "Auto-triggering dependent container: $candidate"
+                   expanded_list+=("$candidate")
+               fi
             fi
           done
-      
-          if [ ${#changed[@]} -eq 0 ]; then
-            json='[]'
-          else
-            json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+
+          # --- 3. Split into Bases and Standalones ---
+          bases=()
+          standalones=()
+          
+          # Remove duplicates
+          unique_list=($(printf "%s\n" "${expanded_list[@]}" | sort -u))
+
+          for c in "${unique_list[@]}"; do
+            if [[ "$c" == *"_standalone" ]]; then
+               standalones+=("$c")
+            else
+               bases+=("$c")
+            fi
+          done
+
+          # --- 4. Output as JSON ---
+          if [ ${#bases[@]} -eq 0 ]; then 
+            echo "bases=[]" >> $GITHUB_OUTPUT
+          else 
+            json=$(printf '%s\n' "${bases[@]}" | jq -R . | jq -sc .)
+            echo "bases=$json" >> $GITHUB_OUTPUT
           fi
-      
-          echo "changed=$json" >> $GITHUB_OUTPUT
 
-      - name: Debug detected containers
+          if [ ${#standalones[@]} -eq 0 ]; then 
+            echo "standalones=[]" >> $GITHUB_OUTPUT
+          else 
+            json=$(printf '%s\n' "${standalones[@]}" | jq -R . | jq -sc .)
+            echo "standalones=$json" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Debug Output
         run: |
-          echo "Detected containers: ${{ steps.detect.outputs.changed }}"
+          echo "Bases to build: ${{ steps.detect.outputs.bases }}"
+          echo "Standalones to build: ${{ steps.detect.outputs.standalones }}"
 
 
   # ------------------------------------------------------------
-  # Build changed containers
+  # Job 3: Build Base Containers
   # ------------------------------------------------------------
-  build:
+  build-bases:
     runs-on: ubuntu-latest
     needs: detect-containers
+    if: ${{ fromJson(needs.detect-containers.outputs.bases)[0] }}
+    strategy:
+      matrix:
+        container: ${{ fromJson(needs.detect-containers.outputs.bases) }}
+      fail-fast: false
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    # Only run if there are containers to build
-    # (array indexing is the ONLY valid way to check length)
-    if: ${{ fromJson(needs.detect-containers.outputs.changed)[0] }}
+      - name: Set lowercase owner
+        run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build_image
+        run: |
+          set -eo pipefail
+          container="${{ matrix.container }}"
+          
+          # Read base version (e.g. "0.4")
+          base_ver=$(cat "containers/$container/VERSION" | tr -d '[:space:]')
+          
+          # Create dynamic build version (e.g. "0.4.105")
+          # github.run_number provides a unique, increasing integer for this workflow
+          full_ver="${base_ver}.${{ github.run_number }}"
+          
+          image="ghcr.io/$OWNER_LC/$container"
+          
+          echo "Building $image:$full_ver"
+
+          docker build --pull \
+            -f "containers/$container/Dockerfile" \
+            -t "$image:$full_ver" \
+            -t "$image:latest" .
+
+          echo "version=$full_ver" >> $GITHUB_OUTPUT
+
+      - name: Push image
+        run: |
+          container="${{ matrix.container }}"
+          version="${{ steps.build_image.outputs.version }}"
+          image="ghcr.io/$OWNER_LC/$container"
+          
+          docker push "$image:$version"
+          docker push "$image:latest"
+
+
+  # ------------------------------------------------------------
+  # Job 4: Build Standalone Containers
+  # ------------------------------------------------------------
+  build-standalones:
+    runs-on: ubuntu-latest
+    needs: [detect-containers, build-bases]
+    # Run if we have standalones AND the base build didn't fail (success or skipped is fine)
+    if: |
+      always() && 
+      fromJson(needs.detect-containers.outputs.standalones)[0] && 
+      (needs.build-bases.result == 'success' || needs.build-bases.result == 'skipped')
 
     strategy:
       matrix:
-        container: ${{ fromJson(needs.detect-containers.outputs.changed) }}
+        container: ${{ fromJson(needs.detect-containers.outputs.standalones) }}
       fail-fast: false
 
     steps:
@@ -124,13 +231,6 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
-      - name: Debug folder tree
-        run: |
-          echo "ROOT:"
-          ls -la .
-          echo "CONTAINERS:"
-          ls -la containers || echo "No containers folder"
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -138,64 +238,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # -------------------------
-      # Build the container
-      # -------------------------
       - id: build_image
         run: |
           set -eo pipefail
-
           container="${{ matrix.container }}"
-          version_file="containers/$container/VERSION"
-
-          echo "Building container: $container"
-          echo "Version file located at: $version_file"
-
-          version=$(cat "$version_file")
+          
+          # Read base version (e.g. "0.4")
+          base_ver=$(cat "containers/$container/VERSION" | tr -d '[:space:]')
+          
+          # Create dynamic build version (e.g. "0.4.105")
+          full_ver="${base_ver}.${{ github.run_number }}"
+          
           image="ghcr.io/$OWNER_LC/$container"
+          
+          echo "Building $image:$full_ver"
 
-          docker build \
-            --pull \
+          # --pull ensures we get the freshly built base image from Job 3
+          docker build --pull \
             -f "containers/$container/Dockerfile" \
-            -t "$image:$version" \
-            -t "$image:latest" \
-            .
+            -t "$image:$full_ver" \
+            -t "$image:latest" .
 
-          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "version=$full_ver" >> $GITHUB_OUTPUT
 
       - name: Push image
         run: |
           container="${{ matrix.container }}"
           version="${{ steps.build_image.outputs.version }}"
           image="ghcr.io/$OWNER_LC/$container"
-
+          
           docker push "$image:$version"
           docker push "$image:latest"
-
-      # -------------------------
-      # Bump version after push
-      # -------------------------
-      - id: bump
-        run: |
-          container="${{ matrix.container }}"
-          file="containers/$container/VERSION"
-          old=$(cat "$file")
-
-          IFS='.' read -r major minor <<< "$old"
-          bump="${{ github.event.inputs.bump || 'minor' }}"
-
-          case "$bump" in
-            major) major=$((major+1)); minor=0 ;;
-            minor) minor=$((minor+1)) ;;
-          esac
-
-          new="$major.$minor"
-          echo "$new" > "$file"
-
-          echo "new_version=$new" >> $GITHUB_OUTPUT
-
-      - name: Commit version bump
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Bump ${{ matrix.container }} to version ${{ steps.bump.outputs.new_version }}"
-          file_pattern: "containers/${{ matrix.container }}/VERSION"
