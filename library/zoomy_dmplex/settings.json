@@ -10,6 +10,7 @@
     },
     "solver": {
         "t_end": 0.1,
-        "cfl": 0.5
+        "cfl": 0.5,
+        "reconstruction_order": 1
     }
 }

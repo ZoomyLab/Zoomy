@@ -4,22 +4,26 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include "nlohmann/json.hpp"
+#include "nlohmann/json.hpp" // nlohmann/json
 
 using json = nlohmann::json;
 
 struct SolverSettings {
     double t_end = 1.0;
     double cfl = 0.5;
+    bool use_deep_adjacency = true; // New
+    int reconstruction_order = 1;   // New
+    double min_dt = 1.0e-12;        // New (Lower limit before aborting)
 };
 
 struct IOSettings {
     std::string directory = "output";
     std::string filename = "sol";
     int snapshots = 10;
-    std::string snapshot_logic = "snap"; // Default: "snap", "loose", "interpolate"
+    std::string snapshot_logic = "snap"; 
     bool clean_directory = false;
     std::string mesh_path = "";
+    std::string mesh_label = "Face Sets"; // New
     bool restart = false;
     std::string restart_file = "";
     std::string initial_condition_file = "";
@@ -47,16 +51,19 @@ struct Settings {
             s.io.directory = jio.value("directory", "output");
             s.io.filename = jio.value("filename", "sol");
             s.io.snapshots = jio.value("snapshots", 10);
-            s.io.snapshot_logic = jio.value("snapshot_logic", "snap"); 
+            s.io.snapshot_logic = jio.value("snapshot_logic", "snap");
             s.io.clean_directory = jio.value("clean_directory", false);
             s.io.mesh_path = jio.value("mesh_path", "");
-            // ... (legacy restart fields if needed)
+            s.io.mesh_label = jio.value("mesh_label", "Face Sets"); 
         }
 
         if (j.contains("solver")) {
             auto& jsol = j["solver"];
             s.solver.t_end = jsol.value("t_end", 1.0);
             s.solver.cfl = jsol.value("cfl", 0.5);
+            s.solver.use_deep_adjacency = jsol.value("use_deep_adjacency", true); 
+            s.solver.reconstruction_order = jsol.value("reconstruction_order", 1); 
+            s.solver.min_dt = jsol.value("min_dt", 1.0e-12);
         }
 
         return s;
