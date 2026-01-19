@@ -20,6 +20,24 @@ struct Model {
 
     // --- Kernels ---
 
+    static PetscErrorCode InitialCondition(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar u[], void *ctx) {
+        // Simple Dam Break at x = 0.0
+        // Left (x < 0): High water h=2
+        // Right (x >= 0): Low water h=1
+        
+        if (x[0] < 5.0) {
+            u[0] = 2.0; // Height
+        } else {
+            u[0] = 1.0; // Height
+        }
+        
+        // Momentum (hu, hv) = 0
+        u[1] = 0.0; 
+        if (dim > 1) u[2] = 0.0;
+        
+        return PETSC_SUCCESS;
+    }
+
     static inline void flux(
         const T* Q,
         const T* Qaux,

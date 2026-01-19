@@ -1,65 +1,66 @@
-#ifndef SOLVER_SETTINGS_HPP
-#define SOLVER_SETTINGS_HPP
+#ifndef SETTINGS_HPP
+#define SETTINGS_HPP
 
 #include <string>
+#include <iostream>
 #include <fstream>
-#include <nlohmann/json.hpp>
+#include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
 
+struct SolverSettings {
+    double t_end = 1.0;
+    double cfl = 0.5;
+};
+
+struct IOSettings {
+    std::string directory = "output";
+    std::string filename = "sol";
+    int snapshots = 10;
+    std::string snapshot_logic = "snap"; // Default: "snap", "loose", "interpolate"
+    bool clean_directory = false;
+    std::string mesh_path = "";
+    bool restart = false;
+    std::string restart_file = "";
+    std::string initial_condition_file = "";
+};
+
 struct Settings {
-    struct IO {
-        // Output Settings
-        std::string directory = "output";
-        std::string filename = "simulation";
-        int snapshots = 10;
-        bool clean_directory = false;
-
-        // Input Settings
-        std::string mesh_path = "mesh.msh";
-        std::string initial_condition_file = "";
-        
-        // Restart Settings
-        bool restart = false;
-        std::string restart_file = "";
-    } io;
-
-    struct Solver {
-        double t_end = 1.0;
-        double cfl = 0.5;
-    } solver;
+    std::string name;
+    IOSettings io;
+    SolverSettings solver;
 
     static Settings from_json(const std::string& path) {
         std::ifstream f(path);
-        if (!f.good()) return Settings(); 
-        
-        json data = json::parse(f);
-        Settings s;
+        if (!f.is_open()) {
+            std::cerr << "Error: Could not open settings file: " << path << std::endl;
+            exit(1);
+        }
+        json j;
+        f >> j;
 
-        if (data.contains("io")) {
-            auto io_block = data["io"];
-            // Output
-            s.io.directory = io_block.value("directory", "output");
-            s.io.filename = io_block.value("filename", "simulation");
-            s.io.snapshots = io_block.value("snapshots", 10);
-            s.io.clean_directory = io_block.value("clean_directory", false);
-            
-            // Input
-            s.io.mesh_path = io_block.value("mesh_path", "mesh.msh");
-            s.io.initial_condition_file = io_block.value("initial_condition_file", "");
-            
-            // Restart
-            s.io.restart = io_block.value("restart", false);
-            s.io.restart_file = io_block.value("restart_file", "");
+        Settings s;
+        s.name = j.value("name", "Simulation");
+
+        if (j.contains("io")) {
+            auto& jio = j["io"];
+            s.io.directory = jio.value("directory", "output");
+            s.io.filename = jio.value("filename", "sol");
+            s.io.snapshots = jio.value("snapshots", 10);
+            s.io.snapshot_logic = jio.value("snapshot_logic", "snap"); 
+            s.io.clean_directory = jio.value("clean_directory", false);
+            s.io.mesh_path = jio.value("mesh_path", "");
+            // ... (legacy restart fields if needed)
         }
 
-        if (data.contains("solver")) {
-            auto sol = data["solver"];
-            s.solver.t_end = sol.value("t_end", 1.0);
-            s.solver.cfl = sol.value("cfl", 0.5);
+        if (j.contains("solver")) {
+            auto& jsol = j["solver"];
+            s.solver.t_end = jsol.value("t_end", 1.0);
+            s.solver.cfl = jsol.value("cfl", 0.5);
         }
 
         return s;
     }
 };
+
 #endif
