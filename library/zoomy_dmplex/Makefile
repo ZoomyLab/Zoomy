@@ -1,7 +1,7 @@
 # --- Configuration ---
 NVCC = nvcc
 NVCC_FLAGS = -O3 -std=c++14 -ccbin mpicxx -Xcompiler -fPIC
-CXX_FLAGS_USER = -O3 -std=c++14
+CXX_FLAGS_USER = -O3 -std=c++17
 
 # PETSc plumbing
 include ${PETSC_DIR}/lib/petsc/conf/variables

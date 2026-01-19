@@ -11,13 +11,6 @@ using Real = PetscScalar;
 
 namespace Zoomy {
 
-    static PetscErrorCode InitialCondition(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar *u, void *ctx) {
-        Real x_dam = 5.0; 
-        for(int i=0; i<Model<Real>::n_dof_q; ++i) u[i] = 0.0;
-        if (x[0] <= x_dam) u[0] = 2.0; 
-        else               u[0] = 1.0;
-        return PETSC_SUCCESS;
-    }
 
     static void RiemannAdapter(PetscInt dim, PetscInt Nf, const PetscReal *qp, const PetscReal *n, const PetscScalar *xL, const PetscScalar *xR, PetscInt numConstants, const PetscScalar constants[], PetscScalar *flux, void *ctx) {
         Real Qaux_L[Model<Real>::n_dof_qaux] = {0.0};

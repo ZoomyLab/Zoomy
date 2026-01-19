@@ -1,0 +1,15 @@
+{
+    "name": "SME",
+    "io": {
+        "directory": "outputs/dmplex",
+        "filename": "dmplex",
+        "snapshots": 2,
+        "snapshot_logic": "interpolate",
+        "clean_directory": true,
+        "mesh_path": "mesh_coarse.msh"
+    },
+    "solver": {
+        "t_end": 0.1,
+        "cfl": 0.5
+    }
+}
