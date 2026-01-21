@@ -5,6 +5,7 @@
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <map> 
 
 #include <petscdmplex.h>
 #include <petscts.h>
@@ -15,7 +16,8 @@
 #include "Numerics.H"
 #include "Settings.hpp"
 #include "Model.H"      
-#include "IOManager.hpp" 
+#include "IOManager.hpp"
+#include "MeshConfigLoader.hpp" // New Include
 
 class VirtualSolver {
 protected:
@@ -245,6 +247,7 @@ protected:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
+    // --- REFACTORED: Infer IDs from Mesh File ---
     PetscErrorCode SetupPrimaryDM() {
         PetscFunctionBeginUser;
         PetscCall(DMClone(dmMesh, &dmQ)); 
@@ -270,19 +273,52 @@ protected:
             SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "Mesh Label not found.");
         }
 
+        // 1. Get User Expected Names
         auto names = Model<Real>::get_boundary_tags();
-        auto ids   = Model<Real>::get_boundary_tag_ids();
         bc_tag_ids.resize(names.size());
         bc_ctx_indices.resize(names.size());
+
+        // 2. Rank 0 Reads and Maps
+        if (rank == 0) {
+            try {
+                // Load map from .msh file
+                std::map<std::string, int> mesh_map = MeshConfigLoader::loadBoundaryMapping(settings.io.mesh_path);
+                
+                // Match required names to mesh IDs
+                for(size_t i=0; i<names.size(); ++i) {
+                    if (mesh_map.find(names[i]) == mesh_map.end()) {
+                        // Error formatting
+                        std::string found_tags = "";
+                        for(const auto& pair : mesh_map) found_tags += "'" + pair.first + "' ";
+                        
+                        PetscPrintf(PETSC_COMM_SELF, "\n[ERROR] Model requires boundary '%s', but it was not found in '%s'.\n", names[i].c_str(), settings.io.mesh_path.c_str());
+                        PetscPrintf(PETSC_COMM_SELF, "[ERROR] Available physical names in mesh: [ %s]\n", found_tags.c_str());
+                        SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Missing boundary tag in mesh file.");
+                    }
+                    bc_tag_ids[i] = mesh_map[names[i]];
+                }
+            } catch (const std::exception& e) {
+                PetscPrintf(PETSC_COMM_SELF, "[ERROR] Mesh Config Loader failed: %s\n", e.what());
+                SETERRQ(PETSC_COMM_SELF, PETSC_ERR_FILE_READ, "Failed to load mesh boundary mapping.");
+            }
+        }
+
+        // 3. Broadcast Result to all Ranks
+        // bc_tag_ids is vector of PetscInt. Check if PetscInt is int or long long.
+        // PETSc usually defines MPIU_INT appropriately, but safely we use MPI_Bcast.
+        PetscCallMPI(MPI_Bcast(bc_tag_ids.data(), bc_tag_ids.size(), MPIU_INT, 0, PETSC_COMM_WORLD));
+
+        // 4. Register with PETSc
         for(size_t i=0; i<names.size(); ++i) {
-            bc_tag_ids[i] = std::stoi(ids[i]);
-            bc_ctx_indices[i] = (PetscInt)i;
+            bc_ctx_indices[i] = (PetscInt)i; // Context index matches order in Model
+            
             PetscCall(PetscDSAddBoundary(prob, DM_BC_NATURAL_RIEMANN, names[i].c_str(), label, 
                                          1, &bc_tag_ids[i], 
                                          0, 0, NULL, 
                                          (PetscVoidFn *)Zoomy::BoundaryAdapter, NULL, 
                                          &bc_ctx_indices[i], NULL)); 
         }
+        
         PetscCall(PetscFVDestroy(&fvm));
         PetscCall(DMCreateGlobalVector(dmQ, &X));
         PetscCall(PetscObjectSetName((PetscObject)X, "Solution"));
