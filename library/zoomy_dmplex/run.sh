@@ -1,2 +1,2 @@
 #!/bin/bash
-mpiexec -n 3 ./solver_cpu
+mpiexec -n 1 ./solver_cpu
