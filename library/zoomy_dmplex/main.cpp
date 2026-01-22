@@ -1,6 +1,9 @@
-#include "FirstOrderSolver.hpp"
-#include "HigherOrderSolver.hpp"
+#include <petsc.h>
 
+// The unified CPU solver (replaces FirstOrder/HigherOrder)
+#include "Solver.hpp" 
+
+// GPU Support
 #ifdef ENABLE_GPU
 #include "GPUFirstOrderSolver.hpp"
 #endif
@@ -13,7 +16,7 @@ int main(int argc, char **argv)
     {
         PetscInt order = 1;
         
-        // Default use_gpu to true if compiled for GPU, false otherwise
+        // Default: true if compiled for GPU, false otherwise
 #ifdef ENABLE_GPU
         PetscBool use_gpu = PETSC_TRUE;
 #else
@@ -21,7 +24,7 @@ int main(int argc, char **argv)
 #endif
 
         PetscCall(PetscOptionsGetInt(NULL, NULL, "-order", &order, NULL));
-        // Still allow the user to override via command line if they really want to
+        // Allow user override via command line (e.g., ./solver_gpu -gpu 0 to run CPU reference)
         PetscCall(PetscOptionsGetBool(NULL, NULL, "-gpu", &use_gpu, NULL));
 
         VirtualSolver* solver = nullptr;
@@ -30,7 +33,8 @@ int main(int argc, char **argv)
 #ifdef ENABLE_GPU
             if (order == 1) {
                 PetscPrintf(PETSC_COMM_WORLD, "--- Solver: GPU First Order ---\n");
-                solver = new GPUFirstOrderSolver();
+                // Assuming GPUFirstOrderSolver still exists and inherits from VirtualSolver
+                solver = new GPUFirstOrderSolver(); 
             } else {
                 PetscPrintf(PETSC_COMM_WORLD, "Error: GPU Order %d not implemented yet.\n", order);
                 PetscFinalize();
@@ -42,13 +46,16 @@ int main(int argc, char **argv)
             return 1;
 #endif
         } else {
-            if (order > 1) {
-                PetscPrintf(PETSC_COMM_WORLD, "--- Solver: CPU MOOD (Target Order: %d) ---\n", order);
-                solver = new HigherOrderSolver(order);
-            } else {
+            // --- CPU Path ---
+            // Much cleaner now: single class handles both 1st and higher order logic
+            if (order == 1) {
                 PetscPrintf(PETSC_COMM_WORLD, "--- Solver: CPU First Order ---\n");
-                solver = new FirstOrderSolver();
+            } else {
+                PetscPrintf(PETSC_COMM_WORLD, "--- Solver: CPU High Order (Target: %d) ---\n", order);
             }
+            
+            // Just instantiate the unified Solver
+            solver = new Solver(order);
         }
 
         if (solver) {

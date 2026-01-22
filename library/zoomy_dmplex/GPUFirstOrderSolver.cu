@@ -15,8 +15,9 @@ struct GPUMesh {
     // Device Pointers
     PetscInt *L;
     PetscInt *R;
-    PetscReal *normals;      // [n_faces * 3] (Assuming 3D capacity, used as 2D)
+    PetscReal *normals;      // [n_faces * 2] (2D)
     PetscReal *cell_volumes; // [n_cells]
+    PetscReal *d_parameters; // [n_parameters] (New: Physical Parameters)
     
     // Temporary Device Buffers for Reductions
     PetscReal *d_eigenvalues;
@@ -44,6 +45,7 @@ __global__ void FluxKernel(
     const PetscInt* L, const PetscInt* R, 
     const PetscReal* normals, 
     const PetscScalar* Q, const PetscScalar* Aux,
+    const PetscReal* parameters, // New: Pass parameters
     PetscScalar* RHS
 ) {
     int f = blockIdx.x * blockDim.x + threadIdx.x;
@@ -61,23 +63,25 @@ __global__ void FluxKernel(
     const PetscScalar* auxR = (Aux) ? &Aux[cR * stride] : nullptr; 
 
     // 3. Geometry (Assuming 2D for now, taking first 2 components)
-    // Numerics expects a pointer to the normal vector
     const PetscReal* n = &normals[f * 2]; 
 
     // 4. Flux Calculation (Physics)
-    PetscScalar flux[Numerics<Real>::n_dof_q];
-    Numerics<Real>::numerical_flux(qL, qR, auxL, auxR, n, flux);
+    // UPDATED: Now returns a value (SimpleArray) instead of void
+    auto flux_val = Numerics<Real>::numerical_flux(qL, qR, auxL, auxR, parameters, n);
 
     // 5. Accumulate to Cells
     for(int i=0; i<stride; ++i) {
-        atomicAdd(&RHS[cL * stride + i], -flux[i]);
-        atomicAdd(&RHS[cR * stride + i],  flux[i]);
+        // Use operator[] on the returned struct
+        PetscScalar val = flux_val[i];
+        atomicAdd(&RHS[cL * stride + i], -val);
+        atomicAdd(&RHS[cR * stride + i],  val);
     }
 }
 
 __global__ void TimeStepKernel(
     int n_cells, 
     const PetscScalar* Q, const PetscScalar* Aux,
+    const PetscReal* parameters, // New: Pass parameters
     PetscReal* max_eigen_per_cell
 ) {
     int c = blockIdx.x * blockDim.x + threadIdx.x;
@@ -92,17 +96,18 @@ __global__ void TimeStepKernel(
 
     // Check Cartesian directions for max wave speed
     PetscReal local_max = 0.0;
-    PetscReal res[1];
     
     // X Direction
     PetscReal n_x[3] = {1.0, 0.0, 0.0};
-    Numerics<Real>::local_max_abs_eigenvalue(q, aux, n_x, res);
-    if(res[0] > local_max) local_max = res[0];
+    // UPDATED: Return by value
+    auto res_x = Numerics<Real>::local_max_abs_eigenvalue(q, aux, parameters, n_x);
+    if(res_x[0] > local_max) local_max = res_x[0];
 
     // Y Direction
     PetscReal n_y[3] = {0.0, 1.0, 0.0};
-    Numerics<Real>::local_max_abs_eigenvalue(q, aux, n_y, res);
-    if(res[0] > local_max) local_max = res[0];
+    // UPDATED: Return by value
+    auto res_y = Numerics<Real>::local_max_abs_eigenvalue(q, aux, parameters, n_y);
+    if(res_y[0] > local_max) local_max = res_y[0];
     
     max_eigen_per_cell[c] = local_max;
 }
@@ -242,17 +247,29 @@ PetscErrorCode GPUFirstOrderSolver::UploadTopology() {
     }
     VecRestoreArrayRead(cellGeom, &c_ptr);
 
-    // 4. Allocate and Copy to GPU
+    // 4. PARAMETERS (New Section)
+    // TODO: You should load these from your Settings.hpp or Python input.
+    // For now, initializing with defaults matching your ShallowWaterTopo model.
+    std::vector<PetscReal> h_params = {9.81, 0.0, 1e-6}; // [g, chezy, eps]
+    PetscInt n_params = h_params.size();
+
+    // 5. Allocate and Copy to GPU
     cudaMalloc(&gpu_mesh->L, gpu_mesh->n_faces * sizeof(PetscInt));
     cudaMalloc(&gpu_mesh->R, gpu_mesh->n_faces * sizeof(PetscInt));
     cudaMalloc(&gpu_mesh->normals, gpu_mesh->n_faces * 2 * sizeof(PetscReal));
     cudaMalloc(&gpu_mesh->cell_volumes, gpu_mesh->n_cells * sizeof(PetscReal));
     cudaMalloc(&gpu_mesh->d_eigenvalues, gpu_mesh->n_cells * sizeof(PetscReal));
+    
+    // Allocate Parameters
+    cudaMalloc(&gpu_mesh->d_parameters, n_params * sizeof(PetscReal));
 
     cudaMemcpy(gpu_mesh->L, h_L.data(), gpu_mesh->n_faces * sizeof(PetscInt), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_mesh->R, h_R.data(), gpu_mesh->n_faces * sizeof(PetscInt), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_mesh->normals, h_normals.data(), gpu_mesh->n_faces * 2 * sizeof(PetscReal), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_mesh->cell_volumes, h_vols.data(), gpu_mesh->n_cells * sizeof(PetscReal), cudaMemcpyHostToDevice);
+    
+    // Copy Parameters
+    cudaMemcpy(gpu_mesh->d_parameters, h_params.data(), n_params * sizeof(PetscReal), cudaMemcpyHostToDevice);
 
     PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -263,6 +280,7 @@ void GPUFirstOrderSolver::FreeTopology() {
     if (gpu_mesh->normals) cudaFree(gpu_mesh->normals);
     if (gpu_mesh->cell_volumes) cudaFree(gpu_mesh->cell_volumes);
     if (gpu_mesh->d_eigenvalues) cudaFree(gpu_mesh->d_eigenvalues);
+    if (gpu_mesh->d_parameters) cudaFree(gpu_mesh->d_parameters); // Free parameters
 }
 
 PetscReal GPUFirstOrderSolver::ComputeDT_GPU() {
@@ -276,7 +294,9 @@ PetscReal GPUFirstOrderSolver::ComputeDT_GPU() {
     int numBlocks = (gpu_mesh->n_cells + blockSize - 1) / blockSize;
     
     TimeStepKernel<<<numBlocks, blockSize>>>(
-        gpu_mesh->n_cells, d_X, d_A, gpu_mesh->d_eigenvalues
+        gpu_mesh->n_cells, d_X, d_A, 
+        gpu_mesh->d_parameters, // Pass parameters
+        gpu_mesh->d_eigenvalues
     );
 
     // 3. Restore Vectors
@@ -318,7 +338,9 @@ PetscErrorCode GPUFirstOrderSolver::ComputeRHS_GPU(Vec X, Vec F) {
         gpu_mesh->n_faces,
         gpu_mesh->L, gpu_mesh->R,
         gpu_mesh->normals,
-        d_X, d_A, d_F
+        d_X, d_A,
+        gpu_mesh->d_parameters, // Pass parameters
+        d_F
     );
 
     VecCUDARestoreArrayRead(X, &d_X);
