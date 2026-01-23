@@ -252,11 +252,13 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = std::pow(Qaux[0], 2);
+    T t1 = 1.0*Qaux[0]*std::pow(std::pow(Q[2], 2)*t0 + std::pow(Q[3], 2)*t0, 1.0/2.0)/std::pow(p[1], 2);
     SimpleArray<T, 4> res;
     res[0] = 0;
     res[1] = 0;
-    res[2] = 0;
-    res[3] = 0;
+    res[2] = -Q[2]*t1;
+    res[3] = -Q[3]*t1;
     return res;
     }
 
@@ -265,6 +267,14 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = std::pow(Q[2], 2);
+    T t1 = std::pow(Qaux[0], 2);
+    T t2 = std::pow(Q[3], 2);
+    T t3 = std::pow(t0*t1 + t1*t2, 1.0/2.0);
+    T t4 = 1.0/std::pow(p[1], 2);
+    T t5 = Qaux[0]*t3*t4;
+    T t6 = std::pow(Qaux[0], 3)*t4/t3;
+    T t7 = -Q[2]*Q[3]*t6;
     SimpleArray<T, 16> res;
     res[0] = 0;
     res[1] = 0;
@@ -276,12 +286,12 @@ struct Model {
     res[7] = 0;
     res[8] = 0;
     res[9] = 0;
-    res[10] = 0;
-    res[11] = 0;
+    res[10] = -t0*t6 - t5;
+    res[11] = t7;
     res[12] = 0;
     res[13] = 0;
-    res[14] = 0;
-    res[15] = 0;
+    res[14] = t7;
+    res[15] = -t2*t6 - t5;
     return res;
     }
 
@@ -290,11 +300,18 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = std::pow(Q[2], 2);
+    T t1 = std::pow(Qaux[0], 2);
+    T t2 = std::pow(Q[3], 2);
+    T t3 = std::pow(t0*t1 + t1*t2, 1.0/2.0);
+    T t4 = 1.0/std::pow(p[1], 2);
+    T t5 = t3*t4;
+    T t6 = Qaux[0]*t4*(Qaux[0]*t0 + Qaux[0]*t2)/t3;
     SimpleArray<T, 4> res;
     res[0] = 0;
     res[1] = 0;
-    res[2] = 0;
-    res[3] = 0;
+    res[2] = -Q[2]*t5 - Q[2]*t6;
+    res[3] = -Q[3]*t5 - Q[3]*t6;
     return res;
     }
 
@@ -374,6 +391,67 @@ struct Model {
     {
     SimpleArray<T, 1> res;
     res[0] = ((X[0] < 5) ? (0.5) : (1.0/p[2]));
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> update_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 1> update_aux_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray<T, 1> res;
+    res[0] = ((Q[1] > p[2]) ? (1.0/Q[1]) : (p[2]));
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 16> update_variables_jacobian_wrt_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray<T, 16> res;
+    res[0] = 1;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 1;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 1;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 1;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> update_aux_variables_jacobian_wrt_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = 0;
+    res[1] = ((Q[1] > p[2]) ? (-1.0/std::pow(Q[1], 2)) : (0));
+    res[2] = 0;
+    res[3] = 0;
     return res;
     }
 
