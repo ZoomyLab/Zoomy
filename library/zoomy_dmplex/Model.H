@@ -362,7 +362,7 @@ struct Model {
     {
     SimpleArray<T, 4> res;
     res[0] = 1.0;
-    res[1] = ((X[0] < 5) ? (2.0) : (1.0));
+    res[1] = ((X[0] < 5) ? (2.0) : (0.0));
     res[2] = 0;
     res[3] = 0;
     return res;
@@ -373,7 +373,7 @@ struct Model {
         const T* p)
     {
     SimpleArray<T, 1> res;
-    res[0] = ((X[0] < 5) ? (0.5) : (1.0));
+    res[0] = ((X[0] < 5) ? (0.5) : (1.0/p[2]));
     return res;
     }
 
@@ -387,15 +387,10 @@ struct Model {
         const T dX)
     {
     if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2) {
-        T t0 = n[1]*Q[2];
-        T t1 = n[0]*Q[1] + t0;
-        T t2 = 1.0*n[0];
-        T t3 = 1.0*n[0]*Q[1] + 1.0*t0;
-        T t4 = 1.0*n[1];
         SimpleArray<T, 4> res;
         res[0] = Q[0];
-        res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
-        res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
+        res[1] = Q[1];
+        res[2] = Q[2];
         res[3] = Q[3];
         return res;
     }

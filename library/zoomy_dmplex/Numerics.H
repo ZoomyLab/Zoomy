@@ -37,18 +37,31 @@ struct Numerics {
         const T* p,
         const T* n)
     {
-    auto v_call_0 = Model<T>::flux(Q_minus, Qaux_minus, p);
-    auto v_call_1 = Model<T>::flux(Q_plus, Qaux_plus, p);
-    auto v_call_2 = Model<T>::eigenvalues(Q_minus, Qaux_minus, p, n);
-    auto v_call_3 = Model<T>::eigenvalues(Q_plus, Qaux_plus, p, n);
-    T t0 = 0.5*n[0];
-    T t1 = 0.5*n[1];
-    T t2 = 0.5*std::max(std::fabs(v_call_2[0]), std::max(std::fabs(v_call_2[1]), std::max(std::fabs(v_call_2[2]), std::max(std::fabs(v_call_2[3]), std::max(std::fabs(v_call_3[0]), std::max(std::fabs(v_call_3[1]), std::max(std::fabs(v_call_3[2]), std::fabs(v_call_3[3]))))))));
+    T t0 = std::max(Q_minus[0], Q_plus[0]);
+    T t1 = -t0;
+    T t2 = std::max(0.0, Q_minus[0] + Q_minus[1] + t1);
+    T t3 = t2/std::max(9.9999999999999995e-7, Q_minus[1]);
+    T t4 = std::max(0.0, Q_plus[0] + Q_plus[1] + t1);
+    T t5 = t4/std::max(9.9999999999999995e-7, Q_plus[1]);
+    T v_arg_0[] = { t0, t2, Q_minus[2]*t3, Q_minus[3]*t3 };
+    T v_arg_1[] = { t0, t4, Q_plus[2]*t5, Q_plus[3]*t5 };
+    auto v_call_0 = Model<T>::flux(v_arg_0, Qaux_minus, p);
+    auto v_call_1 = Model<T>::flux(v_arg_1, Qaux_plus, p);
+    auto v_call_2 = Model<T>::eigenvalues(v_arg_0, Qaux_minus, p, n);
+    auto v_call_3 = Model<T>::eigenvalues(v_arg_1, Qaux_plus, p, n);
+    T t6 = 0.5*n[0];
+    T t7 = 0.5*n[1];
+    T t8 = -std::max(Q_minus[0], Q_plus[0]);
+    T t9 = std::max(0.0, Q_minus[0] + Q_minus[1] + t8);
+    T t10 = std::max(0.0, Q_plus[0] + Q_plus[1] + t8);
+    T t11 = 0.5*std::max(std::fabs(v_call_2[0]), std::max(std::fabs(v_call_2[1]), std::max(std::fabs(v_call_2[2]), std::max(std::fabs(v_call_2[3]), std::max(std::fabs(v_call_3[0]), std::max(std::fabs(v_call_3[1]), std::max(std::fabs(v_call_3[2]), std::fabs(v_call_3[3]))))))));
+    T t12 = t9/std::max(9.9999999999999995e-7, Q_minus[1]);
+    T t13 = (1.0 / std::pow(std::max(9.9999999999999995e-7, Q_plus[1]), 1));
     SimpleArray<T, 4> res;
-    res[0] = t0*v_call_0[0] + t0*v_call_1[0] + t1*v_call_0[1] + t1*v_call_1[1] - t2*(-Q_minus[0] + Q_plus[0]);
-    res[1] = t0*v_call_0[2] + t0*v_call_1[2] + t1*v_call_0[3] + t1*v_call_1[3] - t2*(-Q_minus[1] + Q_plus[1]);
-    res[2] = t0*v_call_0[4] + t0*v_call_1[4] + t1*v_call_0[5] + t1*v_call_1[5] - t2*(-Q_minus[2] + Q_plus[2]);
-    res[3] = t0*v_call_0[6] + t0*v_call_1[6] + t1*v_call_0[7] + t1*v_call_1[7] - t2*(-Q_minus[3] + Q_plus[3]);
+    res[0] = t6*v_call_0[0] + t6*v_call_1[0] + t7*v_call_0[1] + t7*v_call_1[1];
+    res[1] = -t11*(t10 - t9) + t6*v_call_0[2] + t6*v_call_1[2] + t7*v_call_0[3] + t7*v_call_1[3];
+    res[2] = -t11*(-Q_minus[2]*t12 + Q_plus[2]*t10*t13) + t6*v_call_0[4] + t6*v_call_1[4] + t7*v_call_0[5] + t7*v_call_1[5];
+    res[3] = -t11*(-Q_minus[3]*t12 + Q_plus[3]*t10*t13) + t6*v_call_0[6] + t6*v_call_1[6] + t7*v_call_0[7] + t7*v_call_1[7];
     return res;
     }
 

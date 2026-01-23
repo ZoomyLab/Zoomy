@@ -3,14 +3,14 @@
     "io": {
         "directory": "outputs/dmplex",
         "filename": "dmplex",
-        "snapshots": 30,
+        "snapshots": 1000,
         "snapshot_logic": "interpolate",
         "clean_directory": true,
         "mesh_path": "mesh_coarse.msh"
     },
     "solver": {
         "t_end": 0.1,
-        "cfl": 0.5,
-        "reconstruction_order": 1
+        "cfl": 0.4,
+        "reconstruction_order": 0
     }
 }
