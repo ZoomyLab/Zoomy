@@ -41,7 +41,7 @@ public:
         MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
         dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL;
         ts = NULL; X = NULL; A = NULL; X_out = NULL;
-        parameters = {9.81, 0.0, 1e-6}; 
+        parameters = {9.81, 1.0, 1e-6}; 
     }
 
     virtual ~VirtualSolver() {
@@ -108,29 +108,6 @@ protected:
         const PetscScalar *cArray, *fArray;
         PetscCall(VecGetArrayRead(cellGeom, &cArray));
         PetscCall(VecGetArrayRead(faceGeom, &fArray));
-
-        std::cout << "\n[DEBUG] --- GEOMETRY DUMP (Rank 0) ---" << std::endl;
-        
-        // Print Cells (first few)
-        for (PetscInt c = cStart; c < cStart + 5 && c < cEnd; ++c) {
-            PetscInt off;
-            PetscCall(PetscSectionGetOffset(secCell, c, &off));
-            if (off < 0) continue; 
-            const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cArray[off];
-            PetscPrintf(PETSC_COMM_SELF, "Cell %d | Vol: %.4g | Centroid: (%.3g, %.3g)\n", 
-                        c, (double)cg->volume, (double)cg->centroid[0], (double)cg->centroid[1]);
-        }
-
-        // Print Faces (first few)
-        for (PetscInt f = fStart; f < fStart + 5 && f < fEnd; ++f) {
-            PetscInt off;
-            PetscCall(PetscSectionGetOffset(secFace, f, &off));
-            if (off < 0) continue;
-
-            const PetscFVFaceGeom *fg = (const PetscFVFaceGeom*)&fArray[off];
-            PetscPrintf(PETSC_COMM_SELF, "Face %d | Normal: (%.3g, %.3g)\n", 
-                        f, (double)fg->normal[0], (double)fg->normal[1]);
-        }
         
         PetscCall(VecRestoreArrayRead(cellGeom, &cArray));
         PetscCall(VecRestoreArrayRead(faceGeom, &fArray));

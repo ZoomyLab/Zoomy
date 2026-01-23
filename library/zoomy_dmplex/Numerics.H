@@ -77,18 +77,4 @@ struct Numerics {
     return res;
     }
 
-    PORTABLE_FN static inline SimpleArray<T, 5> overwrite_q_qaux(
-        const T* Q,
-        const T* Qaux,
-        const T* p)
-    {
-    SimpleArray<T, 5> res;
-    res[0] = Q[0];
-    res[1] = Q[1];
-    res[2] = Q[2];
-    res[3] = Q[3];
-    res[4] = ((Q[1] > p[2]) ? (1.0/Q[1]) : (p[2]));
-    return res;
-    }
-
 };
