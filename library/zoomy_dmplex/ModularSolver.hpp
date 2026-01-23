@@ -49,36 +49,51 @@ public:
 
     PetscErrorCode ComputeRHS(PetscReal time, Vec X_global, Vec F_global) override {
         Vec X_loc, A_loc, F_loc, cellGeom, faceGeom;
+        
         PetscCall(DMGetLocalVector(dmQ, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
         PetscCall(DMGetLocalVector(dmAux, &A_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
-
         PetscCall(DMGetLocalVector(dmQ, &F_loc));
         PetscCall(VecSet(F_loc, 0.0));
 
-        const PetscScalar *x_ptr, *a_ptr;
-        PetscScalar *f_ptr;
+        const PetscScalar *x_ptr, *a_ptr; PetscScalar *f_ptr;
         PetscCall(VecGetArrayRead(X_loc, &x_ptr));
         PetscCall(VecGetArrayRead(A_loc, &a_ptr));
         PetscCall(VecGetArray(F_loc, &f_ptr));
 
-        PetscCall(DMPlexGetGeometryFVM(dmMesh, &cellGeom, &faceGeom, NULL));
+        // Use dmMesh for geometry (cached)
+        // Correct Order: Face, Cell
+        PetscCall(DMPlexGetGeometryFVM(dmMesh, &faceGeom, &cellGeom, NULL));
+        
+        DM dmCell, dmFace;
+        PetscSection secCell, secFace;
+        PetscCall(VecGetDM(cellGeom, &dmCell));
+        PetscCall(VecGetDM(faceGeom, &dmFace));
+        PetscCall(DMGetLocalSection(dmCell, &secCell));
+        PetscCall(DMGetLocalSection(dmFace, &secFace));
+
         const PetscScalar *cGeom_ptr, *fGeom_ptr;
         PetscCall(VecGetArrayRead(cellGeom, &cGeom_ptr));
         PetscCall(VecGetArrayRead(faceGeom, &fGeom_ptr));
 
-        PetscCall(ComputeFaceFluxes(x_ptr, a_ptr, f_ptr, fGeom_ptr));
+        PetscCall(ComputeFaceFluxes(time, x_ptr, a_ptr, f_ptr, fGeom_ptr, secFace));
         PetscCall(ComputeCellSources(x_ptr, a_ptr, f_ptr));
 
         PetscInt cStart, cEnd;
-        PetscCall(DMPlexGetHeightStratum(dmMesh, 0, &cStart, &cEnd));
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
         for(PetscInt c=cStart; c<cEnd; ++c) {
-             PetscFVCellGeom *cg;
+             PetscInt off;
+             PetscCall(PetscSectionGetOffset(secCell, c, &off));
+             if (off < 0) continue; 
+
+             const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[off];
+             if (cg->volume <= 1e-15) continue;
+
              PetscScalar *f_cell;
-             PetscCall(DMPlexPointLocalRead(dmMesh, c, cGeom_ptr, &cg));
              PetscCall(DMPlexPointLocalRef(dmQ, c, f_ptr, &f_cell));
              if (f_cell) { for(int i=0; i<Model<Real>::n_dof_q; ++i) f_cell[i] /= cg->volume; }
         }
@@ -112,7 +127,7 @@ public:
         PetscCall(VecGetArray(X_loc, &x_ptr));
         PetscCall(VecGetArray(A_loc, &a_ptr));
         PetscInt cStart, cEnd;
-        PetscCall(DMPlexGetHeightStratum(dmMesh, 0, &cStart, &cEnd)); 
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
         for(PetscInt c=cStart; c<cEnd; ++c) {
             PetscScalar *q, *a;
             PetscCall(DMPlexPointLocalRef(dmQ, c, x_ptr, &q));
@@ -135,33 +150,71 @@ public:
     }
 
 protected:
-    PetscErrorCode ComputeFaceFluxes(const PetscScalar* x, const PetscScalar* a, PetscScalar* f_loc, const PetscScalar* fGeom_ptr) {
+    PetscErrorCode ComputeFaceFluxes(PetscReal time, const PetscScalar* x, const PetscScalar* a, PetscScalar* f_loc, 
+                                     const PetscScalar* fGeom_ptr, PetscSection secFace) {
         PetscInt fStart, fEnd;
-        PetscCall(DMPlexGetHeightStratum(dmMesh, 1, &fStart, &fEnd));
+        PetscCall(DMPlexGetHeightStratum(dmQ, 1, &fStart, &fEnd));
         PetscInt dim = Model<Real>::dimension;
+        DMLabel label; PetscCall(DMGetLabel(dmQ, "Face Sets", &label));
+
+        static bool warned = false;
+
         for (PetscInt f = fStart; f < fEnd; ++f) {
-            const PetscInt *cells; PetscInt num_cells;
-            PetscCall(DMPlexGetSupportSize(dmMesh, f, &num_cells));
-            PetscCall(DMPlexGetSupport(dmMesh, f, &cells));
-            if (num_cells != 2) continue; 
-            PetscInt cL = cells[0], cR = cells[1];
-            const PetscScalar *qL, *qR, *auxL, *auxR;
-            PetscCall(DMPlexPointLocalRead(dmQ, cL, x, &qL));
-            PetscCall(DMPlexPointLocalRead(dmQ, cR, x, &qR));
-            PetscCall(DMPlexPointLocalRead(dmAux, cL, a, &auxL));
-            PetscCall(DMPlexPointLocalRead(dmAux, cR, a, &auxR));
-            PetscFVFaceGeom *fg;
-            PetscCall(DMPlexPointLocalRead(dmMesh, f, fGeom_ptr, &fg));
+            PetscInt off;
+            PetscCall(PetscSectionGetOffset(secFace, f, &off));
+            if (off < 0) continue; 
+
+            const PetscFVFaceGeom *fg = (const PetscFVFaceGeom*)&fGeom_ptr[off];
+            
+            // --- ON-THE-FLY NORMALIZATION ---
             PetscScalar n_hat[3] = {0}; PetscReal area = 0;
-            for(int d=0; d<dim; ++d) { n_hat[d] = fg->normal[d]; area += n_hat[d]*n_hat[d]; }
+            for(int d=0; d<dim; ++d) area += fg->normal[d]*fg->normal[d];
             area = std::sqrt(area);
-            if(area > 1e-14) { for(int d=0; d<dim; ++d) n_hat[d] /= area; }
-            for (auto& kernel : flux_kernels) {
-                FluxResult fr = kernel(qL, qR, auxL, auxR, parameters.data(), n_hat);
-                PetscScalar *fL, *fR;
-                PetscCall(DMPlexPointLocalRef(dmQ, cL, f_loc, &fL));
-                PetscCall(DMPlexPointLocalRef(dmQ, cR, f_loc, &fR));
-                if (fL && fR) { for(int i=0; i<Model<Real>::n_dof_q; ++i) { fL[i] -= fr.fluxL[i] * area; fR[i] -= fr.fluxR[i] * area; } }
+            
+            if(area <= 1e-15) continue; // Skip degenerate faces
+
+            for(int d=0; d<dim; ++d) n_hat[d] = fg->normal[d] / area;
+
+            const PetscInt *cells; PetscInt num_cells;
+            PetscCall(DMPlexGetSupportSize(dmQ, f, &num_cells));
+            PetscCall(DMPlexGetSupport(dmQ, f, &cells));
+
+            if (num_cells == 2) {
+                const PetscScalar *qL, *qR, *aL, *aR;
+                PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x, &qL));
+                PetscCall(DMPlexPointLocalRead(dmQ, cells[1], x, &qR));
+                PetscCall(DMPlexPointLocalRead(dmAux, cells[0], a, &aL));
+                PetscCall(DMPlexPointLocalRead(dmAux, cells[1], a, &aR));
+
+                for (auto& kernel : flux_kernels) {
+                    FluxResult fr = kernel(qL, qR, aL, aR, parameters.data(), n_hat);
+                    PetscScalar *fL, *fR;
+                    PetscCall(DMPlexPointLocalRef(dmQ, cells[0], f_loc, &fL));
+                    PetscCall(DMPlexPointLocalRef(dmQ, cells[1], f_loc, &fR));
+                    // Independent updates for safety
+                    if (fL) { for(int i=0; i<Model<Real>::n_dof_q; ++i) fL[i] -= fr.fluxL[i] * area; }
+                    if (fR) { for(int i=0; i<Model<Real>::n_dof_q; ++i) fR[i] -= fr.fluxR[i] * area; }
+                }
+            } else if (num_cells == 1) {
+                PetscInt tag_id;
+                PetscCall(DMLabelGetValue(label, f, &tag_id));
+                if (boundary_map.count(tag_id)) {
+                    PetscInt bc_idx = boundary_map[tag_id];
+                    const PetscScalar *qL, *aL;
+                    PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x, &qL));
+                    PetscCall(DMPlexPointLocalRead(dmAux, cells[0], a, &aL));
+                    
+                    auto qR_arr = Model<Real>::boundary_conditions(bc_idx, qL, aL, n_hat, fg->centroid, time, 0.0);
+                    for (auto& kernel : flux_kernels) {
+                        FluxResult fr = kernel(qL, qR_arr.data, aL, aL, parameters.data(), n_hat);
+                        PetscScalar *fL;
+                        PetscCall(DMPlexPointLocalRef(dmQ, cells[0], f_loc, &fL));
+                        if (fL) { for(int i=0; i<Model<Real>::n_dof_q; ++i) fL[i] -= fr.fluxL[i] * area; }
+                    }
+                } else if (!warned && this->rank == 0) {
+                    std::cerr << "[WARN] Boundary Face " << f << " (Tag " << tag_id << ") ignored! Not in map." << std::endl;
+                    warned = true;
+                }
             }
         }
         return PETSC_SUCCESS;
@@ -169,7 +222,7 @@ protected:
 
     PetscErrorCode ComputeCellSources(const PetscScalar* x, const PetscScalar* a, PetscScalar* f_loc) {
         PetscInt cStart, cEnd;
-        PetscCall(DMPlexGetHeightStratum(dmMesh, 0, &cStart, &cEnd));
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         for (PetscInt c = cStart; c < cEnd; ++c) {
             const PetscScalar *q, *aux; PetscScalar *f;
             PetscCall(DMPlexPointLocalRead(dmQ, c, x, &q));
