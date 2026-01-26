@@ -55,7 +55,7 @@ int main(int argc, char **argv)
             }
             
             // Just instantiate the unified Solver
-            solver = new Solver(order);
+            solver = new Solver(order, true);
         }
 
         if (solver) {
