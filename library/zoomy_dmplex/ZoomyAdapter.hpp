@@ -1,5 +1,5 @@
-#ifndef PETSC_HELPERS_HPP
-#define PETSC_HELPERS_HPP
+#ifndef ZOOMY_ADAPTER_HPP
+#define ZOOMY_ADAPTER_HPP
 
 #include <petscdmplex.h>
 #include <petscfv.h>
