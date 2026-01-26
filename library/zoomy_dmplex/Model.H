@@ -379,7 +379,7 @@ struct Model {
     {
     SimpleArray<T, 4> res;
     res[0] = 1.0;
-    res[1] = ((X[0] < 5) ? (2.0) : (0.0));
+    res[1] = ((X[0] < 5) ? (2.0) : (1.0));
     res[2] = 0;
     res[3] = 0;
     return res;
@@ -413,7 +413,7 @@ struct Model {
         const T* p)
     {
     SimpleArray<T, 1> res;
-    res[0] = ((Q[1] > p[2]) ? (1.0/Q[1]) : (p[2]));
+    res[0] = ((Q[1] > p[2]) ? (1.0/Q[1]) : (1.0/p[2]));
     return res;
     }
 
