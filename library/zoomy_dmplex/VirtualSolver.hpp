@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <memory>
 
 #include "Numerics.H"
 #include "Settings.hpp"
@@ -18,14 +19,51 @@
 
 using Real = PetscReal;
 
+// --- GLOBAL DEFINITIONS ---
+
+// Enums
+enum GradientMethod { GREEN_GAUSS, LEAST_SQUARES };
+enum ReconstructionType { PCM, LINEAR }; 
+
+// Function Pointer Types (Kernel Signatures)
+using FluxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q> (*)(
+    const PetscScalar*, const PetscScalar*, const PetscScalar*, const PetscScalar*, 
+    const PetscScalar*, const PetscScalar*);
+
+using SourceKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q> (*)(
+    const PetscScalar*, const PetscScalar*, const PetscScalar*);
+
+using JacobianKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q * Model<Real>::n_dof_q> (*)(
+    const PetscScalar*, const PetscScalar*, const PetscScalar*);
+using JacobianAuxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q * Model<Real>::n_dof_qaux> (*)(
+    const PetscScalar*, const PetscScalar*, const PetscScalar*);
+using JacobianAuxQKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_qaux * Model<Real>::n_dof_q> (*)(
+    const PetscScalar*, const PetscScalar*, const PetscScalar*);
+
+using NonConservativeFluxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q> (*)(
+    const PetscScalar* qL, const PetscScalar* qR, const PetscScalar* aL, const PetscScalar* aR, 
+    const PetscScalar* p, const PetscScalar* n);
+
+// --------------------------
+
 class VirtualSolver {
 protected:
     Settings settings;
     IOManager* io = nullptr;
     
-    DM dmMesh, dmQ, dmAux, dmOut;
+    // DMs
+    DM dmMesh;
+    DM dmQ; 
+    DM dmAux; 
+    DM dmOut;
+    DM dmGrad; 
+
     TS ts; 
-    Vec X, A, X_out;
+    Vec X; 
+    Vec X_old; 
+    Vec A; 
+    Vec G;     
+    Vec X_out;
     
     PetscMPIInt rank;
     PetscReal minRadius;
@@ -35,51 +73,50 @@ protected:
 public:
     VirtualSolver() : rank(0), minRadius(0.0) { 
         MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
-        dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL;
-        ts = NULL; X = NULL; A = NULL; X_out = NULL;
+        dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL; dmGrad = NULL;
+        ts = NULL; X = NULL; X_old = NULL; A = NULL; G = NULL; X_out = NULL;
         parameters = {9.81, 1.0, 1e-6}; 
     }
 
     virtual ~VirtualSolver() {
         if (io) delete io;
         if (X)      VecDestroy(&X);
+        if (X_old)  VecDestroy(&X_old);
         if (A)      VecDestroy(&A);
+        if (G)      VecDestroy(&G);
         if (X_out)  VecDestroy(&X_out);
         if (ts)     TSDestroy(&ts);
         if (dmQ)    DMDestroy(&dmQ);
         if (dmAux)  DMDestroy(&dmAux);
         if (dmOut)  DMDestroy(&dmOut);
+        if (dmGrad) DMDestroy(&dmGrad);
         if (dmMesh) DMDestroy(&dmMesh);
+    }
+
+    PetscErrorCode CreateVector(DM dm, Vec* v) {
+        return DMCreateGlobalVector(dm, v);
     }
 
     virtual PetscErrorCode Run(int argc, char **argv) {
         PetscFunctionBeginUser;
         PetscCall(Initialize(argc, argv));
         
-        // --- PETSc TS Setup ---
         PetscCall(TSSetApplicationContext(ts, this));
-        
-        // 1. Register callbacks (RHS, IFunction)
         PetscCall(RegisterCallbacks(ts));
-
-        // 2. Register PostStep for State Updates
+        
+        PetscCall(TSSetPreStep(ts, PreStepWrapper));
         PetscCall(TSSetPostStep(ts, PostStepWrapper));
-
-        // 3. Time Loop Config
+        
         PetscCall(TSSetTime(ts, 0.0));
         PetscCall(TSSetMaxTime(ts, settings.solver.t_end));
         PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
         PetscCall(TSSetTimeStep(ts, ComputeTimeStep())); 
         PetscCall(TSSetFromOptions(ts)); 
-
-        // 4. Monitor for I/O
         PetscCall(TSMonitorSet(ts, MonitorWrapper, this, NULL));
-
-        // 5. Solve
+        
         if (rank == 0) std::cout << "[INFO] Starting PETSc TSSolve..." << std::endl;
         PetscCall(TSSolve(ts, X));
         if (rank == 0) std::cout << "[INFO] TSSolve Finished." << std::endl;
-
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
@@ -87,16 +124,21 @@ protected:
     virtual PetscErrorCode RegisterCallbacks(TS ts) = 0;
     virtual PetscErrorCode UpdateState(Vec Q_loc, Vec Aux_loc) = 0; 
 
-    // --- PostStep: Physics Constraints & Time Step Control ---
+    static PetscErrorCode PreStepWrapper(TS ts) {
+        void *ctx; PetscCall(TSGetApplicationContext(ts, &ctx));
+        return ((VirtualSolver*)ctx)->PreStep(ts);
+    }
+    virtual PetscErrorCode PreStep(TS ts) {
+        if (X_old) PetscCall(VecCopy(X, X_old)); 
+        return PETSC_SUCCESS;
+    }
+
     static PetscErrorCode PostStepWrapper(TS ts) {
         void *ctx; PetscCall(TSGetApplicationContext(ts, &ctx));
         return ((VirtualSolver*)ctx)->PostStep(ts);
     }
-
-    PetscErrorCode PostStep(TS ts) {
-        // 1. Update Physics State (Constraints & Aux)
+    virtual PetscErrorCode PostStep(TS ts) {
         Vec X_curr; PetscCall(TSGetSolution(ts, &X_curr));
-
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
@@ -105,10 +147,8 @@ protected:
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        // Perform the Physics Update
         PetscCall(UpdateState(X_loc, A_loc));
 
-        // Scatter back
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
@@ -117,14 +157,11 @@ protected:
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc));
         PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
 
-        // 2. Compute Next Time Step
         PetscReal dt_next = ComputeTimeStep();
         PetscCall(TSSetTimeStep(ts, dt_next));
-
         return PETSC_SUCCESS;
     }
 
-    // --- Monitor: I/O Only (Read-Only) ---
     static PetscErrorCode MonitorWrapper(TS ts, PetscInt step, PetscReal time, Vec X, void *ctx) {
         return ((VirtualSolver*)ctx)->Monitor(ts, step, time, X);
     }
@@ -135,7 +172,6 @@ protected:
             io->WriteVTK(X_out, time);
             io->AdvanceSnapshot();
         }
-        
         if (rank == 0 && step % 10 == 0) {
             PetscReal dt; TSGetTimeStep(ts, &dt);
             PetscPrintf(PETSC_COMM_WORLD, "Step %d Time %.4f dt %.4e\n", step, (double)time, (double)dt);
@@ -153,24 +189,18 @@ protected:
         PetscCall(SetupInitialConditions()); 
         PetscCall(SetupAuxiliaryConditions()); 
         
-        // Initial state sync
-        Vec X_loc, A_loc;
-        PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
-        PetscCall(DMGetLocalVector(dmAux, &A_loc)); PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
-        PetscCall(UpdateState(X_loc, A_loc));
-        PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
-        PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
-        PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
+        // --- REMOVED CRASHING UPDATE STATE CALL FROM HERE ---
+        // It must be called by the derived class after components are initialized.
         
+        if (X_old) PetscCall(VecCopy(X, X_old));
         return PETSC_SUCCESS;
     }
 
-    // [SetupArchitecture, SetupInitialConditions, ComputeTimeStep, PackState wrappers... identical to previous]
-    // (Included for complete file replacement)
     static PetscErrorCode ICWrapper(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar u[], void *ctx) { Real* params = (Real*)ctx; auto res = Model<Real>::initial_condition(x, params); for(int i=0; i<Nf; ++i) u[i] = res[i]; return PETSC_SUCCESS; }
     static PetscErrorCode AuxWrapper(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar u[], void *ctx) { Real* params = (Real*)ctx; auto res = Model<Real>::initial_aux_condition(x, params); for(int i=0; i<Nf; ++i) u[i] = res[i]; return PETSC_SUCCESS; }
     virtual PetscErrorCode SetupInitialConditions() { PetscErrorCode (*funcs[1])(PetscInt, PetscReal, const PetscReal[], PetscInt, PetscScalar[], void*) = { ICWrapper }; void* ctxs[1] = { parameters.data() }; PetscCall(DMProjectFunction(dmQ, 0.0, funcs, ctxs, INSERT_ALL_VALUES, X)); PetscCall(TSSetSolution(ts, X)); return PETSC_SUCCESS; }
     virtual PetscErrorCode SetupAuxiliaryConditions() { PetscErrorCode (*funcs[1])(PetscInt, PetscReal, const PetscReal[], PetscInt, PetscScalar[], void*) = { AuxWrapper }; void* ctxs[1] = { parameters.data() }; PetscCall(DMProjectFunction(dmAux, 0.0, funcs, ctxs, INSERT_ALL_VALUES, A)); return PETSC_SUCCESS; }
+    
     PetscReal ComputeTimeStep() {
         Vec X_loc, A_loc; const PetscScalar *x, *a;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
@@ -194,6 +224,7 @@ protected:
         if (glob_eig < 1e-14) return 1e-3;
         return settings.solver.cfl * minRadius / glob_eig;
     }
+
     PetscErrorCode PackState(Vec X_in, Vec A_in, Vec X_target) {
         const PetscScalar *arr_x, *arr_a; PetscScalar *arr_out;
         PetscCall(VecGetArrayRead(X_in, &arr_x)); PetscCall(VecGetArrayRead(A_in, &arr_a)); PetscCall(VecGetArray(X_target, &arr_out));
@@ -210,7 +241,9 @@ protected:
         PetscCall(VecRestoreArrayRead(X_in, &arr_x)); PetscCall(VecRestoreArrayRead(A_in, &arr_a)); PetscCall(VecRestoreArray(X_target, &arr_out));
         return PETSC_SUCCESS;
     }
+
     PetscErrorCode DebugGeometry(DM dm) { if (rank != 0) return PETSC_SUCCESS; PetscInt cStart, cEnd, fStart, fEnd; PetscCall(DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd)); PetscCall(DMPlexGetHeightStratum(dm, 1, &fStart, &fEnd)); Vec cellGeom, faceGeom; PetscCall(DMPlexGetGeometryFVM(dm, &faceGeom, &cellGeom, NULL)); PetscCall(VecDestroy(&cellGeom)); PetscCall(VecDestroy(&faceGeom)); return PETSC_SUCCESS; }
+
     PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
         if (!settings.io.mesh_path.empty()) PetscCall(DMPlexCreateFromFile(PETSC_COMM_WORLD, settings.io.mesh_path.c_str(), "zoomy_mesh", PETSC_TRUE, &dmMesh));
         else { PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh)); PetscCall(DMSetType(dmMesh, DMPLEX)); }
@@ -218,17 +251,35 @@ protected:
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
         PetscCall(DMLocalizeCoordinates(dmMesh));
         PetscCall(DMSetBasicAdjacency(dmMesh, settings.solver.use_deep_adjacency ? PETSC_TRUE : PETSC_FALSE, PETSC_FALSE));
-        PetscCall(DMClone(dmMesh, &dmQ)); PetscCall(DMClone(dmMesh, &dmAux)); PetscCall(DMClone(dmMesh, &dmOut));
+        
+        PetscCall(DMClone(dmMesh, &dmQ)); 
+        PetscCall(DMClone(dmMesh, &dmAux)); 
+        PetscCall(DMClone(dmMesh, &dmOut));
+        PetscCall(DMClone(dmMesh, &dmGrad));
+
         PetscFV fvm; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvm)); PetscCall(PetscFVSetNumComponents(fvm, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvm, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvm, PETSCFVUPWIND)); 
         PetscCall(DMAddField(dmQ, NULL, (PetscObject)fvm)); PetscCall(DMCreateDS(dmQ)); PetscCall(PetscFVDestroy(&fvm));
         PetscCall(DMCreateGlobalVector(dmQ, &X));
+        PetscCall(DMCreateGlobalVector(dmQ, &X_old)); // Allocation
+        
         PetscFV fvmAux; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmAux)); PetscCall(PetscFVSetNumComponents(fvmAux, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmAux, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvmAux, PETSCFVUPWIND));
         PetscCall(DMAddField(dmAux, NULL, (PetscObject)fvmAux)); PetscCall(DMCreateDS(dmAux)); PetscCall(PetscFVDestroy(&fvmAux));
         PetscCall(DMCreateGlobalVector(dmAux, &A));
+
+        PetscFV fvmGrad; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmGrad));
+        PetscCall(PetscFVSetNumComponents(fvmGrad, Model<Real>::n_dof_q * Model<Real>::dimension)); 
+        PetscCall(PetscFVSetSpatialDimension(fvmGrad, Model<Real>::dimension));
+        PetscCall(PetscFVSetType(fvmGrad, PETSCFVUPWIND)); 
+        PetscCall(DMAddField(dmGrad, NULL, (PetscObject)fvmGrad)); 
+        PetscCall(DMCreateDS(dmGrad)); 
+        PetscCall(PetscFVDestroy(&fvmGrad));
+        PetscCall(DMCreateGlobalVector(dmGrad, &G)); // ALLOCATE G HERE
+        
         PetscFV fvmQ_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmQ_out)); PetscCall(PetscFVSetNumComponents(fvmQ_out, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvmQ_out, Model<Real>::dimension));
         PetscFV fvmA_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmA_out)); PetscCall(PetscFVSetNumComponents(fvmA_out, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmA_out, Model<Real>::dimension));
         PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmQ_out)); PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmA_out)); PetscCall(DMCreateDS(dmOut)); PetscCall(PetscFVDestroy(&fvmQ_out)); PetscCall(PetscFVDestroy(&fvmA_out));
         PetscCall(DMCreateGlobalVector(dmOut, &X_out));
+        
         auto names = Model<Real>::get_boundary_tags();
         std::map<std::string, std::pair<int, int>> mesh_map; bool mismatch = false;
         if (rank == 0) { try { mesh_map = MeshConfigLoader::loadBoundaryMapping(settings.io.mesh_path); int boundary_dim = Model<Real>::dimension - 1; 
@@ -238,6 +289,7 @@ protected:
         if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags.");
         for(size_t i=0; i<names.size(); ++i) { PetscInt tag_id = -1; if (rank == 0) tag_id = mesh_map[names[i]].second;
             PetscCallMPI(MPI_Bcast(&tag_id, 1, MPIU_INT, 0, PETSC_COMM_WORLD)); boundary_map[tag_id] = (PetscInt)i; }
+        
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
         return PETSC_SUCCESS;

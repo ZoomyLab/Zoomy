@@ -379,7 +379,7 @@ struct Model {
     {
     SimpleArray<T, 4> res;
     res[0] = 1.0;
-    res[1] = ((X[0] < 5) ? (2.0) : (1.0));
+    res[1] = ((X[0] < 5) ? (2.0) : (0.0));
     res[2] = 0;
     res[3] = 0;
     return res;
@@ -390,7 +390,7 @@ struct Model {
         const T* p)
     {
     SimpleArray<T, 1> res;
-    res[0] = ((X[0] < 5) ? (0.5) : (1.0/p[2]));
+    res[0] = ((X[0] < 5) ? (0.5) : 0.);
     return res;
     }
 
@@ -413,7 +413,7 @@ struct Model {
         const T* p)
     {
     SimpleArray<T, 1> res;
-    res[0] = ((Q[1] > p[2]) ? (1.0/Q[1]) : (1.0/p[2]));
+    res[0] = Q[1]/(p[2] + std::pow(Q[1], 2));
     return res;
     }
 
@@ -447,9 +447,11 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = std::pow(Q[1], 2);
+    T t1 = p[2] + t0;
     SimpleArray<T, 4> res;
     res[0] = 0;
-    res[1] = ((Q[1] > p[2]) ? (-1.0/std::pow(Q[1], 2)) : (0));
+    res[1] = -2*t0/std::pow(t1, 2) + (1.0 / std::pow(t1, 1));
     res[2] = 0;
     res[3] = 0;
     return res;
