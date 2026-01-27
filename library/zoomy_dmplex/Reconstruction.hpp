@@ -1,8 +1,7 @@
 #ifndef RECONSTRUCTION_HPP
 #define RECONSTRUCTION_HPP
 
-#include <petsc.h>
-#include "Model.H"
+#include "VirtualSolver.hpp" 
 
 template <typename T>
 class Reconstructor {
@@ -34,7 +33,7 @@ public:
             q_face_out[i] = q_cell[i] + delta;
         }
 
-        // Limiters (Positivity)
+        // 1. Positivity Limiter
         if (q_face_out[1] < 1e-9) {
             T h_c = q_cell[1]; T h_f = q_face_out[1];
             T theta = 1.0;
@@ -43,7 +42,7 @@ public:
             for(int i=0; i<Model<T>::n_dof_q; ++i) q_face_out[i] = q_cell[i] + theta * (q_face_out[i] - q_cell[i]);
         }
         
-        // Limiters (TVD)
+        // 2. TVD Limiter
         if (q_min && q_max) {
             for (int i=0; i<Model<T>::n_dof_q; ++i) {
                 T dq = q_face_out[i] - q_cell[i];

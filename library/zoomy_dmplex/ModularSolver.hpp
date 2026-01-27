@@ -10,9 +10,7 @@ private:
     std::unique_ptr<TransportStep<Real>> transport;
     std::unique_ptr<SourceStep<Real>> source;
     
-    // Configuration Storage
     bool config_implicit_source = false;
-    bool config_explicit_source = false;
     int config_reconstruction_order = 1;
     GradientMethod config_grad_method = GREEN_GAUSS;
     FluxKernelPtr config_flux_kernel = Numerics<Real>::numerical_flux;
@@ -20,20 +18,16 @@ private:
 public:
     ModularSolver() {}
 
-    // --- Configuration Setters (Used by Solver.hpp) ---
     void SetReconstruction(ReconstructionType type) { config_reconstruction_order = (type == LINEAR ? 2 : 1); }
     void SetGradientMethod(GradientMethod method) { config_grad_method = method; }
     void SetFluxKernel(FluxKernelPtr k) { config_flux_kernel = k; }
     void SetImplicitSource(bool enable) { config_implicit_source = enable; }
-    void SetExplicitSource(bool enable) { config_explicit_source = enable; }
-    void SetLimiter(bool enable) { /* No-op, implied by order 2 currently */ }
-    void SetLeastSquaresOrder(int order) { /* Stored if LS impl needs it */ }
+    void SetExplicitSource(bool enable) {}
+    void SetLimiter(bool enable) {}
+    void SetLeastSquaresOrder(int order) {}
 
-    // Initialize Components based on stored config
     PetscErrorCode InitializeComponents() {
         transport = std::make_unique<TransportStep<Real>>(dmQ, dmAux, dmGrad, parameters, boundary_map);
-        
-        // Apply Config
         transport->SetFluxKernel(config_flux_kernel);
         
         if (config_reconstruction_order == 2) {
@@ -49,68 +43,52 @@ public:
         if (config_implicit_source) {
             source = std::make_unique<SourceStep<Real>>(dmQ, dmAux, parameters);
         }
-        
         return PETSC_SUCCESS;
     }
 
     PetscErrorCode Run(int argc, char **argv) override {
         PetscFunctionBeginUser;
-        // 1. Initialize Base (DMs, Vectors, IO) - DOES NOT call UpdateState anymore
         PetscCall(VirtualSolver::Initialize(argc, argv)); 
         
-        // 2. Build Solver Components (Transport)
+        // 1. Build Components
         PetscCall(InitializeComponents()); 
 
-        // 3. Explicitly Update Initial State (Aux variables) using the now-ready Transport
+        // 2. Explicitly Initialize State + Aux (FIXED SEGFAULT)
         {
             Vec X_loc, A_loc;
-            PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
-            PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); 
-            PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
+            PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
+            PetscCall(DMGetLocalVector(dmAux, &A_loc)); PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
             
-            PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
-            PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
-            PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
-            
+            // Calls the new UpdateState which updates Q and Aux
             PetscCall(UpdateState(X_loc, A_loc));
             
-            // Sync updated Aux back to global
-            PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); 
-            PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
+            // Sync Updates back to Global
+            PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
+            PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
             
-            PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); 
-            PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
+            PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         }
 
-        // 4. TS Setup
         PetscCall(TSSetApplicationContext(ts, this));
         PetscCall(RegisterCallbacks(ts)); 
-        
         PetscCall(TSSetTime(ts, 0.0));
         PetscCall(TSSetMaxTime(ts, settings.solver.t_end));
         PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
-        
-        // Now safe to compute time step because Aux is consistent
         PetscCall(TSSetTimeStep(ts, ComputeTimeStep())); 
         PetscCall(TSSetFromOptions(ts)); 
         PetscCall(TSMonitorSet(ts, MonitorWrapper, this, NULL));
         
-        // 5. Run
         if (rank == 0) std::cout << "[INFO] Starting Solver..." << std::endl;
         PetscCall(TSSolve(ts, X));
         if (rank == 0) std::cout << "[INFO] Finished." << std::endl;
-        
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
 protected:
     PetscErrorCode RegisterCallbacks(TS ts) override {
         PetscCall(TSSetRHSFunction(ts, NULL, RHSWrapper, this));
-        if (config_implicit_source) {
-            PetscCall(TSSetPostStep(ts, SplittingWrapper));
-        } else {
-            PetscCall(TSSetPostStep(ts, PostStepWrapper)); 
-        }
+        if (config_implicit_source) PetscCall(TSSetPostStep(ts, SplittingWrapper));
+        else PetscCall(TSSetPostStep(ts, PostStepWrapper)); 
         PetscCall(TSSetType(ts, TSSSP)); 
         return PETSC_SUCCESS;
     }
@@ -123,22 +101,18 @@ protected:
         void* ctx; TSGetApplicationContext(ts, &ctx);
         ModularSolver* solver = (ModularSolver*)ctx;
         Vec X_curr; TSGetSolution(ts, &X_curr);
-        
+        // Explicitly check positivity before source step
         solver->CheckPositivity(X_curr);
-
-        if (solver->source) {
-            PetscReal dt; TSGetTimeStep(ts, &dt);
-            solver->source->Solve(dt, X_curr);
-        }
+        if (solver->source) { PetscReal dt; TSGetTimeStep(ts, &dt); solver->source->Solve(dt, X_curr); }
         return solver->PostStep(ts);
     }
 
     PetscErrorCode CheckPositivity(Vec V) {
+        // Simple manual clamp for Source Step safety
         PetscScalar *x; PetscCall(VecGetArray(V, &x));
         PetscInt pStart, pEnd; PetscCall(DMPlexGetChart(dmQ, &pStart, &pEnd));
         PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         for (PetscInt c = pStart; c < pEnd; ++c) {
-             if (c < cStart || c >= cEnd) continue; 
              PetscInt g_idx; PetscCall(DMPlexGetPointGlobal(dmQ, c, &g_idx, NULL));
              if (g_idx < 0) continue; 
              PetscScalar *q; PetscCall(DMPlexPointLocalRef(dmQ, c, x, &q));
@@ -148,8 +122,9 @@ protected:
         return PETSC_SUCCESS;
     }
 
+    // Connects to TransportStep::UpdateState
     PetscErrorCode UpdateState(Vec Q_loc, Vec Aux_loc) override {
-        return transport->UpdateLocalAux(Q_loc, Aux_loc);
+        return transport->UpdateState(Q_loc, Aux_loc);
     }
 };
 #endif

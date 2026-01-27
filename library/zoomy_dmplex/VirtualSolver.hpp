@@ -19,13 +19,11 @@
 
 using Real = PetscReal;
 
-// --- GLOBAL DEFINITIONS ---
+// --- GLOBAL DEFINITIONS (Visible to all Steps) ---
 
-// Enums
 enum GradientMethod { GREEN_GAUSS, LEAST_SQUARES };
 enum ReconstructionType { PCM, LINEAR }; 
 
-// Function Pointer Types (Kernel Signatures)
 using FluxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q> (*)(
     const PetscScalar*, const PetscScalar*, const PetscScalar*, const PetscScalar*, 
     const PetscScalar*, const PetscScalar*);
@@ -44,7 +42,7 @@ using NonConservativeFluxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof
     const PetscScalar* qL, const PetscScalar* qR, const PetscScalar* aL, const PetscScalar* aR, 
     const PetscScalar* p, const PetscScalar* n);
 
-// --------------------------
+// ------------------------------------------------
 
 class VirtualSolver {
 protected:
@@ -97,6 +95,7 @@ public:
         return DMCreateGlobalVector(dm, v);
     }
 
+    // Virtual Run (Can be overridden or used as is)
     virtual PetscErrorCode Run(int argc, char **argv) {
         PetscFunctionBeginUser;
         PetscCall(Initialize(argc, argv));
@@ -147,7 +146,7 @@ protected:
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        PetscCall(UpdateState(X_loc, A_loc));
+        PetscCall(UpdateState(X_loc, A_loc)); // Derived class implementation
 
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
@@ -185,11 +184,11 @@ protected:
         settings = Settings::from_json(settings_path);
         io = new IOManager(settings, rank);
         io->PrepareDirectory();
-        PetscCall(SetupArchitecture(1));
+        PetscCall(SetupArchitecture(2));
         PetscCall(SetupInitialConditions()); 
         PetscCall(SetupAuxiliaryConditions()); 
         
-        // --- REMOVED CRASHING UPDATE STATE CALL FROM HERE ---
+        // NOTE: removed UpdateState here to avoid Segfault. 
         // It must be called by the derived class after components are initialized.
         
         if (X_old) PetscCall(VecCopy(X, X_old));
@@ -260,7 +259,7 @@ protected:
         PetscFV fvm; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvm)); PetscCall(PetscFVSetNumComponents(fvm, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvm, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvm, PETSCFVUPWIND)); 
         PetscCall(DMAddField(dmQ, NULL, (PetscObject)fvm)); PetscCall(DMCreateDS(dmQ)); PetscCall(PetscFVDestroy(&fvm));
         PetscCall(DMCreateGlobalVector(dmQ, &X));
-        PetscCall(DMCreateGlobalVector(dmQ, &X_old)); // Allocation
+        PetscCall(DMCreateGlobalVector(dmQ, &X_old)); 
         
         PetscFV fvmAux; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmAux)); PetscCall(PetscFVSetNumComponents(fvmAux, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmAux, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvmAux, PETSCFVUPWIND));
         PetscCall(DMAddField(dmAux, NULL, (PetscObject)fvmAux)); PetscCall(DMCreateDS(dmAux)); PetscCall(PetscFVDestroy(&fvmAux));
@@ -273,7 +272,7 @@ protected:
         PetscCall(DMAddField(dmGrad, NULL, (PetscObject)fvmGrad)); 
         PetscCall(DMCreateDS(dmGrad)); 
         PetscCall(PetscFVDestroy(&fvmGrad));
-        PetscCall(DMCreateGlobalVector(dmGrad, &G)); // ALLOCATE G HERE
+        PetscCall(DMCreateGlobalVector(dmGrad, &G)); 
         
         PetscFV fvmQ_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmQ_out)); PetscCall(PetscFVSetNumComponents(fvmQ_out, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvmQ_out, Model<Real>::dimension));
         PetscFV fvmA_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmA_out)); PetscCall(PetscFVSetNumComponents(fvmA_out, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmA_out, Model<Real>::dimension));
@@ -292,6 +291,19 @@ protected:
         
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
+        return PETSC_SUCCESS;
+    }
+
+    PetscErrorCode DebugGradients(PetscReal time) {
+        if (!dmGrad) return PETSC_SUCCESS;
+        if (G) {
+            char name[PETSC_MAX_PATH_LEN];
+            PetscSNPrintf(name, PETSC_MAX_PATH_LEN, "outputs/debug_grad_%.4f.vtu", time);
+            PetscViewer v;
+            PetscCall(PetscViewerVTKOpen(PETSC_COMM_WORLD, name, FILE_MODE_WRITE, &v));
+            PetscCall(VecView(G, v));
+            PetscCall(PetscViewerDestroy(&v));
+        }
         return PETSC_SUCCESS;
     }
 };
