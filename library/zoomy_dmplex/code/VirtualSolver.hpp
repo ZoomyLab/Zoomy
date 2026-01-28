@@ -76,7 +76,9 @@ public:
         MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
         dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL; dmGrad = NULL;
         ts = NULL; X = NULL; X_old = NULL; A = NULL; G = NULL; X_out = NULL;
-        parameters = {9.81, 1.0, 1e-6}; 
+        
+        // 1. Initialize with Defaults from Model
+        parameters = Model<Real>::default_parameters();
     }
 
     virtual ~VirtualSolver() {
@@ -149,7 +151,7 @@ protected:
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        PetscCall(UpdateState(X_loc, A_loc)); // Derived class implementation
+        PetscCall(UpdateState(X_loc, A_loc)); 
 
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
@@ -185,6 +187,32 @@ protected:
         char settings_path[PETSC_MAX_PATH_LEN] = "settings.json";
         PetscCall(PetscOptionsGetString(NULL, NULL, "-settings", settings_path, PETSC_MAX_PATH_LEN, NULL));
         settings = Settings::from_json(settings_path);
+        
+        // --- 2. Update Parameters from Settings ---
+        auto valid_names = Model<Real>::parameter_names();
+        
+        // Iterate through User Settings
+        for (const auto& [key, val] : settings.model.parameters) {
+            bool found = false;
+            // Find index in valid names
+            for (size_t i = 0; i < valid_names.size(); ++i) {
+                if (valid_names[i] == key) {
+                    this->parameters[i] = val; // Overwrite default
+                    if (rank == 0) {
+                        std::cout << "[INFO] Overriding parameter '" << key << "' = " << val << std::endl;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            // Warn if key is unknown
+            if (!found && rank == 0) {
+                std::cout << "[WARNING] Settings contained parameter '" << key 
+                          << "' which is NOT defined in the Model. Ignoring." << std::endl;
+            }
+        }
+        // ------------------------------------------
+        
         io = new IOManager(settings, rank);
         io->PrepareDirectory();
         PetscCall(SetupArchitecture(2));
