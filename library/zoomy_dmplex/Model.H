@@ -390,7 +390,7 @@ struct Model {
         const T* p)
     {
     SimpleArray<T, 1> res;
-    res[0] = ((X[0] < 5) ? (0.5) : 0.);
+    res[0] = ((X[0] < 5) ? (0.5) : (1.0/p[2]));
     return res;
     }
 
