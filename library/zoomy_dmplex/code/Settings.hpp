@@ -4,16 +4,17 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include "nlohmann/json.hpp" // nlohmann/json
+#include <map> 
+#include "nlohmann/json.hpp" 
 
 using json = nlohmann::json;
 
 struct SolverSettings {
     double t_end = 1.0;
     double cfl = 0.5;
-    bool use_deep_adjacency = true; // New
-    int reconstruction_order = 1;   // New
-    double min_dt = 1.0e-12;        // New (Lower limit before aborting)
+    bool use_deep_adjacency = true; 
+    int reconstruction_order = 1;   
+    double min_dt = 1.0e-12;        
 };
 
 struct IOSettings {
@@ -23,16 +24,23 @@ struct IOSettings {
     std::string snapshot_logic = "snap"; 
     bool clean_directory = false;
     std::string mesh_path = "";
-    std::string mesh_label = "Face Sets"; // New
+    std::string mesh_label = "Face Sets"; 
     bool restart = false;
     std::string restart_file = "";
     std::string initial_condition_file = "";
 };
 
+// --- NEW STRUCT ---
+struct ModelSettings {
+    std::map<std::string, double> parameters; 
+};
+// ------------------
+
 struct Settings {
     std::string name;
     IOSettings io;
     SolverSettings solver;
+    ModelSettings model; // Added member
 
     static Settings from_json(const std::string& path) {
         std::ifstream f(path);
@@ -65,6 +73,18 @@ struct Settings {
             s.solver.reconstruction_order = jsol.value("reconstruction_order", 1); 
             s.solver.min_dt = jsol.value("min_dt", 1.0e-12);
         }
+
+        // --- NEW Parsing Logic ---
+        if (j.contains("model")) {
+            if (j["model"].contains("parameters")) {
+                for (auto& [key, val] : j["model"]["parameters"].items()) {
+                    if (val.is_number()) {
+                        s.model.parameters[key] = val.get<double>();
+                    }
+                }
+            }
+        }
+        // -------------------------
 
         return s;
     }
