@@ -28,19 +28,22 @@ struct IOSettings {
     bool restart = false;
     std::string restart_file = "";
     std::string initial_condition_file = "";
+
+    // --- NEW 3D Output Settings ---
+    bool write_3d = false;
+    int n_layers_3d = 10;
+    std::string output_3d_name = "sol_3d";
 };
 
-// --- NEW STRUCT ---
 struct ModelSettings {
     std::map<std::string, double> parameters; 
 };
-// ------------------
 
 struct Settings {
     std::string name;
     IOSettings io;
     SolverSettings solver;
-    ModelSettings model; // Added member
+    ModelSettings model;
 
     static Settings from_json(const std::string& path) {
         std::ifstream f(path);
@@ -63,6 +66,11 @@ struct Settings {
             s.io.clean_directory = jio.value("clean_directory", false);
             s.io.mesh_path = jio.value("mesh_path", "");
             s.io.mesh_label = jio.value("mesh_label", "Face Sets"); 
+
+            // --- 3D Parsing ---
+            s.io.write_3d = jio.value("write_3d", false);
+            s.io.n_layers_3d = jio.value("n_layers_3d", 10);
+            s.io.output_3d_name = jio.value("output_3d_name", "sol_3d");
         }
 
         if (j.contains("solver")) {
@@ -74,7 +82,6 @@ struct Settings {
             s.solver.min_dt = jsol.value("min_dt", 1.0e-12);
         }
 
-        // --- NEW Parsing Logic ---
         if (j.contains("model")) {
             if (j["model"].contains("parameters")) {
                 for (auto& [key, val] : j["model"]["parameters"].items()) {
@@ -84,7 +91,6 @@ struct Settings {
                 }
             }
         }
-        // -------------------------
 
         return s;
     }

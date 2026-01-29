@@ -1,6 +1,7 @@
 #ifndef MODULARSOLVER_HPP
 #define MODULARSOLVER_HPP
 
+#include <memory>
 #include "VirtualSolver.hpp"
 #include "TransportStep.hpp"
 #include "SourceStep.hpp"
@@ -63,8 +64,21 @@ public:
         PetscFunctionBeginUser;
         PetscCall(VirtualSolver::Initialize(argc, argv)); 
         
+        // Fix: Apply Settings to Config
+        if (settings.solver.reconstruction_order == 2) {
+            SetReconstruction(LINEAR); 
+        } else {
+            SetReconstruction(PCM);
+        }
+
         // 1. Build Components
         PetscCall(InitializeComponents()); 
+
+        // --- Setup 3D Output (With Names) ---
+        // Pass the names requested by the user
+        std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
+        PetscCall(io->Setup3D(dmQ, 6, names)); 
+        // -------------------------------------
 
         // 2. Explicitly Initialize State + Aux
         {
@@ -102,6 +116,30 @@ protected:
         return PETSC_SUCCESS;
     }
 
+    static PetscErrorCode MonitorWrapper(TS ts, PetscInt step, PetscReal time, Vec X, void *ctx) {
+        ModularSolver *solver = (ModularSolver *)ctx;
+        
+        if (solver->io->ShouldWrite(time)) {
+            if (solver->rank == 0) std::cout << "Writing snapshot at t=" << time << std::endl;
+            
+            solver->io->WriteVTK(X, time);
+
+            if (solver->settings.io.write_3d) {
+                // Pass State(X), Aux(solver->A), DMs, and Parameters
+                solver->io->Write3D<Model<Real>>(
+                    time, 
+                    X, 
+                    solver->A,          
+                    solver->dmQ, 
+                    solver->dmAux,      
+                    solver->parameters  
+                );
+            }
+            solver->io->AdvanceSnapshot();
+        }
+        return PETSC_SUCCESS;
+    }
+
     static PetscErrorCode RHSWrapper(TS ts, PetscReal t, Vec X, Vec F, void* ctx) {
         return ((ModularSolver*)ctx)->transport->FormRHS(t, X, F);
     }
@@ -116,16 +154,6 @@ protected:
     }
 
     PetscErrorCode CheckPositivity(Vec V) {
-        // PetscScalar *x; PetscCall(VecGetArray(V, &x));
-        // PetscInt pStart, pEnd; PetscCall(DMPlexGetChart(dmQ, &pStart, &pEnd));
-        // PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-        // for (PetscInt c = pStart; c < pEnd; ++c) {
-        //      PetscInt g_idx; PetscCall(DMPlexGetPointGlobal(dmQ, c, &g_idx, NULL));
-        //      if (g_idx < 0) continue; 
-        //      PetscScalar *q; PetscCall(DMPlexPointLocalRef(dmQ, c, x, &q));
-        //      if (q && q[1] < 0.) { q[1] = 0.0; q[2] = 0.0; q[3] = 0.0; }
-        // }
-        // PetscCall(VecRestoreArray(V, &x));
         return PETSC_SUCCESS;
     }
 
