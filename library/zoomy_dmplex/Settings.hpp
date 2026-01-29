@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <map> 
+#include <vector>
 #include "nlohmann/json.hpp" 
 
 using json = nlohmann::json;
@@ -27,9 +28,12 @@ struct IOSettings {
     std::string mesh_label = "Face Sets"; 
     bool restart = false;
     std::string restart_file = "";
+    
+    // --- Initial Condition Config ---
     std::string initial_condition_file = "";
+    std::vector<int> initial_condition_mask; // If empty, overwrite all
 
-    // --- NEW 3D Output Settings ---
+    // --- 3D Output Settings ---
     bool write_3d = false;
     int n_layers_3d = 10;
     std::string output_3d_name = "sol_3d";
@@ -66,8 +70,18 @@ struct Settings {
             s.io.clean_directory = jio.value("clean_directory", false);
             s.io.mesh_path = jio.value("mesh_path", "");
             s.io.mesh_label = jio.value("mesh_label", "Face Sets"); 
+            
+            s.io.initial_condition_file = jio.value("initial_condition_file", "");
+            
+            // Parse Mask array: [0, 1, 2, 4]
+            if (jio.contains("initial_condition_mask")) {
+                for (auto& element : jio["initial_condition_mask"]) {
+                    if (element.is_number_integer()) {
+                        s.io.initial_condition_mask.push_back(element.get<int>());
+                    }
+                }
+            }
 
-            // --- 3D Parsing ---
             s.io.write_3d = jio.value("write_3d", false);
             s.io.n_layers_3d = jio.value("n_layers_3d", 10);
             s.io.output_3d_name = jio.value("output_3d_name", "sol_3d");
