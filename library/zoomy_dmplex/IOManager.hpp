@@ -8,6 +8,7 @@
 #include <fstream>
 #include <petscvec.h>
 #include <petscviewer.h>
+#include <petscviewerhdf5.h> 
 #include <petscdmplex.h>
 #include <petscfv.h>     
 #include <petscds.h>     
@@ -31,7 +32,6 @@ private:
     PetscReal next_snap;
     PetscInt snapshot_idx;
 
-    // --- 3D Output Members ---
     DM dm3D = nullptr;
     Vec X_3D = nullptr;
     bool has_setup_3d = false;
@@ -97,82 +97,148 @@ public:
     PetscReal GetNextSnapTime() const { return next_snap; }
     PetscInt GetSnapIdx() const { return snapshot_idx; }
 
-    void WriteVTK(Vec solutionVec, PetscReal time) {
+    PetscErrorCode WriteVTK(DM dm, Vec solutionVec, PetscReal time) {
+        PetscFunctionBeginUser;
         char basename[256];
         snprintf(basename, sizeof(basename), "%s-%03d.vtu", settings.io.filename.c_str(), snapshot_idx);
         std::string fullPath = settings.io.directory + "/" + std::string(basename);
 
         PetscViewer viewer;
-        PetscViewerVTKOpen(PETSC_COMM_WORLD, fullPath.c_str(), FILE_MODE_WRITE, &viewer);
-        PetscObjectSetName((PetscObject)solutionVec, "State");
-        VecView(solutionVec, viewer);
-        PetscViewerDestroy(&viewer);
+        PetscCall(PetscViewerVTKOpen(PETSC_COMM_WORLD, fullPath.c_str(), FILE_MODE_WRITE, &viewer));
+        
+        if (dm) PetscCall(VecSetDM(solutionVec, dm));
+        
+        PetscCall(PetscObjectSetName((PetscObject)solutionVec, "State"));
+        PetscCall(VecView(solutionVec, viewer));
+        PetscCall(PetscViewerDestroy(&viewer));
 
         if (rank == 0) {
             snapshots_log.push_back({std::string(basename), time});
             UpdateSeriesFile();
         }
+        PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // --- 3D SETUP FUNCTION ---
+    // --- UPDATED LoadSolution: Fixes SEGV via Ownership Range ---
+    PetscErrorCode LoadSolution(Vec X, DM dm, const std::string& filename, const std::vector<PetscInt>& fields_to_load = {}) {
+        PetscFunctionBeginUser;
+        if (filename.empty() || !fs::exists(filename)) return PETSC_ERR_FILE_OPEN;
+
+        if (rank == 0) std::cout << "[INFO] Loading initial condition from " << filename << "..." << std::endl;
+
+        PetscViewer viewer;
+        PetscCall(PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_READ, &viewer));
+        
+        Vec rawVec;
+        PetscInt localSize, globalSize;
+        VecType type;
+        PetscCall(VecGetLocalSize(X, &localSize));
+        PetscCall(VecGetSize(X, &globalSize));
+        PetscCall(VecGetType(X, &type));
+
+        PetscCall(VecCreate(PetscObjectComm((PetscObject)X), &rawVec));
+        PetscCall(VecSetSizes(rawVec, localSize, globalSize));
+        PetscCall(VecSetType(rawVec, type));
+        PetscCall(PetscObjectSetName((PetscObject)rawVec, "state"));
+
+        PetscCall(VecLoad(rawVec, viewer));
+        PetscCall(PetscViewerDestroy(&viewer));
+
+        if (fields_to_load.empty()) {
+            PetscCall(VecCopy(rawVec, X));
+        } else {
+            if (rank == 0) std::cout << "[INFO] Partial overwrite: copying specific components only." << std::endl;
+            
+            const PetscScalar *raw_arr;
+            PetscScalar *x_arr;
+            
+            PetscCall(VecGetArrayRead(rawVec, &raw_arr));
+            PetscCall(VecGetArray(X, &x_arr));
+            
+            PetscSection section;
+            PetscCall(DMGetGlobalSection(dm, &section));
+            
+            // --- FIX: Get Ownership Range ---
+            PetscInt rstart;
+            PetscCall(VecGetOwnershipRange(X, &rstart, NULL));
+            // --------------------------------
+
+            PetscInt pStart, pEnd;
+            PetscCall(PetscSectionGetChart(section, &pStart, &pEnd));
+            
+            for (PetscInt p = pStart; p < pEnd; ++p) {
+                PetscInt dof, off;
+                PetscCall(PetscSectionGetDof(section, p, &dof));
+                PetscCall(PetscSectionGetOffset(section, p, &off));
+                
+                if (dof > 0 && off >= 0) { 
+                    // --- FIX: Adjust global offset to local index ---
+                    PetscInt idx = off - rstart;
+                    
+                    if (idx >= 0 && (idx + dof) <= localSize) {
+                        for (PetscInt comp : fields_to_load) {
+                            if (comp < dof) {
+                                x_arr[idx + comp] = raw_arr[idx + comp];
+                            }
+                        }
+                    }
+                }
+            }
+
+            PetscCall(VecRestoreArrayRead(rawVec, &raw_arr));
+            PetscCall(VecRestoreArray(X, &x_arr));
+        }
+        
+        PetscCall(VecDestroy(&rawVec));
+        
+        if (rank == 0) std::cout << "[INFO] Initial condition loaded." << std::endl;
+        PetscFunctionReturn(PETSC_SUCCESS);
+    }
+
     PetscErrorCode Setup3D(DM dm2D, PetscInt num_comp_3d, const std::vector<std::string>& var_names = {}) {
         if (!settings.io.write_3d) return PETSC_SUCCESS;
         if (has_setup_3d) return PETSC_SUCCESS;
 
         PetscFunctionBeginUser;
 
-        // 1. Extrude 2D DM to a Temporary DM
         DM dmExtruded;
         PetscCall(DMPlexExtrude(dm2D, settings.io.n_layers_3d, PETSC_UNLIMITED, 
                                 PETSC_TRUE, PETSC_FALSE, PETSC_FALSE,
                                 NULL, NULL, NULL, &dmExtruded));
 
-        // 2. Clone to 'dm3D' to get a clean slate (Removes inherited 2D fields)
         PetscCall(DMClone(dmExtruded, &dm3D));
         PetscCall(PetscObjectSetName((PetscObject)dm3D, "Mesh3D"));
 
-        // 3. Copy Coordinates
         Vec coords;
         DM dmCoords;
         PetscCall(DMGetCoordinateDM(dmExtruded, &dmCoords));
         PetscCall(DMSetCoordinateDM(dm3D, dmCoords)); 
         PetscCall(DMGetCoordinatesLocal(dmExtruded, &coords));
         PetscCall(DMSetCoordinatesLocal(dm3D, coords)); 
-        
         PetscCall(DMDestroy(&dmExtruded));
 
-        // 4. Setup Finite Volume (FV) Field
         PetscFV fvm;
         PetscCall(PetscFVCreate(PetscObjectComm((PetscObject)dm3D), &fvm));
         PetscCall(PetscFVSetNumComponents(fvm, num_comp_3d));
         PetscCall(PetscFVSetSpatialDimension(fvm, 3)); 
         PetscCall(PetscFVSetType(fvm, PETSCFVUPWIND)); 
         
-        // 5. Apply Custom Component Names
-        // These appear as the labels for the vector components (b, h, u...)
         if (!var_names.empty()) {
             for(size_t i=0; i<var_names.size() && (PetscInt)i < num_comp_3d; ++i) {
                 PetscCall(PetscFVSetComponentName(fvm, i, var_names[i].c_str()));
             }
         }
 
-        // 6. Finalize DS and Name the Field
         PetscCall(DMAddField(dm3D, NULL, (PetscObject)fvm));
         PetscCall(DMCreateDS(dm3D)); 
         
-        // --- FIX: Rename the Field to remove "Field_0" artifact ---
         PetscSection s;
         PetscCall(DMGetLocalSection(dm3D, &s));
-        // Setting this to "State" results in "State" (array) and "State.b" (component) in ParaView.
-        // If you want it completely hidden, try "" (empty string), though behavior varies by viewer.
         PetscCall(PetscSectionSetFieldName(s, 0, "State")); 
-        // ----------------------------------------------------------
 
         PetscCall(PetscFVDestroy(&fvm));
 
-        // 7. Create Global Vector for Output
         PetscCall(DMCreateGlobalVector(dm3D, &X_3D));
-        // Ensure vector name matches or is unrelated (e.g., "Solution")
         PetscCall(PetscObjectSetName((PetscObject)X_3D, "State3D"));
 
         has_setup_3d = true;
@@ -184,7 +250,6 @@ public:
         if (!has_setup_3d) return PETSC_SUCCESS;
         PetscFunctionBeginUser;
 
-        // 1. Get LOCAL vectors (Parallel Safety)
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dm2D, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dm2D, X_global, INSERT_VALUES, X_loc));
@@ -194,7 +259,6 @@ public:
         PetscCall(DMGlobalToLocalBegin(dmAux, A_global, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A_global, INSERT_VALUES, A_loc));
 
-        // 2. Prepare Local 3D Vector
         Vec X_3D_loc;
         PetscCall(DMGetLocalVector(dm3D, &X_3D_loc));
         
@@ -228,8 +292,7 @@ public:
             for (PetscInt k = 0; k < n_layers; ++k) {
                 PetscReal sigma = (PetscReal)(k + 0.5) / (PetscReal)n_layers;
                 PetscScalar X_input[3] = {centroid[0], centroid[1], sigma};
-
-                // Kernel Call
+                
                 auto q_3d_val = ModelType::project_2d_to_3d(X_input, q_ptr, aux_ptr, params_ptr);
 
                 PetscInt c_3d = c * n_layers + k; 
@@ -244,7 +307,6 @@ public:
         PetscCall(VecRestoreArrayRead(A_loc, &a2d_arr));
         PetscCall(VecRestoreArray(X_3D_loc, &x3d_arr));
         
-        // 4. Scatter to Global Output Vector
         PetscCall(VecZeroEntries(X_3D));
         PetscCall(DMLocalToGlobalBegin(dm3D, X_3D_loc, INSERT_VALUES, X_3D));
         PetscCall(DMLocalToGlobalEnd(dm3D, X_3D_loc, INSERT_VALUES, X_3D));
@@ -253,13 +315,12 @@ public:
         PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         PetscCall(DMRestoreLocalVector(dm3D, &X_3D_loc));
 
-        // 5. Write VTK
         char basename[256];
         snprintf(basename, sizeof(basename), "%s-%03d.vtu", settings.io.output_3d_name.c_str(), snapshot_idx);
         std::string fullPath = settings.io.directory + "/" + std::string(basename);
 
         PetscViewer viewer;
-        PetscViewerVTKOpen(PETSC_COMM_WORLD, fullPath.c_str(), FILE_MODE_WRITE, &viewer);
+        PetscCall(PetscViewerVTKOpen(PETSC_COMM_WORLD, fullPath.c_str(), FILE_MODE_WRITE, &viewer));
         PetscCall(VecView(X_3D, viewer));
         PetscCall(PetscViewerDestroy(&viewer));
 

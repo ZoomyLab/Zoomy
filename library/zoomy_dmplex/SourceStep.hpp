@@ -1,131 +1,151 @@
 #ifndef SOURCESTEP_HPP
 #define SOURCESTEP_HPP
 
-#include "VirtualSolver.hpp"
+#include <vector>
+#include <cmath>
+#include <algorithm>
+#include <petscvec.h>
+#include <petscdmplex.h>
+#include "Model.H"
 
 template <typename T>
 class SourceStep {
 private:
-    SNES snes;
-    DM dmQ, dmAux;
-    Vec X_star; 
-    std::vector<T> parameters;
-    SourceKernelPtr source_kernel;
-    JacobianKernelPtr jac_q;
+    DM dmQ;
+    DM dmAux;
+    std::vector<T>& parameters;
+
+    // Local Solver Constants
+    const int max_newton_iter = 15;
+    const T tol = 1e-8;
+    const T epsilon = 1e-7; 
 
 public:
-    SourceStep(DM q, DM aux, std::vector<T> params) : dmQ(q), dmAux(aux), parameters(params) {
-        snes = NULL; X_star = NULL;
-        source_kernel = Model<T>::source;
-        jac_q = Model<T>::source_jacobian_wrt_variables;
-    }
+    SourceStep(DM dm, DM aux, std::vector<T>& params) : dmQ(dm), dmAux(aux), parameters(params) {}
 
-    ~SourceStep() {
-        if (snes) SNESDestroy(&snes);
-        if (X_star) VecDestroy(&X_star);
-    }
+    ~SourceStep() {}
 
-    PetscErrorCode Setup() {
-        PetscCall(SNESCreate(PETSC_COMM_WORLD, &snes));
-        PetscCall(SNESSetFunction(snes, NULL, FormFunctionWrapper, this));
-        PetscCall(SNESSetJacobian(snes, NULL, NULL, FormJacobianWrapper, this));
-        PetscCall(SNESSetFromOptions(snes));
-        PetscCall(DMCreateGlobalVector(dmQ, &X_star));
-        return PETSC_SUCCESS;
-    }
+    // Solve Implicitly: Q_new = Q_old + dt * S(Q_new)
+    PetscErrorCode Solve(T dt, Vec X, Vec A) {
+        PetscFunctionBeginUser;
+        
+        PetscScalar *x_arr;
+        const PetscScalar *a_arr;
+        
+        PetscCall(VecGetArray(X, &x_arr));
+        PetscCall(VecGetArrayRead(A, &a_arr));
+        
+        PetscSection sQ, sAux;
+        PetscCall(DMGetLocalSection(dmQ, &sQ));
+        PetscCall(DMGetLocalSection(dmAux, &sAux));
+        
+        PetscInt cStart, cEnd;
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
+        const T* params_ptr = parameters.data();
+        const int n_dof = Model<T>::n_dof_q;
 
-    PetscErrorCode Solve(PetscReal dt, Vec X_curr) {
-        if (!snes) PetscCall(Setup());
-        PetscCall(VecCopy(X_curr, X_star));
-        this->current_dt = dt;
-        PetscCall(SNESSolve(snes, NULL, X_curr));
-        return PETSC_SUCCESS;
+        for (PetscInt c = cStart; c < cEnd; ++c) {
+            PetscInt offQ, offAux;
+            PetscCall(PetscSectionGetOffset(sQ, c, &offQ));
+            PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
+            
+            if (offQ >= 0) {
+                PetscScalar* q_ptr = &x_arr[offQ];
+                const PetscScalar* aux_ptr = (offAux >= 0) ? &a_arr[offAux] : nullptr;
+                SolveLocalCell(dt, q_ptr, aux_ptr, params_ptr, n_dof);
+            }
+        }
+
+        PetscCall(VecRestoreArray(X, &x_arr));
+        PetscCall(VecRestoreArrayRead(A, &a_arr));
+        
+        PetscFunctionReturn(PETSC_SUCCESS);
     }
 
 private:
-    PetscReal current_dt;
+    void SolveLocalCell(T dt, PetscScalar* q, const PetscScalar* aux, const T* params, int n_dof) {
+        std::vector<PetscScalar> q_old(n_dof);
+        std::vector<PetscScalar> q_curr(n_dof);
+        std::vector<PetscScalar> residual(n_dof);
+        std::vector<PetscScalar> delta(n_dof);
+        std::vector<PetscScalar> J(n_dof * n_dof);
 
-    PetscErrorCode FormFunction(SNES snes, Vec U, Vec Resid) {
-        PetscCall(VecCopy(U, Resid));
-        PetscCall(VecAXPY(Resid, -1.0, X_star));
-        
-        Vec S_global; PetscCall(VecDuplicate(U, &S_global)); PetscCall(VecZeroEntries(S_global));
-        Vec U_loc, A_loc;
-        PetscCall(DMGetLocalVector(dmQ, &U_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, U, INSERT_VALUES, U_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, U, INSERT_VALUES, U_loc));
-        PetscCall(DMGetLocalVector(dmAux, &A_loc)); UpdateLocalAux(U_loc, A_loc);
-
-        Vec S_loc; PetscCall(DMGetLocalVector(dmQ, &S_loc)); PetscCall(VecZeroEntries(S_loc));
-        PetscScalar *s_ptr; PetscCall(VecGetArray(S_loc, &s_ptr));
-        const PetscScalar *u_ptr, *a_ptr;
-        PetscCall(VecGetArrayRead(U_loc, &u_ptr)); PetscCall(VecGetArrayRead(A_loc, &a_ptr));
-        
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-        for(PetscInt c=cStart; c<cEnd; ++c) {
-            const PetscScalar *q, *a; PetscScalar *s;
-            PetscCall(DMPlexPointLocalRead(dmQ, c, u_ptr, &q)); PetscCall(DMPlexPointLocalRead(dmAux, c, a_ptr, &a)); PetscCall(DMPlexPointLocalRef(dmQ, c, s_ptr, &s));
-            if (q && a && s) { auto src = source_kernel(q, a, parameters.data()); for(int i=0; i<Model<T>::n_dof_q; ++i) s[i] = src[i]; }
+        for(int i=0; i<n_dof; ++i) {
+            q_old[i] = q[i];
+            q_curr[i] = q[i]; 
         }
-        
-        PetscCall(VecRestoreArrayRead(U_loc, &u_ptr)); PetscCall(VecRestoreArrayRead(A_loc, &a_ptr)); PetscCall(VecRestoreArray(S_loc, &s_ptr));
-        PetscCall(DMLocalToGlobalBegin(dmQ, S_loc, ADD_VALUES, S_global)); PetscCall(DMLocalToGlobalEnd(dmQ, S_loc, ADD_VALUES, S_global));
-        PetscCall(VecAXPY(Resid, -current_dt, S_global));
-        PetscCall(VecDestroy(&S_global)); PetscCall(DMRestoreLocalVector(dmQ, &U_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc)); PetscCall(DMRestoreLocalVector(dmQ, &S_loc));
-        return PETSC_SUCCESS;
-    }
 
-    PetscErrorCode FormJacobian(SNES snes, Vec U, Mat J, Mat Jpre) {
-        PetscCall(MatZeroEntries(Jpre));
-        Vec U_loc, A_loc;
-        PetscCall(DMGetLocalVector(dmQ, &U_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, U, INSERT_VALUES, U_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, U, INSERT_VALUES, U_loc));
-        PetscCall(DMGetLocalVector(dmAux, &A_loc)); UpdateLocalAux(U_loc, A_loc);
-        
-        const PetscScalar *u_ptr, *a_ptr;
-        PetscCall(VecGetArrayRead(U_loc, &u_ptr)); PetscCall(VecGetArrayRead(A_loc, &a_ptr));
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-        PetscSection section; PetscCall(DMGetGlobalSection(dmQ, &section));
-        
-        std::vector<PetscScalar> values(Model<T>::n_dof_q * Model<T>::n_dof_q);
-        std::vector<PetscInt> indices(Model<T>::n_dof_q);
+        for(int iter=0; iter < max_newton_iter; ++iter) {
+            auto S = Model<T>::source(q_curr.data(), aux, params);
+            
+            T res_norm = 0.0;
+            for(int i=0; i<n_dof; ++i) {
+                residual[i] = q_curr[i] - q_old[i] - dt * S[i];
+                res_norm += residual[i] * residual[i];
+            }
+            if(std::sqrt(res_norm) < tol) break; 
 
-        for(PetscInt c=cStart; c<cEnd; ++c) {
-            const PetscScalar *q, *a;
-            PetscCall(DMPlexPointLocalRead(dmQ, c, u_ptr, &q)); PetscCall(DMPlexPointLocalRead(dmAux, c, a_ptr, &a));
-            if (q && a) {
-                auto J_val = jac_q(q, a, parameters.data());
-                for(int i=0; i<Model<T>::n_dof_q; ++i) {
-                    for(int j=0; j<Model<T>::n_dof_q; ++j) {
-                        PetscScalar val = - current_dt * J_val[i*Model<T>::n_dof_q + j];
-                        if (i==j) val += 1.0;
-                        values[i*Model<T>::n_dof_q + j] = val;
-                    }
+            // Finite Difference Jacobian
+            std::fill(J.begin(), J.end(), 0.0);
+            for(int i=0; i<n_dof; ++i) J[i*n_dof + i] = 1.0;
+
+            for(int j=0; j<n_dof; ++j) {
+                T save_val = q_curr[j];
+                T pert = epsilon * (std::abs(save_val) + 1.0);
+                q_curr[j] += pert;
+                
+                auto S_pert = Model<T>::source(q_curr.data(), aux, params);
+                
+                for(int i=0; i<n_dof; ++i) {
+                    T dS_dq = (S_pert[i] - S[i]) / pert;
+                    J[i*n_dof + j] -= dt * dS_dq; 
                 }
-                PetscInt goff; PetscCall(PetscSectionGetOffset(section, c, &goff));
-                if (goff >= 0) {
-                    for(int i=0; i<Model<T>::n_dof_q; ++i) indices[i] = goff + i;
-                    PetscCall(MatSetValues(Jpre, Model<T>::n_dof_q, indices.data(), Model<T>::n_dof_q, indices.data(), values.data(), INSERT_VALUES));
-                }
+                q_curr[j] = save_val; 
+            }
+
+            for(int i=0; i<n_dof; ++i) residual[i] = -residual[i];
+            
+            if(SolveLinearSystem(J, residual, delta, n_dof)) {
+                for(int i=0; i<n_dof; ++i) q_curr[i] += delta[i];
+            } else {
+                break; 
             }
         }
-        PetscCall(VecRestoreArrayRead(U_loc, &u_ptr)); PetscCall(VecRestoreArrayRead(A_loc, &a_ptr));
-        PetscCall(DMRestoreLocalVector(dmQ, &U_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
-        PetscCall(MatAssemblyBegin(Jpre, MAT_FINAL_ASSEMBLY)); PetscCall(MatAssemblyEnd(Jpre, MAT_FINAL_ASSEMBLY));
-        if (J != Jpre) { PetscCall(MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY)); PetscCall(MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY)); }
-        return PETSC_SUCCESS;
+
+        for(int i=0; i<n_dof; ++i) q[i] = q_curr[i];
     }
 
-    void UpdateLocalAux(Vec X_loc, Vec A_loc) {
-        const PetscScalar *x_ptr; PetscScalar *a_ptr;
-        VecGetArrayRead(X_loc, &x_ptr); VecGetArray(A_loc, &a_ptr);
-        PetscInt cStart, cEnd; DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd);
-        for(PetscInt c=cStart; c<cEnd; ++c) {
-            const PetscScalar *q; PetscScalar *a;
-            DMPlexPointLocalRead(dmQ, c, x_ptr, &q); DMPlexPointLocalRef(dmAux, c, a_ptr, &a);
-            if (q && a) { auto res = Model<T>::update_aux_variables(q, a, parameters.data()); for(int i=0; i<Model<T>::n_dof_qaux; ++i) a[i] = res[i]; }
+    bool SolveLinearSystem(std::vector<PetscScalar>& A, std::vector<PetscScalar>& b, std::vector<PetscScalar>& x, int N) {
+        for (int k=0; k<N; ++k) {
+            int max_row = k;
+            T max_val = std::abs(A[k*N + k]);
+            for (int i=k+1; i<N; ++i) {
+                if (std::abs(A[i*N + k]) > max_val) {
+                    max_val = std::abs(A[i*N + k]);
+                    max_row = i;
+                }
+            }
+            if (max_val < 1e-14) return false; 
+
+            if (max_row != k) {
+                for (int j=k; j<N; ++j) std::swap(A[k*N + j], A[max_row*N + j]);
+                std::swap(b[k], b[max_row]);
+            }
+
+            for (int i=k+1; i<N; ++i) {
+                T factor = A[i*N + k] / A[k*N + k];
+                for (int j=k; j<N; ++j) A[i*N + j] -= factor * A[k*N + j];
+                b[i] -= factor * b[k];
+            }
         }
-        VecRestoreArrayRead(X_loc, &x_ptr); VecRestoreArray(A_loc, &a_ptr);
-    }
 
-    static PetscErrorCode FormFunctionWrapper(SNES snes, Vec U, Vec Resid, void *ctx) { return ((SourceStep*)ctx)->FormFunction(snes, U, Resid); }
-    static PetscErrorCode FormJacobianWrapper(SNES snes, Vec U, Mat J, Mat Jpre, void *ctx) { return ((SourceStep*)ctx)->FormJacobian(snes, U, J, Jpre); }
+        for (int i=N-1; i>=0; --i) {
+            T sum = 0.0;
+            for (int j=i+1; j<N; ++j) sum += A[i*N + j] * x[j];
+            x[i] = (b[i] - sum) / A[i*N + i];
+        }
+        return true;
+    }
 };
 #endif

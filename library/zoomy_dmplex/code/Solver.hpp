@@ -49,10 +49,10 @@ class QuasilinearSolver : public ModularSolver {
 public:
     QuasilinearSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
         // Register 'numerical_flux' as the NON-Conservative kernel
-        SetNonConsFluxKernel(Numerics<Real>::numerical_flux);
+        SetNonConsFluxKernel(Numerics<Real>::nonconservative_fluctuations);
         
         // Disable the Conservative Flux (set to zero) so we don't double count
-        SetFluxKernel(ZeroFlux<Real>);
+        SetFluxKernel(Numerics<Real>::numerical_flux);
 
         SetImplicitSource(implicit_source);
         SetExplicitSource(!implicit_source);

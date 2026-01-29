@@ -31,8 +31,8 @@ struct Model {
     static constexpr int n_dof_q    = 6;
     static constexpr int n_dof_qaux = 1;
     static constexpr int dimension  = 2;
-    static constexpr int n_boundary_tags = 3;
-    static const std::vector<std::string> get_boundary_tags() { return { "inflow", "outflow", "wall" }; }
+    static constexpr int n_boundary_tags = 1;
+    static const std::vector<std::string> get_boundary_tags() { return { "default" }; }
     static const std::vector<std::string> parameter_names() { return { "g", "chezy_C", "eps", "ex", "ey", "ez", "rho", "nu", "lamda", "c_slipmod", "l_bl", "l_turb", "kappa" }; }
     static const std::vector<T> default_parameters() { return { 9.81, 50.0, 1e-06, 0.0, 0.0, 1.0, 1000.0, 1e-06, 0.1, 0.0, 0.1, 0.1, 0.41 }; }
     PORTABLE_FN static inline SimpleArray<T, 12> flux(
@@ -660,7 +660,7 @@ struct Model {
         const T time,
         const T dX)
     {
-    if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2) {
+    if (bc_idx == 0) {
         SimpleArray<T, 6> res;
         res[0] = Q[0];
         res[1] = Q[1];

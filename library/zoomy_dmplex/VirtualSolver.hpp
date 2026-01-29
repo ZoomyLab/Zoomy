@@ -19,12 +19,11 @@
 
 using Real = PetscReal;
 
-// --- GLOBAL DEFINITIONS (Visible to all Steps) ---
+// --- GLOBAL DEFINITIONS ---
 
 enum GradientMethod { GREEN_GAUSS, LEAST_SQUARES };
 enum ReconstructionType { PCM, LINEAR }; 
 
-// Standard Conservative Flux (Returns F)
 using FluxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q> (*)(
     const PetscScalar*, const PetscScalar*, const PetscScalar*, const PetscScalar*, 
     const PetscScalar*, const PetscScalar*);
@@ -39,8 +38,6 @@ using JacobianAuxKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_q * Mod
 using JacobianAuxQKernelPtr = SimpleArray<PetscScalar, Model<Real>::n_dof_qaux * Model<Real>::n_dof_q> (*)(
     const PetscScalar*, const PetscScalar*, const PetscScalar*);
 
-// Non-Conservative Fluctuation Kernel (Returns D- and D+ stacked)
-// Size is 2 * n_dof_q
 using NonConservativeFluxKernelPtr = SimpleArray<PetscScalar, 2 * Model<Real>::n_dof_q> (*)(
     const PetscScalar* qL, const PetscScalar* qR, const PetscScalar* aL, const PetscScalar* aR, 
     const PetscScalar* p, const PetscScalar* n);
@@ -76,8 +73,6 @@ public:
         MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
         dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL; dmGrad = NULL;
         ts = NULL; X = NULL; X_old = NULL; A = NULL; G = NULL; X_out = NULL;
-        
-        // 1. Initialize with Defaults from Model
         parameters = Model<Real>::default_parameters();
     }
 
@@ -100,7 +95,6 @@ public:
         return DMCreateGlobalVector(dm, v);
     }
 
-    // Virtual Run (Can be overridden or used as is)
     virtual PetscErrorCode Run(int argc, char **argv) {
         PetscFunctionBeginUser;
         PetscCall(Initialize(argc, argv));
@@ -173,7 +167,8 @@ protected:
     PetscErrorCode Monitor(TS ts, PetscInt step, PetscReal time, Vec X_curr) {
         if (io->ShouldWrite(time)) {
             PetscCall(PackState(X_curr, A, X_out));
-            io->WriteVTK(X_out, time);
+            // Correctly passing dmOut to WriteVTK
+            io->WriteVTK(dmOut, X_out, time);
             io->AdvanceSnapshot();
         }
         if (rank == 0 && step % 10 == 0) {
@@ -188,16 +183,13 @@ protected:
         PetscCall(PetscOptionsGetString(NULL, NULL, "-settings", settings_path, PETSC_MAX_PATH_LEN, NULL));
         settings = Settings::from_json(settings_path);
         
-        // --- 2. Update Parameters from Settings ---
         auto valid_names = Model<Real>::parameter_names();
         
-        // Iterate through User Settings
         for (const auto& [key, val] : settings.model.parameters) {
             bool found = false;
-            // Find index in valid names
             for (size_t i = 0; i < valid_names.size(); ++i) {
                 if (valid_names[i] == key) {
-                    this->parameters[i] = val; // Overwrite default
+                    this->parameters[i] = val; 
                     if (rank == 0) {
                         std::cout << "[INFO] Overriding parameter '" << key << "' = " << val << std::endl;
                     }
@@ -205,13 +197,11 @@ protected:
                     break;
                 }
             }
-            // Warn if key is unknown
             if (!found && rank == 0) {
                 std::cout << "[WARNING] Settings contained parameter '" << key 
                           << "' which is NOT defined in the Model. Ignoring." << std::endl;
             }
         }
-        // ------------------------------------------
         
         io = new IOManager(settings, rank);
         io->PrepareDirectory();
@@ -269,13 +259,53 @@ protected:
         return PETSC_SUCCESS;
     }
 
-    PetscErrorCode DebugGeometry(DM dm) { if (rank != 0) return PETSC_SUCCESS; PetscInt cStart, cEnd, fStart, fEnd; PetscCall(DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd)); PetscCall(DMPlexGetHeightStratum(dm, 1, &fStart, &fEnd)); Vec cellGeom, faceGeom; PetscCall(DMPlexGetGeometryFVM(dm, &faceGeom, &cellGeom, NULL)); PetscCall(VecDestroy(&cellGeom)); PetscCall(VecDestroy(&faceGeom)); return PETSC_SUCCESS; }
-
     PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
         if (!settings.io.mesh_path.empty()) PetscCall(DMPlexCreateFromFile(PETSC_COMM_WORLD, settings.io.mesh_path.c_str(), "zoomy_mesh", PETSC_TRUE, &dmMesh));
         else { PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh)); PetscCall(DMSetType(dmMesh, DMPLEX)); }
+        
+        auto names = Model<Real>::get_boundary_tags();
+        std::map<std::string, std::pair<int, int>> mesh_map; 
+        bool mismatch = false;
+        bool map_empty = false;
+
+        if (rank == 0) { 
+            try { 
+                mesh_map = MeshConfigLoader::loadBoundaryMapping(settings.io.mesh_path); 
+                map_empty = mesh_map.empty();
+            } catch(...) { 
+                map_empty = true;
+            }
+            
+            int boundary_dim = Model<Real>::dimension - 1; 
+            for (const auto& name : names) { 
+                if (name == "default") continue; 
+                if (mesh_map.find(name) == mesh_map.end() || mesh_map[name].first != boundary_dim) mismatch = true; 
+            }
+        }
+        
+        PetscCallMPI(MPI_Bcast(&mismatch, 1, MPI_C_BOOL, 0, PETSC_COMM_WORLD));
+        PetscCallMPI(MPI_Bcast(&map_empty, 1, MPI_C_BOOL, 0, PETSC_COMM_WORLD));
+
+        if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags (excluding 'default').");
+
+        // --- FIX: Enable Natural Ordering Mapping ---
+        // This is crucial for HDF5 loading to work correctly in parallel!
+        PetscCall(DMSetUseNatural(dmMesh, PETSC_TRUE));
+        // --------------------------------------------
+
         DM dmDist = NULL; PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
+        
+        if (map_empty) {
+            DMLabel label;
+            PetscCall(DMGetLabel(dmMesh, "Face Sets", &label));
+            if (!label) {
+                PetscCall(DMCreateLabel(dmMesh, "Face Sets"));
+                PetscCall(DMGetLabel(dmMesh, "Face Sets", &label));
+            }
+            PetscCall(DMPlexMarkBoundaryFaces(dmMesh, 1, label));
+        }
+
         PetscCall(DMLocalizeCoordinates(dmMesh));
         PetscCall(DMSetBasicAdjacency(dmMesh, settings.solver.use_deep_adjacency ? PETSC_TRUE : PETSC_FALSE, PETSC_FALSE));
         
@@ -307,31 +337,21 @@ protected:
         PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmQ_out)); PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmA_out)); PetscCall(DMCreateDS(dmOut)); PetscCall(PetscFVDestroy(&fvmQ_out)); PetscCall(PetscFVDestroy(&fvmA_out));
         PetscCall(DMCreateGlobalVector(dmOut, &X_out));
         
-        auto names = Model<Real>::get_boundary_tags();
-        std::map<std::string, std::pair<int, int>> mesh_map; bool mismatch = false;
-        if (rank == 0) { try { mesh_map = MeshConfigLoader::loadBoundaryMapping(settings.io.mesh_path); int boundary_dim = Model<Real>::dimension - 1; 
-                for (const auto& name : names) { if (mesh_map.find(name) == mesh_map.end() || mesh_map[name].first != boundary_dim) mismatch = true; }
-            } catch(...) { mismatch = true; } }
-        PetscCallMPI(MPI_Bcast(&mismatch, 1, MPI_C_BOOL, 0, PETSC_COMM_WORLD));
-        if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags.");
-        for(size_t i=0; i<names.size(); ++i) { PetscInt tag_id = -1; if (rank == 0) tag_id = mesh_map[names[i]].second;
-            PetscCallMPI(MPI_Bcast(&tag_id, 1, MPIU_INT, 0, PETSC_COMM_WORLD)); boundary_map[tag_id] = (PetscInt)i; }
+        for(size_t i=0; i<names.size(); ++i) { 
+            PetscInt tag_id = -1; 
+            if (rank == 0) {
+                if (mesh_map.find(names[i]) != mesh_map.end()) {
+                    tag_id = mesh_map[names[i]].second;
+                } else if (names[i] == "default") {
+                    tag_id = 1; 
+                }
+            }
+            PetscCallMPI(MPI_Bcast(&tag_id, 1, MPIU_INT, 0, PETSC_COMM_WORLD)); 
+            if (tag_id != -1) boundary_map[tag_id] = (PetscInt)i; 
+        }
         
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
-        return PETSC_SUCCESS;
-    }
-
-    PetscErrorCode DebugGradients(PetscReal time) {
-        if (!dmGrad) return PETSC_SUCCESS;
-        if (G) {
-            char name[PETSC_MAX_PATH_LEN];
-            PetscSNPrintf(name, PETSC_MAX_PATH_LEN, "outputs/debug_grad_%.4f.vtu", time);
-            PetscViewer v;
-            PetscCall(PetscViewerVTKOpen(PETSC_COMM_WORLD, name, FILE_MODE_WRITE, &v));
-            PetscCall(VecView(G, v));
-            PetscCall(PetscViewerDestroy(&v));
-        }
         return PETSC_SUCCESS;
     }
 };
