@@ -55,7 +55,7 @@ int main(int argc, char **argv)
             }
             
             // Just instantiate the unified Solver
-            solver = new NonConservativeSolver(order, true);
+            solver = new ConservativeSolver(order, true);
         }
 
         if (solver) {
