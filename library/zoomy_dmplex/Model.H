@@ -571,7 +571,7 @@ struct Model {
     {
     SimpleArray<T, 6> res;
     res[0] = Q[0];
-    res[1] = Q[1];
+    res[1] = ((false) ? (0) : (Q[1]));
     res[2] = Q[2];
     res[3] = Q[3];
     res[4] = Q[4];
@@ -602,7 +602,7 @@ struct Model {
     res[4] = 0;
     res[5] = 0;
     res[6] = 0;
-    res[7] = 1;
+    res[7] = ((false) ? (0) : (1));
     res[8] = 0;
     res[9] = 0;
     res[10] = 0;

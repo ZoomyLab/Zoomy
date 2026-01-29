@@ -135,20 +135,30 @@ protected:
         void *ctx; PetscCall(TSGetApplicationContext(ts, &ctx));
         return ((VirtualSolver*)ctx)->PostStep(ts);
     }
+
     virtual PetscErrorCode PostStep(TS ts) {
-        Vec X_curr; PetscCall(TSGetSolution(ts, &X_curr));
+        PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+        Vec X_curr; 
+        PetscCall(TSGetSolution(ts, &X_curr));
+
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, X_curr, INSERT_VALUES, X_loc));
+        
         PetscCall(DMGetLocalVector(dmAux, &A_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
+
+        // --- THE SUSPECT ---
         PetscCall(UpdateState(X_loc, A_loc)); 
+        // -------------------
 
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
+        
         PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
         PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
 
@@ -245,10 +255,24 @@ protected:
     PetscErrorCode PackState(Vec X_in, Vec A_in, Vec X_target) {
         const PetscScalar *arr_x, *arr_a; PetscScalar *arr_out;
         PetscCall(VecGetArrayRead(X_in, &arr_x)); PetscCall(VecGetArrayRead(A_in, &arr_a)); PetscCall(VecGetArray(X_target, &arr_out));
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
+        PetscInt cStart, cEnd; 
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
         for (PetscInt c = cStart; c < cEnd; ++c) {
+            // --- FIX: CHECK OWNERSHIP ---
+            // We must ONLY write to Global vector if we own the point.
+            // Writing to a ghost cell in a global vector causes out-of-bounds access.
+            PetscInt gIdx;
+            PetscCall(DMPlexGetPointGlobal(dmQ, c, &gIdx, NULL));
+            if (gIdx < 0) continue; // Skip ghost cells
+            // ----------------------------
+
             const PetscScalar *qx, *qa; PetscScalar *qout;
-            PetscCall(DMPlexPointGlobalRead(dmQ, c, arr_x, &qx)); PetscCall(DMPlexPointGlobalRead(dmAux, c, arr_a, &qa)); PetscCall(DMPlexPointGlobalRef(dmOut, c, arr_out, &qout));
+            PetscCall(DMPlexPointGlobalRead(dmQ, c, arr_x, &qx)); 
+            PetscCall(DMPlexPointGlobalRead(dmAux, c, arr_a, &qa)); 
+            PetscCall(DMPlexPointGlobalRef(dmOut, c, arr_out, &qout));
+            
             if (qout) {
                 int n_q = Model<Real>::n_dof_q, n_aux = Model<Real>::n_dof_qaux;
                 if (qx) for (int i = 0; i < n_q; ++i) qout[i] = qx[i];
@@ -288,10 +312,7 @@ protected:
 
         if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags (excluding 'default').");
 
-        // --- FIX: Enable Natural Ordering Mapping ---
-        // This is crucial for HDF5 loading to work correctly in parallel!
         PetscCall(DMSetUseNatural(dmMesh, PETSC_TRUE));
-        // --------------------------------------------
 
         DM dmDist = NULL; PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
@@ -353,6 +374,9 @@ protected:
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
         return PETSC_SUCCESS;
+    
     }
+
+
 };
 #endif

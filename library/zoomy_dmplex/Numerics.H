@@ -98,12 +98,12 @@ struct Numerics {
     T t18 = t2*t6;
     T t19 = t4*t8;
     T v_arg_0[] = { t0, t3 + t5, Q_minus[2]*t7 + Q_plus[2]*t9, Q_minus[3]*t7 + Q_plus[3]*t9, Q_minus[4]*t7 + Q_plus[4]*t9, Q_minus[5]*t7 + Q_plus[5]*t9 };
-    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0], 0.5*Qaux_minus[1] + 0.5*Qaux_plus[1], 0.5*Qaux_minus[2] + 0.5*Qaux_plus[2], 0.5*Qaux_minus[3] + 0.5*Qaux_plus[3], 0.5*Qaux_minus[4] + 0.5*Qaux_plus[4], 0.5*Qaux_minus[5] + 0.5*Qaux_plus[5] };
+    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0] };
     T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
     T v_arg_3[] = { t0, t10 + t11, Q_minus[2]*t12 + Q_plus[2]*t13, Q_minus[3]*t12 + Q_plus[3]*t13, Q_minus[4]*t12 + Q_plus[4]*t13, Q_minus[5]*t12 + Q_plus[5]*t13 };
-    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0], 0.1127016653792583*Qaux_minus[1] + 0.8872983346207417*Qaux_plus[1], 0.1127016653792583*Qaux_minus[2] + 0.8872983346207417*Qaux_plus[2], 0.1127016653792583*Qaux_minus[3] + 0.8872983346207417*Qaux_plus[3], 0.1127016653792583*Qaux_minus[4] + 0.8872983346207417*Qaux_plus[4], 0.1127016653792583*Qaux_minus[5] + 0.8872983346207417*Qaux_plus[5] };
+    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0] };
     T v_arg_5[] = { t0, t14 + t15, Q_minus[2]*t16 + Q_plus[2]*t17, Q_minus[3]*t16 + Q_plus[3]*t17, Q_minus[4]*t16 + Q_plus[4]*t17, Q_minus[5]*t16 + Q_plus[5]*t17 };
-    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0], 0.8872983346207417*Qaux_minus[1] + 0.1127016653792583*Qaux_plus[1], 0.8872983346207417*Qaux_minus[2] + 0.1127016653792583*Qaux_plus[2], 0.8872983346207417*Qaux_minus[3] + 0.1127016653792583*Qaux_plus[3], 0.8872983346207417*Qaux_minus[4] + 0.1127016653792583*Qaux_plus[4], 0.8872983346207417*Qaux_minus[5] + 0.1127016653792583*Qaux_plus[5] };
+    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0] };
     T v_arg_7[] = { t0, t2, Q_minus[2]*t18, Q_minus[3]*t18, Q_minus[4]*t18, Q_minus[5]*t18 };
     T v_arg_8[] = { n[0], n[1] };
     T v_arg_9[] = { t0, t4, Q_plus[2]*t19, Q_plus[3]*t19, Q_plus[4]*t19, Q_plus[5]*t19 };

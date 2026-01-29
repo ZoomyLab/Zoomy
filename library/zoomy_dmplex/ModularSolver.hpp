@@ -63,43 +63,47 @@ public:
         std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
         PetscCall(io->Setup3D(dmQ, 6, names)); 
 
-        // Explicitly Initialize State + Aux
         {
             Vec X_loc, A_loc;
             PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
             PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
             
-            // 1. Initialize Default Analytic State
             PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
             PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+            
             PetscCall(UpdateState(X_loc, A_loc));
             
-            // 2. Overwrite from File
             std::string init_file = settings.io.initial_condition_file;
             if (!init_file.empty()) {
-                
-                // --- STRATEGY 1: Direct .msh Loading (Spatial Mapping) ---
                 if (init_file.find(".msh") != std::string::npos) {
                     if (rank == 0) std::cout << "[INFO] Detected .msh file. Using spatial interpolation loader." << std::endl;
                     
                     MshLoader loader;
                     loader.Load(init_file);
 
-                    PetscScalar *q_arr;
+                    PetscScalar *q_arr, *aux_arr;
                     PetscCall(VecGetArray(X_loc, &q_arr));
+                    PetscCall(VecGetArray(A_loc, &aux_arr));
                     
+                    PetscInt loc_size_Q, loc_size_A;
+                    PetscCall(VecGetLocalSize(X_loc, &loc_size_Q));
+                    PetscCall(VecGetLocalSize(A_loc, &loc_size_A));
+
                     PetscInt cStart, cEnd;
                     PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
                     
-                    // Access coordinates
                     Vec cellGeom;
                     PetscCall(DMPlexGetGeometryFVM(dmQ, NULL, &cellGeom, NULL));
                     const PetscScalar *cGeom_ptr;
                     PetscCall(VecGetArrayRead(cellGeom, &cGeom_ptr));
                     DM dmCell; PetscCall(VecGetDM(cellGeom, &dmCell)); 
                     PetscSection secCell; PetscCall(DMGetLocalSection(dmCell, &secCell));
-                    
                     PetscSection sQ; PetscCall(DMGetLocalSection(dmQ, &sQ));
+                    PetscSection sAux; PetscCall(DMGetLocalSection(dmAux, &sAux));
+                    
+                    const int n_dof = Model<Real>::n_dof_q;
+                    const int n_dof_aux = Model<Real>::n_dof_qaux;
+                    const PetscReal* params_ptr = parameters.data();
 
                     for(PetscInt c=cStart; c<cEnd; ++c) {
                         PetscInt offG; PetscCall(PetscSectionGetOffset(secCell, c, &offG));
@@ -113,20 +117,33 @@ public:
                         double V = loader.Interpolate("V", x, y);
 
                         PetscInt offQ; PetscCall(PetscSectionGetOffset(sQ, c, &offQ));
-                        if (offQ >= 0) {
-                            q_arr[offQ + 0] = B;
-                            q_arr[offQ + 1] = H;
-                            q_arr[offQ + 2] = H * U;
-                            q_arr[offQ + 4] = H * V;
+                        PetscInt offAux; PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
+                        
+                        if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q) {
+                            if (0 < n_dof) q_arr[offQ + 0] = B;
+                            if (1 < n_dof) q_arr[offQ + 1] = H;
+                            if (2 < n_dof) q_arr[offQ + 2] = H * U;
+                            if (n_dof == 4) {
+                                if (3 < n_dof) q_arr[offQ + 3] = H * V;
+                            } else {
+                                if (4 < n_dof) q_arr[offQ + 4] = H * V; 
+                            }
+                        }
+
+                        if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q &&
+                            offAux >= 0 && (offAux + n_dof_aux) <= loc_size_A) 
+                        {
+                            Model<Real>::update_aux_variables(&q_arr[offQ], &aux_arr[offAux], params_ptr);
                         }
                     }
+
                     PetscCall(VecRestoreArray(X_loc, &q_arr));
+                    PetscCall(VecRestoreArray(A_loc, &aux_arr));
                     PetscCall(VecRestoreArrayRead(cellGeom, &cGeom_ptr));
                     
                     PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); 
                     PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
                 }
-                // --- STRATEGY 2: HDF5 Loading (Original) ---
                 else {
                     PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); 
                     PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
@@ -137,47 +154,20 @@ public:
                     
                     PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); 
                     PetscCall(DMGlobalToLocalEnd(dmQ, X_loc, INSERT_VALUES, X_loc));
-                }
 
-                // 3. Update Aux
-                PetscInt cStart, cEnd;
-                PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-                PetscScalar *q_arr, *aux_arr;
-                PetscCall(VecGetArray(X_loc, &q_arr));
-                PetscCall(VecGetArray(A_loc, &aux_arr));
-                PetscSection sQ, sAux;
-                PetscCall(DMGetLocalSection(dmQ, &sQ));
-                PetscCall(DMGetLocalSection(dmAux, &sAux));
-                const PetscReal* params_ptr = parameters.data();
-
-                for(PetscInt c=cStart; c<cEnd; ++c) {
-                    PetscInt offQ, offAux;
-                    PetscCall(PetscSectionGetOffset(sQ, c, &offQ));
-                    PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
-                    if (offQ >= 0 && offAux >= 0) {
-                        Model<Real>::update_aux_variables(&q_arr[offQ], &aux_arr[offAux], params_ptr);
-                    }
+                    PetscCall(UpdateState(X_loc, A_loc));
                 }
-                PetscCall(VecRestoreArray(X_loc, &q_arr));
-                PetscCall(VecRestoreArray(A_loc, &aux_arr));
             }
             
-            // Sync Global
             PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
             
-            // --- DEBUG: Print Initial Condition Stats ---
             {
                 PetscReal min_val[2], max_val[2];
                 PetscCall(VecStrideMin(X, 0, NULL, &min_val[0]));
                 PetscCall(VecStrideMax(X, 0, NULL, &max_val[0]));
                 PetscCall(VecStrideMin(X, 1, NULL, &min_val[1]));
                 PetscCall(VecStrideMax(X, 1, NULL, &max_val[1]));
-                
-                if (rank == 0) {
-                    std::cout << "[DEBUG] Loaded State Statistics:" << std::endl;
-                    std::cout << "  Comp 0 (B): Min=" << min_val[0] << ", Max=" << max_val[0] << std::endl;
-                    std::cout << "  Comp 1 (H): Min=" << min_val[1] << ", Max=" << max_val[1] << std::endl;
-                }
+            
             }
 
             PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
@@ -193,6 +183,8 @@ public:
         PetscCall(TSMonitorSet(ts, MonitorWrapper, this, NULL));
         
         if (rank == 0) std::cout << "[INFO] Starting Solver..." << std::endl;
+        
+
         PetscCall(TSSolve(ts, X));
         if (rank == 0) std::cout << "[INFO] Finished." << std::endl;
         PetscFunctionReturn(PETSC_SUCCESS);
@@ -221,14 +213,10 @@ protected:
             solver->io->AdvanceSnapshot();
         }
         
-        // --- ADDED MISSING STATUS PRINT ---
         if (solver->rank == 0 && step % 10 == 0) {
-            PetscReal dt; 
-            TSGetTimeStep(ts, &dt);
+            PetscReal dt; TSGetTimeStep(ts, &dt);
             PetscPrintf(PETSC_COMM_WORLD, "Step %d Time %.4f dt %.4e\n", step, (double)time, (double)dt);
         }
-        // ----------------------------------
-        
         return PETSC_SUCCESS;
     }
 
