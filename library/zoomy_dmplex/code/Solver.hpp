@@ -3,19 +3,27 @@
 
 #include "ModularSolver.hpp"
 
+// A dummy flux kernel that returns zero
+// Used when we want to rely solely on the Non-Conservative Flux
+template <typename T>
+SimpleArray<T, Model<T>::n_dof_q> ZeroFlux(
+    const T*, const T*, const T*, const T*, 
+    const T*, const T*) 
+{
+    SimpleArray<T, Model<T>::n_dof_q> res;
+    for(int i=0; i<Model<T>::n_dof_q; ++i) res[i] = 0.0;
+    return res;
+}
+
 // ------------------------------------------
 // 1. Conservative Solver (Standard)
 // ------------------------------------------
 class ConservativeSolver : public ModularSolver {
 public:
     ConservativeSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
-        // Register standard conservative flux
+        // Standard Conservative Flux
         SetFluxKernel(Numerics<Real>::numerical_flux);
-        
-        // Disable Non-Conservative part
-        // (Even though Numerics::nonconservative_fluctuations exists and returns zero,
-        //  passing nullptr allows TransportStep to skip the loop entirely)
-        SetNonConsFluxKernel(nullptr); 
+        SetNonConsFluxKernel(nullptr); // Disable Non-Cons
 
         SetImplicitSource(implicit_source);
         SetExplicitSource(!implicit_source);
@@ -35,24 +43,24 @@ public:
 };
 
 // ------------------------------------------
-// 2. Non-Conservative Solver (Quasilinear + Conservative)
+// 2. Quasilinear Solver (Non-Conservative)
 // ------------------------------------------
-class NonConservativeSolver : public ModularSolver {
+class QuasilinearSolver : public ModularSolver {
 public:
-    NonConservativeSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
-        // 1. Register Conservative Flux (e.g., g*h^2/2)
-        SetFluxKernel(Numerics<Real>::numerical_flux);
+    QuasilinearSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
+        // Register 'numerical_flux' as the NON-Conservative kernel
+        SetNonConsFluxKernel(Numerics<Real>::numerical_flux);
         
-        // 2. Register Non-Conservative Fluctuations (e.g., g*h*db/dx)
-        SetNonConsFluxKernel(Numerics<Real>::nonconservative_fluctuations);
-        
+        // Disable the Conservative Flux (set to zero) so we don't double count
+        SetFluxKernel(ZeroFlux<Real>);
+
         SetImplicitSource(implicit_source);
         SetExplicitSource(!implicit_source);
 
         if (order == 1) {
             SetReconstruction(PCM);
         } else if (order == 2) {
-            if (this->rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[INFO] NonConservativeSolver: Using 2nd order.\n");
+            if (this->rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[INFO] QuasilinearSolver: Using 2nd order.\n");
             SetReconstruction(LINEAR); 
             SetGradientMethod(LEAST_SQUARES); 
             SetLeastSquaresOrder(1);
@@ -63,8 +71,7 @@ public:
     }
 };
 
-// Default Alias
+// Type alias for backward compatibility if needed, or default choice
 using Solver = ConservativeSolver; 
-// using Solver = NonConservativeSolver; // Switch to this if needed
 
 #endif

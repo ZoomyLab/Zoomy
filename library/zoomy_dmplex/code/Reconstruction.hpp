@@ -37,7 +37,7 @@ template <typename T>
 class VacuumLimiter : public Limiter<T> {
     T tol;
 public:
-    VacuumLimiter(T tolerance = 1e-6) : tol(tolerance) {}
+    VacuumLimiter(T tolerance = 1e-2) : tol(tolerance) {}
 
     void ComputeAlphas(const T* q_cell, const T*, const T* q_min, const T*, T* alphas_out) override {
         // Default: No limiting (1.0)

@@ -63,8 +63,19 @@ public:
         PetscFunctionBeginUser;
         PetscCall(VirtualSolver::Initialize(argc, argv)); 
         
+        // Fix: Apply Settings to Config
+        if (settings.solver.reconstruction_order == 2) {
+            SetReconstruction(LINEAR); 
+        } else {
+            SetReconstruction(PCM);
+        }
+
         // 1. Build Components
         PetscCall(InitializeComponents()); 
+
+        // --- Setup 3D Output (6 Variables) ---
+        PetscCall(io_manager->Setup3D(dmQ, 6)); 
+        // -------------------------------------
 
         // 2. Explicitly Initialize State + Aux
         {
@@ -102,6 +113,31 @@ protected:
         return PETSC_SUCCESS;
     }
 
+    // UPDATED Monitor to pass Aux and Parameters
+    static PetscErrorCode MonitorWrapper(TS ts, PetscInt step, PetscReal time, Vec X, void *ctx) {
+        ModularSolver *solver = (ModularSolver *)ctx;
+        
+        if (solver->io_manager->ShouldWrite(time)) {
+            if (solver->rank == 0) std::cout << "Writing snapshot at t=" << time << std::endl;
+            
+            solver->io_manager->WriteVTK(X, time);
+
+            if (solver->settings.io.write_3d) {
+                // Pass State(X), Aux(solver->A), DMs, and Parameters
+                solver->io_manager->Write3D<Model<Real>>(
+                    time, 
+                    X, 
+                    solver->A,          // Global Aux Vector
+                    solver->dmQ, 
+                    solver->dmAux,      // Aux DM
+                    solver->parameters  // Parameter Vector
+                );
+            }
+            solver->io_manager->AdvanceSnapshot();
+        }
+        return PETSC_SUCCESS;
+    }
+
     static PetscErrorCode RHSWrapper(TS ts, PetscReal t, Vec X, Vec F, void* ctx) {
         return ((ModularSolver*)ctx)->transport->FormRHS(t, X, F);
     }
@@ -116,16 +152,6 @@ protected:
     }
 
     PetscErrorCode CheckPositivity(Vec V) {
-        // PetscScalar *x; PetscCall(VecGetArray(V, &x));
-        // PetscInt pStart, pEnd; PetscCall(DMPlexGetChart(dmQ, &pStart, &pEnd));
-        // PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-        // for (PetscInt c = pStart; c < pEnd; ++c) {
-        //      PetscInt g_idx; PetscCall(DMPlexGetPointGlobal(dmQ, c, &g_idx, NULL));
-        //      if (g_idx < 0) continue; 
-        //      PetscScalar *q; PetscCall(DMPlexPointLocalRef(dmQ, c, x, &q));
-        //      if (q && q[1] < 0.) { q[1] = 0.0; q[2] = 0.0; q[3] = 0.0; }
-        // }
-        // PetscCall(VecRestoreArray(V, &x));
         return PETSC_SUCCESS;
     }
 

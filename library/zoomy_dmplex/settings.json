@@ -6,7 +6,8 @@
         "snapshots": 1000,
         "snapshot_logic": "interpolate",
         "clean_directory": true,
-        "mesh_path": "mesh_coarse.msh"
+        "mesh_path": "mesh_coarse.msh",
+        "write_3d": true
     },
     "solver": {
         "t_end": 0.1,
