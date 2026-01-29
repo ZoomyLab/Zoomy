@@ -119,7 +119,6 @@ public:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // --- UPDATED LoadSolution: Fixes SEGV via Ownership Range ---
     PetscErrorCode LoadSolution(Vec X, DM dm, const std::string& filename, const std::vector<PetscInt>& fields_to_load = {}) {
         PetscFunctionBeginUser;
         if (filename.empty() || !fs::exists(filename)) return PETSC_ERR_FILE_OPEN;
@@ -158,10 +157,8 @@ public:
             PetscSection section;
             PetscCall(DMGetGlobalSection(dm, &section));
             
-            // --- FIX: Get Ownership Range ---
             PetscInt rstart;
             PetscCall(VecGetOwnershipRange(X, &rstart, NULL));
-            // --------------------------------
 
             PetscInt pStart, pEnd;
             PetscCall(PetscSectionGetChart(section, &pStart, &pEnd));
@@ -172,7 +169,6 @@ public:
                 PetscCall(PetscSectionGetOffset(section, p, &off));
                 
                 if (dof > 0 && off >= 0) { 
-                    // --- FIX: Adjust global offset to local index ---
                     PetscInt idx = off - rstart;
                     
                     if (idx >= 0 && (idx + dof) <= localSize) {
@@ -273,8 +269,14 @@ public:
         PetscCall(DMGetLocalSection(dmAux, &sAux));
         PetscCall(DMGetLocalSection(dm3D, &s3d));
 
+        // --- FIX START: Get Stratum Bounds for both meshes ---
         PetscInt cStart, cEnd;
         PetscCall(DMPlexGetHeightStratum(dm2D, 0, &cStart, &cEnd));
+        
+        PetscInt cStart3d, cEnd3d;
+        PetscCall(DMPlexGetHeightStratum(dm3D, 0, &cStart3d, &cEnd3d));
+        // ----------------------------------------------------
+
         PetscInt n_layers = settings.io.n_layers_3d;
         const PetscReal* params_ptr = params.data();
 
@@ -283,11 +285,14 @@ public:
             PetscCall(PetscSectionGetOffset(s2d, c, &off2d));
             PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
 
+            // Skip if 2D cell has no local storage
+            if (off2d < 0) continue; 
+
             PetscReal centroid[3] = {0.0, 0.0, 0.0};
             PetscCall(DMPlexComputeCellGeometryFVM(dm2D, c, NULL, centroid, NULL));
 
             const PetscScalar *q_ptr = &x2d_arr[off2d];
-            const PetscScalar *aux_ptr = &a2d_arr[offAux];
+            const PetscScalar *aux_ptr = (offAux >= 0) ? &a2d_arr[offAux] : nullptr;
 
             for (PetscInt k = 0; k < n_layers; ++k) {
                 PetscReal sigma = (PetscReal)(k + 0.5) / (PetscReal)n_layers;
@@ -295,11 +300,16 @@ public:
                 
                 auto q_3d_val = ModelType::project_2d_to_3d(X_input, q_ptr, aux_ptr, params_ptr);
 
-                PetscInt c_3d = c * n_layers + k; 
+                // --- FIX: Calculate Relative 3D Index ---
+                PetscInt c_3d = cStart3d + (c - cStart) * n_layers + k; 
+                // ----------------------------------------
+
                 PetscInt off3d;
                 PetscCall(PetscSectionGetOffset(s3d, c_3d, &off3d));
 
-                for (size_t i = 0; i < 6; ++i) x3d_arr[off3d + i] = q_3d_val[i];
+                if (off3d >= 0) {
+                    for (size_t i = 0; i < 6; ++i) x3d_arr[off3d + i] = q_3d_val[i];
+                }
             }
         }
 

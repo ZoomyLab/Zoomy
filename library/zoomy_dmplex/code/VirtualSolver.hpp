@@ -135,22 +135,55 @@ protected:
         void *ctx; PetscCall(TSGetApplicationContext(ts, &ctx));
         return ((VirtualSolver*)ctx)->PostStep(ts);
     }
+
     virtual PetscErrorCode PostStep(TS ts) {
-        Vec X_curr; PetscCall(TSGetSolution(ts, &X_curr));
+        PetscMPIInt rank;
+        MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+        // 1. Initial Entry
+        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Entering\n", rank);
+        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
+
+        Vec X_curr; 
+        PetscCall(TSGetSolution(ts, &X_curr));
+
         Vec X_loc, A_loc;
+        
+        // 2. Get Local Vectors
         PetscCall(DMGetLocalVector(dmQ, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, X_curr, INSERT_VALUES, X_loc));
+        
         PetscCall(DMGetLocalVector(dmAux, &A_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
+        // 3. Check State Before Update
+        PetscInt size_x, size_a;
+        VecGetLocalSize(X_loc, &size_x);
+        VecGetLocalSize(A_loc, &size_a);
+        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Before UpdateState. X_loc size=%d, A_loc size=%d\n", rank, size_x, size_a);
+        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
+
+        // 4. Update State
         PetscCall(UpdateState(X_loc, A_loc)); 
 
+        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: UpdateState finished. Starting Q Scatter.\n", rank);
+        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
+
+        // 5. Scatter Q (If this fails, UpdateState corrupted X_loc)
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
+
+        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Q Scatter finished. Starting Aux Scatter (CRASH SITE).\n", rank);
+        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
+
+        // 6. Scatter Aux (If this fails, UpdateState corrupted A_loc)
         PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
         PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
+
+        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Aux Scatter finished. Restoring vectors.\n", rank);
+        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
 
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc));
         PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
@@ -287,7 +320,12 @@ protected:
         PetscCallMPI(MPI_Bcast(&map_empty, 1, MPI_C_BOOL, 0, PETSC_COMM_WORLD));
 
         if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags (excluding 'default').");
+
+        // --- FIX: Enable Natural Ordering Mapping ---
+        // This is crucial for HDF5 loading to work correctly in parallel!
         PetscCall(DMSetUseNatural(dmMesh, PETSC_TRUE));
+        // --------------------------------------------
+
         DM dmDist = NULL; PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
         

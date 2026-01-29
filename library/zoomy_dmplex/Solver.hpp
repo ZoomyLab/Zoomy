@@ -45,9 +45,9 @@ public:
 // ------------------------------------------
 // 2. Quasilinear Solver (Non-Conservative)
 // ------------------------------------------
-class QuasilinearSolver : public ModularSolver {
+class NonConservativeSolver : public ModularSolver {
 public:
-    QuasilinearSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
+    NonConservativeSolver(int order = 1, bool implicit_source = false) : ModularSolver() {
         // Register 'numerical_flux' as the NON-Conservative kernel
         SetNonConsFluxKernel(Numerics<Real>::nonconservative_fluctuations);
         
@@ -60,7 +60,7 @@ public:
         if (order == 1) {
             SetReconstruction(PCM);
         } else if (order == 2) {
-            if (this->rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[INFO] QuasilinearSolver: Using 2nd order.\n");
+            if (this->rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[INFO] NonConservativeSolver: Using 2nd order.\n");
             SetReconstruction(LINEAR); 
             SetGradientMethod(LEAST_SQUARES); 
             SetLeastSquaresOrder(1);
@@ -72,6 +72,6 @@ public:
 };
 
 // Type alias for backward compatibility if needed, or default choice
-using Solver = ConservativeSolver; 
+using Solver = NonConservativeSolver; 
 
 #endif

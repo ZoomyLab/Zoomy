@@ -35,6 +35,10 @@ public:
         PetscScalar *g_ptr; 
         PetscCall(VecGetArray(G_loc, &g_ptr));
 
+        // Safety: Get local size for Gradient vector
+        PetscInt size_g;
+        PetscCall(VecGetLocalSize(G_loc, &size_g));
+
         // Geometry
         Vec cellGeom, faceGeom; 
         PetscCall(DMPlexGetGeometryFVM(dmQ, &faceGeom, &cellGeom, NULL));
@@ -49,14 +53,13 @@ public:
         
         PetscInt dim = Model<T>::dimension;
         PetscSection secIn; PetscCall(DMGetLocalSection(dmQ, &secIn)); 
+        PetscSection secGrad; PetscCall(DMGetLocalSection(dmGrad, &secGrad));
+        
         PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         PetscInt n_comp; PetscCall(PetscSectionGetDof(secIn, cStart, &n_comp));
         DMLabel label; PetscCall(DMGetLabel(dmQ, "Face Sets", &label));
 
         // --- FACE LOOP ---
-        // Iterate over ALL local faces (Owned + Ghost).
-        // Do NOT skip faces based on ownership; we need every face contribution 
-        // to compute the correct gradient for the adjacent cells.
         for (PetscInt f = fStart; f < fEnd; ++f) {
             PetscInt off; PetscCall(PetscSectionGetOffset(secFace, f, &off)); 
             const PetscFVFaceGeom *fg = (const PetscFVFaceGeom*)&fGeom_ptr[off];
@@ -71,15 +74,18 @@ public:
                 PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x_ptr, &qL)); 
                 PetscCall(DMPlexPointLocalRead(dmQ, cells[1], x_ptr, &qR));
                 
-                PetscScalar *gL, *gR; 
-                PetscCall(DMPlexPointLocalRef(dmGrad, cells[0], g_ptr, &gL)); 
-                PetscCall(DMPlexPointLocalRef(dmGrad, cells[1], g_ptr, &gR));
+                // Safe access to gradient vector
+                PetscInt offGL, offGR;
+                PetscCall(PetscSectionGetOffset(secGrad, cells[0], &offGL));
+                PetscCall(PetscSectionGetOffset(secGrad, cells[1], &offGR));
+                
+                PetscScalar *gL = (offGL >= 0 && offGL + n_comp*dim <= size_g) ? &g_ptr[offGL] : nullptr;
+                PetscScalar *gR = (offGR >= 0 && offGR + n_comp*dim <= size_g) ? &g_ptr[offGR] : nullptr;
                 
                 for(int i=0; i<n_comp; ++i) {
                     PetscScalar face_val = 0.5 * (qL[i] + qR[i]);
                     for(int d=0; d<dim; ++d) { 
                         PetscScalar val = face_val * fg->normal[d]; 
-                        // Accumulate to both cells if they exist locally
                         if(gL) gL[i*dim + d] += val; 
                         if(gR) gR[i*dim + d] -= val; 
                     }
@@ -102,8 +108,10 @@ public:
                     
                     auto q_bc = Model<T>::boundary_conditions(bc_idx, qL, nullptr, n_hat, fg->centroid, 0.0, 0.0);
                     
-                    PetscScalar *gL; 
-                    PetscCall(DMPlexPointLocalRef(dmGrad, c, g_ptr, &gL));
+                    PetscInt offGL; 
+                    PetscCall(PetscSectionGetOffset(secGrad, c, &offGL));
+                    PetscScalar *gL = (offGL >= 0 && offGL + n_comp*dim <= size_g) ? &g_ptr[offGL] : nullptr;
+
                     if (gL) {
                         for(int i=0; i<n_comp; ++i) {
                             for(int d=0; d<dim; ++d) {
@@ -124,8 +132,10 @@ public:
             const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[off];
             
             if (cg->volume > 1e-15) { 
-                PetscScalar *gc; 
-                PetscCall(DMPlexPointLocalRef(dmGrad, c, g_ptr, &gc)); 
+                PetscInt offG; 
+                PetscCall(PetscSectionGetOffset(secGrad, c, &offG));
+                PetscScalar *gc = (offG >= 0 && offG + n_comp*dim <= size_g) ? &g_ptr[offG] : nullptr;
+
                 if (gc) { 
                     for(int k=0; k < n_comp * dim; ++k) gc[k] /= cg->volume; 
                 } 
@@ -138,7 +148,6 @@ public:
         PetscCall(VecRestoreArrayRead(cellGeom, &cGeom_ptr));
         
         // --- Synchronization ---
-        // INSERT_VALUES ensures the owner overwrites any partial data.
         PetscCall(DMLocalToGlobalBegin(dmGrad, G_loc, INSERT_VALUES, G_global)); 
         PetscCall(DMLocalToGlobalEnd(dmGrad, G_loc, INSERT_VALUES, G_global));
         
@@ -270,10 +279,15 @@ public:
         PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
         PetscInt dim = Model<T>::dimension;
         PetscSection sec; PetscCall(DMGetLocalSection(dmQ, &sec)); 
+        PetscSection secGrad; PetscCall(DMGetLocalSection(dmGrad, &secGrad));
         PetscInt n_comp; PetscCall(PetscSectionGetDof(sec, cStart, &n_comp));
+
+        PetscInt size_g; PetscCall(VecGetLocalSize(G_loc, &size_g));
         
         for(PetscInt c=cStart; c<cEnd; ++c) {
-            PetscScalar *gc; PetscCall(DMPlexPointLocalRef(dmGrad, c, g_ptr, &gc)); 
+            PetscInt offG; PetscCall(PetscSectionGetOffset(secGrad, c, &offG));
+            PetscScalar *gc = (offG >= 0 && offG + n_comp*dim <= size_g) ? &g_ptr[offG] : nullptr;
+
             const PetscScalar *qc; PetscCall(DMPlexPointLocalRead(dmQ, c, x_ptr, &qc));
             
             if (gc && qc) {
