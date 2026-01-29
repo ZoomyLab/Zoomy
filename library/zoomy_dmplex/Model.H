@@ -397,13 +397,16 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = Qaux[0]/(p[8]*p[6]);
+    T t1 = 1.0*t0;
+    T t2 = 3.0*t0;
     SimpleArray<T, 6> res;
     res[0] = 0;
     res[1] = 0;
-    res[2] = 0;
-    res[3] = 0;
-    res[4] = 0;
-    res[5] = 0;
+    res[2] = -Q[2]*t1 - Q[3]*t1;
+    res[3] = -Q[2]*t2 - Q[3]*t2;
+    res[4] = -Q[4]*t1 - Q[5]*t1;
+    res[5] = -Q[4]*t2 - Q[5]*t2;
     return res;
     }
 
@@ -412,6 +415,9 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = Qaux[0]/(p[8]*p[6]);
+    T t1 = -1.0*t0;
+    T t2 = -3.0*t0;
     SimpleArray<T, 36> res;
     res[0] = 0;
     res[1] = 0;
@@ -427,28 +433,28 @@ struct Model {
     res[11] = 0;
     res[12] = 0;
     res[13] = 0;
-    res[14] = 0;
-    res[15] = 0;
+    res[14] = t1;
+    res[15] = t2;
     res[16] = 0;
     res[17] = 0;
     res[18] = 0;
     res[19] = 0;
-    res[20] = 0;
-    res[21] = 0;
+    res[20] = t1;
+    res[21] = t2;
     res[22] = 0;
     res[23] = 0;
     res[24] = 0;
     res[25] = 0;
     res[26] = 0;
     res[27] = 0;
-    res[28] = 0;
-    res[29] = 0;
+    res[28] = t1;
+    res[29] = t2;
     res[30] = 0;
     res[31] = 0;
     res[32] = 0;
     res[33] = 0;
-    res[34] = 0;
-    res[35] = 0;
+    res[34] = t1;
+    res[35] = t2;
     return res;
     }
 
@@ -457,13 +463,16 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
+    T t0 = 1/(p[8]*p[6]);
+    T t1 = 1.0*t0;
+    T t2 = 3.0*t0;
     SimpleArray<T, 6> res;
     res[0] = 0;
     res[1] = 0;
-    res[2] = 0;
-    res[3] = 0;
-    res[4] = 0;
-    res[5] = 0;
+    res[2] = -Q[2]*t1 - Q[3]*t1;
+    res[3] = -Q[2]*t2 - Q[3]*t2;
+    res[4] = -Q[4]*t1 - Q[5]*t1;
+    res[5] = -Q[4]*t2 - Q[5]*t2;
     return res;
     }
 
