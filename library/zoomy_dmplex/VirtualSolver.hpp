@@ -45,7 +45,7 @@ using NonConservativeFluxKernelPtr = SimpleArray<PetscScalar, 2 * Model<Real>::n
 // ------------------------------------------------
 
 class VirtualSolver {
-protected:
+public: // CHANGED FROM PROTECTED TO PUBLIC
     Settings settings;
     IOManager* io = nullptr;
     
@@ -118,6 +118,38 @@ public:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
+    // CHANGED: PostStep is now PUBLIC so strategies can call it
+    virtual PetscErrorCode PostStep(TS ts) {
+        PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+        Vec X_curr; 
+        PetscCall(TSGetSolution(ts, &X_curr));
+
+        Vec X_loc, A_loc;
+        PetscCall(DMGetLocalVector(dmQ, &X_loc));
+        PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
+        PetscCall(DMGlobalToLocalEnd(dmQ, X_curr, INSERT_VALUES, X_loc));
+        
+        PetscCall(DMGetLocalVector(dmAux, &A_loc));
+        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
+        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+
+        PetscCall(UpdateState(X_loc, A_loc)); 
+
+        PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
+        PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
+        
+        PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
+        PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
+
+        PetscCall(DMRestoreLocalVector(dmQ, &X_loc));
+        PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
+
+        PetscReal dt_next = ComputeTimeStep();
+        PetscCall(TSSetTimeStep(ts, dt_next));
+        return PETSC_SUCCESS;
+    }
+
 protected:
     virtual PetscErrorCode RegisterCallbacks(TS ts) = 0;
     virtual PetscErrorCode UpdateState(Vec Q_loc, Vec Aux_loc) = 0; 
@@ -136,40 +168,6 @@ protected:
         return ((VirtualSolver*)ctx)->PostStep(ts);
     }
 
-    virtual PetscErrorCode PostStep(TS ts) {
-        PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
-
-        Vec X_curr; 
-        PetscCall(TSGetSolution(ts, &X_curr));
-
-        Vec X_loc, A_loc;
-        PetscCall(DMGetLocalVector(dmQ, &X_loc));
-        PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
-        PetscCall(DMGlobalToLocalEnd(dmQ, X_curr, INSERT_VALUES, X_loc));
-        
-        PetscCall(DMGetLocalVector(dmAux, &A_loc));
-        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
-        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
-
-
-        // --- THE SUSPECT ---
-        PetscCall(UpdateState(X_loc, A_loc)); 
-        // -------------------
-
-        PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
-        PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
-        
-        PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
-        PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
-
-        PetscCall(DMRestoreLocalVector(dmQ, &X_loc));
-        PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
-
-        PetscReal dt_next = ComputeTimeStep();
-        PetscCall(TSSetTimeStep(ts, dt_next));
-        return PETSC_SUCCESS;
-    }
-
     static PetscErrorCode MonitorWrapper(TS ts, PetscInt step, PetscReal time, Vec X, void *ctx) {
         return ((VirtualSolver*)ctx)->Monitor(ts, step, time, X);
     }
@@ -177,7 +175,6 @@ protected:
     PetscErrorCode Monitor(TS ts, PetscInt step, PetscReal time, Vec X_curr) {
         if (io->ShouldWrite(time)) {
             PetscCall(PackState(X_curr, A, X_out));
-            // Correctly passing dmOut to WriteVTK
             io->WriteVTK(dmOut, X_out, time);
             io->AdvanceSnapshot();
         }
@@ -260,13 +257,9 @@ protected:
         PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         
         for (PetscInt c = cStart; c < cEnd; ++c) {
-            // --- FIX: CHECK OWNERSHIP ---
-            // We must ONLY write to Global vector if we own the point.
-            // Writing to a ghost cell in a global vector causes out-of-bounds access.
             PetscInt gIdx;
             PetscCall(DMPlexGetPointGlobal(dmQ, c, &gIdx, NULL));
-            if (gIdx < 0) continue; // Skip ghost cells
-            // ----------------------------
+            if (gIdx < 0) continue; 
 
             const PetscScalar *qx, *qa; PetscScalar *qout;
             PetscCall(DMPlexPointGlobalRead(dmQ, c, arr_x, &qx)); 
@@ -374,9 +367,6 @@ protected:
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
         return PETSC_SUCCESS;
-    
     }
-
-
 };
 #endif
