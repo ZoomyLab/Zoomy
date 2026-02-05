@@ -137,19 +137,12 @@ protected:
     }
 
     virtual PetscErrorCode PostStep(TS ts) {
-        PetscMPIInt rank;
-        MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
-
-        // 1. Initial Entry
-        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Entering\n", rank);
-        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
+        PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
 
         Vec X_curr; 
         PetscCall(TSGetSolution(ts, &X_curr));
 
         Vec X_loc, A_loc;
-        
-        // 2. Get Local Vectors
         PetscCall(DMGetLocalVector(dmQ, &X_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_curr, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, X_curr, INSERT_VALUES, X_loc));
@@ -158,32 +151,16 @@ protected:
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        // 3. Check State Before Update
-        PetscInt size_x, size_a;
-        VecGetLocalSize(X_loc, &size_x);
-        VecGetLocalSize(A_loc, &size_a);
-        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Before UpdateState. X_loc size=%d, A_loc size=%d\n", rank, size_x, size_a);
-        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
 
-        // 4. Update State
+        // --- THE SUSPECT ---
         PetscCall(UpdateState(X_loc, A_loc)); 
+        // -------------------
 
-        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: UpdateState finished. Starting Q Scatter.\n", rank);
-        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
-
-        // 5. Scatter Q (If this fails, UpdateState corrupted X_loc)
         PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X_curr));
         PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X_curr));
-
-        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Q Scatter finished. Starting Aux Scatter (CRASH SITE).\n", rank);
-        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
-
-        // 6. Scatter Aux (If this fails, UpdateState corrupted A_loc)
+        
         PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A));
         PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
-
-        PetscSynchronizedPrintf(PETSC_COMM_WORLD, "[Rank %d] PostStep: Aux Scatter finished. Restoring vectors.\n", rank);
-        PetscSynchronizedFlush(PETSC_COMM_WORLD, PETSC_STDOUT);
 
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc));
         PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
@@ -278,10 +255,24 @@ protected:
     PetscErrorCode PackState(Vec X_in, Vec A_in, Vec X_target) {
         const PetscScalar *arr_x, *arr_a; PetscScalar *arr_out;
         PetscCall(VecGetArrayRead(X_in, &arr_x)); PetscCall(VecGetArrayRead(A_in, &arr_a)); PetscCall(VecGetArray(X_target, &arr_out));
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
+        PetscInt cStart, cEnd; 
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        
         for (PetscInt c = cStart; c < cEnd; ++c) {
+            // --- FIX: CHECK OWNERSHIP ---
+            // We must ONLY write to Global vector if we own the point.
+            // Writing to a ghost cell in a global vector causes out-of-bounds access.
+            PetscInt gIdx;
+            PetscCall(DMPlexGetPointGlobal(dmQ, c, &gIdx, NULL));
+            if (gIdx < 0) continue; // Skip ghost cells
+            // ----------------------------
+
             const PetscScalar *qx, *qa; PetscScalar *qout;
-            PetscCall(DMPlexPointGlobalRead(dmQ, c, arr_x, &qx)); PetscCall(DMPlexPointGlobalRead(dmAux, c, arr_a, &qa)); PetscCall(DMPlexPointGlobalRef(dmOut, c, arr_out, &qout));
+            PetscCall(DMPlexPointGlobalRead(dmQ, c, arr_x, &qx)); 
+            PetscCall(DMPlexPointGlobalRead(dmAux, c, arr_a, &qa)); 
+            PetscCall(DMPlexPointGlobalRef(dmOut, c, arr_out, &qout));
+            
             if (qout) {
                 int n_q = Model<Real>::n_dof_q, n_aux = Model<Real>::n_dof_qaux;
                 if (qx) for (int i = 0; i < n_q; ++i) qout[i] = qx[i];
@@ -321,10 +312,7 @@ protected:
 
         if (mismatch) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "GMSH boundaries must exactly match model tags (excluding 'default').");
 
-        // --- FIX: Enable Natural Ordering Mapping ---
-        // This is crucial for HDF5 loading to work correctly in parallel!
         PetscCall(DMSetUseNatural(dmMesh, PETSC_TRUE));
-        // --------------------------------------------
 
         DM dmDist = NULL; PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
         if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
@@ -386,6 +374,9 @@ protected:
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
         return PETSC_SUCCESS;
+    
     }
+
+
 };
 #endif

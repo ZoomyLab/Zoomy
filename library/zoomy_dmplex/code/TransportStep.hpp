@@ -28,6 +28,26 @@ private:
         return (g_idx >= 0);
     }
 
+    // --- DEBUG HELPER: NOISY VERSION ---
+    PetscErrorCode CheckIntegrity(const char* tag) {
+        PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+        PetscSection s; 
+        PetscCall(DMGetLocalSection(dmAux, &s));
+        PetscInt pStart, pEnd; 
+        PetscCall(PetscSectionGetChart(s, &pStart, &pEnd));
+        
+        for(PetscInt p=pStart; p<pEnd; ++p) {
+            PetscInt dof; 
+            // This call usually crashes if the section is corrupted
+            PetscErrorCode ierr = PetscSectionGetDof(s, p, &dof);
+            if (ierr || dof < 0 || dof > 100) {
+                 PetscPrintf(PETSC_COMM_WORLD, "[CRITICAL] %s: DM_Aux CORRUPTED at p=%d (dof=%d)\n", tag, p, dof);
+                 MPI_Abort(PETSC_COMM_WORLD, 911);
+            }
+        }
+        return PETSC_SUCCESS;
+    }
+
 public:
     TransportStep(DM q, DM aux, DM grad, std::vector<T> params, std::map<PetscInt, PetscInt> bcs) 
         : dmQ(q), dmAux(aux), dmGrad(grad), parameters(params), boundary_map(bcs) {
@@ -121,15 +141,21 @@ public:
     }
 
     PetscErrorCode FormRHS(PetscReal time, Vec X_global, Vec F_global) {
+        PetscCall(CheckIntegrity("1. FormRHS_Start"));
+        
         PetscCall(VecZeroEntries(F_global));
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
         
-        // This is safe now with the bounds check
+        PetscCall(CheckIntegrity("2. Before_UpdateState"));
         PetscCall(UpdateState(X_loc, A_loc)); 
+        PetscCall(CheckIntegrity("3. After_UpdateState"));
 
-        if (gradient) PetscCall(UpdateNeighborBounds(X_loc));
+        if (gradient) {
+            PetscCall(UpdateNeighborBounds(X_loc));
+            PetscCall(CheckIntegrity("3b. After_NeighborBounds"));
+        }
 
         Vec G_global = NULL; Vec G_loc = NULL; PetscScalar *g_ptr = NULL;
         if (gradient) {
@@ -139,15 +165,18 @@ public:
              PetscCall(DMGlobalToLocalBegin(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(DMGlobalToLocalEnd(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(VecGetArray(G_loc, &g_ptr));
+             PetscCall(CheckIntegrity("3c. After_Gradient"));
         }
 
         Vec F_loc; PetscCall(DMGetLocalVector(dmQ, &F_loc)); PetscCall(VecZeroEntries(F_loc));
         
-        // --- CRITICAL FIX: This might have been corrupting memory ---
+        PetscCall(CheckIntegrity("4. Before_ComputeFluxes"));
         PetscCall(ComputeFluxes(time, X_loc, A_loc, g_ptr, F_loc));
-        // ------------------------------------------------------------
+        PetscCall(CheckIntegrity("5. After_ComputeFluxes"));
 
         PetscCall(ComputeExplicitSource(X_loc, A_loc, F_loc));
+        PetscCall(CheckIntegrity("6. After_Source"));
+
         PetscCall(DMLocalToGlobalBegin(dmQ, F_loc, ADD_VALUES, F_global));
         PetscCall(DMLocalToGlobalEnd(dmQ, F_loc, ADD_VALUES, F_global));
 
@@ -155,6 +184,8 @@ public:
         if (G_global) PetscCall(VecDestroy(&G_global));
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         PetscCall(DMRestoreLocalVector(dmQ, &F_loc));
+        
+        PetscCall(CheckIntegrity("7. FormRHS_End"));
         return PETSC_SUCCESS;
     }
 
@@ -162,10 +193,8 @@ public:
         const PetscScalar *x_ptr, *a_ptr; PetscScalar *f_ptr;
         PetscCall(VecGetArrayRead(X_loc, &x_ptr)); PetscCall(VecGetArrayRead(A_loc, &a_ptr)); PetscCall(VecGetArray(F_loc, &f_ptr));
         
-        // --- SAFETY: Get Local Size for Flux Vector ---
         PetscInt size_f;
         PetscCall(VecGetLocalSize(F_loc, &size_f));
-        // ----------------------------------------------
 
         Vec cellGeom, faceGeom; PetscCall(DMPlexGetGeometryFVM(dmQ, &faceGeom, &cellGeom, NULL));
         const PetscScalar *fGeom_ptr, *cGeom_ptr;
@@ -201,7 +230,6 @@ public:
                 
                 PetscScalar qL_face[Model<T>::n_dof_q], qR_face[Model<T>::n_dof_q];
                 
-                // Reconstruction logic (same as before)
                 const PetscScalar *minL=NULL, *maxL=NULL, *minR=NULL, *maxR=NULL;
                 if (min_ptr) { 
                     PetscCall(DMPlexPointLocalRead(dmQ, cells[0], min_ptr, &minL)); PetscCall(DMPlexPointLocalRead(dmQ, cells[0], max_ptr, &maxL)); 
@@ -223,7 +251,6 @@ public:
                     flux = cons_flux_kernel(qL_face, qR_face, aL_face, aR_face, parameters.data(), n_hat);
                 }
 
-                // --- FIX: Strict Bounds Check for Flux Writing ---
                 PetscInt offFL, offFR;
                 PetscCall(PetscSectionGetOffset(sQ, cells[0], &offFL));
                 PetscCall(PetscSectionGetOffset(sQ, cells[1], &offFR));
@@ -248,7 +275,6 @@ public:
                 }
 
             } else if (num_cells == 1) {
-                // Boundary Logic
                 PetscInt tag_id; PetscCall(DMLabelGetValue(label, f, &tag_id));
                 if (boundary_map.count(tag_id)) {
                     PetscInt bc_idx = boundary_map.at(tag_id);
@@ -267,7 +293,6 @@ public:
                         flux = cons_flux_kernel(qL_cell, qR_arr.data, aL_cell, a_bc, parameters.data(), n_hat);
                     }
 
-                    // --- FIX: Strict Bounds Check for Flux Writing ---
                     PetscInt offFL;
                     PetscCall(PetscSectionGetOffset(sQ, cells[0], &offFL));
                     PetscScalar *fL = (offFL >= 0 && offFL + Model<T>::n_dof_q <= size_f) ? &f_ptr[offFL] : nullptr;
@@ -280,7 +305,6 @@ public:
         for(PetscInt c=cStart; c<cEnd; ++c) {
              PetscInt off; PetscCall(PetscSectionGetOffset(secCell, c, &off)); const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[off];
              
-             // --- FIX: Strict Bounds Check ---
              PetscInt offF; PetscCall(PetscSectionGetOffset(sQ, c, &offF));
              PetscScalar *f_cell = (offF >= 0 && offF + Model<T>::n_dof_q <= size_f) ? &f_ptr[offF] : nullptr;
              

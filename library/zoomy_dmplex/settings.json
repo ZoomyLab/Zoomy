@@ -9,11 +9,11 @@
         "mesh_path": "./../../data/malpasset/geo_malpasset-small.msh",
         "initial_condition_file": "../../data/malpasset/geo_malpasset-small.msh",
         "initial_condition_mask": [0, 1],
-        "write_3d": true
+        "write_3d": false
     },
     "solver": {
         "t_end": 100.0,
-        "cfl": 0.5,
+        "cfl": 0.4,
         "reconstruction_order": 0
     }
 }

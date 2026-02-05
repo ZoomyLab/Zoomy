@@ -1,68 +1,67 @@
 #include <petsc.h>
+#include <iostream>
+#include <memory>
 
-// The unified CPU solver (replaces FirstOrder/HigherOrder)
-#include "Solver.hpp" 
+// Architecture
+#include "ModularSolver.hpp"
+#include "SolverStrategies.hpp"
+#include "MOODSolver.hpp"
 
-// GPU Support
-#ifdef ENABLE_GPU
-#include "GPUFirstOrderSolver.hpp"
-#endif
+// Physics & Numerics
+#include "Model.H"
+#include "Numerics.H" 
 
-static char help[] = "Modular FVM Solver (CPU/GPU)\n";
+static char help[] = "Shallow Water Moments Solver (IMEX Default)\n";
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
+    PetscFunctionBeginUser;
     PetscCall(PetscInitialize(&argc, &argv, NULL, help));
-    {
-        PetscInt order = 1;
-        
-        // Default: true if compiled for GPU, false otherwise
-#ifdef ENABLE_GPU
-        PetscBool use_gpu = PETSC_TRUE;
-#else
-        PetscBool use_gpu = PETSC_FALSE;
-#endif
 
-        PetscCall(PetscOptionsGetInt(NULL, NULL, "-order", &order, NULL));
-        // Allow user override via command line (e.g., ./solver_gpu -gpu 0 to run CPU reference)
-        PetscCall(PetscOptionsGetBool(NULL, NULL, "-gpu", &use_gpu, NULL));
+    // =========================================================================
+    // 1. CONFIGURE THE STRATEGY (PHYSICS)
+    // =========================================================================
+    // We use the IMEX Strategy: 
+    // - Explicit Transport (Fluxes)
+    // - Implicit Source (Friction) in the IFunction
+    // This prevents the "Time Step Collapse" on steep slopes.
+    auto strategy = std::make_shared<IMEXStrategy>();
 
-        VirtualSolver* solver = nullptr;
+    // =========================================================================
+    // 2. CONFIGURE THE SOLVER (NUMERICS)
+    // =========================================================================
+    
+    // --- OPTION A: 1st Order IMEX (DEFAULT) ---
+    // Fast, stable, diffusive. Good for testing and very steep terrain.
+    auto solver = std::make_shared<ModularSolver>();
+    solver->SetStrategy(strategy);
+    solver->SetReconstruction(PCM); // 1st Order (Piecewise Constant)
 
-        if (use_gpu) {
-#ifdef ENABLE_GPU
-            if (order == 1) {
-                PetscPrintf(PETSC_COMM_WORLD, "--- Solver: GPU First Order ---\n");
-                // Assuming GPUFirstOrderSolver still exists and inherits from VirtualSolver
-                solver = new GPUFirstOrderSolver(); 
-            } else {
-                PetscPrintf(PETSC_COMM_WORLD, "Error: GPU Order %d not implemented yet.\n", order);
-                PetscFinalize();
-                return 1;
-            }
-#else
-            PetscPrintf(PETSC_COMM_WORLD, "Error: CPU binary cannot run in GPU mode. Use ./solver_gpu\n");
-            PetscFinalize();
-            return 1;
-#endif
-        } else {
-            // --- CPU Path ---
-            // Much cleaner now: single class handles both 1st and higher order logic
-            if (order == 1) {
-                PetscPrintf(PETSC_COMM_WORLD, "--- Solver: CPU First Order ---\n");
-            } else {
-                PetscPrintf(PETSC_COMM_WORLD, "--- Solver: CPU High Order (Target: %d) ---\n", order);
-            }
-            
-            // Just instantiate the unified Solver
-            solver = new NonConservativeSolver(order, true);
-        }
+    // --- OPTION B: 2nd Order MOOD (COMMENTED OUT) ---
+    // High-order accuracy with fallback stability.
+    // auto solver = std::make_shared<MOODSolver>(strategy);
+    // solver->SetReconstruction(LINEAR); // Starts at 2nd Order
 
-        if (solver) {
-            PetscCall(solver->Run(argc, argv));
-            delete solver;
-        }
+    // =========================================================================
+    // 3. REGISTER KERNELS
+    // =========================================================================
+    
+    // A. Conservative Flux (e.g., Rusanov/HLL for SWE)
+    solver->SetFluxKernel(Numerics<Real>::numerical_flux); 
+
+    // B. Non-Conservative Fluctuations (CRITICAL for Path-Conservative)
+    solver->SetNonConsFluxKernel(Numerics<Real>::numerical_fluctuations);
+
+    // =========================================================================
+    // 4. RUN
+    // =========================================================================
+    
+    if (solver->rank == 0) {
+        std::cout << "[MAIN] Starting Simulation..." << std::endl;
     }
+
+    // Run() handles initialization, mesh loading, and the time loop
+    PetscCall(solver->Run(argc, argv));
+
     PetscCall(PetscFinalize());
     return 0;
 }

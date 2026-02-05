@@ -666,21 +666,13 @@ struct Model {
         const T dX)
     {
     if (bc_idx == 0) {
-        T t0 = n[1]*Q[4];
-        T t1 = n[0]*Q[2] + t0;
-        T t2 = 1.0*n[0];
-        T t3 = 1.0*n[0]*Q[2] + 1.0*t0;
-        T t4 = n[1]*Q[5];
-        T t5 = n[0]*Q[3] + t4;
-        T t6 = 1.0*n[0]*Q[3] + 1.0*t4;
-        T t7 = 1.0*n[1];
         SimpleArray<T, 6> res;
         res[0] = Q[0];
         res[1] = Q[1];
-        res[2] = 1.0*Q[2] - t1*t2 - t2*t3;
-        res[3] = 1.0*Q[3] - t2*t5 - t2*t6;
-        res[4] = 1.0*Q[4] - t1*t7 - t3*t7;
-        res[5] = 1.0*Q[5] - t5*t7 - t6*t7;
+        res[2] = Q[2];
+        res[3] = Q[3];
+        res[4] = Q[4];
+        res[5] = Q[5];
         return res;
     }
     SimpleArray<T, 6> default_res = {0};
