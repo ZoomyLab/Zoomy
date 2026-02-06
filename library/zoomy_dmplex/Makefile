@@ -1,71 +1,59 @@
-# --- Configuration ---
-NVCC = nvcc
-NVCC_FLAGS = -O3 -std=c++14 -ccbin mpicxx -Xcompiler -fPIC
-CXX_FLAGS_USER = -O3 -std=c++17
+# --- PETSc Discovery ---
+PETSC_DIR  ?= $(shell python3 -c "import os, petsc; print(os.path.dirname(petsc.__file__))")
+PETSC_ARCH ?= $(shell python3 -c "import petsc4py; print(petsc4py.get_config().get('PETSC_ARCH', ''))")
 
-# --- ASan Configuration ---
-# Usage: make CPU ASAN=1
-ifdef ASAN
-# Use -O1 for better stack traces
-SANITIZER_FLAGS = -fsanitize=address -fno-omit-frame-pointer -g -O1
-# Append to flags
-CXX_FLAGS_USER += $(SANITIZER_FLAGS)
-NVCC_FLAGS += -Xcompiler "$(SANITIZER_FLAGS)"
-LDFLAGS_USER = $(SANITIZER_FLAGS)
+# Include PETSc plumbing (if these exist, they help; if not, we handle it)
+-include ${PETSC_DIR}/lib/petsc/conf/variables
+
+# --- Mode Logic ---
+ifeq ($(MODE), ASAN)
+    BUILD_OPTS = -fsanitize=address -fno-omit-frame-pointer -g -O1
+    LDFLAGS_USER = -fsanitize=address
+else ifeq ($(MODE), DEBUG)
+    BUILD_OPTS = -g -O0 -DDEBUG
+    LDFLAGS_USER = -g
 else
-LDFLAGS_USER =
+    BUILD_OPTS = -O3
+    LDFLAGS_USER = 
 endif
 
-# PETSc plumbing
-include ${PETSC_DIR}/lib/petsc/conf/variables
-include ${PETSC_DIR}/lib/petsc/conf/rules
+# --- Compile Flags ---
+# Handle both "arch" builds and "flat/pip" builds
+ifeq ($(PETSC_ARCH),)
+    PETSC_INC = -I$(PETSC_DIR)/include -I$(PETSC_DIR)/include/eigen3
+    PETSC_LNK = -L$(PETSC_DIR)/lib -Wl,-rpath,$(PETSC_DIR)/lib
+else
+    PETSC_INC = -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+    PETSC_LNK = -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
+endif
 
-# Final binary names
+CXX_FLAGS_USER = $(BUILD_OPTS) -std=c++17 -fPIC
+
+# --- Targets ---
 CPU_APP = solver_cpu
-GPU_APP = solver_gpu
-
-# Source files
-SRCS_CPP = main.cpp
-SRCS_CU  = GPUFirstOrderSolver.cu
-
-# Object files
 CPU_OBJS = obj_cpu/main.o
-GPU_OBJS = obj_gpu/main.o obj_gpu/GPUFirstOrderSolver.o
 
-.PHONY: all CPU GPU clean_all
+.PHONY: all CPU clean_all check_env
 
-# Default
-all: CPU GPU
+all: CPU
 
-# Targets
+check_env:
+	@echo "PETSC_DIR:  $(PETSC_DIR)"
+	@echo "PETSC_ARCH: $(PETSC_ARCH)"
+	@echo "Includes:   $(PETSC_INC)"
+
 CPU: $(CPU_APP)
-	@echo "CPU build complete: ./${CPU_APP}"
+	@echo "CPU build complete."
 
-GPU: $(GPU_APP)
-	@echo "GPU build complete: ./${GPU_APP}"
-
-# --- CPU Build Rules ---
 $(CPU_APP): $(CPU_OBJS)
-	@echo "Linking CPU version..."
-	${CLINKER} $(LDFLAGS_USER) -o $@ $^ ${PETSC_LIB}
+	@echo "Linking $@..."
+	mpicxx $(LDFLAGS_USER) -o $@ $^ $(PETSC_LNK) \
+	    -lpetsc -ldmumps -lmumps_common -lpord -lscalapack -lsuperlu_dist \
+	    -lpastix -lopenblas -lhdf5_hl -lhdf5 -lparmetis -lmetis -lhwloc -lX11
 
 obj_cpu/%.o: %.cpp
 	@mkdir -p obj_cpu
-	${CXX} -c $< -o $@ ${PETSC_CC_INCLUDES} ${CXX_FLAGS} ${CXX_FLAGS_USER}
-
-# --- GPU Build Rules ---
-$(GPU_APP): $(GPU_OBJS)
-	@echo "Linking GPU version..."
-	${CLINKER} $(LDFLAGS_USER) -o $@ $^ ${PETSC_LIB} -lcudart
-
-obj_gpu/main.o: main.cpp
-	@mkdir -p obj_gpu
-	${CXX} -c $< -o $@ ${PETSC_CC_INCLUDES} ${CXX_FLAGS} ${CXX_FLAGS_USER} -DENABLE_GPU
-
-obj_gpu/%.o: %.cu
-	@mkdir -p obj_gpu
-	@echo "Compiling CUDA source $<..."
-	$(NVCC) $(NVCC_FLAGS) -I. -I${PETSC_DIR}/include -I${PETSC_DIR}/${PETSC_ARCH}/include -c $< -o $@
+	mpicxx -c $< -o $@ $(PETSC_INC) $(CXX_FLAGS_USER)
 
 clean_all:
-	rm -rf obj_cpu obj_gpu $(CPU_APP) $(GPU_APP) output*.vtu output.vtu.series
+	rm -rf obj_cpu $(CPU_APP)
