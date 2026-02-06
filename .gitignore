@@ -153,3 +153,4 @@ obj_cpu/
 solver_cpu
 solver_gpu
 
+petsc-3.24
