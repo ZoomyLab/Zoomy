@@ -6,7 +6,7 @@
 ### Request the time you need for execution. The full format is D-HH:MM:SS
 ### You must at least specify minutes or days and hours and may add or
 ### leave out any other parameters
-#SBATCH --time=0-03:00:00
+#SBATCH --time=0-01:00:00
 
 ### Request 12 processes, all on a single node
 #SBATCH --nodes=1
