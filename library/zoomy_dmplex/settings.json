@@ -3,13 +3,13 @@
     "io": {
         "directory": "outputs/dmplex",
         "filename": "dmplex",
-        "snapshots": 150,
+        "snapshots": 15000,
         "snapshot_logic": "interpolate",
         "clean_directory": true,
         "mesh_path": "./../../data/malpasset/geo_malpasset-small.msh",
         "initial_condition_file": "../../data/malpasset/geo_malpasset-small.msh",
         "initial_condition_mask": [0, 1],
-        "write_3d": true
+        "write_3d": false
     },
     "solver": {
         "t_end": 150.0,

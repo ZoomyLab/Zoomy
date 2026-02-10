@@ -195,19 +195,96 @@ public:
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
+        
         PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        
         PetscCall(UpdateState(X_loc, A_loc));
-
-        // Use IO Manager to load file if present
+        
+        // --- RESTORED MSH LOADING LOGIC ---
         std::string init_file = settings.io.initial_condition_file;
         if (!init_file.empty()) {
-             // (Assuming MshLoader logic from your original code goes here or reused)
-             // For brevity, calling the IO load:
-             std::vector<PetscInt> mask;
-             for(int m : settings.io.initial_condition_mask) mask.push_back((PetscInt)m);
-             PetscCall(io->LoadSolution(X, dmQ, init_file, mask));
+            if (init_file.find(".msh") != std::string::npos) {
+                if (rank == 0) std::cout << "[INFO] Detected .msh file. Using spatial interpolation loader." << std::endl;
+                
+                MshLoader loader;
+                loader.Load(init_file);
+
+                PetscScalar *q_arr, *aux_arr;
+                PetscCall(VecGetArray(X_loc, &q_arr));
+                PetscCall(VecGetArray(A_loc, &aux_arr));
+                
+                PetscInt loc_size_Q, loc_size_A;
+                PetscCall(VecGetLocalSize(X_loc, &loc_size_Q));
+                PetscCall(VecGetLocalSize(A_loc, &loc_size_A));
+
+                PetscInt cStart, cEnd;
+                PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+                
+                Vec cellGeom;
+                PetscCall(DMPlexGetGeometryFVM(dmQ, NULL, &cellGeom, NULL));
+                const PetscScalar *cGeom_ptr;
+                PetscCall(VecGetArrayRead(cellGeom, &cGeom_ptr));
+                DM dmCell; PetscCall(VecGetDM(cellGeom, &dmCell)); 
+                PetscSection secCell; PetscCall(DMGetLocalSection(dmCell, &secCell));
+                PetscSection sQ; PetscCall(DMGetLocalSection(dmQ, &sQ));
+                PetscSection sAux; PetscCall(DMGetLocalSection(dmAux, &sAux));
+                
+                const int n_dof = Model<Real>::n_dof_q;
+                const int n_dof_aux = Model<Real>::n_dof_qaux;
+                const PetscReal* params_ptr = parameters.data();
+
+                for(PetscInt c=cStart; c<cEnd; ++c) {
+                    PetscInt offG; PetscCall(PetscSectionGetOffset(secCell, c, &offG));
+                    const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[offG];
+                    double x = cg->centroid[0];
+                    double y = cg->centroid[1];
+
+                    double B = loader.Interpolate("B", x, y);
+                    double H = loader.Interpolate("H", x, y);
+                    double U = loader.Interpolate("U", x, y);
+                    double V = loader.Interpolate("V", x, y);
+
+                    PetscInt offQ; PetscCall(PetscSectionGetOffset(sQ, c, &offQ));
+                    PetscInt offAux; PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
+                    
+                    if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q) {
+                        if (0 < n_dof) q_arr[offQ + 0] = B;
+                        if (1 < n_dof) q_arr[offQ + 1] = H;
+                        if (2 < n_dof) q_arr[offQ + 2] = H * U;
+                        if (n_dof == 4) {
+                            if (3 < n_dof) q_arr[offQ + 3] = H * V;
+                        } else {
+                            if (4 < n_dof) q_arr[offQ + 4] = H * V; 
+                        }
+                    }
+
+                    if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q &&
+                        offAux >= 0 && (offAux + n_dof_aux) <= loc_size_A) 
+                    {
+                        Model<Real>::update_aux_variables(&q_arr[offQ], &aux_arr[offAux], params_ptr);
+                    }
+                }
+
+                PetscCall(VecRestoreArray(X_loc, &q_arr));
+                PetscCall(VecRestoreArray(A_loc, &aux_arr));
+                PetscCall(VecRestoreArrayRead(cellGeom, &cGeom_ptr));
+                
+                PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); 
+                PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
+            } else {
+                // Fallback to IO Manager (Standard/Mask loading)
+                std::vector<PetscInt> mask;
+                for(int m : settings.io.initial_condition_mask) mask.push_back((PetscInt)m);
+                PetscCall(io->LoadSolution(X, dmQ, init_file, mask));
+                
+                // Sync globals
+                PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); 
+                PetscCall(DMGlobalToLocalEnd(dmQ, X_loc, INSERT_VALUES, X_loc));
+                PetscCall(UpdateState(X_loc, A_loc));
+            }
         }
+        // -----------------------------------------------------
 
         PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
