@@ -276,9 +276,13 @@ protected:
         return PETSC_SUCCESS;
     }
 
-    PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
-        if (!settings.io.mesh_path.empty()) PetscCall(DMPlexCreateFromFile(PETSC_COMM_WORLD, settings.io.mesh_path.c_str(), "zoomy_mesh", PETSC_TRUE, &dmMesh));
-        else { PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh)); PetscCall(DMSetType(dmMesh, DMPLEX)); }
+   PetscErrorCode SetupArchitecture(PetscInt overlap = 1) {
+        if (!settings.io.mesh_path.empty()) {
+            PetscCall(DMPlexCreateFromFile(PETSC_COMM_WORLD, settings.io.mesh_path.c_str(), "zoomy_mesh", PETSC_TRUE, &dmMesh));
+        } else {
+            PetscCall(DMCreate(PETSC_COMM_WORLD, &dmMesh));
+            PetscCall(DMSetType(dmMesh, DMPLEX));
+        }
         
         auto names = Model<Real>::get_boundary_tags();
         std::map<std::string, std::pair<int, int>> mesh_map; 
@@ -307,8 +311,12 @@ protected:
 
         PetscCall(DMSetUseNatural(dmMesh, PETSC_TRUE));
 
-        DM dmDist = NULL; PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
-        if (dmDist) { PetscCall(DMDestroy(&dmMesh)); dmMesh = dmDist; }
+        DM dmDist = NULL; 
+        PetscCall(DMPlexDistribute(dmMesh, overlap, NULL, &dmDist));
+        if (dmDist) { 
+            PetscCall(DMDestroy(&dmMesh)); 
+            dmMesh = dmDist; 
+        }
         
         if (map_empty) {
             DMLabel label;
@@ -328,16 +336,32 @@ protected:
         PetscCall(DMClone(dmMesh, &dmOut));
         PetscCall(DMClone(dmMesh, &dmGrad));
 
-        PetscFV fvm; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvm)); PetscCall(PetscFVSetNumComponents(fvm, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvm, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvm, PETSCFVUPWIND)); 
-        PetscCall(DMAddField(dmQ, NULL, (PetscObject)fvm)); PetscCall(DMCreateDS(dmQ)); PetscCall(PetscFVDestroy(&fvm));
+        // Setup State Fields (dmQ)
+        PetscFV fvm; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvm)); 
+        PetscCall(PetscFVSetNumComponents(fvm, Model<Real>::n_dof_q)); 
+        PetscCall(PetscFVSetSpatialDimension(fvm, Model<Real>::dimension)); 
+        PetscCall(PetscFVSetType(fvm, PETSCFVUPWIND)); 
+        PetscCall(DMAddField(dmQ, NULL, (PetscObject)fvm)); 
+        PetscCall(DMCreateDS(dmQ)); 
+        PetscCall(PetscFVDestroy(&fvm));
         PetscCall(DMCreateGlobalVector(dmQ, &X));
         PetscCall(DMCreateGlobalVector(dmQ, &X_old)); 
         
-        PetscFV fvmAux; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmAux)); PetscCall(PetscFVSetNumComponents(fvmAux, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmAux, Model<Real>::dimension)); PetscCall(PetscFVSetType(fvmAux, PETSCFVUPWIND));
-        PetscCall(DMAddField(dmAux, NULL, (PetscObject)fvmAux)); PetscCall(DMCreateDS(dmAux)); PetscCall(PetscFVDestroy(&fvmAux));
+        // Setup Auxiliary Fields (dmAux)
+        PetscFV fvmAux; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmAux)); 
+        PetscCall(PetscFVSetNumComponents(fvmAux, Model<Real>::n_dof_qaux)); 
+        PetscCall(PetscFVSetSpatialDimension(fvmAux, Model<Real>::dimension)); 
+        PetscCall(PetscFVSetType(fvmAux, PETSCFVUPWIND));
+        PetscCall(DMAddField(dmAux, NULL, (PetscObject)fvmAux)); 
+        PetscCall(DMCreateDS(dmAux)); 
+        PetscCall(PetscFVDestroy(&fvmAux));
         PetscCall(DMCreateGlobalVector(dmAux, &A));
 
-        PetscFV fvmGrad; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmGrad));
+        // Setup Gradient Fields (dmGrad)
+        PetscFV fvmGrad; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmGrad));
         PetscCall(PetscFVSetNumComponents(fvmGrad, Model<Real>::n_dof_q * Model<Real>::dimension)); 
         PetscCall(PetscFVSetSpatialDimension(fvmGrad, Model<Real>::dimension));
         PetscCall(PetscFVSetType(fvmGrad, PETSCFVUPWIND)); 
@@ -346,11 +370,23 @@ protected:
         PetscCall(PetscFVDestroy(&fvmGrad));
         PetscCall(DMCreateGlobalVector(dmGrad, &G)); 
         
-        PetscFV fvmQ_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmQ_out)); PetscCall(PetscFVSetNumComponents(fvmQ_out, Model<Real>::n_dof_q)); PetscCall(PetscFVSetSpatialDimension(fvmQ_out, Model<Real>::dimension));
-        PetscFV fvmA_out; PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmA_out)); PetscCall(PetscFVSetNumComponents(fvmA_out, Model<Real>::n_dof_qaux)); PetscCall(PetscFVSetSpatialDimension(fvmA_out, Model<Real>::dimension));
-        PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmQ_out)); PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmA_out)); PetscCall(DMCreateDS(dmOut)); PetscCall(PetscFVDestroy(&fvmQ_out)); PetscCall(PetscFVDestroy(&fvmA_out));
+        // Setup Output Fields (dmOut)
+        PetscFV fvmQ_out; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmQ_out)); 
+        PetscCall(PetscFVSetNumComponents(fvmQ_out, Model<Real>::n_dof_q)); 
+        PetscCall(PetscFVSetSpatialDimension(fvmQ_out, Model<Real>::dimension));
+        PetscFV fvmA_out; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmA_out)); 
+        PetscCall(PetscFVSetNumComponents(fvmA_out, Model<Real>::n_dof_qaux)); 
+        PetscCall(PetscFVSetSpatialDimension(fvmA_out, Model<Real>::dimension));
+        PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmQ_out)); 
+        PetscCall(DMAddField(dmOut, NULL, (PetscObject)fvmA_out)); 
+        PetscCall(DMCreateDS(dmOut)); 
+        PetscCall(PetscFVDestroy(&fvmQ_out)); 
+        PetscCall(PetscFVDestroy(&fvmA_out));
         PetscCall(DMCreateGlobalVector(dmOut, &X_out));
         
+        // Map boundary tags
         for(size_t i=0; i<names.size(); ++i) { 
             PetscInt tag_id = -1; 
             if (rank == 0) {
@@ -365,7 +401,18 @@ protected:
         }
         
         PetscCall(DMPlexGetGeometryFVM(dmMesh, NULL, NULL, &minRadius));
-        PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); PetscCall(TSSetDM(ts, dmQ));
+        
+        // Initialize TS
+        PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); 
+        PetscCall(TSSetDM(ts, dmQ));
+
+        // --- NEW: Disable PETSc adaptive time stepping by default ---
+        // Since dt is manually computed via CFL in PostStep, we use TSADAPTNONE.
+        TSAdapt adapt;
+        PetscCall(TSGetAdapt(ts, &adapt));
+        PetscCall(TSAdaptSetType(adapt, TSADAPTNONE));
+        // -------------------------------------------------------------
+
         return PETSC_SUCCESS;
     }
 };
