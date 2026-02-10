@@ -2,66 +2,36 @@
 #include <iostream>
 #include <memory>
 
-// Architecture
 #include "ModularSolver.hpp"
 #include "SolverStrategies.hpp"
-#include "MOODSolver.hpp"
 
-// Physics & Numerics
-#include "Model.H"
-#include "Numerics.H" 
-
-static char help[] = "Shallow Water Moments Solver (IMEX Default)\n";
+static char help[] = "Shallow Water Moments Solver)\n";
 
 int main(int argc, char **argv) {
     PetscFunctionBeginUser;
+    // 1. Initialize PETSc
     PetscCall(PetscInitialize(&argc, &argv, NULL, help));
 
-    // =========================================================================
-    // 1. CONFIGURE THE STRATEGY (PHYSICS)
-    // =========================================================================
-    // We use the IMEX Strategy: 
-    // - Explicit Transport (Fluxes)
-    // - Implicit Source (Friction) in the IFunction
-    // This prevents the "Time Step Collapse" on steep slopes.
-    auto strategy = std::make_shared<IMEXStrategy>();
+    { // 2. START OF SCOPE BLOCK
+        auto strategy = std::make_shared<IMEXStrategy>();
+        
+        // Solver is created inside this block
+        ModularSolver solver;
+        solver.SetStrategy(strategy);
+        
+        // Standard setup and run
+        solver.SetReconstruction(PCM); 
+        solver.SetFluxKernel(Numerics<Real>::numerical_flux); 
+        solver.SetNonConsFluxKernel(Numerics<Real>::numerical_fluctuations);
 
-    // =========================================================================
-    // 2. CONFIGURE THE SOLVER (NUMERICS)
-    // =========================================================================
-    
-    // --- OPTION A: 1st Order IMEX (DEFAULT) ---
-    // Fast, stable, diffusive. Good for testing and very steep terrain.
-    auto solver = std::make_shared<ModularSolver>();
-    solver->SetStrategy(strategy);
-    solver->SetReconstruction(PCM); // 1st Order (Piecewise Constant)
+        if (solver.rank == 0) std::cout << "[MAIN] Starting Simulation..." << std::endl;
+        
+        PetscCall(solver.Run(argc, argv));
 
-    // --- OPTION B: 2nd Order MOOD (COMMENTED OUT) ---
-    // High-order accuracy with fallback stability.
-    // auto solver = std::make_shared<MOODSolver>(strategy);
-    // solver->SetReconstruction(LINEAR); // Starts at 2nd Order
+    } // 3. END OF SCOPE BLOCK 
+    // The 'solver' destructor is called automatically here.
+    // All PETSc objects (DM, Vec, TS) are destroyed while MPI is still open.
 
-    // =========================================================================
-    // 3. REGISTER KERNELS
-    // =========================================================================
-    
-    // A. Conservative Flux (e.g., Rusanov/HLL for SWE)
-    solver->SetFluxKernel(Numerics<Real>::numerical_flux); 
-
-    // B. Non-Conservative Fluctuations (CRITICAL for Path-Conservative)
-    solver->SetNonConsFluxKernel(Numerics<Real>::numerical_fluctuations);
-
-    // =========================================================================
-    // 4. RUN
-    // =========================================================================
-    
-    if (solver->rank == 0) {
-        std::cout << "[MAIN] Starting Simulation..." << std::endl;
-    }
-
-    // Run() handles initialization, mesh loading, and the time loop
-    PetscCall(solver->Run(argc, argv));
-
-    PetscCall(PetscFinalize());
-    return 0;
+    // 4. Finalize PETSc safely
+    return PetscFinalize();
 }

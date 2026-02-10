@@ -28,7 +28,6 @@ private:
         return (g_idx >= 0);
     }
 
-    // --- DEBUG HELPER: NOISY VERSION ---
     PetscErrorCode CheckIntegrity(const char* tag) {
         PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
         PetscSection s; 
@@ -38,7 +37,6 @@ private:
         
         for(PetscInt p=pStart; p<pEnd; ++p) {
             PetscInt dof; 
-            // This call usually crashes if the section is corrupted
             PetscErrorCode ierr = PetscSectionGetDof(s, p, &dof);
             if (ierr || dof < 0 || dof > 100) {
                  PetscPrintf(PETSC_COMM_WORLD, "[CRITICAL] %s: DM_Aux CORRUPTED at p=%d (dof=%d)\n", tag, p, dof);
@@ -46,6 +44,50 @@ private:
             }
         }
         return PETSC_SUCCESS;
+    }
+
+    // --- NEW: Non-Conservative Flux Integrity Test ---
+    void CheckNCFluxIntegrity(PetscInt face_id, const PetscScalar* nc_left, const PetscScalar* nc_right) {
+        const T tol = 1e-12;
+        bool failed = false;
+
+        // Based on your Model.H matrices:
+        // Rows 0, 1, 2, 4 are ZERO.
+        // Rows 3, 5 are NON-ZERO.
+        int conservative_indices[] = {0, 1, 2, 4}; 
+
+        for (int idx : conservative_indices) {
+            if (idx >= Model<T>::n_dof_q) continue;
+            
+            if (std::abs(nc_left[idx]) > tol || (nc_right && std::abs(nc_right[idx]) > tol)) {
+                failed = true;
+            }
+        }
+
+        if (failed) {
+            PetscPrintf(PETSC_COMM_WORLD, "\n[CRITICAL ERROR] NC Flux Integrity Fail at Face %d\n", face_id);
+            PetscPrintf(PETSC_COMM_WORLD, "  Idx |      Left NC       |      Right NC      | Status\n");
+            PetscPrintf(PETSC_COMM_WORLD, "  ---------------------------------------------------------\n");
+            for(int i=0; i<Model<T>::n_dof_q; ++i) {
+                T vL = nc_left[i];
+                T vR = (nc_right) ? nc_right[i] : 0.0;
+                
+                const char* status = "OK";
+                
+                // Check if this index was supposed to be zero
+                bool should_be_zero = false;
+                for (int c : conservative_indices) if(c==i) should_be_zero = true;
+
+                if (should_be_zero && (std::abs(vL) > tol || std::abs(vR) > tol)) {
+                    status = "FAIL (Matrix is 0 here)";
+                } else if (!should_be_zero && std::abs(vL) < tol && std::abs(vR) < tol) {
+                    status = "INFO (Zero but allowed)";
+                }
+
+                PetscPrintf(PETSC_COMM_WORLD, "   %d  | %18.10e | %18.10e | %s\n", i, vL, vR, status);
+            }
+            MPI_Abort(PETSC_COMM_WORLD, 911);
+        }
     }
 
 public:
@@ -263,6 +305,10 @@ public:
                     auto* nc_into_right = nc_stacked.data;
                     auto* nc_into_left  = nc_stacked.data + Model<T>::n_dof_q;
 
+                    // --- DEBUG CHECK ---
+                    // CheckNCFluxIntegrity(f, nc_into_left, nc_into_right);
+                    // -------------------
+
                     for(int i=0; i<Model<T>::n_dof_q; ++i) { 
                         if (fL) fL[i] -= nc_into_left[i] * area; 
                         if (fR) fR[i] -= nc_into_right[i] * area; 
@@ -275,29 +321,69 @@ public:
                 }
 
             } else if (num_cells == 1) {
-                PetscInt tag_id; PetscCall(DMLabelGetValue(label, f, &tag_id));
+                PetscInt tag_id; 
+                PetscCall(DMLabelGetValue(label, f, &tag_id));
+                
                 if (boundary_map.count(tag_id)) {
                     PetscInt bc_idx = boundary_map.at(tag_id);
-                    const PetscScalar *qL_cell, *aL_cell; 
-                    PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x_ptr, &qL_cell)); 
-                    PetscCall(DMPlexPointLocalRead(dmAux, cells[0], a_ptr, &aL_cell));
                     
-                    auto qR_arr = Model<T>::boundary_conditions(bc_idx, qL_cell, aL_cell, n_hat, fg->centroid, time, 0.0);
-                    PetscScalar a_bc[Model<T>::n_dof_qaux]; auto res_a = Model<T>::update_aux_variables(qR_arr.data, nullptr, parameters.data());
-                    for(int i=0; i<Model<T>::n_dof_qaux; ++i) a_bc[i] = res_a[i];
+                    PetscInt cL = cells[0];
+                    const PetscScalar *qL_cell, *gL_cell = NULL;
+                    PetscCall(DMPlexPointLocalRead(dmQ, cL, x_ptr, &qL_cell));
+                    if (g_ptr) { PetscCall(DMPlexPointLocalRead(dmGrad, cL, g_ptr, &gL_cell)); }
                     
+                    PetscInt offL; PetscCall(PetscSectionGetOffset(secCell, cL, &offL));
+                    const PetscFVCellGeom *cgL = (const PetscFVCellGeom*)&cGeom_ptr[offL];
+                    
+                    PetscScalar qL_face[Model<T>::n_dof_q];
+                    const PetscScalar *minL=NULL, *maxL=NULL;
+                    if (min_ptr) { 
+                        PetscCall(DMPlexPointLocalRead(dmQ, cL, min_ptr, &minL)); 
+                        PetscCall(DMPlexPointLocalRead(dmQ, cL, max_ptr, &maxL)); 
+                    }
+                    
+                    reconstructor->Reconstruct(qL_cell, gL_cell, cgL->centroid, fg->centroid, minL, maxL, qL_face);
+
+                    PetscScalar aL_face[Model<T>::n_dof_qaux];
+                    auto res_aL = Model<T>::update_aux_variables(qL_face, nullptr, parameters.data());
+                    for(int i=0; i<Model<T>::n_dof_qaux; ++i) aL_face[i] = res_aL[i];
+
+                    auto qR_arr = Model<T>::boundary_conditions(bc_idx, qL_face, aL_face, n_hat, fg->centroid, time, 0.0);
+                    PetscScalar *qR_face = qR_arr.data;
+
+                    PetscScalar aR_face[Model<T>::n_dof_qaux];
+                    auto res_aR = Model<T>::update_aux_variables(qR_face, nullptr, parameters.data());
+                    for(int i=0; i<Model<T>::n_dof_qaux; ++i) aR_face[i] = res_aR[i];
+
                     SimpleArray<T, Model<T>::n_dof_q> flux;
                     for(int i=0; i<Model<T>::n_dof_q; ++i) flux[i] = 0.0;
                     
                     if (cons_flux_kernel) {
-                        flux = cons_flux_kernel(qL_cell, qR_arr.data, aL_cell, a_bc, parameters.data(), n_hat);
+                        flux = cons_flux_kernel(qL_face, qR_face, aL_face, aR_face, parameters.data(), n_hat);
                     }
 
                     PetscInt offFL;
-                    PetscCall(PetscSectionGetOffset(sQ, cells[0], &offFL));
+                    PetscCall(PetscSectionGetOffset(sQ, cL, &offFL));
                     PetscScalar *fL = (offFL >= 0 && offFL + Model<T>::n_dof_q <= size_f) ? &f_ptr[offFL] : nullptr;
 
-                    if (fL) { for(int i=0; i<Model<T>::n_dof_q; ++i) fL[i] -= flux[i] * area; }
+                    if (noncons_flux_kernel) {
+                        auto nc_stacked = noncons_flux_kernel(qL_face, qR_face, aL_face, aR_face, parameters.data(), n_hat);
+                        auto* nc_into_left  = nc_stacked.data + Model<T>::n_dof_q; 
+
+                        // --- DEBUG CHECK ---
+                        // CheckNCFluxIntegrity(f, nc_into_left, nullptr);
+                        // -------------------
+
+                        if (fL) {
+                            for(int i=0; i<Model<T>::n_dof_q; ++i) { 
+                                fL[i] -= nc_into_left[i] * area; 
+                            }
+                        }
+                    }
+
+                    if (fL) { 
+                        for(int i=0; i<Model<T>::n_dof_q; ++i) fL[i] -= flux[i] * area; 
+                    }
                 }
             }
         }

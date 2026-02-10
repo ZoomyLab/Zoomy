@@ -90,9 +90,8 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
-    T t0 = p[5]*p[0]*Q[1];
-    T t1 = -Q[2]*Qaux[0];
-    T t2 = -Q[4]*Qaux[0];
+    T t0 = -Q[2]*Qaux[0];
+    T t1 = -Q[4]*Qaux[0];
     SimpleArray<T, 72> res;
     res[0] = 0;
     res[1] = 0;
@@ -118,7 +117,7 @@ struct Model {
     res[21] = 0;
     res[22] = 0;
     res[23] = 0;
-    res[24] = t0;
+    res[24] = 0;
     res[25] = 0;
     res[26] = 0;
     res[27] = 0;
@@ -136,14 +135,14 @@ struct Model {
     res[39] = 0;
     res[40] = 0;
     res[41] = 0;
-    res[42] = t1;
+    res[42] = t0;
     res[43] = 0;
     res[44] = 0;
     res[45] = 0;
     res[46] = 0;
-    res[47] = t1;
+    res[47] = t0;
     res[48] = 0;
-    res[49] = t0;
+    res[49] = 0;
     res[50] = 0;
     res[51] = 0;
     res[52] = 0;
@@ -160,12 +159,12 @@ struct Model {
     res[63] = 0;
     res[64] = 0;
     res[65] = 0;
-    res[66] = t2;
+    res[66] = t1;
     res[67] = 0;
     res[68] = 0;
     res[69] = 0;
     res[70] = 0;
-    res[71] = t2;
+    res[71] = t1;
     return res;
     }
 
@@ -221,7 +220,7 @@ struct Model {
     res[21] = t2;
     res[22] = 0;
     res[23] = 0;
-    res[24] = t3;
+    res[24] = 0;
     res[25] = 0;
     res[26] = std::pow(Q[2], 2)*t4 + std::pow(Q[3], 2)*t5 + t3;
     res[27] = t8;
@@ -246,7 +245,7 @@ struct Model {
     res[46] = 0;
     res[47] = t10 + t19;
     res[48] = 0;
-    res[49] = t3;
+    res[49] = 0;
     res[50] = t8;
     res[51] = std::pow(Q[4], 2)*t4 + std::pow(Q[5], 2)*t5 + t3;
     res[52] = t12;
@@ -569,14 +568,13 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
-    T t0 = Q[1]/(100.0*p[2] + Q[1]);
     SimpleArray<T, 6> res;
     res[0] = Q[0];
-    res[1] = ((false) ? (0) : (Q[1]));
-    res[2] = Q[2]*t0;
-    res[3] = Q[3]*t0;
-    res[4] = Q[4]*t0;
-    res[5] = Q[5]*t0;
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    res[4] = Q[4];
+    res[5] = Q[5];
     return res;
     }
 
@@ -595,10 +593,6 @@ struct Model {
         const T* Qaux,
         const T* p)
     {
-    T t0 = 100.0*p[2] + Q[1];
-    T t1 = (1.0 / std::pow(t0, 1));
-    T t2 = Q[1]/std::pow(t0, 2);
-    T t3 = Q[1]*t1;
     SimpleArray<T, 36> res;
     res[0] = 1;
     res[1] = 0;
@@ -607,35 +601,35 @@ struct Model {
     res[4] = 0;
     res[5] = 0;
     res[6] = 0;
-    res[7] = ((false) ? (0) : (1));
-    res[8] = Q[2]*t1 - Q[2]*t2;
-    res[9] = Q[3]*t1 - Q[3]*t2;
-    res[10] = Q[4]*t1 - Q[4]*t2;
-    res[11] = Q[5]*t1 - Q[5]*t2;
+    res[7] = 1;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
     res[12] = 0;
     res[13] = 0;
-    res[14] = t3;
+    res[14] = 1;
     res[15] = 0;
     res[16] = 0;
     res[17] = 0;
     res[18] = 0;
     res[19] = 0;
     res[20] = 0;
-    res[21] = t3;
+    res[21] = 1;
     res[22] = 0;
     res[23] = 0;
     res[24] = 0;
     res[25] = 0;
     res[26] = 0;
     res[27] = 0;
-    res[28] = t3;
+    res[28] = 1;
     res[29] = 0;
     res[30] = 0;
     res[31] = 0;
     res[32] = 0;
     res[33] = 0;
     res[34] = 0;
-    res[35] = t3;
+    res[35] = 1;
     return res;
     }
 
@@ -666,13 +660,21 @@ struct Model {
         const T dX)
     {
     if (bc_idx == 0) {
+        T t0 = n[1]*Q[4];
+        T t1 = n[0]*Q[2] + t0;
+        T t2 = 1.0*n[0];
+        T t3 = 1.0*n[0]*Q[2] + 1.0*t0;
+        T t4 = n[1]*Q[5];
+        T t5 = n[0]*Q[3] + t4;
+        T t6 = 1.0*n[0]*Q[3] + 1.0*t4;
+        T t7 = 1.0*n[1];
         SimpleArray<T, 6> res;
         res[0] = Q[0];
         res[1] = Q[1];
-        res[2] = Q[2];
-        res[3] = Q[3];
-        res[4] = Q[4];
-        res[5] = Q[5];
+        res[2] = 1.0*Q[2] - t1*t2 - t2*t3;
+        res[3] = 1.0*Q[3] - t2*t5 - t2*t6;
+        res[4] = 1.0*Q[4] - t1*t7 - t3*t7;
+        res[5] = 1.0*Q[5] - t5*t7 - t6*t7;
         return res;
     }
     SimpleArray<T, 6> default_res = {0};
