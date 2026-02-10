@@ -183,20 +183,20 @@ public:
     }
 
     PetscErrorCode FormRHS(PetscReal time, Vec X_global, Vec F_global) {
-        PetscCall(CheckIntegrity("1. FormRHS_Start"));
+        // PetscCall(CheckIntegrity("1. FormRHS_Start"));
         
         PetscCall(VecZeroEntries(F_global));
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
         
-        PetscCall(CheckIntegrity("2. Before_UpdateState"));
+        // PetscCall(CheckIntegrity("2. Before_UpdateState"));
         PetscCall(UpdateState(X_loc, A_loc)); 
-        PetscCall(CheckIntegrity("3. After_UpdateState"));
+        // PetscCall(CheckIntegrity("3. After_UpdateState"));
 
         if (gradient) {
             PetscCall(UpdateNeighborBounds(X_loc));
-            PetscCall(CheckIntegrity("3b. After_NeighborBounds"));
+            // PetscCall(CheckIntegrity("3b. After_NeighborBounds"));
         }
 
         Vec G_global = NULL; Vec G_loc = NULL; PetscScalar *g_ptr = NULL;
@@ -207,17 +207,17 @@ public:
              PetscCall(DMGlobalToLocalBegin(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(DMGlobalToLocalEnd(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(VecGetArray(G_loc, &g_ptr));
-             PetscCall(CheckIntegrity("3c. After_Gradient"));
+            //  PetscCall(CheckIntegrity("3c. After_Gradient"));
         }
 
         Vec F_loc; PetscCall(DMGetLocalVector(dmQ, &F_loc)); PetscCall(VecZeroEntries(F_loc));
         
-        PetscCall(CheckIntegrity("4. Before_ComputeFluxes"));
+        // PetscCall(CheckIntegrity("4. Before_ComputeFluxes"));
         PetscCall(ComputeFluxes(time, X_loc, A_loc, g_ptr, F_loc));
-        PetscCall(CheckIntegrity("5. After_ComputeFluxes"));
+        // PetscCall(CheckIntegrity("5. After_ComputeFluxes"));
 
         PetscCall(ComputeExplicitSource(X_loc, A_loc, F_loc));
-        PetscCall(CheckIntegrity("6. After_Source"));
+        // PetscCall(CheckIntegrity("6. After_Source"));
 
         PetscCall(DMLocalToGlobalBegin(dmQ, F_loc, ADD_VALUES, F_global));
         PetscCall(DMLocalToGlobalEnd(dmQ, F_loc, ADD_VALUES, F_global));
@@ -227,7 +227,7 @@ public:
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         PetscCall(DMRestoreLocalVector(dmQ, &F_loc));
         
-        PetscCall(CheckIntegrity("7. FormRHS_End"));
+        // PetscCall(CheckIntegrity("7. FormRHS_End"));
         return PETSC_SUCCESS;
     }
 
