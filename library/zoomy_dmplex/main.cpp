@@ -3,9 +3,10 @@
 #include <memory>
 
 #include "ModularSolver.hpp"
+#include "MOODSolver.hpp"       // [NEW] Include the MOOD Solver header
 #include "SolverStrategies.hpp"
 
-static char help[] = "Shallow Water Moments Solver)\n";
+static char help[] = "Shallow Water Moments Solver (MOOD)\n";
 
 int main(int argc, char **argv) {
     PetscFunctionBeginUser;
@@ -13,18 +14,26 @@ int main(int argc, char **argv) {
     PetscCall(PetscInitialize(&argc, &argv, NULL, help));
 
     { // 2. START OF SCOPE BLOCK
+        
+        // Choose your time-stepping strategy. 
+        // MOOD is compatible with both Splitting and IMEX.
+        // Use IMEX if your source terms are stiff.
         auto strategy = std::make_shared<IMEXStrategy>();
         
-        // Solver is created inside this block
-        ModularSolver solver;
+        // [CHANGE 1] Instantiate MOODSolver instead of ModularSolver
+        MOODSolver solver;
         solver.SetStrategy(strategy);
         
-        // Standard setup and run
-        solver.SetReconstruction(PCM); 
+        // [CHANGE 2] Set Reconstruction to LINEAR (2nd Order)
+        // MOOD relies on a High-Order "Predictor" step. 
+        // If you set this to PCM, the solver will have nothing to lower.
+        solver.SetReconstruction(LINEAR); 
+        
+        // [Standard] Set Flux Kernels
         solver.SetFluxKernel(Numerics<Real>::numerical_flux); 
         solver.SetNonConsFluxKernel(Numerics<Real>::numerical_fluctuations);
 
-        if (solver.rank == 0) std::cout << "[MAIN] Starting Simulation..." << std::endl;
+        if (solver.rank == 0) std::cout << "[MAIN] Starting MOOD Simulation..." << std::endl;
         
         PetscCall(solver.Run(argc, argv));
 
