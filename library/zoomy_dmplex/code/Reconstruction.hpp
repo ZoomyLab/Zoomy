@@ -190,9 +190,17 @@ public:
             }
         }
 
+        auto alpha = 1.;
+        // Take the MINIMUM alpha over all components
+        for(int i=0; i<Model<T>::n_dof_q; ++i) {
+            if (alpha > final_alphas[i]) {
+                alpha = final_alphas[i];
+            }
+        }
+
         // 4. Apply Final Reconstruction
         for(int i=0; i<Model<T>::n_dof_q; ++i) {
-            q_face_out[i] = q_cell[i] + final_alphas[i] * delta[i];
+            q_face_out[i] = q_cell[i] + alpha * delta[i];
         }
     }
 };

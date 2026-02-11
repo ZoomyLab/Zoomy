@@ -18,6 +18,9 @@ private:
     std::vector<PetscInt> neigh_offsets, neigh_list;
     bool topology_setup = false;
 
+    // MOOD: 0=High, 1=Low
+    std::vector<uint8_t> cell_orders;
+
     FluxKernelPtr cons_flux_kernel;
     NonConservativeFluxKernelPtr noncons_flux_kernel;
     SourceKernelPtr source_kernel;
@@ -46,14 +49,13 @@ private:
         return PETSC_SUCCESS;
     }
 
-    // --- NEW: Non-Conservative Flux Integrity Test ---
+    // --- Non-Conservative Flux Integrity Test ---
     void CheckNCFluxIntegrity(PetscInt face_id, const PetscScalar* nc_left, const PetscScalar* nc_right) {
         const T tol = 1e-12;
         bool failed = false;
 
-        // Based on your Model.H matrices:
-        // Rows 0, 1, 2, 4 are ZERO.
-        // Rows 3, 5 are NON-ZERO.
+        // Based on Model.H matrices structure (rows 0,1,2,4 often zero for specific models)
+        // Adjust these indices based on your specific equation set if needed
         int conservative_indices[] = {0, 1, 2, 4}; 
 
         for (int idx : conservative_indices) {
@@ -71,10 +73,7 @@ private:
             for(int i=0; i<Model<T>::n_dof_q; ++i) {
                 T vL = nc_left[i];
                 T vR = (nc_right) ? nc_right[i] : 0.0;
-                
                 const char* status = "OK";
-                
-                // Check if this index was supposed to be zero
                 bool should_be_zero = false;
                 for (int c : conservative_indices) if(c==i) should_be_zero = true;
 
@@ -83,7 +82,6 @@ private:
                 } else if (!should_be_zero && std::abs(vL) < tol && std::abs(vR) < tol) {
                     status = "INFO (Zero but allowed)";
                 }
-
                 PetscPrintf(PETSC_COMM_WORLD, "   %d  | %18.10e | %18.10e | %s\n", i, vL, vR, status);
             }
             MPI_Abort(PETSC_COMM_WORLD, 911);
@@ -110,6 +108,9 @@ public:
     void SetGradient(std::shared_ptr<GradientCalculator<T>> g) { gradient = g; }
     void SetNonConsFlux(NonConservativeFluxKernelPtr k) { noncons_flux_kernel = k; }
     void SetFluxKernel(FluxKernelPtr k) { cons_flux_kernel = k; }
+    
+    // FIX: Added method for MOOD Solver
+    void SetCellOrders(const std::vector<uint8_t>& orders) { cell_orders = orders; }
 
     PetscErrorCode SetupTopology() {
         if (topology_setup) return PETSC_SUCCESS;
@@ -183,20 +184,15 @@ public:
     }
 
     PetscErrorCode FormRHS(PetscReal time, Vec X_global, Vec F_global) {
-        // PetscCall(CheckIntegrity("1. FormRHS_Start"));
-        
         PetscCall(VecZeroEntries(F_global));
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
         
-        // PetscCall(CheckIntegrity("2. Before_UpdateState"));
         PetscCall(UpdateState(X_loc, A_loc)); 
-        // PetscCall(CheckIntegrity("3. After_UpdateState"));
 
         if (gradient) {
             PetscCall(UpdateNeighborBounds(X_loc));
-            // PetscCall(CheckIntegrity("3b. After_NeighborBounds"));
         }
 
         Vec G_global = NULL; Vec G_loc = NULL; PetscScalar *g_ptr = NULL;
@@ -207,17 +203,13 @@ public:
              PetscCall(DMGlobalToLocalBegin(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(DMGlobalToLocalEnd(dmGrad, G_global, INSERT_VALUES, G_loc));
              PetscCall(VecGetArray(G_loc, &g_ptr));
-            //  PetscCall(CheckIntegrity("3c. After_Gradient"));
         }
 
         Vec F_loc; PetscCall(DMGetLocalVector(dmQ, &F_loc)); PetscCall(VecZeroEntries(F_loc));
         
-        // PetscCall(CheckIntegrity("4. Before_ComputeFluxes"));
         PetscCall(ComputeFluxes(time, X_loc, A_loc, g_ptr, F_loc));
-        // PetscCall(CheckIntegrity("5. After_ComputeFluxes"));
 
         PetscCall(ComputeExplicitSource(X_loc, A_loc, F_loc));
-        // PetscCall(CheckIntegrity("6. After_Source"));
 
         PetscCall(DMLocalToGlobalBegin(dmQ, F_loc, ADD_VALUES, F_global));
         PetscCall(DMLocalToGlobalEnd(dmQ, F_loc, ADD_VALUES, F_global));
@@ -227,7 +219,6 @@ public:
         PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         PetscCall(DMRestoreLocalVector(dmQ, &F_loc));
         
-        // PetscCall(CheckIntegrity("7. FormRHS_End"));
         return PETSC_SUCCESS;
     }
 
@@ -251,6 +242,10 @@ public:
         PetscInt fStart, fEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 1, &fStart, &fEnd));
         DMLabel label; PetscCall(DMGetLabel(dmQ, "Face Sets", &label));
         PetscInt dim = Model<T>::dimension;
+        
+        // Use for mapping local cell index to order mask
+        PetscInt cStart, cEnd; 
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
 
         for (PetscInt f = fStart; f < fEnd; ++f) {
             if (!IsOwned(dmQ, f)) continue;
@@ -267,6 +262,12 @@ public:
                 PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x_ptr, &qL_cell)); PetscCall(DMPlexPointLocalRead(dmQ, cells[1], x_ptr, &qR_cell));
                 if (g_ptr) { PetscCall(DMPlexPointLocalRead(dmGrad, cells[0], g_ptr, &gL_cell)); PetscCall(DMPlexPointLocalRead(dmGrad, cells[1], g_ptr, &gR_cell)); }
                 
+                // FIX: Check MOOD Orders. If 1 (Low Order), force gradient to NULL (PCM).
+                if (!cell_orders.empty()) {
+                    if (cells[0] >= cStart && cells[0] < cEnd && cell_orders[cells[0] - cStart] == 1) gL_cell = nullptr;
+                    if (cells[1] >= cStart && cells[1] < cEnd && cell_orders[cells[1] - cStart] == 1) gR_cell = nullptr;
+                }
+
                 PetscInt offL, offR; PetscCall(PetscSectionGetOffset(secCell, cells[0], &offL)); PetscCall(PetscSectionGetOffset(secCell, cells[1], &offR));
                 const PetscFVCellGeom *cgL = (const PetscFVCellGeom*)&cGeom_ptr[offL]; const PetscFVCellGeom *cgR = (const PetscFVCellGeom*)&cGeom_ptr[offR];
                 
@@ -305,10 +306,6 @@ public:
                     auto* nc_into_right = nc_stacked.data;
                     auto* nc_into_left  = nc_stacked.data + Model<T>::n_dof_q;
 
-                    // --- DEBUG CHECK ---
-                    // CheckNCFluxIntegrity(f, nc_into_left, nc_into_right);
-                    // -------------------
-
                     for(int i=0; i<Model<T>::n_dof_q; ++i) { 
                         if (fL) fL[i] -= nc_into_left[i] * area; 
                         if (fR) fR[i] -= nc_into_right[i] * area; 
@@ -331,6 +328,11 @@ public:
                     const PetscScalar *qL_cell, *gL_cell = NULL;
                     PetscCall(DMPlexPointLocalRead(dmQ, cL, x_ptr, &qL_cell));
                     if (g_ptr) { PetscCall(DMPlexPointLocalRead(dmGrad, cL, g_ptr, &gL_cell)); }
+
+                    // FIX: Mask gradient for MOOD boundary cells too
+                    if (!cell_orders.empty()) {
+                        if (cL >= cStart && cL < cEnd && cell_orders[cL - cStart] == 1) gL_cell = nullptr;
+                    }
                     
                     PetscInt offL; PetscCall(PetscSectionGetOffset(secCell, cL, &offL));
                     const PetscFVCellGeom *cgL = (const PetscFVCellGeom*)&cGeom_ptr[offL];
@@ -370,10 +372,6 @@ public:
                         auto nc_stacked = noncons_flux_kernel(qL_face, qR_face, aL_face, aR_face, parameters.data(), n_hat);
                         auto* nc_into_left  = nc_stacked.data + Model<T>::n_dof_q; 
 
-                        // --- DEBUG CHECK ---
-                        // CheckNCFluxIntegrity(f, nc_into_left, nullptr);
-                        // -------------------
-
                         if (fL) {
                             for(int i=0; i<Model<T>::n_dof_q; ++i) { 
                                 fL[i] -= nc_into_left[i] * area; 
@@ -387,7 +385,7 @@ public:
                 }
             }
         }
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+
         for(PetscInt c=cStart; c<cEnd; ++c) {
              PetscInt off; PetscCall(PetscSectionGetOffset(secCell, c, &off)); const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[off];
              
