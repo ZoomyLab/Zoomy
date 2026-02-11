@@ -353,9 +353,9 @@ public:
                     auto qR_arr = Model<T>::boundary_conditions(bc_idx, qL_face, aL_face, n_hat, fg->centroid, time, 0.0);
                     PetscScalar *qR_face = qR_arr.data;
 
-                    PetscScalar aR_face[Model<T>::n_dof_qaux];
-                    auto res_aR = Model<T>::update_aux_variables(qR_face, nullptr, parameters.data());
-                    for(int i=0; i<Model<T>::n_dof_qaux; ++i) aR_face[i] = res_aR[i];
+                    // NEW: Compute Boundary Aux using specific Boundary Function
+                    auto aR_arr = Model<T>::aux_boundary_conditions(bc_idx, qL_face, aL_face, n_hat, fg->centroid, time, 0.0);
+                    PetscScalar *aR_face = aR_arr.data;
 
                     SimpleArray<T, Model<T>::n_dof_q> flux;
                     for(int i=0; i<Model<T>::n_dof_q; ++i) flux[i] = 0.0;
