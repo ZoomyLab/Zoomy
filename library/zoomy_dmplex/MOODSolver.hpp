@@ -250,7 +250,7 @@ private:
             bool bad = false;
 
             // Tolerate dry cells with negative numerical noise (prevents 90% replacement false positives)
-            if (q_high[1] < -1e-12) bad = true; 
+            if (q_high[1] < 0.) bad = true; 
 
             if (!bad) {
                 std::vector<PetscReal> min_b(Model<Real>::n_dof_q);
