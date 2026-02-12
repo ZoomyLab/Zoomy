@@ -29,7 +29,7 @@ struct SimpleArray {
 template <typename T>
 struct Model {
     static constexpr int n_dof_q    = 6;
-    static constexpr int n_dof_qaux = 1;
+    static constexpr int n_dof_qaux = 2;
     static constexpr int dimension  = 2;
     static constexpr int n_boundary_tags = 1;
     static const std::vector<std::string> get_boundary_tags() { return { "default" }; }
@@ -457,7 +457,7 @@ struct Model {
     return res;
     }
 
-    PORTABLE_FN static inline SimpleArray<T, 6> source_jacobian_wrt_aux_variables(
+    PORTABLE_FN static inline SimpleArray<T, 12> source_jacobian_wrt_aux_variables(
         const T* Q,
         const T* Qaux,
         const T* p)
@@ -465,13 +465,19 @@ struct Model {
     T t0 = 1/(p[8]*p[6]);
     T t1 = 1.0*t0;
     T t2 = 3.0*t0;
-    SimpleArray<T, 6> res;
+    SimpleArray<T, 12> res;
     res[0] = 0;
     res[1] = 0;
     res[2] = -Q[2]*t1 - Q[3]*t1;
     res[3] = -Q[2]*t2 - Q[3]*t2;
     res[4] = -Q[4]*t1 - Q[5]*t1;
     res[5] = -Q[4]*t2 - Q[5]*t2;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
     return res;
     }
 
@@ -554,12 +560,13 @@ struct Model {
     return res;
     }
 
-    PORTABLE_FN static inline SimpleArray<T, 1> initial_aux_condition(
+    PORTABLE_FN static inline SimpleArray<T, 2> initial_aux_condition(
         const T* X,
         const T* p)
     {
-    SimpleArray<T, 1> res;
+    SimpleArray<T, 2> res;
     res[0] = ((X[0] < 5) ? (0.5) : (1.0/p[2]));
+    res[1] = 0;
     return res;
     }
 
@@ -579,13 +586,14 @@ struct Model {
     return res;
     }
 
-    PORTABLE_FN static inline SimpleArray<T, 1> update_aux_variables(
+    PORTABLE_FN static inline SimpleArray<T, 2> update_aux_variables(
         const T* Q,
         const T* Qaux,
         const T* p)
     {
-    SimpleArray<T, 1> res;
+    SimpleArray<T, 2> res;
     res[0] = Q[1]/(p[2] + std::pow(Q[1], 2));
+    res[1] = Qaux[1];
     return res;
     }
 
@@ -638,20 +646,26 @@ struct Model {
     return res;
     }
 
-    PORTABLE_FN static inline SimpleArray<T, 6> update_aux_variables_jacobian_wrt_variables(
+    PORTABLE_FN static inline SimpleArray<T, 12> update_aux_variables_jacobian_wrt_variables(
         const T* Q,
         const T* Qaux,
         const T* p)
     {
     T t0 = std::pow(Q[1], 2);
     T t1 = p[2] + t0;
-    SimpleArray<T, 6> res;
+    SimpleArray<T, 12> res;
     res[0] = 0;
-    res[1] = -2*t0/std::pow(t1, 2) + (1.0 / std::pow(t1, 1));
-    res[2] = 0;
+    res[1] = 0;
+    res[2] = -2*t0/std::pow(t1, 2) + (1.0 / std::pow(t1, 1));
     res[3] = 0;
     res[4] = 0;
     res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
     return res;
     }
 
@@ -683,6 +697,25 @@ struct Model {
         return res;
     }
     SimpleArray<T, 6> default_res = {0};
+    return default_res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 2> aux_boundary_conditions(
+        const int bc_idx,
+        const T* Q,
+        const T* Qaux,
+        const T* n,
+        const T* X,
+        const T time,
+        const T dX)
+    {
+    if (bc_idx == 0) {
+        SimpleArray<T, 2> res;
+        res[0] = Qaux[0];
+        res[1] = Qaux[1];
+        return res;
+    }
+    SimpleArray<T, 2> default_res = {0};
     return default_res;
     }
 

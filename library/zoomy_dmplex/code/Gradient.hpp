@@ -2,62 +2,90 @@
 #define GRADIENT_HPP
 
 #include "VirtualSolver.hpp"
+#include <functional>
+#include <vector>
+#include <cmath>
 
 template <typename T>
 class GradientCalculator {
 public:
+    // Callback: (bc_idx, x_primary_cell, x_coupling_cell, normal, centroid, time, dx, output_buffer)
+    using BCFunction = std::function<void(int, const T*, const T*, const T*, const T*, T, T, T*)>;
+
+protected:
+    BCFunction bc_func = nullptr;
+
+public:
     virtual ~GradientCalculator() = default;
+    
+    void SetBCFunction(BCFunction func) { bc_func = func; }
+
     virtual PetscErrorCode Setup(DM dm) { return PETSC_SUCCESS; }
-    virtual PetscErrorCode Compute(DM dmQ, Vec X_global, DM dmGrad, Vec G_global, 
-                                   const std::map<PetscInt, PetscInt>& boundary_map) = 0;
+    
+    /**
+     * Compute Gradient.
+     * @param dmP          DM for the Primary field (field being differentiated).
+     * @param X_primary    Global Vector of the Primary field.
+     * @param dmGrad       DM for the Gradient output.
+     * @param G_global     Global Vector for Gradient output.
+     * @param boundary_map Map of mesh tags to Model BC indices.
+     * @param dmCoupling   (Optional) DM for the Coupling field (context).
+     * @param X_coupling   (Optional) Local Vector of the Coupling field.
+     */
+    virtual PetscErrorCode Compute(DM dmP, Vec X_primary, DM dmGrad, Vec G_global, 
+                                   const std::map<PetscInt, PetscInt>& boundary_map,
+                                   DM dmCoupling = NULL, Vec X_coupling = NULL) = 0;
 };
 
+// ============================================================================
+//  Green-Gauss Gradient
+// ============================================================================
 template <typename T>
 class GreenGaussGradient : public GradientCalculator<T> {
 public:
-    PetscErrorCode Compute(DM dmQ, Vec X_global, DM dmGrad, Vec G_global, 
-                           const std::map<PetscInt, PetscInt>& boundary_map) override {
+    PetscErrorCode Compute(DM dmP, Vec X_primary, DM dmGrad, Vec G_global, 
+                           const std::map<PetscInt, PetscInt>& boundary_map,
+                           DM dmCoupling = NULL, Vec X_coupling = NULL) override {
         // 1. Zero Global Vector
         PetscCall(VecZeroEntries(G_global));
 
         // 2. Prepare Local Vectors
         Vec X_loc; 
-        PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
-        PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc)); 
-        PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
+        PetscCall(DMGetLocalVector(dmP, &X_loc)); 
+        PetscCall(DMGlobalToLocalBegin(dmP, X_primary, INSERT_VALUES, X_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmP, X_primary, INSERT_VALUES, X_loc));
         
+        // Coupling Vector is assumed to be passed as LOCAL vector if provided
+        // (If X_coupling is NULL, we don't use it)
+        const PetscScalar *c_ptr = NULL; 
+        if(X_coupling) PetscCall(VecGetArrayRead(X_coupling, &c_ptr));
+
         Vec G_loc; 
         PetscCall(DMGetLocalVector(dmGrad, &G_loc)); 
         PetscCall(VecZeroEntries(G_loc)); 
 
-        const PetscScalar *x_ptr; 
-        PetscCall(VecGetArrayRead(X_loc, &x_ptr)); 
-        PetscScalar *g_ptr; 
-        PetscCall(VecGetArray(G_loc, &g_ptr));
+        const PetscScalar *x_ptr; PetscCall(VecGetArrayRead(X_loc, &x_ptr)); 
+        PetscScalar *g_ptr; PetscCall(VecGetArray(G_loc, &g_ptr));
 
-        // Safety: Get local size for Gradient vector
-        PetscInt size_g;
-        PetscCall(VecGetLocalSize(G_loc, &size_g));
-
-        // Geometry
+        PetscInt size_g; PetscCall(VecGetLocalSize(G_loc, &size_g));
+        
         Vec cellGeom, faceGeom; 
-        PetscCall(DMPlexGetGeometryFVM(dmQ, &faceGeom, &cellGeom, NULL));
+        PetscCall(DMPlexGetGeometryFVM(dmP, &faceGeom, &cellGeom, NULL));
         const PetscScalar *fGeom_ptr, *cGeom_ptr; 
         PetscCall(VecGetArrayRead(faceGeom, &fGeom_ptr)); 
         PetscCall(VecGetArrayRead(cellGeom, &cGeom_ptr));
 
-        // Topology
         DM dmFace; PetscCall(VecGetDM(faceGeom, &dmFace)); 
         PetscSection secFace; PetscCall(DMGetLocalSection(dmFace, &secFace));
-        PetscInt fStart, fEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 1, &fStart, &fEnd));
+        PetscInt fStart, fEnd; PetscCall(DMPlexGetHeightStratum(dmP, 1, &fStart, &fEnd));
         
         PetscInt dim = Model<T>::dimension;
-        PetscSection secIn; PetscCall(DMGetLocalSection(dmQ, &secIn)); 
+        PetscSection secIn; PetscCall(DMGetLocalSection(dmP, &secIn)); 
         PetscSection secGrad; PetscCall(DMGetLocalSection(dmGrad, &secGrad));
         
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmP, 0, &cStart, &cEnd));
         PetscInt n_comp; PetscCall(PetscSectionGetDof(secIn, cStart, &n_comp));
-        DMLabel label; PetscCall(DMGetLabel(dmQ, "Face Sets", &label));
+        DMLabel label; PetscCall(DMGetLabel(dmP, "Face Sets", &label));
 
         // --- FACE LOOP ---
         for (PetscInt f = fStart; f < fEnd; ++f) {
@@ -65,16 +93,15 @@ public:
             const PetscFVFaceGeom *fg = (const PetscFVFaceGeom*)&fGeom_ptr[off];
             
             const PetscInt *cells; PetscInt num_cells; 
-            PetscCall(DMPlexGetSupportSize(dmQ, f, &num_cells)); 
-            PetscCall(DMPlexGetSupport(dmQ, f, &cells));
+            PetscCall(DMPlexGetSupportSize(dmP, f, &num_cells)); 
+            PetscCall(DMPlexGetSupport(dmP, f, &cells));
             
             if (num_cells == 2) {
                 // Internal Face
                 const PetscScalar *qL, *qR; 
-                PetscCall(DMPlexPointLocalRead(dmQ, cells[0], x_ptr, &qL)); 
-                PetscCall(DMPlexPointLocalRead(dmQ, cells[1], x_ptr, &qR));
+                PetscCall(DMPlexPointLocalRead(dmP, cells[0], x_ptr, &qL)); 
+                PetscCall(DMPlexPointLocalRead(dmP, cells[1], x_ptr, &qR));
                 
-                // Safe access to gradient vector
                 PetscInt offGL, offGR;
                 PetscCall(PetscSectionGetOffset(secGrad, cells[0], &offGL));
                 PetscCall(PetscSectionGetOffset(secGrad, cells[1], &offGR));
@@ -94,19 +121,25 @@ public:
                 // Boundary Face
                 PetscInt tag_id; 
                 PetscCall(DMLabelGetValue(label, f, &tag_id));
-                if (boundary_map.count(tag_id)) {
+                
+                if (boundary_map.count(tag_id) && this->bc_func) {
                     PetscInt bc_idx = boundary_map.at(tag_id);
                     PetscInt c = cells[0];
                     const PetscScalar *qL; 
-                    PetscCall(DMPlexPointLocalRead(dmQ, c, x_ptr, &qL));
+                    PetscCall(DMPlexPointLocalRead(dmP, c, x_ptr, &qL));
                     
+                    const PetscScalar *cL = nullptr; 
+                    if(c_ptr) PetscCall(DMPlexPointLocalRead(dmCoupling, c, c_ptr, &cL));
+
                     PetscScalar n_hat[3];
                     PetscReal area = 0; 
                     for(int d=0; d<dim; ++d) area += fg->normal[d]*fg->normal[d]; 
                     area = std::sqrt(area);
                     for(int d=0; d<dim; ++d) n_hat[d] = fg->normal[d]/area;
                     
-                    auto q_bc = Model<T>::boundary_conditions(bc_idx, qL, nullptr, n_hat, fg->centroid, 0.0, 0.0);
+                    std::vector<T> q_bc_vec(n_comp);
+                    // Pass primary (qL) and coupling (cL) to callback
+                    this->bc_func(bc_idx, qL, cL, n_hat, fg->centroid, 0.0, 0.0, q_bc_vec.data());
                     
                     PetscInt offGL; 
                     PetscCall(PetscSectionGetOffset(secGrad, c, &offGL));
@@ -115,7 +148,7 @@ public:
                     if (gL) {
                         for(int i=0; i<n_comp; ++i) {
                             for(int d=0; d<dim; ++d) {
-                                gL[i*dim + d] += q_bc[i] * fg->normal[d];
+                                gL[i*dim + d] += q_bc_vec[i] * fg->normal[d];
                             }
                         }
                     }
@@ -123,7 +156,7 @@ public:
             }
         }
         
-        // --- CELL LOOP ---
+        // --- CELL LOOP (Normalize by Volume) ---
         DM dmCell; PetscCall(VecGetDM(cellGeom, &dmCell)); 
         PetscSection secCell; PetscCall(DMGetLocalSection(dmCell, &secCell));
         
@@ -143,20 +176,23 @@ public:
         }
         
         PetscCall(VecRestoreArrayRead(X_loc, &x_ptr)); 
+        if(c_ptr) PetscCall(VecRestoreArrayRead(X_coupling, &c_ptr));
         PetscCall(VecRestoreArray(G_loc, &g_ptr));
         PetscCall(VecRestoreArrayRead(faceGeom, &fGeom_ptr)); 
         PetscCall(VecRestoreArrayRead(cellGeom, &cGeom_ptr));
         
-        // --- Synchronization ---
         PetscCall(DMLocalToGlobalBegin(dmGrad, G_loc, INSERT_VALUES, G_global)); 
         PetscCall(DMLocalToGlobalEnd(dmGrad, G_loc, INSERT_VALUES, G_global));
         
-        PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); 
+        PetscCall(DMRestoreLocalVector(dmP, &X_loc)); 
         PetscCall(DMRestoreLocalVector(dmGrad, &G_loc));
         return PETSC_SUCCESS;
     }
 };
 
+// ============================================================================
+//  Least Squares Gradient
+// ============================================================================
 template <typename T>
 class LeastSquaresGradient : public GradientCalculator<T> {
 private:
@@ -261,14 +297,15 @@ public:
         return PETSC_SUCCESS;
     }
 
-    PetscErrorCode Compute(DM dmQ, Vec X_global, DM dmGrad, Vec G_global, 
-                           const std::map<PetscInt, PetscInt>& boundary_map) override {
-        if (!initialized) PetscCall(Setup(dmQ));
+    PetscErrorCode Compute(DM dmP, Vec X_primary, DM dmGrad, Vec G_global, 
+                           const std::map<PetscInt, PetscInt>& boundary_map,
+                           DM dmCoupling = NULL, Vec X_coupling = NULL) override {
+        if (!initialized) PetscCall(Setup(dmP));
         PetscCall(VecZeroEntries(G_global));
 
-        Vec X_loc; PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
-        PetscCall(DMGlobalToLocalBegin(dmQ, X_global, INSERT_VALUES, X_loc)); 
-        PetscCall(DMGlobalToLocalEnd(dmQ, X_global, INSERT_VALUES, X_loc));
+        Vec X_loc; PetscCall(DMGetLocalVector(dmP, &X_loc)); 
+        PetscCall(DMGlobalToLocalBegin(dmP, X_primary, INSERT_VALUES, X_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmP, X_primary, INSERT_VALUES, X_loc));
         
         Vec G_loc; PetscCall(DMGetLocalVector(dmGrad, &G_loc)); 
         PetscCall(VecZeroEntries(G_loc)); 
@@ -276,9 +313,9 @@ public:
         const PetscScalar *x_ptr; PetscCall(VecGetArrayRead(X_loc, &x_ptr)); 
         PetscScalar *g_ptr; PetscCall(VecGetArray(G_loc, &g_ptr));
         
-        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd)); 
+        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmP, 0, &cStart, &cEnd)); 
         PetscInt dim = Model<T>::dimension;
-        PetscSection sec; PetscCall(DMGetLocalSection(dmQ, &sec)); 
+        PetscSection sec; PetscCall(DMGetLocalSection(dmP, &sec)); 
         PetscSection secGrad; PetscCall(DMGetLocalSection(dmGrad, &secGrad));
         PetscInt n_comp; PetscCall(PetscSectionGetDof(sec, cStart, &n_comp));
 
@@ -288,7 +325,7 @@ public:
             PetscInt offG; PetscCall(PetscSectionGetOffset(secGrad, c, &offG));
             PetscScalar *gc = (offG >= 0 && offG + n_comp*dim <= size_g) ? &g_ptr[offG] : nullptr;
 
-            const PetscScalar *qc; PetscCall(DMPlexPointLocalRead(dmQ, c, x_ptr, &qc));
+            const PetscScalar *qc; PetscCall(DMPlexPointLocalRead(dmP, c, x_ptr, &qc));
             
             if (gc && qc) {
                 int idx_start = ls_offsets[c - cStart]; 
@@ -297,7 +334,7 @@ public:
                 
                 for(int k=idx_start; k<idx_end; ++k) {
                     PetscInt n = ls_neighbors[k]; 
-                    const PetscScalar *qn; PetscCall(DMPlexPointLocalRead(dmQ, n, x_ptr, &qn));
+                    const PetscScalar *qn; PetscCall(DMPlexPointLocalRead(dmP, n, x_ptr, &qn));
                     const double *w = &ls_weights[k * n_basis];
                     
                     for(int i=0; i<n_comp; ++i) { 
@@ -316,7 +353,7 @@ public:
         PetscCall(DMLocalToGlobalBegin(dmGrad, G_loc, INSERT_VALUES, G_global)); 
         PetscCall(DMLocalToGlobalEnd(dmGrad, G_loc, INSERT_VALUES, G_global));
         
-        PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); 
+        PetscCall(DMRestoreLocalVector(dmP, &X_loc)); 
         PetscCall(DMRestoreLocalVector(dmGrad, &G_loc));
         return PETSC_SUCCESS;
     }

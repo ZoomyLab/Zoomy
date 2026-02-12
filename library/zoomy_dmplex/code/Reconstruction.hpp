@@ -167,8 +167,11 @@ public:
 
         for(int i=0; i<Model<T>::n_dof_q; ++i) {
             delta[i] = 0.0;
-            for(int d=0; d<Model<T>::dimension; ++d) {
-                delta[i] += grad_cell[i * Model<T>::dimension + d] * dx[d];
+            // FIX: Check for NULL gradient (implies low order or no gradient available)
+            if (grad_cell) {
+                for(int d=0; d<Model<T>::dimension; ++d) {
+                    delta[i] += grad_cell[i * Model<T>::dimension + d] * dx[d];
+                }
             }
             q_face_unlimited[i] = q_cell[i] + delta[i];
         }

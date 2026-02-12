@@ -13,14 +13,12 @@
 class SolverStrategy;
 
 class ModularSolver : public VirtualSolver {
-public: // Public so Strategies can access components
+public:
     std::unique_ptr<TransportStep<Real>> transport;
     std::unique_ptr<SourceStep<Real>> source_solver;
     
-    // The Strategy (Logic)
     std::shared_ptr<SolverStrategy> strategy;
 
-    // Configuration
     int config_reconstruction_order = 1;
     GradientMethod config_grad_method = GREEN_GAUSS;
     FluxKernelPtr config_flux_kernel = nullptr; 
@@ -30,7 +28,6 @@ public:
     ModularSolver() : VirtualSolver() {}
     virtual ~ModularSolver() = default;
 
-    // --- Configuration ---
     void SetStrategy(std::shared_ptr<SolverStrategy> s) { strategy = s; }
     void SetReconstruction(ReconstructionType type) { config_reconstruction_order = (type == LINEAR ? 2 : 1); }
     void SetGradientMethod(GradientMethod method) { config_grad_method = method; }
@@ -39,45 +36,55 @@ public:
 
     // --- Component Initialization ---
     PetscErrorCode InitializeComponents() {
-        // 1. Transport
-        transport = std::make_unique<TransportStep<Real>>(dmQ, dmAux, dmGrad, parameters, boundary_map);
+        // 1. Create Transport Step (Now including dmGradAux)
+        transport = std::make_unique<TransportStep<Real>>(dmQ, dmAux, dmGrad, dmGradAux, parameters, boundary_map);
+        
         if (config_flux_kernel) transport->SetFluxKernel(config_flux_kernel);
         if (config_noncons_flux_kernel) transport->SetNonConsFlux(config_noncons_flux_kernel);
         
-        // 2. Reconstruction
+        // 2. Configure Reconstruction & Gradients
         if (config_reconstruction_order == 2) {
+            // A. State Reconstruction
             transport->SetReconstruction(std::make_shared<LinearReconstructor<Real>>());
-            if (config_grad_method == GREEN_GAUSS) transport->SetGradient(std::make_shared<GreenGaussGradient<Real>>());
-            else transport->SetGradient(std::make_shared<LeastSquaresGradient<Real>>(1));
+            auto grad = std::make_shared<GreenGaussGradient<Real>>();
+            grad->SetBCFunction(Model<Real>::boundary_conditions); 
+            transport->SetGradient(grad);
+
+            // B. Auxiliary Reconstruction (Matches State Order)
+            transport->SetAuxReconstruction(std::make_shared<LinearReconstructor<Real>>());
+            auto gradAux = std::make_shared<GreenGaussGradient<Real>>();
+            gradAux->SetBCFunction(Model<Real>::aux_boundary_conditions); 
+            transport->SetAuxGradient(gradAux);
+
         } else {
+            // 1st Order (PCM)
             transport->SetReconstruction(std::make_shared<PCMReconstructor<Real>>());
+            transport->SetAuxReconstruction(std::make_shared<PCMReconstructor<Real>>());
         }
 
-        // 3. Source Solver (Lazy init: mostly used by Splitting strategy)
+        // 3. Create Source Solver
         source_solver = std::make_unique<SourceStep<Real>>(dmQ, dmAux, parameters);
-        
         return PETSC_SUCCESS;
     }
 
-    // --- Main Execution Loop ---
     PetscErrorCode Run(int argc, char **argv) override;
 
-    // --- Helper: Update State (Proxy to Transport) ---
     PetscErrorCode UpdateState(Vec Q_loc, Vec Aux_loc) override { 
         return transport->UpdateState(Q_loc, Aux_loc); 
     }
 
-    // --- Helper: Implicit Source Residual Calculation (Used by IMEX/Implicit Strategies) ---
-    // F_glob += sign * Source(U)
     PetscErrorCode AddImplicitSourceToResidual(Vec X_glob, Vec F_glob, PetscReal sign) {
         PetscFunctionBeginUser;
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
-        PetscCall(DMGlobalToLocalBegin(dmQ, X_glob, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_glob, INSERT_VALUES, X_loc));
-        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        
+        PetscCall(DMGlobalToLocalBegin(dmQ, X_glob, INSERT_VALUES, X_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmQ, X_glob, INSERT_VALUES, X_loc));
+        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        // Ensure Aux is consistent with State
+        // Ensure state is consistent for Source calculation
         PetscCall(transport->UpdateState(X_loc, A_loc));
 
         const PetscScalar *x_arr, *a_arr;
@@ -104,7 +111,6 @@ public:
 
             if (offGlob >= 0) {
                 PetscInt idx_glob = offGlob - rstart;
-                // Evaluate Source: S(U)
                 auto S = Model<Real>::source(&x_arr[offQ], &a_arr[offA], params_ptr);
                 for (int i = 0; i < Model<Real>::n_dof_q; ++i) {
                     f_arr[idx_glob + i] += sign * S[i];
@@ -119,8 +125,6 @@ public:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // --- Helper: Form Source Jacobian (Used by IMEX/Implicit Strategies) ---
-    // P = a*I - dSource/dQ
     PetscErrorCode FormSourceJacobian(PetscReal t, Vec X_glob, PetscReal a, Mat P) {
         PetscFunctionBeginUser;
         PetscCall(MatZeroEntries(P));
@@ -132,6 +136,9 @@ public:
         PetscCall(DMGlobalToLocalEnd(dmQ, X_glob, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        
+        // Note: UpdateState likely called in Residual eval before Jacobian, but good practice if needed.
+        // But for pure Jacobian assembly we assume X is state.
 
         const PetscScalar *x_arr, *a_arr;
         PetscCall(VecGetArrayRead(X_loc, &x_arr));
@@ -169,7 +176,6 @@ public:
                     for(int j=0; j<n_dof; ++j) {
                         Real val = (i == j) ? a : 0.0;
                         Real dSource = dS_dQ[i*n_dof + j];
-                        // Chain rule: dS/dQ + dS/dAux * dAux/dQ
                         for(int k=0; k<n_aux; ++k) {
                              dSource += dS_dAux[i*n_aux + k] * dAux_dQ[k*n_dof + j];
                         }
@@ -196,102 +202,91 @@ public:
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
         PetscCall(DMGetLocalVector(dmAux, &A_loc)); 
         
-        PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
-        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmQ, X, INSERT_VALUES, X_loc));
+        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
         
         PetscCall(UpdateState(X_loc, A_loc));
         
-        // --- RESTORED MSH LOADING LOGIC ---
         std::string init_file = settings.io.initial_condition_file;
         if (!init_file.empty()) {
             if (init_file.find(".msh") != std::string::npos) {
                 if (rank == 0) std::cout << "[INFO] Detected .msh file. Using spatial interpolation loader." << std::endl;
+                MshLoader loader; loader.Load(init_file);
                 
-                MshLoader loader;
-                loader.Load(init_file);
-
                 PetscScalar *q_arr, *aux_arr;
-                PetscCall(VecGetArray(X_loc, &q_arr));
+                PetscCall(VecGetArray(X_loc, &q_arr)); 
                 PetscCall(VecGetArray(A_loc, &aux_arr));
                 
                 PetscInt loc_size_Q, loc_size_A;
-                PetscCall(VecGetLocalSize(X_loc, &loc_size_Q));
+                PetscCall(VecGetLocalSize(X_loc, &loc_size_Q)); 
                 PetscCall(VecGetLocalSize(A_loc, &loc_size_A));
-
-                PetscInt cStart, cEnd;
-                PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
                 
-                Vec cellGeom;
+                PetscInt cStart, cEnd; 
+                PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+                Vec cellGeom; 
                 PetscCall(DMPlexGetGeometryFVM(dmQ, NULL, &cellGeom, NULL));
-                const PetscScalar *cGeom_ptr;
+                const PetscScalar *cGeom_ptr; 
                 PetscCall(VecGetArrayRead(cellGeom, &cGeom_ptr));
+                
                 DM dmCell; PetscCall(VecGetDM(cellGeom, &dmCell)); 
                 PetscSection secCell; PetscCall(DMGetLocalSection(dmCell, &secCell));
-                PetscSection sQ; PetscCall(DMGetLocalSection(dmQ, &sQ));
+                PetscSection sQ; PetscCall(DMGetLocalSection(dmQ, &sQ)); 
                 PetscSection sAux; PetscCall(DMGetLocalSection(dmAux, &sAux));
                 
-                const int n_dof = Model<Real>::n_dof_q;
+                const int n_dof = Model<Real>::n_dof_q; 
                 const int n_dof_aux = Model<Real>::n_dof_qaux;
                 const PetscReal* params_ptr = parameters.data();
 
                 for(PetscInt c=cStart; c<cEnd; ++c) {
                     PetscInt offG; PetscCall(PetscSectionGetOffset(secCell, c, &offG));
                     const PetscFVCellGeom *cg = (const PetscFVCellGeom*)&cGeom_ptr[offG];
-                    double x = cg->centroid[0];
-                    double y = cg->centroid[1];
-
-                    double B = loader.Interpolate("B", x, y);
-                    double H = loader.Interpolate("H", x, y);
-                    double U = loader.Interpolate("U", x, y);
+                    double x = cg->centroid[0]; double y = cg->centroid[1];
+                    double B = loader.Interpolate("B", x, y); 
+                    double H = loader.Interpolate("H", x, y); 
+                    double U = loader.Interpolate("U", x, y); 
                     double V = loader.Interpolate("V", x, y);
-
-                    PetscInt offQ; PetscCall(PetscSectionGetOffset(sQ, c, &offQ));
+                    
+                    PetscInt offQ; PetscCall(PetscSectionGetOffset(sQ, c, &offQ)); 
                     PetscInt offAux; PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
                     
                     if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q) {
-                        if (0 < n_dof) q_arr[offQ + 0] = B;
-                        if (1 < n_dof) q_arr[offQ + 1] = H;
+                        if (0 < n_dof) q_arr[offQ + 0] = B; 
+                        if (1 < n_dof) q_arr[offQ + 1] = H; 
                         if (2 < n_dof) q_arr[offQ + 2] = H * U;
-                        if (n_dof == 4) {
-                            if (3 < n_dof) q_arr[offQ + 3] = H * V;
-                        } else {
+                        if (n_dof == 4) { 
+                            if (3 < n_dof) q_arr[offQ + 3] = H * V; 
+                        } else { 
                             if (4 < n_dof) q_arr[offQ + 4] = H * V; 
                         }
                     }
-
-                    if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q &&
-                        offAux >= 0 && (offAux + n_dof_aux) <= loc_size_A) 
-                    {
+                    // Update Aux from interpolated State
+                    if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q && offAux >= 0 && (offAux + n_dof_aux) <= loc_size_A) {
                         Model<Real>::update_aux_variables(&q_arr[offQ], &aux_arr[offAux], params_ptr);
                     }
                 }
-
-                PetscCall(VecRestoreArray(X_loc, &q_arr));
-                PetscCall(VecRestoreArray(A_loc, &aux_arr));
+                PetscCall(VecRestoreArray(X_loc, &q_arr)); 
+                PetscCall(VecRestoreArray(A_loc, &aux_arr)); 
                 PetscCall(VecRestoreArrayRead(cellGeom, &cGeom_ptr));
-                
                 PetscCall(DMLocalToGlobalBegin(dmQ, X_loc, INSERT_VALUES, X)); 
                 PetscCall(DMLocalToGlobalEnd(dmQ, X_loc, INSERT_VALUES, X));
             } else {
-                // Fallback to IO Manager (Standard/Mask loading)
-                std::vector<PetscInt> mask;
+                std::vector<PetscInt> mask; 
                 for(int m : settings.io.initial_condition_mask) mask.push_back((PetscInt)m);
                 PetscCall(io->LoadSolution(X, dmQ, init_file, mask));
-                
-                // Sync globals
                 PetscCall(DMGlobalToLocalBegin(dmQ, X, INSERT_VALUES, X_loc)); 
                 PetscCall(DMGlobalToLocalEnd(dmQ, X_loc, INSERT_VALUES, X_loc));
                 PetscCall(UpdateState(X_loc, A_loc));
             }
         }
-        // -----------------------------------------------------
-
-        PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
-        PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
+        PetscCall(DMLocalToGlobalBegin(dmAux, A_loc, INSERT_VALUES, A)); 
+        PetscCall(DMLocalToGlobalEnd(dmAux, A_loc, INSERT_VALUES, A));
+        PetscCall(DMRestoreLocalVector(dmQ, &X_loc)); 
+        PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         return PETSC_SUCCESS;
     }
 
-    // Helper static wrapper for IO Monitoring
     static PetscErrorCode MonitorWrapper(TS ts, PetscInt step, PetscReal time, Vec X, void *ctx) {
         ModularSolver *solver = (ModularSolver *)ctx;
         if (solver->io->ShouldWrite(time)) {
@@ -313,31 +308,29 @@ protected:
     virtual PetscErrorCode RegisterCallbacks(TS ts);
 };
 
-// ============================================================================
-// INCLUDE STRATEGIES AT THE END TO RESOLVE DEPENDENCIES
-// ============================================================================
 #include "SolverStrategies.hpp"
 
-// Implementation of Run() is here because it needs SolverStrategy definition
 inline PetscErrorCode ModularSolver::Run(int argc, char **argv) {
     PetscFunctionBeginUser;
     PetscCall(VirtualSolver::Initialize(argc, argv)); 
     
+    // Set Reconstruction Type from Settings
     if (settings.solver.reconstruction_order == 2) SetReconstruction(LINEAR); 
     else SetReconstruction(PCM);
-
+    
     PetscCall(InitializeComponents()); 
+    
+    // Detect Output Fields (Dynamic check)
+    int n_dof = Model<Real>::n_dof_q;
+    std::vector<std::string> names;
+    if (n_dof >= 6) names = {"b", "h", "u", "v", "w", "p"};
+    else if (n_dof == 4) names = {"b", "h", "hu", "hv"};
+    else names = {"b", "h"};
 
-    std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
-    PetscCall(io->Setup3D(dmQ, 6, names)); 
+    PetscCall(io->Setup3D(dmQ, n_dof, names)); 
     PetscCall(LoadInitialCondition());
-
-    // --- STRATEGY INJECTION ---
-    if (!strategy) {
-        // Default to Splitting if none set
-        strategy = std::make_shared<SplittingStrategy>();
-    }
-
+    
+    if (!strategy) { strategy = std::make_shared<SplittingStrategy>(); }
     PetscCall(TSSetApplicationContext(ts, this));
     PetscCall(RegisterCallbacks(ts)); 
     
@@ -349,6 +342,7 @@ inline PetscErrorCode ModularSolver::Run(int argc, char **argv) {
     dt_start = std::max(dt_start, settings.solver.min_dt);
     PetscCall(TSSetTimeStep(ts, dt_start)); 
     PetscCall(TSSetFromOptions(ts)); 
+    
     PetscCall(TSMonitorSet(ts, MonitorWrapper, this, NULL));
     
     if (rank == 0) std::cout << "[INFO] Starting ModularSolver..." << std::endl;
@@ -357,10 +351,8 @@ inline PetscErrorCode ModularSolver::Run(int argc, char **argv) {
     PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-// Implementation of RegisterCallbacks delegating to Strategy
 inline PetscErrorCode ModularSolver::RegisterCallbacks(TS ts) {
     if (!strategy) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_NULL, "No SolverStrategy set!");
     return strategy->SetupTS(ts, this);
 }
-
 #endif
