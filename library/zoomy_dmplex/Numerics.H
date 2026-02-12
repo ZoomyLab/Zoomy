@@ -44,10 +44,10 @@ struct Numerics {
     T t4 = std::max(0.0, Q_plus[0] + Q_plus[1] + t1);
     T t5 = t4/std::max(9.9999999999999995e-7, Q_plus[1]);
     T v_arg_0[] = { t0, t2, Q_minus[2]*t3, Q_minus[3]*t3, Q_minus[4]*t3, Q_minus[5]*t3 };
-    T v_arg_1[] = { (1.0 / std::pow(p[2] + t2, 1)) };
+    T v_arg_1[] = { (1.0 / std::pow(p[2] + t2, 1)), Qaux_minus[1] };
     T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
     T v_arg_3[] = { t0, t4, Q_plus[2]*t5, Q_plus[3]*t5, Q_plus[4]*t5, Q_plus[5]*t5 };
-    T v_arg_4[] = { (1.0 / std::pow(p[2] + t4, 1)) };
+    T v_arg_4[] = { (1.0 / std::pow(p[2] + t4, 1)), Qaux_plus[1] };
     auto v_call_0 = Model<T>::flux(v_arg_0, v_arg_1, v_arg_2);
     auto v_call_1 = Model<T>::flux(v_arg_3, v_arg_4, v_arg_2);
     T t6 = 0.5*n[0];
@@ -71,15 +71,15 @@ struct Numerics {
         const T* n)
     {
     T v_arg_0[] = { 0.5*Q_minus[0] + 0.5*Q_plus[0], 0.5*Q_minus[1] + 0.5*Q_plus[1], 0.5*Q_minus[2] + 0.5*Q_plus[2], 0.5*Q_minus[3] + 0.5*Q_plus[3], 0.5*Q_minus[4] + 0.5*Q_plus[4], 0.5*Q_minus[5] + 0.5*Q_plus[5] };
-    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0] };
+    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0], 0.5*Qaux_minus[1] + 0.5*Qaux_plus[1] };
     T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
     T v_arg_3[] = { 0.1127016653792583*Q_minus[0] + 0.8872983346207417*Q_plus[0], 0.1127016653792583*Q_minus[1] + 0.8872983346207417*Q_plus[1], 0.1127016653792583*Q_minus[2] + 0.8872983346207417*Q_plus[2], 0.1127016653792583*Q_minus[3] + 0.8872983346207417*Q_plus[3], 0.1127016653792583*Q_minus[4] + 0.8872983346207417*Q_plus[4], 0.1127016653792583*Q_minus[5] + 0.8872983346207417*Q_plus[5] };
-    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0] };
+    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0], 0.1127016653792583*Qaux_minus[1] + 0.8872983346207417*Qaux_plus[1] };
     T v_arg_5[] = { 0.8872983346207417*Q_minus[0] + 0.1127016653792583*Q_plus[0], 0.8872983346207417*Q_minus[1] + 0.1127016653792583*Q_plus[1], 0.8872983346207417*Q_minus[2] + 0.1127016653792583*Q_plus[2], 0.8872983346207417*Q_minus[3] + 0.1127016653792583*Q_plus[3], 0.8872983346207417*Q_minus[4] + 0.1127016653792583*Q_plus[4], 0.8872983346207417*Q_minus[5] + 0.1127016653792583*Q_plus[5] };
-    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0] };
-    T v_arg_7[] = { Qaux_minus[0] };
+    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0], 0.8872983346207417*Qaux_minus[1] + 0.1127016653792583*Qaux_plus[1] };
+    T v_arg_7[] = { Qaux_minus[0], Qaux_minus[1] };
     T v_arg_8[] = { n[0], n[1] };
-    T v_arg_9[] = { Qaux_plus[0] };
+    T v_arg_9[] = { Qaux_plus[0], Qaux_plus[1] };
     auto v_call_0 = Model<T>::nonconservative_matrix(v_arg_0, v_arg_1, v_arg_2);
     auto v_call_1 = Model<T>::nonconservative_matrix(v_arg_3, v_arg_4, v_arg_2);
     auto v_call_2 = Model<T>::nonconservative_matrix(v_arg_5, v_arg_6, v_arg_2);
@@ -130,7 +130,7 @@ struct Numerics {
         const T* n)
     {
     T v_arg_0[] = { Q[0], Q[1], Q[2], Q[3], Q[4], Q[5] };
-    T v_arg_1[] = { Qaux[0] };
+    T v_arg_1[] = { Qaux[0], Qaux[1] };
     T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
     T v_arg_3[] = { n[0], n[1] };
     auto v_call_0 = Model<T>::eigenvalues(v_arg_0, v_arg_1, v_arg_2, v_arg_3);

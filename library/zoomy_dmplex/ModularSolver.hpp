@@ -119,6 +119,7 @@ public:
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGetLocalVector(dmAux, &A_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_glob, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_glob, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        PetscCall(transport->UpdateState(X_loc, A_loc));
         
         const PetscScalar *x_arr, *a_arr;
         PetscCall(VecGetArrayRead(X_loc, &x_arr)); PetscCall(VecGetArrayRead(A_loc, &a_arr));
