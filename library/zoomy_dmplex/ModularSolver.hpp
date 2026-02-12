@@ -225,7 +225,7 @@ public:
             if (solver->settings.io.write_3d) solver->io->Write3D<Model<Real>>(time, X, solver->A, solver->dmQ, solver->dmAux, solver->parameters);
             solver->io->AdvanceSnapshot();
         }
-        if (solver->rank == 0 && step % 10 == 0) {
+        if (solver->rank == 0 && step % 1 == 0) {
             PetscReal dt; TSGetTimeStep(ts, &dt);
             PetscPrintf(PETSC_COMM_WORLD, "Step %d Time %.4f dt %.4e\n", step, (double)time, (double)dt);
         }
