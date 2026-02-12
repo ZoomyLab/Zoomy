@@ -16,10 +16,12 @@ public:
 // ============================================================================
 class SplittingStrategy : public SolverStrategy {
 public:
-    PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
+PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
         PetscCall(TSSetRHSFunction(ts, NULL, RHSWrapper, solver));
         PetscCall(TSSetPostStep(ts, SplittingWrapper));
+        
         PetscCall(TSSetType(ts, TSSSP)); // Strong Stability Preserving
+        PetscCall(TSSSPSetType(ts, TSSSPRK104)); 
         return PETSC_SUCCESS;
     }
 
@@ -49,15 +51,15 @@ private:
 // ============================================================================
 class IMEXStrategy : public SolverStrategy {
 public:
-    PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
-        // Explicit Part: Fluxes
+PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
         PetscCall(TSSetRHSFunction(ts, NULL, RHSWrapper, solver));
-        
-        // Implicit Part: Source Term
         PetscCall(TSSetIFunction(ts, NULL, IFunctionWrapper, solver));
         PetscCall(TSSetIJacobian(ts, NULL, NULL, IJacobianWrapper, solver));
         
         PetscCall(TSSetType(ts, TSARKIMEX)); 
+        
+        PetscCall(TSARKIMEXSetType(ts, "2e"));
+        
         PetscCall(TSSetPostStep(ts, PostStepWrapper)); 
         return PETSC_SUCCESS;
     }
