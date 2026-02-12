@@ -2,6 +2,7 @@
 #define MOOD_SOLVER_HPP
 
 #include "ModularSolver.hpp"
+#include "SolverStrategies.hpp"
 #include <vector>
 #include <algorithm>
 #include <numeric> 
@@ -9,6 +10,7 @@
 class MOODSolver : public ModularSolver {
 private:
     Vec X_backup;
+    Vec X_low;  
     
     // Mask: 0=High Order, 1=Low Order
     std::vector<uint8_t> current_cell_orders; 
@@ -17,43 +19,56 @@ private:
     std::vector<std::vector<CellBounds>> bounds_cache;
 
 public:
-    MOODSolver() : ModularSolver() { X_backup = NULL; }
+    MOODSolver() : ModularSolver() { X_backup = NULL; X_low = NULL; }
 
     MOODSolver(std::shared_ptr<SolverStrategy> strat) : ModularSolver() {
-        this->strategy = strat;
-        X_backup = NULL;
+        this->SetStrategy(strat);
+        X_backup = NULL; 
+        X_low = NULL;
     }
 
     ~MOODSolver() { 
         if(X_backup) VecDestroy(&X_backup); 
+        if(X_low) VecDestroy(&X_low);
+    }
+
+    PetscErrorCode GlobalUpdateState(Vec U_global) {
+        PetscFunctionBeginUser;
+        Vec U_loc, A_loc;
+        PetscCall(DMGetLocalVector(dmQ, &U_loc)); 
+        PetscCall(DMGetLocalVector(dmAux, &A_loc));
+        
+        // 1. Scatter Global -> Local (Get current state with ghosts)
+        PetscCall(DMGlobalToLocalBegin(dmQ, U_global, INSERT_VALUES, U_loc));
+        PetscCall(DMGlobalToLocalEnd(dmQ, U_global, INSERT_VALUES, U_loc));
+        
+        // 2. Aux vars are needed for consistency checks
+        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
+        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+
+        // 3. Apply Model::update_variables (Clamps h, desingularizes u)
+        // This modifies U_loc in-place.
+        PetscCall(transport->UpdateState(U_loc, A_loc)); 
+
+        // 4. Scatter Local -> Global (Write back clamped values)
+        // We use INSERT_VALUES to overwrite the raw arithmetic result with the physically valid one.
+        PetscCall(DMLocalToGlobalBegin(dmQ, U_loc, INSERT_VALUES, U_global));
+        PetscCall(DMLocalToGlobalEnd(dmQ, U_loc, INSERT_VALUES, U_global));
+
+        PetscCall(DMRestoreLocalVector(dmQ, &U_loc)); 
+        PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
+        PetscFunctionReturn(PETSC_SUCCESS);
     }
 
     PetscErrorCode Run(int argc, char **argv) override {
         PetscFunctionBeginUser;
         PetscCall(VirtualSolver::Initialize(argc, argv));
         
-        // --- MOOD CONFIGURATION ---
-        // REMOVED: The forced override to Order 2. 
-        // Now respecting settings.solver.reconstruction_order.
-        // If set to 1, this runs as a pure Finite Volume 1st order scheme 
-        // (but still within the MOOD loop structure).
-        
-        // Disable Limiters for High Order (if we are in High Order mode)
-        // We rely on the rollback to cure oscillations.
-        if (settings.solver.reconstruction_order >= 2) {
-            SetLimiters(false); 
-        }
-        // --------------------------
-
+        SetReconstruction(LINEAR); 
         PetscCall(InitializeComponents()); 
 
-        int n_dof = Model<Real>::n_dof_q;
-        std::vector<std::string> names;
-        if (n_dof >= 6) names = {"b", "h", "u", "v", "w", "p"};
-        else if (n_dof == 4) names = {"b", "h", "hu", "hv"};
-        else names = {"b", "h"}; 
-        
-        PetscCall(io->Setup3D(dmQ, n_dof, names));
+        std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
+        PetscCall(io->Setup3D(dmQ, 6, names));
         PetscCall(LoadInitialCondition());
 
         if (!strategy) strategy = std::make_shared<SplittingStrategy>();
@@ -64,14 +79,13 @@ public:
         PetscCall(TSSetMaxTime(ts, settings.solver.t_end));
         PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
         
-        if (X_backup) PetscCall(VecDestroy(&X_backup));
         PetscCall(VecDuplicate(X, &X_backup));
+        PetscCall(VecDuplicate(X, &X_low));
 
-        PetscReal dt_start = ComputeTimeStep();
-        dt_start = std::max(dt_start, settings.solver.min_dt);
+        PetscReal dt_start = std::max(ComputeTimeStep(), settings.solver.min_dt);
         PetscCall(TSSetTimeStep(ts, dt_start));
         PetscCall(TSSetFromOptions(ts)); 
-        
+
         PetscInt cStart, cEnd;
         PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         current_cell_orders.assign(cEnd - cStart, 0); 
@@ -80,14 +94,7 @@ public:
         PetscInt global_n_cells = 0;
         MPI_Allreduce(&local_n_cells, &global_n_cells, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD);
 
-        if (rank == 0) {
-            std::cout << "[INFO] Starting MOOD Solver..." << std::endl;
-            if (settings.solver.reconstruction_order == 1) {
-                std::cout << "[INFO] Running in DEBUG MODE (Order=1). MOOD Rollback is effectively disabled." << std::endl;
-            } else {
-                std::cout << "[INFO] Strategy: Unlimited Order 2 Candidate -> Rollback to Order 1." << std::endl;
-            }
-        }
+        if (rank == 0) std::cout << "[INFO] Starting MOOD Solver..." << std::endl;
 
         PetscReal time;
         PetscCall(TSGetTime(ts, &time));
@@ -95,19 +102,14 @@ public:
         PetscCall(MonitorWrapper(ts, 0, time, X, this));
 
         while (time < settings.solver.t_end) {
-            // 1. Pre-step: Compute bounds and backup solution
             PetscCall(PrecomputeDMPBounds(X));
             PetscCall(VecCopy(X, X_backup));
 
-            // Reset to High Order (0) for the Predictor
-            // (If Order=1 in settings, "High Order" is actually PCM, effectively same as Low Order)
             std::fill(current_cell_orders.begin(), current_cell_orders.end(), 0);
             transport->SetCellOrders(current_cell_orders);
-
-            // 2. Predictor Step
+            SetOrder(2); 
             PetscCall(TSStep(ts));
 
-            // 3. Detection
             bool needs_rollback = DetectTroubledCells(X);
             
             PetscMPIInt local_rb = needs_rollback ? 1 : 0;
@@ -115,34 +117,33 @@ public:
             MPI_Allreduce(&local_rb, &global_rb, 1, MPI_INT, MPI_MAX, PETSC_COMM_WORLD);
 
             if (global_rb == 1) {
-                // If we are already running at Order 1, rollback is redundant but harmless.
-                // We perform it to ensure logic consistency.
-                
-                if (rank == 0 && step_num % 1 == 0) {
+                if (step_num % 10 == 0) {
                     PetscInt local_bad = 0;
                     for(auto val : current_cell_orders) if(val == 1) local_bad++;
                     PetscInt global_bad = 0;
                     MPI_Allreduce(&local_bad, &global_bad, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD);
-                    
-                    double percent = 100.0 * (double)global_bad / (double)global_n_cells;
-                    std::cout << "  Step " << step_num << " MOOD Rollback: " 
-                              << global_bad << "/" << global_n_cells << " cells (" 
-                              << percent << "%) marked." << std::endl;
+                    if (rank == 0) {
+                        double percent = 100.0 * (double)global_bad / (double)global_n_cells;
+                        if(global_bad > 0) std::cout << "  [MOOD] " << global_bad << " cells (" << percent << "%) replaced." << std::endl;
+                    }
                 }
 
-                // 4. Corrector Step
                 transport->SetCellOrders(current_cell_orders);
-
-                // Revert to U^n
                 PetscCall(VecCopy(X_backup, X));
                 PetscCall(TSSetSolution(ts, X));
                 PetscCall(TSSetTime(ts, time)); 
                 
+                SetOrder(1);
                 PetscCall(TSStep(ts));
             }
 
+            PetscCall(GlobalUpdateState(X));
+
             step_num++;
             PetscCall(TSGetTime(ts, &time));
+            
+            // PostStep now sees clean X, so ComputeTimeStep will calculate a healthy dt
+            PetscCall(PostStep(ts)); 
             PetscCall(MonitorWrapper(ts, step_num, time, X, this));
         }
 
@@ -151,6 +152,42 @@ public:
     }
 
 private:
+    void SetOrder(int order) {
+        if (order == 2 && settings.solver.reconstruction_order >= 2) {
+            transport->SetReconstruction(std::make_shared<LinearReconstructor<Real>>());
+        } else {
+            transport->SetReconstruction(std::make_shared<PCMReconstructor<Real>>());
+        }
+    }
+
+    PetscErrorCode ApplyReplacement() {
+        PetscScalar *x_arr; const PetscScalar *low_arr;
+        PetscCall(VecGetArray(X, &x_arr)); PetscCall(VecGetArrayRead(X_low, &low_arr));
+        
+        PetscInt rstart;
+        PetscCall(VecGetOwnershipRange(X, &rstart, NULL));
+        PetscSection sGlob;
+        PetscCall(DMGetGlobalSection(dmQ, &sGlob));
+
+        PetscInt cStart, cEnd; 
+        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
+
+        for (PetscInt c = cStart; c < cEnd; ++c) {
+            if (current_cell_orders[c - cStart] == 1) {
+                PetscInt off;
+                PetscCall(PetscSectionGetOffset(sGlob, c, &off)); 
+                if (off >= 0) {
+                    PetscInt idx = off - rstart; 
+                    for (int i = 0; i < Model<Real>::n_dof_q; ++i) {
+                        x_arr[idx + i] = low_arr[idx + i];
+                    }
+                }
+            }
+        }
+        PetscCall(VecRestoreArray(X, &x_arr)); PetscCall(VecRestoreArrayRead(X_low, &low_arr));
+        return PETSC_SUCCESS;
+    }
+
     PetscErrorCode PrecomputeDMPBounds(Vec U_curr) {
         PetscFunctionBeginUser;
         Vec X_loc; PetscCall(DMGetLocalVector(dmQ, &X_loc));
@@ -211,17 +248,14 @@ private:
             const PetscScalar* q; DMPlexPointLocalRead(dmQ, c, x_arr, &q);
             bool bad = false;
 
-            // 1. Positivity Check
             if (q[1] < 0.0) {
                 bad = true; 
             }
 
-            // 2. Relaxed DMP Check
             if (!bad) {
                 for(int idx : check_indices) {
                     Real min_b = bounds_cache[c - cStart][idx].min_val;
                     Real max_b = bounds_cache[c - cStart][idx].max_val;
-                    
                     Real range = max_b - min_b;
                     Real tol = std::max(eps_abs, range * eps_rel);
 

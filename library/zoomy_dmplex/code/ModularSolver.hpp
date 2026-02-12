@@ -119,6 +119,7 @@ public:
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); PetscCall(DMGetLocalVector(dmAux, &A_loc));
         PetscCall(DMGlobalToLocalBegin(dmQ, X_glob, INSERT_VALUES, X_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, X_glob, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
+        PetscCall(transport->UpdateState(X_loc, A_loc));
         
         const PetscScalar *x_arr, *a_arr;
         PetscCall(VecGetArrayRead(X_loc, &x_arr)); PetscCall(VecGetArrayRead(A_loc, &a_arr));
@@ -225,7 +226,7 @@ public:
             if (solver->settings.io.write_3d) solver->io->Write3D<Model<Real>>(time, X, solver->A, solver->dmQ, solver->dmAux, solver->parameters);
             solver->io->AdvanceSnapshot();
         }
-        if (solver->rank == 0 && step % 10 == 0) {
+        if (solver->rank == 0 && step % 1 == 0) {
             PetscReal dt; TSGetTimeStep(ts, &dt);
             PetscPrintf(PETSC_COMM_WORLD, "Step %d Time %.4f dt %.4e\n", step, (double)time, (double)dt);
         }
