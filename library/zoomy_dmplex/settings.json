@@ -3,7 +3,7 @@
     "io": {
         "directory": "outputs/dmplex",
         "filename": "dmplex",
-        "snapshots": 720,
+        "snapshots": 100,
         "snapshot_logic": "interpolate",
         "clean_directory": true,
         "mesh_path": "./../../data/malpasset/geo_malpasset-small.msh",
@@ -12,7 +12,7 @@
         "write_3d": false
     },
     "solver": {
-        "t_end": 3600.0,
+        "t_end": 1.0,
         "cfl": 0.5,
         "reconstruction_order": 1
     }

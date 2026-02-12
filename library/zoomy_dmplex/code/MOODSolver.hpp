@@ -17,12 +17,8 @@ private:
     std::vector<std::vector<CellBounds>> bounds_cache;
 
 public:
-    // FIX: Added default constructor to satisfy 'MOODSolver solver;' in main.cpp
-    MOODSolver() : ModularSolver() { 
-        X_backup = NULL; 
-    }
+    MOODSolver() : ModularSolver() { X_backup = NULL; }
 
-    // Optional: Keep this if you want to allow passing a strategy manually
     MOODSolver(std::shared_ptr<SolverStrategy> strat) : ModularSolver() {
         this->strategy = strat;
         X_backup = NULL;
@@ -36,20 +32,26 @@ public:
         PetscFunctionBeginUser;
         PetscCall(VirtualSolver::Initialize(argc, argv));
         
-        // Ensure we are in 2nd order mode (Linear Reconstructor) to start with
-        if (settings.solver.reconstruction_order < 2) {
-            if (rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[WARNING] MOODSolver running with order=1 setting. Boosting to 2 for Predictor.\n");
-            settings.solver.reconstruction_order = 2;
+        // --- MOOD CONFIGURATION ---
+        // REMOVED: The forced override to Order 2. 
+        // Now respecting settings.solver.reconstruction_order.
+        // If set to 1, this runs as a pure Finite Volume 1st order scheme 
+        // (but still within the MOOD loop structure).
+        
+        // Disable Limiters for High Order (if we are in High Order mode)
+        // We rely on the rollback to cure oscillations.
+        if (settings.solver.reconstruction_order >= 2) {
+            SetLimiters(false); 
         }
+        // --------------------------
 
         PetscCall(InitializeComponents()); 
 
-        // Setup 3D output if requested (Dynamic component check)
         int n_dof = Model<Real>::n_dof_q;
         std::vector<std::string> names;
         if (n_dof >= 6) names = {"b", "h", "u", "v", "w", "p"};
         else if (n_dof == 4) names = {"b", "h", "hu", "hv"};
-        else names = {"b", "h"}; // Fallback
+        else names = {"b", "h"}; 
         
         PetscCall(io->Setup3D(dmQ, n_dof, names));
         PetscCall(LoadInitialCondition());
@@ -74,12 +76,18 @@ public:
         PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         current_cell_orders.assign(cEnd - cStart, 0); 
         
-        // Calculate Total Global Cells
         PetscInt local_n_cells = cEnd - cStart;
         PetscInt global_n_cells = 0;
         MPI_Allreduce(&local_n_cells, &global_n_cells, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD);
 
-        if (rank == 0) std::cout << "[INFO] Starting MOOD Solver (Predictor-Corrector)..." << std::endl;
+        if (rank == 0) {
+            std::cout << "[INFO] Starting MOOD Solver..." << std::endl;
+            if (settings.solver.reconstruction_order == 1) {
+                std::cout << "[INFO] Running in DEBUG MODE (Order=1). MOOD Rollback is effectively disabled." << std::endl;
+            } else {
+                std::cout << "[INFO] Strategy: Unlimited Order 2 Candidate -> Rollback to Order 1." << std::endl;
+            }
+        }
 
         PetscReal time;
         PetscCall(TSGetTime(ts, &time));
@@ -87,60 +95,52 @@ public:
         PetscCall(MonitorWrapper(ts, 0, time, X, this));
 
         while (time < settings.solver.t_end) {
-            // 1. Prepare for Candidate Step
-            // Calculate Min/Max of neighbors at U^n (Pre-step)
+            // 1. Pre-step: Compute bounds and backup solution
             PetscCall(PrecomputeDMPBounds(X));
-            PetscCall(VecCopy(X, X_backup)); // Backup U^n
+            PetscCall(VecCopy(X, X_backup));
 
-            // Reset Mask to High Order (0) for the Predictor Step
+            // Reset to High Order (0) for the Predictor
+            // (If Order=1 in settings, "High Order" is actually PCM, effectively same as Low Order)
             std::fill(current_cell_orders.begin(), current_cell_orders.end(), 0);
             transport->SetCellOrders(current_cell_orders);
 
-            // 2. Candidate Step (High Order)
+            // 2. Predictor Step
             PetscCall(TSStep(ts));
 
             // 3. Detection
-            // Check if U^* violates criteria (Positivity, DMP)
             bool needs_rollback = DetectTroubledCells(X);
             
-            // Global reduction to check if ANY rank failed
             PetscMPIInt local_rb = needs_rollback ? 1 : 0;
             PetscMPIInt global_rb = 0;
             MPI_Allreduce(&local_rb, &global_rb, 1, MPI_INT, MPI_MAX, PETSC_COMM_WORLD);
 
             if (global_rb == 1) {
-                // --- DEBUG STATS ---
-                PetscInt local_bad = 0;
-                for(auto val : current_cell_orders) if(val == 1) local_bad++;
-                
-                PetscInt global_bad = 0;
-                MPI_Allreduce(&local_bad, &global_bad, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD);
+                // If we are already running at Order 1, rollback is redundant but harmless.
+                // We perform it to ensure logic consistency.
                 
                 if (rank == 0 && step_num % 100 == 0) {
+                    PetscInt local_bad = 0;
+                    for(auto val : current_cell_orders) if(val == 1) local_bad++;
+                    PetscInt global_bad = 0;
+                    MPI_Allreduce(&local_bad, &global_bad, 1, MPIU_INT, MPI_SUM, PETSC_COMM_WORLD);
+                    
                     double percent = 100.0 * (double)global_bad / (double)global_n_cells;
                     std::cout << "  Step " << step_num << " MOOD Rollback: " 
                               << global_bad << "/" << global_n_cells << " cells (" 
-                              << percent << "%) reverted to 1st Order." << std::endl;
+                              << percent << "%) marked." << std::endl;
                 }
-                // -------------------
 
-                // 4. CORRECTION
-                // We re-compute the step. The bad cells (and potentially neighbors) need to use Low Order fluxes.
-                
-                // Pass the updated mask to Transport
+                // 4. Corrector Step
                 transport->SetCellOrders(current_cell_orders);
 
-                // Rollback solution to U^n
+                // Revert to U^n
                 PetscCall(VecCopy(X_backup, X));
                 PetscCall(TSSetSolution(ts, X));
                 PetscCall(TSSetTime(ts, time)); 
                 
-                // Re-take the step with the mixed-order reconstruction
-                // This ensures neighbors also re-compute fluxes across the troubled interfaces
                 PetscCall(TSStep(ts));
             }
 
-            // 5. Finalize Step
             step_num++;
             PetscCall(TSGetTime(ts, &time));
             PetscCall(MonitorWrapper(ts, step_num, time, X, this));
@@ -161,8 +161,6 @@ private:
         PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         bounds_cache.resize(cEnd - cStart);
         
-        // Indices to check for DMP: 1 (h), 2 (hu) ... usually index 1 is depth
-        // We will focus on index 1 for strict checks, others for relaxed
         std::vector<int> check_indices = {1}; 
         if (Model<Real>::n_dof_q > 2) check_indices.push_back(2);
         if (Model<Real>::n_dof_q > 4) check_indices.push_back(4);
@@ -172,12 +170,10 @@ private:
             const PetscScalar* qc; PetscCall(DMPlexPointLocalRead(dmQ, c, x_arr, &qc));
             bounds_cache[c - cStart].resize(Model<Real>::n_dof_q);
             
-            // Initialize bounds with cell's own value
             for(int idx : check_indices) { 
                 bounds_cache[c - cStart][idx] = {qc[idx], qc[idx]}; 
             }
 
-            // Expand bounds with neighbors
             for (int k = 0; k < num_adj; ++k) {
                 PetscInt n = adj[k]; if (n < 0) continue;
                 const PetscScalar* qn; PetscCall(DMPlexPointLocalRead(dmQ, n, x_arr, &qn));
@@ -192,7 +188,6 @@ private:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // Returns TRUE if bad cells found (and updates 'current_cell_orders')
     bool DetectTroubledCells(Vec U_next) {
         Vec X_loc; DMGetLocalVector(dmQ, &X_loc);
         DMGlobalToLocalBegin(dmQ, U_next, INSERT_VALUES, X_loc);
@@ -205,31 +200,28 @@ private:
         if (Model<Real>::n_dof_q > 2) check_indices.push_back(2);
         if (Model<Real>::n_dof_q > 4) check_indices.push_back(4);
 
-        // Relaxed DMP Tolerance to allow for physical growth/wave interactions
         const Real eps_rel = 1e-4; 
         const Real eps_abs = 1e-7;
 
         bool found_new_bad = false;
 
         for (PetscInt c = cStart; c < cEnd; ++c) {
-            // If already marked as bad (from previous sub-iterations if we had them), skip
             if (current_cell_orders[c - cStart] == 1) continue;
 
             const PetscScalar* q; DMPlexPointLocalRead(dmQ, c, x_arr, &q);
             bool bad = false;
 
-            // 1. Positivity Check (Strict for Depth Q[1])
+            // 1. Positivity Check
             if (q[1] < 0.0) {
                 bad = true; 
             }
 
-            // 2. Relaxed DMP Check (A Posteriori)
+            // 2. Relaxed DMP Check
             if (!bad) {
                 for(int idx : check_indices) {
                     Real min_b = bounds_cache[c - cStart][idx].min_val;
                     Real max_b = bounds_cache[c - cStart][idx].max_val;
                     
-                    // Allow small overshoot/undershoot (Relaxed DMP)
                     Real range = max_b - min_b;
                     Real tol = std::max(eps_abs, range * eps_rel);
 
@@ -241,7 +233,7 @@ private:
             }
 
             if (bad) {
-                current_cell_orders[c - cStart] = 1; // Mark as Low Order
+                current_cell_orders[c - cStart] = 1; 
                 found_new_bad = true;
             }
         }
