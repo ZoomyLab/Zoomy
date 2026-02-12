@@ -14,6 +14,6 @@
     "solver": {
         "t_end": 3600.0,
         "cfl": 0.5,
-        "reconstruction_order": 2
+        "reconstruction_order": 1
     }
 }

@@ -45,7 +45,7 @@ using NonConservativeFluxKernelPtr = SimpleArray<PetscScalar, 2 * Model<Real>::n
 // ------------------------------------------------
 
 class VirtualSolver {
-public: // CHANGED FROM PROTECTED TO PUBLIC
+public:
     Settings settings;
     IOManager* io = nullptr;
     
@@ -55,12 +55,14 @@ public: // CHANGED FROM PROTECTED TO PUBLIC
     DM dmAux; 
     DM dmOut;
     DM dmGrad; 
+    DM dmGradAux; // NEW: DM for Gradient of Aux
 
     TS ts; 
     Vec X; 
     Vec X_old; 
     Vec A; 
     Vec G;     
+    Vec G_aux;    // NEW: Vector for Gradient of Aux
     Vec X_out;
     
     PetscMPIInt rank;
@@ -71,8 +73,8 @@ public: // CHANGED FROM PROTECTED TO PUBLIC
 public:
     VirtualSolver() : rank(0), minRadius(0.0) { 
         MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
-        dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL; dmGrad = NULL;
-        ts = NULL; X = NULL; X_old = NULL; A = NULL; G = NULL; X_out = NULL;
+        dmMesh = NULL; dmQ = NULL; dmAux = NULL; dmOut = NULL; dmGrad = NULL; dmGradAux = NULL;
+        ts = NULL; X = NULL; X_old = NULL; A = NULL; G = NULL; G_aux = NULL; X_out = NULL;
         parameters = Model<Real>::default_parameters();
     }
 
@@ -82,12 +84,14 @@ public:
         if (X_old)  VecDestroy(&X_old);
         if (A)      VecDestroy(&A);
         if (G)      VecDestroy(&G);
+        if (G_aux)  VecDestroy(&G_aux);
         if (X_out)  VecDestroy(&X_out);
         if (ts)     TSDestroy(&ts);
         if (dmQ)    DMDestroy(&dmQ);
         if (dmAux)  DMDestroy(&dmAux);
         if (dmOut)  DMDestroy(&dmOut);
         if (dmGrad) DMDestroy(&dmGrad);
+        if (dmGradAux) DMDestroy(&dmGradAux);
         if (dmMesh) DMDestroy(&dmMesh);
     }
 
@@ -118,7 +122,6 @@ public:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
 
-    // CHANGED: PostStep is now PUBLIC so strategies can call it
     virtual PetscErrorCode PostStep(TS ts) {
         PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
 
@@ -335,6 +338,7 @@ protected:
         PetscCall(DMClone(dmMesh, &dmAux)); 
         PetscCall(DMClone(dmMesh, &dmOut));
         PetscCall(DMClone(dmMesh, &dmGrad));
+        PetscCall(DMClone(dmMesh, &dmGradAux)); // NEW
 
         // Setup State Fields (dmQ)
         PetscFV fvm; 
@@ -369,6 +373,17 @@ protected:
         PetscCall(DMCreateDS(dmGrad)); 
         PetscCall(PetscFVDestroy(&fvmGrad));
         PetscCall(DMCreateGlobalVector(dmGrad, &G)); 
+
+        // Setup Gradient Fields for Aux (dmGradAux) - NEW
+        PetscFV fvmGradAux; 
+        PetscCall(PetscFVCreate(PETSC_COMM_WORLD, &fvmGradAux)); 
+        PetscCall(PetscFVSetNumComponents(fvmGradAux, Model<Real>::n_dof_qaux * Model<Real>::dimension)); 
+        PetscCall(PetscFVSetSpatialDimension(fvmGradAux, Model<Real>::dimension)); 
+        PetscCall(PetscFVSetType(fvmGradAux, PETSCFVUPWIND)); 
+        PetscCall(DMAddField(dmGradAux, NULL, (PetscObject)fvmGradAux)); 
+        PetscCall(DMCreateDS(dmGradAux)); 
+        PetscCall(PetscFVDestroy(&fvmGradAux));
+        PetscCall(DMCreateGlobalVector(dmGradAux, &G_aux)); 
         
         // Setup Output Fields (dmOut)
         PetscFV fvmQ_out; 
@@ -406,12 +421,10 @@ protected:
         PetscCall(TSCreate(PETSC_COMM_WORLD, &ts)); 
         PetscCall(TSSetDM(ts, dmQ));
 
-        // --- NEW: Disable PETSc adaptive time stepping by default ---
-        // Since dt is manually computed via CFL in PostStep, we use TSADAPTNONE.
+        // Disable PETSc adaptive time stepping by default
         TSAdapt adapt;
         PetscCall(TSGetAdapt(ts, &adapt));
         PetscCall(TSAdaptSetType(adapt, TSADAPTNONE));
-        // -------------------------------------------------------------
 
         return PETSC_SUCCESS;
     }

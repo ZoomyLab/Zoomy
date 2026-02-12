@@ -17,8 +17,20 @@ private:
     std::vector<std::vector<CellBounds>> bounds_cache;
 
 public:
-    MOODSolver() : ModularSolver() { X_backup = NULL; }
-    ~MOODSolver() { if(X_backup) VecDestroy(&X_backup); }
+    // FIX: Added default constructor to satisfy 'MOODSolver solver;' in main.cpp
+    MOODSolver() : ModularSolver() { 
+        X_backup = NULL; 
+    }
+
+    // Optional: Keep this if you want to allow passing a strategy manually
+    MOODSolver(std::shared_ptr<SolverStrategy> strat) : ModularSolver() {
+        this->strategy = strat;
+        X_backup = NULL;
+    }
+
+    ~MOODSolver() { 
+        if(X_backup) VecDestroy(&X_backup); 
+    }
 
     PetscErrorCode Run(int argc, char **argv) override {
         PetscFunctionBeginUser;
@@ -26,16 +38,20 @@ public:
         
         // Ensure we are in 2nd order mode (Linear Reconstructor) to start with
         if (settings.solver.reconstruction_order < 2) {
-            PetscPrintf(PETSC_COMM_WORLD, "[WARNING] MOODSolver running with order=1 setting. MOOD requires High Order baseline.\n");
-        }
-        // Force Linear if not set, to ensure we have a predictor
-        if (settings.solver.reconstruction_order == 1) {
-             settings.solver.reconstruction_order = 2;
+            if (rank == 0) PetscPrintf(PETSC_COMM_WORLD, "[WARNING] MOODSolver running with order=1 setting. Boosting to 2 for Predictor.\n");
+            settings.solver.reconstruction_order = 2;
         }
 
         PetscCall(InitializeComponents()); 
-        std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
-        PetscCall(io->Setup3D(dmQ, 6, names));
+
+        // Setup 3D output if requested (Dynamic component check)
+        int n_dof = Model<Real>::n_dof_q;
+        std::vector<std::string> names;
+        if (n_dof >= 6) names = {"b", "h", "u", "v", "w", "p"};
+        else if (n_dof == 4) names = {"b", "h", "hu", "hv"};
+        else names = {"b", "h"}; // Fallback
+        
+        PetscCall(io->Setup3D(dmQ, n_dof, names));
         PetscCall(LoadInitialCondition());
 
         if (!strategy) strategy = std::make_shared<SplittingStrategy>();
@@ -45,6 +61,8 @@ public:
         PetscCall(TSSetTime(ts, 0.0));
         PetscCall(TSSetMaxTime(ts, settings.solver.t_end));
         PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
+        
+        if (X_backup) PetscCall(VecDestroy(&X_backup));
         PetscCall(VecDuplicate(X, &X_backup));
 
         PetscReal dt_start = ComputeTimeStep();
