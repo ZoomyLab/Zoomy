@@ -34,7 +34,7 @@ struct Model {
     static constexpr int n_boundary_tags = 1;
     static const std::vector<std::string> get_boundary_tags() { return { "default" }; }
     static const std::vector<std::string> parameter_names() { return { "g", "chezy_C", "eps", "ex", "ey", "ez", "rho", "nu", "lamda", "c_slipmod", "l_bl", "l_turb", "kappa" }; }
-    static const std::vector<T> default_parameters() { return { 9.81, 50.0, 1e-02, 0.0, 0.0, 1.0, 1000.0, 1e-06, 0.1, 0.0, 0.1, 0.1, 0.41 }; }
+    static const std::vector<T> default_parameters() { return { 9.81, 50.0, 1e-06, 0.0, 0.0, 1.0, 1000.0, 1e-06, 0.1, 0.0, 0.1, 0.1, 0.41 }; }
     PORTABLE_FN static inline SimpleArray<T, 12> flux(
         const T* Q,
         const T* Qaux,
@@ -578,8 +578,8 @@ struct Model {
     T t0 = ((Q[1] < 0) ? (0) : (Q[1]));
     T t1 = t0/(100.0*p[2] + t0);
     SimpleArray<T, 6> res;
-    res[0] = t0;
-    res[1] = t0;
+    res[0] = Q[0];
+    res[1] = Q[1];
     res[2] = Q[2]*t1;
     res[3] = Q[3]*t1;
     res[4] = Q[4]*t1;
