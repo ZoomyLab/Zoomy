@@ -44,7 +44,7 @@ public:
         
         if (config_reconstruction_order == 2) {
             // A. State Reconstruction (High Order with Optional Limiters)
-            transport->SetReconstruction(std::make_shared<LinearReconstructor<Real>>(config_use_limiters));
+            transport->SetReconstruction(std::make_shared<LinearReconstructor<Real>>(Model<Real>::n_dof_q, config_use_limiters));
             
             auto grad = std::make_shared<GreenGaussGradient<Real>>();
             grad->SetBCFunction([](int idx, const Real* p, const Real* c, const Real* n, const Real* x, Real t, Real dx, Real* out) {
@@ -56,14 +56,15 @@ public:
             // B. Auxiliary Reconstruction -> FORCED PCM (Constant)
             // Using Unlimited Linear on derived vars (like 1/h) is dangerous. 
             // We revert to PCM for Aux to ensure stability.
-            transport->SetAuxReconstruction(std::make_shared<PCMReconstructor<Real>>());
+            // FIX: Pass correct size to PCMReconstructor
+            transport->SetAuxReconstruction(std::make_shared<PCMReconstructor<Real>>(Model<Real>::n_dof_qaux));
             
             // Note: We do NOT set the Aux Gradient here, so TransportStep will skip gradient computation for Aux.
 
         } else {
             // 1st Order (PCM)
-            transport->SetReconstruction(std::make_shared<PCMReconstructor<Real>>());
-            transport->SetAuxReconstruction(std::make_shared<PCMReconstructor<Real>>());
+            transport->SetReconstruction(std::make_shared<PCMReconstructor<Real>>(Model<Real>::n_dof_q));
+            transport->SetAuxReconstruction(std::make_shared<PCMReconstructor<Real>>(Model<Real>::n_dof_qaux));
         }
 
         source_solver = std::make_unique<SourceStep<Real>>(dmQ, dmAux, parameters);
@@ -159,7 +160,6 @@ public:
         PetscFunctionReturn(PETSC_SUCCESS);
     }
     
-    // ... (LoadInitialCondition and MonitorWrapper remain same) ...
     PetscErrorCode LoadInitialCondition() {
         Vec X_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &X_loc)); 
@@ -193,7 +193,10 @@ public:
                     double B = loader.Interpolate("B", x, y); double H = loader.Interpolate("H", x, y); double U = loader.Interpolate("U", x, y); double V = loader.Interpolate("V", x, y);
                     PetscInt offQ; PetscCall(PetscSectionGetOffset(sQ, c, &offQ)); PetscInt offAux; PetscCall(PetscSectionGetOffset(sAux, c, &offAux));
                     if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q) {
-                        if (0 < n_dof) q_arr[offQ + 0] = B; if (1 < n_dof) q_arr[offQ + 1] = H; if (2 < n_dof) q_arr[offQ + 2] = H * U;
+                        // FIX: Separated if statements to avoid "misleading indentation" warning
+                        if (0 < n_dof) q_arr[offQ + 0] = B; 
+                        if (1 < n_dof) q_arr[offQ + 1] = H; 
+                        if (2 < n_dof) q_arr[offQ + 2] = H * U;
                         if (n_dof == 4) { if (3 < n_dof) q_arr[offQ + 3] = H * V; } else { if (4 < n_dof) q_arr[offQ + 4] = H * V; }
                     }
                     if (offQ >= 0 && (offQ + n_dof) <= loc_size_Q && offAux >= 0 && (offAux + n_dof_aux) <= loc_size_A) {

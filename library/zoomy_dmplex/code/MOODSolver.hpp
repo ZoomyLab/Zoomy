@@ -118,7 +118,7 @@ public:
                 // If we are already running at Order 1, rollback is redundant but harmless.
                 // We perform it to ensure logic consistency.
                 
-                if (rank == 0 && step_num % 100 == 0) {
+                if (rank == 0 && step_num % 1 == 0) {
                     PetscInt local_bad = 0;
                     for(auto val : current_cell_orders) if(val == 1) local_bad++;
                     PetscInt global_bad = 0;

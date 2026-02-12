@@ -33,13 +33,6 @@ public:
         PetscCall(VirtualSolver::Initialize(argc, argv));
         
         // --- MOOD CONFIGURATION ---
-        // REMOVED: The forced override to Order 2. 
-        // Now respecting settings.solver.reconstruction_order.
-        // If set to 1, this runs as a pure Finite Volume 1st order scheme 
-        // (but still within the MOOD loop structure).
-        
-        // Disable Limiters for High Order (if we are in High Order mode)
-        // We rely on the rollback to cure oscillations.
         if (settings.solver.reconstruction_order >= 2) {
             SetLimiters(false); 
         }
@@ -67,6 +60,7 @@ public:
         if (X_backup) PetscCall(VecDestroy(&X_backup));
         PetscCall(VecDuplicate(X, &X_backup));
 
+        // Initial Time Step
         PetscReal dt_start = ComputeTimeStep();
         dt_start = std::max(dt_start, settings.solver.min_dt);
         PetscCall(TSSetTimeStep(ts, dt_start));
@@ -99,8 +93,6 @@ public:
             PetscCall(PrecomputeDMPBounds(X));
             PetscCall(VecCopy(X, X_backup));
 
-            // Reset to High Order (0) for the Predictor
-            // (If Order=1 in settings, "High Order" is actually PCM, effectively same as Low Order)
             std::fill(current_cell_orders.begin(), current_cell_orders.end(), 0);
             transport->SetCellOrders(current_cell_orders);
 
@@ -115,9 +107,6 @@ public:
             MPI_Allreduce(&local_rb, &global_rb, 1, MPI_INT, MPI_MAX, PETSC_COMM_WORLD);
 
             if (global_rb == 1) {
-                // If we are already running at Order 1, rollback is redundant but harmless.
-                // We perform it to ensure logic consistency.
-                
                 if (rank == 0 && step_num % 1 == 0) {
                     PetscInt local_bad = 0;
                     for(auto val : current_cell_orders) if(val == 1) local_bad++;
@@ -143,6 +132,15 @@ public:
 
             step_num++;
             PetscCall(TSGetTime(ts, &time));
+
+            // --- CHANGED: Update Auxiliary Variables & Compute Next Time Step ---
+            // Calling PostStep(ts) here ensures:
+            // 1. Aux variables (A) are updated based on the new X (needed for IO and next step).
+            // 2. ComputeTimeStep() is called to calculate the new CFL-based dt.
+            // 3. TSSetTimeStep is called to force the next step size (disabling RK adaptivity).
+            PetscCall(PostStep(ts)); 
+            // --------------------------------------------------------------------
+
             PetscCall(MonitorWrapper(ts, step_num, time, X, this));
         }
 
