@@ -2,43 +2,39 @@
   "name": "Zoomy + Firedrake + AMR",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "${localWorkspaceFolder}"
+    "context": "../.."
   },
   "remoteUser": "root",
-  "workspaceFolder": "/workspace",
+  
+  // 1. Tell VS Code WHERE to map the files
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
-  "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {}
-  },
+  
+  // 2. Tell VS Code where to start the terminal
+  "workspaceFolder": "/workspace",
+
   "settings": {
     "terminal.integrated.defaultProfile.linux": "bash",
-    "python.pythonPath": "/opt/firedrake/bin/python"
+    "python.defaultInterpreterPath": "/opt/firedrake/bin/python"
   },
   "remoteEnv": {
-    "PYTHONPATH": "/opt/firedrake:",
+    "PYTHONPATH": "/opt/firedrake:/workspace/library/zoomy_core:/workspace/library/firedrake_animate:/workspace/library/zoomy_firedrake",
     "ZOOMY_DIR": "/workspace"
   },
-  "postCreateCommand": "pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_tests -e /workspace/library/firedrake_animate -e /workspace/library/zoomy_firedrake",
-  "extensions": [
-    "ms-python.python",
-    "ms-toolsai.jupyter",
-    "ms-azuretools.vscode-docker",
-    "tamasfe.even-better-toml",
-    "redhat.vscode-yaml",
-    "oderwat.indent-rainbow",
-    "ms-vsliveshare.vsliveshare"
-  ],
+  "updateContentCommand": "for dir in library/zoomy_core library/firedrake_animate library/zoomy_firedrake; do pip install -e \"$dir\"; done",
   "customizations": {
     "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "oderwat.indent-rainbow"
+      ],
       "settings": {
         "python.formatting.provider": "black",
         "editor.formatOnSave": true
       }
     }
   },
-  "forwardPorts": [
-    8888,
-    8000,
-    8080
-  ]
+  "forwardPorts": [8888, 8000, 8080]
 }
