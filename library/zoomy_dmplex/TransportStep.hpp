@@ -42,8 +42,11 @@ public:
         : dmQ(q), dmAux(aux), dmGrad(grad), dmGradAux(gradAux), parameters(params), boundary_map(bcs) {
         V_min_loc = NULL; V_max_loc = NULL;
         A_min_loc = NULL; A_max_loc = NULL;
-        reconstructor = std::make_shared<PCMReconstructor<T>>();
-        reconstructorAux = std::make_shared<PCMReconstructor<T>>();
+        // Default Reconstructors
+        reconstructor = std::make_shared<PCMReconstructor<T>>(); // Defaults to n_dof_q
+        // FIX: Explicitly use Aux size for the Aux reconstructor
+        reconstructorAux = std::make_shared<PCMReconstructor<T>>(Model<T>::n_dof_qaux); 
+        
         gradient = nullptr;
         gradientAux = nullptr;
         cons_flux_kernel = nullptr; 
