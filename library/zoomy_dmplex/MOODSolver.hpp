@@ -11,10 +11,7 @@ class MOODSolver : public ModularSolver {
 private:
     Vec X_backup;
     Vec X_low;  
-    
-    // Mask: 0=High Order, 1=Low Order
     std::vector<uint8_t> current_cell_orders; 
-
     struct CellBounds { PetscReal min_val; PetscReal max_val; };
     std::vector<std::vector<CellBounds>> bounds_cache;
 
@@ -32,29 +29,16 @@ public:
         if(X_low) VecDestroy(&X_low);
     }
 
-    PetscErrorCode GlobalUpdateState(Vec U_global) {
+    PetscErrorCode EnforcePhysicalConstraints(Vec U_global) {
         PetscFunctionBeginUser;
         Vec U_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &U_loc)); 
         PetscCall(DMGetLocalVector(dmAux, &A_loc));
-        
-        // 1. Scatter Global -> Local (Get current state with ghosts)
-        PetscCall(DMGlobalToLocalBegin(dmQ, U_global, INSERT_VALUES, U_loc));
-        PetscCall(DMGlobalToLocalEnd(dmQ, U_global, INSERT_VALUES, U_loc));
-        
-        // 2. Aux vars are needed for consistency checks
-        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
-        PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
-
-        // 3. Apply Model::update_variables (Clamps h, desingularizes u)
-        // This modifies U_loc in-place.
+        PetscCall(DMGlobalToLocalBegin(dmQ, U_global, INSERT_VALUES, U_loc)); PetscCall(DMGlobalToLocalEnd(dmQ, U_global, INSERT_VALUES, U_loc));
+        PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
         PetscCall(transport->UpdateState(U_loc, A_loc)); 
-
-        // 4. Scatter Local -> Global (Write back clamped values)
-        // We use INSERT_VALUES to overwrite the raw arithmetic result with the physically valid one.
         PetscCall(DMLocalToGlobalBegin(dmQ, U_loc, INSERT_VALUES, U_global));
         PetscCall(DMLocalToGlobalEnd(dmQ, U_loc, INSERT_VALUES, U_global));
-
         PetscCall(DMRestoreLocalVector(dmQ, &U_loc)); 
         PetscCall(DMRestoreLocalVector(dmAux, &A_loc));
         PetscFunctionReturn(PETSC_SUCCESS);
@@ -69,7 +53,7 @@ public:
 
         std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
         PetscCall(io->Setup3D(dmQ, 6, names));
-        PetscCall(LoadInitialCondition());
+        PetscCall(this->LoadInitialCondition());
 
         if (!strategy) strategy = std::make_shared<SplittingStrategy>();
         PetscCall(TSSetApplicationContext(ts, this));
@@ -84,7 +68,16 @@ public:
 
         PetscReal dt_start = std::max(ComputeTimeStep(), settings.solver.min_dt);
         PetscCall(TSSetTimeStep(ts, dt_start));
+        
+        // 1. Load Options (might reset SNES to defaults)
         PetscCall(TSSetFromOptions(ts)); 
+
+        // 2. FORCE SNES Tolerances AFTER options are loaded
+        //    Using 1e-3 relative tolerance is plenty accurate for time-stepping 
+        //    (truncation error dominates) and helps avoid stagnation at noise floor.
+        SNES snes;
+        PetscCall(TSGetSNES(ts, &snes));
+        PetscCall(SNESSetTolerances(snes, 1e-4, 1e-3, 1e-50, 20, 100));
 
         PetscInt cStart, cEnd;
         PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
@@ -111,7 +104,6 @@ public:
             PetscCall(TSStep(ts));
 
             bool needs_rollback = DetectTroubledCells(X);
-            
             PetscMPIInt local_rb = needs_rollback ? 1 : 0;
             PetscMPIInt global_rb = 0;
             MPI_Allreduce(&local_rb, &global_rb, 1, MPI_INT, MPI_MAX, PETSC_COMM_WORLD);
@@ -127,22 +119,17 @@ public:
                         if(global_bad > 0) std::cout << "  [MOOD] " << global_bad << " cells (" << percent << "%) replaced." << std::endl;
                     }
                 }
-
                 transport->SetCellOrders(current_cell_orders);
                 PetscCall(VecCopy(X_backup, X));
                 PetscCall(TSSetSolution(ts, X));
                 PetscCall(TSSetTime(ts, time)); 
-                
                 SetOrder(1);
                 PetscCall(TSStep(ts));
             }
 
-            PetscCall(GlobalUpdateState(X));
-
+            PetscCall(EnforcePhysicalConstraints(X));
             step_num++;
             PetscCall(TSGetTime(ts, &time));
-            
-            // PostStep now sees clean X, so ComputeTimeStep will calculate a healthy dt
             PetscCall(PostStep(ts)); 
             PetscCall(MonitorWrapper(ts, step_num, time, X, this));
         }
@@ -163,24 +150,15 @@ private:
     PetscErrorCode ApplyReplacement() {
         PetscScalar *x_arr; const PetscScalar *low_arr;
         PetscCall(VecGetArray(X, &x_arr)); PetscCall(VecGetArrayRead(X_low, &low_arr));
-        
-        PetscInt rstart;
-        PetscCall(VecGetOwnershipRange(X, &rstart, NULL));
-        PetscSection sGlob;
-        PetscCall(DMGetGlobalSection(dmQ, &sGlob));
-
-        PetscInt cStart, cEnd; 
-        PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
-
+        PetscInt rstart; PetscCall(VecGetOwnershipRange(X, &rstart, NULL));
+        PetscSection sGlob; PetscCall(DMGetGlobalSection(dmQ, &sGlob));
+        PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         for (PetscInt c = cStart; c < cEnd; ++c) {
             if (current_cell_orders[c - cStart] == 1) {
-                PetscInt off;
-                PetscCall(PetscSectionGetOffset(sGlob, c, &off)); 
+                PetscInt off; PetscCall(PetscSectionGetOffset(sGlob, c, &off)); 
                 if (off >= 0) {
                     PetscInt idx = off - rstart; 
-                    for (int i = 0; i < Model<Real>::n_dof_q; ++i) {
-                        x_arr[idx + i] = low_arr[idx + i];
-                    }
+                    for (int i = 0; i < Model<Real>::n_dof_q; ++i) x_arr[idx + i] = low_arr[idx + i];
                 }
             }
         }
@@ -194,23 +172,16 @@ private:
         PetscCall(DMGlobalToLocalBegin(dmQ, U_curr, INSERT_VALUES, X_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, U_curr, INSERT_VALUES, X_loc));
         const PetscScalar* x_arr; PetscCall(VecGetArrayRead(X_loc, &x_arr));
-
         PetscInt cStart, cEnd; PetscCall(DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd));
         bounds_cache.resize(cEnd - cStart);
-        
         std::vector<int> check_indices = {1}; 
         if (Model<Real>::n_dof_q > 2) check_indices.push_back(2);
         if (Model<Real>::n_dof_q > 4) check_indices.push_back(4);
-
         for (PetscInt c = cStart; c < cEnd; ++c) {
             PetscInt num_adj = -1; PetscInt *adj = NULL; PetscCall(DMPlexGetAdjacency(dmQ, c, &num_adj, &adj));
             const PetscScalar* qc; PetscCall(DMPlexPointLocalRead(dmQ, c, x_arr, &qc));
             bounds_cache[c - cStart].resize(Model<Real>::n_dof_q);
-            
-            for(int idx : check_indices) { 
-                bounds_cache[c - cStart][idx] = {qc[idx], qc[idx]}; 
-            }
-
+            for(int idx : check_indices) bounds_cache[c - cStart][idx] = {qc[idx], qc[idx]}; 
             for (int k = 0; k < num_adj; ++k) {
                 PetscInt n = adj[k]; if (n < 0) continue;
                 const PetscScalar* qn; PetscCall(DMPlexPointLocalRead(dmQ, n, x_arr, &qn));
@@ -230,48 +201,28 @@ private:
         DMGlobalToLocalBegin(dmQ, U_next, INSERT_VALUES, X_loc);
         DMGlobalToLocalEnd(dmQ, U_next, INSERT_VALUES, X_loc);
         const PetscScalar* x_arr; VecGetArrayRead(X_loc, &x_arr);
-
         PetscInt cStart, cEnd; DMPlexGetHeightStratum(dmQ, 0, &cStart, &cEnd);
-        
         std::vector<int> check_indices = {1}; 
         if (Model<Real>::n_dof_q > 2) check_indices.push_back(2);
         if (Model<Real>::n_dof_q > 4) check_indices.push_back(4);
-
-        const Real eps_rel = 1e-4; 
-        const Real eps_abs = 1e-7;
-
+        const Real eps_rel = 1e-4; const Real eps_abs = 1e-7;
         bool found_new_bad = false;
-
         for (PetscInt c = cStart; c < cEnd; ++c) {
             if (current_cell_orders[c - cStart] == 1) continue;
-
             const PetscScalar* q; DMPlexPointLocalRead(dmQ, c, x_arr, &q);
             bool bad = false;
-
-            if (q[1] < 0.0) {
-                bad = true; 
-            }
-
+            if (q[1] < 0.0) bad = true; 
             if (!bad) {
                 for(int idx : check_indices) {
                     Real min_b = bounds_cache[c - cStart][idx].min_val;
                     Real max_b = bounds_cache[c - cStart][idx].max_val;
                     Real range = max_b - min_b;
                     Real tol = std::max(eps_abs, range * eps_rel);
-
-                    if (q[idx] < min_b - tol || q[idx] > max_b + tol) {
-                        bad = true; 
-                        break;
-                    }
+                    if (q[idx] < min_b - tol || q[idx] > max_b + tol) { bad = true; break; }
                 }
             }
-
-            if (bad) {
-                current_cell_orders[c - cStart] = 1; 
-                found_new_bad = true;
-            }
+            if (bad) { current_cell_orders[c - cStart] = 1; found_new_bad = true; }
         }
-
         VecRestoreArrayRead(X_loc, &x_arr);
         DMRestoreLocalVector(dmQ, &X_loc);
         return found_new_bad;
