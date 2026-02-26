@@ -32,26 +32,21 @@ public:
         if(X_low) VecDestroy(&X_low);
     }
 
-    PetscErrorCode GlobalUpdateState(Vec U_global) {
+    // --- Helper to Enforce Model Constraints on Global State ---
+    PetscErrorCode EnforcePhysicalConstraints(Vec U_global) {
         PetscFunctionBeginUser;
         Vec U_loc, A_loc;
         PetscCall(DMGetLocalVector(dmQ, &U_loc)); 
         PetscCall(DMGetLocalVector(dmAux, &A_loc));
         
-        // 1. Scatter Global -> Local (Get current state with ghosts)
         PetscCall(DMGlobalToLocalBegin(dmQ, U_global, INSERT_VALUES, U_loc));
         PetscCall(DMGlobalToLocalEnd(dmQ, U_global, INSERT_VALUES, U_loc));
         
-        // 2. Aux vars are needed for consistency checks
         PetscCall(DMGlobalToLocalBegin(dmAux, A, INSERT_VALUES, A_loc)); 
         PetscCall(DMGlobalToLocalEnd(dmAux, A, INSERT_VALUES, A_loc));
 
-        // 3. Apply Model::update_variables (Clamps h, desingularizes u)
-        // This modifies U_loc in-place.
         PetscCall(transport->UpdateState(U_loc, A_loc)); 
 
-        // 4. Scatter Local -> Global (Write back clamped values)
-        // We use INSERT_VALUES to overwrite the raw arithmetic result with the physically valid one.
         PetscCall(DMLocalToGlobalBegin(dmQ, U_loc, INSERT_VALUES, U_global));
         PetscCall(DMLocalToGlobalEnd(dmQ, U_loc, INSERT_VALUES, U_global));
 
@@ -69,7 +64,8 @@ public:
 
         std::vector<std::string> names = {"b", "h", "u", "v", "w", "p"};
         PetscCall(io->Setup3D(dmQ, 6, names));
-        PetscCall(LoadInitialCondition());
+        // Use this->LoadInitialCondition() to ensure visibility
+        PetscCall(this->LoadInitialCondition());
 
         if (!strategy) strategy = std::make_shared<SplittingStrategy>();
         PetscCall(TSSetApplicationContext(ts, this));
@@ -137,12 +133,12 @@ public:
                 PetscCall(TSStep(ts));
             }
 
-            PetscCall(GlobalUpdateState(X));
+            // --- Enforce Physical Constraints (Global) ---
+            PetscCall(EnforcePhysicalConstraints(X));
 
             step_num++;
             PetscCall(TSGetTime(ts, &time));
             
-            // PostStep now sees clean X, so ComputeTimeStep will calculate a healthy dt
             PetscCall(PostStep(ts)); 
             PetscCall(MonitorWrapper(ts, step_num, time, X, this));
         }

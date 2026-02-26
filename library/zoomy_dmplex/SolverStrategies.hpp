@@ -12,15 +12,14 @@ public:
 };
 
 // ============================================================================
-// 1. Splitting Strategy (Explicit Transport + Post-Step Implicit Source)
+// 1. Splitting Strategy
 // ============================================================================
 class SplittingStrategy : public SolverStrategy {
 public:
-PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
+    PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
         PetscCall(TSSetRHSFunction(ts, NULL, RHSWrapper, solver));
         PetscCall(TSSetPostStep(ts, SplittingWrapper));
-        
-        PetscCall(TSSetType(ts, TSSSP)); // Strong Stability Preserving
+        PetscCall(TSSetType(ts, TSSSP)); 
         PetscCall(TSSSPSetType(ts, TSSSPRK104)); 
         return PETSC_SUCCESS;
     }
@@ -33,11 +32,8 @@ private:
     static PetscErrorCode SplittingWrapper(TS ts) {
         void* ctx; TSGetApplicationContext(ts, &ctx);
         ModularSolver* solver = (ModularSolver*)ctx;
-        
         Vec X_curr; TSGetSolution(ts, &X_curr);
         PetscReal dt; TSGetTimeStep(ts, &dt); 
-        
-        // Solve Source locally
         if(solver->source_solver) {
              PetscCall(solver->source_solver->Solve(dt, X_curr, solver->A)); 
         }
@@ -46,20 +42,21 @@ private:
 };
 
 // ============================================================================
-// 2. IMEX Strategy (Explicit Transport + Implicit Source in IFunction)
-//    Solves friction/source simultaneously with time step (No splitting error)
+// 2. IMEX Strategy
 // ============================================================================
 class IMEXStrategy : public SolverStrategy {
 public:
-PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
+    PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
         PetscCall(TSSetRHSFunction(ts, NULL, RHSWrapper, solver));
         PetscCall(TSSetIFunction(ts, NULL, IFunctionWrapper, solver));
-        PetscCall(TSSetIJacobian(ts, NULL, NULL, IJacobianWrapper, solver));
         
+        Mat P;
+        PetscCall(DMCreateMatrix(solver->dmQ, &P));
+        PetscCall(TSSetIJacobian(ts, NULL, P, IJacobianWrapper, solver));
+        PetscCall(MatDestroy(&P));
+
         PetscCall(TSSetType(ts, TSARKIMEX)); 
-        
         PetscCall(TSARKIMEXSetType(ts, "2e"));
-        
         PetscCall(TSSetPostStep(ts, PostStepWrapper)); 
         return PETSC_SUCCESS;
     }
@@ -74,33 +71,42 @@ private:
         return ((ModularSolver*)ctx)->transport->FormRHS(t, X, F);
     }
 
-    // G = U_dot - Source(U)
     static PetscErrorCode IFunctionWrapper(TS ts, PetscReal t, Vec X, Vec X_dot, Vec F, void* ctx) {
         ModularSolver* solver = (ModularSolver*)ctx;
-        // G = U_dot
         PetscCall(VecCopy(X_dot, F));
-        // G -= Source(U)
         PetscCall(solver->AddImplicitSourceToResidual(X, F, -1.0));
         return PETSC_SUCCESS;
     }
 
     static PetscErrorCode IJacobianWrapper(TS ts, PetscReal t, Vec X, Vec X_dot, PetscReal a, Mat J, Mat P, void* ctx) {
-        // J = a*I - dSource/dQ
         return ((ModularSolver*)ctx)->FormSourceJacobian(t, X, a, P);
     }
 };
 
 // ============================================================================
-// 3. Fully Implicit Strategy (Everything in IFunction)
-//    - Relies on -snes_mf_operator for Flux Jacobian
-//    - Uses Analytical Source Jacobian for Preconditioning
+// 3. Fully Implicit Strategy
 // ============================================================================
 class FullyImplicitStrategy : public SolverStrategy {
 public:
     PetscErrorCode SetupTS(TS ts, ModularSolver* solver) override {
+        PetscCall(TSSetType(ts, TSBDF));
+        PetscCall(TSBDFSetOrder(ts, 2));
+
         PetscCall(TSSetIFunction(ts, NULL, IFunctionWrapper, solver));
-        PetscCall(TSSetIJacobian(ts, NULL, NULL, IJacobianWrapper, solver));
-        PetscCall(TSSetType(ts, TSARKIMEX));
+        
+        Mat P;
+        PetscCall(DMCreateMatrix(solver->dmQ, &P));
+        
+        // --- Safety: Allow new nonzeros if the preallocation is slightly off ---
+        PetscCall(MatSetOption(P, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE)); 
+
+        PetscCall(TSSetIJacobian(ts, P, P, IJacobianWrapper, solver));
+        PetscCall(MatDestroy(&P));
+
+        SNES snes;
+        PetscCall(TSGetSNES(ts, &snes));
+        PetscCall(SNESSetUseMatrixFree(snes, PETSC_TRUE, PETSC_FALSE));
+
         PetscCall(TSSetPostStep(ts, PostStepWrapper));
         return PETSC_SUCCESS;
     }
@@ -111,29 +117,36 @@ private:
         return ((ModularSolver*)ctx)->PostStep(ts);
     }
 
-    // G = U_dot - Source(U) - FluxDiv(U)
     static PetscErrorCode IFunctionWrapper(TS ts, PetscReal t, Vec X, Vec X_dot, Vec F, void* ctx) {
         ModularSolver* solver = (ModularSolver*)ctx;
-
-        // 1. G = U_dot - Source(U)
         PetscCall(VecCopy(X_dot, F));
         PetscCall(solver->AddImplicitSourceToResidual(X, F, -1.0));
-
-        // 2. G -= FluxDiv(U)
-        // Transport::FormRHS returns (+FluxDiv). We subtract it.
-        Vec Fluxes;
-        PetscCall(VecDuplicate(F, &Fluxes));
-        PetscCall(solver->transport->FormRHS(t, X, Fluxes));
-        PetscCall(VecAXPY(F, -1.0, Fluxes));
-        PetscCall(VecDestroy(&Fluxes));
+        
+        Vec R_transport;
+        PetscCall(DMGetGlobalVector(solver->dmQ, &R_transport));
+        PetscCall(solver->transport->FormRHS(t, X, R_transport));
+        PetscCall(VecAXPY(F, -1.0, R_transport));
+        PetscCall(DMRestoreGlobalVector(solver->dmQ, &R_transport));
         return PETSC_SUCCESS;
     }
 
     static PetscErrorCode IJacobianWrapper(TS ts, PetscReal t, Vec X, Vec X_dot, PetscReal a, Mat J, Mat P, void* ctx) {
-        // P = a*I - dSource/dQ
-        // The Flux Jacobian part is handled by Matrix-Free operator (-snes_mf_operator)
-        // This 'P' acts as the Preconditioner.
-        return ((ModularSolver*)ctx)->FormSourceJacobian(t, X, a, P);
+        ModularSolver* solver = (ModularSolver*)ctx;
+        
+        // Assemble Preconditioner P
+        PetscCall(solver->FormImplicitJacobian(t, X, a, P));
+
+        // Initialize Matrix-Free J
+        if (J && J != P) {
+            PetscBool is_mffd;
+            PetscCall(PetscObjectTypeCompare((PetscObject)J, MATMFFD, &is_mffd));
+            if (is_mffd) {
+                PetscCall(MatMFFDSetBase(J, X, NULL));
+            }
+            PetscCall(MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY));
+            PetscCall(MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY));
+        }
+        return PETSC_SUCCESS;
     }
 };
 
