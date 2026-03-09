@@ -128,5 +128,8 @@ def transform_tiff(file_path, tilt=False, scale=1., zoom=[None, None]):
                         crs=src.crs,
                         transform=from_origin(src.transform[2], src.transform[5], dx, dy)) as dst:
         dst.write(adjusted_elevation_data.astype(elevation.dtype), 1)
+        
+    if tilt==False:
+        alpha_deg = 0
 
     return new_file_path, alpha_deg
