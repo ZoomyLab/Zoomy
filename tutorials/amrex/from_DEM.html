@@ -404,7 +404,11 @@ window.Quarto = {
   <li><a href="#imports" id="toc-imports" class="nav-link" data-scroll-target="#imports">Imports</a></li>
   <li><a href="#read-raster-data" id="toc-read-raster-data" class="nav-link" data-scroll-target="#read-raster-data">Read raster data</a></li>
   <li><a href="#model-definition" id="toc-model-definition" class="nav-link" data-scroll-target="#model-definition">Model definition</a></li>
-  <li><a href="#code-transformation-and-amrex-compilation" id="toc-code-transformation-and-amrex-compilation" class="nav-link" data-scroll-target="#code-transformation-and-amrex-compilation">Code transformation and AMReX compilation</a></li>
+  <li><a href="#print-the-model-definition" id="toc-print-the-model-definition" class="nav-link" data-scroll-target="#print-the-model-definition">Print the Model definition</a></li>
+  <li><a href="#code-transformation-and-amrex-compilation" id="toc-code-transformation-and-amrex-compilation" class="nav-link" data-scroll-target="#code-transformation-and-amrex-compilation">Code transformation and AMReX compilation</a>
+  <ul class="collapse">
+  <li><a href="#what-have-we-gained" id="toc-what-have-we-gained" class="nav-link" data-scroll-target="#what-have-we-gained">What have we gained?</a></li>
+  </ul></li>
   <li><a href="#prepare-raster-data-for-amrex" id="toc-prepare-raster-data-for-amrex" class="nav-link" data-scroll-target="#prepare-raster-data-for-amrex">Prepare raster data for AMReX</a></li>
   <li><a href="#do-the-simulation" id="toc-do-the-simulation" class="nav-link" data-scroll-target="#do-the-simulation">Do the Simulation</a></li>
   </ul></li>
@@ -459,90 +463,97 @@ Warning
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>You need to modify <code>ZOOMY_AMREX_HOME</code> below to point to your local AMReX installation</p>
+<p>You need to modify <code>ZOOMY_AMREX_HOME</code> below to point to your local AMReX installation This test case requires you to have cloned the <code>ZoomyLab/zoomy-amrex</code> subrepository <code>git submodule update --init library/zoomy-amrex</code>. This test case requires you to have cloned the <code>ZoomyLab/data</code> subrepository <code>git submodule update --init data</code>.</p>
 </div>
 </div>
-<div id="5c9d986d" class="cell" data-execution_count="1">
+<div id="ceb0383e" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> rasterio</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'PYTHONPATH'</span>] <span class="op">=</span> os.path.join(os.getcwd(), <span class="st">'../../..'</span>)</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZOOMY_DIR'</span>] <span class="op">=</span> os.path.join(os.getcwd(), <span class="st">'../../..'</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZoomyLog'</span>] <span class="op">=</span> <span class="st">'Default'</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZoomyLogLevel'</span>] <span class="op">=</span> <span class="st">'INFO'</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'JAX_ENABLE_X64'</span>] <span class="op">=</span> <span class="st">'True'</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZOOMY_AMREX_HOME'</span>] <span class="op">=</span> <span class="st">'/home/is086873/MBD/Git/amrex'</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>project_root <span class="op">=</span> Path.cwd().parents[<span class="dv">2</span>]  <span class="co"># 0=current, 1=.., 2=../..</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>sys.path.append(<span class="bu">str</span>(project_root))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">"ZOOMY_AMREX_HOME"</span>] <span class="op">=</span> <span class="st">"/home/is086873/MBD/Git/amrex"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<div id="4f583c96" class="cell">
+<div id="5c9d986d" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> rasterio</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Matrix</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZoomyLog'</span>] <span class="op">=</span> <span class="st">'Default'</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZoomyLogLevel'</span>] <span class="op">=</span> <span class="st">'INFO'</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>project_root <span class="op">=</span> Path.cwd().parents[<span class="dv">2</span>]  <span class="co"># 0=current, 1=.., 2=../..</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>sys.path.append(<span class="bu">str</span>(project_root))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="4f583c96" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Load packages</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Matrix</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_jax.fvm.solver_jax <span class="im">import</span> Settings</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_moments_topo <span class="im">import</span> ShallowMomentsTopo, ShallowMomentsTopoNumerical</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_amrex <span class="im">as</span> trafo</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tutorials.amrex.helper <span class="im">import</span> create_artificial_raster, show_raster, transform_tiff</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sympy <span class="im">import</span> Matrix, Identity</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_moments_topo <span class="im">import</span> (</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    ShallowMomentsTopo,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    NumericalShallowMomentsTopo,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.custom_sympy_functions <span class="im">import</span> conditional</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.symbolic_numerics <span class="im">import</span> (</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    PositiveNonconservativeRusanov,</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    PositiveRusanov,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    Rusanov</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct, ZArray, get_main_directory, Settings</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_amrex <span class="im">as</span> trafo</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tutorials.amrex.helper <span class="im">import</span> create_artificial_raster, show_raster, transform_tiff</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
 <section id="read-raster-data" class="level2">
 <h2 class="anchored" data-anchor-id="read-raster-data">Read raster data</h2>
-<div id="6f4fc505" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>dem_path <span class="op">=</span> os.path.join(main_dir, <span class="st">'data/ca_elev.tif'</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>ic_water_path <span class="op">=</span> os.path.join(main_dir, <span class="st">'data/ca_debrisflow.tif'</span>)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>angle <span class="op">=</span> <span class="fl">0.0</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># dem_path = os.path.join(main_dir, 'data/evel_artificial.tif')</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># ic_water_path = os.path.join(main_dir, 'data/release_artificial.tif')</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co"># N = 100</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># dx = 5.</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co"># M = N * dx</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 1*np.exp((-(x+0.5*M)**2-y**2)/M/10), (-M, M, -M, M), dx, ic_water_path)</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 100 * np.exp(-(x+M)**2/M**2), (-M, M, -M, M), dx, dem_path)</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 1.*np.exp((-(x-1000)**2-(y-3000)**2)/10000.), (0, 2000, 0, 4000), 5, ic_water_path)</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co"># ic_water_path, _ = transform_tiff(ic_water_path, tilt=False)</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>zoom <span class="op">=</span> [[<span class="dv">0</span>, <span class="dv">800</span>], [<span class="dv">700</span>,<span class="dv">1100</span>]]  <span class="co"># [ymin,ymax], [xmin,xmax]</span></span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>dem_path, angle <span class="op">=</span> transform_tiff(dem_path, tilt<span class="op">=</span><span class="va">True</span>, scale<span class="op">=</span><span class="dv">1</span>, zoom<span class="op">=</span>zoom)</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>ic_water_path, _ <span class="op">=</span> transform_tiff(ic_water_path, tilt<span class="op">=</span><span class="va">False</span>, scale<span class="op">=</span><span class="dv">1</span>, zoom<span class="op">=</span>zoom)</span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Tilt angle (degrees): </span><span class="sc">{</span>angle<span class="sc">:.2f}</span><span class="ss">'</span>)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>show_raster(dem_path)</span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>show_raster(ic_water_path)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="6f4fc505" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> get_main_directory()</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>dem_path <span class="op">=</span> os.path.join(main_dir, <span class="st">'data/ravaflow/ca_elev.tif'</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>ic_water_path <span class="op">=</span> os.path.join(main_dir, <span class="st">'data/ravaflow/ca_debrisflow.tif'</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>angle <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># dem_path = os.path.join(main_dir, 'data/evel_artificial.tif')</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># ic_water_path = os.path.join(main_dir, 'data/release_artificial.tif')</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"># N = 100</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co"># dx = 5.</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"># M = N * dx</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 1*np.exp((-(x+0.5*M)**2-y**2)/M/10), (-M, M, -M, M), dx, ic_water_path)</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 100 * np.exp(-(x+M)**2/M**2), (-M, M, -M, M), dx, dem_path)</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co"># create_artificial_raster(lambda x, y: 1.*np.exp((-(x-1000)**2-(y-3000)**2)/10000.), (0, 2000, 0, 4000), 5, ic_water_path)</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co"># ic_water_path, _ = transform_tiff(ic_water_path, tilt=False)</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>zoom <span class="op">=</span> [[<span class="dv">0</span>, <span class="dv">800</span>], [<span class="dv">700</span>,<span class="dv">1100</span>]]  <span class="co"># [ymin,ymax], [xmin,xmax]</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>dem_path, angle <span class="op">=</span> transform_tiff(dem_path, tilt<span class="op">=</span><span class="va">False</span>, scale<span class="op">=</span><span class="dv">1</span>, zoom<span class="op">=</span>zoom)</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>ic_water_path, _ <span class="op">=</span> transform_tiff(ic_water_path, tilt<span class="op">=</span><span class="va">False</span>, scale<span class="op">=</span><span class="dv">1</span>, zoom<span class="op">=</span>zoom)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Tilt angle (degrees): </span><span class="sc">{</span>angle<span class="sc">:.2f}</span><span class="ss">'</span>)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>show_raster(dem_path)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>show_raster(ic_water_path)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>2119.715620611168 -0.22698929399103876 -0.00021292724603619957
+<pre><code>2119.715620611142 -0.2269892939910745 -0.00021292724603583224
 Inclination angle: alpha: -12.79 degrees ; theta: -0.01 degrees
-0.029961072081822165 -5.212249583064369e-06 -1.1138400164830554e-07
+0.029961072081823793 -5.212249583065447e-06 -1.1138400164830651e-07
 Inclination angle: alpha: -0.00 degrees ; theta: -0.00 degrees
-Tilt angle (degrees): -12.79</code></pre>
+Tilt angle (degrees): 0.00</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="from_DEM_files/figure-html/cell-4-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="from_DEM_files/figure-html/cell-5-output-2.png" class="img-fluid figure-img"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="from_DEM_files/figure-html/cell-4-output-3.png" class="img-fluid figure-img"></p>
+<p><img src="from_DEM_files/figure-html/cell-5-output-3.png" class="img-fluid figure-img"></p>
 </figure>
 </div>
 </div>
@@ -550,185 +561,1080 @@ Tilt angle (degrees): -12.79</code></pre>
 </section>
 <section id="model-definition" class="level2">
 <h2 class="anchored" data-anchor-id="model-definition">Model definition</h2>
-<div id="9d8b0a27" class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Currently, BCs are not implemented in AMReX and periodic BCs are applied</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    [</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"N"</span>),</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"S"</span>),</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"E"</span>),</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"W"</span>),</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyModel(ShallowMomentsTopoNumerical):</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Matrix([<span class="dv">0</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="va">self</span>.n_variables)])</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="co"># out += self.inclination()</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        out <span class="op">+=</span> <span class="va">self</span>.newtonian()</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        out <span class="op">+=</span> <span class="va">self</span>.slip_mod()</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="co"># out += self.chezy()</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.substitute_precomputed_denominator(out, <span class="va">self</span>.variables[<span class="dv">1</span>], <span class="va">self</span>.aux_variables.hinv)</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>         </span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>level <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> MyModel(</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    level<span class="op">=</span>level,</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    parameters<span class="op">=</span>Zstruct(ey<span class="op">=</span>np.sin(np.radians(<span class="op">-</span>angle)), ez<span class="op">=</span>np.cos(np.radians(<span class="op">-</span>angle)), nu<span class="op">=</span><span class="fl">0.000001</span>, lamda<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="fl">1000.</span>, rho<span class="op">=</span><span class="dv">1000</span>, c_slipmod<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">30</span>, C<span class="op">=</span><span class="dv">300</span>),</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    <span class="co"># aux_variables = ['hinv'] + [f'dalpha_{i}_dx' for i in range(level+1)] + [f'dbeta_{i}_dy' for i in range(level+1)],</span></span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    aux_variables <span class="op">=</span> [<span class="st">'hinv'</span>],</span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="9d8b0a27" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">TODO</span><span class="co">: Currently, BCs are not implemented in AMReX. This serves as a placeholder aligning with our current sympy interface</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"N"</span>),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"S"</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"E"</span>),</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"W"</span>),</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyModel(NumericalShallowMomentsTopo):</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_variables(<span class="va">self</span>):</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        Q <span class="op">=</span> <span class="va">self</span>.variables</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> Q[<span class="dv">1</span>]</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        Qout <span class="op">=</span> ZArray(Q)</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> conditional(h <span class="op">&lt;=</span> <span class="dv">0</span>, <span class="dv">0</span>, h)</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        Qout[<span class="dv">1</span>] <span class="op">=</span> h</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> <span class="va">self</span>.parameters.eps</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        factor <span class="op">=</span> h <span class="op">/</span> (h <span class="op">+</span> eps<span class="op">*</span><span class="fl">100.</span>)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>, <span class="va">self</span>.n_variables):</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>            Qout[i] <span class="op">*=</span> factor</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Qout</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_aux_variables(<span class="va">self</span>):</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        Q <span class="op">=</span> <span class="va">self</span>.variables</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        Qaux <span class="op">=</span> ZArray(<span class="va">self</span>.aux_variables)</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> <span class="va">self</span>.parameters.eps</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        Qaux[<span class="dv">0</span>] <span class="op">=</span> Q[<span class="dv">1</span>] <span class="op">/</span> (Q[<span class="dv">1</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> eps)</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(Qaux)</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> Matrix([<span class="dv">0</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="va">self</span>.n_variables)])</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>        <span class="co"># out += self.newtonian()</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>        <span class="co"># out += self.slip_mod()</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># out += self.slip()</span></span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>         </span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>level <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> MyModel(</span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>    level<span class="op">=</span>level,</span>
+<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>    parameters<span class="op">=</span>Zstruct(g<span class="op">=</span><span class="fl">9.81</span>, ey<span class="op">=</span>np.sin(np.radians(<span class="op">-</span>angle)), ez<span class="op">=</span>np.cos(np.radians(<span class="op">-</span>angle)), nu<span class="op">=</span><span class="fl">0.000001</span>, lamda<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="fl">1000.</span>, rho<span class="op">=</span><span class="dv">1000</span>, c_slipmod<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">30</span>, C<span class="op">=</span><span class="dv">300</span>, eps<span class="op">=</span><span class="fl">1e-6</span>),</span>
+<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>    aux_variables <span class="op">=</span> [<span class="st">'hinv'</span>],</span>
+<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<div id="ddfe40a8" class="cell">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(model.parameters.keys())</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(model.parameter_values)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="e557eb68" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Numerics(PositiveRusanov):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_viscosity_identity_flux(<span class="va">self</span>):</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> Matrix(Identity(<span class="va">self</span>.model.n_variables))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        lvl <span class="op">=</span> <span class="va">self</span>.model.level</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        offset <span class="op">=</span> lvl <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> <span class="dv">0</span> <span class="op">*</span> Id</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">1</span>, <span class="dv">1</span>] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span> <span class="op">+</span> offset, <span class="dv">2</span> <span class="op">+</span> offset] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(Id)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_viscosity_identity_fluctuations(<span class="va">self</span>):</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> Matrix(Identity(<span class="va">self</span>.model.n_variables))</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">0</span>, <span class="dv">0</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        lvl <span class="op">=</span> <span class="va">self</span>.model.level</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        offset <span class="op">=</span> lvl <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> <span class="dv">0</span> <span class="op">*</span> Id</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">1</span>, <span class="dv">1</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span> <span class="op">+</span> offset, <span class="dv">2</span> <span class="op">+</span> offset] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ZArray(Id)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>numerics <span class="op">=</span> Numerics(model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="print-the-model-definition" class="level2">
+<h2 class="anchored" data-anchor-id="print-the-model-definition">Print the Model definition</h2>
+<div id="ddfe40a8" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(model.parameters.keys())</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(model.parameter_values)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>['g', 'ex', 'ey', 'ez', 'eps_low_water', 'rho', 'nu', 'lamda', 'c_slipmod', 'C']
-[9.81000000e+00 0.00000000e+00 2.21358269e-01 9.75192554e-01
- 1.00000000e-06 1.00000000e+03 1.00000000e-06 1.00000000e-03
- 3.33333333e-02 3.00000000e+02]</code></pre>
+<pre><code>['g', 'ey', 'ez', 'nu', 'lamda', 'rho', 'c_slipmod', 'C', 'eps']
+[9.81000000e+00 0.00000000e+00 1.00000000e+00 1.00000000e-06
+ 1.00000000e-03 1.00000000e+03 3.33333333e-02 3.00000000e+02
+ 1.00000000e-06]</code></pre>
 </div>
 </div>
-<div id="adaf2a08" class="cell">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># model.source()</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-<div id="42b419c4" class="cell">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>model.eigenvalues()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="7">
-<p><span class="math inline">\(\displaystyle \left[\begin{matrix}0\\\begin{cases} hinv \left(n_{0} q_{2} + n_{1} q_{3}\right) &amp; \text{for}\: q_{1} &gt; 1.0 \cdot 10^{-8} \\0 &amp; \text{otherwise} \end{cases}\\\begin{cases} hinv \left(n_{0} q_{2} + n_{1} q_{3} - q_{1}^{\frac{3}{2}} \sqrt{ez g} \sqrt{n_{0}^{2} + n_{1}^{2}}\right) &amp; \text{for}\: q_{1} &gt; 1.0 \cdot 10^{-8} \\0 &amp; \text{otherwise} \end{cases}\\\begin{cases} hinv \left(n_{0} q_{2} + n_{1} q_{3} + q_{1}^{\frac{3}{2}} \sqrt{ez g} \sqrt{n_{0}^{2} + n_{1}^{2}}\right) &amp; \text{for}\: q_{1} &gt; 1.0 \cdot 10^{-8} \\0 &amp; \text{otherwise} \end{cases}\end{matrix}\right]\)</span></p>
+<p>Note that this is the numerical model, hence we explicitly use hinv instead of 1/h and apply regularization. Also note that in the numerical model, the eigenvalues are ‘truncated’ in the sense that we return 0 eigenvalues for try cells.</p>
+<div id="9512def2" class="cell" data-execution_count="18">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>model.flux() <span class="op">+</span> model.hydrostatic_pressure()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="18">
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}0 &amp; 0\\hinv q_{1} q_{2} &amp; hinv q_{1} q_{3}\\\frac{ez g q_{1}^{2}}{2} + hinv^{2} q_{1} q_{2}^{2} &amp; hinv^{2} q_{1} q_{2} q_{3}\\hinv^{2} q_{1} q_{2} q_{3} &amp; \frac{ez g q_{1}^{2}}{2} + hinv^{2} q_{1} q_{3}^{2}\end{matrix}\right]\)</span></p>
 </div>
 </div>
-<div id="44c68292" class="cell">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>model.quasilinear_matrix()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="8">
-<p><span class="math inline">\(\displaystyle \left[ \left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 1 &amp; 0\\0 &amp; ez g q_{1} - hinv^{2} q_{2}^{2} &amp; 2 hinv q_{2} &amp; 0\\0 &amp; - hinv^{2} q_{2} q_{3} &amp; hinv q_{3} &amp; hinv q_{2}\end{matrix}\right], \  \left[\begin{matrix}0 &amp; 0 &amp; 0 &amp; 0\\0 &amp; 0 &amp; 0 &amp; 1\\0 &amp; - hinv^{2} q_{2} q_{3} &amp; hinv q_{3} &amp; hinv q_{2}\\0 &amp; ez g q_{1} - hinv^{2} q_{3}^{2} &amp; 0 &amp; 2 hinv q_{3}\end{matrix}\right]\right]\)</span></p>
+<div id="44c68292" class="cell" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>model.nonconservative_matrix()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="11">
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}\left[\begin{matrix}0 &amp; 0\\0 &amp; 0\\0 &amp; 0\\0 &amp; 0\end{matrix}\right] &amp; \left[\begin{matrix}0 &amp; 0\\0 &amp; 0\\0 &amp; 0\\0 &amp; 0\end{matrix}\right] &amp; \left[\begin{matrix}0 &amp; 0\\0 &amp; 0\\0 &amp; 0\\0 &amp; 0\end{matrix}\right] &amp; \left[\begin{matrix}0 &amp; 0\\0 &amp; 0\\0 &amp; 0\\0 &amp; 0\end{matrix}\right]\end{matrix}\right]\)</span></p>
+</div>
+</div>
+<div id="bf900015" class="cell" data-execution_count="12">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>model.source()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="12">
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}0\\0\\0\\0\end{matrix}\right]\)</span></p>
+</div>
+</div>
+<div id="514404e6" class="cell" data-execution_count="19">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>model.eigenvalues()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="19">
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}\operatorname{conditional}{\left(q_{1} &gt; eps,0,0 \right)} &amp; \operatorname{conditional}{\left(q_{1} &gt; eps,\frac{n_{0} q_{2} + n_{1} q_{3}}{q_{1}},0 \right)} &amp; \operatorname{conditional}{\left(q_{1} &gt; eps,\frac{- \sqrt{ez} \sqrt{g} q_{1}^{\frac{3}{2}} \sqrt{n_{0}^{2} + n_{1}^{2}} + n_{0} q_{2} + n_{1} q_{3}}{q_{1}},0 \right)} &amp; \operatorname{conditional}{\left(q_{1} &gt; eps,\frac{\sqrt{ez} \sqrt{g} q_{1}^{\frac{3}{2}} \sqrt{n_{0}^{2} + n_{1}^{2}} + n_{0} q_{2} + n_{1} q_{3}}{q_{1}},0 \right)}\end{matrix}\right]\)</span></p>
 </div>
 </div>
 </section>
 <section id="code-transformation-and-amrex-compilation" class="level2">
 <h2 class="anchored" data-anchor-id="code-transformation-and-amrex-compilation">Code transformation and AMReX compilation</h2>
-<p>currently, we always “clean” and compile from scratch. Comment out “make clean” to disable.</p>
-<div id="0be9f302" class="cell">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shutil</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowMoments"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="ss">f"outputs/amrex_</span><span class="sc">{</span>level<span class="sc">}</span><span class="ss">"</span>))</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>source_dir <span class="op">=</span> Path(os.path.join(main_dir, <span class="st">'library/amrex/Exec'</span>))</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>output_dir <span class="op">=</span> Path(os.path.join(main_dir, settings.output.directory))</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> os.path.exists(output_dir):</span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    shutil.rmtree(output_dir)</span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>trafo.write_code(model, settings)</span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZOOMY_AMREX_MODEL'</span>] <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.c_interface'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>if you want to “clean” and compile from scratch, Comment in “make clean” two cells below.</p>
+<div id="0be9f302" class="cell" data-execution_count="13">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shutil</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowMoments"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="ss">f"outputs/amrex_</span><span class="sc">{</span>level<span class="sc">}</span><span class="ss">"</span>))</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>source_dir <span class="op">=</span> Path(os.path.join(main_dir, <span class="st">'library/zoomy_amrex/Exec'</span>))</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>output_dir <span class="op">=</span> Path(os.path.join(main_dir, settings.output.directory))</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> os.path.exists(output_dir):</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    shutil.rmtree(output_dir)</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>trafo.AmrexModel.write_code(model, settings)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>trafo.AmrexNumerics.write_code(numerics, settings)</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="co"># trafo.write_code(model, settings)</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> get_main_directory()</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>os.environ[<span class="st">'ZOOMY_AMREX_MODEL'</span>] <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.c_interface'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-09-24 16:05:57.966</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">143</span> - <span class="ansi-yellow-fg ansi-bold">No 'filename' attribute found in output Zstruct. Default: 'simulation'</span>
+<pre><span class="ansi-green-fg">2026-03-09 13:45:48.355</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">391</span> - <span class="ansi-yellow-fg ansi-bold">No 'filename' attribute found in Settings.output Zstruct. Default: 'simulation'</span>
 
-<span class="ansi-green-fg">2025-09-24 16:05:57.969</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
+<span class="ansi-green-fg">2026-03-09 13:45:48.356</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">391</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in Settings.output Zstruct. Default: 'False'</span>
+
+<span class="ansi-green-fg">2026-03-09 13:45:48.356</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">391</span> - <span class="ansi-yellow-fg ansi-bold">No 'snapshots' attribute found in Settings.output Zstruct. Default: '2'</span>
 </pre>
 </div>
 </div>
 </div>
-<div id="9a966579" class="cell">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> subprocess</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>base <span class="op">=</span> os.path.join(os.environ[<span class="st">'ZOOMY_DIR'</span>], <span class="st">'library/amrex/'</span>)</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>cmds <span class="op">=</span> [</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"cp ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">/.c_interface/model.h ./Source/model.h"</span>,</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"source ~/.zshrc"</span>,</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"source setup.sh"</span>,</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"cd Exec"</span>,</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># "make clean",</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"make"</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>]</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>subprocess.run(<span class="st">" &amp;&amp; "</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="what-have-we-gained" class="level3">
+<h3 class="anchored" data-anchor-id="what-have-we-gained">What have we gained?</h3>
+<ul>
+<li>A C++ file containing the translation of our symbolical PDE model</li>
+<li>A C++ file containing the translatoin of our numerical Riemann solver, including Wet-dry front treatment.</li>
+</ul>
+<p>Let’s have a look at the code now!</p>
+<section id="model.h" class="level4">
+<h4 class="anchored" data-anchor-id="model.h">Model.H</h4>
+<div id="eb7ebd1e" class="cell" data-execution_count="22">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> get_main_directory()</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.amrex_interface/Model.H'</span>))</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+#include &lt;AMReX_Array4.H&gt;
+#include &lt;AMReX_Vector.H&gt;
+#include &lt;AMReX_SmallMatrix.H&gt;
+
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+
+struct Model {
+    using T = amrex::Real;
+    static constexpr int n_dof_q    = 4;
+    static constexpr int n_dof_qaux = 1;
+    static constexpr int dimension  = 2;
+    static constexpr int n_boundary_tags = 4;
+    static const std::vector&lt;std::string&gt; get_boundary_tags() { return { "E", "N", "S", "W" }; }
+    static const std::vector&lt;std::string&gt; parameter_names() { return { "g", "ey", "ez", "nu", "lamda", "rho", "c_slipmod", "C", "eps" }; }
+    static const std::vector&lt;T&gt; default_parameters() { return { 9.81, 0.0, 1.0, 1e-06, 0.001, 1000.0, 0.03333333333333333, 300.0, 1e-06 }; }
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,8,1&gt; flux(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = Qaux(0, 0)*Q(1, 0);
+    amrex::Real t1 = amrex::Math::powi&lt;2&gt;(Qaux(0, 0))*Q(1, 0);
+    amrex::Real t2 = Q(2, 0)*Q(3, 0)*t1;
+    amrex::SmallMatrix&lt;amrex::Real,8,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = Q(2, 0)*t0;
+    res(3, 0) = Q(3, 0)*t0;
+    res(4, 0) = amrex::Math::powi&lt;2&gt;(Q(2, 0))*t1;
+    res(5, 0) = t2;
+    res(6, 0) = t2;
+    res(7, 0) = amrex::Math::powi&lt;2&gt;(Q(3, 0))*t1;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,8,1&gt; dflux(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,8,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,8,1&gt; hydrostatic_pressure(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = (1.0/2.0)*p(2, 0)*p(0, 0)*amrex::Math::powi&lt;2&gt;(Q(1, 0));
+    amrex::SmallMatrix&lt;amrex::Real,8,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = t0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = t0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,32,1&gt; nonconservative_matrix(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,32,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = 0;
+    res(11, 0) = 0;
+    res(12, 0) = 0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = 0;
+    res(16, 0) = 0;
+    res(17, 0) = 0;
+    res(18, 0) = 0;
+    res(19, 0) = 0;
+    res(20, 0) = 0;
+    res(21, 0) = 0;
+    res(22, 0) = 0;
+    res(23, 0) = 0;
+    res(24, 0) = 0;
+    res(25, 0) = 0;
+    res(26, 0) = 0;
+    res(27, 0) = 0;
+    res(28, 0) = 0;
+    res(29, 0) = 0;
+    res(30, 0) = 0;
+    res(31, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,32,1&gt; quasilinear_matrix(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = Qaux(0, 0)*Q(1, 0);
+    amrex::Real t1 = p(2, 0)*p(0, 0)*Q(1, 0);
+    amrex::Real t2 = amrex::Math::powi&lt;2&gt;(Qaux(0, 0));
+    amrex::Real t3 = Q(3, 0)*t2;
+    amrex::Real t4 = Q(2, 0)*t3;
+    amrex::Real t5 = Q(1, 0)*Q(2, 0)*t2;
+    amrex::Real t6 = Q(1, 0)*t3;
+    amrex::SmallMatrix&lt;amrex::Real,32,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = Qaux(0, 0)*Q(2, 0);
+    res(11, 0) = Qaux(0, 0)*Q(3, 0);
+    res(12, 0) = t0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = t0;
+    res(16, 0) = 0;
+    res(17, 0) = 0;
+    res(18, 0) = amrex::Math::powi&lt;2&gt;(Q(2, 0))*t2 + t1;
+    res(19, 0) = t4;
+    res(20, 0) = 2*t5;
+    res(21, 0) = t6;
+    res(22, 0) = 0;
+    res(23, 0) = t5;
+    res(24, 0) = 0;
+    res(25, 0) = 0;
+    res(26, 0) = t4;
+    res(27, 0) = amrex::Math::powi&lt;2&gt;(Q(3, 0))*t2 + t1;
+    res(28, 0) = t6;
+    res(29, 0) = 0;
+    res(30, 0) = t5;
+    res(31, 0) = 2*t6;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; eigenvalues(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::Real t0 = Q(1, 0) &gt; p(8, 0);
+    amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(1, 0)));
+    amrex::Real t2 = n(0, 0)*Q(2, 0) + n(1, 0)*Q(3, 0);
+    amrex::Real t3 = std::pow(p(2, 0), 1.0/2.0)*std::pow(p(0, 0), 1.0/2.0)*std::pow(Q(1, 0), 3.0/2.0)*std::pow(amrex::Math::powi&lt;2&gt;(n(0, 0)) + amrex::Math::powi&lt;2&gt;(n(1, 0)), 1.0/2.0);
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = ((t0) ? (0) : (0));
+    res(1, 0) = ((t0) ? (t1*t2) : (0));
+    res(2, 0) = ((t0) ? (t1*(t2 - t3)) : (0));
+    res(3, 0) = ((t0) ? (t1*(t2 + t3)) : (0));
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,16,1&gt; left_eigenvectors(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,16,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = 0;
+    res(11, 0) = 0;
+    res(12, 0) = 0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,16,1&gt; right_eigenvectors(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,16,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = 0;
+    res(11, 0) = 0;
+    res(12, 0) = 0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; source(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,16,1&gt; source_jacobian_wrt_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,16,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = 0;
+    res(6, 0) = 0;
+    res(7, 0) = 0;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = 0;
+    res(11, 0) = 0;
+    res(12, 0) = 0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; source_jacobian_wrt_aux_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,6,1&gt; project_2d_to_3d(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,6,1&gt; res;
+    res(0, 0) = Q(0, 0);
+    res(1, 0) = Q(1, 0);
+    res(2, 0) = Qaux(0, 0)*Q(2, 0);
+    res(3, 0) = Qaux(0, 0)*Q(3, 0);
+    res(4, 0) = 0;
+    res(5, 0) = 9810.0*Q(1, 0)*(1 - X(2, 0));
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; project_3d_to_2d(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; residual(
+        amrex::Real const time,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::Real const dX,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; interpolate(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = Q(0, 0);
+    res(1, 0) = Q(1, 0);
+    res(2, 0) = Q(2, 0);
+    res(3, 0) = Q(3, 0);
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; initial_condition(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,1,1&gt; initial_aux_condition(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; res;
+    res(0, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; update_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = ((false) ? (0) : (Q(1, 0)));
+    amrex::Real t1 = t0/(100.0*p(8, 0) + t0);
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = Q(0, 0);
+    res(1, 0) = t0;
+    res(2, 0) = Q(2, 0)*t1;
+    res(3, 0) = Q(3, 0)*t1;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,1,1&gt; update_aux_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; res;
+    res(0, 0) = Q(1, 0)/(p(8, 0) + amrex::Math::powi&lt;2&gt;(Q(1, 0)));
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,16,1&gt; update_variables_jacobian_wrt_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = ((false) ? (0) : (1));
+    amrex::Real t1 = ((false) ? (0) : (Q(1, 0)));
+    amrex::Real t2 = 100.0*p(8, 0) + t1;
+    amrex::Real t3 = (1.0 / amrex::Math::powi&lt;1&gt;(t2));
+    amrex::Real t4 = t0*t3;
+    amrex::Real t5 = t0*t1/amrex::Math::powi&lt;2&gt;(t2);
+    amrex::Real t6 = t1*t3;
+    amrex::SmallMatrix&lt;amrex::Real,16,1&gt; res;
+    res(0, 0) = 1;
+    res(1, 0) = 0;
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    res(4, 0) = 0;
+    res(5, 0) = t0;
+    res(6, 0) = Q(2, 0)*t4 - Q(2, 0)*t5;
+    res(7, 0) = Q(3, 0)*t4 - Q(3, 0)*t5;
+    res(8, 0) = 0;
+    res(9, 0) = 0;
+    res(10, 0) = t6;
+    res(11, 0) = 0;
+    res(12, 0) = 0;
+    res(13, 0) = 0;
+    res(14, 0) = 0;
+    res(15, 0) = t6;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; update_aux_variables_jacobian_wrt_variables(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p) noexcept
+    {
+    amrex::Real t0 = amrex::Math::powi&lt;2&gt;(Q(1, 0));
+    amrex::Real t1 = p(8, 0) + t0;
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = 0;
+    res(1, 0) = -2*t0/amrex::Math::powi&lt;2&gt;(t1) + (1.0 / amrex::Math::powi&lt;1&gt;(t1));
+    res(2, 0) = 0;
+    res(3, 0) = 0;
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; boundary_conditions(
+        const int bc_idx,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::Real const time,
+        amrex::Real const dX) noexcept
+    {
+    if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2 || bc_idx == 3) {
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+        res(0, 0) = Q(0, 0);
+        res(1, 0) = Q(1, 0);
+        res(2, 0) = Q(2, 0);
+        res(3, 0) = Q(3, 0);
+        return res;
+    }
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; default_res{};
+    return default_res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,1,1&gt; aux_boundary_conditions(
+        const int bc_idx,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::Real const time,
+        amrex::Real const dX) noexcept
+    {
+    if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2 || bc_idx == 3) {
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; res;
+        res(0, 0) = Qaux(0, 0);
+        return res;
+    }
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; default_res{};
+    return default_res;
+    }
+
+};
+</code></pre>
+</div>
+</div>
+</section>
+<section id="numerics.h" class="level4">
+<h4 class="anchored" data-anchor-id="numerics.h">Numerics.H</h4>
+<div id="030577f5" class="cell" data-execution_count="23">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> get_main_directory()</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.amrex_interface/Numerics.H'</span>))</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+#include &lt;AMReX_Array4.H&gt;
+#include &lt;AMReX_Vector.H&gt;
+#include &lt;AMReX_SmallMatrix.H&gt;
+#include "Model.H"
+
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+
+struct Numerics {
+    using T = amrex::Real;
+    static constexpr int n_dof_q = 4;
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,4,1&gt; numerical_flux(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q_minus,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q_plus,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux_minus,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux_plus,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::Real t0 = amrex::max(Q_minus(0, 0), Q_plus(0, 0));
+    amrex::Real t1 = -t0;
+    amrex::Real t2 = amrex::max(0.0, Q_minus(0, 0) + Q_minus(1, 0) + t1);
+    amrex::Real t3 = t2/amrex::max(Q_minus(1, 0), p(8, 0));
+    amrex::Real t4 = amrex::max(0.0, Q_plus(0, 0) + Q_plus(1, 0) + t1);
+    amrex::Real t5 = t4/amrex::max(Q_plus(1, 0), p(8, 0));
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; v_arg_0{};
+v_arg_0(0, 0) = t0;
+v_arg_0(1, 0) = t2;
+v_arg_0(2, 0) = Q_minus(2, 0)*t3;
+v_arg_0(3, 0) = Q_minus(3, 0)*t3;
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; v_arg_1{};
+v_arg_1(0, 0) = (1.0 / amrex::Math::powi&lt;1&gt;(p(8, 0) + t2));
+    amrex::SmallMatrix&lt;amrex::Real,9,1&gt; v_arg_2{};
+v_arg_2(0, 0) = p(0, 0);
+v_arg_2(1, 0) = p(1, 0);
+v_arg_2(2, 0) = p(2, 0);
+v_arg_2(3, 0) = p(3, 0);
+v_arg_2(4, 0) = p(4, 0);
+v_arg_2(5, 0) = p(5, 0);
+v_arg_2(6, 0) = p(6, 0);
+v_arg_2(7, 0) = p(7, 0);
+v_arg_2(8, 0) = p(8, 0);
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; v_arg_3{};
+v_arg_3(0, 0) = t0;
+v_arg_3(1, 0) = t4;
+v_arg_3(2, 0) = Q_plus(2, 0)*t5;
+v_arg_3(3, 0) = Q_plus(3, 0)*t5;
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; v_arg_4{};
+v_arg_4(0, 0) = (1.0 / amrex::Math::powi&lt;1&gt;(p(8, 0) + t4));
+    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; v_arg_5{};
+v_arg_5(0, 0) = n(0, 0);
+v_arg_5(1, 0) = n(1, 0);
+    auto v_call_0 = Model::flux(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_1 = Model::hydrostatic_pressure(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_2 = Model::flux(v_arg_3, v_arg_4, v_arg_2);
+    auto v_call_3 = Model::hydrostatic_pressure(v_arg_3, v_arg_4, v_arg_2);
+    auto v_call_4 = Model::eigenvalues(v_arg_0, v_arg_1, v_arg_2, v_arg_5);
+    auto v_call_5 = Model::eigenvalues(v_arg_3, v_arg_4, v_arg_2, v_arg_5);
+    amrex::Real t6 = 0.5*n(0, 0);
+    amrex::Real t7 = 0.5*n(1, 0);
+    amrex::Real t8 = -amrex::max(Q_minus(0, 0), Q_plus(0, 0));
+    amrex::Real t9 = amrex::max(0.0, Q_minus(0, 0) + Q_minus(1, 0) + t8);
+    amrex::Real t10 = amrex::max(0.0, Q_plus(0, 0) + Q_plus(1, 0) + t8);
+    amrex::Real t11 = 0.5*amrex::max(std::abs(v_call_4(0, 0)), amrex::max(std::abs(v_call_4(1, 0)), amrex::max(std::abs(v_call_4(2, 0)), amrex::max(std::abs(v_call_4(3, 0)), amrex::max(std::abs(v_call_5(0, 0)), amrex::max(std::abs(v_call_5(1, 0)), amrex::max(std::abs(v_call_5(2, 0)), std::abs(v_call_5(3, 0)))))))));
+    amrex::Real t12 = t9/amrex::max(Q_minus(1, 0), p(8, 0));
+    amrex::Real t13 = (1.0 / amrex::Math::powi&lt;1&gt;(amrex::max(Q_plus(1, 0), p(8, 0))));
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; res;
+    res(0, 0) = t6*(v_call_0(0, 0) + v_call_1(0, 0)) + t6*(v_call_2(0, 0) + v_call_3(0, 0)) + t7*(v_call_0(1, 0) + v_call_1(1, 0)) + t7*(v_call_2(1, 0) + v_call_3(1, 0));
+    res(1, 0) = -t11*(t10 - t9) + t6*(v_call_0(2, 0) + v_call_1(2, 0)) + t6*(v_call_2(2, 0) + v_call_3(2, 0)) + t7*(v_call_0(3, 0) + v_call_1(3, 0)) + t7*(v_call_2(3, 0) + v_call_3(3, 0));
+    res(2, 0) = -t11*(-Q_minus(2, 0)*t12 + Q_plus(2, 0)*t10*t13) + t6*(v_call_0(4, 0) + v_call_1(4, 0)) + t6*(v_call_2(4, 0) + v_call_3(4, 0)) + t7*(v_call_0(5, 0) + v_call_1(5, 0)) + t7*(v_call_2(5, 0) + v_call_3(5, 0));
+    res(3, 0) = -t11*(-Q_minus(3, 0)*t12 + Q_plus(3, 0)*t10*t13) + t6*(v_call_0(6, 0) + v_call_1(6, 0)) + t6*(v_call_2(6, 0) + v_call_3(6, 0)) + t7*(v_call_0(7, 0) + v_call_1(7, 0)) + t7*(v_call_2(7, 0) + v_call_3(7, 0));
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,8,1&gt; numerical_fluctuations(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q_minus,
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q_plus,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux_minus,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux_plus,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::Real t0 = amrex::max(Q_minus(0, 0), Q_plus(0, 0));
+    amrex::Real t1 = -t0;
+    amrex::Real t2 = amrex::max(0.0, Q_plus(0, 0) + Q_plus(1, 0) + t1);
+    amrex::Real t3 = t2/amrex::max(Q_plus(1, 0), p(8, 0));
+    amrex::Real t4 = amrex::max(0.0, Q_minus(0, 0) + Q_minus(1, 0) + t1);
+    amrex::Real t5 = t4/amrex::max(Q_minus(1, 0), p(8, 0));
+    amrex::SmallMatrix&lt;amrex::Real,9,1&gt; v_arg_0{};
+v_arg_0(0, 0) = p(0, 0);
+v_arg_0(1, 0) = p(1, 0);
+v_arg_0(2, 0) = p(2, 0);
+v_arg_0(3, 0) = p(3, 0);
+v_arg_0(4, 0) = p(4, 0);
+v_arg_0(5, 0) = p(5, 0);
+v_arg_0(6, 0) = p(6, 0);
+v_arg_0(7, 0) = p(7, 0);
+v_arg_0(8, 0) = p(8, 0);
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; v_arg_1{};
+v_arg_1(0, 0) = t0;
+v_arg_1(1, 0) = t2;
+v_arg_1(2, 0) = Q_plus(2, 0)*t3;
+v_arg_1(3, 0) = Q_plus(3, 0)*t3;
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; v_arg_2{};
+v_arg_2(0, 0) = (1.0 / amrex::Math::powi&lt;1&gt;(p(8, 0) + t2));
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; v_arg_3{};
+v_arg_3(0, 0) = t0;
+v_arg_3(1, 0) = t4;
+v_arg_3(2, 0) = Q_minus(2, 0)*t5;
+v_arg_3(3, 0) = Q_minus(3, 0)*t5;
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; v_arg_4{};
+v_arg_4(0, 0) = (1.0 / amrex::Math::powi&lt;1&gt;(p(8, 0) + t4));
+    auto v_call_0 = Model::hydrostatic_pressure(Q_plus, Qaux_plus, v_arg_0);
+    auto v_call_1 = Model::hydrostatic_pressure(v_arg_1, v_arg_2, v_arg_0);
+    auto v_call_2 = Model::hydrostatic_pressure(v_arg_3, v_arg_4, v_arg_0);
+    auto v_call_3 = Model::hydrostatic_pressure(Q_minus, Qaux_minus, v_arg_0);
+    amrex::SmallMatrix&lt;amrex::Real,8,1&gt; res;
+    res(0, 0) = n(0, 0)*(-v_call_0(0, 0) + v_call_1(0, 0)) + n(1, 0)*(-v_call_0(1, 0) + v_call_1(1, 0));
+    res(1, 0) = n(0, 0)*(-v_call_0(2, 0) + v_call_1(2, 0)) + n(1, 0)*(-v_call_0(3, 0) + v_call_1(3, 0));
+    res(2, 0) = n(0, 0)*(-v_call_0(4, 0) + v_call_1(4, 0)) + n(1, 0)*(-v_call_0(5, 0) + v_call_1(5, 0));
+    res(3, 0) = n(0, 0)*(-v_call_0(6, 0) + v_call_1(6, 0)) + n(1, 0)*(-v_call_0(7, 0) + v_call_1(7, 0));
+    res(4, 0) = n(0, 0)*(-v_call_2(0, 0) + v_call_3(0, 0)) + n(1, 0)*(-v_call_2(1, 0) + v_call_3(1, 0));
+    res(5, 0) = n(0, 0)*(-v_call_2(2, 0) + v_call_3(2, 0)) + n(1, 0)*(-v_call_2(3, 0) + v_call_3(3, 0));
+    res(6, 0) = n(0, 0)*(-v_call_2(4, 0) + v_call_3(4, 0)) + n(1, 0)*(-v_call_2(5, 0) + v_call_3(5, 0));
+    res(7, 0) = n(0, 0)*(-v_call_2(6, 0) + v_call_3(6, 0)) + n(1, 0)*(-v_call_2(7, 0) + v_call_3(7, 0));
+    return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,1,1&gt; local_max_abs_eigenvalue(
+        amrex::SmallMatrix&lt;amrex::Real,4,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,1,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,9,1&gt; const&amp; p,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
+    {
+    amrex::SmallMatrix&lt;amrex::Real,4,1&gt; v_arg_0{};
+v_arg_0(0, 0) = Q(0, 0);
+v_arg_0(1, 0) = Q(1, 0);
+v_arg_0(2, 0) = Q(2, 0);
+v_arg_0(3, 0) = Q(3, 0);
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; v_arg_1{};
+v_arg_1(0, 0) = Qaux(0, 0);
+    amrex::SmallMatrix&lt;amrex::Real,9,1&gt; v_arg_2{};
+v_arg_2(0, 0) = p(0, 0);
+v_arg_2(1, 0) = p(1, 0);
+v_arg_2(2, 0) = p(2, 0);
+v_arg_2(3, 0) = p(3, 0);
+v_arg_2(4, 0) = p(4, 0);
+v_arg_2(5, 0) = p(5, 0);
+v_arg_2(6, 0) = p(6, 0);
+v_arg_2(7, 0) = p(7, 0);
+v_arg_2(8, 0) = p(8, 0);
+    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; v_arg_3{};
+v_arg_3(0, 0) = n(0, 0);
+v_arg_3(1, 0) = n(1, 0);
+    auto v_call_0 = Model::eigenvalues(v_arg_0, v_arg_1, v_arg_2, v_arg_3);
+    amrex::SmallMatrix&lt;amrex::Real,1,1&gt; res;
+    res(0, 0) = amrex::max(std::abs(v_call_0(0, 0)), amrex::max(std::abs(v_call_0(1, 0)), amrex::max(std::abs(v_call_0(2, 0)), std::abs(v_call_0(3, 0)))));
+    return res;
+    }
+
+};
+</code></pre>
+</div>
+</div>
+</section>
+<section id="compile" class="level4">
+<h4 class="anchored" data-anchor-id="compile">Compile</h4>
+<div id="9a966579" class="cell" data-execution_count="20">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> subprocess</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>base <span class="op">=</span> os.path.join(main_dir, <span class="st">"library/zoomy_amrex/"</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>cmds <span class="op">=</span> [</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"cp ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">/.amrex_interface/Model.H ./Source/Model.H"</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="ss">f"cp ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">/.amrex_interface/Numerics.H ./Source/Numerics.H"</span>,</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"source setup.sh"</span>,</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"cd Exec"</span>,</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">#"make clean",</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"make"</span>,</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>subprocess.run(<span class="st">" &amp;&amp; "</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>setup.sh:4: command not found: module
-setup.sh:5: command not found: module
-setup.sh:6: command not found: micromamba</code></pre>
+<pre><code>[WARN] OpenMPI's default binding is set to OFF, you can override this
+[INFO] Module foss/2024a loaded.
+[INFO] Module Python/3.12.3 loaded.
+fatal: not a git repository (or any parent up to mount point /rwthfs/rz/cluster/home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).</code></pre>
 </div>
-<div class="cell-output cell-output-display" data-execution_count="10">
-<pre><code>CompletedProcess(args='cp ../../outputs/amrex_0/.c_interface/model.h ./Source/model.h &amp;&amp; source ~/.zshrc &amp;&amp; source setup.sh &amp;&amp; cd Exec &amp;&amp; make', returncode=127)</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>Loading /home/is086873/MBD/Git/amrex/Tools/GNUMake/comps/gnu.mak...
+Loading /home/is086873/MBD/Git/amrex/Tools/GNUMake/sites/Make.unknown...
+Compiling write_plotfiles.cpp ...
+mpicxx -MMD -MP -Werror=return-type -gdwarf-4 -O3 -finline-limit=43210 -std=c++17  -pthread    -DBL_USE_MPI -DAMREX_USE_MPI -DAMREX_GPU_MAX_THREADS=0 -DBL_SPACEDIM=3 -DAMREX_SPACEDIM=3 -DBL_FORT_USE_UNDERSCORE -DAMREX_FORT_USE_UNDERSCORE -DBL_Linux -DAMREX_Linux -DNDEBUG -DOMPI_SKIP_MPICXX -Itmp_build_dir/s/3d.gnu.MPI.EXE -I. -I../Source -I/rwthfs/rz/cluster/home/is086873/Git/Zoomy/outputs/amrex_0/.c_interface -I/home/is086873/MBD/Git/amrex/Src/Base -I/home/is086873/MBD/Git/amrex/Src/Base/Parser  -I/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/include -c ../Source/write_plotfiles.cpp -o tmp_build_dir/o/3d.gnu.MPI.EXE/write_plotfiles.o
+Compiling main.cpp ...
+mpicxx -MMD -MP -Werror=return-type -gdwarf-4 -O3 -finline-limit=43210 -std=c++17  -pthread    -DBL_USE_MPI -DAMREX_USE_MPI -DAMREX_GPU_MAX_THREADS=0 -DBL_SPACEDIM=3 -DAMREX_SPACEDIM=3 -DBL_FORT_USE_UNDERSCORE -DAMREX_FORT_USE_UNDERSCORE -DBL_Linux -DAMREX_Linux -DNDEBUG -DOMPI_SKIP_MPICXX -Itmp_build_dir/s/3d.gnu.MPI.EXE -I. -I../Source -I/rwthfs/rz/cluster/home/is086873/Git/Zoomy/outputs/amrex_0/.c_interface -I/home/is086873/MBD/Git/amrex/Src/Base -I/home/is086873/MBD/Git/amrex/Src/Base/Parser  -I/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/include -c ../Source/main.cpp -o tmp_build_dir/o/3d.gnu.MPI.EXE/main.o
+Linking main3d.gnu.MPI.ex ...
+mpicxx -Werror=return-type -gdwarf-4 -O3 -finline-limit=43210 -std=c++17  -pthread   -DBL_USE_MPI -DAMREX_USE_MPI -DAMREX_GPU_MAX_THREADS=0 -DBL_SPACEDIM=3 -DAMREX_SPACEDIM=3 -DBL_FORT_USE_UNDERSCORE -DAMREX_FORT_USE_UNDERSCORE -DBL_Linux -DAMREX_Linux -DNDEBUG -DOMPI_SKIP_MPICXX -Itmp_build_dir/s/3d.gnu.MPI.EXE -I. -I../Source -I/rwthfs/rz/cluster/home/is086873/Git/Zoomy/outputs/amrex_0/.c_interface -I/home/is086873/MBD/Git/amrex/Src/Base -I/home/is086873/MBD/Git/amrex/Src/Base/Parser  -L. -L/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/GCCcore/13.3.0/lib/gcc/x86_64-pc-linux-gnu/13.3.0/../../../../lib64/ -o main3d.gnu.MPI.ex tmp_build_dir/o/3d.gnu.MPI.EXE/init_solution.o tmp_build_dir/o/3d.gnu.MPI.EXE/write_plotfiles.o tmp_build_dir/o/3d.gnu.MPI.EXE/plotfile_utils.o tmp_build_dir/o/3d.gnu.MPI.EXE/main.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_error_fi.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Version.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_PODVector.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BlockMutex.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_String.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_ParmParse.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_parmparse_fi.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Utility.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FileSystem.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Random.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_DistributionMapping.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_ParallelDescriptor.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_OpenMP.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_ForkJoin.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_ParallelContext.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_VisMF.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Arena.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BArena.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_CArena.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_PArena.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_AsyncOut.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BackgroundThread.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_NFiles.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_parstream.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_GpuControl.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_GpuDevice.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_GpuUtility.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_GpuAsyncArray.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_GpuElixir.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FabConv.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FPC.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IntConv.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_VectorIO.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Box.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BoxIterator.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IntVect.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IndexType.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Orientation.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Periodicity.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_RealBox.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_RealVect.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BoxList.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BoxArray.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BoxDomain.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FArrayBox.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IArrayBox.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BaseFab.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MultiFab.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MFCopyDescriptor.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_iMultiFab.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FabArrayBase.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MFIter.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_CoordSys.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Geometry.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MultiFabUtil.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BCRec.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_PhysBCFunct.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BCUtil.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FilCC_C.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FilND_C.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_FilFC_C.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_NonLocalBC.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_PlotFileUtil.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_PlotFileDataImpl.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BLProfiler.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BLBackTrace.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MemPool.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Machine.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_MPMD.o tmp_build_dir/o/3d.gnu.MPI.EXE/amrex_parser.lex.o tmp_build_dir/o/3d.gnu.MPI.EXE/amrex_parser.tab.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Parser_Y.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Parser_Exe.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_Parser.o tmp_build_dir/o/3d.gnu.MPI.EXE/amrex_iparser.lex.o tmp_build_dir/o/3d.gnu.MPI.EXE/amrex_iparser.tab.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IParser_Y.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IParser_Exe.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_IParser.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_constants_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BLutil_F.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_BLProfiler_F.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_filcc_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_omp_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_acc_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_fort_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_error_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_parmparse_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_string_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_bc_types_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_io_mod.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_ParallelDescriptor_F.o tmp_build_dir/o/3d.gnu.MPI.EXE/AMReX_mempool_mod.o  -I/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/include -I/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/lib -L/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/lib -Wl,-rpath -Wl,/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenMPI/5.0.3-GCC-13.3.0/lib -Wl,--enable-new-dtags -lmpi_usempif08 -lmpi_usempi_ignore_tkr -lmpi_mpifh -lmpi -lmpi -lgfortran -lquadmath</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="20">
+<pre><code>CompletedProcess(args='cp ../../outputs/amrex_0/.amrex_interface/Model.H ./Source/Model.H &amp;&amp; cp ../../outputs/amrex_0/.amrex_interface/Numerics.H ./Source/Numerics.H &amp;&amp; source setup.sh &amp;&amp; cd Exec &amp;&amp; make', returncode=0)</code></pre>
 </div>
 </div>
+</section>
+</section>
 </section>
 <section id="prepare-raster-data-for-amrex" class="level2">
 <h2 class="anchored" data-anchor-id="prepare-raster-data-for-amrex">Prepare raster data for AMReX</h2>
 <p>… and copy stuff to the output directory …</p>
-<div id="fc403459" class="cell">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>output_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)  <span class="co"># make sure output folder exists</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> item <span class="kw">in</span> source_dir.iterdir():</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    dest <span class="op">=</span> output_dir <span class="op">/</span> item.name</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> item.is_dir():</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        shutil.copytree(item, dest, dirs_exist_ok<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        shutil.copy2(item, dest)</span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>shutil.copy(dem_path, output_dir)</span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>shutil.copy(ic_water_path, output_dir)</span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"The simulation output will be written to: "</span>, output_dir)</span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> amrex.preprocess_rasterdata <span class="im">import</span> preprocess</span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>preprocess(os.path.join(output_dir, <span class="st">'inputs'</span>), dem_path, ic_water_path)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="fc403459" class="cell" data-execution_count="15">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>output_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)  <span class="co"># make sure output folder exists</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> item <span class="kw">in</span> source_dir.iterdir():</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    dest <span class="op">=</span> output_dir <span class="op">/</span> item.name</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> item.is_dir():</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>        shutil.copytree(item, dest, dirs_exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>        shutil.copy2(item, dest)</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>shutil.copy(dem_path, output_dir)</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>shutil.copy(ic_water_path, output_dir)</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"The simulation output will be written to: "</span>, output_dir)</span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_amrex.preprocess_rasterdata <span class="im">import</span> preprocess</span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>preprocess(os.path.join(output_dir, <span class="st">'inputs'</span>), dem_path, ic_water_path)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>The simulation output will be written to:  /home/ingo/Git/Zoomy/web/tutorials/amrex/../../../outputs/amrex_0
+<pre><code>The simulation output will be written to:  /rwthfs/rz/cluster/home/is086873/Git/Zoomy/outputs/amrex_0
 ✓ raw files: adjusted_ca_elev.raw adjusted_ca_debrisflow.raw
-✓ inputs updated → /home/ingo/Git/Zoomy/outputs/amrex_0/inputs</code></pre>
+✓ inputs updated → /rwthfs/rz/cluster/home/is086873/Git/Zoomy/outputs/amrex_0/inputs</code></pre>
 </div>
 </div>
 </section>
 <section id="do-the-simulation" class="level2">
 <h2 class="anchored" data-anchor-id="do-the-simulation">Do the Simulation</h2>
 <p>run in the notebook or as a batch job</p>
-<div id="c2533f14" class="cell">
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>run_in_notebook <span class="op">=</span> <span class="va">False</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="c2533f14" class="cell" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>run_in_notebook <span class="op">=</span> <span class="va">True</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<div id="1399b3c1" class="cell">
-<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (run_in_notebook):</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    base <span class="op">=</span> os.path.join(os.environ[<span class="st">'ZOOMY_DIR'</span>], <span class="st">'library/amrex/'</span>)</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    cmds <span class="op">=</span> [</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source ~/.zshrc"</span>,</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source setup.sh"</span>,</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"cd ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">"</span>,</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="st">"./clean.sh"</span>,</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">"mpiexec -np 4 ./main3d.gnu.MPI.ex inputs"</span>,</span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    subprocess.run(<span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    base <span class="op">=</span> os.path.join(os.environ[<span class="st">'ZOOMY_DIR'</span>], <span class="st">'library/amrex/'</span>)</span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    cmds <span class="op">=</span> [</span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source ~/.zshrc"</span>,</span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source setup.sh"</span>,</span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"cd ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">"</span>,</span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"./clean.sh"</span>,</span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"sbatch batch.sh &lt; inputs"</span>,</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>    subprocess.run(<span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>        </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="1399b3c1" class="cell" data-execution_count="17">
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (run_in_notebook):</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>    base <span class="op">=</span> os.path.join(main_dir, <span class="st">'library/zoomy_amrex/'</span>)</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    cmds <span class="op">=</span> [</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source setup.sh"</span>,</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"cd ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"./clean.sh"</span>,</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>        <span class="st">"mpiexec -np 4 ./main3d.gnu.MPI.ex inputs"</span>,</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    subprocess.run(<span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>    base <span class="op">=</span> os.path.join(main_dir, <span class="st">'library/zoomy_amrex/'</span>)</span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>    cmds <span class="op">=</span> [</span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"source setup.sh"</span>,</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"cd ../../</span><span class="sc">{</span>settings<span class="sc">.</span>output<span class="sc">.</span>directory<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"./clean.sh"</span>,</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"sbatch batch.sh &lt; inputs"</span>,</span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    subprocess.run(<span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(cmds), shell<span class="op">=</span><span class="va">True</span>, executable<span class="op">=</span><span class="st">"/bin/zsh"</span>, cwd<span class="op">=</span>base)</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>        </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>setup.sh:4: command not found: module
-setup.sh:5: command not found: module
-setup.sh:6: command not found: micromamba
+<pre><code>[WARN] OpenMPI's default binding is set to OFF, you can override this
+[INFO] Module foss/2024a loaded.
+[INFO] Module Python/3.12.3 loaded.
 ./clean.sh:3: no matches found: plt*
 ./clean.sh:4: no matches found: output*.txt
-./clean.sh:5: no matches found: Backtrace*
-zsh:5: command not found: sbatch</code></pre>
+./clean.sh:5: no matches found: Backtrace*</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing AMReX (25.03)...
+MPI initialized with 4 MPI processes
+MPI initialized with thread support level 0
+AMReX (25.03) initialized
+✓ loaded '/rwthfs/rz/cluster/home/is086873/Git/Zoomy/web/tutorials/amrex/adjusted_ca_debrisflow.raw' into component 1 (400×800)
+✓ loaded '/rwthfs/rz/cluster/home/is086873/Git/Zoomy/web/tutorials/amrex/adjusted_ca_elev.raw' into component 0 (400×800)
+Step 0 dt: 0.249367831 time: 0s in 0.044485026s
+Step 1 dt: 0.2479311613 time: 0.249367831s in 0.040715024s
+Step 2 dt: 0.2463866353 time: 0.4972989923s in 0.04402949s
+Step 3 dt: 0.2447046997 time: 0.7436856276s in 0.040641445s
+Step 4 dt: 0.2433552221 time: 0.9883903272s in 0.04352328s
+Step 5 dt: 0.2420919481 time: 1.231745549s in 0.041638576s
+Step 6 dt: 0.2411809336 time: 1.473837497s in 0.040648295s
+Step 7 dt: 0.240739465 time: 1.715018431s in 0.045070784s
+Step 8 dt: 0.2409240695 time: 1.955757896s in 0.040633637s
+Step 9 dt: 0.2414956228 time: 2.196681966s in 0.043801314s
+Step 10 dt: 0.2394962289 time: 2.438177588s in 0.041680341s
+Step 11 dt: 0.2376495933 time: 2.677673817s in 0.045366204s
+Step 12 dt: 0.2357596109 time: 2.915323411s in 0.04069181s
+Step 13 dt: 0.2338326195 time: 3.151083021s in 0.0424354s
+Step 14 dt: 0.2317909722 time: 3.384915641s in 0.048366624s
+Step 15 dt: 0.2297609621 time: 3.616706613s in 0.042297356s
+Step 16 dt: 0.2282316425 time: 3.846467575s in 0.040797362s
+Step 17 dt: 0.2266847149 time: 4.074699218s in 0.044104607s
+Step 18 dt: 0.2249847419 time: 4.301383933s in 0.040758389s
+Step 19 dt: 0.2232355373 time: 4.526368675s in 0.061241947s
+Step 20 dt: 0.2214713681 time: 4.749604212s in 0.04070483s
+Step 21 dt: 0.2187125231 time: 4.97107558s in 0.049543546s
+Step 22 dt: 0.2156753892 time: 5.189788103s in 0.04129543s
+Step 23 dt: 0.2130941232 time: 5.405463492s in 0.040675905s
+Step 24 dt: 0.2105929713 time: 5.618557616s in 0.041366182s
+Step 25 dt: 0.2086384299 time: 5.829150587s in 0.040680323s
+Step 26 dt: 0.206486444 time: 6.037789017s in 0.043089073s
+Step 27 dt: 0.2048826119 time: 6.244275461s in 0.040766368s
+Step 28 dt: 0.2028922694 time: 6.449158073s in 0.042984579s
+Step 29 dt: 0.2012212886 time: 6.652050342s in 0.040668735s
+Step 30 dt: 0.1994353141 time: 6.853271631s in 0.042262119s
+Step 31 dt: 0.1980172687 time: 7.052706945s in 0.041245528s
+Step 32 dt: 0.1964136287 time: 7.250724214s in 0.043447313s
+Step 33 dt: 0.1953444949 time: 7.447137842s in 0.040722255s
+Step 34 dt: 0.19379885 time: 7.642482337s in 0.040707468s
+Step 35 dt: 0.1928649766 time: 7.836281187s in 0.041085618s
+Step 36 dt: 0.191542558 time: 8.029146164s in 0.041455095s
+Step 37 dt: 0.1906257318 time: 8.220688722s in 0.045435635s
+Step 38 dt: 0.1895937175 time: 8.411314453s in 0.040838464s
+Step 39 dt: 0.1887171423 time: 8.600908171s in 0.05195855s
+Step 40 dt: 0.1879394963 time: 8.789625313s in 0.041039465s
+Step 41 dt: 0.1870695564 time: 8.97756481s in 0.064263727s
+Step 42 dt: 0.1862768224 time: 9.164634366s in 0.041495728s
+Step 43 dt: 0.1854510813 time: 9.350911188s in 0.042856435s
+Step 44 dt: 0.1846328161 time: 9.53636227s in 0.040883327s
+Step 45 dt: 0.1838089042 time: 9.720995086s in 0.042587962s
+Step 46 dt: 0.1829974213 time: 9.90480399s in 0.040930551s
+Step 47 dt: 0.1822374177 time: 10.08780141s in 0.073858023s
+Step 48 dt: 0.1816717296 time: 10.27003883s in 0.096412832s
+Step 49 dt: 0.1806090746 time: 10.45171056s in 0.080764523s
+Step 50 dt: 0.1800413834 time: 10.63231963s in 0.041536587s
+Step 51 dt: 0.1796687722 time: 10.81236102s in 0.081694412s
+Step 52 dt: 0.1773410472 time: 10.99202979s in 0.075989512s
+Step 53 dt: 0.1772065268 time: 11.16937084s in 0.041505138s
+Step 54 dt: 0.1772207861 time: 11.34657736s in 0.055307147s
+Step 55 dt: 0.1762946103 time: 11.52379815s in 0.041092342s
+Step 56 dt: 0.1688569593 time: 11.70009276s in 0.070279949s
+Step 57 dt: 0.1723388635 time: 11.86894972s in 0.070160069s
+Step 58 dt: 0.17520439 time: 12.04128858s in 0.053396459s
+Step 59 dt: 0.1753831796 time: 12.21649297s in 0.04094086s
+Step 60 dt: 0.1749258328 time: 12.39187615s in 0.045603151s
+Step 61 dt: 0.1724587231 time: 12.56680198s in 0.041104906s
+Step 62 dt: 0.1740196917 time: 12.73926071s in 0.051195562s
+Step 63 dt: 0.1676867438 time: 12.9132804s in 0.041296007s
+Step 64 dt: 0.1708449229 time: 13.08096714s in 0.042965938s
+Step 65 dt: 0.1719132304 time: 13.25181207s in 0.041139284s
+Step 66 dt: 0.1744125806 time: 13.4237253s in 0.041138806s
+Step 67 dt: 0.1709506557 time: 13.59813788s in 0.041911868s
+Step 68 dt: 0.1710018023 time: 13.76908853s in 0.041043083s
+Step 69 dt: 0.1723482786 time: 13.94009034s in 0.042802142s
+Step 70 dt: 0.172672786 time: 14.11243861s in 0.041645494s
+Step 71 dt: 0.1726488552 time: 14.2851114s in 0.043287129s
+Step 72 dt: 0.1729080521 time: 14.45776025s in 0.041216193s
+Step 73 dt: 0.1728689548 time: 14.63066831s in 0.060342785s
+Step 74 dt: 0.1736701748 time: 14.80353726s in 0.0412168s
+Step 75 dt: 0.0227925635 time: 14.97720744s in 0.041769237s
+Total evolution time = 5.523381926 seconds
+AMReX (25.03) finalized</code></pre>
 </div>
 </div>
 

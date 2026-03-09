@@ -448,7 +448,7 @@ window.Quarto = {
 <h1>Transformation to C Code (Simple)</h1>
 <section id="imports" class="level2">
 <h2 class="anchored" data-anchor-id="imports">Imports</h2>
-<div id="4f583c96" class="cell">
+<div id="4f583c96" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Load packages</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
@@ -460,7 +460,8 @@ window.Quarto = {
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.transformation.to_amrex <span class="im">as</span> trafo</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.misc <span class="im">as</span> misc</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.transformation.to_amrex <span class="im">import</span> AmrexModel</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
@@ -496,383 +497,327 @@ window.Quarto = {
 <div id="4deb8ab5" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model.flux()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="3">
-<p><span class="math inline">\(\displaystyle \left[ \left[\begin{matrix}q_{1}\\\frac{g q_{0}^{2}}{2} + \frac{q_{1}^{2}}{q_{0}}\\\frac{q_{1} q_{2}}{q_{0}}\end{matrix}\right], \  \left[\begin{matrix}q_{2}\\\frac{q_{1} q_{2}}{q_{0}}\\\frac{g q_{0}^{2}}{2} + \frac{q_{2}^{2}}{q_{0}}\end{matrix}\right]\right]\)</span></p>
+<p><span class="math inline">\(\displaystyle \left[\begin{matrix}q_{1} &amp; q_{2}\\0.5 ez g q_{0}^{2} + \frac{q_{1}^{2}}{q_{0}} &amp; \frac{q_{1} q_{2}}{q_{0}}\\\frac{q_{1} q_{2}}{q_{0}} &amp; 0.5 ez g q_{0}^{2} + \frac{q_{2}^{2}}{q_{0}}\end{matrix}\right]\)</span></p>
 </div>
 </div>
 <div id="15516519" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model.print_boundary_conditions()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="4">
-<p><span class="math inline">\(\displaystyle \left[\begin{matrix}q_{0} &amp; - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\\q_{0} &amp; - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) - n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) + 1.0 q_{1} &amp; - n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\end{matrix}\right]\)</span></p>
+<p><span class="math inline">\(\displaystyle \begin{cases} \left[\begin{matrix}q_{0} &amp; - 1.0 n_{0} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{0} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{1} &amp; - 1.0 n_{1} \left(1.0 n_{0} q_{1} + 1.0 n_{1} q_{2}\right) - 1.0 n_{1} \left(n_{0} q_{1} + n_{1} q_{2}\right) + 1.0 q_{2}\end{matrix}\right] &amp; \text{for}\: bc_{idx} = 0 \vee bc_{idx} = 1 \vee bc_{idx} = 2 \vee bc_{idx} = 3 \end{cases}\)</span></p>
 </div>
 </div>
 </section>
 <section id="code-transformation" class="level2">
 <h2 class="anchored" data-anchor-id="code-transformation">Code transformation</h2>
-<div id="0be9f302" class="cell" data-execution_count="7">
+<div id="0be9f302" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowWater"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/trafo"</span>, filename<span class="op">=</span><span class="st">"swe.h5"</span>))</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>trafo.write_code(model, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>AmrexModel.write_code(model, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <div class="ansi-escaped-output">
-<pre><span class="ansi-green-fg">2025-10-05 09:56:08.648</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">library.core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">146</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
+<pre><span class="ansi-green-fg">2026-01-10 11:32:12.455</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">194</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: False</span>
+
+<span class="ansi-green-fg">2026-01-10 11:32:12.457</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">197</span> - <span class="ansi-yellow-fg ansi-bold">No 'snapshots' attribute found in output Zstruct. Default: 2</span>
 </pre>
 </div>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="5">
+<pre><code>'/home/ingo/Git/Zoomy/outputs/trafo/.amrex_interface/Model.H'</code></pre>
 </div>
 </div>
 </section>
 <section id="check-the-output" class="level2">
 <h2 class="anchored" data-anchor-id="check-the-output">Check the output</h2>
-<div id="28fd7c60" class="cell">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> os.getenv(<span class="st">"ZOOMY_DIR"</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.amrex_interface/Model.h'</span>))</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="28fd7c60" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.amrex_interface/Model.H'</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>
-#pragma once
+<pre><code>#pragma once
 #include &lt;AMReX_Array4.H&gt;
 #include &lt;AMReX_Vector.H&gt;
+#include &lt;AMReX_SmallMatrix.H&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
 
-class Model {
-public:
+
+struct Model {
+
+    // --- Constants ---
     static constexpr int n_dof_q    = 3;
     static constexpr int n_dof_qaux = 2;
     static constexpr int dimension  = 2;
+    static constexpr int n_boundary_tags = 4;
+
+    // --- Helpers ---
+    static const std::vector&lt;std::string&gt; get_boundary_tags() { return { "bottom", "left", "right", "top" }; }
+
+    // --- Kernels ---
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,2&gt; flux(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,3,2&gt;{};
+    amrex::Real t0 = 0.5*1.0*9.81*amrex::Math::powi&lt;2&gt;(Q(0));
+    amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
+    amrex::Real t2 = Q(1)*Q(2)*t1;
+    res(0,0) = Q(1);
+    res(0,1) = Q(2);
+    res(1,0) = amrex::Math::powi&lt;2&gt;(Q(1))*t1 + t0;
+    res(1,1) = t2;
+    res(2,0) = t2;
+    res(2,1) = amrex::Math::powi&lt;2&gt;(Q(2))*t1 + t0;
+        return res;
+    }
 
 
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,2&gt; dflux(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,3,2&gt;{};
+    res(0,0) = 0;
+    res(0,1) = 0;
+    res(1,0) = 0;
+    res(1,1) = 0;
+    res(2,0) = 0;
+    res(2,1) = 0;
+        return res;
+    }
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    flux_x ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,18,1&gt; nonconservative_matrix(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,18,1&gt;{};
+    res(0) = 0;
+    res(1) = 0;
+    res(2) = 0;
+    res(3) = 0;
+    res(4) = 0;
+    res(5) = 0;
+    res(6) = 0;
+    res(7) = 0;
+    res(8) = 0;
+    res(9) = 0;
+    res(10) = 0;
+    res(11) = 0;
+    res(12) = 0;
+    res(13) = 0;
+    res(14) = 0;
+    res(15) = 0;
+    res(16) = 0;
+    res(17) = 0;
+        return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,18,1&gt; quasilinear_matrix(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,18,1&gt;{};
+    amrex::Real t0 = 1.0*1.0*9.81*Q(0);
+    amrex::Real t1 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
+    amrex::Real t2 = -Q(1)*Q(2)*t1;
+    amrex::Real t3 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
+    amrex::Real t4 = Q(1)*t3;
+    amrex::Real t5 = Q(2)*t3;
+    res(0) = 0;
+    res(1) = 0;
+    res(2) = 1;
+    res(3) = 0;
+    res(4) = 0;
+    res(5) = 1;
+    res(6) = -amrex::Math::powi&lt;2&gt;(Q(1))*t1 + t0;
+    res(7) = t2;
+    res(8) = 2*t4;
+    res(9) = t5;
+    res(10) = 0;
+    res(11) = t4;
+    res(12) = t2;
+    res(13) = -amrex::Math::powi&lt;2&gt;(Q(2))*t1 + t0;
+    res(14) = t5;
+    res(15) = 0;
+    res(16) = t4;
+    res(17) = 2*t5;
+        return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt; source(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        res(0,0) = Q(1);
-        res(1,0) = (1.0/2.0)*9.81*amrex::Math::powi&lt;2&gt;(Q(0)) + amrex::Math::powi&lt;2&gt;(Q(1))*t0;
-        res(2,0) = Q(1)*Q(2)*t0;
+    res(0,0) = 0;
+    res(1,0) = 0;
+    res(2,0) = 0;
         return res;
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    flux_y ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,9,1&gt; source_jacobian_wrt_variables(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,9,1&gt;{};
+    res(0) = 0;
+    res(1) = 0;
+    res(2) = 0;
+    res(3) = 0;
+    res(4) = 0;
+    res(5) = 0;
+    res(6) = 0;
+    res(7) = 0;
+    res(8) = 0;
+        return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,6,1&gt; source_jacobian_wrt_aux_variables(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    {
+        auto res = amrex::SmallMatrix&lt;amrex::Real,6,1&gt;{};
+    res(0) = 0;
+    res(1) = 0;
+    res(2) = 0;
+    res(3) = 0;
+    res(4) = 0;
+    res(5) = 0;
+        return res;
+    }
+
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt; eigenvalues(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        res(0,0) = Q(2);
-        res(1,0) = Q(1)*Q(2)*t0;
-        res(2,0) = (1.0/2.0)*9.81*amrex::Math::powi&lt;2&gt;(Q(0)) + amrex::Math::powi&lt;2&gt;(Q(2))*t0;
+    amrex::Real t0 = 1.0*n(0)*Q(1);
+    amrex::Real t1 = 1.0*n(1)*Q(2);
+    amrex::Real t2 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
+    amrex::Real t3 = 1.0*amrex::Math::pow(1.0*9.81*amrex::Math::powi&lt;5&gt;(Q(0)), 1.0/2.0)*amrex::Math::pow(amrex::Math::powi&lt;2&gt;(n(0)) + amrex::Math::powi&lt;2&gt;(n(1)), 1.0/2.0);
+    amrex::Real t4 = Q(0)*t0 + Q(0)*t1;
+    res(0) = (t0 + t1)/Q(0);
+    res(1) = t2*(t3 + t4);
+    res(2) = t2*(-t3 + t4);
         return res;
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    flux_jacobian_x ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt; left_eigenvectors(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
-        amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        amrex::Real t2 = Q(1)*t1;
-        res(0,0) = 0;
-        res(0,1) = 1;
-        res(0,2) = 0;
-        res(1,0) = 9.81*Q(0) - amrex::Math::powi&lt;2&gt;(Q(1))*t0;
-        res(1,1) = 2*t2;
-        res(1,2) = 0;
-        res(2,0) = -Q(1)*Q(2)*t0;
-        res(2,1) = Q(2)*t1;
-        res(2,2) = t2;
+    res(0,0) = 0;
+    res(0,1) = 0;
+    res(0,2) = 0;
+    res(1,0) = 0;
+    res(1,1) = 0;
+    res(1,2) = 0;
+    res(2,0) = 0;
+    res(2,1) = 0;
+    res(2,2) = 0;
         return res;
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    flux_jacobian_y ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt; right_eigenvectors(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
-        amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        amrex::Real t2 = Q(2)*t1;
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 1;
-        res(1,0) = -Q(1)*Q(2)*t0;
-        res(1,1) = t2;
-        res(1,2) = Q(1)*t1;
-        res(2,0) = 9.81*Q(0) - amrex::Math::powi&lt;2&gt;(Q(2))*t0;
-        res(2,1) = 0;
-        res(2,2) = 2*t2;
+    res(0,0) = 0;
+    res(0,1) = 0;
+    res(0,2) = 0;
+    res(1,0) = 0;
+    res(1,1) = 0;
+    res(1,2) = 0;
+    res(2,0) = 0;
+    res(2,1) = 0;
+    res(2,2) = 0;
         return res;
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    nonconservative_matrix_x ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 0;
-        res(1,0) = 0;
-        res(1,1) = 0;
-        res(1,2) = 0;
-        res(2,0) = 0;
-        res(2,1) = 0;
-        res(2,2) = 0;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    nonconservative_matrix_y ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 0;
-        res(1,0) = 0;
-        res(1,1) = 0;
-        res(1,2) = 0;
-        res(2,0) = 0;
-        res(2,1) = 0;
-        res(2,2) = 0;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    quasilinear_matrix_x ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
-        amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        amrex::Real t2 = Q(1)*t1;
-        res(0,0) = 0;
-        res(0,1) = 1;
-        res(0,2) = 0;
-        res(1,0) = 9.81*Q(0) - amrex::Math::powi&lt;2&gt;(Q(1))*t0;
-        res(1,1) = 2*t2;
-        res(1,2) = 0;
-        res(2,0) = -Q(1)*Q(2)*t0;
-        res(2,1) = Q(2)*t1;
-        res(2,2) = t2;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    quasilinear_matrix_y ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
-        amrex::Real t1 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        amrex::Real t2 = Q(2)*t1;
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 1;
-        res(1,0) = -Q(1)*Q(2)*t0;
-        res(1,1) = t2;
-        res(1,2) = Q(1)*t1;
-        res(2,0) = 9.81*Q(0) - amrex::Math::powi&lt;2&gt;(Q(2))*t0;
-        res(2,1) = 0;
-        res(2,2) = 2*t2;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    eigenvalues ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; normal) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt; residual(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::Real const&amp; time,
+        amrex::Real const&amp; dX) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        amrex::Real t0 = normal(0)*Q(1);
-        amrex::Real t1 = normal(1)*Q(2);
-        amrex::Real t2 = (1.0 / amrex::Math::powi&lt;2&gt;(Q(0)));
-        amrex::Real t3 = std::pow(9.81*amrex::Math::powi&lt;5&gt;(Q(0)), 1.0/2.0)*std::pow(amrex::Math::powi&lt;2&gt;(normal(0)) + amrex::Math::powi&lt;2&gt;(normal(1)), 1.0/2.0);
-        amrex::Real t4 = Q(0)*t0 + Q(0)*t1;
-        res(0,0) = (t0 + t1)/Q(0);
-        res(1,0) = t2*(t3 + t4);
-        res(2,0) = t2*(-t3 + t4);
+    res(0) = 0;
+    res(1) = 0;
+    res(2) = 0;
         return res;
-
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    left_eigenvectors ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,6,1&gt; interpolate(
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X) noexcept
     {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 0;
-        res(1,0) = 0;
-        res(1,1) = 0;
-        res(1,2) = 0;
-        res(2,0) = 0;
-        res(2,1) = 0;
-        res(2,2) = 0;
+        auto res = amrex::SmallMatrix&lt;amrex::Real,6,1&gt;{};
+    amrex::Real t0 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
+    res(0) = 0.0;
+    res(1) = Q(0);
+    res(2) = Q(1)*t0;
+    res(3) = Q(2)*t0;
+    res(4) = 0.0;
+    res(5) = 9810.0*Q(0)*(1 - X(2));
         return res;
     }
-        
 
 
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,3&gt;
-    right_eigenvectors ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,3&gt;{};
-        res(0,0) = 0;
-        res(0,1) = 0;
-        res(0,2) = 0;
-        res(1,0) = 0;
-        res(1,1) = 0;
-        res(1,2) = 0;
-        res(2,0) = 0;
-        res(2,1) = 0;
-        res(2,2) = 0;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    source ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt; boundary_conditions(
+        const int bc_idx,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
+        amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; n,
+        amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X,
+        amrex::Real const&amp; time,
+        amrex::Real const&amp; dX) noexcept
     {
         auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        res(0,0) = 0;
-        res(1,0) = 0;
-        res(2,0) = 0;
-        return res;
+    if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2 || bc_idx == 3) {
+        amrex::Real t0 = n(1)*Q(2);
+        amrex::Real t1 = n(0)*Q(1) + t0;
+        amrex::Real t2 = 1.0*n(0);
+        amrex::Real t3 = 1.0*n(0)*Q(1) + 1.0*t0;
+        amrex::Real t4 = 1.0*n(1);
+        res(0) = Q(0);
+        res(1) = 1.0*Q(1) - t1*t2 - t2*t3;
+        res(2) = 1.0*Q(2) - t1*t4 - t3*t4;
     }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    residual ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        res(0,0) = 0;
-        res(1,0) = 0;
-        res(2,0) = 0;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,3,1&gt;
-    source_implicit ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,3,1&gt;{};
-        res(0,0) = 0;
-        res(1,0) = 0;
-        res(2,0) = 0;
-        return res;
-    }
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,5,1&gt;
-    project_2d_to_3d ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
-    amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; X) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,5,1&gt;{};
-        amrex::Real t0 = (1.0 / amrex::Math::powi&lt;1&gt;(Q(0)));
-        res(0,0) = Q(0);
-        res(1,0) = Q(1)*t0;
-        res(2,0) = Q(2)*t0;
-        res(3,0) = 0;
-        res(4,0) = 9810.0*Q(0)*(1 - X(2));
         return res;
     }
 
-        
-
-
-    AMREX_GPU_HOST_DEVICE
-    AMREX_FORCE_INLINE
-    static amrex::SmallMatrix&lt;amrex::Real,4,3&gt;
-    boundary_conditions ( amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; Q,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; Qaux,
-    amrex::SmallMatrix&lt;amrex::Real,2,1&gt; const&amp; normal, 
-    amrex::SmallMatrix&lt;amrex::Real,3,1&gt; const&amp; position,
-    amrex::Real const&amp; time,
-    amrex::Real const&amp; dX) noexcept
-    {
-        auto res = amrex::SmallMatrix&lt;amrex::Real,4,3&gt;{};
-        amrex::Real t0 = normal(1)*Q(2);
-        amrex::Real t1 = 1.0*normal(0)*Q(1) + 1.0*t0;
-        amrex::Real t2 = 1.0*normal(0)*Q(1) + 1.0*t0;
-        amrex::Real t3 = -normal(0)*t1 - normal(0)*t2 + 1.0*Q(1);
-        amrex::Real t4 = -normal(1)*t1 - normal(1)*t2 + 1.0*Q(2);
-        res(0,0) = Q(0);
-        res(0,1) = t3;
-        res(0,2) = t4;
-        res(1,0) = Q(0);
-        res(1,1) = t3;
-        res(1,2) = t4;
-        res(2,0) = Q(0);
-        res(2,1) = t3;
-        res(2,2) = t4;
-        res(3,0) = Q(0);
-        res(3,1) = t3;
-        res(3,2) = t4;
-        return res;
-
-    }
-        
 };
-                </code></pre>
+</code></pre>
 </div>
 </div>
 

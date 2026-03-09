@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.23">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Ingo Steldermann">
+<meta name="dcterms.date" content="2025-10-13">
+
+<title>Transformation to C Code</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<link href="../..//images/favicon.svg" rel="icon" type="image/svg+xml">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-226bd0f977fa82dfae4534cac220d79a.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-3289a1c0eea969fea9a887a3e7302bd0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="../../site_libs/quarto-contrib/iconify-2.1.0/iconify-icon.min.js"></script>
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script>
+MathJax = {
+  tex: {
+    tags: 'ams'
+  }
+};
+</script>
+<script data-goatcounter="https://ingosteldermann.goatcounter.com/count" async="" src="//gc.zgo.at/count.js"></script>
+
+
+<link rel="stylesheet" href="../../custom.css">
+<link rel="stylesheet" href="../notebook.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../images/logo_no_text.svg" alt="" class="navbar-logo">
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../software.html"> 
+<span class="menu-text">Software</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../playground/playground.html"> 
+<span class="menu-text">Playground</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../docs/index.html"> 
+<span class="menu-text">Documentation</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../tutorials/index.html"> 
+<span class="menu-text">Tutorials</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../publications.html"> 
+<span class="menu-text">Publications</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-bi-github" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="bi bi-github" role="img">
+</i> 
+ <span class="menu-text"></span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-menu-bi-github">    
+        <li>
+    <a class="dropdown-item" href="https://github.com/mbd-rwth/Zoomy">
+ <span class="dropdown-text">Zoomy</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="https://github.com/mbd-rwth">
+ <span class="dropdown-text">MBD</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="https://de.linkedin.com/company/rwth-mbd"> 
+<span class="menu-text"><iconify-icon role="img" inline="" icon="fa6-brands:linkedin" aria-label="Icon linkedin from fa6-brands Iconify.design set." title="Icon linkedin from fa6-brands Iconify.design set."></iconify-icon></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#transformation-to-c-code-simple" id="toc-transformation-to-c-code-simple" class="nav-link active" data-scroll-target="#transformation-to-c-code-simple">Transformation to C Code (Simple)</a>
+  <ul class="collapse">
+  <li><a href="#imports" id="toc-imports" class="nav-link" data-scroll-target="#imports">Imports</a></li>
+  <li><a href="#model-definition" id="toc-model-definition" class="nav-link" data-scroll-target="#model-definition">Model definition</a></li>
+  <li><a href="#sympy-model" id="toc-sympy-model" class="nav-link" data-scroll-target="#sympy-model">Sympy Model</a></li>
+  <li><a href="#code-transformation" id="toc-code-transformation" class="nav-link" data-scroll-target="#code-transformation">Code transformation</a></li>
+  <li><a href="#check-the-output" id="toc-check-the-output" class="nav-link" data-scroll-target="#check-the-output">Check the output</a></li>
+  </ul></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/code_printers/to_c_moments.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Transformation to C Code</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Ingo Steldermann </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 13, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="transformation-to-c-code-simple" class="level1">
+<h1>Transformation to C Code (Simple)</h1>
+<section id="imports" class="level2">
+<h2 class="anchored" data-anchor-id="imports">Imports</h2>
+<div id="4f583c96" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Load packages</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations <span class="im">as</span> SWE</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water_topo <span class="im">import</span> NumericalShallowWaterEquationsWithTopo </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_moments_topo <span class="im">import</span> NumericalShallowMomentsTopo, ShallowMomentsTopo</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.fvm.symbolic_numerics <span class="im">import</span> (</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    PositiveRusanov,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    Rusanov,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    QuasilinearRusanov,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    PositiveQuasilinearRusanov,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    NonconservativeRusanov,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    PositiveNonconservativeRusanov,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct, Settings</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.transformation.to_c <span class="im">import</span> CppModel, CppNumerics</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.misc <span class="im">as</span> misc</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.custom_sympy_functions <span class="im">import</span> conditional</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="model-definition" class="level2">
+<h2 class="anchored" data-anchor-id="model-definition">Model definition</h2>
+<div id="9d8b0a27" class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        BC.Wall(tag<span class="op">=</span><span class="st">"default"</span>, momentum_field_indices<span class="op">=</span>[[<span class="dv">2</span>, <span class="dv">4</span>], [<span class="dv">3</span>, <span class="dv">5</span>]]),</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SMEB(NumericalShallowMomentsTopo):</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> initial_condition(<span class="va">self</span>):</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        X <span class="op">=</span> <span class="va">self</span>.position</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> <span class="va">self</span>.parameters</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> misc.ZArray.zeros(<span class="va">self</span>.n_variables)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">0</span>] <span class="op">=</span> <span class="fl">1.</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">1</span>] <span class="op">=</span> conditional(X[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="dv">5</span>, <span class="fl">2.</span>, <span class="fl">0.</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> initial_aux_condition(<span class="va">self</span>):</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        X <span class="op">=</span> <span class="va">self</span>.position</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> <span class="va">self</span>.parameters</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> p.eps</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> misc.ZArray.zeros(<span class="va">self</span>.n_aux_variables)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        out[<span class="dv">0</span>] <span class="op">=</span> conditional(X[<span class="dv">0</span>] <span class="op">&lt;</span> <span class="dv">5</span>, <span class="fl">1.</span><span class="op">/</span><span class="fl">2.</span>, <span class="fl">1.</span><span class="op">/</span>eps)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> out</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_variables(<span class="va">self</span>):</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        Q <span class="op">=</span> <span class="va">self</span>.variables</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> Q[<span class="dv">1</span>]</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        Qout <span class="op">=</span> misc.ZArray(Q)</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> conditional(h <span class="op">&lt;=</span> <span class="dv">0</span>, <span class="dv">0</span>, h)</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        Qout[<span class="dv">1</span>] <span class="op">=</span> h</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> <span class="va">self</span>.parameters.eps</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        factor <span class="op">=</span> h <span class="op">/</span> (h <span class="op">+</span> eps<span class="op">*</span><span class="fl">100.</span>)</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>, <span class="va">self</span>.n_variables):</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>            Qout[i] <span class="op">*=</span> factor</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Qout</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> update_aux_variables(<span class="va">self</span>):</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>        Q <span class="op">=</span> <span class="va">self</span>.variables</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        Qaux <span class="op">=</span> misc.ZArray(<span class="va">self</span>.aux_variables)</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        eps <span class="op">=</span> <span class="va">self</span>.parameters.eps</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        Qaux[<span class="dv">0</span>] <span class="op">=</span> Q[<span class="dv">1</span>] <span class="op">/</span> (Q[<span class="dv">1</span>]<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> eps)</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> misc.ZArray(Qaux)</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> source(<span class="va">self</span>):</span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.slip()</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> SMEB(</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>    level<span class="op">=</span><span class="dv">1</span> ,</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>    dimension<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    aux_variables<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="sympy-model" class="level2">
+<h2 class="anchored" data-anchor-id="sympy-model">Sympy Model</h2>
+<div id="5d1d8348" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sympy <span class="im">as</span> sp</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="code-transformation" class="level2">
+<h2 class="anchored" data-anchor-id="code-transformation">Code transformation</h2>
+<div id="0be9f302" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(name<span class="op">=</span><span class="st">"ShallowWater"</span>, output<span class="op">=</span>Zstruct(directory<span class="op">=</span><span class="st">"outputs/trafo"</span>, filename<span class="op">=</span><span class="st">"swe.h5"</span>, clean_directory<span class="op">=</span><span class="va">True</span>, snapshots<span class="op">=</span><span class="dv">30</span>))</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>CppModel.write_code(model, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>'/home/ingo/Git/Zoomy/outputs/trafo/.c_interface/Model.H'</code></pre>
+</div>
+</div>
+<div id="b5a3fafd" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="op">!</span> cp <span class="op">/</span>home<span class="op">/</span>ingo<span class="op">/</span>Git<span class="op">/</span>Zoomy<span class="op">/</span>outputs<span class="op">/</span>trafo<span class="op">/</span>.c_interface<span class="op">/</span>Model.H <span class="op">/</span>home<span class="op">/</span>ingo<span class="op">/</span>Git<span class="op">/</span>Zoomy<span class="op">/</span>library<span class="op">/</span>zoomy_dmplex</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="2d70ef94" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Numerics(PositiveNonconservativeRusanov):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_viscosity_identity_flux(<span class="va">self</span>):</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> sp.Matrix(sp.Identity(<span class="va">self</span>.model.n_variables))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        lvl <span class="op">=</span> <span class="va">self</span>.model.level</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        offset <span class="op">=</span> lvl<span class="op">+</span><span class="dv">1</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> <span class="dv">0</span> <span class="op">*</span> Id</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">1</span>, <span class="dv">1</span>] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span><span class="op">+</span>offset, <span class="dv">2</span><span class="op">+</span>offset] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> misc.ZArray(Id)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_viscosity_identity_fluctuations(<span class="va">self</span>):</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> sp.Matrix(sp.Identity(<span class="va">self</span>.model.n_variables))</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">0</span>,<span class="dv">0</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        lvl <span class="op">=</span> <span class="va">self</span>.model.level</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        offset <span class="op">=</span> lvl<span class="op">+</span><span class="dv">1</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        Id <span class="op">=</span> <span class="dv">0</span> <span class="op">*</span> Id</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">1</span>, <span class="dv">1</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span>, <span class="dv">2</span>] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        Id[<span class="dv">2</span><span class="op">+</span>offset, <span class="dv">2</span><span class="op">+</span>offset] <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> misc.ZArray(Id)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>numerics <span class="op">=</span> PositiveNonconservativeRusanov(model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="662db63e" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>CppNumerics.write_code(numerics, settings)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>'/home/ingo/Git/Zoomy/outputs/trafo/.c_interface/Numerics.H'</code></pre>
+</div>
+</div>
+<div id="741dfeaa" class="cell" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="op">!</span> cp <span class="op">/</span>home<span class="op">/</span>ingo<span class="op">/</span>Git<span class="op">/</span>Zoomy<span class="op">/</span>outputs<span class="op">/</span>trafo<span class="op">/</span>.c_interface<span class="op">/</span>Numerics.H <span class="op">/</span>home<span class="op">/</span>ingo<span class="op">/</span>Git<span class="op">/</span>Zoomy<span class="op">/</span>library<span class="op">/</span>zoomy_dmplex</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="check-the-output" class="level2">
+<h2 class="anchored" data-anchor-id="check-the-output">Check the output</h2>
+<div id="28fd7c60" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(main_dir, os.path.join(settings.output.directory, <span class="st">'.c_interface/Model.H'</span>))</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+#include &lt;cmath&gt;
+#include &lt;array&gt;
+
+#ifndef ZOOMY_SIMPLE_ARRAY
+#define ZOOMY_SIMPLE_ARRAY
+template &lt;typename T, int N&gt;
+struct SimpleArray {
+    T data[N];
+    T&amp; operator[](int i) { return data[i]; }
+    const T&amp; operator[](int i) const { return data[i]; }
+    T* begin() { return data; }
+    const T* begin() const { return data; }
+    T* end() { return data + N; }
+    const T* end() const { return data + N; }
+};
+#endif
+
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+template &lt;typename T&gt;
+struct Model {
+    static constexpr int n_dof_q    = 6;
+    static constexpr int n_dof_qaux = 2;
+    static constexpr int dimension  = 2;
+    static constexpr int n_boundary_tags = 1;
+    static const std::vector&lt;std::string&gt; get_boundary_tags() { return { "default" }; }
+    static const std::vector&lt;std::string&gt; parameter_names() { return { "g", "chezy_C", "eps", "ex", "ey", "ez", "rho", "nu", "lamda", "c_slipmod", "l_bl", "l_turb", "kappa" }; }
+    static const std::vector&lt;T&gt; default_parameters() { return { 9.81, 50.0, 1e-06, 0.0, 0.0, 1.0, 1000.0, 1e-06, 0.1, 0.0, 0.1, 0.1, 0.41 }; }
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; flux(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = Q[1]*Qaux[0];
+    T t1 = (1.0/2.0)*p[5]*p[0]*std::pow(Q[1], 2);
+    T t2 = Q[1]*std::pow(Qaux[0], 2);
+    T t3 = (1.0/3.0)*t2;
+    T t4 = Q[2]*t2;
+    T t5 = Q[3]*Q[5]*t3 + Q[4]*t4;
+    T t6 = Q[4]*t2;
+    T t7 = Q[3]*t6 + Q[5]*t4;
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = Q[2]*t0;
+    res[3] = Q[4]*t0;
+    res[4] = std::pow(Q[2], 2)*t2 + std::pow(Q[3], 2)*t3 + t1;
+    res[5] = t5;
+    res[6] = 2*Q[3]*t4;
+    res[7] = t7;
+    res[8] = t5;
+    res[9] = std::pow(Q[4], 2)*t2 + std::pow(Q[5], 2)*t3 + t1;
+    res[10] = t7;
+    res[11] = 2*Q[5]*t6;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; dflux(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 72&gt; nonconservative_matrix(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = -Q[2]*Qaux[0];
+    T t1 = -Q[4]*Qaux[0];
+    SimpleArray&lt;T, 72&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = 0;
+    res[21] = 0;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = 0;
+    res[27] = 0;
+    res[28] = 0;
+    res[29] = 0;
+    res[30] = 0;
+    res[31] = 0;
+    res[32] = 0;
+    res[33] = 0;
+    res[34] = 0;
+    res[35] = 0;
+    res[36] = 0;
+    res[37] = 0;
+    res[38] = 0;
+    res[39] = 0;
+    res[40] = 0;
+    res[41] = 0;
+    res[42] = t0;
+    res[43] = 0;
+    res[44] = 0;
+    res[45] = 0;
+    res[46] = 0;
+    res[47] = t0;
+    res[48] = 0;
+    res[49] = 0;
+    res[50] = 0;
+    res[51] = 0;
+    res[52] = 0;
+    res[53] = 0;
+    res[54] = 0;
+    res[55] = 0;
+    res[56] = 0;
+    res[57] = 0;
+    res[58] = 0;
+    res[59] = 0;
+    res[60] = 0;
+    res[61] = 0;
+    res[62] = 0;
+    res[63] = 0;
+    res[64] = 0;
+    res[65] = 0;
+    res[66] = t1;
+    res[67] = 0;
+    res[68] = 0;
+    res[69] = 0;
+    res[70] = 0;
+    res[71] = t1;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 72&gt; quasilinear_matrix(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = Q[2]*Qaux[0];
+    T t1 = Q[4]*Qaux[0];
+    T t2 = Q[1]*Qaux[0];
+    T t3 = p[5]*p[0]*Q[1];
+    T t4 = std::pow(Qaux[0], 2);
+    T t5 = (1.0/3.0)*t4;
+    T t6 = Q[4]*t4;
+    T t7 = Q[5]*t5;
+    T t8 = Q[2]*t6 + Q[3]*t7;
+    T t9 = Q[2]*t4;
+    T t10 = Q[1]*t9;
+    T t11 = 2*t10;
+    T t12 = Q[1]*t6;
+    T t13 = Q[1]*t4;
+    T t14 = Q[3]*t13;
+    T t15 = Q[1]*t7;
+    T t16 = Q[1]*Q[3]*t5;
+    T t17 = Q[3]*t6 + Q[5]*t9;
+    T t18 = Q[5]*t13;
+    T t19 = -t0;
+    T t20 = 2*t12;
+    T t21 = -t1;
+    SimpleArray&lt;T, 72&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = t0;
+    res[15] = t1;
+    res[16] = t2;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = 0;
+    res[21] = t2;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = std::pow(Q[2], 2)*t4 + std::pow(Q[3], 2)*t5 + t3;
+    res[27] = t8;
+    res[28] = t11;
+    res[29] = t12;
+    res[30] = (2.0/3.0)*t14;
+    res[31] = t15;
+    res[32] = 0;
+    res[33] = t10;
+    res[34] = 0;
+    res[35] = t16;
+    res[36] = 0;
+    res[37] = 0;
+    res[38] = 2*Q[3]*t9;
+    res[39] = t17;
+    res[40] = 2*t14;
+    res[41] = t18;
+    res[42] = t11 + t19;
+    res[43] = t12;
+    res[44] = 0;
+    res[45] = t14;
+    res[46] = 0;
+    res[47] = t10 + t19;
+    res[48] = 0;
+    res[49] = 0;
+    res[50] = t8;
+    res[51] = std::pow(Q[4], 2)*t4 + std::pow(Q[5], 2)*t5 + t3;
+    res[52] = t12;
+    res[53] = 0;
+    res[54] = t15;
+    res[55] = 0;
+    res[56] = t10;
+    res[57] = t20;
+    res[58] = t16;
+    res[59] = (2.0/3.0)*t18;
+    res[60] = 0;
+    res[61] = 0;
+    res[62] = t17;
+    res[63] = 2*Q[5]*t6;
+    res[64] = t18;
+    res[65] = 0;
+    res[66] = t12 + t21;
+    res[67] = 0;
+    res[68] = t14;
+    res[69] = 2*t18;
+    res[70] = t10;
+    res[71] = t20 + t21;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; eigenvalues(
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n)
+    {
+    T t0 = Q[1] &gt; p[2];
+    T t1 = (1.0 / std::pow(Q[1], 1));
+    T t2 = n[0]*Q[2] + n[1]*Q[4];
+    T t3 = n[0]*Q[3];
+    T t4 = n[1]*Q[5];
+    T t5 = std::pow(n[0], 2);
+    T t6 = std::pow(n[1], 2);
+    T t7 = p[5]*p[0]*std::pow(Q[1], 3);
+    T t8 = std::pow(std::pow(Q[3], 2)*t5 + std::pow(Q[5], 2)*t6 + 2*t3*t4 + t5*t7 + t6*t7, 1.0/2.0);
+    T t9 = (1.0/3.0)*std::pow(3, 1.0/2.0);
+    T t10 = t3*t9;
+    T t11 = t4*t9;
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = ((t0) ? (0) : (0));
+    res[1] = ((t0) ? (t1*t2) : (0));
+    res[2] = ((t0) ? (t1*(t2 - t8)) : (0));
+    res[3] = ((t0) ? (t1*(t2 + t8)) : (0));
+    res[4] = ((t0) ? (t1*(-t10 - t11 + t2)) : (0));
+    res[5] = ((t0) ? (t1*(t10 + t11 + t2)) : (0));
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 36&gt; left_eigenvectors(
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n)
+    {
+    SimpleArray&lt;T, 36&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = 0;
+    res[21] = 0;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = 0;
+    res[27] = 0;
+    res[28] = 0;
+    res[29] = 0;
+    res[30] = 0;
+    res[31] = 0;
+    res[32] = 0;
+    res[33] = 0;
+    res[34] = 0;
+    res[35] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 36&gt; right_eigenvectors(
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n)
+    {
+    SimpleArray&lt;T, 36&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = 0;
+    res[21] = 0;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = 0;
+    res[27] = 0;
+    res[28] = 0;
+    res[29] = 0;
+    res[30] = 0;
+    res[31] = 0;
+    res[32] = 0;
+    res[33] = 0;
+    res[34] = 0;
+    res[35] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; source(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = Qaux[0]/(p[8]*p[6]);
+    T t1 = 1.0*t0;
+    T t2 = 3.0*t0;
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = -Q[2]*t1 - Q[3]*t1;
+    res[3] = -Q[2]*t2 - Q[3]*t2;
+    res[4] = -Q[4]*t1 - Q[5]*t1;
+    res[5] = -Q[4]*t2 - Q[5]*t2;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 36&gt; source_jacobian_wrt_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = Qaux[0]/(p[8]*p[6]);
+    T t1 = -1.0*t0;
+    T t2 = -3.0*t0;
+    SimpleArray&lt;T, 36&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = t1;
+    res[15] = t2;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = t1;
+    res[21] = t2;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = 0;
+    res[27] = 0;
+    res[28] = t1;
+    res[29] = t2;
+    res[30] = 0;
+    res[31] = 0;
+    res[32] = 0;
+    res[33] = 0;
+    res[34] = t1;
+    res[35] = t2;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; source_jacobian_wrt_aux_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = 1/(p[8]*p[6]);
+    T t1 = 1.0*t0;
+    T t2 = 3.0*t0;
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = -Q[2]*t1 - Q[3]*t1;
+    res[3] = -Q[2]*t2 - Q[3]*t2;
+    res[4] = -Q[4]*t1 - Q[5]*t1;
+    res[5] = -Q[4]*t2 - Q[5]*t2;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; project_2d_to_3d(
+        const T* X,
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = Qaux[0]*(1 - 2*X[2]);
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2]*Qaux[0] + Q[3]*t0;
+    res[3] = Q[4]*Qaux[0] + Q[5]*t0;
+    res[4] = 0;
+    res[5] = 9810.0*Q[1]*(1 - X[2]);
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; project_3d_to_2d(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; residual(
+        const T time,
+        const T* X,
+        const T dX,
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; interpolate(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    res[4] = Q[4];
+    res[5] = Q[5];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; initial_condition(
+        const T* X,
+        const T* p)
+    {
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = 1.0;
+    res[1] = ((X[0] &lt; 5) ? (2.0) : (0.0));
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 2&gt; initial_aux_condition(
+        const T* X,
+        const T* p)
+    {
+    SimpleArray&lt;T, 2&gt; res;
+    res[0] = ((X[0] &lt; 5) ? (0.5) : (1.0/p[2]));
+    res[1] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; update_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = ((false) ? (0) : (Q[1]));
+    T t1 = t0/(100.0*p[2] + t0);
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = Q[0];
+    res[1] = t0;
+    res[2] = Q[2]*t1;
+    res[3] = Q[3]*t1;
+    res[4] = Q[4]*t1;
+    res[5] = Q[5]*t1;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 2&gt; update_aux_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    SimpleArray&lt;T, 2&gt; res;
+    res[0] = Q[1]/(p[2] + std::pow(Q[1], 2));
+    res[1] = Qaux[1];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 36&gt; update_variables_jacobian_wrt_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = ((false) ? (0) : (1));
+    T t1 = ((false) ? (0) : (Q[1]));
+    T t2 = 100.0*p[2] + t1;
+    T t3 = (1.0 / std::pow(t2, 1));
+    T t4 = t0*t3;
+    T t5 = t0*t1/std::pow(t2, 2);
+    T t6 = t1*t3;
+    SimpleArray&lt;T, 36&gt; res;
+    res[0] = 1;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = t0;
+    res[8] = Q[2]*t4 - Q[2]*t5;
+    res[9] = Q[3]*t4 - Q[3]*t5;
+    res[10] = Q[4]*t4 - Q[4]*t5;
+    res[11] = Q[5]*t4 - Q[5]*t5;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = t6;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    res[20] = 0;
+    res[21] = t6;
+    res[22] = 0;
+    res[23] = 0;
+    res[24] = 0;
+    res[25] = 0;
+    res[26] = 0;
+    res[27] = 0;
+    res[28] = t6;
+    res[29] = 0;
+    res[30] = 0;
+    res[31] = 0;
+    res[32] = 0;
+    res[33] = 0;
+    res[34] = 0;
+    res[35] = t6;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; update_aux_variables_jacobian_wrt_variables(
+        const T* Q,
+        const T* Qaux,
+        const T* p)
+    {
+    T t0 = std::pow(Q[1], 2);
+    T t1 = p[2] + t0;
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = -2*t0/std::pow(t1, 2) + (1.0 / std::pow(t1, 1));
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; boundary_conditions(
+        const int bc_idx,
+        const T* Q,
+        const T* Qaux,
+        const T* n,
+        const T* X,
+        const T time,
+        const T dX)
+    {
+    if (bc_idx == 0) {
+        T t0 = n[1]*Q[4];
+        T t1 = n[0]*Q[2] + t0;
+        T t2 = 1.0*n[0];
+        T t3 = 1.0*n[0]*Q[2] + 1.0*t0;
+        T t4 = n[1]*Q[5];
+        T t5 = n[0]*Q[3] + t4;
+        T t6 = 1.0*n[0]*Q[3] + 1.0*t4;
+        T t7 = 1.0*n[1];
+        SimpleArray&lt;T, 6&gt; res;
+        res[0] = Q[0];
+        res[1] = Q[1];
+        res[2] = 1.0*Q[2] - t1*t2 - t2*t3;
+        res[3] = 1.0*Q[3] - t2*t5 - t2*t6;
+        res[4] = 1.0*Q[4] - t1*t7 - t3*t7;
+        res[5] = 1.0*Q[5] - t5*t7 - t6*t7;
+        return res;
+    }
+    SimpleArray&lt;T, 6&gt; default_res = {0};
+    return default_res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 2&gt; aux_boundary_conditions(
+        const int bc_idx,
+        const T* Q,
+        const T* Qaux,
+        const T* n,
+        const T* X,
+        const T time,
+        const T dX)
+    {
+    if (bc_idx == 0) {
+        SimpleArray&lt;T, 2&gt; res;
+        res[0] = Qaux[0];
+        res[1] = Qaux[1];
+        return res;
+    }
+    SimpleArray&lt;T, 2&gt; default_res = {0};
+    return default_res;
+    }
+
+};
+</code></pre>
+</div>
+</div>
+<div id="cc1cb2af" class="cell" data-execution_count="10">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    main_dir, os.path.join(settings.output.directory, <span class="st">".c_interface/Numerics.H"</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+#include &lt;cmath&gt;
+#include &lt;array&gt;
+#include "Model.H"
+
+#ifndef ZOOMY_SIMPLE_ARRAY
+#define ZOOMY_SIMPLE_ARRAY
+template &lt;typename T, int N&gt;
+struct SimpleArray {
+    T data[N];
+    T&amp; operator[](int i) { return data[i]; }
+    const T&amp; operator[](int i) const { return data[i]; }
+    T* begin() { return data; }
+    const T* begin() const { return data; }
+    T* end() { return data + N; }
+    const T* end() const { return data + N; }
+};
+#endif
+
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+template &lt;typename T&gt;
+struct Numerics {
+    static constexpr int n_dof_q = 6;
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; numerical_flux(
+        const T* Q_minus,
+        const T* Q_plus,
+        const T* Qaux_minus,
+        const T* Qaux_plus,
+        const T* p,
+        const T* n)
+    {
+    T t0 = std::max(Q_minus[0], Q_plus[0]);
+    T t1 = -t0;
+    T t2 = std::max(0.0, Q_minus[0] + Q_minus[1] + t1);
+    T t3 = t2/std::max(9.9999999999999995e-7, Q_minus[1]);
+    T t4 = std::max(0.0, Q_plus[0] + Q_plus[1] + t1);
+    T t5 = t4/std::max(9.9999999999999995e-7, Q_plus[1]);
+    T v_arg_0[] = { t0, t2, Q_minus[2]*t3, Q_minus[3]*t3, Q_minus[4]*t3, Q_minus[5]*t3 };
+    T v_arg_1[] = { (1.0 / std::pow(p[2] + t2, 1)), Qaux_minus[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { t0, t4, Q_plus[2]*t5, Q_plus[3]*t5, Q_plus[4]*t5, Q_plus[5]*t5 };
+    T v_arg_4[] = { (1.0 / std::pow(p[2] + t4, 1)), Qaux_plus[1] };
+    auto v_call_0 = Model&lt;T&gt;::flux(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_1 = Model&lt;T&gt;::flux(v_arg_3, v_arg_4, v_arg_2);
+    T t6 = 0.5*n[0];
+    T t7 = 0.5*n[1];
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = t6*v_call_0[0] + t6*v_call_1[0] + t7*v_call_0[1] + t7*v_call_1[1];
+    res[1] = t6*v_call_0[2] + t6*v_call_1[2] + t7*v_call_0[3] + t7*v_call_1[3];
+    res[2] = t6*v_call_0[4] + t6*v_call_1[4] + t7*v_call_0[5] + t7*v_call_1[5];
+    res[3] = t6*v_call_0[6] + t6*v_call_1[6] + t7*v_call_0[7] + t7*v_call_1[7];
+    res[4] = t6*v_call_0[8] + t6*v_call_1[8] + t7*v_call_0[9] + t7*v_call_1[9];
+    res[5] = t6*v_call_0[10] + t6*v_call_1[10] + t7*v_call_0[11] + t7*v_call_1[11];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; numerical_fluctuations(
+        const T* Q_minus,
+        const T* Q_plus,
+        const T* Qaux_minus,
+        const T* Qaux_plus,
+        const T* p,
+        const T* n)
+    {
+    T v_arg_0[] = { 0.5*Q_minus[0] + 0.5*Q_plus[0], 0.5*Q_minus[1] + 0.5*Q_plus[1], 0.5*Q_minus[2] + 0.5*Q_plus[2], 0.5*Q_minus[3] + 0.5*Q_plus[3], 0.5*Q_minus[4] + 0.5*Q_plus[4], 0.5*Q_minus[5] + 0.5*Q_plus[5] };
+    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0], 0.5*Qaux_minus[1] + 0.5*Qaux_plus[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { 0.1127016653792583*Q_minus[0] + 0.8872983346207417*Q_plus[0], 0.1127016653792583*Q_minus[1] + 0.8872983346207417*Q_plus[1], 0.1127016653792583*Q_minus[2] + 0.8872983346207417*Q_plus[2], 0.1127016653792583*Q_minus[3] + 0.8872983346207417*Q_plus[3], 0.1127016653792583*Q_minus[4] + 0.8872983346207417*Q_plus[4], 0.1127016653792583*Q_minus[5] + 0.8872983346207417*Q_plus[5] };
+    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0], 0.1127016653792583*Qaux_minus[1] + 0.8872983346207417*Qaux_plus[1] };
+    T v_arg_5[] = { 0.8872983346207417*Q_minus[0] + 0.1127016653792583*Q_plus[0], 0.8872983346207417*Q_minus[1] + 0.1127016653792583*Q_plus[1], 0.8872983346207417*Q_minus[2] + 0.1127016653792583*Q_plus[2], 0.8872983346207417*Q_minus[3] + 0.1127016653792583*Q_plus[3], 0.8872983346207417*Q_minus[4] + 0.1127016653792583*Q_plus[4], 0.8872983346207417*Q_minus[5] + 0.1127016653792583*Q_plus[5] };
+    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0], 0.8872983346207417*Qaux_minus[1] + 0.1127016653792583*Qaux_plus[1] };
+    T v_arg_7[] = { Qaux_minus[0], Qaux_minus[1] };
+    T v_arg_8[] = { n[0], n[1] };
+    T v_arg_9[] = { Qaux_plus[0], Qaux_plus[1] };
+    auto v_call_0 = Model&lt;T&gt;::nonconservative_matrix(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_1 = Model&lt;T&gt;::nonconservative_matrix(v_arg_3, v_arg_4, v_arg_2);
+    auto v_call_2 = Model&lt;T&gt;::nonconservative_matrix(v_arg_5, v_arg_6, v_arg_2);
+    auto v_call_3 = Model&lt;T&gt;::eigenvalues(Q_minus, v_arg_7, v_arg_2, v_arg_8);
+    auto v_call_4 = Model&lt;T&gt;::eigenvalues(Q_plus, v_arg_9, v_arg_2, v_arg_8);
+    T t0 = 0.44444444444444442*n[0];
+    T t1 = 0.27777777777777785*n[0];
+    T t2 = 0.44444444444444442*n[1];
+    T t3 = 0.27777777777777785*n[1];
+    T t4 = -0.5*Q_minus[0] + 0.5*Q_plus[0];
+    T t5 = -0.5*Q_minus[1] + 0.5*Q_plus[1];
+    T t6 = -0.5*Q_minus[2] + 0.5*Q_plus[2];
+    T t7 = -0.5*Q_minus[3] + 0.5*Q_plus[3];
+    T t8 = -0.5*Q_minus[4] + 0.5*Q_plus[4];
+    T t9 = -0.5*Q_minus[5] + 0.5*Q_plus[5];
+    T t10 = t4*(t0*v_call_0[0] + t1*v_call_1[0] + t1*v_call_2[0] + t2*v_call_0[1] + t3*v_call_1[1] + t3*v_call_2[1]) + t5*(t0*v_call_0[2] + t1*v_call_1[2] + t1*v_call_2[2] + t2*v_call_0[3] + t3*v_call_1[3] + t3*v_call_2[3]) + t6*(t0*v_call_0[4] + t1*v_call_1[4] + t1*v_call_2[4] + t2*v_call_0[5] + t3*v_call_1[5] + t3*v_call_2[5]) + t7*(t0*v_call_0[6] + t1*v_call_1[6] + t1*v_call_2[6] + t2*v_call_0[7] + t3*v_call_1[7] + t3*v_call_2[7]) + t8*(t0*v_call_0[8] + t1*v_call_1[8] + t1*v_call_2[8] + t2*v_call_0[9] + t3*v_call_1[9] + t3*v_call_2[9]) + t9*(t0*v_call_0[10] + t1*v_call_1[10] + t1*v_call_2[10] + t2*v_call_0[11] + t3*v_call_1[11] + t3*v_call_2[11]);
+    T t11 = std::max(std::fabs(v_call_3[0]), std::max(std::fabs(v_call_3[1]), std::max(std::fabs(v_call_3[2]), std::max(std::fabs(v_call_3[3]), std::max(std::fabs(v_call_3[4]), std::max(std::fabs(v_call_3[5]), std::max(std::fabs(v_call_4[0]), std::max(std::fabs(v_call_4[1]), std::max(std::fabs(v_call_4[2]), std::max(std::fabs(v_call_4[3]), std::max(std::fabs(v_call_4[4]), std::fabs(v_call_4[5]))))))))))));
+    T t12 = t11*t5;
+    T t13 = t4*(t0*v_call_0[12] + t1*v_call_1[12] + t1*v_call_2[12] + t2*v_call_0[13] + t3*v_call_1[13] + t3*v_call_2[13]) + t5*(t0*v_call_0[14] + t1*v_call_1[14] + t1*v_call_2[14] + t2*v_call_0[15] + t3*v_call_1[15] + t3*v_call_2[15]) + t6*(t0*v_call_0[16] + t1*v_call_1[16] + t1*v_call_2[16] + t2*v_call_0[17] + t3*v_call_1[17] + t3*v_call_2[17]) + t7*(t0*v_call_0[18] + t1*v_call_1[18] + t1*v_call_2[18] + t2*v_call_0[19] + t3*v_call_1[19] + t3*v_call_2[19]) + t8*(t0*v_call_0[20] + t1*v_call_1[20] + t1*v_call_2[20] + t2*v_call_0[21] + t3*v_call_1[21] + t3*v_call_2[21]) + t9*(t0*v_call_0[22] + t1*v_call_1[22] + t1*v_call_2[22] + t2*v_call_0[23] + t3*v_call_1[23] + t3*v_call_2[23]);
+    T t14 = t11*t6;
+    T t15 = t4*(t0*v_call_0[24] + t1*v_call_1[24] + t1*v_call_2[24] + t2*v_call_0[25] + t3*v_call_1[25] + t3*v_call_2[25]) + t5*(t0*v_call_0[26] + t1*v_call_1[26] + t1*v_call_2[26] + t2*v_call_0[27] + t3*v_call_1[27] + t3*v_call_2[27]) + t6*(t0*v_call_0[28] + t1*v_call_1[28] + t1*v_call_2[28] + t2*v_call_0[29] + t3*v_call_1[29] + t3*v_call_2[29]) + t7*(t0*v_call_0[30] + t1*v_call_1[30] + t1*v_call_2[30] + t2*v_call_0[31] + t3*v_call_1[31] + t3*v_call_2[31]) + t8*(t0*v_call_0[32] + t1*v_call_1[32] + t1*v_call_2[32] + t2*v_call_0[33] + t3*v_call_1[33] + t3*v_call_2[33]) + t9*(t0*v_call_0[34] + t1*v_call_1[34] + t1*v_call_2[34] + t2*v_call_0[35] + t3*v_call_1[35] + t3*v_call_2[35]);
+    T t16 = t11*t7;
+    T t17 = t4*(t0*v_call_0[36] + t1*v_call_1[36] + t1*v_call_2[36] + t2*v_call_0[37] + t3*v_call_1[37] + t3*v_call_2[37]) + t5*(t0*v_call_0[38] + t1*v_call_1[38] + t1*v_call_2[38] + t2*v_call_0[39] + t3*v_call_1[39] + t3*v_call_2[39]) + t6*(t0*v_call_0[40] + t1*v_call_1[40] + t1*v_call_2[40] + t2*v_call_0[41] + t3*v_call_1[41] + t3*v_call_2[41]) + t7*(t0*v_call_0[42] + t1*v_call_1[42] + t1*v_call_2[42] + t2*v_call_0[43] + t3*v_call_1[43] + t3*v_call_2[43]) + t8*(t0*v_call_0[44] + t1*v_call_1[44] + t1*v_call_2[44] + t2*v_call_0[45] + t3*v_call_1[45] + t3*v_call_2[45]) + t9*(t0*v_call_0[46] + t1*v_call_1[46] + t1*v_call_2[46] + t2*v_call_0[47] + t3*v_call_1[47] + t3*v_call_2[47]);
+    T t18 = t11*t8;
+    T t19 = t4*(t0*v_call_0[48] + t1*v_call_1[48] + t1*v_call_2[48] + t2*v_call_0[49] + t3*v_call_1[49] + t3*v_call_2[49]) + t5*(t0*v_call_0[50] + t1*v_call_1[50] + t1*v_call_2[50] + t2*v_call_0[51] + t3*v_call_1[51] + t3*v_call_2[51]) + t6*(t0*v_call_0[52] + t1*v_call_1[52] + t1*v_call_2[52] + t2*v_call_0[53] + t3*v_call_1[53] + t3*v_call_2[53]) + t7*(t0*v_call_0[54] + t1*v_call_1[54] + t1*v_call_2[54] + t2*v_call_0[55] + t3*v_call_1[55] + t3*v_call_2[55]) + t8*(t0*v_call_0[56] + t1*v_call_1[56] + t1*v_call_2[56] + t2*v_call_0[57] + t3*v_call_1[57] + t3*v_call_2[57]) + t9*(t0*v_call_0[58] + t1*v_call_1[58] + t1*v_call_2[58] + t2*v_call_0[59] + t3*v_call_1[59] + t3*v_call_2[59]);
+    T t20 = t11*t9;
+    T t21 = t4*(t0*v_call_0[60] + t1*v_call_1[60] + t1*v_call_2[60] + t2*v_call_0[61] + t3*v_call_1[61] + t3*v_call_2[61]) + t5*(t0*v_call_0[62] + t1*v_call_1[62] + t1*v_call_2[62] + t2*v_call_0[63] + t3*v_call_1[63] + t3*v_call_2[63]) + t6*(t0*v_call_0[64] + t1*v_call_1[64] + t1*v_call_2[64] + t2*v_call_0[65] + t3*v_call_1[65] + t3*v_call_2[65]) + t7*(t0*v_call_0[66] + t1*v_call_1[66] + t1*v_call_2[66] + t2*v_call_0[67] + t3*v_call_1[67] + t3*v_call_2[67]) + t8*(t0*v_call_0[68] + t1*v_call_1[68] + t1*v_call_2[68] + t2*v_call_0[69] + t3*v_call_1[69] + t3*v_call_2[69]) + t9*(t0*v_call_0[70] + t1*v_call_1[70] + t1*v_call_2[70] + t2*v_call_0[71] + t3*v_call_1[71] + t3*v_call_2[71]);
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = t10;
+    res[1] = t12 + t13;
+    res[2] = t14 + t15;
+    res[3] = t16 + t17;
+    res[4] = t18 + t19;
+    res[5] = t20 + t21;
+    res[6] = t10;
+    res[7] = -t12 + t13;
+    res[8] = -t14 + t15;
+    res[9] = -t16 + t17;
+    res[10] = -t18 + t19;
+    res[11] = -t20 + t21;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 1&gt; local_max_abs_eigenvalue(
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n)
+    {
+    T v_arg_0[] = { Q[0], Q[1], Q[2], Q[3], Q[4], Q[5] };
+    T v_arg_1[] = { Qaux[0], Qaux[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { n[0], n[1] };
+    auto v_call_0 = Model&lt;T&gt;::eigenvalues(v_arg_0, v_arg_1, v_arg_2, v_arg_3);
+    SimpleArray&lt;T, 1&gt; res;
+    res[0] = std::max(std::fabs(v_call_0[0]), std::max(std::fabs(v_call_0[1]), std::max(std::fabs(v_call_0[2]), std::max(std::fabs(v_call_0[3]), std::max(std::fabs(v_call_0[4]), std::fabs(v_call_0[5]))))));
+    return res;
+    }
+
+};
+</code></pre>
+</div>
+</div>
+<div id="ff238119" class="cell" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>path <span class="op">=</span> os.path.join(</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    main_dir, os.path.join(main_dir, <span class="st">"library/zoomy_dmplex/Numerics.H"</span>)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">"r"</span>) <span class="im">as</span> f:</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(f.read())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>#pragma once
+#include &lt;cmath&gt;
+#include &lt;array&gt;
+#include "Model.H"
+
+#ifndef ZOOMY_SIMPLE_ARRAY
+#define ZOOMY_SIMPLE_ARRAY
+template &lt;typename T, int N&gt;
+struct SimpleArray {
+    T data[N];
+    T&amp; operator[](int i) { return data[i]; }
+    const T&amp; operator[](int i) const { return data[i]; }
+    T* begin() { return data; }
+    const T* begin() const { return data; }
+    T* end() { return data + N; }
+    const T* end() const { return data + N; }
+};
+#endif
+
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+template &lt;typename T&gt;
+struct Numerics {
+    static constexpr int n_dof_q = 6;
+    PORTABLE_FN static inline SimpleArray&lt;T, 6&gt; numerical_flux(
+        const T* Q_minus,
+        const T* Q_plus,
+        const T* Qaux_minus,
+        const T* Qaux_plus,
+        const T* p,
+        const T* n)
+    {
+    T t0 = std::max(Q_minus[0], Q_plus[0]);
+    T t1 = -t0;
+    T t2 = std::max(0.0, Q_minus[0] + Q_minus[1] + t1);
+    T t3 = t2/std::max(9.9999999999999995e-7, Q_minus[1]);
+    T t4 = std::max(0.0, Q_plus[0] + Q_plus[1] + t1);
+    T t5 = t4/std::max(9.9999999999999995e-7, Q_plus[1]);
+    T v_arg_0[] = { t0, t2, Q_minus[2]*t3, Q_minus[3]*t3, Q_minus[4]*t3, Q_minus[5]*t3 };
+    T v_arg_1[] = { (1.0 / std::pow(p[2] + t2, 1)), Qaux_minus[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { t0, t4, Q_plus[2]*t5, Q_plus[3]*t5, Q_plus[4]*t5, Q_plus[5]*t5 };
+    T v_arg_4[] = { (1.0 / std::pow(p[2] + t4, 1)), Qaux_plus[1] };
+    auto v_call_0 = Model&lt;T&gt;::flux(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_1 = Model&lt;T&gt;::flux(v_arg_3, v_arg_4, v_arg_2);
+    T t6 = 0.5*n[0];
+    T t7 = 0.5*n[1];
+    SimpleArray&lt;T, 6&gt; res;
+    res[0] = t6*v_call_0[0] + t6*v_call_1[0] + t7*v_call_0[1] + t7*v_call_1[1];
+    res[1] = t6*v_call_0[2] + t6*v_call_1[2] + t7*v_call_0[3] + t7*v_call_1[3];
+    res[2] = t6*v_call_0[4] + t6*v_call_1[4] + t7*v_call_0[5] + t7*v_call_1[5];
+    res[3] = t6*v_call_0[6] + t6*v_call_1[6] + t7*v_call_0[7] + t7*v_call_1[7];
+    res[4] = t6*v_call_0[8] + t6*v_call_1[8] + t7*v_call_0[9] + t7*v_call_1[9];
+    res[5] = t6*v_call_0[10] + t6*v_call_1[10] + t7*v_call_0[11] + t7*v_call_1[11];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 12&gt; numerical_fluctuations(
+        const T* Q_minus,
+        const T* Q_plus,
+        const T* Qaux_minus,
+        const T* Qaux_plus,
+        const T* p,
+        const T* n)
+    {
+    T v_arg_0[] = { 0.5*Q_minus[0] + 0.5*Q_plus[0], 0.5*Q_minus[1] + 0.5*Q_plus[1], 0.5*Q_minus[2] + 0.5*Q_plus[2], 0.5*Q_minus[3] + 0.5*Q_plus[3], 0.5*Q_minus[4] + 0.5*Q_plus[4], 0.5*Q_minus[5] + 0.5*Q_plus[5] };
+    T v_arg_1[] = { 0.5*Qaux_minus[0] + 0.5*Qaux_plus[0], 0.5*Qaux_minus[1] + 0.5*Qaux_plus[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { 0.1127016653792583*Q_minus[0] + 0.8872983346207417*Q_plus[0], 0.1127016653792583*Q_minus[1] + 0.8872983346207417*Q_plus[1], 0.1127016653792583*Q_minus[2] + 0.8872983346207417*Q_plus[2], 0.1127016653792583*Q_minus[3] + 0.8872983346207417*Q_plus[3], 0.1127016653792583*Q_minus[4] + 0.8872983346207417*Q_plus[4], 0.1127016653792583*Q_minus[5] + 0.8872983346207417*Q_plus[5] };
+    T v_arg_4[] = { 0.1127016653792583*Qaux_minus[0] + 0.8872983346207417*Qaux_plus[0], 0.1127016653792583*Qaux_minus[1] + 0.8872983346207417*Qaux_plus[1] };
+    T v_arg_5[] = { 0.8872983346207417*Q_minus[0] + 0.1127016653792583*Q_plus[0], 0.8872983346207417*Q_minus[1] + 0.1127016653792583*Q_plus[1], 0.8872983346207417*Q_minus[2] + 0.1127016653792583*Q_plus[2], 0.8872983346207417*Q_minus[3] + 0.1127016653792583*Q_plus[3], 0.8872983346207417*Q_minus[4] + 0.1127016653792583*Q_plus[4], 0.8872983346207417*Q_minus[5] + 0.1127016653792583*Q_plus[5] };
+    T v_arg_6[] = { 0.8872983346207417*Qaux_minus[0] + 0.1127016653792583*Qaux_plus[0], 0.8872983346207417*Qaux_minus[1] + 0.1127016653792583*Qaux_plus[1] };
+    T v_arg_7[] = { Qaux_minus[0], Qaux_minus[1] };
+    T v_arg_8[] = { n[0], n[1] };
+    T v_arg_9[] = { Qaux_plus[0], Qaux_plus[1] };
+    auto v_call_0 = Model&lt;T&gt;::nonconservative_matrix(v_arg_0, v_arg_1, v_arg_2);
+    auto v_call_1 = Model&lt;T&gt;::nonconservative_matrix(v_arg_3, v_arg_4, v_arg_2);
+    auto v_call_2 = Model&lt;T&gt;::nonconservative_matrix(v_arg_5, v_arg_6, v_arg_2);
+    auto v_call_3 = Model&lt;T&gt;::eigenvalues(Q_minus, v_arg_7, v_arg_2, v_arg_8);
+    auto v_call_4 = Model&lt;T&gt;::eigenvalues(Q_plus, v_arg_9, v_arg_2, v_arg_8);
+    T t0 = 0.44444444444444442*n[0];
+    T t1 = 0.27777777777777785*n[0];
+    T t2 = 0.44444444444444442*n[1];
+    T t3 = 0.27777777777777785*n[1];
+    T t4 = -0.5*Q_minus[0] + 0.5*Q_plus[0];
+    T t5 = -0.5*Q_minus[1] + 0.5*Q_plus[1];
+    T t6 = -0.5*Q_minus[2] + 0.5*Q_plus[2];
+    T t7 = -0.5*Q_minus[3] + 0.5*Q_plus[3];
+    T t8 = -0.5*Q_minus[4] + 0.5*Q_plus[4];
+    T t9 = -0.5*Q_minus[5] + 0.5*Q_plus[5];
+    T t10 = t4*(t0*v_call_0[0] + t1*v_call_1[0] + t1*v_call_2[0] + t2*v_call_0[1] + t3*v_call_1[1] + t3*v_call_2[1]) + t5*(t0*v_call_0[2] + t1*v_call_1[2] + t1*v_call_2[2] + t2*v_call_0[3] + t3*v_call_1[3] + t3*v_call_2[3]) + t6*(t0*v_call_0[4] + t1*v_call_1[4] + t1*v_call_2[4] + t2*v_call_0[5] + t3*v_call_1[5] + t3*v_call_2[5]) + t7*(t0*v_call_0[6] + t1*v_call_1[6] + t1*v_call_2[6] + t2*v_call_0[7] + t3*v_call_1[7] + t3*v_call_2[7]) + t8*(t0*v_call_0[8] + t1*v_call_1[8] + t1*v_call_2[8] + t2*v_call_0[9] + t3*v_call_1[9] + t3*v_call_2[9]) + t9*(t0*v_call_0[10] + t1*v_call_1[10] + t1*v_call_2[10] + t2*v_call_0[11] + t3*v_call_1[11] + t3*v_call_2[11]);
+    T t11 = std::max(std::fabs(v_call_3[0]), std::max(std::fabs(v_call_3[1]), std::max(std::fabs(v_call_3[2]), std::max(std::fabs(v_call_3[3]), std::max(std::fabs(v_call_3[4]), std::max(std::fabs(v_call_3[5]), std::max(std::fabs(v_call_4[0]), std::max(std::fabs(v_call_4[1]), std::max(std::fabs(v_call_4[2]), std::max(std::fabs(v_call_4[3]), std::max(std::fabs(v_call_4[4]), std::fabs(v_call_4[5]))))))))))));
+    T t12 = t11*t5;
+    T t13 = t4*(t0*v_call_0[12] + t1*v_call_1[12] + t1*v_call_2[12] + t2*v_call_0[13] + t3*v_call_1[13] + t3*v_call_2[13]) + t5*(t0*v_call_0[14] + t1*v_call_1[14] + t1*v_call_2[14] + t2*v_call_0[15] + t3*v_call_1[15] + t3*v_call_2[15]) + t6*(t0*v_call_0[16] + t1*v_call_1[16] + t1*v_call_2[16] + t2*v_call_0[17] + t3*v_call_1[17] + t3*v_call_2[17]) + t7*(t0*v_call_0[18] + t1*v_call_1[18] + t1*v_call_2[18] + t2*v_call_0[19] + t3*v_call_1[19] + t3*v_call_2[19]) + t8*(t0*v_call_0[20] + t1*v_call_1[20] + t1*v_call_2[20] + t2*v_call_0[21] + t3*v_call_1[21] + t3*v_call_2[21]) + t9*(t0*v_call_0[22] + t1*v_call_1[22] + t1*v_call_2[22] + t2*v_call_0[23] + t3*v_call_1[23] + t3*v_call_2[23]);
+    T t14 = t11*t6;
+    T t15 = t4*(t0*v_call_0[24] + t1*v_call_1[24] + t1*v_call_2[24] + t2*v_call_0[25] + t3*v_call_1[25] + t3*v_call_2[25]) + t5*(t0*v_call_0[26] + t1*v_call_1[26] + t1*v_call_2[26] + t2*v_call_0[27] + t3*v_call_1[27] + t3*v_call_2[27]) + t6*(t0*v_call_0[28] + t1*v_call_1[28] + t1*v_call_2[28] + t2*v_call_0[29] + t3*v_call_1[29] + t3*v_call_2[29]) + t7*(t0*v_call_0[30] + t1*v_call_1[30] + t1*v_call_2[30] + t2*v_call_0[31] + t3*v_call_1[31] + t3*v_call_2[31]) + t8*(t0*v_call_0[32] + t1*v_call_1[32] + t1*v_call_2[32] + t2*v_call_0[33] + t3*v_call_1[33] + t3*v_call_2[33]) + t9*(t0*v_call_0[34] + t1*v_call_1[34] + t1*v_call_2[34] + t2*v_call_0[35] + t3*v_call_1[35] + t3*v_call_2[35]);
+    T t16 = t11*t7;
+    T t17 = t4*(t0*v_call_0[36] + t1*v_call_1[36] + t1*v_call_2[36] + t2*v_call_0[37] + t3*v_call_1[37] + t3*v_call_2[37]) + t5*(t0*v_call_0[38] + t1*v_call_1[38] + t1*v_call_2[38] + t2*v_call_0[39] + t3*v_call_1[39] + t3*v_call_2[39]) + t6*(t0*v_call_0[40] + t1*v_call_1[40] + t1*v_call_2[40] + t2*v_call_0[41] + t3*v_call_1[41] + t3*v_call_2[41]) + t7*(t0*v_call_0[42] + t1*v_call_1[42] + t1*v_call_2[42] + t2*v_call_0[43] + t3*v_call_1[43] + t3*v_call_2[43]) + t8*(t0*v_call_0[44] + t1*v_call_1[44] + t1*v_call_2[44] + t2*v_call_0[45] + t3*v_call_1[45] + t3*v_call_2[45]) + t9*(t0*v_call_0[46] + t1*v_call_1[46] + t1*v_call_2[46] + t2*v_call_0[47] + t3*v_call_1[47] + t3*v_call_2[47]);
+    T t18 = t11*t8;
+    T t19 = t4*(t0*v_call_0[48] + t1*v_call_1[48] + t1*v_call_2[48] + t2*v_call_0[49] + t3*v_call_1[49] + t3*v_call_2[49]) + t5*(t0*v_call_0[50] + t1*v_call_1[50] + t1*v_call_2[50] + t2*v_call_0[51] + t3*v_call_1[51] + t3*v_call_2[51]) + t6*(t0*v_call_0[52] + t1*v_call_1[52] + t1*v_call_2[52] + t2*v_call_0[53] + t3*v_call_1[53] + t3*v_call_2[53]) + t7*(t0*v_call_0[54] + t1*v_call_1[54] + t1*v_call_2[54] + t2*v_call_0[55] + t3*v_call_1[55] + t3*v_call_2[55]) + t8*(t0*v_call_0[56] + t1*v_call_1[56] + t1*v_call_2[56] + t2*v_call_0[57] + t3*v_call_1[57] + t3*v_call_2[57]) + t9*(t0*v_call_0[58] + t1*v_call_1[58] + t1*v_call_2[58] + t2*v_call_0[59] + t3*v_call_1[59] + t3*v_call_2[59]);
+    T t20 = t11*t9;
+    T t21 = t4*(t0*v_call_0[60] + t1*v_call_1[60] + t1*v_call_2[60] + t2*v_call_0[61] + t3*v_call_1[61] + t3*v_call_2[61]) + t5*(t0*v_call_0[62] + t1*v_call_1[62] + t1*v_call_2[62] + t2*v_call_0[63] + t3*v_call_1[63] + t3*v_call_2[63]) + t6*(t0*v_call_0[64] + t1*v_call_1[64] + t1*v_call_2[64] + t2*v_call_0[65] + t3*v_call_1[65] + t3*v_call_2[65]) + t7*(t0*v_call_0[66] + t1*v_call_1[66] + t1*v_call_2[66] + t2*v_call_0[67] + t3*v_call_1[67] + t3*v_call_2[67]) + t8*(t0*v_call_0[68] + t1*v_call_1[68] + t1*v_call_2[68] + t2*v_call_0[69] + t3*v_call_1[69] + t3*v_call_2[69]) + t9*(t0*v_call_0[70] + t1*v_call_1[70] + t1*v_call_2[70] + t2*v_call_0[71] + t3*v_call_1[71] + t3*v_call_2[71]);
+    SimpleArray&lt;T, 12&gt; res;
+    res[0] = t10;
+    res[1] = t12 + t13;
+    res[2] = t14 + t15;
+    res[3] = t16 + t17;
+    res[4] = t18 + t19;
+    res[5] = t20 + t21;
+    res[6] = t10;
+    res[7] = -t12 + t13;
+    res[8] = -t14 + t15;
+    res[9] = -t16 + t17;
+    res[10] = -t18 + t19;
+    res[11] = -t20 + t21;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray&lt;T, 1&gt; local_max_abs_eigenvalue(
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n)
+    {
+    T v_arg_0[] = { Q[0], Q[1], Q[2], Q[3], Q[4], Q[5] };
+    T v_arg_1[] = { Qaux[0], Qaux[1] };
+    T v_arg_2[] = { p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12] };
+    T v_arg_3[] = { n[0], n[1] };
+    auto v_call_0 = Model&lt;T&gt;::eigenvalues(v_arg_0, v_arg_1, v_arg_2, v_arg_3);
+    SimpleArray&lt;T, 1&gt; res;
+    res[0] = std::max(std::fabs(v_call_0[0]), std::max(std::fabs(v_call_0[1]), std::max(std::fabs(v_call_0[2]), std::max(std::fabs(v_call_0[3]), std::max(std::fabs(v_call_0[4]), std::fabs(v_call_0[5]))))));
+    return res;
+    }
+
+};
+</code></pre>
+</div>
+</div>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Copyright 2025, Ingo Steldermann</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/code_printers/to_c_moments.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item">
+    <a class="nav-link" href="../../legal.html">
+<p>Legal notice and data protection</p>
+</a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

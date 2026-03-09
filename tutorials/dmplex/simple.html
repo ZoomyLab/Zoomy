@@ -6,8 +6,10 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Ingo Steldermann">
+<meta name="dcterms.date" content="2026-01-15">
 
-<title>legal</title>
+<title>Simple</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,28 +22,63 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
-<script src="site_libs/quarto-nav/quarto-nav.js"></script>
-<script src="site_libs/quarto-nav/headroom.min.js"></script>
-<script src="site_libs/clipboard/clipboard.min.js"></script>
-<script src="site_libs/quarto-search/autocomplete.umd.js"></script>
-<script src="site_libs/quarto-search/fuse.min.js"></script>
-<script src="site_libs/quarto-search/quarto-search.js"></script>
-<meta name="quarto:offset" content="./">
-<link href=".//images/favicon.svg" rel="icon" type="image/svg+xml">
-<script src="site_libs/quarto-html/quarto.js" type="module"></script>
-<script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="site_libs/quarto-html/popper.min.js"></script>
-<script src="site_libs/quarto-html/tippy.umd.min.js"></script>
-<script src="site_libs/quarto-html/anchor.min.js"></script>
-<link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-226bd0f977fa82dfae4534cac220d79a.css" rel="stylesheet" id="quarto-text-highlighting-styles">
-<script src="site_libs/bootstrap/bootstrap.min.js"></script>
-<link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-3289a1c0eea969fea9a887a3e7302bd0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
-<script src="site_libs/quarto-contrib/iconify-2.1.0/iconify-icon.min.js"></script>
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<link href="../..//images/favicon.svg" rel="icon" type="image/svg+xml">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-226bd0f977fa82dfae4534cac220d79a.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-3289a1c0eea969fea9a887a3e7302bd0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="../../site_libs/quarto-contrib/iconify-2.1.0/iconify-icon.min.js"></script>
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -78,7 +115,8 @@ MathJax = {
 <script data-goatcounter="https://ingosteldermann.goatcounter.com/count" async="" src="//gc.zgo.at/count.js"></script>
 
 
-<link rel="stylesheet" href="custom.css">
+<link rel="stylesheet" href="../../custom.css">
+<link rel="stylesheet" href="../notebook.css">
 </head>
 
 <body class="nav-fixed quarto-light">
@@ -88,8 +126,8 @@ MathJax = {
     <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
-    <a href="./index.html" class="navbar-brand navbar-brand-logo">
-    <img src="./images/logo_no_text.svg" alt="" class="navbar-logo">
+    <a href="../../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../../images/logo_no_text.svg" alt="" class="navbar-logo">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -99,27 +137,27 @@ MathJax = {
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./software.html"> 
+    <a class="nav-link" href="../../software.html"> 
 <span class="menu-text">Software</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./playground/playground.html"> 
+    <a class="nav-link" href="../../playground/playground.html"> 
 <span class="menu-text">Playground</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./docs/index.html"> 
+    <a class="nav-link" href="../../docs/index.html"> 
 <span class="menu-text">Documentation</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./tutorials/index.html"> 
+    <a class="nav-link" href="../../tutorials/index.html"> 
 <span class="menu-text">Tutorials</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./publications.html"> 
+    <a class="nav-link" href="../../publications.html"> 
 <span class="menu-text">Publications</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./about.html"> 
+    <a class="nav-link" href="../../about.html"> 
 <span class="menu-text">About</span></a>
   </li>  
 </ul>
@@ -161,92 +199,120 @@ MathJax = {
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#legal-notice-and-data-protection" id="toc-legal-notice-and-data-protection" class="nav-link active" data-scroll-target="#legal-notice-and-data-protection">Legal notice and data protection</a></li>
-  <li><a href="#disclaimer" id="toc-disclaimer" class="nav-link" data-scroll-target="#disclaimer">Disclaimer</a></li>
-  <li><a href="#privary-policy" id="toc-privary-policy" class="nav-link" data-scroll-target="#privary-policy">Privary Policy</a>
+  <li><a href="#get-dmplex-solver-to-work" id="toc-get-dmplex-solver-to-work" class="nav-link active" data-scroll-target="#get-dmplex-solver-to-work">Get DMPlex solver to work</a>
   <ul class="collapse">
-  <li><a href="#data-protection-at-a-glance" id="toc-data-protection-at-a-glance" class="nav-link" data-scroll-target="#data-protection-at-a-glance">Data protection at a glance</a></li>
+  <li><a href="#imports" id="toc-imports" class="nav-link" data-scroll-target="#imports">Imports</a></li>
+  <li><a href="#model" id="toc-model" class="nav-link" data-scroll-target="#model">Model</a></li>
   </ul></li>
-  <li><a href="#general-information-and-mandatory-information" id="toc-general-information-and-mandatory-information" class="nav-link" data-scroll-target="#general-information-and-mandatory-information">General information and mandatory information</a></li>
   </ul>
-<div class="toc-actions"><ul><li><a href="https://github.com/mbd-rwth/Zoomy/edit/main/web/legal.qmd" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+<div class="toc-actions"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/dmplex/simple.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"></header>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Simple</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+</div>
 
 
 
+<div class="quarto-title-meta">
 
-<section id="legal-notice-and-data-protection" class="level2">
-<h2 class="anchored" data-anchor-id="legal-notice-and-data-protection">Legal notice and data protection</h2>
-<p><strong>Responsible for the content of these pages:</strong></p>
-<p>Ingo Steldermann</p>
-<p>Ringstr. 103</p>
-<p>52078 Aachen</p>
-<p>E-Mail: info@shallowflow.com</p>
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Ingo Steldermann </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">January 15, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="get-dmplex-solver-to-work" class="level1">
+<h1>Get DMPlex solver to work</h1>
+<section id="imports" class="level2">
+<h2 class="anchored" data-anchor-id="imports">Imports</h2>
+<div id="4f583c96" class="cell" data-tags="[]" data-execution_count="1">
+<details class="code-fold">
+<summary>Load packages</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water <span class="im">import</span> ShallowWaterEquations <span class="im">as</span> SWE</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.model.models.shallow_water_topo <span class="im">import</span> ShallowWaterEquationsWithTopo <span class="im">as</span> SWEB</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.initial_conditions <span class="im">as</span> IC</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.model.boundary_conditions <span class="im">as</span> BC</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.misc.misc <span class="im">import</span> Zstruct, Settings</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> zoomy_core.transformation.to_c <span class="im">import</span> CppModel, CppNumerics</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.misc.misc <span class="im">as</span> misc</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zoomy_core.mesh.petscmesh <span class="im">as</span> petscMesh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
 </section>
-<section id="disclaimer" class="level2">
-<h2 class="anchored" data-anchor-id="disclaimer">Disclaimer</h2>
-<ol type="1">
-<li><strong>Content of the online offer</strong></li>
-</ol>
-<p>The author does not assume any liability for the topicality, correctness, completeness or quality of the information provided. Liability claims against the author relating to material or immaterial damage caused by the use or non-use of the information provided or by the use of incorrect and incomplete information are generally excluded, unless there is evidence of intentional or gross negligence on the part of the author. All offers are subject to change and non-binding. The author expressly reserves the right to change, supplement or delete parts of the pages or the entire offer without prior notice or to cease publication temporarily or permanently.</p>
-<ol start="2" type="1">
-<li><strong>References and links</strong></li>
-</ol>
-<p>In the case of direct or indirect references to external websites (“hyperlinks”), which lie outside the author’s area of responsibility, a liability obligation would only come into effect if the author had knowledge of the contents and it was technically possible and reasonable for him to prevent use in the event of illegal contents. The author hereby expressly declares that at the time the links were created, no illegal content was recognisable on the linked pages. The author has no influence whatsoever on the current and future design, content or authorship of the linked pages. Therefore, he hereby expressly distances himself from all contents of all linked pages that were changed after the link was set. This statement applies to all links and references set within the author’s own Internet offer as well as to external entries in guest books, discussion forums, link directories, mailing lists and in all other forms of databases set up within the author’s own Internet offer, as well as to entries by the author, which can be accessed by external write access. For illegal, incorrect or incomplete contents and in particular for damages resulting from the use or non-use of such information, the provider of the page to which reference was made is solely liable, not the one who merely refers to the respective publication via links.</p>
-<ol start="3" type="1">
-<li><strong>Copyright and trademark law</strong></li>
-</ol>
-<p>The author endeavours to observe the copyrights of the images, graphics, sound documents, video sequences and texts used in all publications, to use images, graphics, sound documents, video sequences and texts created by himself or to resort to license-free graphics, sound documents, video sequences and texts. All brands and trademarks mentioned within the Internet offer and possibly protected by third parties are subject without restriction to the provisions of the applicable trademark law and the ownership rights of the respective registered owners. The mere mention does not lead to the conclusion that trademarks are not protected by the rights of third parties! The copyright for published objects created by the author himself remains solely with the author of the pages. Any duplication or use of such graphics, sound documents, video sequences and texts in other electronic or printed publications is not permitted without the express consent of the author.</p>
-<ol start="4" type="1">
-<li><strong>Legal validity of this disclaimer</strong></li>
-</ol>
-<p>This disclaimer is to be regarded as part of the Internet offer from which reference was made to this page. If parts or individual formulations of this text do not, no longer or do not completely correspond to the current legal situation, the remaining parts of the document remain unaffected in their content and validity.</p>
-</section>
-<section id="privary-policy" class="level2">
-<h2 class="anchored" data-anchor-id="privary-policy">Privary Policy</h2>
-<section id="data-protection-at-a-glance" class="level3">
-<h3 class="anchored" data-anchor-id="data-protection-at-a-glance">Data protection at a glance</h3>
-<p>We collect no data. GitHub, as a hosting service, might collect data. Please take a look at their Impressum for more details.</p>
-</section>
-</section>
-<section id="general-information-and-mandatory-information" class="level2">
-<h2 class="anchored" data-anchor-id="general-information-and-mandatory-information">General information and mandatory information</h2>
-<p><strong>Data protection</strong></p>
-<p>The operators of these pages take the protection of your personal data very seriously. We treat your personal data confidentially and in accordance with the statutory data protection regulations and this privacy policy.</p>
-<p>If you use this website, various personal data is collected. Personal data is data with which you can be personally identified. This privacy policy explains what data we collect and what we use it for. It also explains how and for what purpose this is done. We would like to point out that data transmission over the Internet (e.g.&nbsp;when communicating by e-mail) can have security vulnerabilities. A complete protection of data against access by third parties is not possible.</p>
-<p>Note on the responsible body</p>
-<p>The responsible body for data processing on this website is:</p>
-<p>Ingo Steldermann</p>
-<p>Schinkelstr. 2a</p>
-<p>52068 Aachen</p>
-<p>E-Mail: steldermann@mbd.rwth-aachen.de</p>
-<p>The controller is the natural or legal person who, alone or jointly with others, about the purposes and means of the processing of personal data (e.g.&nbsp;B. Names, email addresses o. ethere).</p>
-<p><strong>Storage duration</strong></p>
-<p>If no more specific storage period has been specified within this privacy policy, your personal data will remain with us until the purpose for data processing is not applicable. If you assert a legitimate request for deletion or revoke your consent to data processing, your data will be deleted, unless we have any other legally permissible reasons for the storage of your personal data (e.g.&nbsp;tax or commercial retention periods); in the latter case, deletion takes place after these reasons has since then these reasons have lapsed.</p>
-<p><strong>Note on data transfer to the USA and other third countries</strong></p>
-<p>We use, among other things, tools from companies based in the USA or other third countries not secure under data protection law. If these tools are active, your personal data may be transferred to and processed there. We would like to point out that in these countries no level of data protection comparable to the EU can be guaranteed.</p>
-<p>For example, US companies are required to disclose personal data to security agencies without you as affecting being able to take legal action against this. It cannot therefore be ruled out that US authorities (e.g.&nbsp;B. Secret services) process, evaluate and permanently store your data on US servers for monitoring purposes. We have no influence on these processing activities.</p>
-<p><strong>Revocation of your consent to data processing</strong></p>
-<p>Many data processing operations are only possible with your explicit consent. You can revoke your consent at any time. The legality of the data processing carried out until the revocation remains unaffected by the revocation.</p>
-<p><strong>Right to object to data collection in special surveys and against</strong></p>
-<p><strong>Direct marketing (Art. 21 GDPR)</strong></p>
-<p>IF THE DATA PROCESSING ON GROAD OF ART. 6 ABS. 1 LIT. OR F GDPR, HAVE EVERY TIME THE RIGHT OF THE GREEN, THE GREEN OF THE YOUR SON OF SPECIAL SITUATION FEELs, AGAINST THE DISCLAIMER OF PERSONAL PERSONAL DATA SPECIAL PROSE INSTRUTH; THE PARTICULATIONS OF THE PARTICIPATION OF PARTIES. THE LEGAL LEGAL DAYS, ON THE A PROCESSING, RELEASES. IF YOU ARE NOT MORE USE, MEETING THE PERSONAL DATA NOT MORE DISTRIBUTION, IT YOU ARE INSTRUAL PROTECTIRY PROTECTS WITHIN WORKERS WITHOWN GREAT FOUNDATIONS ON THE DISPLOYMENT SECTORS, THE YOU ARE RELEASES,HUNG, EXCLUSIVE DEFENCE OF RIGHT PRODUCTS (EMPLOYMENT AFTER ART. 21 ABS. 1 GDPR).</p>
-<p>WILL BE RESPONSIBLE TO REPRESENTATION OF YOUR PERSONAL YOU HAVE THE RIGHT, EVERY PREPARATION OF THIS PROCESSING USE OF THE USE OF RECALLING BETRIMINAL PERSONE CITY DATA TO PURPOSE OF THE PURPOSE OF THE PURPOSESUCH DIRECT TERMS IN CONNECTION. IF YOU ARE BY YOU WILL BE PERSONAL DATA ONLY ONLY MORE TO OVERVIEW OF THE DIRECT WORLDING USE (EMPLOYEMENT AFTER ART. 21 ABS. 2 GDPR).</p>
-<p><strong>Right to complain at the supervisory authority</strong></p>
-<p>In the event of violations of the GDPR, the data subjects have the right to lodge a complaint with a supervisory authority, in particular in the Member State of their habitual residence, their workplace or the place of the alleged infringement. The right to lodge a complaint exists without prejudice to any other administrative or judicial remedy.</p>
-<p><strong>Right to data transfer</strong></p>
-<p>You have the right to have data that we process automatically on the basis of your consent or in fulfilment of a contract handed over to you or to a third party in a common, machine-readable format. If you request the direct transfer of the data to another controller, this will only be done if it is technically feasible.</p>
-<p><strong>Data collection</strong></p>
-<p>We collect no data. GitHub, as a hosting service, might collect data. Please take a look at their Impressum for more details.</p>
-<p><strong>Request by e-mail</strong></p>
-<p>If you contact us by e-mail, your request, including all resulting personal data (name, request), will be stored and processed by us for the purpose of processing your request. We will not pass on this data without your consent.</p>
-<p>The processing of this data is based on Art. 6 para. 1 lit. b GDPR, if your request is related to the performance of a contract or is necessary for the implementation of pre-contractual measures. In all other cases, the processing is based on our legitimate interest in the effective processing of the inquiries addressed to us (Art. 6 para. 1 lit. f GDPR) or on your consent (Art. 6 para. 1 lit. a GDPR) if this has been queried.</p>
-<p>The data sent by you to us via contact requests will remain with us until you request its deletion, revoke your consent to its storage or the purpose for its storage no longer applies (e.g.&nbsp;after completion of your request). Mandatory legal provisions – in particular statutory retention periods – remain unaffected.</p>
-<p>Source (adapted): https://www.e-recht24.de</p>
+<section id="model" class="level2">
+<h2 class="anchored" data-anchor-id="model">Model</h2>
+<div id="ad87e829-022c-4468-a8b1-55f0965a2e07" class="cell" data-tags="[]" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>settings <span class="op">=</span> Settings(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">"SME"</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    output<span class="op">=</span>Zstruct(</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        directory<span class="op">=</span><span class="ss">f"outputs/dmplex"</span>, filename<span class="op">=</span><span class="st">"dmplex"</span>, output_snapshots<span class="op">=</span><span class="dv">2</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg">2026-01-20 08:40:22.046</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">199</span> - <span class="ansi-yellow-fg ansi-bold">No 'clean_directory' attribute found in output Zstruct. Default: 'False'</span>
+
+<span class="ansi-green-fg">2026-01-20 08:40:22.047</span> | <span class="ansi-yellow-fg ansi-bold">WARNING </span> | <span class="ansi-cyan-fg">zoomy_core.misc.misc</span>:<span class="ansi-cyan-fg">__init__</span>:<span class="ansi-cyan-fg">199</span> - <span class="ansi-yellow-fg ansi-bold">No 'snapshots' attribute found in output Zstruct. Default: '2'</span>
+</pre>
+</div>
+</div>
+</div>
+<div id="fd25e4e2-4653-441c-a82b-4d4c2e4c013b" class="cell" data-tags="[]" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>bcs <span class="op">=</span> BC.BoundaryConditions(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    [</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"inflow"</span>),</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        BC.Extrapolation(tag<span class="op">=</span><span class="st">"wall"</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> custom_ic(x):</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    Q <span class="op">=</span> np.zeros(<span class="dv">4</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    Q[<span class="dv">1</span>] <span class="op">=</span> <span class="fl">0.01</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Q</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>ic <span class="op">=</span> IC.UserFunction(custom_ic)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> SWEB(</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    boundary_conditions<span class="op">=</span>bcs,</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    initial_conditions<span class="op">=</span>ic,</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    aux_variables<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>main_dir <span class="op">=</span> misc.get_main_directory()</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>mesh <span class="op">=</span> petscMesh.PetscMesh.from_gmsh(</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    os.path.join(main_dir, <span class="st">"meshes/channel_quad_2d/mesh_coarse.msh"</span>)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="8d39ef18" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>mesh.to_h5(os.path.join(main_dir, settings.output.directory, <span class="st">'ic.h5'</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
 
 
+</section>
 </section>
 
 </main> <!-- /main -->
@@ -319,6 +385,57 @@ MathJax = {
         container: window.document.getElementById('quarto-embedded-source-code-modal')
       });
       clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
@@ -657,11 +774,11 @@ MathJax = {
 </div>   
     <div class="nav-footer-center">
       &nbsp;
-    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/mbd-rwth/Zoomy/edit/main/web/legal.qmd" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.dev/mbd-rwth/Zoomy/blob/main/web/tutorials/dmplex/simple.ipynb" target="_blank" class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a href="https://github.com/mbd-rwth/Zoomy/issues/new" target="_blank" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item">
-    <a class="nav-link active" href="./legal.html" aria-current="page">
+    <a class="nav-link" href="../../legal.html">
 <p>Legal notice and data protection</p>
 </a>
   </li>  
