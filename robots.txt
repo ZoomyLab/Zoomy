@@ -1,1 +1,1 @@
-Sitemap: https://ZoomyLab.github.io/zoomy/sitemap.xml
+Sitemap: https://ZoomyLab.github.io/Zoomy/sitemap.xml

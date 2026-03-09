@@ -1,183 +1,183 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/playground/no-playground.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/playground/no-playground.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/playground/playground.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/playground/playground.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/index.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/index.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/topo.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/topo.html</loc>
     <lastmod>2026-03-08T05:34:31.468Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/timedependend_bc.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/timedependend_bc.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/non_legendre.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/non_legendre.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/simple.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/simple.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/parabolic_bowl.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/firedrake/parabolic_bowl.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/characteristic_variables.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/firedrake/characteristic_variables.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/sme.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/openfoam/sme.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/simple_numpy.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/swe/simple_numpy.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/pyodide.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/swe/pyodide.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/amrex/buoy.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/amrex/buoy.html</loc>
     <lastmod>2026-03-09T15:49:14.602Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/dolfinx/dolfinx_demo.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/dolfinx/dolfinx_demo.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_openfoam.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/code_printers/to_openfoam.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_c_moments.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/code_printers/to_c_moments.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam_poisson_hp.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/vam_poisson_hp.html</loc>
     <lastmod>2026-02-26T11:07:47.585Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/examples/index.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/examples/index.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/jupyter-lite/notebooks/pyodide.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/jupyter-lite/notebooks/pyodide.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/publications.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/publications.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/docs/index.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/docs/index.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/api/index.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/api/index.html</loc>
     <lastmod>2026-02-26T11:07:47.489Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/api/fvm.solver.Settings.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/api/fvm.solver.Settings.html</loc>
     <lastmod>2026-02-26T11:07:47.489Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/docs/logging.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/docs/logging.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/software.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/software.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/about.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/about.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/legal.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/legal.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam_poisson.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/vam_poisson.html</loc>
     <lastmod>2026-02-26T11:07:47.585Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_c.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/code_printers/to_c.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_ufl.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/code_printers/to_ufl.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/code_printers/to_amrex.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/code_printers/to_amrex.html</loc>
     <lastmod>2026-03-08T07:24:21.479Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/vam/simple.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/vam/simple.html</loc>
     <lastmod>2026-03-08T05:34:49.148Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/amrex/from_DEM.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/amrex/from_DEM.html</loc>
     <lastmod>2026-03-09T15:49:14.602Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/swe/simple_jax.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/swe/simple_jax.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/swe.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/openfoam/swe.html</loc>
     <lastmod>2026-02-26T11:07:47.517Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/openfoam/smet.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/openfoam/smet.html</loc>
     <lastmod>2026-02-26T11:07:47.517Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/swe_minimal.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/firedrake/swe_minimal.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/firedrake/malpasset.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/firedrake/malpasset.html</loc>
     <lastmod>2026-02-26T11:07:47.501Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/minimal.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/minimal.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/topo_turbulent.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/topo_turbulent.html</loc>
     <lastmod>2026-03-08T07:24:21.491Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/sme/tc_intro_variable_friction.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/sme/tc_intro_variable_friction.html</loc>
     <lastmod>2026-02-26T11:07:47.581Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/poisson/simple.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/poisson/simple.html</loc>
     <lastmod>2026-02-26T11:07:47.517Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/tutorials/dmplex/simple.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/tutorials/dmplex/simple.html</loc>
     <lastmod>2026-03-08T07:24:21.491Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/research.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/research.html</loc>
     <lastmod>2025-11-10T14:12:36.630Z</lastmod>
   </url>
   <url>
-    <loc>https://ZoomyLab.github.io/zoomy/playground/jupyterlite.html</loc>
+    <loc>https://ZoomyLab.github.io/Zoomy/playground/jupyterlite.html</loc>
     <lastmod>2026-02-26T11:07:47.497Z</lastmod>
   </url>
 </urlset>

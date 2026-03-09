@@ -2337,7 +2337,7 @@ inline Foam::List&lt;Foam::List&lt;Foam::scalar&gt;&gt; basis(
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/zoomy\/");
+        var filterRegex = new RegExp("https:\/\/ZoomyLab\.github\.io\/Zoomy\/");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
