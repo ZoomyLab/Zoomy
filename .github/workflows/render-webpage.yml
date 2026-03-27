@@ -30,8 +30,9 @@ jobs:
 
       - name: Manual render note
         if: github.event_name == 'workflow_dispatch' && inputs.note != ''
-        run: echo "Manual render note: ${{ inputs.note }}"
-
+        run: |
+          echo "Manual render note: ${{ inputs.note }}"
+               
       - name: Set lowercase owner
         run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
         env:
