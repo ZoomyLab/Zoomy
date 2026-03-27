@@ -11,7 +11,7 @@ on:
       - "docs/**"
       - "web/**"
       - "tests/reporting/**"
-      - ".github/workflows/docs-build.yml"
+      - ".github/workflows/render-webpage.yml"
   workflow_dispatch:
     inputs:
       note:
