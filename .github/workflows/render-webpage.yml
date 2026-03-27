@@ -3,6 +3,8 @@ name: Render Webpage
 permissions:
   contents: read
   packages: read
+  pages: write      # Required to deploy to GitHub Pages
+  id-token: write   # Required to deploy to GitHub Pages
 
 on:
   push:
@@ -61,8 +63,24 @@ jobs:
             "$DOCS_IMAGE" \
             bash -lc "python docs/scripts/generate_ci_test_report.py && jupyter-book build docs/book"
 
-      - name: Upload docs artifact
-        uses: actions/upload-artifact@v4
+      # CHANGED: Replaced upload-artifact with configure-pages
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      # CHANGED: Use the official Pages artifact uploader
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: docs-book-html
-          path: docs/book/_build/html/**
+          path: docs/book/_build/html
+
+  # NEW JOB: Actually deploys the uploaded artifact to the live website
+  deploy-docs:
+    needs: build-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
