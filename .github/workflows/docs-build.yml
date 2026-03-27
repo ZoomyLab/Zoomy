@@ -43,14 +43,21 @@ jobs:
 
       - name: Pull docs image
         run: |
-          docker pull "ghcr.io/$OWNER_LC/zoomy_docs:latest"
+          IMAGE="ghcr.io/$OWNER_LC/zoomy_docs:latest"
+          if docker pull "$IMAGE"; then
+            echo "DOCS_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          else
+            echo "Prebuilt docs image not available. Building fallback image locally."
+            docker build -f docs/Dockerfile.docs -t zoomy-docs:fallback .
+            echo "DOCS_IMAGE=zoomy-docs:fallback" >> "$GITHUB_ENV"
+          fi
 
       - name: Build Jupyter Book in docs image
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
             -w /workspace \
-            "ghcr.io/$OWNER_LC/zoomy_docs:latest" \
+            "$DOCS_IMAGE" \
             bash -lc "python docs/scripts/generate_ci_test_report.py && jupyter-book build docs/book"
 
       - name: Upload docs artifact
