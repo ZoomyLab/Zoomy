@@ -18,6 +18,7 @@ on:
         description: "Optional note for this manual render"
         required: false
         default: ""
+        type: string
 
 jobs:
   build-docs:
