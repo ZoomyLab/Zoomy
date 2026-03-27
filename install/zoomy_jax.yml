@@ -6,3 +6,7 @@ dependencies:
   - jaxlib
   - jaxopt
   - pip
+  - pip:
+      - jraph
+      - equinox
+      - optax

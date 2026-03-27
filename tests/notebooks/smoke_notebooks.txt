@@ -1,0 +1,5 @@
+# Curated list of lightweight notebooks for periodic execution in CI.
+# Keep this list short and stable.
+#
+# Example:
+# tutorials/code_printers/to_c.ipynb

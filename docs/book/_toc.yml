@@ -1,0 +1,68 @@
+format: jb-book
+root: index
+parts:
+  - caption: Software
+    chapters:
+      - file: software
+      - file: documentation
+        sections:
+          - file: installation
+          - file: usage
+          - file: testing
+          - file: logging
+          - file: ci-reports
+      - file: research
+      - file: publications
+  - caption: Tutorials
+    chapters:
+      - file: tutorials/swe
+        sections:
+          - file: notebooks/tutorials/swe/simple_numpy
+          - file: notebooks/tutorials/swe/simple_jax
+          - file: notebooks/pyodide_sample
+      - file: tutorials/sme
+        sections:
+          - file: notebooks/tutorials/sme/simple
+          - file: notebooks/tutorials/sme/minimal
+          - file: notebooks/tutorials/sme/non_legendre
+          - file: notebooks/tutorials/sme/timedependend_bc
+          - file: notebooks/tutorials/sme/topo
+          - file: notebooks/tutorials/sme/topo_turbulent
+          - file: notebooks/tutorials/sme/tc_intro_variable_friction
+      - file: tutorials/amrex
+        sections:
+          - file: notebooks/tutorials/amrex/from_DEM
+          - file: notebooks/tutorials/amrex/buoy
+      - file: tutorials/openfoam
+        sections:
+          - file: notebooks/tutorials/openfoam/swe
+          - file: notebooks/tutorials/openfoam/sme
+          - file: notebooks/tutorials/openfoam/smet
+      - file: tutorials/dmplex
+        sections:
+          - file: notebooks/tutorials/dmplex/simple
+      - file: tutorials/dolfinx
+        sections:
+          - file: notebooks/tutorials/dolfinx/dolfinx_demo
+      - file: tutorials/code_printers
+        sections:
+          - file: notebooks/tutorials/code_printers/to_amrex
+          - file: notebooks/tutorials/code_printers/to_openfoam
+          - file: notebooks/tutorials/code_printers/to_ufl
+          - file: notebooks/tutorials/code_printers/to_c
+          - file: notebooks/tutorials/code_printers/to_c_moments
+      - file: tutorials/misc
+        sections:
+          - file: notebooks/tutorials/poisson/simple
+          - file: notebooks/tutorials/vam/simple
+          - file: notebooks/tutorials/vam_poisson
+          - file: notebooks/tutorials/vam_poisson_hp
+  - caption: API
+    chapters:
+      - file: api/index
+        sections:
+          - file: api/core
+          - file: api/jax
+          - file: api/amrex
+          - file: api/petsc
+          - file: api/firedrake

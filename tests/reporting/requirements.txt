@@ -1,0 +1,5 @@
+pytest
+pytest-html
+nbformat
+nbclient
+jupytext

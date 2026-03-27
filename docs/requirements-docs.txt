@@ -1,0 +1,8 @@
+jupyter-book<1
+sphinx
+myst-parser
+sphinx-design
+sphinx-copybutton
+sphinx-togglebutton
+breathe
+exhale

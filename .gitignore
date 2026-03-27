@@ -156,3 +156,4 @@ solver_gpu
 petsc-3.24
 .venv*
 /.jupyter_config
+_build
