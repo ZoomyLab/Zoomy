@@ -10,6 +10,7 @@ only_build_toc_files: false
 repository:
   url: https://github.com/mbd-rwth/Zoomy
   branch: main
+  path_to_book: docs/book
 
 launch_buttons:
   thebe: true
