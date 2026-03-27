@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Docs-only toolchain: Sphinx/Jupyter Book + C++ API doc generators.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    ca-certificates \
+    nodejs \
+    npm \
+    doxygen \
+    graphviz \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY docs/requirements-docs.txt /tmp/requirements-docs.txt
+RUN python -m pip install --upgrade pip && \
+    python -m pip install -r /tmp/requirements-docs.txt
+
+CMD ["bash"]

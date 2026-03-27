@@ -1,0 +1,29 @@
+title: Zoomy Documentation
+author: ZoomyLab
+logo: ../../web/images/logo.svg
+
+execute:
+  execute_notebooks: "off"
+
+only_build_toc_files: false
+
+repository:
+  url: https://github.com/mbd-rwth/Zoomy
+  branch: main
+
+launch_buttons:
+  thebe: true
+  binderhub_url: "https://mybinder.org"
+  notebook_interface: "jupyterlab"
+
+sphinx:
+  config:
+    html_theme: sphinx_book_theme
+    html_title: Zoomy Documentation
+    copyright: "2026, ZoomyLab"
+    suppress_warnings:
+      - toc.excluded
+      - toc.not_included
+    html_theme_options:
+      use_download_button: false
+      extra_footer: '<a href="about.html">About</a> · <a href="legal.html">Legal notice and data protection</a>'

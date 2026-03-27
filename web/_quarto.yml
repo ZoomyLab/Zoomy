@@ -87,7 +87,7 @@ website:
           contents: 
             - docs/index.qmd
         - text: "Testing"
-          href: ./pytest-report.html
+          href: docs/testing.qmd
         - text: "API"
           href: api/index.qmd
 

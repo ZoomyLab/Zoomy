@@ -1,0 +1,60 @@
+name: Render Webpage
+
+permissions:
+  contents: read
+  packages: read
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "docs/**"
+      - "web/**"
+      - "tests/reporting/**"
+      - ".github/workflows/docs-build.yml"
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Optional note for this manual render"
+        required: false
+        default: ""
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Manual render note
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.note != ''
+        run: echo "Manual render note: ${{ github.event.inputs.note }}"
+
+      - name: Set lowercase owner
+        run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull docs image
+        run: |
+          docker pull "ghcr.io/$OWNER_LC/zoomy_docs:latest"
+
+      - name: Build Jupyter Book in docs image
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "ghcr.io/$OWNER_LC/zoomy_docs:latest" \
+            bash -lc "python docs/scripts/generate_ci_test_report.py && jupyter-book build docs/book"
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-book-html
+          path: docs/book/_build/html/**

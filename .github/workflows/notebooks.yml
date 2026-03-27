@@ -1,0 +1,82 @@
+name: Notebook Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute_smoke:
+        description: "Execute curated smoke notebooks after validation"
+        required: false
+        default: "false"
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - "tutorials/**/*.ipynb"
+      - "notebooks/**/*.ipynb"
+      - "web/jupyter-lite/notebooks/**/*.ipynb"
+      - "tests/notebooks/**"
+      - "tests/reporting/check_notebooks.py"
+      - "tests/reporting/requirements.txt"
+      - ".github/workflows/notebooks.yml"
+  schedule:
+    # Weekly notebook smoke execution
+    - cron: "0 4 * * 0"
+
+jobs:
+  changed-notebooks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      notebooks_changed: ${{ steps.filter.outputs.notebooks }}
+      notebooks_list: ${{ steps.filter.outputs.notebooks_files }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          list-files: shell
+          filters: |
+            notebooks:
+              - 'tutorials/**/*.ipynb'
+              - 'notebooks/**/*.ipynb'
+              - 'web/jupyter-lite/notebooks/**/*.ipynb'
+
+  notebooks-validate:
+    needs: [changed-notebooks]
+    if: >
+      github.event_name != 'pull_request' ||
+      (github.event_name == 'pull_request' && needs.changed-notebooks.outputs.notebooks_changed == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install notebook check deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+
+      - name: Validate changed notebooks (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          python tests/reporting/check_notebooks.py --paths ${{ needs.changed-notebooks.outputs.notebooks_list }}
+          python tests/reporting/check_notebooks.py --paths ${{ needs.changed-notebooks.outputs.notebooks_list }} --jupytext-check
+
+      - name: Validate all notebooks (manual/schedule)
+        if: github.event_name != 'pull_request'
+        run: |
+          python tests/reporting/check_notebooks.py
+          python tests/reporting/check_notebooks.py --jupytext-check
+
+      - name: Execute smoke notebooks (weekly)
+        if: github.event_name == 'schedule'
+        run: |
+          python tests/reporting/check_notebooks.py --execute-smoke
+
+      - name: Execute smoke notebooks (manual opt-in)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.execute_smoke == 'true'
+        run: |
+          python tests/reporting/check_notebooks.py --execute-smoke

@@ -1,0 +1,298 @@
+name: Smart Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_large:
+        description: "Also run large/benchmark test suite"
+        required: false
+        default: "false"
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - "library/**"
+      - "tests/**"
+      - "tutorials/**"
+      - "pytest.ini"
+      - ".github/workflows/tests-report.yml"
+  schedule:
+    # Weekly large/benchmark run (Sunday 03:00 UTC)
+    - cron: "0 3 * * 0"
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ github.event_name == 'pull_request' && steps.filter.outputs.core || steps.defaults.outputs.core }}
+      jax: ${{ github.event_name == 'pull_request' && steps.filter.outputs.jax || steps.defaults.outputs.jax }}
+      amrex: ${{ github.event_name == 'pull_request' && steps.filter.outputs.amrex || steps.defaults.outputs.amrex }}
+      petsc: ${{ github.event_name == 'pull_request' && steps.filter.outputs.petsc || steps.defaults.outputs.petsc }}
+      firedrake: ${{ github.event_name == 'pull_request' && steps.filter.outputs.firedrake || steps.defaults.outputs.firedrake }}
+      infra: ${{ github.event_name == 'pull_request' && steps.filter.outputs.infra || steps.defaults.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            core:
+              - 'library/zoomy_core/**'
+              - 'tests/unit/zoomy_core/**'
+              - 'tests/regression/zoomy_core/**'
+              - 'tests/scripts/**'
+              - 'tutorials/swe/**'
+              - 'tutorials/poisson/**'
+            jax:
+              - 'library/zoomy_jax/**'
+              - 'tests/unit/zoomy_jax/**'
+              - 'tests/regression/zoomy_jax/**'
+              - 'tests/benchmarks/zoomy_jax/**'
+              - 'tests/scripts/**'
+            amrex:
+              - 'library/zoomy_amrex/**'
+              - 'tests/unit/zoomy_amrex/**'
+              - 'tests/regression/zoomy_amrex/**'
+              - 'tests/benchmarks/zoomy_amrex/**'
+              - 'tutorials/amrex/**'
+            petsc:
+              - 'library/zoomy_dmplex/**'
+              - 'library/zoomy_fenicsx/**'
+              - 'tests/unit/zoomy_dmplex/**'
+              - 'tests/unit/zoomy_fenicsx/**'
+              - 'tests/regression/zoomy_dmplex/**'
+              - 'tests/regression/zoomy_fenicsx/**'
+              - 'tests/benchmarks/zoomy_dmplex/**'
+              - 'tests/benchmarks/zoomy_fenicsx/**'
+              - 'tutorials/dmplex/**'
+              - 'tutorials/dolfinx/**'
+            firedrake:
+              - 'library/zoomy_firedrake/**'
+              - 'library/firedrake_animate/**'
+              - 'tests/unit/zoomy_firedrake/**'
+              - 'tests/regression/zoomy_firedrake/**'
+              - 'tests/benchmarks/zoomy_firedrake/**'
+              - 'tutorials/firedrake/**'
+            infra:
+              - 'pytest.ini'
+              - 'tests/conftest.py'
+              - 'tests/reporting/**'
+              - '.github/workflows/tests-report.yml'
+      - id: defaults
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "core=true" >> "$GITHUB_OUTPUT"
+          echo "jax=true" >> "$GITHUB_OUTPUT"
+          echo "amrex=true" >> "$GITHUB_OUTPUT"
+          echo "petsc=true" >> "$GITHUB_OUTPUT"
+          echo "firedrake=true" >> "$GITHUB_OUTPUT"
+          echo "infra=true" >> "$GITHUB_OUTPUT"
+
+  tests-core:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install core deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+      
+      - name: Generate core report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and (core or (numpy and not jax))" \
+            --output-dir artifacts/test-reports/core
+
+      - name: Upload core report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-core
+          path: artifacts/test-reports/core/**
+
+  tests-jax:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.jax == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jax deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          python -m pip install -e "library/zoomy_jax"
+      
+      - name: Generate jax report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and jax" \
+            --output-dir artifacts/test-reports/jax
+
+      - name: Upload jax report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-jax
+          path: artifacts/test-reports/jax/**
+
+  tests-amrex:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.amrex == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install amrex test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f tests/requirements/amrex.txt ]; then python -m pip install -r tests/requirements/amrex.txt; fi
+
+      - name: Generate amrex report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and amrex" \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/amrex
+
+      - name: Upload amrex report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-amrex
+          path: artifacts/test-reports/amrex/**
+
+  tests-petsc:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.petsc == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install petsc test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install -e "library/zoomy_fenicsx"; fi
+          if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
+
+      - name: Generate petsc report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and petsc" \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/petsc
+
+      - name: Upload petsc report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-petsc
+          path: artifacts/test-reports/petsc/**
+
+  tests-firedrake:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.firedrake == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install firedrake test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
+          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
+
+      - name: Generate firedrake report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and firedrake" \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/firedrake
+
+      - name: Upload firedrake report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-firedrake
+          path: artifacts/test-reports/firedrake/**
+
+  tests-large-weekly:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install full deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          python -m pip install -e "library/zoomy_jax"
+
+      - name: Generate weekly large+benchmark report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "large or benchmark" \
+            --run-large \
+            --run-benchmark \
+            --output-dir artifacts/test-reports/weekly-large
+
+      - name: Upload weekly large report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-weekly-large
+          path: artifacts/test-reports/weekly-large/**
+

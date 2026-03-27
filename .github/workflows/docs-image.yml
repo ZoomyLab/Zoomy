@@ -1,0 +1,45 @@
+name: Docs Image
+
+permissions:
+  contents: read
+  packages: write
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "docs/Dockerfile.docs"
+      - "docs/requirements-docs.txt"
+      - ".github/workflows/docs-image.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        run: echo "OWNER_LC=$(echo $OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build docs image
+        run: |
+          IMAGE="ghcr.io/$OWNER_LC/zoomy_docs"
+          TAG="${GITHUB_RUN_NUMBER}"
+          docker build --pull -f docs/Dockerfile.docs -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Push docs image
+        run: |
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
