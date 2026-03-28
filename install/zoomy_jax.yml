@@ -1,3 +1,4 @@
+# JAX + graph/GNN stack (jraph, equinox, optax). Consumed by containers/zoomy_jax_dev.
 channels:
   - conda-forge
 

@@ -1,4 +1,4 @@
-FROM ghcr.io/zoomylab/zoomy_firedrake:latest
+FROM ghcr.io/zoomylab/zoomy_firedrake_dev:latest
 
 # 1. Install system-level X11 libs
 RUN apt-get update && apt-get install -y \
