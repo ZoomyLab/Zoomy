@@ -12,6 +12,7 @@ on:
     paths:
       - "docs/**"
       - "web/**"
+      - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
   workflow_dispatch:
