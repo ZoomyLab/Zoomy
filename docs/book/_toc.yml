@@ -17,46 +17,46 @@ parts:
     chapters:
       - file: tutorials/swe
         sections:
-          - file: notebooks/tutorials/swe/simple_numpy
-          - file: notebooks/tutorials/swe/simple_jax
+          - file: tutorials/ipynb/swe/simple_numpy
+          - file: tutorials/ipynb/swe/simple_jax
           - file: notebooks/pyodide_sample
       - file: tutorials/sme
         sections:
-          - file: notebooks/tutorials/sme/simple
-          - file: notebooks/tutorials/sme/minimal
-          - file: notebooks/tutorials/sme/non_legendre
-          - file: notebooks/tutorials/sme/timedependend_bc
-          - file: notebooks/tutorials/sme/topo
-          - file: notebooks/tutorials/sme/topo_turbulent
-          - file: notebooks/tutorials/sme/tc_intro_variable_friction
+          - file: tutorials/ipynb/sme/simple
+          - file: tutorials/ipynb/sme/minimal
+          - file: tutorials/ipynb/sme/non_legendre
+          - file: tutorials/ipynb/sme/timedependend_bc
+          - file: tutorials/ipynb/sme/topo
+          - file: tutorials/ipynb/sme/topo_turbulent
+          - file: tutorials/ipynb/sme/tc_intro_variable_friction
       - file: tutorials/amrex
         sections:
-          - file: notebooks/tutorials/amrex/from_DEM
-          - file: notebooks/tutorials/amrex/buoy
+          - file: tutorials/ipynb/amrex/from_DEM
+          - file: tutorials/ipynb/amrex/buoy
       - file: tutorials/openfoam
         sections:
-          - file: notebooks/tutorials/openfoam/swe
-          - file: notebooks/tutorials/openfoam/sme
-          - file: notebooks/tutorials/openfoam/smet
+          - file: tutorials/ipynb/openfoam/swe
+          - file: tutorials/ipynb/openfoam/sme
+          - file: tutorials/ipynb/openfoam/smet
       - file: tutorials/dmplex
         sections:
-          - file: notebooks/tutorials/dmplex/simple
+          - file: tutorials/ipynb/dmplex/simple
       - file: tutorials/dolfinx
         sections:
-          - file: notebooks/tutorials/dolfinx/dolfinx_demo
+          - file: tutorials/ipynb/dolfinx/dolfinx_demo
       - file: tutorials/code_printers
         sections:
-          - file: notebooks/tutorials/code_printers/to_amrex
-          - file: notebooks/tutorials/code_printers/to_openfoam
-          - file: notebooks/tutorials/code_printers/to_ufl
-          - file: notebooks/tutorials/code_printers/to_c
-          - file: notebooks/tutorials/code_printers/to_c_moments
+          - file: tutorials/ipynb/code_printers/to_amrex
+          - file: tutorials/ipynb/code_printers/to_openfoam
+          - file: tutorials/ipynb/code_printers/to_ufl
+          - file: tutorials/ipynb/code_printers/to_c
+          - file: tutorials/ipynb/code_printers/to_c_moments
       - file: tutorials/misc
         sections:
-          - file: notebooks/tutorials/poisson/simple
-          - file: notebooks/tutorials/vam/simple
-          - file: notebooks/tutorials/vam_poisson
-          - file: notebooks/tutorials/vam_poisson_hp
+          - file: tutorials/ipynb/poisson/simple
+          - file: tutorials/ipynb/vam/simple
+          - file: tutorials/ipynb/vam_poisson
+          - file: tutorials/ipynb/vam_poisson_hp
   - caption: API
     chapters:
       - file: api/index

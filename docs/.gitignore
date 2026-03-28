@@ -1,1 +1,3 @@
 book/_build/
+book/_static/pytest-report.html
+book/tutorials/ipynb/

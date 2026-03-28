@@ -1,0 +1,55 @@
+/* Softer styling when reports are embedded in documentation (pytest-html --css). */
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #fafafa;
+  color: #1a1a1a;
+  line-height: 1.45;
+  margin: 0;
+  padding: 1rem 1.25rem;
+}
+
+h1, h2 {
+  font-weight: 600;
+  color: #111;
+}
+
+table {
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+th, td {
+  border: 1px solid #e0e0e0;
+  padding: 0.35rem 0.6rem;
+}
+
+thead th {
+  background: #f0f0f0;
+  font-weight: 600;
+}
+
+.passed,
+.results-table .passed {
+  background: #f3faf3 !important;
+}
+
+.skipped,
+.results-table .skipped {
+  background: #f8f8f6 !important;
+}
+
+.error,
+.failed,
+.results-table .failed,
+.results-table .error {
+  background: #fdf5f5 !important;
+}
+
+a {
+  color: #0b5fff;
+}
+
+a:visited {
+  color: #5a32a3;
+}

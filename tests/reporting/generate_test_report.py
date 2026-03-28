@@ -67,6 +67,9 @@ def main() -> int:
     ]
     if have_pytest_html:
         cmd.extend(["--html", str(html_path), "--self-contained-html"])
+        css = Path(__file__).resolve().parent / "pytest_html_docs.css"
+        if css.is_file():
+            cmd.extend(["--css", str(css)])
     else:
         print(
             "pytest-html not installed; HTML report will be skipped. "
