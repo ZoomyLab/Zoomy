@@ -19,6 +19,8 @@ launch_buttons:
 
 sphinx:
   config:
+    # Long stdout/stderr in frozen tutorial notebooks: limit vertical growth (see also cell tag scroll-output).
+    nb_scroll_outputs: true
     html_theme: sphinx_book_theme
     html_title: Zoomy Documentation
     copyright: "2026, ZoomyLab"

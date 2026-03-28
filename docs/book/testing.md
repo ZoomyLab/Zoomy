@@ -109,9 +109,13 @@ ZOOMY_CREATE_BASELINES=1 pytest tests -m small
   - `amrex`
   - `petsc`
   - `firedrake`
-- weekly scheduled large/benchmark run
+- scheduled and manual **large / benchmark** runs: one job per stack (same backends as small), merged into
+  **`test-reports-large-bundle`**
 - manual run with optional large test toggle
-- HTML + JUnit artifact output
+- HTML + JUnit per stack job; follow-up jobs merge stack artifacts into **`test-reports-small-bundle`** and
+  **`test-reports-large-bundle`** so docs can download two artifacts (small vs large, each with per-stack folders).
+- **Render Webpage** downloads the latest completed bundles of those names before building the book, and can also
+  run after Smart Tests via `workflow_run`.
 - runtime jobs can opt into dedicated dependency sets via:
   - `tests/requirements/amrex.txt`
   - `tests/requirements/petsc.txt`
