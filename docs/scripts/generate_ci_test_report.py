@@ -37,7 +37,7 @@ def _junit_under(root: Path) -> list[Path]:
     return sorted(root.glob("**/junit.xml"))
 
 
-def _parse_junit(path: Path) -> tuple[int, int, int, float]:
+def _parse_junit(path: Path) -> tuple[int, int, int, float, str | None]:
     root = ET.parse(path).getroot()
     if root.tag == "testsuites":
         suites = list(root.findall("testsuite"))
@@ -48,12 +48,27 @@ def _parse_junit(path: Path) -> tuple[int, int, int, float]:
 
     tests = failures = skipped = 0
     duration = 0.0
+    timestamps: list[str] = []
     for s in suites:
         tests += int(float(s.attrib.get("tests", "0")))
         failures += int(float(s.attrib.get("failures", "0")))
         skipped += int(float(s.attrib.get("skipped", "0")))
         duration += float(s.attrib.get("time", "0"))
-    return tests, failures, skipped, duration
+        ts = s.attrib.get("timestamp")
+        if ts:
+            timestamps.append(ts)
+    ts_out = max(timestamps) if timestamps else None
+    return tests, failures, skipped, duration, ts_out
+
+
+def _newest_junit_mtime(files: list[Path]) -> str | None:
+    if not files:
+        return None
+    try:
+        m = max(p.stat().st_mtime for p in files)
+        return dt.datetime.fromtimestamp(m, tz=dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except OSError:
+        return None
 
 
 def _write_junit_table(lines: list[str], title: str, files: list[Path]) -> None:
@@ -67,11 +82,50 @@ def _write_junit_table(lines: list[str], title: str, files: list[Path]) -> None:
     lines.append("| Report | Tests | Failures | Skipped | Duration (s) |")
     lines.append("|---|---:|---:|---:|---:|")
     for p in files:
-        tests, failures, skipped, duration = _parse_junit(p)
+        tests, failures, skipped, duration, _ts = _parse_junit(p)
         rel = p.relative_to(ROOT).as_posix()
         lines.append(
             f"| `{rel}` | {tests} | {failures} | {skipped} | {duration:.2f} |"
         )
+    lines.append("")
+
+
+def _latest_junit_xml_under(root: Path) -> Path | None:
+    files = _junit_under(root)
+    if not files:
+        return None
+    return max(files, key=lambda p: p.stat().st_mtime)
+
+
+def _write_summary_tables_by_tier(lines: list[str], tier_dir: Path, tier_title: str) -> None:
+    """One subsection per tier: timestamp line + single table (stack × metrics)."""
+    lines.append(f"### {tier_title}")
+    lines.append("")
+    all_junits: list[Path] = []
+    for slug, label in BACKENDS:
+        all_junits.extend(_junit_under(tier_dir / slug))
+    when_xml: list[str] = []
+    for p in all_junits:
+        _, _, _, _, ts = _parse_junit(p)
+        if ts:
+            when_xml.append(ts)
+    wall = _newest_junit_mtime(all_junits)
+    if when_xml:
+        lines.append(f"_Newest suite timestamp (from JUnit XML): **{max(when_xml)}**_")
+    if wall:
+        lines.append(f"_Newest report file on disk: **{wall}**_")
+    if not when_xml and not wall:
+        lines.append("_No timestamp metadata; run CI or `generate_test_report.py` to produce JUnit._")
+    lines.append("")
+    lines.append("| Stack | Tests | Failures | Skipped | Duration (s) |")
+    lines.append("|---|--:|--:|--:|--:|")
+    for slug, label in BACKENDS:
+        latest = _latest_junit_xml_under(tier_dir / slug)
+        if latest is None:
+            lines.append(f"| {label} | — | — | — | — |")
+            continue
+        tests, failures, skipped, duration, _ts = _parse_junit(latest)
+        lines.append(f"| {label} | {tests} | {failures} | {skipped} | {duration:.2f} |")
     lines.append("")
 
 
@@ -103,18 +157,18 @@ def _write_junit_summary() -> int:
     legacy = _legacy_junit_files()
 
     if has_modern:
-        lines.append("### Small suite (artifact `test-reports-small-bundle`)")
+        lines.append(
+            "Aggregated from the newest `junit.xml` per stack under "
+            "`artifacts/test-reports/small/<stack>/` and `.../large/<stack>/` "
+            "(CI artifacts **`test-reports-small-bundle`** / **`test-reports-large-bundle`**)."
+        )
         lines.append("")
-        for slug, label in BACKENDS:
-            lines.append(f"#### {label}")
-            lines.append("")
-            _write_junit_table(lines, "", _junit_under(SMALL_REPORTS / slug))
-        lines.append("### Large / benchmark suite (artifact `test-reports-large-bundle`)")
-        lines.append("")
-        for slug, label in BACKENDS:
-            lines.append(f"#### {label}")
-            lines.append("")
-            _write_junit_table(lines, "", _junit_under(LARGE_REPORTS / slug))
+        _write_summary_tables_by_tier(
+            lines, SMALL_REPORTS, "Small suite"
+        )
+        _write_summary_tables_by_tier(
+            lines, LARGE_REPORTS, "Large / benchmark suite"
+        )
     elif legacy:
         lines.append(
             "### Local / legacy layout (`artifacts/test-reports/` without `small/` or `large/`)"
