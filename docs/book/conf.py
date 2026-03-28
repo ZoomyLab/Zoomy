@@ -1,4 +1,4 @@
-"""Sphinx config merged by Jupyter Book: make ``zoomy_core`` importable for autodoc."""
+"""Sphinx config merged by Jupyter Book: editable installs use site-packages; this aids local src checkouts."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sys
 
 _here = pathlib.Path(__file__).resolve().parent
 _repo = _here.parent.parent
-_zoomy_core = _repo / "library" / "zoomy_core"
-if _zoomy_core.is_dir():
-    sys.path.insert(0, str(_zoomy_core))
+for _name in ("zoomy_core", "zoomy_jax"):
+    _lib = _repo / "library" / _name
+    if _lib.is_dir():
+        sys.path.insert(0, str(_lib))

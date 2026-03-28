@@ -38,8 +38,6 @@ sphinx:
       - h5py
       - gmsh
       - precice
-      - jax
-      - jaxlib
     autodoc_default_options:
       members: true
       undoc-members: false
