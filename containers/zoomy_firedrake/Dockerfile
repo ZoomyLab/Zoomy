@@ -2,8 +2,8 @@
 ARG FD_DEV_IMAGE=ghcr.io/zoomylab/zoomy_firedrake_dev:latest
 FROM ${FD_DEV_IMAGE}
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
+# Do not `pip install --upgrade pip` here: Firedrake uses Debian's python3-pip (no RECORD), which breaks uninstall.
+RUN python3 -m pip install --no-cache-dir \
       zoomy_core \
       pytest-html \
       jupytext \
