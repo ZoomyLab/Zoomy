@@ -318,7 +318,7 @@ jobs:
             -w /workspace \
             -e LOGURU_LEVEL=WARNING \
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_firedrake && \
+            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/firedrake_animate -e library/zoomy_firedrake && \
               ( python3 tests/reporting/generate_test_report.py \
                   --markers "small and dmplex" \
                   --ignore-pytest-exit-code \
@@ -552,7 +552,7 @@ jobs:
             -w /workspace \
             -e LOGURU_LEVEL=WARNING \
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_firedrake && \
+            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/firedrake_animate -e library/zoomy_firedrake && \
               ( python3 tests/reporting/generate_test_report.py \
                   --markers "(large or benchmark) and dmplex" \
                   --run-large \
