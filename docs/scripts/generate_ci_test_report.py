@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Prepare docs build: JUnit summary, latest pytest-html embed, tutorial notebook mirror."""
+"""Prepare docs build: JUnit summary, per-stack pytest-html embeds, tutorial notebook mirror."""
 
 from __future__ import annotations
 
 import datetime as dt
+import html
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -13,17 +14,26 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "docs" / "_generated"
 OUT_FILE = OUT_DIR / "test_report_summary.md"
 BOOK_STATIC = ROOT / "docs" / "book" / "_static"
-PYTEST_REPORT_NAME = "pytest-report.html"
+SMALL_REPORTS = ROOT / "artifacts" / "test-reports" / "small"
+LARGE_REPORTS = ROOT / "artifacts" / "test-reports" / "large"
+LEGACY_ROOT = ROOT / "artifacts" / "test-reports"
 TUTORIALS_SRC = ROOT / "tutorials"
 TUTORIALS_MIRROR = ROOT / "docs" / "book" / "tutorials" / "ipynb"
 
+# slug -> book heading
+BACKENDS: tuple[tuple[str, str], ...] = (
+    ("core", "Zoomy Core"),
+    ("jax", "Zoomy JAX"),
+    ("amrex", "AMReX"),
+    ("petsc", "PETSc / DMPlex / FEniCSx"),
+    ("firedrake", "Firedrake"),
+)
 
-def _iter_junit_files() -> list[Path]:
-    paths = []
-    artifacts = ROOT / "artifacts" / "test-reports"
-    if artifacts.exists():
-        paths.extend(artifacts.glob("**/junit.xml"))
-    return sorted(paths)
+
+def _junit_under(root: Path) -> list[Path]:
+    if not root.is_dir():
+        return []
+    return sorted(root.glob("**/junit.xml"))
 
 
 def _parse_junit(path: Path) -> tuple[int, int, int, float]:
@@ -45,20 +55,14 @@ def _parse_junit(path: Path) -> tuple[int, int, int, float]:
     return tests, failures, skipped, duration
 
 
-def _write_junit_summary() -> int:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    files = _iter_junit_files()
-    stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    lines: list[str] = []
-    lines.append(f"_Generated: {stamp}_")
-    lines.append("")
-
+def _write_junit_table(lines: list[str], title: str, files: list[Path]) -> None:
+    if title:
+        lines.append(f"#### {title}")
+        lines.append("")
     if not files:
-        lines.append("No JUnit report files found under `artifacts/test-reports/**/junit.xml`.")
-        OUT_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return 0
-
+        lines.append("_No JUnit files in this group._")
+        lines.append("")
+        return
     lines.append("| Report | Tests | Failures | Skipped | Duration (s) |")
     lines.append("|---|---:|---:|---:|---:|")
     for p in files:
@@ -66,6 +70,60 @@ def _write_junit_summary() -> int:
         rel = p.relative_to(ROOT).as_posix()
         lines.append(
             f"| `{rel}` | {tests} | {failures} | {skipped} | {duration:.2f} |"
+        )
+    lines.append("")
+
+
+def _legacy_junit_files() -> list[Path]:
+    legacy: list[Path] = []
+    if not LEGACY_ROOT.is_dir():
+        return legacy
+    for p in LEGACY_ROOT.glob("**/junit.xml"):
+        for sub in (SMALL_REPORTS, LARGE_REPORTS):
+            try:
+                p.relative_to(sub)
+            except ValueError:
+                pass
+            else:
+                break
+        else:
+            legacy.append(p)
+    return sorted(legacy)
+
+
+def _write_junit_summary() -> int:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    lines: list[str] = []
+    lines.append(f"_Generated: {stamp}_")
+    lines.append("")
+
+    has_modern = SMALL_REPORTS.is_dir() or LARGE_REPORTS.is_dir()
+    legacy = _legacy_junit_files()
+
+    if has_modern:
+        lines.append("### Small suite (artifact `test-reports-small-bundle`)")
+        lines.append("")
+        for slug, label in BACKENDS:
+            lines.append(f"#### {label}")
+            lines.append("")
+            _write_junit_table(lines, "", _junit_under(SMALL_REPORTS / slug))
+        lines.append("### Large / benchmark suite (artifact `test-reports-large-bundle`)")
+        lines.append("")
+        for slug, label in BACKENDS:
+            lines.append(f"#### {label}")
+            lines.append("")
+            _write_junit_table(lines, "", _junit_under(LARGE_REPORTS / slug))
+    elif legacy:
+        lines.append(
+            "### Local / legacy layout (`artifacts/test-reports/` without `small/` or `large/`)"
+        )
+        lines.append("")
+        _write_junit_table(lines, "", legacy)
+    else:
+        lines.append(
+            "No JUnit report files found under `artifacts/test-reports/small/`, "
+            "`artifacts/test-reports/large/`, or legacy `artifacts/test-reports/**/`."
         )
 
     OUT_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -84,29 +142,99 @@ def _sync_tutorial_notebooks() -> None:
         shutil.copy2(ipynb, dest)
 
 
-def _copy_latest_pytest_html() -> None:
-    BOOK_STATIC.mkdir(parents=True, exist_ok=True)
-    dest = BOOK_STATIC / PYTEST_REPORT_NAME
-    artifacts = ROOT / "artifacts" / "test-reports"
-    reports = list(artifacts.glob("**/report.html")) if artifacts.is_dir() else []
-    if not reports:
-        stub = """<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><title>Test report</title></head>
+def _stub(*, backend: str, tier: str) -> str:
+    be = html.escape(backend)
+    tier_esc = html.escape(tier)
+    small_name = html.escape("test-reports-small-bundle")
+    large_name = html.escape("test-reports-large-bundle")
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>{tier_esc} — {be}</title></head>
 <body style="font-family:system-ui,sans-serif;padding:1.5rem;max-width:48rem;">
-<p>No <code>report.html</code> found under <code>artifacts/test-reports/</code>.</p>
-<p>Run the <em>tests-report</em> workflow (or <code>python tests/reporting/generate_test_report.py</code>)
-and copy artifacts here, then re-run <code>python docs/scripts/generate_ci_test_report.py</code>.</p>
+<p>No <code>report.html</code> found for <strong>{tier_esc}</strong> / <strong>{be}</strong>.</p>
+<p>CI stores reports under <code>artifacts/test-reports/{tier_esc}/{backend}/&lt;timestamp&gt;/</code>.
+Smart Tests uploads <code>{small_name}</code> (small) and <code>{large_name}</code> (large); Render Webpage
+downloads them before the book build.</p>
+<p>Large jobs run on the weekly schedule or a manual Smart Tests run with large tests enabled.</p>
 </body></html>
 """
-        dest.write_text(stub, encoding="utf-8")
+
+
+def _latest_report_html(search_roots: list[Path]) -> Path | None:
+    reports: list[Path] = []
+    for root in search_roots:
+        if root.is_dir():
+            reports.extend(root.glob("**/report.html"))
+    if not reports:
+        return None
+    return max(reports, key=lambda p: p.stat().st_mtime)
+
+
+def _copy_pytest_html(dest_name: str, search_roots: list[Path], *, backend: str, tier: str) -> None:
+    BOOK_STATIC.mkdir(parents=True, exist_ok=True)
+    dest = BOOK_STATIC / dest_name
+    latest = _latest_report_html(search_roots)
+    if latest is None:
+        dest.write_text(_stub(backend=backend, tier=tier), encoding="utf-8")
         return
-    latest = max(reports, key=lambda p: p.stat().st_mtime)
     shutil.copy2(latest, dest)
+
+
+def _copy_per_backend_reports() -> None:
+    for slug, _label in BACKENDS:
+        _copy_pytest_html(
+            f"pytest-report-small-{slug}.html",
+            [SMALL_REPORTS / slug],
+            backend=slug,
+            tier="small",
+        )
+        _copy_pytest_html(
+            f"pytest-report-large-{slug}.html",
+            [LARGE_REPORTS / slug],
+            backend=slug,
+            tier="large",
+        )
+
+
+def _legacy_single_report_fallback() -> None:
+    """If only timestamped local dirs exist (no small/large split), surface one report under Core small."""
+    latest = _latest_report_html([LEGACY_ROOT])
+    if latest is None:
+        return
+    BOOK_STATIC.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(latest, BOOK_STATIC / "pytest-report-small-core.html")
+    for slug, _ in BACKENDS:
+        if slug == "core":
+            continue
+        _copy_pytest_html(
+            f"pytest-report-small-{slug}.html",
+            [],
+            backend=slug,
+            tier="small",
+        )
+    for slug, _ in BACKENDS:
+        _copy_pytest_html(
+            f"pytest-report-large-{slug}.html",
+            [],
+            backend=slug,
+            tier="large",
+        )
+
+
+def _copy_all_pytest_html() -> None:
+    BOOK_STATIC.mkdir(parents=True, exist_ok=True)
+    modern = SMALL_REPORTS.is_dir() or LARGE_REPORTS.is_dir()
+    if modern:
+        _copy_per_backend_reports()
+        return
+    if LEGACY_ROOT.is_dir() and _latest_report_html([LEGACY_ROOT]) is not None:
+        _legacy_single_report_fallback()
+        return
+    _copy_per_backend_reports()
 
 
 def main() -> int:
     _sync_tutorial_notebooks()
-    _copy_latest_pytest_html()
+    _copy_all_pytest_html()
     return _write_junit_summary()
 
 

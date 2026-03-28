@@ -1,6 +1,14 @@
 name: Smart Tests
 
 on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "library/**"
+      - "tests/**"
+      - "tutorials/**"
+      - "pytest.ini"
+      - ".github/workflows/tests-report.yml"
   workflow_dispatch:
     inputs:
       run_large:
@@ -262,37 +270,272 @@ jobs:
           name: test-report-firedrake
           path: artifacts/test-reports/firedrake/**
 
-  tests-large-weekly:
+  tests-large-core:
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install core deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+      - name: Generate large core report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and (core or (numpy and not jax))" \
+            --run-large \
+            --run-benchmark \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-core
+      - name: Upload large core report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-core
+          path: artifacts/test-reports/large-core/**
 
-      - name: Install full deps
+  tests-large-jax:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install jax deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r tests/reporting/requirements.txt
           python -m pip install -e "library/zoomy_core"
           python -m pip install -e "library/zoomy_jax"
-
-      - name: Generate weekly large+benchmark report
+      - name: Generate large jax report
         run: |
           python tests/reporting/generate_test_report.py \
-            --markers "large or benchmark" \
+            --markers "(large or benchmark) and jax" \
             --run-large \
             --run-benchmark \
-            --output-dir artifacts/test-reports/weekly-large
-
-      - name: Upload weekly large report artifacts
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-jax
+      - name: Upload large jax report
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-weekly-large
-          path: artifacts/test-reports/weekly-large/**
+          name: test-report-large-jax
+          path: artifacts/test-reports/large-jax/**
+
+  tests-large-amrex:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install amrex test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f tests/requirements/amrex.txt ]; then python -m pip install -r tests/requirements/amrex.txt; fi
+      - name: Generate large amrex report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and amrex" \
+            --run-large \
+            --run-benchmark \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-amrex
+      - name: Upload large amrex report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-amrex
+          path: artifacts/test-reports/large-amrex/**
+
+  tests-large-petsc:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install petsc test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install -e "library/zoomy_fenicsx"; fi
+          if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
+      - name: Generate large petsc report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and petsc" \
+            --run-large \
+            --run-benchmark \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-petsc
+      - name: Upload large petsc report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-petsc
+          path: artifacts/test-reports/large-petsc/**
+
+  tests-large-firedrake:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install firedrake test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
+          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
+      - name: Generate large firedrake report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and firedrake" \
+            --run-large \
+            --run-benchmark \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-firedrake
+      - name: Upload large firedrake report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-firedrake
+          path: artifacts/test-reports/large-firedrake/**
+
+  aggregate-large-reports:
+    name: Bundle large-suite reports
+    needs:
+      - tests-large-core
+      - tests-large-jax
+      - tests-large-amrex
+      - tests-large-petsc
+      - tests-large-firedrake
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Init bundle directory
+        run: mkdir -p artifacts/test-reports/large
+      - name: Download large core report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-core
+          path: artifacts/test-reports/large/core
+      - name: Download large jax report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-jax
+          path: artifacts/test-reports/large/jax
+      - name: Download large amrex report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-amrex
+          path: artifacts/test-reports/large/amrex
+      - name: Download large petsc report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-petsc
+          path: artifacts/test-reports/large/petsc
+      - name: Download large firedrake report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-firedrake
+          path: artifacts/test-reports/large/firedrake
+      - name: Detect merged large HTML reports
+        id: check
+        run: |
+          if [ -d artifacts/test-reports/large ] && \
+             find artifacts/test-reports/large -name report.html -print -quit | grep -q .; then
+            echo "has_reports=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_reports=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload large-suite bundle
+        if: steps.check.outputs.has_reports == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-large-bundle
+          path: artifacts/test-reports/large
+
+  aggregate-small-reports:
+    name: Bundle small-suite reports
+    needs: [tests-core, tests-jax, tests-amrex, tests-petsc, tests-firedrake]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Init bundle directory
+        run: mkdir -p artifacts/test-reports/small
+      - name: Download core report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-core
+          path: artifacts/test-reports/small/core
+      - name: Download jax report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-jax
+          path: artifacts/test-reports/small/jax
+      - name: Download amrex report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-amrex
+          path: artifacts/test-reports/small/amrex
+      - name: Download petsc report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-petsc
+          path: artifacts/test-reports/small/petsc
+      - name: Download firedrake report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-firedrake
+          path: artifacts/test-reports/small/firedrake
+      - name: Detect merged HTML reports
+        id: check
+        run: |
+          if [ -d artifacts/test-reports/small ] && \
+             find artifacts/test-reports/small -name report.html -print -quit | grep -q .; then
+            echo "has_reports=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_reports=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload small-suite bundle
+        if: steps.check.outputs.has_reports == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-small-bundle
+          path: artifacts/test-reports/small
 

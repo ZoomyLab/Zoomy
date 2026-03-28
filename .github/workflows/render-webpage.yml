@@ -3,6 +3,7 @@ name: Render Webpage
 permissions:
   contents: read
   packages: read
+  actions: read     # Download Smart Tests artifacts from other workflow runs
   pages: write      # Required to deploy to GitHub Pages
   id-token: write   # Required to deploy to GitHub Pages
 
@@ -15,6 +16,10 @@ on:
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
+  workflow_run:
+    workflows: [ "Smart Tests" ]
+    types: [ completed ]
+    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       note:
@@ -56,6 +61,29 @@ jobs:
             docker build -f docs/Dockerfile.docs -t zoomy-docs:fallback .
             echo "DOCS_IMAGE=zoomy-docs:fallback" >> "$GITHUB_ENV"
           fi
+
+      # Small vs large bundles are produced on different schedules; fetch each separately.
+      - name: Download latest small-suite test reports
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: tests-report.yml
+          workflow_conclusion: completed
+          branch: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+          name: test-reports-small-bundle
+          path: artifacts/test-reports/small
+          if_no_artifact_found: ignore
+
+      - name: Download latest large-suite test reports
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: tests-report.yml
+          workflow_conclusion: completed
+          branch: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+          name: test-reports-large-bundle
+          path: artifacts/test-reports/large
+          if_no_artifact_found: ignore
 
       - name: Build Jupyter Book in docs image
         run: |
