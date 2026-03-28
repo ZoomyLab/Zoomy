@@ -23,4 +23,8 @@ COPY docs/requirements-docs.txt /tmp/requirements-docs.txt
 RUN python -m pip install --upgrade pip && \
     python -m pip install -r /tmp/requirements-docs.txt
 
+# Same dependency surface as a dev conda env with zoomy_core; needed for autodoc (api/core.md).
+COPY library/zoomy_core /tmp/zoomy_core
+RUN python -m pip install --no-cache-dir -e /tmp/zoomy_core
+
 CMD ["bash"]

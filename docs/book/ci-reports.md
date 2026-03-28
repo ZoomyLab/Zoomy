@@ -5,8 +5,6 @@
 ```{include} ../_generated/test_report_summary.md
 ```
 
-The table is produced by `docs/scripts/generate_ci_test_report.py` before `jupyter-book build`: it reads the **newest** `junit.xml` per stack from `artifacts/test-reports/small/<stack>/` and `artifacts/test-reports/large/<stack>/`, parses counts and duration, and uses JUnit `timestamp` attributes plus file mtimes when present.
-
 ---
 
 ## Detailed HTML reports (per stack)
@@ -174,37 +172,43 @@ Missing reports show a short placeholder inside the iframe.
 
 ## How to use this page
 
-### Viewing on the website
-
-- **Summary** updates when **Render Webpage** runs after **Smart Tests** (or when you rebuild docs locally with artifacts present).
-- You do not need to run Smart Tests and Render Webpage by hand in order: when **Smart Tests** completes on **`main`**, **Render Webpage** is triggered via `workflow_run` and downloads the latest **`test-reports-small-bundle`** / **`test-reports-large-bundle`** for that branch.
-
 ### Local book build with real reports
+
+From the **repository root**:
 
 ```bash
 python tests/reporting/generate_test_report.py … \
-  --output-dir artifacts/test-reports/small/core   # or large/…
+  --output-dir artifacts/test-reports/small/core   # or large/<stack>/…
 python docs/scripts/generate_ci_test_report.py
 jupyter-book build docs/book
 ```
 
+**Files created or refreshed by `docs/scripts/generate_ci_test_report.py`:**
+
+| Output | Role |
+|--------|------|
+| `docs/_generated/test_report_summary.md` | Summary tables for this page (`{include}`) |
+| `docs/book/_static/pytest-report-small-<stack>.html` | Embedded small-suite HTML per stack |
+| `docs/book/_static/pytest-report-large-<stack>.html` | Embedded large-suite HTML per stack |
+| `docs/book/tutorials/ipynb/**` | Mirror of `tutorials/**/*.ipynb` for MyST pages |
+
+Stub HTML is written when no matching `report.html` exists under `artifacts/`.
+
 ### Adding or changing tests
 
 - Mark tests with the right **pytest markers** (`small`, `jax`, `core`, `firedrake`, …) so the correct CI job collects them.
-- After CI changes, open the matching **pytest-html** iframe on this page or the JUnit row in the **Summary** table.
+- After CI runs, use the **Summary** table and the matching **pytest-html** section on this page.
 
 ### Docs-only changes
 
-- Pushing documentation alone still rebuilds the site; it re-downloads the **latest** Smart Tests artifacts from **`main`** when Render Webpage runs.
+- Pushing documentation alone still rebuilds the site; **Render Webpage** re-downloads the latest Smart Tests artifacts from **`main`** when it runs.
 
 ---
 
-## How CI fits together (architecture)
+## Architecture
 
 - **Smart Tests** (`.github/workflows/tests-report.yml`) runs pytest inside **GHCR** images (`zoomy_core`, `zoomy_jax`, `zoomy_firedrake`, placeholders, …), bind-mounts the repo, and `pip install -e`’s the relevant `library/*` trees so reports match the commit under test.
 - **Artifacts**: per-stack HTML/JUnit are merged into **`test-reports-small-bundle`** and **`test-reports-large-bundle`** (small vs large/benchmark jobs).
 - **Render Webpage** downloads those bundles, runs `docs/scripts/generate_ci_test_report.py`, then builds the book (including this page).
 - **Containers** must publish images before pulls make sense; a successful **Containers** run triggers another **Smart Tests** pass via `workflow_run` so `:latest` images match the same SHA.
 - **Submodules**: Smart Tests uses `actions/checkout` with **`submodules: recursive`** so `library/*` exists on the runner.
-
-DMPlex vs FEniCSx: tests under `tests/**/zoomy_dmplex/` get the `dmplex` marker; `tests/**/zoomy_fenicsx/` get `fenicsx` (see `tests/conftest.py`). CI runs DMPlex and Firedrake in the **zoomy_firedrake** image; FEniCSx uses its placeholder image.

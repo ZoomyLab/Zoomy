@@ -18,9 +18,31 @@ launch_buttons:
   notebook_interface: "jupyterlab"
 
 sphinx:
+  extra_extensions:
+    - sphinx.ext.autodoc
+    - sphinx.ext.napoleon
   config:
     # Long stdout/stderr in frozen tutorial notebooks: limit vertical growth (see also cell tag scroll-output).
     nb_scroll_outputs: true
+    html_css_files:
+      - notebook-output-scroll.css
+    autodoc_mock_imports:
+      - petsc4py
+      - firedrake
+      - pyop2
+      - ufl
+      - finat
+      - FIAT
+      - tsfc
+      - meshio
+      - h5py
+      - gmsh
+      - precice
+      - jax
+      - jaxlib
+    autodoc_default_options:
+      members: true
+      undoc-members: false
     html_theme: sphinx_book_theme
     html_title: Zoomy Documentation
     copyright: "2026, ZoomyLab"

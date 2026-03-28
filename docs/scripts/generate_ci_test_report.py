@@ -98,24 +98,16 @@ def _latest_junit_xml_under(root: Path) -> Path | None:
 
 
 def _write_summary_tables_by_tier(lines: list[str], tier_dir: Path, tier_title: str) -> None:
-    """One subsection per tier: timestamp line + single table (stack × metrics)."""
+    """One subsection per tier: Generated (from newest junit.xml mtime on disk) + table."""
     lines.append(f"### {tier_title}")
     lines.append("")
     all_junits: list[Path] = []
     for slug, label in BACKENDS:
         all_junits.extend(_junit_under(tier_dir / slug))
-    when_xml: list[str] = []
-    for p in all_junits:
-        _, _, _, _, ts = _parse_junit(p)
-        if ts:
-            when_xml.append(ts)
     wall = _newest_junit_mtime(all_junits)
-    if when_xml:
-        lines.append(f"_Newest suite timestamp (from JUnit XML): **{max(when_xml)}**_")
-    if wall:
-        lines.append(f"_Newest report file on disk: **{wall}**_")
-    if not when_xml and not wall:
-        lines.append("_No timestamp metadata; run CI or `generate_test_report.py` to produce JUnit._")
+    if not wall:
+        wall = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    lines.append(f"_Generated: {wall}_")
     lines.append("")
     lines.append("| Stack | Tests | Failures | Skipped | Duration (s) |")
     lines.append("|---|--:|--:|--:|--:|")
@@ -148,21 +140,12 @@ def _legacy_junit_files() -> list[Path]:
 
 def _write_junit_summary() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines: list[str] = []
-    lines.append(f"_Generated: {stamp}_")
-    lines.append("")
 
     has_modern = SMALL_REPORTS.is_dir() or LARGE_REPORTS.is_dir()
     legacy = _legacy_junit_files()
 
     if has_modern:
-        lines.append(
-            "Aggregated from the newest `junit.xml` per stack under "
-            "`artifacts/test-reports/small/<stack>/` and `.../large/<stack>/` "
-            "(CI artifacts **`test-reports-small-bundle`** / **`test-reports-large-bundle`**)."
-        )
-        lines.append("")
         _write_summary_tables_by_tier(
             lines, SMALL_REPORTS, "Small suite"
         )
@@ -170,12 +153,21 @@ def _write_junit_summary() -> int:
             lines, LARGE_REPORTS, "Large / benchmark suite"
         )
     elif legacy:
+        gen = _newest_junit_mtime(legacy)
+        if not gen:
+            gen = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        lines.append(f"_Generated: {gen}_")
+        lines.append("")
         lines.append(
             "### Local / legacy layout (`artifacts/test-reports/` without `small/` or `large/`)"
         )
         lines.append("")
         _write_junit_table(lines, "", legacy)
     else:
+        lines.append(
+            f"_Generated: {dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}_"
+        )
+        lines.append("")
         lines.append(
             "No JUnit report files found under `artifacts/test-reports/small/`, "
             "`artifacts/test-reports/large/`, or legacy `artifacts/test-reports/**/`."
