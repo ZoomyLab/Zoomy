@@ -94,6 +94,8 @@ jobs:
               - 'tests/benchmarks/zoomy_amrex/**'
               - 'tutorials/amrex/**'
             dmplex:
+              # Bare path: submodule gitlink-only bumps do not match library/zoomy_dmplex/**
+              - 'library/zoomy_dmplex'
               - 'library/zoomy_dmplex/**'
               - 'tests/unit/zoomy_dmplex/**'
               - 'tests/regression/zoomy_dmplex/**'
