@@ -55,15 +55,46 @@ WIP
 
 ### Cloning the repository
 
-You can either clone the repo with all related subrepositories via
+The Zoomy repository pins **exact commits** for each submodule (reproducible checkouts). The submodule entries in `.gitmodules` also record `branch = main` so you can optionally move submodules to the **latest `main`** of their own repos.
 
-```
+#### 1) Full tree at the pins recorded by Zoomy (typical)
+
+```bash
 git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
+cd Zoomy
 ```
 
-**or** you can start by cloning the main repository (Zoomy) and selected subrepositories, e.g.
+If you already cloned without submodules:
 
+```bash
+git clone https://github.com/ZoomyLab/Zoomy.git
+cd Zoomy
+git submodule sync --recursive
+git submodule update --init --recursive
 ```
+
+#### 2) Full tree with every submodule moved to the latest `main`
+
+Use this when you want all libraries on the current tip of their default branch (may be less stable than the pins on `Zoomy`’s `main`).
+
+```bash
+git clone https://github.com/ZoomyLab/Zoomy.git
+cd Zoomy
+git submodule sync --recursive
+git submodule update --init --recursive
+git submodule update --remote --merge --recursive
+```
+
+Or, after a `--recurse-submodules` clone, run only:
+
+```bash
+cd Zoomy
+git submodule update --remote --merge --recursive
+```
+
+#### 3) Clone Zoomy only, then initialize **selected** submodules
+
+```bash
 git clone https://github.com/ZoomyLab/Zoomy.git
 cd Zoomy
 git submodule update --init meshes
@@ -71,7 +102,40 @@ git submodule update --init library/zoomy_core
 git submodule update --init library/zoomy_jax
 ```
 
-The different subrepositories are listed at [ZoomyLab](https://github.com/ZoomyLab)
+Paths match `.gitmodules` (e.g. `library/zoomy_firedrake`, `library/zoomy_dmplex`, `data`, …).
+
+#### 4) One submodule: fetch it and stay on latest `main`
+
+From the root of your Zoomy clone:
+
+```bash
+git submodule update --init path/to/submodule
+git submodule update --remote --merge path/to/submodule
+```
+
+Example for JAX only:
+
+```bash
+git submodule update --init library/zoomy_jax
+git submodule update --remote --merge library/zoomy_jax
+```
+
+That uses the `branch = main` entry for that submodule in `.gitmodules`. To persist the new commit in **your** Zoomy fork/branch (so others see the same pin):
+
+```bash
+git add library/zoomy_jax
+git commit -m "Bump zoomy_jax submodule to latest main"
+```
+
+**Pulling Zoomy later** does not automatically advance submodules; use:
+
+```bash
+git pull --recurse-submodules
+# and if you want submodules to track their remotes again:
+git submodule update --remote --merge --recursive
+```
+
+The different subrepositories are listed under [ZoomyLab](https://github.com/ZoomyLab) on GitHub.
 
 
 
