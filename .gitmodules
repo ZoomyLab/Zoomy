@@ -28,3 +28,6 @@
 [submodule "library/firedrake_animate"]
 	path = library/firedrake_animate
 	url = git@github.com:ZoomyLab/firedrake_animate.git
+[submodule "library/zoomy_dmplex"]
+	path = library/zoomy_dmplex
+	url = git@github.com:ZoomyLab/zoomy-dmplex.git
