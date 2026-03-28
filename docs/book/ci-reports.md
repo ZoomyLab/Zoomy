@@ -16,6 +16,10 @@ get `fenicsx` (see `tests/conftest.py`). CI runs DMPlex and Firedrake on the sam
 
 ### First-time setup (GitHub Actions)
 
+The monorepo uses **git submodules** under `library/` (see `.gitmodules`). Smart Tests runs `actions/checkout` with
+`submodules: recursive` so `library/zoomy_core/pyproject.toml` and siblings exist on the runner. If submodule checkout
+fails (e.g. private submodules on a fork PR), fix access or use a machine user / deploy key.
+
 1. **Merge** workflow changes to `main` (or `master`) so **Smart Tests** includes the bundle upload jobs.
 2. Run **Smart Tests** once successfully on that branch (push a commit under the workflow path filters, open a PR, or use **Run workflow**).  
    - For **large** iframes too: run Smart Tests manually with **“Also run large/benchmark test suite”** checked, or wait for the weekly schedule.
