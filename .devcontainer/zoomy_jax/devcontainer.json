@@ -12,13 +12,12 @@
   },
   "settings": {
     "terminal.integrated.defaultProfile.linux": "bash",
-    "python.pythonPath": "/opt/firedrake/bin/python"
+    "python.defaultInterpreterPath": "/opt/zoomy/envs/zoomy/bin/python"
   },
   "remoteEnv": {
-    "PYTHONPATH": "/opt/firedrake:",
     "ZOOMY_DIR": "/workspace"
   },
-  "postCreateCommand": "python3 -m pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_jax -e /workspace/library/zoomy_tests",
+  "postCreateCommand": "/opt/zoomy/envs/zoomy/bin/python -m pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_jax -e /workspace/library/zoomy_tests",
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",

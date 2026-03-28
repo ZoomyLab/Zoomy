@@ -1,2 +1,2 @@
-FROM ghcr.io/zoomylab/zoomy_jax:latest
+FROM ghcr.io/zoomylab/zoomy_jax_dev:latest
 

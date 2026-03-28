@@ -1,64 +1,16 @@
-# Use firedrake vanilla image (default architecture, main branch)
-FROM firedrakeproject/firedrake-vanilla-default:latest
+# CI image: Firedrake dev base + Zoomy wheels from PyPI when published.
+ARG FD_DEV_IMAGE=ghcr.io/zoomylab/zoomy_firedrake_dev:latest
+FROM ${FD_DEV_IMAGE}
 
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Europe/London
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir \
+      zoomy_core \
+      pytest-html \
+      jupytext \
+      nbformat \
+      nbclient
 
-# Install additional build tools and dependencies for PETSc
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    gfortran \
-    cmake \
-    git \
-    sudo \
-    libblas-dev \
-    liblapack-dev \
-    libboost-dev \
-    libopenblas-dev \
-    nlohmann-json3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Optional until published to PyPI:
+RUN python3 -m pip install --no-cache-dir zoomy_firedrake firedrake_animate zoomy_tests 2>/dev/null || true
 
-# Rebuild PETSc with mesh adaptivity frameworks enabled
-RUN cd /opt/petsc && \
-    make clean && rm -rf arch-* && \
-    ./configure \
-        --download-ptscotch \
-        --with-make-np=8 \
-        --download-hwloc \
-        --download-hdf5 \
-        --with-hdf5=1 \
-        --with-hdf5-fortran-bindings=0 \
-        --download-netlib-lapack \
-        --with-netlib-lapack-c-bindings \
-        --download-mumps \
-        --download-scalapack \
-        --download-parmetis \
-        --download-superlu_dist \
-        --download-pastix \
-        --download-metis \
-        --download-mmg \
-        --download-parmmg \
-        --download-pragmatic \
-        --download-eigen \
-        --download-slepc \
-        --with-shared-libraries \
-        PETSC_ARCH=arch-firedrake-default && \
-    make PETSC_DIR=/opt/petsc PETSC_ARCH=arch-firedrake-default all
-
-# Re-install Python PETSc bindings
-RUN pip install --no-cache-dir --force-reinstall \
-    /opt/petsc/src/binding/petsc4py
-
-# --- Install Python dependencies ---
-RUN python3 -m pip install --no-cache-dir \
-      jupyterlab \
-      notebook \
-      ipywidgets \
-      matplotlib \
-      pandas
-
-
-# Clean up
-RUN rm -rf /var/lib/apt/lists/*
-
+CMD ["/bin/bash"]

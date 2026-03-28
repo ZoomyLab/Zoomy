@@ -20,7 +20,7 @@
     "PYTHONPATH": "/opt/firedrake:/workspace/library/zoomy_core:/workspace/library/firedrake_animate:/workspace/library/zoomy_firedrake",
     "ZOOMY_DIR": "/workspace"
   },
-  "updateContentCommand": "for dir in library/zoomy_core library/firedrake_animate library/zoomy_firedrake; do pip install -e \"$dir\"; done",
+  "updateContentCommand": "for dir in library/zoomy_core library/firedrake_animate library/zoomy_firedrake; do python3 -m pip install -e \"$dir\"; done",
   "customizations": {
     "vscode": {
       "extensions": [

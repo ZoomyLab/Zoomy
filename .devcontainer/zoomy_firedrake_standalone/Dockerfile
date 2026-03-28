@@ -1,4 +1,5 @@
-FROM ghcr.io/zoomylab/zoomy_firedrake_standalone:latest
+# Prebuilt Zoomy Firedrake stack (PyPI zoomy_* on top of dev base); use zoomy_firedrake_dev for editable-only workflows.
+FROM ghcr.io/zoomylab/zoomy_firedrake:latest
 
 # Install minimal X11 libs so Firedrake's PETSc/Xlib detection works
 RUN apt-get update && apt-get install -y \
