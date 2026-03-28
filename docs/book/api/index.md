@@ -2,10 +2,10 @@
 
 API documentation is organized by solver/backend runtime:
 
-- Core
+- Core (`zoomy_core`)
 - JAX
 - AMReX
-- PETSc / DMPlex
+- DMPlex
 - Firedrake
 
 This split mirrors the testing/runtime marker model and dependency containers.

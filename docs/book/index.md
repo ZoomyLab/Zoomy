@@ -37,7 +37,7 @@ Browse tutorials by topic and backend folder grouping.
 :link: api/index.html
 :link-type: url
 ![API](../../web/images/wip.png)
-Find API references split into core, jax, amrex, petsc, and firedrake.
+Find API references split into core, jax, amrex, DMPlex, and firedrake.
 :::
 
 :::{grid-item-card} Testing and CI Reports

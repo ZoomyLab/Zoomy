@@ -64,5 +64,5 @@ parts:
           - file: api/core
           - file: api/jax
           - file: api/amrex
-          - file: api/petsc
+          - file: api/dmplex
           - file: api/firedrake
