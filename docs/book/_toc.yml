@@ -59,10 +59,8 @@ parts:
           - file: tutorials/ipynb/vam_poisson_hp
   - caption: API
     chapters:
-      - file: api/index
-        sections:
-          - file: api/core
-          - file: api/jax
-          - file: api/amrex
-          - file: api/dmplex
-          - file: api/firedrake
+      - file: api/zoomy_core
+      - file: api/zoomy_jax
+      - file: api/amrex
+      - file: api/dmplex
+      - file: api/firedrake

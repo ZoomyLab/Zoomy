@@ -34,10 +34,10 @@ Browse tutorials by topic and backend folder grouping.
 :::
 
 :::{grid-item-card} API by Backend
-:link: api/index.html
+:link: api/zoomy_core.html
 :link-type: url
 ![API](../../web/images/wip.png)
-Find API references split into core, jax, amrex, DMPlex, and firedrake.
+Python API for Zoomy Core and Zoomy JAX, plus backend overview pages.
 :::
 
 :::{grid-item-card} Testing and CI Reports
