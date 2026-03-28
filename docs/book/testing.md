@@ -107,7 +107,7 @@ ZOOMY_CREATE_BASELINES=1 pytest tests -m small
   - tutorial tests run inside their runtime group job (no dedicated tutorial runtime lane)
   - `core` / `jax`
   - `amrex`
-  - `petsc`
+  - `dmplex` / `fenicsx` (split paths; `dmplex` and `firedrake` share one job install)
   - `firedrake`
 - scheduled and manual **large / benchmark** runs: one job per stack (same backends as small), merged into
   **`test-reports-large-bundle`**

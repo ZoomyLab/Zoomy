@@ -39,3 +39,13 @@ def pytest_collection_modifyitems(config, items):
         if ("benchmark" in item.keywords) and (not run_bench):
             item.add_marker(skip_bench)
 
+        try:
+            path = str(item.path)
+        except AttributeError:
+            path = str(item.fspath)
+        norm = path.replace("\\", "/")
+        if "/zoomy_dmplex/" in norm:
+            item.add_marker(pytest.mark.dmplex)
+        if "/zoomy_fenicsx/" in norm:
+            item.add_marker(pytest.mark.fenicsx)
+

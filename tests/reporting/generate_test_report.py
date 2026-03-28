@@ -29,6 +29,16 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Treat pytest exit code 5 (no tests collected) as success.",
     )
+    p.add_argument(
+        "--ignore-pytest-exit-code",
+        action="store_true",
+        help="Exit 0 if junit.xml or report.html was written even when pytest failed (keeps CI artifacts).",
+    )
+    p.add_argument(
+        "--pytest-paths",
+        default="tests",
+        help="Whitespace-separated roots for pytest (default: tests).",
+    )
     p.add_argument("--extra-pytest-args", default="", help="Additional raw pytest args.")
     return p.parse_args()
 
@@ -54,11 +64,15 @@ def main() -> int:
     except Exception:
         have_pytest_html = False
 
+    path_args = [p for p in args.pytest_paths.split() if p.strip()]
+    if not path_args:
+        path_args = ["tests"]
+
     cmd = [
         sys.executable,
         "-m",
         "pytest",
-        "tests",
+        *path_args,
         "-m",
         args.markers,
         "--junitxml",
@@ -86,6 +100,12 @@ def main() -> int:
     if have_pytest_html:
         print(f"HTML report:  {html_path}")
     print(f"JUnit report: {junit_path}")
+    wrote_junit = junit_path.is_file()
+    wrote_html = have_pytest_html and html_path.is_file()
+    if args.ignore_pytest_exit_code and (wrote_junit or wrote_html):
+        if rc != 0:
+            print("Pytest failed but reports exist; exiting 0 (--ignore-pytest-exit-code).")
+        return 0
     return int(rc)
 
 

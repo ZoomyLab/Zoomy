@@ -1,4 +1,4 @@
-_Generated: 2026-03-28 04:30:55 UTC_
+_Generated: 2026-03-28 04:47:48 UTC_
 
 ### Local / legacy layout (`artifacts/test-reports/` without `small/` or `large/`)
 

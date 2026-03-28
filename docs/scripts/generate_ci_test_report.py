@@ -25,7 +25,8 @@ BACKENDS: tuple[tuple[str, str], ...] = (
     ("core", "Zoomy Core"),
     ("jax", "Zoomy JAX"),
     ("amrex", "AMReX"),
-    ("petsc", "PETSc / DMPlex / FEniCSx"),
+    ("dmplex", "DMPlex"),
+    ("fenicsx", "FEniCSx"),
     ("firedrake", "Firedrake"),
 )
 
