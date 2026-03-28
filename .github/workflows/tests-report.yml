@@ -34,7 +34,8 @@ jobs:
       core: ${{ github.event_name == 'pull_request' && steps.filter.outputs.core || steps.defaults.outputs.core }}
       jax: ${{ github.event_name == 'pull_request' && steps.filter.outputs.jax || steps.defaults.outputs.jax }}
       amrex: ${{ github.event_name == 'pull_request' && steps.filter.outputs.amrex || steps.defaults.outputs.amrex }}
-      petsc: ${{ github.event_name == 'pull_request' && steps.filter.outputs.petsc || steps.defaults.outputs.petsc }}
+      dmplex: ${{ github.event_name == 'pull_request' && steps.filter.outputs.dmplex || steps.defaults.outputs.dmplex }}
+      fenicsx: ${{ github.event_name == 'pull_request' && steps.filter.outputs.fenicsx || steps.defaults.outputs.fenicsx }}
       firedrake: ${{ github.event_name == 'pull_request' && steps.filter.outputs.firedrake || steps.defaults.outputs.firedrake }}
       infra: ${{ github.event_name == 'pull_request' && steps.filter.outputs.infra || steps.defaults.outputs.infra }}
     steps:
@@ -63,16 +64,17 @@ jobs:
               - 'tests/regression/zoomy_amrex/**'
               - 'tests/benchmarks/zoomy_amrex/**'
               - 'tutorials/amrex/**'
-            petsc:
+            dmplex:
               - 'library/zoomy_dmplex/**'
-              - 'library/zoomy_fenicsx/**'
               - 'tests/unit/zoomy_dmplex/**'
-              - 'tests/unit/zoomy_fenicsx/**'
               - 'tests/regression/zoomy_dmplex/**'
-              - 'tests/regression/zoomy_fenicsx/**'
               - 'tests/benchmarks/zoomy_dmplex/**'
-              - 'tests/benchmarks/zoomy_fenicsx/**'
               - 'tutorials/dmplex/**'
+            fenicsx:
+              - 'library/zoomy_fenicsx/**'
+              - 'tests/unit/zoomy_fenicsx/**'
+              - 'tests/regression/zoomy_fenicsx/**'
+              - 'tests/benchmarks/zoomy_fenicsx/**'
               - 'tutorials/dolfinx/**'
             firedrake:
               - 'library/zoomy_firedrake/**'
@@ -92,7 +94,8 @@ jobs:
           echo "core=true" >> "$GITHUB_OUTPUT"
           echo "jax=true" >> "$GITHUB_OUTPUT"
           echo "amrex=true" >> "$GITHUB_OUTPUT"
-          echo "petsc=true" >> "$GITHUB_OUTPUT"
+          echo "dmplex=true" >> "$GITHUB_OUTPUT"
+          echo "fenicsx=true" >> "$GITHUB_OUTPUT"
           echo "firedrake=true" >> "$GITHUB_OUTPUT"
           echo "infra=true" >> "$GITHUB_OUTPUT"
 
@@ -100,6 +103,7 @@ jobs:
     needs: [changes]
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        (needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
@@ -121,18 +125,23 @@ jobs:
         run: |
           python tests/reporting/generate_test_report.py \
             --markers "small and (core or (numpy and not jax))" \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
             --output-dir artifacts/test-reports/core
 
       - name: Upload core report artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-core
           path: artifacts/test-reports/core/**
+          if-no-files-found: ignore
 
   tests-jax:
     needs: [changes]
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        (needs.changes.outputs.jax == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
@@ -155,18 +164,23 @@ jobs:
         run: |
           python tests/reporting/generate_test_report.py \
             --markers "small and jax" \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
             --output-dir artifacts/test-reports/jax
 
       - name: Upload jax report artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-jax
           path: artifacts/test-reports/jax/**
+          if-no-files-found: ignore
 
   tests-amrex:
     needs: [changes]
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        (needs.changes.outputs.amrex == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
@@ -189,21 +203,27 @@ jobs:
         run: |
           python tests/reporting/generate_test_report.py \
             --markers "small and amrex" \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
             --output-dir artifacts/test-reports/amrex
 
       - name: Upload amrex report artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-amrex
           path: artifacts/test-reports/amrex/**
+          if-no-files-found: ignore
 
-  tests-petsc:
+  # DMPlex + Firedrake share one runner install; FEniCSx is a separate job (different stack).
+  tests-dmplex-firedrake:
     needs: [changes]
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.petsc == 'true' || needs.changes.outputs.infra == 'true'))
+       (needs.changes.outputs.dmplex == 'true' || needs.changes.outputs.firedrake == 'true' ||
+        needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -213,7 +233,64 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install petsc test deps
+      - name: Install DMPlex + Firedrake test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
+          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
+          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
+
+      - name: Generate DMPlex report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and dmplex" \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/dmplex
+
+      - name: Generate Firedrake report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "small and firedrake" \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/firedrake
+
+      - name: Upload DMPlex report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-dmplex
+          path: artifacts/test-reports/dmplex/**
+          if-no-files-found: ignore
+
+      - name: Upload Firedrake report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-firedrake
+          path: artifacts/test-reports/firedrake/**
+          if-no-files-found: ignore
+
+  tests-fenicsx:
+    needs: [changes]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       (needs.changes.outputs.fenicsx == 'true' || needs.changes.outputs.infra == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FEniCSx test deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r tests/reporting/requirements.txt
@@ -221,54 +298,21 @@ jobs:
           if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install -e "library/zoomy_fenicsx"; fi
           if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
 
-      - name: Generate petsc report
+      - name: Generate FEniCSx report
         run: |
           python tests/reporting/generate_test_report.py \
-            --markers "small and petsc" \
+            --markers "small and fenicsx" \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
-            --output-dir artifacts/test-reports/petsc
+            --output-dir artifacts/test-reports/fenicsx
 
-      - name: Upload petsc report artifacts
+      - name: Upload FEniCSx report artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-petsc
-          path: artifacts/test-reports/petsc/**
-
-  tests-firedrake:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.firedrake == 'true' || needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install firedrake test deps
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r tests/reporting/requirements.txt
-          python -m pip install -e "library/zoomy_core"
-          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
-          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
-
-      - name: Generate firedrake report
-        run: |
-          python tests/reporting/generate_test_report.py \
-            --markers "small and firedrake" \
-            --allow-no-tests \
-            --output-dir artifacts/test-reports/firedrake
-
-      - name: Upload firedrake report artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report-firedrake
-          path: artifacts/test-reports/firedrake/**
+          name: test-report-fenicsx
+          path: artifacts/test-reports/fenicsx/**
+          if-no-files-found: ignore
 
   tests-large-core:
     if: >
@@ -292,13 +336,16 @@ jobs:
             --markers "(large or benchmark) and (core or (numpy and not jax))" \
             --run-large \
             --run-benchmark \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
             --output-dir artifacts/test-reports/large-core
       - name: Upload large core report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-large-core
           path: artifacts/test-reports/large-core/**
+          if-no-files-found: ignore
 
   tests-large-jax:
     if: >
@@ -323,13 +370,16 @@ jobs:
             --markers "(large or benchmark) and jax" \
             --run-large \
             --run-benchmark \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
             --output-dir artifacts/test-reports/large-jax
       - name: Upload large jax report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-large-jax
           path: artifacts/test-reports/large-jax/**
+          if-no-files-found: ignore
 
   tests-large-amrex:
     if: >
@@ -354,15 +404,18 @@ jobs:
             --markers "(large or benchmark) and amrex" \
             --run-large \
             --run-benchmark \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
             --output-dir artifacts/test-reports/large-amrex
       - name: Upload large amrex report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-report-large-amrex
           path: artifacts/test-reports/large-amrex/**
+          if-no-files-found: ignore
 
-  tests-large-petsc:
+  tests-large-dmplex-firedrake:
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
@@ -373,58 +426,81 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install petsc test deps
+      - name: Install DMPlex + Firedrake test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r tests/reporting/requirements.txt
+          python -m pip install -e "library/zoomy_core"
+          if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
+          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
+          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
+      - name: Generate large DMPlex report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and dmplex" \
+            --run-large \
+            --run-benchmark \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-dmplex
+      - name: Generate large Firedrake report
+        run: |
+          python tests/reporting/generate_test_report.py \
+            --markers "(large or benchmark) and firedrake" \
+            --run-large \
+            --run-benchmark \
+            --ignore-pytest-exit-code \
+            --allow-no-tests \
+            --output-dir artifacts/test-reports/large-firedrake
+      - name: Upload large DMPlex report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-dmplex
+          path: artifacts/test-reports/large-dmplex/**
+          if-no-files-found: ignore
+      - name: Upload large Firedrake report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-large-firedrake
+          path: artifacts/test-reports/large-firedrake/**
+          if-no-files-found: ignore
+
+  tests-large-fenicsx:
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install FEniCSx test deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r tests/reporting/requirements.txt
           python -m pip install -e "library/zoomy_core"
           if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install -e "library/zoomy_fenicsx"; fi
           if [ -f tests/requirements/petsc.txt ]; then python -m pip install -r tests/requirements/petsc.txt; fi
-      - name: Generate large petsc report
+      - name: Generate large FEniCSx report
         run: |
           python tests/reporting/generate_test_report.py \
-            --markers "(large or benchmark) and petsc" \
+            --markers "(large or benchmark) and fenicsx" \
             --run-large \
             --run-benchmark \
+            --ignore-pytest-exit-code \
             --allow-no-tests \
-            --output-dir artifacts/test-reports/large-petsc
-      - name: Upload large petsc report
+            --output-dir artifacts/test-reports/large-fenicsx
+      - name: Upload large FEniCSx report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-large-petsc
-          path: artifacts/test-reports/large-petsc/**
-
-  tests-large-firedrake:
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install firedrake test deps
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r tests/reporting/requirements.txt
-          python -m pip install -e "library/zoomy_core"
-          if [ -f library/zoomy_firedrake/pyproject.toml ]; then python -m pip install -e "library/zoomy_firedrake"; fi
-          if [ -f tests/requirements/firedrake.txt ]; then python -m pip install -r tests/requirements/firedrake.txt; fi
-      - name: Generate large firedrake report
-        run: |
-          python tests/reporting/generate_test_report.py \
-            --markers "(large or benchmark) and firedrake" \
-            --run-large \
-            --run-benchmark \
-            --allow-no-tests \
-            --output-dir artifacts/test-reports/large-firedrake
-      - name: Upload large firedrake report
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report-large-firedrake
-          path: artifacts/test-reports/large-firedrake/**
+          name: test-report-large-fenicsx
+          path: artifacts/test-reports/large-fenicsx/**
+          if-no-files-found: ignore
 
   aggregate-large-reports:
     name: Bundle large-suite reports
@@ -432,8 +508,8 @@ jobs:
       - tests-large-core
       - tests-large-jax
       - tests-large-amrex
-      - tests-large-petsc
-      - tests-large-firedrake
+      - tests-large-dmplex-firedrake
+      - tests-large-fenicsx
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -457,18 +533,24 @@ jobs:
         with:
           name: test-report-large-amrex
           path: artifacts/test-reports/large/amrex
-      - name: Download large petsc report
+      - name: Download large DMPlex report
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: test-report-large-petsc
-          path: artifacts/test-reports/large/petsc
-      - name: Download large firedrake report
+          name: test-report-large-dmplex
+          path: artifacts/test-reports/large/dmplex
+      - name: Download large Firedrake report
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: test-report-large-firedrake
           path: artifacts/test-reports/large/firedrake
+      - name: Download large FEniCSx report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-large-fenicsx
+          path: artifacts/test-reports/large/fenicsx
       - name: Detect merged large HTML reports
         id: check
         run: |
@@ -487,7 +569,12 @@ jobs:
 
   aggregate-small-reports:
     name: Bundle small-suite reports
-    needs: [tests-core, tests-jax, tests-amrex, tests-petsc, tests-firedrake]
+    needs:
+      - tests-core
+      - tests-jax
+      - tests-amrex
+      - tests-dmplex-firedrake
+      - tests-fenicsx
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -511,18 +598,24 @@ jobs:
         with:
           name: test-report-amrex
           path: artifacts/test-reports/small/amrex
-      - name: Download petsc report
+      - name: Download DMPlex report
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: test-report-petsc
-          path: artifacts/test-reports/small/petsc
-      - name: Download firedrake report
+          name: test-report-dmplex
+          path: artifacts/test-reports/small/dmplex
+      - name: Download Firedrake report
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: test-report-firedrake
           path: artifacts/test-reports/small/firedrake
+      - name: Download FEniCSx report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-report-fenicsx
+          path: artifacts/test-reports/small/fenicsx
       - name: Detect merged HTML reports
         id: check
         run: |

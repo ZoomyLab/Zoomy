@@ -11,6 +11,20 @@ This page embeds **pytest-html** output per solver backend. The script `docs/scr
 the branch. If you change only documentation, a normal docs push still builds the site (it re-downloads those latest
 artifacts). You can still run either workflow by hand from the Actions tab when you want.
 
+DMPlex vs FEniCSx: tests under `tests/**/zoomy_dmplex/` get the `dmplex` marker; tests under `tests/**/zoomy_fenicsx/`
+get `fenicsx` (see `tests/conftest.py`). CI runs DMPlex and Firedrake on the same runner install; FEniCSx is a separate job.
+
+### First-time setup (GitHub Actions)
+
+1. **Merge** workflow changes to `main` (or `master`) so **Smart Tests** includes the bundle upload jobs.
+2. Run **Smart Tests** once successfully on that branch (push a commit under the workflow path filters, open a PR, or use **Run workflow**).  
+   - For **large** iframes too: run Smart Tests manually with **“Also run large/benchmark test suite”** checked, or wait for the weekly schedule.
+3. Confirm the run published artifacts **`test-reports-small-bundle`** and **`test-reports-large-bundle`** (Actions run → **Artifacts**).  
+   - If tests **fail**, you should still get HTML/JUnit when pytest wrote reports (`--ignore-pytest-exit-code` + upload on `always()`).
+4. Trigger **Render Webpage** (it may already have run via `workflow_run` from step 2). Check the site **CI Test Reports** page.
+
+Locally: run `python tests/reporting/generate_test_report.py …` into `artifacts/test-reports/small/<stack>/` or `large/…`, then `python docs/scripts/generate_ci_test_report.py` and `jupyter-book build docs/book`.
+
 ---
 
 ## Zoomy Core
@@ -91,7 +105,7 @@ artifacts). You can still run either workflow by hand from the Actions tab when 
    </div>
 ```
 
-## PETSc / DMPlex / FEniCSx
+## DMPlex
 
 ### Small
 
@@ -99,9 +113,9 @@ artifacts). You can still run either workflow by hand from the Actions tab when 
 .. raw:: html
 
    <div class="pytest-report-frame" style="margin:1rem 0;">
-   <iframe src="_static/pytest-report-small-petsc.html" width="100%" height="900"
+   <iframe src="_static/pytest-report-small-dmplex.html" width="100%" height="900"
      style="border:1px solid #e0e0e0;border-radius:6px;background:#fff;"
-     title="Pytest HTML — PETSc small"></iframe>
+     title="Pytest HTML — DMPlex small"></iframe>
    </div>
 ```
 
@@ -111,9 +125,35 @@ artifacts). You can still run either workflow by hand from the Actions tab when 
 .. raw:: html
 
    <div class="pytest-report-frame" style="margin:1rem 0;">
-   <iframe src="_static/pytest-report-large-petsc.html" width="100%" height="900"
+   <iframe src="_static/pytest-report-large-dmplex.html" width="100%" height="900"
      style="border:1px solid #e0e0e0;border-radius:6px;background:#fff;"
-     title="Pytest HTML — PETSc large"></iframe>
+     title="Pytest HTML — DMPlex large"></iframe>
+   </div>
+```
+
+## FEniCSx
+
+### Small
+
+```{eval-rst}
+.. raw:: html
+
+   <div class="pytest-report-frame" style="margin:1rem 0;">
+   <iframe src="_static/pytest-report-small-fenicsx.html" width="100%" height="900"
+     style="border:1px solid #e0e0e0;border-radius:6px;background:#fff;"
+     title="Pytest HTML — FEniCSx small"></iframe>
+   </div>
+```
+
+### Large
+
+```{eval-rst}
+.. raw:: html
+
+   <div class="pytest-report-frame" style="margin:1rem 0;">
+   <iframe src="_static/pytest-report-large-fenicsx.html" width="100%" height="900"
+     style="border:1px solid #e0e0e0;border-radius:6px;background:#fff;"
+     title="Pytest HTML — FEniCSx large"></iframe>
    </div>
 ```
 
