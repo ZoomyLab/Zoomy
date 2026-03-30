@@ -93,7 +93,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             "$DOCS_IMAGE" \
-            bash -lc "python docs/scripts/generate_ci_test_report.py && jupyter-book build docs/book"
+            bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages

@@ -41,6 +41,8 @@ sphinx:
     autodoc_default_options:
       members: true
       undoc-members: false
+    autodoc_member_order: bysource
+    autodoc_typehints: description
     html_theme: sphinx_book_theme
     html_title: Zoomy Documentation
     copyright: "2026, ZoomyLab"
@@ -49,4 +51,6 @@ sphinx:
       - toc.not_included
     html_theme_options:
       use_download_button: false
+      navigation_depth: 4
+      show_nav_level: 2
       extra_footer: '<a href="about.html">About</a> · <a href="legal.html">Legal notice and data protection</a>'
