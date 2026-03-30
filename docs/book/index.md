@@ -34,10 +34,10 @@ Browse tutorials by topic and backend folder grouping.
 :::
 
 :::{grid-item-card} API by Backend
-:link: api/zoomy_core.html
+:link: api/_apidoc_zoomy_core/zoomy_core.html
 :link-type: url
 ![API](../../web/images/wip.png)
-Python API for Zoomy Core and Zoomy JAX, plus backend overview pages.
+Sphinx apidoc-style Python reference for Zoomy Core and Zoomy JAX, plus backend overview pages.
 :::
 
 :::{grid-item-card} Testing and CI Reports
