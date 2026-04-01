@@ -1,18 +1,12 @@
-# Zoomy Documentation
+# Zoomy
 
-Zoomy is a flexible modeling and simulation framework for free-surface flows.
+Zoomy is a flexible modeling and simulation software for free-surface flows.
 
-This documentation site is now based on **Jupyter Book + Sphinx**, with:
+![](docs/book/images/overview2.png)
 
-- Markdown-first authoring
-- notebook support without forced re-execution in docs builds
-- test report ingestion from CI artifacts
-- a dedicated docs build image separated from solver toolchains
+Zoomy's main objective is to provide a convenient modeling interface for complex free-surface flow models. Zoomy transitions from a **symbolic** modeling layer to **numerical** layer, compatible with a multitude of numerical solvers, e.g. Numpy, Jax, Firedrake, FenicsX, OpenFOAM and AMReX. Additionally, we support the PreCICE coupling framework in many of our numerical implementations, to allow for a convenient integration of our solver with your existing code.
 
-```{note}
-Notebook execution for docs is intentionally disabled in this stage.
-Only notebooks already executed in tests should be published.
-```
+
 
 ## Explore Zoomy
 
@@ -31,20 +25,6 @@ Explore software capabilities, backend structure, and runtime design.
 :link-type: url
 ![Tutorials](../../web/images/wip.png)
 Browse tutorials by topic and backend folder grouping.
-:::
-
-:::{grid-item-card} API by Backend
-:link: api/_apidoc_zoomy_core/zoomy_core.html
-:link-type: url
-![API](../../web/images/wip.png)
-Sphinx apidoc-style Python reference for Zoomy Core and Zoomy JAX, plus backend overview pages.
-:::
-
-:::{grid-item-card} Testing and CI Reports
-:link: ci-reports.html
-:link-type: url
-![Testing](../../web/images/wip.png)
-Review testing policy, marker model, and generated CI summaries.
 :::
 
 ::::
