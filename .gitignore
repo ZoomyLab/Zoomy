@@ -157,3 +157,5 @@ petsc-3.24
 .venv*
 /.jupyter_config
 _build
+*.csv
+*.series
