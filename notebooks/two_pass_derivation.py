@@ -43,7 +43,7 @@ from zoomy_core.model.models.ins_generator import (
     materials, assumptions, Newtonian, Inviscid,
 )
 
-state = StateSpace(dimension=1)
+state = StateSpace(dimension=2)
 ins = FullINS(state)
 
 print("Full 3D INS equations (1D horizontal):")
