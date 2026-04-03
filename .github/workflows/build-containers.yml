@@ -209,17 +209,18 @@ jobs:
             sudo apptainer build "containers/$c/$c.sif" "$def_file"
 
             echo "==> Converting SIF to Docker image"
-            # Build an OCI bundle from the SIF, then docker-import it
-            sudo apptainer build --force "docker-daemon:${image}:${full_ver}" \
-              "containers/$c/$c.sif"
+            # Convert SIF to a sandbox, tar it, and docker-import
+            sudo apptainer build --sandbox "/tmp/${c}_sandbox" "containers/$c/$c.sif"
+            sudo tar -C "/tmp/${c}_sandbox" -c . | docker import - "$image:$full_ver"
             docker tag "$image:$full_ver" "$image:latest"
+            sudo rm -rf "/tmp/${c}_sandbox"
 
             echo "==> Pushing SIF to GHCR via ORAS"
-            sudo apptainer push --no-https=false \
+            apptainer push \
               "containers/$c/$c.sif" \
               "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
               echo "WARNING: ORAS push failed (may need package visibility set to public)"
-            sudo apptainer push --no-https=false \
+            apptainer push \
               "containers/$c/$c.sif" \
               "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
               echo "WARNING: ORAS push of :latest failed"
