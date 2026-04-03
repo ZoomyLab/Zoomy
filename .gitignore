@@ -159,3 +159,6 @@ petsc-3.24
 _build
 *.csv
 *.series
+/.zoomy
+/artifacts/basilisk_benchmarks
+/library/zoomy_cli/.zoomy
