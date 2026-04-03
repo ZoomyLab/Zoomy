@@ -66,14 +66,14 @@ From: ubuntu:24.04
         --download-scalapack \
         --download-mumps \
         --download-superlu_dist \
-        --with-petsc4py=1
+        --with-petsc4py=0
 
     make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc)
     make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH check
 
-    # Install petsc4py into system Python
-    cd "$PETSC_DIR/src/binding/petsc4py"
-    pip install --no-cache-dir --break-system-packages .
+    # Install petsc4py via pip (avoids build-system incompatibilities)
+    PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH \
+        pip install --no-cache-dir --break-system-packages petsc4py==3.22.3
 
     # Clean build objects to reduce image size
     find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
