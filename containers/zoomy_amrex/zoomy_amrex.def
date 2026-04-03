@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: ubuntu:22.04
+From: ubuntu:24.04
 
 %labels
     Author ZoomyLab
@@ -30,18 +30,12 @@ From: ubuntu:22.04
         wget \
     && rm -rf /var/lib/apt/lists/*
 
-    python3 -m pip install --no-cache-dir --upgrade pip
-    python3 -m pip install --no-cache-dir \
+    python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs meshio pytest rasterio h5py
 
     # --- Build AMReX from source ---
     git clone --depth 1 --branch 25.02 \
         https://github.com/AMReX-Codes/amrex.git /opt/amrex
-
-    # Compile AMReX base library to verify the toolchain works
-    cd /opt/amrex && make -C Src/Base -j$(nproc) \
-        AMREX_HOME=/opt/amrex USE_MPI=TRUE COMP=gnu DIM=3 DEBUG=FALSE \
-        || echo "AMReX base compile check done"
 
     # Clean build artifacts to reduce image size, keep source + headers
     find /opt/amrex -name "*.o" -delete 2>/dev/null || true
@@ -52,19 +46,20 @@ From: ubuntu:22.04
 
 %test
     echo "=== AMReX Container Verification ==="
-    echo "1. Checking compilers..."
+    echo "1. Checking Python version..."
+    python3 --version
+    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
+
+    echo "2. Checking compilers..."
     gcc --version | head -1
     gfortran --version | head -1
     mpicxx --version | head -1
 
-    echo "2. Checking AMReX installation..."
+    echo "3. Checking AMReX installation..."
     test -d /opt/amrex/Src/Base && echo "AMReX source: OK" || exit 1
     test -f /opt/amrex/Tools/GNUMake/Make.defs && echo "AMReX Make.defs: OK" || exit 1
 
-    echo "3. Checking Python..."
+    echo "4. Checking Python deps..."
     python3 -c "import numpy; import sympy; import attrs; print('Python deps: OK')"
-
-    echo "4. Checking MPI..."
-    mpicc --version | head -1
 
     echo "=== All checks passed ==="
