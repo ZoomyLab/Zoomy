@@ -40,7 +40,7 @@ from zoomy_core.model.models.ins_generator import (
 # Everything — equations, materials, assumptions — references the same `StateSpace`.
 
 # %%
-state = StateSpace(dimension=1)
+state = StateSpace(dimension=2)
 print(f"Coordinates: t={state.t}, x={state.x}, z={state.z}")
 print(f"Fields: u={state.u}, w={state.w}, p={state.p}")
 print(f"Stress: tau_xz={state.tau['xz']}")

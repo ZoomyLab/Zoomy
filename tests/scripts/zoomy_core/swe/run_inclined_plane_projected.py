@@ -44,7 +44,7 @@ def run_single(args):
     }
     basis_cls = basis_map[basis_name]
 
-    state = StateSpace(dimension=1)
+    state = StateSpace(dimension=2)
     pre = derive_shallow_moments(state, material=Newtonian(state))
 
     class InclinedPlaneProjected(ProjectedModel):
