@@ -142,6 +142,7 @@ dist
 *.vtk
 
 *.egg-info
+*.sif
 web/_freeze/
 *.whl
 jupyter-lite/.jupyterlite.doit.db

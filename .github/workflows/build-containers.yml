@@ -82,6 +82,10 @@ jobs:
                 echo "Dockerfile changed: containers/$c"
                 add_raw "$c"
               fi
+              if ! git diff --quiet "$base" "$head" -- "containers/$c/*.def" 2>/dev/null; then
+                echo "Apptainer def changed: containers/$c"
+                add_raw "$c"
+              fi
             done
 
             shopt -s nullglob
@@ -125,7 +129,7 @@ jobs:
           # Tier 1: heavy bases (Firedrake/PETSc, micromamba+JAX, …). Tier 2: thin images on top for CI/pull;
           # they pull :latest tier-1 from GHCR. Pairing is one-way (dev → release) so editing a tier-2 Dockerfile
           # alone does not rebuild tier 1.
-          TIER1_NAMES=" zoomy_core zoomy_jax_dev zoomy_firedrake_dev zoomy_amrex_dummy zoomy_fenicsx_dummy "
+          TIER1_NAMES=" zoomy_core zoomy_jax_dev zoomy_firedrake_dev zoomy_amrex zoomy_amrex_dummy zoomy_fenicsx_dummy "
           TIER2_NAMES=" zoomy_jax zoomy_firedrake "
 
           tier1=()
@@ -179,6 +183,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Apptainer (if needed)
+        if: ${{ hashFiles(format('containers/{0}/*.def', matrix.container)) != '' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq apptainer
+
       - id: build_image
         run: |
           set -eo pipefail
@@ -187,13 +197,40 @@ jobs:
           full_ver="${base_ver}.${{ github.run_number }}"
           image="ghcr.io/$OWNER_LC/$c"
           echo "Building $image:$full_ver"
-          docker build --pull \
-            -f "containers/$c/Dockerfile" \
-            -t "$image:$full_ver" \
-            -t "$image:latest" .
+
+          # Detect whether this container uses an Apptainer .def or a Dockerfile
+          def_file=$(find "containers/$c" -maxdepth 1 -name '*.def' | head -1)
+
+          if [ -n "$def_file" ]; then
+            echo "==> Apptainer build: $def_file"
+            sudo apptainer build "containers/$c/$c.sif" "$def_file"
+
+            echo "==> Converting SIF to Docker image"
+            # Build an OCI bundle from the SIF, then docker-import it
+            sudo apptainer build --force "docker-daemon:${image}:${full_ver}" \
+              "containers/$c/$c.sif"
+            docker tag "$image:$full_ver" "$image:latest"
+
+            echo "==> Pushing SIF to GHCR via ORAS"
+            sudo apptainer push --no-https=false \
+              "containers/$c/$c.sif" \
+              "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
+              echo "WARNING: ORAS push failed (may need package visibility set to public)"
+            sudo apptainer push --no-https=false \
+              "containers/$c/$c.sif" \
+              "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
+              echo "WARNING: ORAS push of :latest failed"
+
+            rm -f "containers/$c/$c.sif"
+          else
+            docker build --pull \
+              -f "containers/$c/Dockerfile" \
+              -t "$image:$full_ver" \
+              -t "$image:latest" .
+          fi
           echo "version=$full_ver" >> "$GITHUB_OUTPUT"
 
-      - name: Push
+      - name: Push Docker image
         run: |
           c="${{ matrix.container }}"
           image="ghcr.io/$OWNER_LC/$c"
