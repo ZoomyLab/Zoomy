@@ -1,0 +1,12 @@
+{
+  "name": "zoomy-cli",
+  "version": "0.1.0",
+  "description": "Zoomy CLI — manage projects, sessions, and simulations",
+  "main": "cli.js",
+  "bin": {
+    "zoomy": "cli.js"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}
