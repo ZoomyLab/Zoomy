@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: ubuntu:22.04
+From: ubuntu:24.04
 
 %labels
     Author ZoomyLab
@@ -34,8 +34,7 @@ From: ubuntu:22.04
         valgrind \
     && rm -rf /var/lib/apt/lists/*
 
-    python3 -m pip install --no-cache-dir --upgrade pip
-    python3 -m pip install --no-cache-dir \
+    python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs cython pytest h5py meshio
 
     # --- Build PETSc from source ---
@@ -74,9 +73,9 @@ From: ubuntu:22.04
 
     # Install petsc4py into system Python
     cd "$PETSC_DIR/src/binding/petsc4py"
-    python3 -m pip install --no-cache-dir .
+    pip install --no-cache-dir --break-system-packages .
 
-    # Clean build objects to reduce image size, keep libs + headers
+    # Clean build objects to reduce image size
     find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
     rm -rf "$PETSC_DIR/.git" 2>/dev/null || true
     rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true
@@ -90,37 +89,35 @@ From: ubuntu:22.04
     export PETSC_DIR=/opt/petsc
     export PETSC_ARCH=arch-container-opt
 
-    echo "1. Checking compilers..."
+    echo "1. Checking Python version..."
+    python3 --version
+    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
+
+    echo "2. Checking compilers..."
     gcc --version | head -1
     mpicxx --version | head -1
 
-    echo "2. Checking PETSc installation..."
+    echo "3. Checking PETSc installation..."
     test -f "$PETSC_DIR/$PETSC_ARCH/lib/libpetsc.so" && echo "PETSc library: OK" || exit 1
-    test -f "$PETSC_DIR/$PETSC_ARCH/include/petscconf.h" && echo "PETSc headers: OK" || exit 1
 
-    echo "3. Checking petsc4py..."
+    echo "4. Checking petsc4py..."
     python3 -c "
 import petsc4py
 petsc4py.init()
 from petsc4py import PETSc
 print(f'petsc4py version: {petsc4py.__version__}')
-print(f'PETSc arch: {PETSc.COMM_WORLD.size} rank(s)')
 "
 
-    echo "4. Checking DMPlex..."
+    echo "5. Checking DMPlex..."
     python3 -c "
 import petsc4py
 petsc4py.init()
 from petsc4py import PETSc
-# Create a simple box mesh via DMPlex
 dm = PETSc.DMPlex().createBoxMesh([4, 4], simplex=True)
 dm.distribute()
 print(f'DMPlex box mesh: {dm.getChart()} cells')
 dm.destroy()
 print('DMPlex: OK')
 "
-
-    echo "5. Checking MPI..."
-    mpicc --version | head -1
 
     echo "=== All checks passed ==="

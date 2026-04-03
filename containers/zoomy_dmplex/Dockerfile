@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 LABEL org.opencontainers.image.description="PETSc/DMPlex development container for Zoomy"
 
@@ -26,8 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         valgrind \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip \
-    && python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs cython pytest h5py meshio
 
 RUN git clone --depth 1 --branch v3.22.3 \
@@ -57,12 +56,23 @@ RUN git clone --depth 1 --branch v3.22.3 \
     && make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc) \
     && make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH check \
     && cd "$PETSC_DIR/src/binding/petsc4py" \
-    && python3 -m pip install --no-cache-dir . \
+    && python3 -m pip install --no-cache-dir --break-system-packages . \
     && find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/.git" 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true
 
-ENV LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH"
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        "fastapi>=0.100" "uvicorn[standard]>=0.20"
+
+COPY library/zoomy_core /tmp/src/zoomy_core
+COPY library/zoomy_server /tmp/src/zoomy_server
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        /tmp/src/zoomy_core /tmp/src/zoomy_server \
+    && rm -rf /tmp/src
+
+ENV LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH" \
+    ZOOMY_ROOT=/workspace
 
 WORKDIR /workspace
-CMD ["/bin/bash"]
+EXPOSE 8080
+CMD ["zoomy-server", "--adapter", "dmplex", "--port", "8080"]
