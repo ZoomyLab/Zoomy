@@ -4,5 +4,6 @@ zoomy_jax
 zoomy_firedrake_dev
 zoomy_firedrake
 zoomy_amrex
+zoomy_dmplex
 zoomy_amrex_dummy
 zoomy_fenicsx_dummy
