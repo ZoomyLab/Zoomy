@@ -54,7 +54,8 @@ RUN git clone --depth 1 --branch v3.22.3 \
         --download-superlu_dist \
         --with-petsc4py=0 \
     && make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc) \
-    && python3 -m pip install --no-cache-dir --break-system-packages petsc4py==3.22.3 \
+    && python3 -m pip install --no-cache-dir --break-system-packages "cython<3" \
+    && python3 -m pip install --no-cache-dir --break-system-packages --no-build-isolation petsc4py==3.22.3 \
     && find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/.git" 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true

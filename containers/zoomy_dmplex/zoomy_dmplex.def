@@ -72,9 +72,11 @@ From: ubuntu:24.04
     # Skip 'make check' - MPI tests fail under fakeroot/container build
     # PETSc library is verified via %test section instead
 
-    # Install petsc4py via pip (avoids build-system incompatibilities)
+    # Install petsc4py - pin Cython<3 for compatibility, then restore
+    pip install --no-cache-dir --break-system-packages "cython<3"
     PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH \
-        pip install --no-cache-dir --break-system-packages petsc4py==3.22.3
+        pip install --no-cache-dir --break-system-packages --no-build-isolation petsc4py==3.22.3
+    pip install --no-cache-dir --break-system-packages "cython<3.1"
 
     # Clean build objects to reduce image size
     find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
