@@ -22,5 +22,6 @@ From: python:3.11-slim-bookworm
 
 %test
     python --version
+    pip --version
     echo "Container build test passed"
 
