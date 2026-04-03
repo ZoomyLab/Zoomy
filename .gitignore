@@ -162,3 +162,4 @@ _build
 /.zoomy
 /artifacts/basilisk_benchmarks
 /library/zoomy_cli/.zoomy
+/PROGRESS.md
