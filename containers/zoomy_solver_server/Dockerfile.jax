@@ -1,0 +1,19 @@
+ARG JAX_DEV_IMAGE=ghcr.io/zoomylab/zoomy_jax_dev:latest
+FROM ${JAX_DEV_IMAGE}
+
+SHELL ["/bin/bash", "-c"]
+ENV PATH=/opt/zoomy/envs/zoomy/bin:$PATH
+ENV CONDA_PREFIX=/opt/zoomy/envs/zoomy
+
+COPY library/zoomy_core /tmp/src/zoomy_core
+COPY library/zoomy_jax /tmp/src/zoomy_jax
+COPY library/zoomy_server /tmp/src/zoomy_server
+
+RUN /opt/zoomy/envs/zoomy/bin/python -m pip install --no-cache-dir \
+      /tmp/src/zoomy_core \
+      /tmp/src/zoomy_jax \
+      /tmp/src/zoomy_server \
+    && rm -rf /tmp/src
+
+EXPOSE 8080
+CMD ["zoomy-server", "--adapter", "jax", "--port", "8080"]
