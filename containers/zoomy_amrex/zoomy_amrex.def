@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: python:3.11-slim-bookworm
+
+%labels
+    Author ZoomyLab
+    Description Dummy AMReX container for testing Apptainer build workflow
+
+%post
+    apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+    python -m pip install --upgrade pip
+    python -m pip install --no-cache-dir pytest
+
+%environment
+    export LC_ALL=C
+
+%runscript
+    echo "zoomy_amrex dummy container"
+    exec /bin/bash "$@"
+
+%test
+    python --version
+    echo "Container build test passed"
