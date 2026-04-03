@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
-        numpy scipy sympy attrs cython pytest h5py meshio
+        numpy scipy sympy attrs "cython<3.1" pytest h5py meshio
 
 RUN git clone --depth 1 --branch v3.22.3 \
         https://gitlab.com/petsc/petsc.git "$PETSC_DIR" \
