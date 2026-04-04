@@ -11,6 +11,7 @@ From: ubuntu:24.04
     export LC_ALL=C
     export PATH="/usr/local/bin:$PATH"
     export LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH"
+    export PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH"
 
 %post
     export DEBIAN_FRONTEND=noninteractive
@@ -41,7 +42,7 @@ From: ubuntu:24.04
     export PETSC_DIR=/opt/petsc
     export PETSC_ARCH=arch-container-opt
 
-    git clone --depth 1 --branch v3.22.3 \
+    git clone --depth 1 --branch v3.23.3 \
         https://gitlab.com/petsc/petsc.git "$PETSC_DIR"
 
     cd "$PETSC_DIR"
@@ -66,17 +67,11 @@ From: ubuntu:24.04
         --download-scalapack \
         --download-mumps \
         --download-superlu_dist \
-        --with-petsc4py=0
+        --with-petsc4py=1
 
     make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc)
     # Skip 'make check' - MPI tests fail under fakeroot/container build
     # PETSc library is verified via %test section instead
-
-    # Install petsc4py - pin Cython<3 for compatibility, then restore
-    pip install --no-cache-dir --break-system-packages "cython<3"
-    PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH \
-        pip install --no-cache-dir --break-system-packages --no-build-isolation petsc4py==3.22.3
-    pip install --no-cache-dir --break-system-packages "cython<3.1"
 
     # Clean build objects to reduce image size
     find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
