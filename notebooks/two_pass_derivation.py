@@ -12,17 +12,18 @@
 # ---
 
 # %% [markdown]
-# # Two-Pass PDE Model Derivation
+# # Three-Phase PDE Model Derivation
 #
 # Derives shallow water moment equations from the **full 3D Incompressible Navier-Stokes**
 # for **any vertical basis**: Legendre, Chebyshev, B-splines, Galerkin (Shen-type).
 #
-# | Pass | What | Output |
-# |------|------|--------|
-# | **Pass 1** | Basis-independent: INS + material + hydrostatic + BCs + term tagging | `PreProjectedEquations` |
-# | **Pass 2** | Basis-specific: ansatz substitution, Galerkin projection, M^{-1} | `ProjectedModel` (a `Model`) |
+# | Phase | What | Output |
+# |-------|------|--------|
+# | **Phase 1** | INS + material + hydrostatic + BCs + term tagging | `PreProjectedEquations` |
+# | **Phase 2** | Map to $\zeta$-space, formal Galerkin projection with abstract matrices | `ZetaProjectedEquations` |
+# | **Phase 3** | Choose basis + level, compute matrices (cached), apply $M^{-1}$ | `ProjectedModel` (a `Model`) |
 #
-# This notebook walks through both passes and compares results across bases.
+# This notebook walks through all three phases and compares results across bases.
 
 # %%
 import sympy as sp
@@ -69,7 +70,7 @@ display(hydro)
 
 # %% [markdown]
 # ---
-# ## Part 2: Pass 1 -- Basis-Independent Derivation
+# ## Part 2: Phase 1 -- Basis-Independent Derivation
 #
 # `derive_shallow_moments()` does the full derivation from INS:
 #
@@ -137,14 +138,68 @@ print(f"  Missing in inviscid: {newton_origins - inv_origins}")
 
 # %% [markdown]
 # ---
-# ## Part 3: Pass 2 -- Basis-Specific Projection
+# ## Part 2b: Phase 2 -- Abstract $\zeta$-Space Projection
 #
-# `ProjectedModel` takes `PreProjectedEquations` + a basis + level and produces
-# a complete `Model` with `flux()`, `source()`, `eigenvalues()`, etc.
+# `project_to_zeta()` takes Phase 1 output and performs the **formal Galerkin projection**
+# in normalized $\zeta$-space $[0, 1]$ -- **without choosing a basis or level**.
+#
+# The projection steps:
+# 1. Coordinate transform: $z \to \zeta = (z - b) / H$
+# 2. Ansatz substitution: $u(t,x,\zeta) = \sum_k \alpha_k(t,x)\,\varphi_k(\zeta)$
+# 3. Galerkin projection: multiply by $\varphi_l(\zeta)$, integrate $\int_0^1 \ldots d\zeta$
+# 4. Integration by parts on $\partial/\partial\zeta$ terms
+# 5. Apply kinematic BCs at $\zeta = 0$ (bottom) and $\zeta = 1$ (surface)
+# 6. Apply stress BCs: free surface at top, Navier-slip at bottom
+#
+# The result uses **abstract matrix symbols** -- no numerical values yet:
+# - $M_{lk}$: mass matrix
+# - $A_{lij}$: triple product (advection)
+# - $D_{lk}$: stiffness/derivative (viscosity)
+# - $B_{lij}$: vertical advection coupling
+# - $\Phi_l$: constant projection integral
+# - $\varphi_l^b$: boundary values
+
+# %%
+from zoomy_core.model.models.zeta_projection import project_to_zeta
+
+zeta = project_to_zeta(pre)
+print(zeta.summary())
+
+# %% [markdown]
+# ### Abstract equation structure
+#
+# Each term carries a `role`, `origin`, and `matrix_deps` (which basis matrices it needs).
+# The actual matrix values are computed in Phase 3 with a specific basis.
+
+# %%
+print("=== Continuity (abstract) ===")
+for t in zeta.continuity:
+    print(f"  {t.role:20s}  type={t.term_type.value:25s}  deps={t.matrix_deps}")
+
+print("\n=== x-Momentum (abstract, mode l) ===")
+for t in zeta.x_momentum:
+    print(f"  {t.role:20s}  type={t.term_type.value:25s}  deps={t.matrix_deps}")
+
+# %% [markdown]
+# ### LaTeX PDE system (abstract -- before $M^{-1}$)
+
+# %%
+print(zeta.latex_system())
+
+# %% [markdown]
+# ---
+# ## Part 3: Phase 3 -- Basis-Specific Projection (with caching)
+#
+# `ProjectedModel` takes `ZetaProjectedEquations` (or `PreProjectedEquations`)
+# plus a basis + level, and produces a complete `Model`.
+#
+# **Key improvement**: basis matrices (M, A, D, B, ...) are now **cached** by
+# `(basis_name, level)` -- they are model-agnostic. Switching between Newtonian
+# and inviscid models reuses the same matrices.
 #
 # The projection:
-# 1. Substitutes ansatz: $u(\zeta) = \sum_k \alpha_k \varphi_k(\zeta)$
-# 2. Projects each tagged term onto test functions $\varphi_j$
+# 1. Computes basis matrices via `SymbolicIntegrator` (cached)
+# 2. Substitutes ansatz: $u(\zeta) = \sum_k \alpha_k \varphi_k(\zeta)$
 # 3. Collects raw projected vectors (with mass matrix M in front)
 # 4. Applies $M^{-1}$ once to ALL non-temporal terms
 # 5. Outputs `Model`-compatible `flux()`, `source()`, `nonconservative_matrix()`
@@ -156,7 +211,7 @@ from zoomy_core.model.models.basisfunctions import (
 )
 
 # %% [markdown]
-# ### 3a. Legendre basis (standard)
+# ### 3a. Legendre basis (standard, from ZetaProjectedEquations)
 #
 # Legendre on [0,1]: $\varphi_k(\zeta) = P_k(2\zeta - 1) \cdot (-1)^k$
 #
@@ -469,8 +524,8 @@ for i in range(ip_spl.n_variables):
 # ## Part 6: Architecture Summary
 #
 # ```
-# Pass 1 (basis-independent)
-# --------------------------
+# Phase 1 (basis-independent)
+# ---------------------------
 # FullINS(state)
 #   |
 #   +-- .apply(material)     -> Newtonian / Inviscid stress
@@ -485,16 +540,32 @@ for i in range(ip_spl.n_variables):
 #   +-- tag each term: temporal / flux / NC / source
 #   |
 #   v
-# PreProjectedEquations  (cached, reusable for ANY basis)
+# PreProjectedEquations  (reusable for ANY basis)
 #
 #
-# Pass 2 (basis-specific)
-# -----------------------
-# PreProjectedEquations + Basis + Level
+# Phase 2 (abstract zeta-space projection)
+# -----------------------------------------
+# PreProjectedEquations
 #   |
-#   +-- substitute ansatz: u(z) = sum alpha_k phi_k(z)
-#   +-- project onto phi_j via SymbolicIntegrator
-#   +-- compute M, A, D, phib matrices
+#   +-- coordinate transform z -> zeta = (z-b)/H
+#   +-- formal Galerkin projection with abstract phi_k(zeta)
+#   +-- IBP on d/dzeta terms
+#   +-- kinematic + stress BCs
+#   +-- tag each term with matrix dependencies
+#   |
+#   v
+# ZetaProjectedEquations  (inspectable LaTeX, abstract matrices)
+#   |
+#   +-- latex_system()  -> displayable PDE with M, A, D, B, Phi, phi_b
+#   +-- summary()       -> text overview of terms and dependencies
+#
+#
+# Phase 3 (basis-specific, cached)
+# --------------------------------
+# ZetaProjectedEquations + Basis + Level
+#   |
+#   +-- compute M, A, D, B, phib matrices via SymbolicIntegrator
+#   +-- CACHED by (basis_name, level) -- model-agnostic!
 #   +-- apply M^{-1} to all non-temporal terms
 #   |
 #   v
@@ -513,5 +584,6 @@ for i in range(ip_spl.n_variables):
 # Solver (explicit / IMEX)
 # ```
 #
-# The **same** `PreProjectedEquations` feeds into different bases.
-# The basis only enters in Pass 2.
+# The **same** `ZetaProjectedEquations` feeds into different bases.
+# Matrix computation is cached -- switching bases at the same level is instant.
+# Switching between Newtonian and inviscid reuses the same matrices.
