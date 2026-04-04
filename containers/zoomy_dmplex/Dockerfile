@@ -52,6 +52,7 @@ RUN git clone --depth 1 --branch v3.23.3 \
         --download-scalapack \
         --download-mumps \
         --download-superlu_dist \
+        --download-triangle \
         --with-petsc4py=1 \
     && make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc) \
     && find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true \
