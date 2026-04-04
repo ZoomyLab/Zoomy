@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs "cython<3.1" pytest h5py meshio
 
-RUN git clone --depth 1 --branch v3.22.3 \
+RUN git clone --depth 1 --branch v3.23.3 \
         https://gitlab.com/petsc/petsc.git "$PETSC_DIR" \
     && cd "$PETSC_DIR" \
     && python3 ./configure \
@@ -53,11 +53,8 @@ RUN git clone --depth 1 --branch v3.22.3 \
         --download-mumps \
         --download-superlu_dist \
         --download-triangle \
-        --with-petsc4py=0 \
+        --with-petsc4py=1 \
     && make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc) \
-    && python3 -m pip install --no-cache-dir --break-system-packages "setuptools<80" "cython==3.0.11" \
-    && cd "$PETSC_DIR/src/binding/petsc4py" \
-    && python3 -m pip install --no-cache-dir --break-system-packages --no-build-isolation . \
     && find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/.git" 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true
