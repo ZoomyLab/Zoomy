@@ -67,11 +67,11 @@ From: ubuntu:24.04
         --download-scalapack \
         --download-mumps \
         --download-superlu_dist \
+        --download-triangle \
         --with-petsc4py=1
 
     make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc)
     # Skip 'make check' - MPI tests fail under fakeroot/container build
-    # PETSc library is verified via %test section instead
 
     # Clean build objects to reduce image size
     find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
