@@ -1,5 +1,6 @@
 import os
 import logging
+import numpy as np
 
 from zoomy_server.adapter import SolverAdapter
 
@@ -11,13 +12,44 @@ class NumpyAdapter(SolverAdapter):
 
     def solve(self, case, output_dir, on_progress):
         from zoomy_core.mesh.mesh import Mesh
-        from zoomy_core.misc.misc import Settings
-        from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+        from zoomy_core.misc.misc import Settings, Zstruct
+        from zoomy_core.model.numerical_model import NumericalModel
+        from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
         import zoomy_core.fvm.timestepping as timestepping
-        import zoomy_core.fvm.flux as fvmflux
+        import zoomy_core.model.boundary_conditions as BC
+        import zoomy_core.model.initial_conditions as IC
 
         mesh = self._build_mesh(case["mesh"])
-        model = self._build_model(case["model"])
+        raw_model = self._build_model(case["model"])
+
+        # Wrap with NumericalModel for regularization (1/h → 1/(h+eps), wet/dry)
+        nv = raw_model.n_variables
+        bcs = BC.BoundaryConditions([
+            BC.Extrapolation(tag="left"),
+            BC.Extrapolation(tag="right"),
+        ])
+
+        ic_spec = case.get("initial_conditions")
+        if ic_spec and ic_spec.get("type") == "dam_break":
+            h_left = ic_spec.get("h_left", 2.0)
+            h_right = ic_spec.get("h_right", 1.0)
+            x_jump = ic_spec.get("x_jump", 0.0)
+            def ic_func(x, _nv=nv, _hl=h_left, _hr=h_right, _xj=x_jump):
+                Q = np.zeros(_nv)
+                Q[1] = _hl if float(x[0]) < _xj else _hr
+                return Q
+            ic = IC.UserFunction(ic_func)
+        else:
+            # Default: uniform h=1
+            def ic_default(n, _nv=nv):
+                Q = np.zeros(_nv)
+                Q[1] = 1.0
+                return Q
+            ic = IC.Constant(constants=ic_default)
+
+        model = NumericalModel(raw_model,
+                               boundary_conditions=bcs,
+                               initial_conditions=ic)
 
         settings = Settings.default()
         settings.output.directory = output_dir
@@ -25,15 +57,16 @@ class NumpyAdapter(SolverAdapter):
         settings.output.snapshots = case.get("solver", {}).get("output_snapshots", 10)
         settings.output.clean_directory = True
 
-        solver = HyperbolicSolver(
+        solver_spec = case.get("solver", {})
+        solver = GeneratedModelSolver(
             settings=settings,
-            time_end=case.get("solver", {}).get("time_end", 0.1),
-            compute_dt=timestepping.adaptive(CFL=case.get("solver", {}).get("cfl", 0.45)),
-            flux=fvmflux.Rusanov(),
+            time_end=solver_spec.get("time_end", 0.1),
+            compute_dt=timestepping.adaptive(CFL=solver_spec.get("cfl", 0.45)),
+            min_dt=solver_spec.get("min_dt", 1e-6),
         )
 
         Q, Qaux = solver.solve(mesh, model)
-        on_progress(-1, case.get("solver", {}).get("time_end", 0.1), 0.0)
+        on_progress(-1, solver_spec.get("time_end", 0.1), 0.0)
 
     def list_models(self):
         try:

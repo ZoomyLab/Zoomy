@@ -111,7 +111,7 @@ function installCompletions() {
                 '#compdef zoomy',
                 '_zoomy() {',
                 '  local -a commands tabs session_cmds',
-                '  commands=(start overview status list select show session connect disconnect backends case save load)',
+                '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load)',
                 '  tabs=(model mesh solver visu)',
                 '  session_cmds=(new switch rename list)',
                 '  if (( CURRENT == 2 )); then',
@@ -172,7 +172,7 @@ function installCompletions() {
             var script = [
                 '_zoomy_completions() {',
                 '  local cur="${COMP_WORDS[COMP_CWORD]}" prev="${COMP_WORDS[COMP_CWORD-1]}"',
-                '  local cmds="start overview status list select show session connect disconnect backends case save load"',
+                '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load"',
                 '  local tabs="model mesh solver visu"',
                 '  if [ "$COMP_CWORD" = 1 ]; then COMPREPLY=($(compgen -W "$cmds" -- "$cur"))',
                 '  elif [ "$prev" = "list" ] || [ "$prev" = "overview" ] || [ "$prev" = "select" ] || [ "$prev" = "show" ]; then COMPREPLY=($(compgen -W "$tabs" -- "$cur"))',
@@ -471,19 +471,48 @@ function cmdBackends() {
     console.log("");
 }
 
-async function cmdRun(proj, opts) {
-    var wait = opts.indexOf("--wait") !== -1;
+function resolveBackendUrl(proj) {
     var solverCardId = proj.selections.selected("solver");
     var solverCard = solverCardId ? proj.cardState.get(solverCardId) : null;
     var tag = solverCard && solverCard.requires_tag ? solverCard.requires_tag : "numpy";
-    var url = tag === "numpy" ? _backends["numpy"] : _backends[tag];
+    var url = _backends[tag];
+    return { tag: tag, url: url };
+}
 
-    if (!url && tag !== "numpy") {
-        console.log("Backend '" + tag + "' not connected. Run: zoomy connect <url>");
-        return;
+async function pollJob(url, jobId) {
+    var http = url.indexOf("https") === 0 ? require("https") : require("http");
+    console.log("Watching job " + jobId + "...");
+    var done = false;
+    while (!done) {
+        await new Promise(function (r) { setTimeout(r, 2000); });
+        var status = await new Promise(function (resolve) {
+            http.get(url + "/api/v1/jobs/" + jobId, function (res) {
+                var data = "";
+                res.on("data", function (d) { data += d; });
+                res.on("end", function () { try { resolve(JSON.parse(data)); } catch (e) { resolve({}); } });
+            }).on("error", function () { resolve({}); });
+        });
+        if (status.status === "complete") {
+            process.stdout.write("\n");
+            console.log("Complete!");
+            done = true;
+        } else if (status.status === "failed") {
+            process.stdout.write("\n");
+            console.log("Failed: " + (status.error || "").substring(0, 200));
+            done = true;
+        } else if (status.progress) {
+            var p = status.progress;
+            process.stdout.write("\r  t=" + (p.time || 0).toFixed(4) + " / " + (p.time_end || 0).toFixed(4) + "  iter=" + (p.iteration || 0) + "    ");
+        }
     }
-    if (!url) {
-        console.log("No backend URL for numpy. Connect first: zoomy connect <url>");
+}
+
+async function cmdRun(proj, opts) {
+    var wait = opts.indexOf("--wait") !== -1;
+    var backend = resolveBackendUrl(proj);
+
+    if (!backend.url) {
+        console.log("Backend '" + backend.tag + "' not connected. Run: zoomy connect <url>");
         return;
     }
 
@@ -491,13 +520,13 @@ async function cmdRun(proj, opts) {
     try { zcase = proj.buildCase(); }
     catch (err) { console.log("Error: " + err.message); return; }
 
-    console.log("Submitting to " + tag + " at " + url + "...");
+    console.log("Submitting to " + backend.tag + " at " + backend.url + "...");
 
-    var http = url.indexOf("https") === 0 ? require("https") : require("http");
+    var http = backend.url.indexOf("https") === 0 ? require("https") : require("http");
     var body = JSON.stringify(zcase);
 
     var jobId = await new Promise(function (resolve) {
-        var req = http.request(url + "/api/v1/jobs", {
+        var req = http.request(backend.url + "/api/v1/jobs", {
             method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
         }, function (res) {
             var data = "";
@@ -517,40 +546,30 @@ async function cmdRun(proj, opts) {
 
     if (!wait) {
         console.log("Check status:  zoomy jobs " + jobId);
-        console.log("Or wait:       zoomy run --wait");
+        console.log("Watch live:    zoomy watch " + jobId);
         return;
     }
 
-    console.log("Waiting...");
-    var done = false;
-    while (!done) {
-        await new Promise(function (r) { setTimeout(r, 2000); });
-        var status = await new Promise(function (resolve) {
-            http.get(url + "/api/v1/jobs/" + jobId, function (res) {
-                var data = "";
-                res.on("data", function (d) { data += d; });
-                res.on("end", function () { try { resolve(JSON.parse(data)); } catch (e) { resolve({}); } });
-            }).on("error", function () { resolve({}); });
-        });
-        if (status.status === "complete") {
-            console.log("Complete!");
-            done = true;
-        } else if (status.status === "failed") {
-            console.log("Failed: " + (status.error || "").substring(0, 200));
-            done = true;
-        } else if (status.progress) {
-            var p = status.progress;
-            process.stdout.write("\r  t=" + (p.time || 0).toFixed(4) + " / " + (p.time_end || 0).toFixed(4) + "  iter=" + (p.iteration || 0) + "    ");
-        }
+    await pollJob(backend.url, jobId);
+}
+
+async function cmdWatch(proj, jobId) {
+    if (!jobId) {
+        console.log("Usage: zoomy watch <job_id>");
+        return;
     }
+    var backend = resolveBackendUrl(proj);
+    if (!backend.url) {
+        console.log("Backend '" + backend.tag + "' not connected. Run: zoomy connect <url>");
+        return;
+    }
+    await pollJob(backend.url, jobId);
 }
 
 async function cmdJobs(proj, jobId) {
-    var solverCardId = proj.selections.selected("solver");
-    var solverCard = solverCardId ? proj.cardState.get(solverCardId) : null;
-    var tag = solverCard && solverCard.requires_tag ? solverCard.requires_tag : "numpy";
-    var url = _backends[tag];
-    if (!url) { console.log("No backend connected for '" + tag + "'"); return; }
+    var backend = resolveBackendUrl(proj);
+    if (!backend.url) { console.log("No backend connected for '" + backend.tag + "'"); return; }
+    var url = backend.url;
 
     var http = url.indexOf("https") === 0 ? require("https") : require("http");
     var endpoint = jobId ? url + "/api/v1/jobs/" + jobId : url + "/api/v1/jobs";
@@ -653,7 +672,7 @@ function cmdCompletion(shell) {
             '#compdef zoomy',
             '_zoomy() {',
             '  local -a commands tabs',
-            '  commands=(start overview status list select show case save load)',
+            '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load)',
             '  tabs=(model mesh solver visualization)',
             '  if (( CURRENT == 2 )); then',
             '    _describe "command" commands',
@@ -680,7 +699,7 @@ function cmdCompletion(shell) {
             '_zoomy_completions() {',
             '  local cur="${COMP_WORDS[COMP_CWORD]}"',
             '  local prev="${COMP_WORDS[COMP_CWORD-1]}"',
-            '  local cmds="start overview status list select show case save load"',
+            '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load"',
             '  local tabs="model mesh solver visualization"',
             '  if [ "$COMP_CWORD" = 1 ]; then',
             '    COMPREPLY=($(compgen -W "$cmds" -- "$cur"))',
@@ -731,6 +750,7 @@ async function main() {
             "  RUN:",
             "    zoomy run                        Submit simulation to backend",
             "    zoomy run --wait                 Submit and wait for completion",
+            "    zoomy watch <job_id>             Attach to job with live progress",
             "    zoomy jobs                       List all jobs",
             "    zoomy jobs <job_id>              Show job status",
             "",
@@ -761,6 +781,7 @@ async function main() {
     else if (cmd === "connect") await cmdConnect(proj, args[1]);
     else if (cmd === "disconnect") cmdDisconnect(proj, args[1]);
     else if (cmd === "run") await cmdRun(proj, args.slice(1));
+    else if (cmd === "watch") await cmdWatch(proj, args[1]);
     else if (cmd === "jobs") await cmdJobs(proj, args[1]);
     else if (cmd === "case") cmdCase(proj);
     else if (cmd === "save") await cmdSave(proj, args[1]);
