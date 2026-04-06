@@ -17,24 +17,51 @@ class TestStateSpace:
     @pytest.mark.small
     @pytest.mark.unittest
     @pytest.mark.core
-    def test_1d_creation(self):
-        s = StateSpace(dimension=1)
-        assert s.dim == 1
-        assert s.v == S.Zero
-
-    @pytest.mark.small
-    @pytest.mark.unittest
-    @pytest.mark.core
     def test_2d_creation(self):
+        """dimension=2 means xz plane: no y, v=0, 4 tau components."""
         s = StateSpace(dimension=2)
         assert s.dim == 2
-        assert s.v != S.Zero
+        assert s.v == S.Zero
+        assert not s.has_y
+        assert s.horizontal_dim == 1
 
     @pytest.mark.small
     @pytest.mark.unittest
     @pytest.mark.core
-    def test_stress_tensor_complete(self):
+    def test_3d_creation(self):
+        """dimension=3 means xyz space: has y, v != 0, 9 tau components."""
+        s = StateSpace(dimension=3)
+        assert s.dim == 3
+        assert s.v != S.Zero
+        assert s.has_y
+        assert s.horizontal_dim == 2
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_dimension_1_raises(self):
+        with pytest.raises(ValueError):
+            StateSpace(dimension=1)
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_stress_tensor_2d(self):
+        """dimension=2: only xx, xz, zx, zz — no y components."""
         s = StateSpace(dimension=2)
+        assert len(s.tau) == 4
+        for key in ["xx", "xz", "zx", "zz"]:
+            assert key in s.tau
+        for key in ["xy", "yx", "yy", "yz", "zy"]:
+            assert key not in s.tau
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_stress_tensor_3d(self):
+        """dimension=3: all 9 components."""
+        s = StateSpace(dimension=3)
+        assert len(s.tau) == 9
         for i in "xyz":
             for j in "xyz":
                 assert i + j in s.tau
@@ -43,7 +70,7 @@ class TestStateSpace:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_bathymetry(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         assert s.eta == s.b + s.H
 
 
@@ -143,16 +170,18 @@ class TestFullINS:
     @pytest.mark.small
     @pytest.mark.unittest
     @pytest.mark.core
-    def test_1d_equations_count(self):
-        s = StateSpace(dimension=1)
+    def test_2d_equations_count(self):
+        """dim=2 (xz): continuity + x_momentum + z_momentum = 3 equations."""
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         assert len(ins.equations) == 3
 
     @pytest.mark.small
     @pytest.mark.unittest
     @pytest.mark.core
-    def test_2d_equations_count(self):
-        s = StateSpace(dimension=2)
+    def test_3d_equations_count(self):
+        """dim=3 (xyz): continuity + x + y + z momentum = 4 equations."""
+        s = StateSpace(dimension=3)
         ins = FullINS(s)
         assert len(ins.equations) == 4
 
@@ -160,7 +189,7 @@ class TestFullINS:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_x_momentum_has_stress(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         assert ins.x_momentum.has(s.tau["xz"])
 
@@ -168,7 +197,7 @@ class TestFullINS:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_z_momentum_has_gravity(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         assert ins.z_momentum.has(s.g)
 
@@ -176,7 +205,7 @@ class TestFullINS:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_z_momentum_has_full_inertia(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         zm = ins.z_momentum
         assert zm.has(Derivative(s.w, s.t))
@@ -188,7 +217,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_newtonian_is_material(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         n = materials.newtonian(s)
         assert isinstance(n, Material)
 
@@ -196,7 +225,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_newtonian_replaces_tau(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         n = materials.newtonian(s)
         xm = ins.x_momentum.apply(n)
@@ -206,7 +235,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_newtonian_introduces_nu(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         n = materials.newtonian(s)
         ins = FullINS(s)
         xm = ins.x_momentum.apply(n)
@@ -216,7 +245,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_newtonian_custom_nu(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         my_nu = Symbol("my_viscosity", positive=True)
         n = materials.newtonian(s, nu=my_nu)
         assert n.nu == my_nu
@@ -225,7 +254,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_inviscid_zeros_all_tau(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         inv = materials.inviscid(s)
         xm = ins.x_momentum.apply(inv)
@@ -236,7 +265,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_newtonian_displays(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         n = materials.newtonian(s)
         latex = n._repr_latex_()
         assert "=" in latex
@@ -245,7 +274,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_material_on_single_term(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         n = materials.newtonian(s)
         stress_term = ins.x_momentum[2]
@@ -256,7 +285,7 @@ class TestMaterials:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_materials_independent_of_ins(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         n = materials.newtonian(s)
         assert not hasattr(n, "ins")
 
@@ -267,7 +296,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_kinematic_bc_bottom_is_assumption(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         kbc = assumptions.kinematic_bc_bottom(s)
         assert isinstance(kbc, Assumption)
 
@@ -275,7 +304,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_hydrostatic_replaces_p(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         hydro = assumptions.hydrostatic_pressure(s)
         xm = ins.x_momentum.apply(hydro)
@@ -286,7 +315,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_kinematic_bc_applied_to_boundary(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         kbc = assumptions.kinematic_bc_bottom(s)
         w_at_b = s.w.subs(s.z, s.b)
         expr = Expression(w_at_b)
@@ -297,7 +326,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_chain_multiple(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         ins = FullINS(s)
         hydro = assumptions.hydrostatic_pressure(s)
         inv = materials.inviscid(s)
@@ -309,7 +338,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_assumptions_independent_of_ins(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         kbc = assumptions.kinematic_bc_bottom(s)
         assert not hasattr(kbc, "ins")
 
@@ -317,7 +346,7 @@ class TestAssumptions:
     @pytest.mark.unittest
     @pytest.mark.core
     def test_assumptions_display(self):
-        s = StateSpace(dimension=1)
+        s = StateSpace(dimension=2)
         kbc = assumptions.kinematic_bc_bottom(s)
         latex = kbc._repr_latex_()
         assert "=" in latex
@@ -325,11 +354,22 @@ class TestAssumptions:
     @pytest.mark.small
     @pytest.mark.unittest
     @pytest.mark.core
-    def test_2d_kinematic_bc_has_y(self):
-        s = StateSpace(dimension=2)
+    def test_3d_kinematic_bc_has_y(self):
+        """dimension=3 (xyz): kinematic BC includes v*db/dy."""
+        s = StateSpace(dimension=3)
         kbc = assumptions.kinematic_bc_bottom(s)
         for _, rhs in kbc.subs_map.items():
             assert rhs.has(s.y)
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_2d_kinematic_bc_no_y(self):
+        """dimension=2 (xz): kinematic BC has no y terms."""
+        s = StateSpace(dimension=2)
+        kbc = assumptions.kinematic_bc_bottom(s)
+        for _, rhs in kbc.subs_map.items():
+            assert not rhs.has(s.y)
 
 
 class TestIntegrateByParts:
@@ -364,3 +404,158 @@ class TestIntegrateByParts:
         result = integrate_by_parts(f, S.One, z, domain=(0, 1))
         bc_result = result.apply_bcs(bc_lower={f.subs(z, 0): tau})
         assert bc_result.boundary_lower.has(tau)
+
+
+class TestZetaProjection:
+    """Tests for Phase 2: abstract zeta-space projection."""
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_project_to_zeta_2d(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import (
+            project_to_zeta, ZetaProjectedEquations,
+        )
+        from zoomy_core.model.models.ins_generator import Newtonian
+
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state, material=Newtonian(state))
+        zeta = project_to_zeta(pre)
+
+        assert isinstance(zeta, ZetaProjectedEquations)
+        assert zeta.dimension == 2
+        assert zeta.horizontal_dim == 1
+        assert len(zeta.continuity) >= 2  # temporal + flux
+        assert len(zeta.x_momentum) >= 6  # inertia + advection + pressure + topo + viscous + slip
+        assert len(zeta.y_momentum) == 0
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_project_to_zeta_3d(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import project_to_zeta
+
+        state = StateSpace(dimension=3)
+        pre = derive_shallow_moments(state)
+        zeta = project_to_zeta(pre)
+
+        assert zeta.dimension == 3
+        assert zeta.horizontal_dim == 2
+        assert len(zeta.continuity) >= 3  # temporal + x flux + y flux
+        assert len(zeta.y_momentum) > 0
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_zeta_term_roles(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import project_to_zeta
+
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+        zeta = project_to_zeta(pre)
+
+        roles = {t.role for t in zeta.x_momentum}
+        assert "temporal" in roles
+        assert "flux" in roles
+        assert "nonconservative" in roles
+        assert "source" in roles
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_zeta_latex_system(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import project_to_zeta
+
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+        zeta = project_to_zeta(pre)
+
+        latex = zeta.latex_system()
+        assert "M_{lk}" in latex
+        assert "A_{lij}" in latex
+        assert r"\Phi_l" in latex
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_zeta_summary(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import project_to_zeta
+
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+        zeta = project_to_zeta(pre)
+
+        summary = zeta.summary()
+        assert "ZetaProjectedEquations" in summary
+        assert "abstract" in summary
+
+
+class TestMatrixCaching:
+    """Tests for Phase 3: basis matrix caching."""
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_cache_hit(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.projected_model import (
+            ProjectedModel, clear_matrix_cache, _basis_matrix_cache,
+        )
+        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+
+        clear_matrix_cache()
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+
+        m1 = ProjectedModel(pre, basis_type=Legendre_shifted, level=2,
+                            eigenvalue_mode="numerical")
+        assert len(_basis_matrix_cache) == 1
+
+        # Second model with same basis+level should hit cache
+        m2 = ProjectedModel(pre, basis_type=Legendre_shifted, level=2,
+                            eigenvalue_mode="numerical")
+        assert len(_basis_matrix_cache) == 1  # no new entry
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_cache_miss_different_level(self):
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.projected_model import (
+            ProjectedModel, clear_matrix_cache, _basis_matrix_cache,
+        )
+        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+
+        clear_matrix_cache()
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+
+        ProjectedModel(pre, basis_type=Legendre_shifted, level=0,
+                       eigenvalue_mode="numerical")
+        ProjectedModel(pre, basis_type=Legendre_shifted, level=2,
+                       eigenvalue_mode="numerical")
+        assert len(_basis_matrix_cache) == 2
+
+    @pytest.mark.small
+    @pytest.mark.unittest
+    @pytest.mark.core
+    def test_projected_model_accepts_zeta(self):
+        """ProjectedModel accepts ZetaProjectedEquations (Phase 2 output)."""
+        from zoomy_core.model.models.model_derivation import derive_shallow_moments
+        from zoomy_core.model.models.zeta_projection import project_to_zeta
+        from zoomy_core.model.models.projected_model import ProjectedModel
+        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+
+        state = StateSpace(dimension=2)
+        pre = derive_shallow_moments(state)
+        zeta = project_to_zeta(pre)
+
+        model = ProjectedModel(zeta, basis_type=Legendre_shifted, level=2,
+                               eigenvalue_mode="numerical")
+        F = model.flux()
+        assert F is not None
