@@ -63,19 +63,14 @@ for eq in ins.equations:
 kbc_b = KinematicBCBottom(state)
 kbc_s = KinematicBCSurface(state)
 
-print("Step by step:")
-print("  du/dx → Leibniz: d/dx[∫u dz] - u(η)·dη/dx + u(b)·db/dx")
-print("  dw/dz → fund. theorem: w(η) - w(b)")
-print("  Apply kinematic BCs: w(η) - u(η)·dη/dx = dη/dt, etc.")
-print("  Result: dH/dt + d/dx[∫u dz] = 0")
-
+# One call does everything: depth-integrate each term + apply BCs + simplify
 mass_eq = ins.continuity.map_with_bcs(
     lambda t: t.depth_integrate(b, eta, z),
     bcs=[kbc_s, kbc_b],
 )
 
-print("\nDepth-integrated mass conservation:")
-display(Math(sp.latex(simplify(mass_eq.expr)) + " = 0"))
+print("Depth-integrated mass conservation:")
+display(Math(sp.latex(mass_eq.expr) + " = 0"))
 
 # %% [markdown]
 # ### Project mass equation onto Legendre L2 basis
@@ -94,9 +89,9 @@ mass_projected = mass_eq.project_onto_basis(
     z_var=z,
 )
 print("Mass equation after basis projection:")
-display(Math(sp.latex(simplify(mass_projected.expr)) + " = 0"))
+display(Math(sp.latex(mass_projected.expr) + " = 0"))
 
-print("\nThis is: dH/dt + d(H·α₀)/dx = 0  (the standard shallow water mass conservation)")
+print("\nThis is dH/dt + d(H·alpha_0)/dx = 0  (standard shallow water mass conservation)")
 
 # %% [markdown]
 # ---
