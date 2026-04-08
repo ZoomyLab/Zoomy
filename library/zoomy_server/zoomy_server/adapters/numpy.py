@@ -11,9 +11,9 @@ class NumpyAdapter(SolverAdapter):
     tag = "numpy"
 
     def solve(self, case, output_dir, on_progress):
-        from zoomy_core.mesh.mesh import Mesh
+        from zoomy_core.mesh.lsq_mesh import LSQMesh as Mesh
         from zoomy_core.misc.misc import Settings, Zstruct
-        from zoomy_core.model.numerical_model import NumericalModel
+        from zoomy_core.model.legacy.numerical_model import NumericalModel
         from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
         import zoomy_core.fvm.timestepping as timestepping
         import zoomy_core.model.boundary_conditions as BC
@@ -76,7 +76,7 @@ class NumpyAdapter(SolverAdapter):
             return []
 
     def _build_mesh(self, mesh_spec):
-        from zoomy_core.mesh.mesh import Mesh
+        from zoomy_core.mesh.lsq_mesh import LSQMesh as Mesh
         if mesh_spec["type"] == "create_1d":
             return Mesh.create_1d(tuple(mesh_spec["domain"]), mesh_spec["n_cells"])
         elif mesh_spec["type"] == "create_2d":
