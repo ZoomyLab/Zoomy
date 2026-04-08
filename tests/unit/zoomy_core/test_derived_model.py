@@ -280,6 +280,40 @@ def test_full_pipeline_1d():
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
+def test_3d_advection_solve():
+    """3D scalar advection on a cube: Gaussian pulse in x-direction."""
+    from zoomy_core.model.models.advection_model import ScalarAdvection
+    from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+    import zoomy_core.fvm.timestepping as ts
+    import zoomy_core.model.boundary_conditions as BC
+    import zoomy_core.model.initial_conditions as IC
+
+    model = ScalarAdvection(dimension=3)
+    model.parameter_values = np.array([1.0, 0.0, 0.0])
+    model.initial_conditions = IC.UserFunction(
+        function=lambda x: np.array([np.exp(-((x[0]-0.3)**2 + (x[1]-0.5)**2 + (x[2]-0.5)**2) / 0.01)])
+    )
+    model.boundary_conditions = BC.BoundaryConditions(
+        boundary_conditions_list=[
+            BC.Extrapolation(tag=t) for t in
+            ["left", "right", "front", "back", "bottom", "top"]
+        ]
+    )
+    mesh = BaseMesh.create_3d((0, 1, 0, 1, 0, 1), nx=8, ny=8, nz=8)
+    solver = HyperbolicSolver(time_end=0.1, compute_dt=ts.adaptive(CFL=0.3))
+    Q, _ = solver.solve(mesh, model, write_output=False)
+    nc = mesh.n_inner_cells
+    assert np.isfinite(Q[:, :nc]).all()
+    assert Q[0, :nc].min() >= -0.01  # no large negative values
+    lsq = ensure_lsq_mesh(mesh, model)
+    mass_init = np.sum(lsq.cell_volumes[:nc]) * 0.005577  # approximate
+    mass_final = np.sum(Q[0, :nc] * lsq.cell_volumes[:nc])
+    assert mass_final > 0  # mass is positive
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
 def test_full_pipeline_2d():
     """2D BaseMesh → auto-promote → Kernel → NumpyRuntimeModel → evaluate."""
     model = SMEModel(level=0)
