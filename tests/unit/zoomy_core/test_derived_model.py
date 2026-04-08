@@ -259,6 +259,71 @@ def test_model_compiles_with_kernel():
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
+def test_ins_2d_chorin_projection():
+    """2D Taylor-Green vortex with Chorin pressure splitting."""
+    from zoomy_core.model.models.ins3d_model import INS3DChorin
+    from zoomy_core.fvm.projection_solver import ProjectionSolver
+    import zoomy_core.model.boundary_conditions as BC
+    import zoomy_core.model.initial_conditions as IC
+
+    model = INS3DChorin(dimension=2, nu=0.01)
+    model.initial_conditions = IC.UserFunction(
+        function=lambda x: np.array([
+            np.sin(2*np.pi*x[0]) * np.cos(2*np.pi*x[1]),
+            -np.cos(2*np.pi*x[0]) * np.sin(2*np.pi*x[1]),
+        ])
+    )
+    model.boundary_conditions = BC.BoundaryConditions(
+        boundary_conditions_list=[
+            BC.Extrapolation(tag=t) for t in ["left", "right", "bottom", "top"]
+        ]
+    )
+    mesh = BaseMesh.create_2d((0, 1, 0, 1), nx=10, ny=10)
+    solver = ProjectionSolver(time_end=0.05, CFL=0.2)
+    Q, p = solver.solve(mesh, model, write_output=False)
+    nc = 100
+    assert np.isfinite(Q[:, :nc]).all()
+    assert np.isfinite(p[:nc]).all()
+    max_speed = np.sqrt(Q[0, :nc]**2 + Q[1, :nc]**2).max()
+    assert max_speed > 0.1  # velocity is evolving
+    assert max_speed < 10.0  # not blowing up
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_ins_3d_chorin_projection():
+    """3D Taylor-Green vortex with Chorin pressure splitting."""
+    from zoomy_core.model.models.ins3d_model import INS3DChorin
+    from zoomy_core.fvm.projection_solver import ProjectionSolver
+    import zoomy_core.model.boundary_conditions as BC
+    import zoomy_core.model.initial_conditions as IC
+
+    model = INS3DChorin(dimension=3, nu=0.1)
+    model.initial_conditions = IC.UserFunction(
+        function=lambda x: np.array([
+            np.sin(2*np.pi*x[0]) * np.cos(2*np.pi*x[1]),
+            -np.cos(2*np.pi*x[0]) * np.sin(2*np.pi*x[1]),
+            0.0,
+        ])
+    )
+    model.boundary_conditions = BC.BoundaryConditions(
+        boundary_conditions_list=[
+            BC.Extrapolation(tag=t) for t in
+            ["left", "right", "front", "back", "bottom", "top"]
+        ]
+    )
+    mesh = BaseMesh.create_3d((0, 1, 0, 1, 0, 1), nx=5, ny=5, nz=5)
+    solver = ProjectionSolver(time_end=0.02, CFL=0.2)
+    Q, p = solver.solve(mesh, model, write_output=False)
+    nc = 125
+    assert np.isfinite(Q[:, :nc]).all()
+    assert np.isfinite(p[:nc]).all()
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
 def test_full_pipeline_1d():
     """BaseMesh → auto-promote → Kernel → NumpyRuntimeModel → evaluate."""
     model = SMEModel(level=1)
