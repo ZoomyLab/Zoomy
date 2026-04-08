@@ -166,6 +166,57 @@ def test_create_2d_lsq_mesh_derivatives():
     assert min(col_means) < 0.1, f"Expected one derivative ≈ 0, got {col_means}"
 
 
+# ── 3D Mesh ──────────────────────────────────────────────────────────────────
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_create_3d_mesh():
+    bm = BaseMesh.create_3d((0, 1, 0, 1, 0, 1), nx=3, ny=3, nz=3)
+    assert bm.dimension == 3
+    assert bm.n_inner_cells == 27
+    assert bm.type == "hexahedron"
+    assert bm.n_faces_per_cell == 6
+    assert set(bm.boundary_conditions_sorted_names) == {
+        "left", "right", "front", "back", "bottom", "top"
+    }
+    # 6 faces × 9 boundary faces each = 54
+    assert bm.n_boundary_faces == 54
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_3d_mesh_volumes():
+    from zoomy_core.mesh.fvm_mesh import FVMMesh
+    fm = FVMMesh.create_3d((0, 1, 0, 1, 0, 1), nx=4, ny=4, nz=4)
+    # Total volume = 1.0
+    assert abs(np.sum(fm.cell_volumes[:64]) - 1.0) < 1e-12
+    # Each cell volume = 1/64
+    assert abs(fm.cell_volumes[0] - 1.0 / 64) < 1e-12
+    # Face areas = 1/16
+    assert abs(fm.face_volumes.min() - 1.0 / 16) < 1e-12
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_3d_lsq_derivatives():
+    lm = LSQMesh.create_3d((0, 1, 0, 1, 0, 1), nx=4, ny=4, nz=4, lsq_degree=1)
+    # u = x → one derivative ≈ 1, others ≈ 0
+    u = lm._cell_centers[0, :lm.n_cells]
+    derivs = lm.compute_derivatives(u, degree=1)
+    # 3 monomials for degree 1 in 3D
+    assert derivs.shape[1] == 3
+    # Interior cell
+    center_cell = 4 * 4 * 2 + 4 * 2 + 2  # roughly center
+    d = derivs[center_cell, :]
+    # One component should be ~1 (the x-derivative)
+    assert max(np.abs(d)) > 0.9
+    # At least one should be ~0
+    assert min(np.abs(d)) < 0.1
+
+
 # ── Kernel ────────────────────────────────────────────────────────────────────
 
 @pytest.mark.small
