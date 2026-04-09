@@ -262,7 +262,8 @@ def test_model_compiles_with_kernel():
 def test_ins_2d_chorin_projection():
     """2D Taylor-Green vortex with Chorin pressure splitting."""
     from zoomy_core.model.models.ins3d_model import INS3DChorin
-    from zoomy_core.fvm.projection_solver import ProjectionSolver
+    from zoomy_core.fvm.solver_splitting_numpy import SplittingSolver
+    import zoomy_core.fvm.timestepping as ts
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
@@ -279,7 +280,7 @@ def test_ins_2d_chorin_projection():
         ]
     )
     mesh = BaseMesh.create_2d((0, 1, 0, 1), nx=10, ny=10)
-    solver = ProjectionSolver(time_end=0.05, CFL=0.2)
+    solver = SplittingSolver(time_end=0.05, compute_dt=ts.adaptive(CFL=0.2))
     Q, p = solver.solve(mesh, model, write_output=False)
     nc = 100
     assert np.isfinite(Q[:, :nc]).all()
@@ -295,7 +296,8 @@ def test_ins_2d_chorin_projection():
 def test_ins_3d_chorin_projection():
     """3D Taylor-Green vortex with Chorin pressure splitting."""
     from zoomy_core.model.models.ins3d_model import INS3DChorin
-    from zoomy_core.fvm.projection_solver import ProjectionSolver
+    from zoomy_core.fvm.solver_splitting_numpy import SplittingSolver
+    import zoomy_core.fvm.timestepping as ts
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
@@ -314,7 +316,7 @@ def test_ins_3d_chorin_projection():
         ]
     )
     mesh = BaseMesh.create_3d((0, 1, 0, 1, 0, 1), nx=5, ny=5, nz=5)
-    solver = ProjectionSolver(time_end=0.02, CFL=0.2)
+    solver = SplittingSolver(time_end=0.02, compute_dt=ts.adaptive(CFL=0.2))
     Q, p = solver.solve(mesh, model, write_output=False)
     nc = 125
     assert np.isfinite(Q[:, :nc]).all()
