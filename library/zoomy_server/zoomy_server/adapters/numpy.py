@@ -14,7 +14,7 @@ class NumpyAdapter(SolverAdapter):
         from zoomy_core.mesh.lsq_mesh import LSQMesh as Mesh
         from zoomy_core.misc.misc import Settings, Zstruct
         from zoomy_core.model.legacy.numerical_model import NumericalModel
-        from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
+        from zoomy_core.fvm.solver_imex_numpy import FSFIMEXSolver
         import zoomy_core.fvm.timestepping as timestepping
         import zoomy_core.model.boundary_conditions as BC
         import zoomy_core.model.initial_conditions as IC
@@ -58,7 +58,7 @@ class NumpyAdapter(SolverAdapter):
         settings.output.clean_directory = True
 
         solver_spec = case.get("solver", {})
-        solver = GeneratedModelSolver(
+        solver = FSFIMEXSolver(
             settings=settings,
             time_end=solver_spec.get("time_end", 0.1),
             compute_dt=timestepping.adaptive(CFL=solver_spec.get("cfl", 0.45)),
