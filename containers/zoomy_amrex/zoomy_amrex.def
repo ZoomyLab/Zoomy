@@ -1,0 +1,65 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Author ZoomyLab
+    Description AMReX development container with host-MPI bind support
+
+%environment
+    export AMREX_HOME=/opt/amrex
+    export ZOOMY_AMREX_HOME=/opt/amrex
+    export LC_ALL=C
+    export PATH="/usr/local/bin:$PATH"
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gfortran \
+        git \
+        ca-certificates \
+        python3 \
+        python3-pip \
+        python3-dev \
+        python3-venv \
+        pkg-config \
+        libopenmpi-dev \
+        openmpi-bin \
+        libhdf5-openmpi-dev \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        numpy scipy sympy attrs meshio pytest rasterio h5py
+
+    # --- Build AMReX from source ---
+    git clone --depth 1 --branch 25.02 \
+        https://github.com/AMReX-Codes/amrex.git /opt/amrex
+
+    # Clean build artifacts to reduce image size, keep source + headers
+    find /opt/amrex -name "*.o" -delete 2>/dev/null || true
+
+%runscript
+    echo "zoomy_amrex container (AMReX at /opt/amrex)"
+    exec /bin/bash "$@"
+
+%test
+    echo "=== AMReX Container Verification ==="
+    echo "1. Checking Python version..."
+    python3 --version
+    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
+
+    echo "2. Checking compilers..."
+    gcc --version | head -1
+    gfortran --version | head -1
+    mpicxx --version | head -1
+
+    echo "3. Checking AMReX installation..."
+    test -d /opt/amrex/Src/Base && echo "AMReX source: OK" || exit 1
+    test -f /opt/amrex/Tools/GNUMake/Make.defs && echo "AMReX Make.defs: OK" || exit 1
+
+    echo "4. Checking Python deps..."
+    python3 -c "import numpy; import sympy; import attrs; print('Python deps: OK')"
+
+    echo "=== All checks passed ==="

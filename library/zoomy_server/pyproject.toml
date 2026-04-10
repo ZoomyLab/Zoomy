@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zoomy-server"
+version = "0.1.0"
+description = "Zoomy solver server with adapter pattern for any backend"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.20",
+]
+
+[project.optional-dependencies]
+numpy = ["zoomy-core"]
+jax = ["zoomy-core", "zoomy-jax"]
+
+[project.scripts]
+zoomy-server = "zoomy_server.cli:main"
