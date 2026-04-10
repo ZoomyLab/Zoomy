@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 from tests.common.baseline_store import assert_or_create_array_baseline
-from zoomy_core.fvm.symbolic_numerics_v2 import PositiveNonconservativeRusanov
-from zoomy_core.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
+from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
+from zoomy_core.model.models.legacy.shallow_water_topo import ShallowWaterEquationsWithTopo
 
 
 def _as_np(x):

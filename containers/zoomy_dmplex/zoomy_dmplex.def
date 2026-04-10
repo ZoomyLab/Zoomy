@@ -1,0 +1,121 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Author ZoomyLab
+    Description PETSc/DMPlex development container with host-MPI bind support
+
+%environment
+    export PETSC_DIR=/opt/petsc
+    export PETSC_ARCH=arch-container-opt
+    export LC_ALL=C
+    export PATH="/usr/local/bin:$PATH"
+    export LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH"
+    export PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH"
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gfortran \
+        git \
+        ca-certificates \
+        python3 \
+        python3-pip \
+        python3-dev \
+        python3-venv \
+        pkg-config \
+        cmake \
+        libopenmpi-dev \
+        openmpi-bin \
+        wget \
+        flex \
+        bison \
+        valgrind \
+    && rm -rf /var/lib/apt/lists/*
+
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        numpy scipy "sympy>=1.14" param loguru attrs "cython<3.1" pytest h5py meshio
+
+    # --- Build PETSc from source ---
+    export PETSC_DIR=/opt/petsc
+    export PETSC_ARCH=arch-container-opt
+
+    git clone --depth 1 --branch v3.23.3 \
+        https://gitlab.com/petsc/petsc.git "$PETSC_DIR"
+
+    cd "$PETSC_DIR"
+
+    python3 ./configure \
+        --with-cc=mpicc \
+        --with-cxx=mpicxx \
+        --with-fc=mpif90 \
+        COPTFLAGS="-O2" \
+        CXXOPTFLAGS="-O2" \
+        FOPTFLAGS="-O2" \
+        --with-debugging=0 \
+        --with-shared-libraries=1 \
+        --with-fortran-bindings=0 \
+        --download-hdf5 \
+        --download-metis \
+        --download-parmetis \
+        --download-eigen \
+        --download-ptscotch \
+        --download-netlib-lapack \
+        --download-fblaslapack \
+        --download-scalapack \
+        --download-mumps \
+        --download-superlu_dist \
+        --download-triangle \
+        --with-petsc4py=1
+
+    make PETSC_DIR=$PETSC_DIR PETSC_ARCH=$PETSC_ARCH all -j$(nproc)
+    # Skip 'make check' - MPI tests fail under fakeroot/container build
+
+    # Clean build objects to reduce image size
+    find "$PETSC_DIR/$PETSC_ARCH" -name "*.o" -delete 2>/dev/null || true
+    rm -rf "$PETSC_DIR/.git" 2>/dev/null || true
+    rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true
+
+%runscript
+    echo "zoomy_dmplex container (PETSc at /opt/petsc)"
+    exec /bin/bash "$@"
+
+%test
+    echo "=== PETSc/DMPlex Container Verification ==="
+    export PETSC_DIR=/opt/petsc
+    export PETSC_ARCH=arch-container-opt
+
+    echo "1. Checking Python version..."
+    python3 --version
+    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
+
+    echo "2. Checking compilers..."
+    gcc --version | head -1
+    mpicxx --version | head -1
+
+    echo "3. Checking PETSc installation..."
+    test -f "$PETSC_DIR/$PETSC_ARCH/lib/libpetsc.so" && echo "PETSc library: OK" || exit 1
+
+    echo "4. Checking petsc4py..."
+    python3 -c "
+import petsc4py
+petsc4py.init()
+from petsc4py import PETSc
+print(f'petsc4py version: {petsc4py.__version__}')
+"
+
+    echo "5. Checking DMPlex..."
+    python3 -c "
+import petsc4py
+petsc4py.init()
+from petsc4py import PETSc
+dm = PETSc.DMPlex().createBoxMesh([4, 4], simplex=True)
+dm.distribute()
+print(f'DMPlex box mesh: {dm.getChart()} cells')
+dm.destroy()
+print('DMPlex: OK')
+"
+
+    echo "=== All checks passed ==="
