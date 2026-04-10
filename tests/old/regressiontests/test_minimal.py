@@ -27,13 +27,13 @@ from zoomy_core.model.model import *
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 from zoomy_core.misc import misc as misc
 
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 
@@ -83,7 +83,7 @@ def test_smm_1d():
         settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1, 30), 100)
+    mesh = BaseMesh.create_1d((-1, 30), 100)
 
     solver = Solver()
     solver.jax_fvm_unsteady_semidiscrete(mesh, model, settings)
@@ -151,7 +151,7 @@ def test_smm_2d():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         #os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/channel_quad_2d/mesh.msh")
     )
@@ -215,7 +215,7 @@ def test_jax_jit_grad():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
     # print(settings.parameters)
@@ -316,7 +316,7 @@ def test_jax_jit_grad_minimal():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
     # print(settings.parameters)
@@ -420,7 +420,7 @@ def test_reconstruction():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
 
@@ -481,7 +481,7 @@ def test_reconstruction_faces():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
     )
 
@@ -546,7 +546,7 @@ def test_implicit():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         # os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh")
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
     )
@@ -623,7 +623,7 @@ def test_smm_junction():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/channel_junction/mesh_2d_coarse.msh")
         # os.path.join(main_dir, "meshes/channel_junction/mesh_2d_fine.msh")
     )

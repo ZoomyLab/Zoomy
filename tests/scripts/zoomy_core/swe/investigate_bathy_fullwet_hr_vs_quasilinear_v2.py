@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.fvm.symbolic_numerics_v2 import (
@@ -226,7 +226,7 @@ def state_stats(Qref, Qtest, label):
 def run():
     os.makedirs("outputs/investigate_bathy_fullwet_hr_vs_quasilinear_v2", exist_ok=True)
 
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 70.0), n_inner_cells=260, lsq_degree=1)
+    mesh = LSQMesh.create_1d(domain=(0.0, 70.0), n_inner_cells=260, lsq_degree=1)
     n = mesh.n_inner_cells
     model = make_model()
 

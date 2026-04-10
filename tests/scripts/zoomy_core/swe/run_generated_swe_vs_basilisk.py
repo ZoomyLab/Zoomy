@@ -8,7 +8,7 @@ import numpy as np
 from sympy import Matrix
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
@@ -114,7 +114,7 @@ def solve_case(model, domain, n_cells, time_end, cfl=0.9, g=1.0):
     model.parameter_values[0] = g
     model.parameter_values[2] = 1.0
 
-    mesh = petscMesh.Mesh.create_1d(domain=domain, n_inner_cells=n_cells)
+    mesh = BaseMesh.create_1d(domain=domain, n_inner_cells=n_cells)
 
     settings = Zstruct(
         output=Zstruct(

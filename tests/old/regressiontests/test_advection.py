@@ -8,7 +8,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1, RK2, RK3
 import zoomy_core.misc.io as io
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 from zoomy_core.misc import misc as misc
 
 
@@ -45,7 +45,7 @@ def test_advection_1d():
         settings={},
     )
     # mesh = Mesh.create_1d((-1, 1), 100)
-    mesh = petscMesh.Mesh.create_1d((-1, 1), 100)
+    mesh = BaseMesh.create_1d((-1, 1), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
@@ -92,7 +92,7 @@ def test_reconstruction_1d():
         initial_conditions=ic,
         settings={},
     )
-    mesh = petscMesh.Mesh.create_1d((-1, 1), 10)
+    mesh = BaseMesh.create_1d((-1, 1), 10)
 
     solver_price_c(mesh, model, settings, RK1)
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
@@ -164,7 +164,7 @@ def test_advection_2d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
+    mesh = BaseMesh.from_gmsh(f"meshes/{mesh_type}_2d/mesh_fine.msh")
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
     solver_price_c(mesh, model, settings, RK1)
@@ -223,8 +223,8 @@ def test_advection_3d(mesh_type):
     #     os.path.join(main_dir, "meshes/{}_3d/mesh_coarse.msh".format(mesh_type)),
     #     mesh_type
     # )
-    # mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_finest.msh")
-    mesh = petscMesh.Mesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_mid.msh")
+    # mesh = BaseMesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_finest.msh")
+    mesh = BaseMesh.from_gmsh(f"meshes/{mesh_type}_3d/mesh_mid.msh")
 
     solver_price_c(mesh, model, settings, RK1)
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
@@ -281,7 +281,7 @@ def test_periodic_bc(mesh_type):
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type))
     )
 
@@ -364,7 +364,7 @@ def test_reconstruction_2d(mesh_type):
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh.msh".format(mesh_type))
     )
 

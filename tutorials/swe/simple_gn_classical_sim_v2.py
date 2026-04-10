@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.misc.misc import Zstruct
@@ -35,7 +35,7 @@ def run():
     model = make_model()
     model.print_model_functions(function_names=["flux", "source"])
 
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300, lsq_degree=2)
     Q0 = np.empty((model.n_variables, mesh.n_cells), dtype=float)
     Q0 = model.initial_conditions.apply(mesh.cell_centers, Q0)
 

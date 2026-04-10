@@ -12,7 +12,7 @@ from zoomy_core.misc import misc as misc
 
 
 # from pysolver.reconstruction import GradientMesh
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
 import argparse
 
@@ -191,7 +191,7 @@ def test_smm_1d():
         settings={"eigenvalue_mode": "symbolic", "friction": ["newtonian", "slip_mod"]},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1, 30), 1000)
+    mesh = BaseMesh.create_1d((-1, 30), 1000)
 
     jax_fvm_unsteady_semidiscrete(mesh, model, settings)
     io.generate_vtk(os.path.join(settings.output.directory, f"{settings.name}.h5"))
@@ -283,7 +283,7 @@ def test_smm_2d(mesh_type):
     )
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type)),
     )
 
@@ -361,7 +361,7 @@ def test_steffler():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_mid.msh")
     )
 
@@ -432,7 +432,7 @@ def test_steffler_small():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/curved_open_channel/mesh_coarse.msh")
     )
 
@@ -1187,8 +1187,8 @@ def test_petsc(mesh_type):
     )
     main_dir = misc.get_main_directory()
 
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
-    mesh = petscMesh.Mesh.from_gmsh(
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/{}_2d/mesh_coarse.msh".format(mesh_type)))
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/{}_2d/mesh_fine.msh".format(mesh_type))
     )
 
@@ -1298,14 +1298,14 @@ def test_enforce_w_bc():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh")
     )
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"))
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finer.msh"))
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_fine.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finer.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/channel_2d_hole_sym/mesh_finest.msh"))
 
     print(mesh.boundary_conditions_sorted_names)
 
@@ -1422,7 +1422,7 @@ def test_ijshs24():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.create_1d((0, 10), 500)
+    mesh = BaseMesh.create_1d((0, 10), 500)
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1
@@ -1592,7 +1592,7 @@ def test_eccomas_hyperbolicity():
 
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
+    mesh = BaseMesh.create_1d((-5, 5), 100)
 
     print("SMM-WS")
     settings.output.directory = "outputs/eccomas/SMMWE"

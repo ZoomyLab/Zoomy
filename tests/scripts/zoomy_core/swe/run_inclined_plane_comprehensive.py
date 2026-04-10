@@ -55,7 +55,7 @@ def _run(config_key, basis_name, bc_mode, tau, level):
     from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
     from zoomy_core.misc.misc import ZArray, Zstruct
     import zoomy_core.fvm.timestepping as timestepping
-    import zoomy_core.mesh.mesh as petscMesh
+    from zoomy_core.mesh import BaseMesh
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
     import sympy as sp
@@ -174,7 +174,7 @@ def _run(config_key, basis_name, bc_mode, tau, level):
         result["error"] = f"num: {str(e)[:200]}"
         return result
 
-    mesh = petscMesh.Mesh.create_1d(domain=(0., 1.), n_inner_cells=5)
+    mesh = BaseMesh.create_1d(domain=(0., 1.), n_inner_cells=5)
     settings = Zstruct(output=Zstruct(directory=OUTPUT_DIR, filename="tmp",
                                        snapshots=2, clean_directory=False))
 

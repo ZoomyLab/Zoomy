@@ -5,7 +5,7 @@ import numpy as np
 from sympy import Matrix
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.misc.io as io
@@ -365,7 +365,7 @@ def run():
     lsq_degree = infer_required_lsq_degree([swe, gn], minimum_degree=1)
 
     # Synolakis-like canonical setup (nonbreaking solitary-wave runup regime).
-    mesh = petscMesh.Mesh.create_1d(
+    mesh = LSQMesh.create_1d(
         domain=(0.0, 70.0),
         n_inner_cells=36,
         lsq_degree=lsq_degree,

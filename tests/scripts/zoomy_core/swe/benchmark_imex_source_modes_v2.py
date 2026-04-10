@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
 
 from tutorials.swe.gn_classical_linear_analysis_v2 import ClassicalGreenNaghdi1D
@@ -77,7 +77,7 @@ def run_case(
 
 
 def run():
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=220, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=220, lsq_degree=2)
     time_end = 0.08
     cfl = 0.5
 

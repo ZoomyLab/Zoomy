@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.misc.misc import Zstruct
@@ -193,7 +193,7 @@ def run():
             boundary_conditions=cfg["bcs"],
         )
         lsq_degree = infer_required_lsq_degree([swe, gn], minimum_degree=1)
-        mesh = petscMesh.Mesh.create_1d(
+        mesh = LSQMesh.create_1d(
             domain=cfg["domain"],
             n_inner_cells=cfg["n_cells"],
             lsq_degree=lsq_degree,

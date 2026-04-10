@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.fvm.symbolic_numerics_v2 import (
@@ -250,7 +250,7 @@ def run():
     for cfg in cases:
         ref = _load_reference_csv(cfg["ref_csv"])
         for n_cells in n_levels:
-            mesh = petscMesh.Mesh.create_1d(
+            mesh = LSQMesh.create_1d(
                 domain=cfg["domain"],
                 n_inner_cells=n_cells,
                 lsq_degree=1,

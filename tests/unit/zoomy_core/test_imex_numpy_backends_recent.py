@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from tutorials.swe.gn_classical_linear_analysis_v2 import ClassicalGreenNaghdi1D
 from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
 
@@ -11,7 +11,7 @@ from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
 @pytest.mark.unittest
 @pytest.mark.numpy
 def test_imex_numpy_jv_backends_run_and_match():
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
     n = mesh.n_inner_cells
 
     model_a = ClassicalGreenNaghdi1D()
