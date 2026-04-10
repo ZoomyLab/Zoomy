@@ -164,3 +164,9 @@ _build
 /artifacts/basilisk_benchmarks
 /library/zoomy_cli/.zoomy
 /PROGRESS.md
+
+# Description exports (generated)
+notebooks/derivation_mermaid.md
+notebooks/model.md
+notebooks/model_description.md
+notebooks/sme_derivation.md
