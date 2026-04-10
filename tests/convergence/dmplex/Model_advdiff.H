@@ -45,6 +45,9 @@ struct Model {
     static constexpr int dimension  = 2;
     static constexpr int n_dof_gradQ = 2;   // n_dof_q * dimension
     static constexpr bool has_diffusion = true;
+    static constexpr bool has_free_surface = false;
+    static constexpr int idx_b = -1;
+    static constexpr int idx_h = -1;
     static constexpr int n_boundary_tags = 1;
 
     static const std::vector<std::string> get_boundary_tags() { return { "wall" }; }
