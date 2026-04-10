@@ -56,7 +56,11 @@ RUN python3 -m pip install --no-cache-dir \
       pytest-html \
       nbformat \
       nbclient \
-      jupytext
+      jupytext \
+      param \
+      loguru \
+      attrs \
+      "sympy>=1.14"
 
 RUN rm -rf /var/lib/apt/lists/*
 
