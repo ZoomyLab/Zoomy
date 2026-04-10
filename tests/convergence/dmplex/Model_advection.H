@@ -30,24 +30,25 @@ struct SimpleArray {
  *
  * Advection velocity a = (ax, ay) = (p[0], p[1])
  * Single DOF: Q[0] = u
- * Smooth IC: Gaussian hump centered at (0.25, 0.25) with sigma=p[2]
- * Exact solution: u(x,y,t) = exp(-((x-0.25-ax*t)^2+(y-0.25-ay*t)^2)/(2*sigma^2))
+ * Smooth IC: Gaussian hump centered at (x0, y0) with steepness alpha
+ *   u(x,y,0) = exp(-alpha * ((x-x0)^2 + (y-y0)^2))
+ * Exact solution: u(x,y,t) = exp(-alpha * ((x-x0-ax*t)^2 + (y-y0-ay*t)^2))
  *
- * n_parameters: ax, ay, sigma  (defaults: 1.0, 1.0, 0.1)
+ * n_parameters: ax, ay, alpha, x0, y0  (defaults: 1.0, 0.0, 50.0, 0.3, 0.5)
  */
 template <typename T>
 struct Model {
     static constexpr int n_dof_q    = 1;
     static constexpr int n_dof_qaux = 0;
-    static constexpr int n_parameters = 3;
+    static constexpr int n_parameters = 5;
     static constexpr int dimension  = 2;
     static constexpr int n_dof_gradQ = 2;   // n_dof_q * dimension
     static constexpr bool has_diffusion = false;
     static constexpr int n_boundary_tags = 1;
 
     static const std::vector<std::string> get_boundary_tags() { return { "wall" }; }
-    static const std::vector<std::string> parameter_names() { return { "ax", "ay", "sigma" }; }
-    static const std::vector<T> default_parameters() { return { 1.0, 1.0, 0.1 }; }
+    static const std::vector<std::string> parameter_names() { return { "ax", "ay", "alpha", "x0", "y0" }; }
+    static const std::vector<T> default_parameters() { return { 1.0, 0.0, 50.0, 0.3, 0.5 }; }
 
     // Flux: F(u) = (ax*u, ay*u) -- but solver expects 1D flux dotted with normal
     // In the MUSCL framework, flux returns the contribution in the normal direction
@@ -182,15 +183,17 @@ struct Model {
         return res;
     }
 
-    // IC: Gaussian hump centered at (0.25, 0.25)
+    // IC: Gaussian hump  u0 = exp(-alpha * ((x-x0)^2 + (y-y0)^2))
     PORTABLE_FN static inline SimpleArray<T, 1> initial_condition(
         const T* X, const T* p)
     {
-        T sigma = p[2];
-        T dx = X[0] - 0.25;
-        T dy = X[1] - 0.25;
+        T alpha = p[2];
+        T x0    = p[3];
+        T y0    = p[4];
+        T dx = X[0] - x0;
+        T dy = X[1] - y0;
         SimpleArray<T, 1> res;
-        res[0] = std::exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma));
+        res[0] = std::exp(-alpha * (dx * dx + dy * dy));
         return res;
     }
 
