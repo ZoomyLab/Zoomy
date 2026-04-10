@@ -16,6 +16,5 @@ class JaxAdapter(NumpyAdapter):
             logger.warning("zoomy_jax not available, falling back to numpy")
             return super().solve(case, output_dir, on_progress)
 
-        # For now, JAX path uses the same NumericalModel + GeneratedModelSolver
-        # pattern as numpy. JAX-specific solver integration can be added later.
+        # For now, falls back to numpy. JAX-specific solver integration pending.
         return super().solve(case, output_dir, on_progress)

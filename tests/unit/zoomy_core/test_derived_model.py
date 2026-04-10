@@ -381,6 +381,155 @@ def test_3d_advection_solve():
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
+def test_advection_diffusion_explicit_vs_implicit():
+    """1D advection-diffusion: explicit and implicit diffusion should agree."""
+    from zoomy_core.model.models.advection_model import ScalarAdvectionDiffusion
+    from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+    from zoomy_core.fvm.solver_imex_numpy import IMEXSolver
+    import zoomy_core.fvm.timestepping as ts
+    from zoomy_core.model.initial_conditions import InitialConditions
+
+    class GaussianIC(InitialConditions):
+        def apply(self, X, Q):
+            Q[0, :] = np.exp(-100 * (X[0, :] - 0.3)**2)
+            return Q
+
+    mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=100)
+    nu = 0.01
+
+    # Explicit diffusion (HyperbolicSolver)
+    m1 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m1.parameter_values = np.array([1.0, nu])
+    m1.initial_conditions = GaussianIC()
+    Q1, _ = HyperbolicSolver(
+        time_end=0.2, compute_dt=ts.adaptive(CFL=0.5, nu=nu)
+    ).solve(mesh, m1, write_output=False)
+
+    # Implicit diffusion (IMEXSolver, same dt)
+    m2 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m2.parameter_values = np.array([1.0, nu])
+    m2.initial_conditions = GaussianIC()
+    Q2, _ = IMEXSolver(
+        time_end=0.2, compute_dt=ts.adaptive(CFL=0.5, nu=nu)
+    ).solve(mesh, m2, write_output=False)
+
+    nc = mesh.n_inner_cells
+    # Both should produce advected+diffused Gaussian
+    assert Q1[0, :nc].max() < 0.75, "explicit: peak should be diffused"
+    assert Q2[0, :nc].max() < 0.75, "IMEX: peak should be diffused"
+    assert Q1[0, :nc].argmax() > 40, "explicit: peak should have advected right"
+    assert Q2[0, :nc].argmax() > 40, "IMEX: peak should have advected right"
+    # At same dt, explicit and implicit should be close
+    assert np.abs(Q1[0, :nc] - Q2[0, :nc]).max() < 0.01
+
+    # IMEX with larger dt (no diffusive CFL — implicit handles it)
+    m3 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m3.parameter_values = np.array([1.0, nu])
+    m3.initial_conditions = GaussianIC()
+    solver3 = IMEXSolver(time_end=0.2, compute_dt=ts.adaptive(CFL=0.9))
+    Q3, _ = solver3.solve(mesh, m3, write_output=False)
+    assert solver3.last_stats.n_steps < 40, "IMEX should take fewer steps without diff CFL"
+    assert np.abs(Q1[0, :nc] - Q3[0, :nc]).max() < 0.1
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_advection_diffusion_convergence():
+    """1D advection-diffusion convergence against exact analytical solution.
+
+    Uses IMEXSolver with convective CFL only (no diffusive CFL constraint).
+    Implicit diffusion keeps the convective CFL number constant at 0.5,
+    giving clean O(Δx) convergence from the Rusanov scheme.
+
+    With explicit diffusion + diffusive CFL, the convective CFL drops to
+    σ ~ Δx, inflating Rusanov numerical diffusion and degrading the rate.
+    """
+    from zoomy_core.model.models.advection_model import ScalarAdvectionDiffusion
+    from zoomy_core.fvm.solver_imex_numpy import IMEXSolver
+    import zoomy_core.fvm.timestepping as ts
+    from zoomy_core.model.initial_conditions import InitialConditions
+
+    def exact_solution(x, t, x0=0.5, a=1.0, nu=0.01, alpha=100.0):
+        sigma0_sq = 1.0 / (2 * alpha)
+        sigma_t_sq = sigma0_sq + 2 * nu * t
+        return np.sqrt(sigma0_sq / sigma_t_sq) * np.exp(
+            -(x - x0 - a * t) ** 2 / (2 * sigma_t_sq)
+        )
+
+    class GaussianIC(InitialConditions):
+        def apply(self, X, Q):
+            Q[0, :] = np.exp(-100 * (X[0, :] - 0.5) ** 2)
+            return Q
+
+    nu = 0.01
+    t_end = 0.05  # short so Gaussian stays away from boundaries
+    errors = []
+    for N in [100, 200, 400]:
+        mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
+        m = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+        m.parameter_values = np.array([1.0, nu])
+        m.initial_conditions = GaussianIC()
+        Q, _ = IMEXSolver(
+            time_end=t_end, compute_dt=ts.adaptive(CFL=0.5)
+        ).solve(mesh, m, write_output=False)
+        lsq = ensure_lsq_mesh(mesh, m)
+        nc = lsq.n_inner_cells
+        xc = lsq.cell_centers[0, :nc]
+        l2 = np.sqrt(np.sum((Q[0, :nc] - exact_solution(xc, t_end)) ** 2) / N)
+        errors.append(l2)
+
+    # First-order convergence: each refinement should halve the error
+    rate1 = np.log2(errors[0] / errors[1])
+    rate2 = np.log2(errors[1] / errors[2])
+    assert rate1 > 0.9, f"convergence rate {rate1:.2f} too low (100→200)"
+    assert rate2 > 0.9, f"convergence rate {rate2:.2f} too low (200→400)"
+    assert errors[-1] < 0.01, f"L2 error {errors[-1]:.4e} too large at N=400"
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_muscl_second_order_convergence():
+    """MUSCL reconstruction gives ~2nd-order convergence for pure advection."""
+    from zoomy_core.model.models.advection_model import ScalarAdvection
+    from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+    import zoomy_core.fvm.timestepping as ts
+    from zoomy_core.model.initial_conditions import InitialConditions
+
+    class GaussianIC(InitialConditions):
+        def apply(self, X, Q):
+            Q[0, :] = np.exp(-100 * (X[0, :] - 0.5) ** 2)
+            return Q
+
+    errors = []
+    for N in [100, 200, 400]:
+        mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
+        m = ScalarAdvection(dimension=1)
+        m.parameter_values = np.array([1.0])
+        m.initial_conditions = GaussianIC()
+        Q, _ = HyperbolicSolver(
+            time_end=0.02, compute_dt=ts.adaptive(CFL=0.5),
+            reconstruction_order=2,
+        ).solve(mesh, m, write_output=False)
+        lsq = ensure_lsq_mesh(mesh, m)
+        nc = lsq.n_inner_cells
+        xc = lsq.cell_centers[0, :nc]
+        u_exact = np.exp(-100 * (xc - 0.52) ** 2)
+        errors.append(np.sqrt(np.sum((Q[0, :nc] - u_exact) ** 2) / N))
+
+    rate1 = np.log2(errors[0] / errors[1])
+    rate2 = np.log2(errors[1] / errors[2])
+    # MUSCL + RK2 should give rate > 1.5 (limited by Venkatakrishnan at peak)
+    assert rate1 > 1.5, f"MUSCL rate {rate1:.2f} too low (100→200)"
+    assert rate2 > 1.5, f"MUSCL rate {rate2:.2f} too low (200→400)"
+    # Error should be much smaller than 1st-order at same resolution
+    assert errors[-1] < 1e-4, f"L2 error {errors[-1]:.4e} too large at N=400"
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
 def test_full_pipeline_2d():
     """2D BaseMesh → auto-promote → Kernel → NumpyRuntimeModel → evaluate."""
     model = SMEModel(level=0)

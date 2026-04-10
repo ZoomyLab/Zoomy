@@ -11,23 +11,21 @@ class NumpyAdapter(SolverAdapter):
     tag = "numpy"
 
     def solve(self, case, output_dir, on_progress):
-        from zoomy_core.mesh.lsq_mesh import LSQMesh as Mesh
         from zoomy_core.misc.misc import Settings, Zstruct
-        from zoomy_core.model.legacy.numerical_model import NumericalModel
         from zoomy_core.fvm.solver_imex_numpy import FSFIMEXSolver
         import zoomy_core.fvm.timestepping as timestepping
         import zoomy_core.model.boundary_conditions as BC
         import zoomy_core.model.initial_conditions as IC
 
         mesh = self._build_mesh(case["mesh"])
-        raw_model = self._build_model(case["model"])
+        model = self._build_model(case["model"])
 
-        # Wrap with NumericalModel for regularization (1/h → 1/(h+eps), wet/dry)
-        nv = raw_model.n_variables
-        bcs = BC.BoundaryConditions([
-            BC.Extrapolation(tag="left"),
-            BC.Extrapolation(tag="right"),
-        ])
+        nv = model.n_variables
+        if model.boundary_conditions is None:
+            model.boundary_conditions = BC.BoundaryConditions([
+                BC.Extrapolation(tag="left"),
+                BC.Extrapolation(tag="right"),
+            ])
 
         ic_spec = case.get("initial_conditions")
         if ic_spec and ic_spec.get("type") == "dam_break":
@@ -38,18 +36,13 @@ class NumpyAdapter(SolverAdapter):
                 Q = np.zeros(_nv)
                 Q[1] = _hl if float(x[0]) < _xj else _hr
                 return Q
-            ic = IC.UserFunction(ic_func)
-        else:
-            # Default: uniform h=1
+            model.initial_conditions = IC.UserFunction(ic_func)
+        elif model.initial_conditions is None:
             def ic_default(n, _nv=nv):
                 Q = np.zeros(_nv)
                 Q[1] = 1.0
                 return Q
-            ic = IC.Constant(constants=ic_default)
-
-        model = NumericalModel(raw_model,
-                               boundary_conditions=bcs,
-                               initial_conditions=ic)
+            model.initial_conditions = IC.Constant(constants=ic_default)
 
         settings = Settings.default()
         settings.output.directory = output_dir
