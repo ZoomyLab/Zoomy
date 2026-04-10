@@ -67,8 +67,11 @@ jobs:
             [[ " ${RAW[*]} " == *" $x "* ]] || RAW+=("$x")
           }
 
-          if [ -n "${{ github.event.inputs.container }}" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.container }}" ]; then
             add_raw "${{ github.event.inputs.container }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual dispatch without specific container: rebuild all
+            for c in $ALL; do add_raw "$c"; done
           else
             base="${{ github.event.before }}"
             head="${{ github.event.after }}"
