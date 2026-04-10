@@ -14,7 +14,7 @@ from zoomy_core.misc.misc import Settings, Zstruct
 import zoomy_core.fvm.timestepping as timestepping
 
 # from pysolver.reconstruction import GradientMesh
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
 import argparse
 
@@ -82,7 +82,7 @@ def test_smm_1d(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 2), 2000)
+    mesh = BaseMesh.create_1d((0.5, 2), 2000)
 
     solver = PreciceHyperbolicSolver(
         settings=settings,
@@ -129,7 +129,7 @@ def test_smm_1d_bidirectional(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 5), 500)
+    mesh = BaseMesh.create_1d((0.5, 5), 500)
 
     solver = PreciceHyperbolicSolverBidirectional(
         settings=settings,
@@ -185,7 +185,7 @@ def test_smm_1d_from_tut(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 1), 500)
+    mesh = BaseMesh.create_1d((0.5, 1), 500)
 
     solver = PreciceHyperbolicSolverAUP_while(
         settings=settings,
@@ -232,7 +232,7 @@ def test_precice(
         initial_conditions=ic,
     )
 
-    mesh = petscMesh.Mesh.create_1d((0.5, 1), 500)
+    mesh = BaseMesh.create_1d((0.5, 1), 500)
 
     solver = PreciceTestSolver(
         settings=settings,

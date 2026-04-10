@@ -61,7 +61,7 @@ import numpy.typing as npt
 from zoomy_core.fvm.solver_numpy import Settings
 from zoomy_core.model.models.shallow_water_topo import ShallowWaterEquationsWithTopo
 from zoomy_core.model.models.shallow_water import ShallowWaterEquations
-from zoomy_core.mesh.mesh import Mesh
+from zoomy_core.mesh import BaseMesh  # noqa: F401
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.misc.misc import Zstruct

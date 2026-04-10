@@ -3,7 +3,7 @@ import json
 import logging
 import numpy as np
 
-from zoomy_core.mesh.mesh import Mesh
+from zoomy_core.mesh import BaseMesh
 from zoomy_core.misc.misc import Zstruct, Settings
 import zoomy_core.fvm.timestepping as timestepping
 import zoomy_core.misc.io as io
@@ -31,11 +31,11 @@ def _get_solver_class():
 
 def build_mesh(mesh_spec):
     if mesh_spec["type"] == "create_1d":
-        return Mesh.create_1d(tuple(mesh_spec["domain"]), mesh_spec["n_cells"])
+        return BaseMesh.create_1d(tuple(mesh_spec["domain"]), mesh_spec["n_cells"])
     elif mesh_spec["type"] == "create_2d":
-        return Mesh.create_2d(
-            [mesh_spec.get("x_min", 0), mesh_spec.get("x_max", 1)],
-            [mesh_spec.get("y_min", 0), mesh_spec.get("y_max", 1)],
+        return BaseMesh.create_2d(
+            (mesh_spec.get("x_min", 0), mesh_spec.get("x_max", 1),
+             mesh_spec.get("y_min", 0), mesh_spec.get("y_max", 1)),
             mesh_spec.get("nx", 50),
             mesh_spec.get("ny", 50),
         )

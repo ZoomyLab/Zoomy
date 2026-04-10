@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from tests.common.baseline_store import assert_or_create_array_baseline
 from tests.scripts.zoomy_core.swe.compare_jvp_fd_analytic_v2 import _compare_for_model
 from tutorials.swe.gn_classical_linear_analysis_v2 import ClassicalGreenNaghdi1D
@@ -13,7 +13,7 @@ from tutorials.swe.simple_gn_v2 import make_model as make_model_gn_minimal
 @pytest.mark.numpy
 @pytest.mark.core
 def test_fd_vs_analytic_jvp_consistency():
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=60, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=60, lsq_degree=2)
 
     # Reuse the tutorial comparison logic and keep acceptance broad enough for CI variability.
     # We capture only robust summary metrics.

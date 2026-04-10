@@ -20,7 +20,7 @@ from pysolver.ode import RK1
 import zoomy_core.misc.io as io
 
 # from pysolver.reconstruction import GradientMesh
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
 import argparse
 

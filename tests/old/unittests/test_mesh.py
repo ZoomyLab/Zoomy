@@ -2,7 +2,9 @@ import pytest
 import os
 
 # from zoomy_core.mesh.fvm_mesh import *
-from zoomy_core.mesh.mesh import Mesh
+# Legacy: uses old Mesh API (from_gmsh, extrude_mesh, write_to_vtk) not available on new classes
+# from zoomy_core.mesh.mesh import Mesh
+from zoomy_core.mesh import BaseMesh as Mesh  # partial compat: create_1d works, from_gmsh->from_msh
 import zoomy_core.misc.io as io
 from zoomy_core.misc import misc as misc
 

@@ -15,7 +15,7 @@ import time
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ TIMEOUT_S = 90
 # ---------------------------------------------------------------------------
 
 def run_numpy(case):
-    mesh = petscMesh.Mesh.create_1d(
+    mesh = LSQMesh.create_1d(
         domain=(0.0, 10.0), n_inner_cells=case["n_cells"], lsq_degree=2)
     if case["model"] == "swe":
         model = make_swe()
@@ -82,7 +82,7 @@ import numpy as np
 os.chdir(os.environ["ZOOMY_CWD"])
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from tutorials.swe.simple_swe_v2 import make_model as make_swe
 from tutorials.swe.gn_classical_linear_analysis_v2 import ClassicalGreenNaghdi1D
 from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
@@ -92,7 +92,7 @@ case = json.loads(os.environ["ZOOMY_CASE"])
 out_npy = os.environ["ZOOMY_OUT_NPY"]
 meta_path = os.environ["ZOOMY_OUT_JSON"]
 
-mesh = petscMesh.Mesh.create_1d(
+mesh = LSQMesh.create_1d(
     domain=(0.0, 10.0), n_inner_cells=case["n_cells"], lsq_degree=2)
 if case["model"] == "swe":
     model = make_swe()

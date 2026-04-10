@@ -10,7 +10,7 @@ from pysolver.ode import RK1
 import zoomy_core.misc.io as io
 from pysolver.reconstruction import GradientMesh
 import postprocessing.postprocessing as postprocessing
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import argparse
 from zoomy_core.misc import misc as misc
 
@@ -93,8 +93,8 @@ def test_ssf():
     main_dir = misc.get_main_directory()
 
 
-    # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
-    mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
+    # mesh, _ = BaseMesh.create_1d([0, Lx], 100)
+    mesh = BaseMesh.create_1d((0, Lx), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
@@ -184,8 +184,8 @@ def test_ssf_energy():
     main_dir = misc.get_main_directory()
 
 
-    # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
-    mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
+    # mesh, _ = BaseMesh.create_1d([0, Lx], 100)
+    mesh = BaseMesh.create_1d((0, Lx), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
@@ -301,8 +301,8 @@ def test_ssf_pathconservative():
     main_dir = misc.get_main_directory()
 
 
-    # mesh, _ = petscMesh.Mesh.create_1d([0, Lx], 100)
-    mesh = petscMesh.Mesh.create_1d((0, Lx), 100)
+    # mesh, _ = BaseMesh.create_1d([0, Lx], 100)
+    mesh = BaseMesh.create_1d((0, Lx), 100)
 
     # fvm_unsteady_semidiscrete(mesh, model, settings, RK1)
 
@@ -408,10 +408,10 @@ def test_ssf_2d():
 
     # io.generate_vtk(settings.output.directory)
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = BaseMesh.from_gmsh(
         os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_mid.msh")
     )
-    # mesh = petscMesh.Mesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
+    # mesh = BaseMesh.from_gmsh( os.path.join(main_dir, "meshes/simple_openfoam/mesh_2d_finest.msh"))
 
     jax_fvm_unsteady_semidiscrete(
         mesh, model, settings, ode_solver_flux=RK1, ode_solver_source=RK1

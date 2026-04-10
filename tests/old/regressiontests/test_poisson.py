@@ -20,12 +20,12 @@ from zoomy_core.model.model import *
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import postprocessing.postprocessing as postprocessing
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 
@@ -130,7 +130,7 @@ def test_poisson():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((0., 1.), 300, lsq_degree = 2)
+    mesh = LSQMesh.create_1d((0., 1.), 300, lsq_degree = 2)
 
     Q, Qaux = solve(
         mesh,
