@@ -52,10 +52,14 @@ def run_bounce_back(reconstruction_order, N, gradient_method="green_gauss"):
             0.0,
         ])
     )
-    model.boundary_conditions = BC.BoundaryConditions([
-        BC.Extrapolation(tag="left"),
-        BC.Wall(tag="right", momentum_field_indices=[[2]]),
-    ])
+    # System-aware BCs: h gets use_gradient=False, momentum gets True
+    model._system.boundary_conditions.apply(BC.SystemExtrapolation(), tag="left")
+    model._system.boundary_conditions.apply(BC.SystemWall(), tag="right")
+    model.boundary_conditions = BC.compile_system_bcs(
+        model._system.boundary_conditions,
+        model._equation_variable_map,
+        model.dimension,
+    )
 
     solver = FreeSurfaceFlowSolver(
         time_end=t_end,
