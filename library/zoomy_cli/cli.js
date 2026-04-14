@@ -21,13 +21,47 @@ function findDefaultConfig() {
     return null;
 }
 
+function _loadJsonSafe(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch (e) { return null; } }
+
+function _loadCardsFolder(baseDir) {
+    /* Load tabs.json + default/generated/user per category — mirrors GUI _loadAllCards */
+    var tabsPath = path.join(baseDir, "cards", "tabs.json");
+    var tabsMeta = _loadJsonSafe(tabsPath);
+    if (!tabsMeta) return null;
+
+    var categories = [
+        { dir: "models", tabId: "model" },
+        { dir: "solvers", tabId: "solver" },
+        { dir: "meshes", tabId: "mesh" },
+        { dir: "visualizations", tabId: "visualization" }
+    ];
+
+    var tabs = [tabsMeta.dashboard || { id: "dashboard", title: "Dashboard", type: "dashboard" }];
+    categories.forEach(function (cat) {
+        var cardsDir = path.join(baseDir, "cards", cat.dir);
+        var def = _loadJsonSafe(path.join(cardsDir, "default.json")) || [];
+        var gen = _loadJsonSafe(path.join(cardsDir, "generated.json")) || [];
+        var usr = _loadJsonSafe(path.join(cardsDir, "user.json")) || [];
+        var seen = {}, merged = [];
+        [def, gen, usr].forEach(function (list) {
+            list.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = true; merged.push(c); } });
+        });
+        var meta = tabsMeta[cat.tabId] || { id: cat.tabId, title: cat.dir, type: "cards" };
+        meta.cards = merged;
+        tabs.push(meta);
+    });
+    return { tabs: tabs };
+}
+
 function loadProject() {
-    var configPath = fs.existsSync(CONFIG_FILE) ? CONFIG_FILE : findDefaultConfig();
-    if (!configPath) {
-        console.error("No project found. Run 'zoomy start' first.");
-        process.exit(1);
+    /* Try cards/ folder first, fall back to cards.json */
+    var guiDir = path.join(__dirname, "..", "zoomy_gui", "standalone");
+    var config = _loadCardsFolder(guiDir);
+    if (!config) {
+        var configPath = fs.existsSync(CONFIG_FILE) ? CONFIG_FILE : findDefaultConfig();
+        if (!configPath) { console.error("No project found. Run 'zoomy start' first."); process.exit(1); }
+        config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     }
-    var config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     var proj = ZoomyCore.Project.fromConfig(config);
     loadState(proj);
     return proj;
@@ -507,12 +541,81 @@ async function pollJob(url, jobId) {
     }
 }
 
+async function cmdRunLocal(proj) {
+    var zcase;
+    try { zcase = proj.buildCase(); }
+    catch (err) { console.log("Error: " + err.message); return; }
+
+    /* Get model code: user-edited > template > auto-generated */
+    var modelCardId = proj.selections.selected("model");
+    var modelState = modelCardId ? proj.cardState.get(modelCardId) : null;
+    var modelCode;
+    if (modelState && modelState.code) {
+        modelCode = modelState.code;
+    } else {
+        var cp = zcase.model.class_path || "";
+        var parts = cp.split(".");
+        var cls = parts[parts.length - 1];
+        var mod = parts.slice(0, -1).join(".");
+        var initKw = zcase.model.init || {};
+        var kwargs = Object.keys(initKw).map(function (k) {
+            var v = initKw[k];
+            return k + "=" + (typeof v === "string" ? "'" + v + "'" : v);
+        }).join(", ");
+        modelCode = "from " + mod + " import " + cls + "\nmodel = " + cls + "(" + kwargs + ")\n";
+    }
+
+    /* Mesh */
+    var meshCode;
+    var ms = zcase.mesh;
+    if (ms.type === "create_2d") {
+        meshCode = "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_2d((" +
+            ms.x_min + ", " + ms.x_max + ", " + ms.y_min + ", " + ms.y_max + "), nx=" + ms.nx + ", ny=" + ms.ny + ")\n";
+    } else if (ms.type === "create_3d") {
+        meshCode = "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_3d((" +
+            ms.x_min + ", " + ms.x_max + ", " + ms.y_min + ", " + ms.y_max + ", " +
+            ms.z_min + ", " + ms.z_max + "), nx=" + ms.nx + ", ny=" + ms.ny + ", nz=" + ms.nz + ")\n";
+    } else {
+        var dom = ms.domain || [0, 1];
+        meshCode = "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_1d(domain=(" + dom[0] + ", " + dom[1] + "), n_inner_cells=" + (ms.n_cells || 100) + ")\n";
+    }
+
+    /* Solver */
+    var ss = zcase.solver || {};
+    var solverCode = "from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver, HyperbolicSolver\n" +
+        "import zoomy_core.fvm.timestepping as ts\n" +
+        "keys = list(model.variables.keys()) if hasattr(model.variables, 'keys') else []\n" +
+        "Solver = FreeSurfaceFlowSolver if ('h' in keys and 'b' in keys) else HyperbolicSolver\n" +
+        "solver = Solver(time_end=" + (ss.time_end || 0.1) + ", compute_dt=ts.adaptive(CFL=" + (ss.cfl || 0.3) + "))\n" +
+        "Q, Qaux = solver.solve(mesh, model, write_output=False)\n" +
+        "print(f'Done: {Q.shape[0]} variables, {mesh.n_inner_cells} cells')\n";
+
+    var script = modelCode + "\n" + meshCode + "\n" + solverCode;
+
+    console.log("Running locally with Python...\n");
+
+    var child = require("child_process");
+    var proc = child.spawn("python", ["-c", script], { stdio: "inherit" });
+    return new Promise(function (resolve) {
+        proc.on("close", function (code) {
+            if (code !== 0) console.log("\nProcess exited with code " + code);
+            resolve();
+        });
+    });
+}
+
 async function cmdRun(proj, opts) {
     var wait = opts.indexOf("--wait") !== -1;
+    var local = opts.indexOf("--local") !== -1;
+
+    if (local) return cmdRunLocal(proj);
+
     var backend = resolveBackendUrl(proj);
 
     if (!backend.url) {
-        console.log("Backend '" + backend.tag + "' not connected. Run: zoomy connect <url>");
+        console.log("Backend '" + backend.tag + "' not connected.");
+        console.log("Use: zoomy run --local    (run with local Python)");
+        console.log("Or:  zoomy connect <url>  (connect to server)");
         return;
     }
 
@@ -749,6 +852,7 @@ async function main() {
             "",
             "  RUN:",
             "    zoomy run                        Submit simulation to backend",
+            "    zoomy run --local                Run locally with Python (no server)",
             "    zoomy run --wait                 Submit and wait for completion",
             "    zoomy watch <job_id>             Attach to job with live progress",
             "    zoomy jobs                       List all jobs",
