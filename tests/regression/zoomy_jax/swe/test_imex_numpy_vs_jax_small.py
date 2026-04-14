@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from tests.common.baseline_store import assert_or_create_array_baseline
 from tutorials.swe.gn_classical_linear_analysis_v2 import ClassicalGreenNaghdi1D
 from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
@@ -17,7 +17,7 @@ from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
 @pytest.mark.numpy
 @pytest.mark.jax
 def test_imex_numpy_vs_jax_gn_small_regression():
-    mesh_np = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
+    mesh_np = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
     model_np = ClassicalGreenNaghdi1D()
     solver_np = IMEXSourceSolver(time_end=0.06, compute_dt=timestepping.adaptive(CFL=0.5))
     object.__setattr__(solver_np, "source_mode", "auto")
@@ -28,7 +28,7 @@ def test_imex_numpy_vs_jax_gn_small_regression():
     n = mesh_np.n_inner_cells
     Q_ref = np.asarray(Q_np[:, :n], dtype=float)
 
-    mesh_jax = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
+    mesh_jax = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
     model_jax = ClassicalGreenNaghdi1D()
     solver_jax = IMEXSourceSolverJax(time_end=0.06, compute_dt=timestepping.adaptive(CFL=0.5))
     object.__setattr__(solver_jax, "source_mode", "auto")

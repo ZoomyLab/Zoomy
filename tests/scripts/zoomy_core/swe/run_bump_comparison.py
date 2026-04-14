@@ -39,7 +39,7 @@ def run_sme_bump(level):
     from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
     from zoomy_core.misc.misc import Zstruct
     import zoomy_core.fvm.timestepping as timestepping
-    import zoomy_core.mesh.mesh as petscMesh
+    from zoomy_core.mesh import BaseMesh
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
@@ -90,7 +90,7 @@ def run_sme_bump(level):
     except Exception as e:
         return {"level": level, "error": f"NumericalModel: {e}", "build_time": build_time}
 
-    mesh = petscMesh.Mesh.create_1d(domain=(-1.5, 15.0), n_inner_cells=200)
+    mesh = BaseMesh.create_1d(domain=(-1.5, 15.0), n_inner_cells=200)
     settings = Zstruct(output=Zstruct(directory=OUTPUT_DIR, filename="tmp",
                                        snapshots=2, clean_directory=False))
 

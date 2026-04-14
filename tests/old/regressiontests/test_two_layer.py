@@ -14,8 +14,8 @@ import zoomy_core.fvm.nonconservative_flux as nc_flux
 
 
 
-import zoomy_core.mesh.mesh as petscMesh
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_core.mesh import BaseMesh
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 
 import numpy as np
 from sympy import Matrix, sqrt
@@ -25,7 +25,7 @@ from zoomy_core.model.model import Model
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 from zoomy_core.model import *
 from zoomy_core.model.basemodel import (
     register_sympy_attribute,
@@ -606,7 +606,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-5, 5), 100)
+    mesh = BaseMesh.create_1d((-5, 5), 100)
 
     Q, Qaux = solve_vam(
         mesh,

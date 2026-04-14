@@ -14,6 +14,7 @@ def main():
         "jax": "zoomy_server.adapters.jax.JaxAdapter",
         "amrex": "zoomy_server.adapters.amrex.AmrexAdapter",
         "dmplex": "zoomy_server.adapters.dmplex.DmplexAdapter",
+        "mesh": "zoomy_server.adapters.mesh.MeshAdapter",
     }
 
     adapter_path = builtin.get(args.adapter, args.adapter)

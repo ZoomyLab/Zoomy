@@ -1,3 +1,15 @@
+"""DMPlex solver adapter — C++ codegen + PETSc build + MPI run.
+
+Case folder: model.py, numerics.py, mesh.py, settings.json
+
+Server workflow:
+  1. Execute mesh.py → mesh.msh
+  2. Import model.py, numerics.py
+  3. Transform → Model.H, Numerics.H
+  4. Compile with PETSc
+  5. Run with MPI
+"""
+
 import json
 import logging
 import os
@@ -16,115 +28,94 @@ PETSC_ARCH = os.environ.get("PETSC_ARCH", "arch-container-opt")
 class DmplexAdapter(SolverAdapter):
     tag = "dmplex"
 
-    def solve(self, case, output_dir, on_progress):
-        from zoomy_server._registry import resolve_model
+    def solve(self, case_dir, output_dir, on_progress):
         from zoomy_core.transformation.to_c import CppModel, CppNumerics
-        from zoomy_core.fvm.symbolic_numerics import Numerics
 
-        model_spec = case["model"]
-        solver_spec = case.get("solver", {})
-        mesh_spec = case.get("mesh", {})
+        # 1. Execute mesh.py (preprocessing)
+        self.run_mesh_script(case_dir)
 
-        # Resolve and instantiate the model
-        cls = resolve_model(model_spec["class_path"])
-        model = cls(**model_spec.get("init", {}))
+        # 2. Load settings
+        settings = self.load_settings(case_dir)
 
-        # Create a build directory
+        # 3. Import model and numerics from case folder
+        model = self.resolve_model(case_dir)
+        numerics = self.resolve_numerics(case_dir, model)
+
+        # 4. Create build directory
         build_dir = tempfile.mkdtemp(prefix="zoomy_dmplex_")
 
         try:
-            # Generate Model.H and Numerics.H
-            logger.info("Generating DMPlex code...")
-            numerics = Numerics(model)
-            cm = CppModel(model)
-            cn = CppNumerics(numerics)
+            # 5. Transform model + numerics → C++
+            logger.info("Generating C++ code...")
             with open(os.path.join(build_dir, "Model.H"), "w") as f:
-                f.write(cm.create_code())
+                f.write(CppModel(model).create_code())
             with open(os.path.join(build_dir, "Numerics.H"), "w") as f:
-                f.write(cn.create_code())
+                f.write(CppNumerics(numerics).create_code())
 
-            # Copy solver source files from zoomy_dmplex
-            zoomy_dmplex_src = self._find_zoomy_dmplex_source()
-            for f in os.listdir(zoomy_dmplex_src):
-                if f.endswith((".cpp", ".hpp", ".H", ".h")):
-                    src = os.path.join(zoomy_dmplex_src, f)
-                    dst = os.path.join(build_dir, f)
-                    # Don't overwrite generated Model.H / Numerics.H
-                    if f not in ("Model.H", "Numerics.H"):
-                        shutil.copy2(src, dst)
+            # 6. Copy solver source files (including subdirectories like nlohmann/)
+            src_dir = self._find_solver_source()
+            for item in os.listdir(src_dir):
+                src_path = os.path.join(src_dir, item)
+                dst_path = os.path.join(build_dir, item)
+                if item in ("Model.H", "Numerics.H", "obj_cpu", "obj_gpu", "solver_cpu", "solver_gpu"):
+                    continue  # skip generated/build artifacts
+                if os.path.isdir(src_path):
+                    shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                elif item.endswith((".cpp", ".hpp", ".H", ".h", "Makefile")):
+                    shutil.copy2(src_path, dst_path)
 
-            # Copy Makefile
-            makefile_src = os.path.join(zoomy_dmplex_src, "Makefile")
-            if os.path.exists(makefile_src):
-                shutil.copy2(makefile_src, build_dir)
+            # 7. Copy mesh file
+            mesh_file = settings.get("mesh", "mesh.msh")
+            mesh_src = os.path.join(case_dir, mesh_file)
+            if os.path.exists(mesh_src):
+                shutil.copy2(mesh_src, build_dir)
 
-            # Write settings.json
-            mesh_path = mesh_spec.get("mesh_path", "")
-            self._write_settings(build_dir, solver_spec, mesh_path, output_dir)
+            # 8. Write DMPlex settings.json
+            self._write_dmplex_settings(build_dir, settings, mesh_file, output_dir)
 
-            # Build (CPU only)
-            logger.info("Building DMPlex solver...")
+            # 9. Compile
+            logger.info("Building solver...")
             env = os.environ.copy()
             env["PETSC_DIR"] = PETSC_DIR
             env["PETSC_ARCH"] = PETSC_ARCH
             result = subprocess.run(
                 ["make", "CPU", f"-j{os.cpu_count() or 2}"],
-                cwd=build_dir, capture_output=True, text=True, timeout=300, env=env
+                cwd=build_dir, capture_output=True, text=True, timeout=300, env=env,
             )
             if result.returncode != 0:
-                logger.error(f"Build failed:\n{result.stderr}")
-                raise RuntimeError(f"DMPlex build failed: {result.stderr[-500:]}")
+                raise RuntimeError(f"Build failed: {result.stderr[-500:]}")
 
-            # Run
-            n_procs = case.get("n_procs", 1)
+            # 10. Run
+            n_procs = settings.get("n_procs", 1)
             exe = os.path.join(build_dir, "solver_cpu")
-            if not os.path.exists(exe):
-                raise RuntimeError("solver_cpu not found after build")
+            cmd = (["mpiexec", "-n", str(n_procs), "--allow-run-as-root", exe]
+                   if n_procs > 1 else [exe])
+            cmd += ["-settings", "settings.json"]
 
-            logger.info(f"Running DMPlex solver with {n_procs} process(es)")
-            cmd = ["mpiexec", "-n", str(n_procs), "--allow-run-as-root",
-                   exe] if n_procs > 1 else [exe]
-
+            logger.info(f"Running with {n_procs} process(es)")
             proc = subprocess.Popen(
                 cmd, cwd=build_dir,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             )
-
-            time_end = solver_spec.get("time_end", 1.0)
+            time_end = settings.get("time_end", 1.0)
             for line in proc.stdout:
-                line = line.strip()
-                # Parse progress from DMPlex output (format: "[TS] Step X, t = Y, dt = Z")
-                if "Step" in line and "t =" in line:
-                    try:
-                        parts = line.split()
-                        step_idx = next(i for i, p in enumerate(parts) if p == "Step") + 1
-                        iteration = int(parts[step_idx].rstrip(","))
-                        t_idx = next(i for i, p in enumerate(parts) if p == "t") + 2
-                        time_val = float(parts[t_idx].rstrip(","))
-                        dt_idx = next(i for i, p in enumerate(parts) if p == "dt") + 2
-                        dt_val = float(parts[dt_idx].rstrip(","))
-                        on_progress(iteration, time_val, dt_val)
-                    except (ValueError, IndexError, StopIteration):
-                        pass
-                logger.debug(line)
-
+                self._parse_progress(line.strip(), on_progress)
+                logger.debug(line.strip())
             proc.wait()
             if proc.returncode != 0:
-                raise RuntimeError(f"DMPlex solver exited with code {proc.returncode}")
+                raise RuntimeError(f"Solver exited with code {proc.returncode}")
+
+            # Copy output files to output_dir
+            for f in os.listdir(build_dir):
+                if f.endswith((".vtu", ".pvd", ".h5", ".vtk")):
+                    shutil.copy2(os.path.join(build_dir, f), output_dir)
 
             on_progress(-1, time_end, 0.0)
 
         finally:
             shutil.rmtree(build_dir, ignore_errors=True)
 
-    def list_models(self):
-        try:
-            from zoomy_server._registry import scan_models
-            return scan_models()
-        except Exception:
-            return []
-
-    def _find_zoomy_dmplex_source(self):
+    def _find_solver_source(self):
         candidates = [
             os.path.join(os.environ.get("ZOOMY_ROOT", ""), "library/zoomy_dmplex"),
             "/workspace/library/zoomy_dmplex",
@@ -135,23 +126,32 @@ class DmplexAdapter(SolverAdapter):
                 return c
         raise FileNotFoundError("Cannot find zoomy_dmplex source directory")
 
-    def _write_settings(self, build_dir, solver_spec, mesh_path, output_dir):
-        settings = {
-            "name": "zoomy_server_run",
+    def _write_dmplex_settings(self, build_dir, settings, mesh_file, output_dir):
+        dmplex_settings = {
             "io": {
-                "directory": output_dir,
-                "filename": "simulation",
-                "snapshots": solver_spec.get("output_snapshots", 10),
-                "snapshot_logic": "interpolate",
-                "clean_directory": True,
-                "mesh_path": mesh_path,
-                "write_3d": False,
+                "mesh_path": mesh_file,
+                "output_directory": output_dir,
+                "write_interval": settings.get("output_snapshots", 10),
             },
             "solver": {
-                "t_end": solver_spec.get("time_end", 1.0),
-                "cfl": solver_spec.get("cfl", 0.5),
-                "reconstruction_order": solver_spec.get("spatial_order", 1),
+                "t_end": settings.get("time_end", 1.0),
+                "CFL": settings.get("cfl", 0.5),
+                "min_dt": settings.get("min_dt", 1e-8),
+                "reconstruction_order": settings.get("reconstruction_order", 2),
+                "limiter": settings.get("limiter", "venkatakrishnan"),
             },
         }
         with open(os.path.join(build_dir, "settings.json"), "w") as f:
-            json.dump(settings, f, indent=4)
+            json.dump(dmplex_settings, f, indent=2)
+
+    @staticmethod
+    def _parse_progress(line, on_progress):
+        if "Step" in line and "dt" in line:
+            try:
+                parts = line.split()
+                step = int(parts[parts.index("Step") + 1].strip(","))
+                time_val = float(parts[parts.index("Time") + 1].strip(","))
+                dt_val = float(parts[parts.index("dt") + 1].strip(","))
+                on_progress(step, time_val, dt_val)
+            except (ValueError, IndexError):
+                pass

@@ -19,12 +19,13 @@ from zoomy_core.model.model import *
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_gradient
+# compute_gradient removed with mesh.mesh shim; legacy test broken
+# from zoomy_core.mesh.mesh import compute_gradient
 
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 
@@ -692,7 +693,7 @@ def test_vam_1d():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 15), 100)
+    mesh = BaseMesh.create_1d((-1.5, 15), 100)
 
     Q, Qaux = solve_vam(
         mesh,
@@ -772,7 +773,7 @@ def test_vam_1d_full():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-1.5, 1.5), 30)
+    mesh = BaseMesh.create_1d((-1.5, 1.5), 30)
 
     P, Paux = solve_vam_full(
         mesh,
@@ -841,7 +842,7 @@ def test_vam_1d_fullyimplicit():
         settings={},
     )
     
-    mesh = petscMesh.Mesh.create_1d((-1.5, 15), 100)
+    mesh = BaseMesh.create_1d((-1.5, 15), 100)
 
     Q, Qaux = solve_vam_fullyimplicit(
         mesh,

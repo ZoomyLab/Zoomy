@@ -2,9 +2,9 @@ import jax.numpy as jnp
 import os
 import numpy as np
 
-import zoomy_core.mesh.mesh as petscMesh
-from zoomy_core.mesh.mesh import compute_derivatives
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_core.mesh import LSQMesh
+from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 from zoomy_core.misc import misc as misc
 
 
@@ -16,7 +16,7 @@ def test_1d():
         return Q
 
     
-    mesh = petscMesh.Mesh.create_1d((0, 1), N, lsq_degree=2)
+    mesh = LSQMesh.create_1d((0, 1), N, lsq_degree=2)
     mesh = convert_mesh_to_jax(mesh)
     X = mesh.cell_centers
     Q = custom_ic(X)
@@ -27,7 +27,7 @@ def test_1d():
 def test_2d():
     main_dir = misc.get_main_directory()
 
-    mesh = petscMesh.Mesh.from_gmsh(
+    mesh = LSQMesh.from_gmsh(
         os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"), lsq_degree=2
     )
     def custom_ic(x):

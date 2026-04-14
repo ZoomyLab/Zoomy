@@ -20,12 +20,13 @@ from zoomy_core.model.model import *
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_gradient
+# compute_gradient removed with mesh.mesh shim; legacy test broken
+# from zoomy_core.mesh.mesh import compute_gradient
 
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 import argparse
 
 
@@ -210,7 +211,7 @@ def test_poisson():
         settings={},
     )
 
-    mesh = petscMesh.Mesh.create_1d((-10.5, 10.5), 300)
+    mesh = BaseMesh.create_1d((-10.5, 10.5), 300)
 
     Q, Qaux = solve(
         mesh,

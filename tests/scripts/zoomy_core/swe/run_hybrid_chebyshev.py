@@ -268,7 +268,7 @@ def main():
     from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver
     from zoomy_core.misc.misc import Zstruct
     import zoomy_core.fvm.timestepping as timestepping
-    import zoomy_core.mesh.mesh as petscMesh
+    from zoomy_core.mesh import BaseMesh
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
@@ -323,7 +323,7 @@ def main():
                     if pn in pk:
                         num.parameter_values[pk.index(pn)] = pv
 
-                mesh = petscMesh.Mesh.create_1d(domain=(0., 1.), n_inner_cells=5)
+                mesh = BaseMesh.create_1d(domain=(0., 1.), n_inner_cells=5)
                 settings = Zstruct(output=Zstruct(directory="outputs/hybrid_cheby",
                                                    filename="tmp", snapshots=2,
                                                    clean_directory=False))

@@ -13,6 +13,7 @@ on:
     paths:
       - "docs/**"
       - "web/**"
+      - "library/zoomy_gui/**"
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
@@ -94,6 +95,14 @@ jobs:
             -w /workspace \
             "$DOCS_IMAGE" \
             bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
+
+      - name: Copy GUI into docs site
+        run: |
+          mkdir -p docs/book/_build/html/gui
+          cp -r library/zoomy_gui/* docs/book/_build/html/gui/
+          rm -f docs/book/_build/html/gui/.git
+          rm -f docs/book/_build/html/gui/.gitignore
+          rm -rf docs/book/_build/html/gui/__pycache__
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages

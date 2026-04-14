@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.misc.misc import Zstruct
@@ -49,7 +49,7 @@ def run():
     # This script compares 3 models on a common flat-bottom pulse case.
     # A true beach runup benchmark requires explicit bathymetry source terms
     # and wetting/drying treatment, which are not part of these minimal models.
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=350, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=350, lsq_degree=2)
     n = mesh.n_inner_cells
     x = mesh.cell_centers[0, :n]
 

@@ -6,7 +6,7 @@ from sympy import Matrix
 import zoomy_core.fvm.timestepping as timestepping
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 from zoomy_core.misc.misc import ZArray, Zstruct
 from zoomy_core.model.derivative_workflow import (
     DerivativeAwareSolver,
@@ -57,7 +57,7 @@ def run():
     model = make_model()
     model.print_model_functions(function_names=["flux", "source"])
 
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
+    mesh = BaseMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
     Q0 = np.empty((model.n_variables, mesh.n_cells), dtype=float)
     Q0 = model.initial_conditions.apply(mesh.cell_centers, Q0)
     settings = Zstruct(

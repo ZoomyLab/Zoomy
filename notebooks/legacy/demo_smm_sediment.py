@@ -61,7 +61,7 @@ import zoomy_core.model.boundary_conditions as BC
 from pysolver.ode import RK1
 import zoomy_core.misc.io as io
 from pysolver.reconstruction import GradientMesh
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
 
 # -
@@ -249,7 +249,7 @@ class ShallowMomentsSedimentSimple(Model):
 # +
 # | code-fold: true
 # | code-summary: "Initialize model and mesh"
-mesh = petscMesh.Mesh.create_1d((-6, 6), 600)
+mesh = BaseMesh.create_1d((-6, 6), 600)
 
 bcs = BC.BoundaryConditions(
     [
@@ -580,7 +580,7 @@ plt.show()
 # # +
 # #| code-fold: true
 # #| code-summary: "Initialize model and mesh"
-# mesh = petscMesh.Mesh.create_1d((-6, 6), 200)
+# mesh = BaseMesh.create_1d((-6, 6), 200)
 #
 # bcs = BC.BoundaryConditions(
 #     [
@@ -890,10 +890,10 @@ plt.show()
 # #| code-fold: false
 # #| code-summary: "Load Gmsh mesh"
 #
-# # mesh = petscMesh.Mesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"))
-# mesh = petscMesh.Mesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"))
-# # mesh = petscMesh.Mesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_finest.msh"))
-# # mesh = petscMesh.Mesh.from_gmsh(os.path.join(main_dir, "meshes/triangle_2d/mesh_finest.msh"))
+# # mesh = BaseMesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_coarse.msh"))
+# mesh = BaseMesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_fine.msh"))
+# # mesh = BaseMesh.from_gmsh(os.path.join(main_dir, "meshes/quad_2d/mesh_finest.msh"))
+# # mesh = BaseMesh.from_gmsh(os.path.join(main_dir, "meshes/triangle_2d/mesh_finest.msh"))
 # print(f"physical tags in gmsh file: {mesh.boundary_conditions_sorted_names}")
 #
 # # -

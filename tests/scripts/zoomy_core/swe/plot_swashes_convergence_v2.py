@@ -4,7 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 
 from tests.scripts.zoomy_core.swe.benchmark_swashes_wetdry_compare_v2 import (
@@ -69,7 +69,7 @@ def run():
 
         for variant_name, solver_cls in cfg["variants"]:
             for n_cells in n_levels:
-                mesh = petscMesh.Mesh.create_1d(
+                mesh = LSQMesh.create_1d(
                     domain=cfg["domain"],
                     n_inner_cells=n_cells,
                     lsq_degree=1,

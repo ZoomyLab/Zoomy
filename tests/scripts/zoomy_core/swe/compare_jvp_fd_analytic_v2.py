@@ -1,6 +1,6 @@
 import numpy as np
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 from zoomy_core.fvm.jvp_numpy import analytic_source_jvp, fd_jvp
 from zoomy_core.model.derivative_workflow import DerivativeAwareSolver
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
@@ -93,7 +93,7 @@ def _compare_for_model(name, symbolic_model, mesh, dt=1e-2, eps=1e-7):
 
 
 def run():
-    mesh = petscMesh.Mesh.create_1d(domain=(0.0, 10.0), n_inner_cells=120, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=120, lsq_degree=2)
     _compare_for_model("GN-minimal", make_model_gn_minimal(), mesh, dt=1e-2, eps=1e-7)
     _compare_for_model("GN-classical", ClassicalGreenNaghdi1D(), mesh, dt=1e-2, eps=1e-7)
 
