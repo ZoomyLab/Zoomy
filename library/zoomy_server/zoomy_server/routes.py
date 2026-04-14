@@ -5,14 +5,23 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from zoomy_server import jobs
+from zoomy_server.registry import build_registry
 
 router = APIRouter(prefix="/api/v1")
 _adapter = None
+_session_dir = None
+_predefined_json = None
 
 
 def set_adapter(adapter):
     global _adapter
     _adapter = adapter
+
+
+def set_session(session_dir=None, predefined_json=None):
+    global _session_dir, _predefined_json
+    _session_dir = session_dir
+    _predefined_json = predefined_json
 
 
 class JobRequest(BaseModel):
@@ -22,6 +31,15 @@ class JobRequest(BaseModel):
 @router.get("/health")
 def health():
     return {"status": "ok", "tag": _adapter.tag if _adapter else "unknown"}
+
+
+@router.get("/registry")
+def get_registry():
+    """Return available models, solvers, and meshes from all sources."""
+    return build_registry(
+        session_dir=_session_dir,
+        predefined_json=_predefined_json,
+    )
 
 
 @router.post("/jobs")
