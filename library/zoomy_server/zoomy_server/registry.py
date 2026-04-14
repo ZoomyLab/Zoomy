@@ -149,7 +149,8 @@ def discover_user_meshes(session_dir):
 def discover_catalog_meshes():
     """Discover meshes from the MeshCatalog (GitHub Pages index).
 
-    Returns list of card dicts. Uses cached index if available.
+    Each card gets a template that uses ``MeshCatalog().load()`` —
+    the template IS the code that loads the mesh, no duplication.
     """
     try:
         from zoomy_core.mesh.mesh_catalog import MeshCatalog
@@ -157,23 +158,69 @@ def discover_catalog_meshes():
         cards = []
         for name in catalog.names():
             entry = catalog.get(name)
-            # Pretty title from mesh name (e.g. "basic_shapes__quad_2d" → "Quad 2D")
             parts = name.split("__")
             title = parts[-1].replace("_", " ").title() if len(parts) > 1 else name.replace("_", " ").title()
             category = parts[0].replace("_", " ").title() if len(parts) > 1 else ""
+
+            # Template uses the catalog — single source of truth
+            template = (
+                f'from zoomy_core.mesh.mesh_catalog import MeshCatalog\n'
+                f'\n'
+                f'mesh = MeshCatalog().load("{name}")\n'
+            )
+
             cards.append({
                 "id": f"catalog-{name}",
                 "title": title,
                 "source": "catalog",
                 "category": category,
                 "mesh_name": name,
-                "mesh_sizes": entry.sizes or ["default"],
+                "mesh_sizes": entry.sizes or [],
                 "mesh_types": entry.types or [],
                 "description": f"{category}: {title}" if category else title,
+                "template": template,
             })
         return cards
     except Exception:
         return []
+
+
+def discover_user_meshes(session_dir):
+    """Scan session_dir/meshes/ for mesh files (.msh, .h5).
+
+    Each uploaded mesh gets a template that loads the file.
+    """
+    meshes_dir = Path(session_dir) / "meshes"
+    if not meshes_dir.is_dir():
+        return []
+
+    cards = []
+    for mesh_file in sorted(meshes_dir.iterdir()):
+        if mesh_file.name.startswith("_"):
+            continue
+        suffix = mesh_file.suffix
+        if suffix in (".msh", ".h5"):
+            # Template loads the uploaded file
+            if suffix == ".h5":
+                template = (
+                    f'from zoomy_core.mesh import BaseMesh\n'
+                    f'\n'
+                    f'mesh = BaseMesh.from_hdf5("{mesh_file.name}")\n'
+                )
+            else:
+                template = (
+                    f'from zoomy_core.mesh import BaseMesh\n'
+                    f'\n'
+                    f'mesh = BaseMesh.from_msh("{mesh_file.name}")\n'
+                )
+            cards.append({
+                "id": f"user-mesh-{mesh_file.stem}",
+                "title": mesh_file.stem.replace("_", " ").title(),
+                "file": str(mesh_file),
+                "source": "user",
+                "template": template,
+            })
+    return cards
 
 
 def load_predefined_cards(cards_json_path):
