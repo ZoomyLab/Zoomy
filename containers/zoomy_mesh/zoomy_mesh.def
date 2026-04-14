@@ -1,0 +1,78 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Author ZoomyLab
+    Description Lightweight mesh converter: gmsh + meshio + zoomy_core + zoomy_mesh
+
+%environment
+    export LC_ALL=C
+    export PATH="/usr/local/bin:$PATH"
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-dev \
+        git \
+        ca-certificates \
+        gmsh \
+        libglu1-mesa \
+        libxrender1 \
+        libxcursor1 \
+        libxinerama1 \
+    && rm -rf /var/lib/apt/lists/*
+
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        numpy scipy "sympy>=1.14" param loguru attrs h5py meshio gmsh pytest
+
+    # Install zoomy_core and zoomy_mesh from the build context
+    # (source is copied via --bind or %files during build)
+    if [ -d /tmp/src/zoomy_core ]; then
+        python3 -m pip install --no-cache-dir --break-system-packages /tmp/src/zoomy_core
+    fi
+    if [ -d /tmp/src/zoomy_mesh ]; then
+        python3 -m pip install --no-cache-dir --break-system-packages /tmp/src/zoomy_mesh
+    fi
+    if [ -d /tmp/src/zoomy_server ]; then
+        python3 -m pip install --no-cache-dir --break-system-packages /tmp/src/zoomy_server
+    fi
+
+    rm -rf /tmp/src
+
+%files
+    library/zoomy_core   /tmp/src/zoomy_core
+    library/zoomy_mesh   /tmp/src/zoomy_mesh
+    library/zoomy_server /tmp/src/zoomy_server
+
+%runscript
+    echo "zoomy_mesh container (mesh converter service)"
+    exec zoomy-server --adapter mesh --port 8080 "$@"
+
+%test
+    echo "=== Zoomy Mesh Container Verification ==="
+    echo "1. Checking Python version..."
+    python3 --version
+    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
+
+    echo "2. Checking gmsh..."
+    gmsh --version 2>&1 || true
+
+    echo "3. Checking Python deps..."
+    python3 -c "
+import numpy, meshio, h5py, param, sympy
+print(f'numpy={numpy.__version__}')
+print(f'meshio={meshio.__version__}')
+print(f'sympy={sympy.__version__}')
+print('Python deps: OK')
+"
+
+    echo "4. Checking zoomy_core..."
+    python3 -c "from zoomy_core.mesh import BaseMesh; print('zoomy_core: OK')"
+
+    echo "5. Checking zoomy_mesh..."
+    python3 -c "from zoomy_mesh.converter import h5_to_msh, msh_to_h5; print('zoomy_mesh: OK')"
+
+    echo "=== All checks passed ==="

@@ -55,14 +55,14 @@ from zoomy_core.model.models.shallow_moments import ShallowMoments2d, ShallowMom
 import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.io as io
-from zoomy_core.mesh.mesh import compute_derivatives
+from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 from zoomy_tests.swashes import plots_paper
 import postprocessing.visualization as visu
 
 
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import postprocessing.postprocessing as postprocessing
-from zoomy_core.mesh.mesh import convert_mesh_to_jax
+from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 import argparse
 # -
 
@@ -118,7 +118,7 @@ print(model.eigenvalues())
 
 main_dir = misc.get_main_directory()
 
-mesh = petscMesh.Mesh.create_1d([0, 100], 500)
+mesh = BaseMesh.create_1d([0, 100], 500)
 
 mesh = convert_mesh_to_jax(mesh)
 

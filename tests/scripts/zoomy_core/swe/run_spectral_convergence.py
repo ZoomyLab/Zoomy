@@ -28,7 +28,7 @@ def run_single(args):
     from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
     from zoomy_core.misc.misc import ZArray, Zstruct
     import zoomy_core.fvm.timestepping as timestepping
-    import zoomy_core.mesh.mesh as petscMesh
+    from zoomy_core.mesh import BaseMesh
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
@@ -75,7 +75,7 @@ def run_single(args):
         result["error"] = f"NumericalModel: {str(e)[:200]}"
         return result
 
-    mesh = petscMesh.Mesh.create_1d(domain=DOMAIN, n_inner_cells=N_CELLS)
+    mesh = BaseMesh.create_1d(domain=DOMAIN, n_inner_cells=N_CELLS)
     settings = Zstruct(output=Zstruct(directory=OUTPUT_DIR, filename="tmp",
                                        snapshots=2, clean_directory=False))
     solver = GeneratedModelSolver(time_end=TIME_END, settings=settings,

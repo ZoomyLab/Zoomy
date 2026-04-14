@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import LSQMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.misc.misc import Zstruct
@@ -126,7 +126,7 @@ def _print_case_summary(metrics, thresholds):
 
 def _run_one_config(cfg, n_cells=None):
     n_inner_cells = int(cfg["n_cells"] if n_cells is None else n_cells)
-    mesh = petscMesh.Mesh.create_1d(
+    mesh = LSQMesh.create_1d(
         domain=cfg["domain"],
         n_inner_cells=n_inner_cells,
         lsq_degree=1,

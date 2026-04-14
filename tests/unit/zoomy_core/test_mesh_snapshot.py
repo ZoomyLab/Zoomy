@@ -108,10 +108,7 @@ class TestReferenceDataLoads:
 # ---------------------------------------------------------------------------
 # PETSc vs numpy geometry comparison (run only if PETSc available)
 # ---------------------------------------------------------------------------
-try:
-    from zoomy_core.mesh.mesh import Mesh as PetscMesh, _HAVE_PETSC
-except ImportError:
-    _HAVE_PETSC = False
+_HAVE_PETSC = False  # PETSc Mesh class removed; keep flag for skip guards
 
 
 @pytest.mark.skipif(not _HAVE_PETSC, reason="PETSc not available")
@@ -180,7 +177,7 @@ class TestLSQGradientAccuracy:
     @pytest.mark.parametrize("case", ["square_quad", "triangle", "channel_hole"])
     def test_linear_gradient_2d(self, case):
         """For u(x,y) = 2x + 3y, gradient should be [2, 3] everywhere."""
-        from zoomy_core.mesh.mesh import compute_derivatives
+        from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 
         m = self._load_mesh(case)
         dim = m.dimension
@@ -195,7 +192,7 @@ class TestLSQGradientAccuracy:
 
     def test_linear_gradient_3d(self):
         """For u(x,y,z) = x + 2y + 3z, gradient should be [1, 2, 3]."""
-        from zoomy_core.mesh.mesh import compute_derivatives
+        from zoomy_core.mesh.lsq_reconstruction import compute_derivatives
 
         m = self._load_mesh("tetra3d")
         dim = m.dimension

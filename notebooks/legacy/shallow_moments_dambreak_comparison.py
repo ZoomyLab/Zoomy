@@ -30,7 +30,7 @@ from zoomy_core.model.numerical_model import NumericalModel
 from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
 from zoomy_core.misc.misc import ZArray, Zstruct
 import zoomy_core.fvm.timestepping as timestepping
-import zoomy_core.mesh.mesh as petscMesh
+from zoomy_core.mesh import BaseMesh
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 
@@ -76,7 +76,7 @@ def run_case(basis, level, eig_mode, h_right, weight_mode="orthogonal", proxy=No
         initial_conditions=IC.UserFunction(ic), eigenvalue_proxy_level=proxy)
     num.parameter_values[list(num.parameters.keys()).index("lamda")] = SLIP_LAMBDA
 
-    mesh = petscMesh.Mesh.create_1d(domain=DOMAIN, n_inner_cells=N_CELLS)
+    mesh = BaseMesh.create_1d(domain=DOMAIN, n_inner_cells=N_CELLS)
     settings = Zstruct(output=Zstruct(
         directory="outputs/dambreak_comparison", filename="tmp",
         snapshots=2, clean_directory=False,
