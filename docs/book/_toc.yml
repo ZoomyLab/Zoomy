@@ -1,18 +1,6 @@
 format: jb-book
 root: index
 parts:
-  - caption: Software
-    chapters:
-      - file: software
-      - file: documentation
-        sections:
-          - file: installation
-          - file: usage
-          - file: testing
-          - file: logging
-          - file: ci-reports
-      - file: research
-      - file: publications
   - caption: User Guide
     chapters:
       - file: user-guide
@@ -20,12 +8,8 @@ parts:
           - file: user-guide-gui
           - file: user-guide-cli
           - file: user-guide-use-cases
-  - caption: Developer Guide
-    chapters:
-      - file: dev-guide
-        sections:
-          - file: dev-architecture
-          - file: dev-components
+      - file: installation
+      - file: usage
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
@@ -70,6 +54,15 @@ parts:
           - file: tutorials/ipynb/vam/simple
           - file: tutorials/ipynb/vam_poisson
           - file: tutorials/ipynb/vam_poisson_hp
+  - caption: Developer Guide
+    chapters:
+      - file: dev-guide
+        sections:
+          - file: dev-architecture
+          - file: dev-components
+      - file: testing
+      - file: logging
+      - file: ci-reports
   - caption: API
     chapters:
       - file: api/_apidoc_zoomy_core/zoomy_core
@@ -77,3 +70,10 @@ parts:
       - file: api/amrex
       - file: api/dmplex
       - file: api/firedrake
+  - caption: Archive (under review)
+    chapters:
+      - file: software
+      - file: documentation
+      - file: research
+      - file: publications
+      - file: legal
