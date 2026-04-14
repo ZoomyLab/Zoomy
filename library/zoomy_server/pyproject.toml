@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "zoomy-server"
 version = "0.2.0"
 description = "FastAPI solver server for Zoomy — submits and manages simulation jobs."
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GNU" }
 authors = [
