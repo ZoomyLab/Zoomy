@@ -146,6 +146,36 @@ def discover_user_meshes(session_dir):
     return cards
 
 
+def discover_catalog_meshes():
+    """Discover meshes from the MeshCatalog (GitHub Pages index).
+
+    Returns list of card dicts. Uses cached index if available.
+    """
+    try:
+        from zoomy_core.mesh.mesh_catalog import MeshCatalog
+        catalog = MeshCatalog(auto_fetch=True)
+        cards = []
+        for name in catalog.names():
+            entry = catalog.get(name)
+            # Pretty title from mesh name (e.g. "basic_shapes__quad_2d" → "Quad 2D")
+            parts = name.split("__")
+            title = parts[-1].replace("_", " ").title() if len(parts) > 1 else name.replace("_", " ").title()
+            category = parts[0].replace("_", " ").title() if len(parts) > 1 else ""
+            cards.append({
+                "id": f"catalog-{name}",
+                "title": title,
+                "source": "catalog",
+                "category": category,
+                "mesh_name": name,
+                "mesh_sizes": entry.sizes or ["default"],
+                "mesh_types": entry.types or [],
+                "description": f"{category}: {title}" if category else title,
+            })
+        return cards
+    except Exception:
+        return []
+
+
 def load_predefined_cards(cards_json_path):
     """Load pre-defined cards from a JSON file.
 
@@ -161,6 +191,9 @@ def load_predefined_cards(cards_json_path):
 def build_registry(session_dir=None, predefined_json=None):
     """Build the complete card registry from all sources.
 
+    Merges: pre-defined cards → library discovery → catalog meshes → user session.
+    Order within mesh tab: builtin create → user meshes → catalog meshes.
+
     Returns the full tabs structure for the GUI.
     """
     # 1. Library discovery
@@ -171,34 +204,44 @@ def build_registry(session_dir=None, predefined_json=None):
     user_models = discover_user_models(session_dir) if session_dir else []
     user_meshes = discover_user_meshes(session_dir) if session_dir else []
 
-    # 3. Pre-defined cards
+    # 3. Mesh catalog (remote index)
+    catalog_meshes = discover_catalog_meshes()
+
+    # 4. Pre-defined cards
     predefined = load_predefined_cards(predefined_json) if predefined_json else {}
     predefined_tabs = {t["id"]: t for t in predefined.get("tabs", [])}
 
-    # Merge: pre-defined cards first, then library, then user
-    model_cards = predefined_tabs.get("model", {}).get("cards", [])
-    # Add library models not already in pre-defined
+    # --- Models: pre-defined → library → user ---
+    model_cards = list(predefined_tabs.get("model", {}).get("cards", []))
     predefined_classes = {c.get("class") for c in model_cards}
     for card in lib_models:
         if card["class"] not in predefined_classes:
             model_cards.append(card)
-    # Add user models
     model_cards.extend(user_models)
 
-    solver_cards = predefined_tabs.get("solver", {}).get("cards", [])
+    # --- Solvers: pre-defined → library ---
+    solver_cards = list(predefined_tabs.get("solver", {}).get("cards", []))
     predefined_solver_classes = {c.get("class") for c in solver_cards if c.get("class")}
     for card in lib_solvers:
         if card["class"] not in predefined_solver_classes:
             solver_cards.append(card)
 
-    mesh_cards = predefined_tabs.get("mesh", {}).get("cards", [])
-    mesh_cards.extend(user_meshes)
+    # --- Meshes: builtin create (from pre-defined) → user → catalog ---
+    mesh_tab_def = predefined_tabs.get("mesh", {})
+    builtin_meshes = [c for c in mesh_tab_def.get("cards", []) if c.get("source") == "builtin"]
+    other_predefined = [c for c in mesh_tab_def.get("cards", []) if c.get("source") != "builtin"]
+    mesh_cards = builtin_meshes + user_meshes + catalog_meshes + other_predefined
 
     # Build final structure
     tabs = [
         predefined_tabs.get("dashboard", {"id": "dashboard", "title": "Dashboard", "type": "dashboard"}),
         {"id": "model", "title": "Model", "type": "cards", "cardType": "model", "cards": model_cards},
-        {"id": "mesh", "title": "Mesh", "type": "cards", "cardType": "mesh", "cards": mesh_cards},
+        {
+            "id": "mesh", "title": "Mesh", "type": "cards", "cardType": "mesh",
+            "layout": mesh_tab_def.get("layout", "grid"),
+            "columns": mesh_tab_def.get("columns", 2),
+            "cards": mesh_cards,
+        },
         {"id": "solver", "title": "Solver", "type": "cards", "cardType": "solver", "cards": solver_cards},
     ]
 
@@ -207,3 +250,40 @@ def build_registry(session_dir=None, predefined_json=None):
         tabs.append(predefined_tabs["visualization"])
 
     return {"tabs": tabs}
+
+
+# --- Manifest cache ---
+
+MANIFEST_FILENAME = "registry_manifest.json"
+
+
+def save_manifest(registry, path):
+    """Save registry to a JSON manifest file for instant GUI loading."""
+    with open(path, "w") as f:
+        json.dump(registry, f, indent=2, default=str)
+
+
+def load_manifest(path):
+    """Load a cached registry manifest. Returns None if not found."""
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def refresh_manifest(session_dir=None, predefined_json=None, manifest_dir=None):
+    """Build the registry and save as a manifest file.
+
+    Call this on server startup or via a CLI command to keep the
+    manifest up-to-date. The GUI loads the manifest for instant
+    startup, then background-refreshes from the live endpoint.
+    """
+    registry = build_registry(session_dir, predefined_json)
+    if manifest_dir is None:
+        manifest_dir = session_dir or "."
+    path = os.path.join(manifest_dir, MANIFEST_FILENAME)
+    save_manifest(registry, path)
+    return path

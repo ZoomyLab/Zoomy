@@ -35,7 +35,11 @@ def health():
 
 @router.get("/registry")
 def get_registry():
-    """Return available models, solvers, and meshes from all sources."""
+    """Return available models, solvers, and meshes from all sources.
+
+    Merges: pre-defined cards → library discovery → catalog meshes → user session.
+    The GUI calls this at startup to populate model/solver/mesh tabs.
+    """
     return build_registry(
         session_dir=_session_dir,
         predefined_json=_predefined_json,
