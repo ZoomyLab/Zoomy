@@ -98,6 +98,7 @@ jobs:
 
       - name: Copy GUI into docs site
         run: |
+          sudo chown -R $(id -u):$(id -g) docs/book/_build/
           mkdir -p docs/book/_build/html/gui
           cp -r library/zoomy_gui/* docs/book/_build/html/gui/
           rm -f docs/book/_build/html/gui/.git
