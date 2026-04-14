@@ -13,6 +13,19 @@ parts:
           - file: ci-reports
       - file: research
       - file: publications
+  - caption: User Guide
+    chapters:
+      - file: user-guide
+        sections:
+          - file: user-guide-gui
+          - file: user-guide-cli
+          - file: user-guide-use-cases
+  - caption: Developer Guide
+    chapters:
+      - file: dev-guide
+        sections:
+          - file: dev-architecture
+          - file: dev-components
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
