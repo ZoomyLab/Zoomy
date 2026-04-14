@@ -2,7 +2,7 @@
 
 var fs = require("fs");
 var path = require("path");
-var ZoomyCore = require(path.join(__dirname, "..", "zoomy_gui", "standalone", "core.js"));
+var ZoomyCore = require(path.join(__dirname, "..", "zoomy_gui", "core.js"));
 var JSZip = require("jszip");
 
 var STATE_DIR = ".zoomy";
@@ -10,7 +10,7 @@ var STATE_FILE = path.join(STATE_DIR, "state.json");
 var CONFIG_FILE = path.join(STATE_DIR, "cards.json");
 
 var DEFAULT_CONFIG_PATHS = [
-    path.join(__dirname, "..", "zoomy_gui", "standalone", "cards.json"),
+    path.join(__dirname, "..", "zoomy_gui", "cards.json"),
     "cards.json"
 ];
 
@@ -55,7 +55,7 @@ function _loadCardsFolder(baseDir) {
 
 function loadProject() {
     /* Try cards/ folder first, fall back to cards.json */
-    var guiDir = path.join(__dirname, "..", "zoomy_gui", "standalone");
+    var guiDir = path.join(__dirname, "..", "zoomy_gui");
     var config = _loadCardsFolder(guiDir);
     if (!config) {
         var configPath = fs.existsSync(CONFIG_FILE) ? CONFIG_FILE : findDefaultConfig();
