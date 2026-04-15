@@ -7,9 +7,7 @@ parts:
         sections:
           - file: user-guide-gui
           - file: user-guide-cli
-          - file: user-guide-use-cases
       - file: installation
-      - file: usage
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
@@ -30,36 +28,13 @@ parts:
         sections:
           - file: tutorials/ipynb/amrex/from_DEM
           - file: tutorials/ipynb/amrex/buoy
-      - file: tutorials/openfoam
-        sections:
-          - file: tutorials/ipynb/openfoam/swe
-          - file: tutorials/ipynb/openfoam/sme
-          - file: tutorials/ipynb/openfoam/smet
-      - file: tutorials/dmplex
-        sections:
-          - file: tutorials/ipynb/dmplex/simple
-      - file: tutorials/dolfinx
-        sections:
-          - file: tutorials/ipynb/dolfinx/dolfinx_demo
-      - file: tutorials/code_printers
-        sections:
-          - file: tutorials/ipynb/code_printers/to_amrex
-          - file: tutorials/ipynb/code_printers/to_openfoam
-          - file: tutorials/ipynb/code_printers/to_ufl
-          - file: tutorials/ipynb/code_printers/to_c
-          - file: tutorials/ipynb/code_printers/to_c_moments
-      - file: tutorials/misc
-        sections:
-          - file: tutorials/ipynb/poisson/simple
-          - file: tutorials/ipynb/vam/simple
-          - file: tutorials/ipynb/vam_poisson
-          - file: tutorials/ipynb/vam_poisson_hp
   - caption: Developer Guide
     chapters:
       - file: dev-guide
         sections:
           - file: dev-architecture
           - file: dev-components
+          - file: dev-gui-cli
       - file: testing
       - file: logging
       - file: ci-reports
@@ -70,10 +45,12 @@ parts:
       - file: api/amrex
       - file: api/dmplex
       - file: api/firedrake
+  - caption: Legal
+    chapters:
+      - file: legal
   - caption: Archive (under review)
     chapters:
       - file: software
       - file: documentation
       - file: research
       - file: publications
-      - file: legal
