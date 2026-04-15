@@ -2,23 +2,30 @@
 
 ## Opening the GUI
 
-The Zoomy GUI is a static web application. You can access it in three ways:
+The Zoomy GUI is a static web application:
 
-**Online (GitHub Pages):**
-```
-https://mbd-rwth.github.io/Zoomy/gui/
-```
+::::{grid} 2
+:gutter: 3
 
-**Locally (from the repository):**
+:::{grid-item-card} Open the GUI
+:link: gui/index.html
+:link-type: url
+Launch the Zoomy GUI in your browser.
+:::
+
+:::{grid-item-card} Open with Tutorial
+:link: gui/index.html?project=tutorials/getting-started.zip
+:link-type: url
+Load the Getting Started project with three pre-configured test cases.
+:::
+
+::::
+
+**Run locally** (from the repository):
 ```bash
 cd library/zoomy_gui
 python -m http.server 8000
 # Open http://localhost:8000
-```
-
-**With a tutorial pre-loaded:**
-```
-https://mbd-rwth.github.io/Zoomy/gui/?project=tutorials/getting-started.zip
 ```
 
 ## The Workflow
