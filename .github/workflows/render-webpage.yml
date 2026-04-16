@@ -109,8 +109,7 @@ jobs:
           if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
             for url in $(echo "$RELEASE_JSON" | jq -r '.assets[].browser_download_url // empty'); do
               fname=$(basename "$url")
-              # Only download unsuffixed .msh files (medium/compat copies)
-              # Skip size-suffixed variants like __coarse.msh, __fine.msh, __medium.msh
+              # Only download unsuffixed .msh files (skip __coarse/__fine/__medium variants)
               if [[ "$fname" == *.msh ]] && [[ ! "$fname" =~ __(coarse|medium|fine)\.msh$ ]]; then
                 echo "  Downloading: $fname"
                 curl -sL "$url" -o "meshes_download/$fname"
@@ -120,17 +119,26 @@ jobs:
             echo "  No mesh release found, using local .msh files only"
           fi
 
-          # Place .msh files into meshes/ directory structure
-          # Release assets use __ as path separator (e.g. square__mesh.msh)
+          # Place .msh files into meshes/ directory structure.
+          # The build-meshes CI flattens paths with __ separators when uploading
+          # (e.g. square__mesh.msh, channels__channel_junction__mesh_2d.msh).
+          # But older releases may use _ (e.g. square_mesh.msh).
+          # We place them flat — generate_mesh_previews.py scans recursively.
           for f in meshes_download/*.msh; do
             [ -f "$f" ] || continue
             fname=$(basename "$f")
+            # Convert safe name back: __ → /
             REL_PATH=$(echo "$fname" | sed 's/__/\//g')
             DEST_DIR="meshes/$(dirname "$REL_PATH")"
             mkdir -p "$DEST_DIR"
             cp "$f" "meshes/$REL_PATH"
             echo "  Placed: meshes/$REL_PATH"
           done
+
+          # Also copy any .msh files from the submodule checkout itself
+          # (square/ has committed .msh files)
+          echo "Checking submodule meshes..."
+          find meshes/ -name '*.msh' 2>/dev/null | head -20
 
           # Generate mesh previews (force rebuild with all available .msh files)
           echo "Generating mesh preview SVGs..."
