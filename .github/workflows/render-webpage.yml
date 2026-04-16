@@ -96,6 +96,53 @@ jobs:
             "$DOCS_IMAGE" \
             bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
+      - name: Download mesh artifacts and generate GUI previews
+        run: |
+          # Fetch the latest mesh release from the meshes repo
+          MESHES_REPO="${{ github.repository_owner }}/meshes"
+
+          echo "Fetching latest mesh release assets..."
+          mkdir -p meshes_download
+
+          # Download .msh files from the meshes repo's latest release
+          RELEASE_JSON=$(gh api "repos/${MESHES_REPO}/releases/latest" 2>/dev/null || echo '{}')
+          if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
+            for url in $(echo "$RELEASE_JSON" | jq -r '.assets[].browser_download_url // empty'); do
+              fname=$(basename "$url")
+              # Only download unsuffixed .msh files (medium/compat copies)
+              # Skip size-suffixed variants like __coarse.msh, __fine.msh, __medium.msh
+              if [[ "$fname" == *.msh ]] && [[ ! "$fname" =~ __(coarse|medium|fine)\.msh$ ]]; then
+                echo "  Downloading: $fname"
+                curl -sL "$url" -o "meshes_download/$fname"
+              fi
+            done
+          else
+            echo "  No mesh release found, using local .msh files only"
+          fi
+
+          # Place .msh files into meshes/ directory structure
+          # Release assets use __ as path separator (e.g. square__mesh.msh)
+          for f in meshes_download/*.msh; do
+            [ -f "$f" ] || continue
+            fname=$(basename "$f")
+            REL_PATH=$(echo "$fname" | sed 's/__/\//g')
+            DEST_DIR="meshes/$(dirname "$REL_PATH")"
+            mkdir -p "$DEST_DIR"
+            cp "$f" "meshes/$REL_PATH"
+            echo "  Placed: meshes/$REL_PATH"
+          done
+
+          # Generate mesh previews (force rebuild with all available .msh files)
+          echo "Generating mesh preview SVGs..."
+          pip install meshio matplotlib numpy
+          cd library/zoomy_gui
+          python generate_mesh_previews.py --force
+          cd ../..
+
+          echo "Mesh preview generation complete."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Copy GUI into docs site
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
@@ -104,6 +151,8 @@ jobs:
           rm -f docs/book/_build/html/gui/.git
           rm -f docs/book/_build/html/gui/.gitignore
           rm -rf docs/book/_build/html/gui/__pycache__
+          rm -f docs/book/_build/html/gui/generate_mesh_previews.py
+          rm -f docs/book/_build/html/gui/generate_previews.py
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
