@@ -16,14 +16,14 @@ Zoomy's main objective is to provide a convenient modeling interface for complex
 :::{grid-item-card} Open the GUI
 :link: gui/index.html
 :link-type: url
-![GUI](../../web/images/gui.png)
+![GUI](/images/gui.png)
 Configure simulations, run in the browser, and share via URL. No installation required.
 :::
 
 :::{grid-item-card} Testing and CI Reports
 :link: ci-reports.html
 :link-type: url
-![Testing](../../web/images/tests.png)
+![Testing](/images/tests.png)
 Review testing policy, marker model, and generated CI summaries.
 :::
 
