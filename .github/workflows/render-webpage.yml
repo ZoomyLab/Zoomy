@@ -155,7 +155,12 @@ jobs:
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
           mkdir -p docs/book/_build/html/gui
+          # Copy the submodule GUI first
           cp -r library/zoomy_gui/* docs/book/_build/html/gui/
+          # Then overwrite with freshly generated cards + previews
+          cp library/zoomy_gui/cards/meshes/generated.json docs/book/_build/html/gui/cards/meshes/generated.json
+          cp -r library/zoomy_gui/previews/* docs/book/_build/html/gui/previews/ 2>/dev/null || true
+          # Cleanup
           rm -f docs/book/_build/html/gui/.git
           rm -f docs/book/_build/html/gui/.gitignore
           rm -rf docs/book/_build/html/gui/__pycache__
