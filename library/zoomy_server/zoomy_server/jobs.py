@@ -78,6 +78,102 @@ def get_hdf5_path(job_id):
     return path if os.path.exists(path) else None
 
 
+def get_results(job_id, timeline=False):
+    """Return simulation results as a JSON-serializable dict.
+
+    Parses the job's HDF5 output file and returns either the final snapshot
+    (timeline=False) or the full time history (timeline=True).
+
+    Returns None if the job or its HDF5 file cannot be found.
+
+    Structure::
+
+        {
+            "job_id": str,
+            "time": float,                 # final snapshot time (non-timeline)
+            "n_vars": int,
+            "n_cells": int,
+            "dim": int,                    # 1/2/3
+            "coords": [[x,y,z], ...],      # cell centers
+            "vertices": [[x,y,z], ...],    # mesh vertices (if available)
+            "cells": [[v0,v1,...], ...],   # cell connectivity (if available)
+            "Q": [[field0 values], ...],           # (n_vars, n_cells) — final state
+            "Qaux": [[aux0 values], ...],          # optional
+            # Only when timeline=True:
+            "Q_timeline": [[[...], ...], ...],     # (n_snapshots, n_vars, n_cells)
+            "Qaux_timeline": ...,
+            "times": [t0, t1, ...],
+            "n_snapshots": int,
+        }
+    """
+    import numpy as np
+    h5_path = get_hdf5_path(job_id)
+    if not h5_path:
+        return None
+
+    try:
+        from zoomy_core.misc import io as _io
+    except ImportError:
+        return {"error": "zoomy_core not available for result parsing"}
+
+    result = {"job_id": job_id}
+
+    try:
+        if timeline:
+            try:
+                x, Q_tl, Qaux_tl, times = _io.load_timeline_of_fields_from_hdf5(h5_path)
+            except Exception as e:
+                return {"error": f"Failed to load timeline: {e}"}
+            Q_tl = np.asarray(Q_tl)
+            result["Q_timeline"] = Q_tl.tolist()
+            result["Q"] = Q_tl[-1].tolist()
+            if Qaux_tl is not None and len(Qaux_tl) > 0:
+                Qaux_tl = np.asarray(Qaux_tl)
+                result["Qaux_timeline"] = Qaux_tl.tolist()
+                result["Qaux"] = Qaux_tl[-1].tolist()
+            result["times"] = np.asarray(times).tolist()
+            result["n_snapshots"] = len(times)
+            result["time"] = float(times[-1]) if len(times) else 0.0
+            result["coords"] = np.asarray(x).tolist() if x is not None else None
+            result["n_vars"] = Q_tl.shape[1]
+            result["n_cells"] = Q_tl.shape[2]
+        else:
+            Q, Qaux, t = _io.load_fields_from_hdf5(h5_path)
+            Q = np.asarray(Q)
+            result["Q"] = Q.tolist()
+            if Qaux is not None:
+                result["Qaux"] = np.asarray(Qaux).tolist()
+            result["time"] = float(t) if t is not None else 0.0
+            result["n_vars"] = Q.shape[0]
+            result["n_cells"] = Q.shape[1]
+
+        # Attempt to read mesh geometry from HDF5
+        try:
+            import h5py
+            with h5py.File(h5_path, "r") as f:
+                if "mesh" in f:
+                    mg = f["mesh"]
+                    if "vertices" in mg:
+                        result["vertices"] = np.asarray(mg["vertices"][:]).tolist()
+                    elif "nodes" in mg:
+                        result["vertices"] = np.asarray(mg["nodes"][:]).tolist()
+                    if "cells" in mg:
+                        result["cells"] = np.asarray(mg["cells"][:]).tolist()
+                    elif "connectivity" in mg:
+                        result["cells"] = np.asarray(mg["connectivity"][:]).tolist()
+                    if "dim" in mg.attrs:
+                        result["dim"] = int(mg.attrs["dim"])
+                    elif "coords" in result and result["coords"]:
+                        c0 = result["coords"][0]
+                        result["dim"] = len(c0) if hasattr(c0, "__len__") else 1
+        except Exception:
+            pass
+
+        return result
+    except Exception as e:
+        return {"error": f"Failed to parse results: {e}"}
+
+
 def list_jobs():
     return [get_status(jid) for jid in JOBS]
 
