@@ -75,6 +75,22 @@ def download_hdf5(job_id: str):
     return FileResponse(path, media_type="application/x-hdf5", filename="simulation.h5")
 
 
+@router.get("/jobs/{job_id}/results")
+def get_job_results(job_id: str, timeline: bool = False):
+    """Return simulation results as JSON (final snapshot, or full timeline).
+
+    Query parameters:
+        timeline: if true, include Q_timeline/Qaux_timeline/times arrays
+                  for all snapshots (useful for slider-based visualization).
+    """
+    data = jobs.get_results(job_id, timeline=timeline)
+    if data is None:
+        raise HTTPException(404, "Results not available")
+    if "error" in data and data.get("error"):
+        raise HTTPException(500, data["error"])
+    return data
+
+
 @router.delete("/jobs/{job_id}")
 def cancel_job(job_id: str):
     if jobs.cancel(job_id):
