@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "zoomy-plotting"
+version = "0.1.0"
+description = "Publication-ready plotting for Zoomy simulation outputs (HDF5 + VTK), with lazy field access."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GNU" }
+authors = [
+  { name = "Ingo Steldermann", email = "steldermann@mbd.rwth-aachen.de" }
+]
+keywords = ["simulation", "visualization", "plotting", "mesh", "HDF5", "VTK"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "h5py",
+  "meshio",
+  "sympy",
+]
+
+[project.scripts]
+zoomy-plot = "zoomy_plotting.cli:main"
+
+
+[project.optional-dependencies]
+plotly = ["plotly"]
+pyvista = ["pyvista"]
+testing = [
+  "pytest",
+  "pytest-mpl",
+]
+dev = [
+  "pytest",
+  "pytest-mpl",
+  "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/mbd-rwth/Zoomy"
+Source = "https://github.com/mbd-rwth/Zoomy"
+Issues = "https://github.com/mbd-rwth/Zoomy/issues"
+
+
+[tool.setuptools.packages.find]
+include = ["zoomy_plotting*"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["zoomy_plotting/tests"]
+markers = [
+  "image: opt-in image-diff tests via pytest-mpl",
+]
