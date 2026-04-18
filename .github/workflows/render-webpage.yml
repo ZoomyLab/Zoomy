@@ -121,21 +121,20 @@ jobs:
             echo "  No mesh release found, using local .msh files only"
           fi
 
-          # Place .msh files into meshes/ directory structure.
-          # The build-meshes CI flattens paths with __ separators when uploading
-          # (e.g. square__mesh.msh, channels__channel_junction__mesh_2d.msh).
-          # But older releases may use _ (e.g. square_mesh.msh).
-          # We place them flat — generate_mesh_previews.py scans recursively.
+          # Place every downloaded .msh flat under meshes/. We do NOT
+          # convert __ → / — the build-meshes CI collapses directory
+          # separators to single _ and uses __size only as the size
+          # suffix (e.g. basic_shapes_quad_2d_hole_mesh__coarse.msh).
+          # generate_mesh_previews.py::_parse_mesh_identity parses both
+          # the category (by matching known-prefix heuristic) and the
+          # size suffix from a flat filename, so we just let it walk
+          # meshes/ as-is.
+          mkdir -p meshes
           for f in meshes_download/*.msh; do
             [ -f "$f" ] || continue
-            fname=$(basename "$f")
-            # Convert safe name back: __ → /
-            REL_PATH=$(echo "$fname" | sed 's/__/\//g')
-            DEST_DIR="meshes/$(dirname "$REL_PATH")"
-            mkdir -p "$DEST_DIR"
-            cp "$f" "meshes/$REL_PATH"
-            echo "  Placed: meshes/$REL_PATH"
+            cp "$f" "meshes/$(basename "$f")"
           done
+          echo "  Placed $(ls meshes/*.msh 2>/dev/null | wc -l) .msh files at meshes/"
 
           # Also copy any .msh files from the submodule checkout itself
           # (square/ has committed .msh files)
