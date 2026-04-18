@@ -117,7 +117,7 @@ class MatplotlibPlotter(BasePlotter):
             ax.grid(True, alpha=CONFIG.grid_alpha)
         ax.set_xlabel("x")
         ax.set_ylabel(self._field_label(field))
-        ax.set_title(f"{self._field_label(field)}  —  step {int(time_step)}")
+        ax.set_title(f"{self._field_label(field)}  —  {self._time_label(time_step)}")
         return out
 
     # ------------------------------------------------------------------
@@ -208,7 +208,7 @@ class MatplotlibPlotter(BasePlotter):
         ax.set_aspect("equal")
         if CONFIG.axes_grid_2d3d:
             ax.grid(True, alpha=CONFIG.grid_alpha)
-        ax.set_title(f"{self._field_label(field)}  —  step {int(time_step)}")
+        ax.set_title(f"{self._field_label(field)}  —  {self._time_label(time_step)}")
 
         if show_cb:
             sm = _mpl().ScalarMappable(cmap=cmap_, norm=norm)
@@ -310,7 +310,7 @@ class MatplotlibPlotter(BasePlotter):
             ax.set_box_aspect([1, 1, 1])
         except Exception:
             pass
-        ax.set_title(f"{self._field_label(field)}  —  step {int(time_step)}")
+        ax.set_title(f"{self._field_label(field)}  —  {self._time_label(time_step)}")
 
         if show_cb:
             sm = _mpl().ScalarMappable(cmap=cmap_, norm=norm)

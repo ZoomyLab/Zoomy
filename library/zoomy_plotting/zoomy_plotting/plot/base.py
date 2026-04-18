@@ -43,6 +43,31 @@ class BasePlotter:
         """Fetch one cell-centered 1-D array at ``time_step`` for ``field``."""
         return np.asarray(self.store.get_cell(time_step, field))
 
+    def _time_label(self, time_step: int) -> str:
+        """Human-readable label for the current frame, preferring real time.
+
+        If the store has a ``times`` array, format ``t = <value>`` with
+        enough precision to distinguish adjacent snapshots. Otherwise fall
+        back to the integer step number. Snippets / custom titles can
+        reuse this so matplotlib and plotly titles stay consistent.
+        """
+        t_arr = self.store.times
+        ts = int(time_step)
+        if t_arr is None or len(t_arr) == 0:
+            return f"step {ts}"
+        ts = max(0, min(ts, len(t_arr) - 1))
+        t = float(t_arr[ts])
+        # Pick precision from the typical gap between snapshots so two
+        # adjacent titles aren't identical. Fall back to 3 decimals.
+        if len(t_arr) >= 2:
+            gaps = np.diff(np.asarray(t_arr))
+            gap = float(np.median(gaps)) if gaps.size else 0.0
+            if gap > 0:
+                import math
+                decimals = max(2, min(6, int(math.ceil(-math.log10(gap))) + 1))
+                return f"t = {t:.{decimals}f}"
+        return f"t = {t:.3f}"
+
     def _field_label(self, field) -> str:
         """Human-readable label for plot titles / colorbars.
 
