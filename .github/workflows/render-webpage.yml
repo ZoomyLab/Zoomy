@@ -109,8 +109,10 @@ jobs:
           if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
             for url in $(echo "$RELEASE_JSON" | jq -r '.assets[].browser_download_url // empty'); do
               fname=$(basename "$url")
-              # Only download unsuffixed .msh files (skip __coarse/__fine/__medium variants)
-              if [[ "$fname" == *.msh ]] && [[ ! "$fname" =~ __(coarse|medium|fine)\.msh$ ]]; then
+              # Download every .msh including __coarse/__medium/__fine
+              # size variants; generate_mesh_previews.py groups them and
+              # populates each card's mesh_sizes array.
+              if [[ "$fname" == *.msh ]]; then
                 echo "  Downloading: $fname"
                 curl -sL "$url" -o "meshes_download/$fname"
               fi

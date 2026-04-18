@@ -1,20 +1,23 @@
 """Styling configuration — the single source of truth for every visual
 parameter used by the plotters.
 
-Design rule enforced by tests:
-    Nothing inside ``plot_1d / plot_2d / plot_3d`` or their helpers may
-    hardcode a color, linewidth, alpha, markersize, or colormap. All such
-    values come from :data:`CONFIG`. Plot functions may accept matching
-    kwargs that, when non-``None``, override the config for that one call.
+Design rules:
+
+1. Nothing inside ``plot_1d / plot_2d / plot_3d`` or their helpers may
+   hardcode a color, linewidth, alpha, markersize, or colormap. All such
+   values come from :data:`CONFIG`. Plot functions may accept matching
+   kwargs that, when non-``None``, override the config for that one call.
+2. **Lazy matplotlib import**: importing this module must NOT load
+   matplotlib. ``import zoomy_plotting`` should be cheap even in Pyodide
+   where matplotlib's init takes ~1–2 s. Every ``import matplotlib...``
+   in this file lives inside a function body.
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, replace, fields as _fields
+from dataclasses import dataclass, fields as _fields
 from typing import Optional
-
-import matplotlib as mpl
 
 
 @dataclass
@@ -97,6 +100,10 @@ def apply_style(**overrides):
     old_values = {name: getattr(CONFIG, name) for name in field_names}
     for name, value in overrides.items():
         setattr(CONFIG, name, value)
+
+    # Lazy matplotlib import — only pay the cost when a user actually
+    # enters the styling block (which implies they're about to plot).
+    import matplotlib as mpl
 
     rc_patch = _as_rcparams(CONFIG)
     with mpl.rc_context(rc_patch):

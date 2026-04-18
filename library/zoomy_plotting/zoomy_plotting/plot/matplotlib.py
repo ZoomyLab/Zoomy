@@ -1,10 +1,15 @@
 """Matplotlib plotters — unified 1D/2D/3D interface.
 
-Design rule: every visual parameter (color, linewidth, markersize, cmap,
-alpha) reads from :data:`~zoomy_plotting.plot.style.CONFIG`. Plot methods
-accept ``None``-defaulted kwargs that override the config for a single call.
-Never hardcode a literal here — ``tests/test_style.py`` enforces this
-statically.
+Design rules:
+
+1. Every visual parameter (color, linewidth, markersize, cmap, alpha)
+   reads from :data:`~zoomy_plotting.plot.style.CONFIG`. Plot methods
+   accept ``None``-defaulted kwargs that override the config for a
+   single call. Never hardcode a literal here — ``tests/test_style.py``
+   enforces this statically.
+2. **Lazy matplotlib import**: importing this module must NOT load
+   matplotlib. Only methods that actually draw touch matplotlib. This
+   is checked by ``tests/test_lazy.py``.
 """
 
 from __future__ import annotations
@@ -12,14 +17,40 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-from matplotlib.collections import PolyCollection
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 
 from ..mesh.faces import cell_to_vert_values
 from .base import BasePlotter
 from ._common import add_colorbar, resolve_viewpoint
 from .style import CONFIG
+
+
+def _mpl():
+    """Lazy one-stop handle for the matplotlib submodules we use.
+
+    First call imports matplotlib (~1 s in Pyodide); subsequent calls
+    are cache hits. Returns a small namespace so callers don't have to
+    juggle three import statements inside every method body.
+    """
+    global _MPL_CACHE
+    if _MPL_CACHE is None:
+        from matplotlib.collections import PolyCollection
+        from matplotlib.cm import ScalarMappable
+        from matplotlib.colors import Normalize
+        import matplotlib.pyplot as plt
+
+        class _Namespace:
+            pass
+
+        ns = _Namespace()
+        ns.PolyCollection = PolyCollection
+        ns.ScalarMappable = ScalarMappable
+        ns.Normalize = Normalize
+        ns.plt = plt
+        _MPL_CACHE = ns
+    return _MPL_CACHE
+
+
+_MPL_CACHE = None
 
 
 # Helper: pick between a kwarg and the CONFIG fallback.
@@ -122,7 +153,7 @@ class MatplotlibPlotter(BasePlotter):
             vmin = float(np.min(values))
         if vmax is None:
             vmax = float(np.max(values))
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = _mpl().Normalize(vmin=vmin, vmax=vmax)
 
         cmap_ = _pick(cmap, "cmap")
         show_cb = _pick(colorbar, "colorbar_show")
@@ -151,7 +182,7 @@ class MatplotlibPlotter(BasePlotter):
             # matplotlib convention, not a style choice, so it is permitted
             # by test_style.py. The linewidth fallback comes from CONFIG
             # even though it is invisible when edges are "none".
-            coll = PolyCollection(
+            coll = _mpl().PolyCollection(
                 polygons,
                 facecolors=face_colors_rgba,
                 edgecolors="none",
@@ -162,7 +193,7 @@ class MatplotlibPlotter(BasePlotter):
             out["mesh"] = coll
 
         if show_mesh:
-            overlay = PolyCollection(
+            overlay = _mpl().PolyCollection(
                 [vertices2d[cell] for cell in cells],
                 facecolors="none",
                 edgecolors=_pick(edgecolor, "mesh_edgecolor"),
@@ -180,7 +211,7 @@ class MatplotlibPlotter(BasePlotter):
         ax.set_title(f"{self._field_label(field)}  —  step {int(time_step)}")
 
         if show_cb:
-            sm = ScalarMappable(cmap=cmap_, norm=norm)
+            sm = _mpl().ScalarMappable(cmap=cmap_, norm=norm)
             sm.set_array([])
             out["colorbar"] = add_colorbar(
                 ax.figure, ax, sm, label=self._field_label(field)
@@ -231,7 +262,7 @@ class MatplotlibPlotter(BasePlotter):
             vmin = float(np.min(values))
         if vmax is None:
             vmax = float(np.max(values))
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = _mpl().Normalize(vmin=vmin, vmax=vmax)
 
         cmap_ = _pick(cmap, "cmap")
         show_cb = _pick(colorbar, "colorbar_show")
@@ -282,7 +313,7 @@ class MatplotlibPlotter(BasePlotter):
         ax.set_title(f"{self._field_label(field)}  —  step {int(time_step)}")
 
         if show_cb:
-            sm = ScalarMappable(cmap=cmap_, norm=norm)
+            sm = _mpl().ScalarMappable(cmap=cmap_, norm=norm)
             sm.set_array([])
             out["colorbar"] = add_colorbar(
                 ax.figure, ax, sm, label=self._field_label(field)
@@ -310,8 +341,8 @@ class MatplotlibPlotter(BasePlotter):
 # only called from this module and keeps ``_common.py`` free of imports that
 # depend on CONFIG-vs-kwarg semantics.
 # --------------------------------------------------------------------------
-def _cmap_colors(cmap_name: str, norm: Normalize, values: np.ndarray) -> np.ndarray:
+def _cmap_colors(cmap_name: str, norm, values: np.ndarray) -> np.ndarray:
     """Map a 1-D array of scalars to RGBA via the given named colormap."""
     import matplotlib.pyplot as plt
 
-    return plt.get_cmap(cmap_name)(norm(values))
+    return _mpl().plt.get_cmap(cmap_name)(norm(values))
