@@ -6,6 +6,9 @@
   "bin": {
     "zoomy": "cli.js"
   },
+  "scripts": {
+    "test": "node --test tests/test_cli_contract.js tests/test_adapter_symmetry.js"
+  },
   "dependencies": {
     "jszip": "^3.10.1"
   }
