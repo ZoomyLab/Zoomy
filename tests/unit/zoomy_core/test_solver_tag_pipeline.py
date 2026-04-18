@@ -209,73 +209,12 @@ def _nc_same(ref, tag):
     return True, None
 
 
-@pytest.mark.small
-@pytest.mark.unittest
-@pytest.mark.core
-@pytest.mark.parametrize("level", [0, 1, 2])
-def test_sme_tagged_parity(level):
-    from zoomy_core.model.models.sme_model import SMEModel, SMEModelTagged
-    ref = SMEModel(level=level)
-    tag = SMEModelTagged(level=level)
-
-    ok, msg = _matrix_same(ref.flux(), tag.flux())
-    assert ok, f"flux mismatch at level={level}: {msg}"
-    ok, msg = _matrix_same(ref.hydrostatic_pressure(), tag.hydrostatic_pressure())
-    assert ok, f"hydrostatic mismatch at level={level}: {msg}"
-    ok, msg = _nc_same(ref.nonconservative_matrix(), tag.nonconservative_matrix())
-    assert ok, f"NC mismatch at level={level}: {msg}"
-    ok, msg = _matrix_same(list(ref.source()), list(tag.source()))
-    assert ok, f"source mismatch at level={level}: {msg}"
+# SMEModelTagged / VAMModelTagged parity tests were removed alongside the
+# implementations.  Re-add them once the tag-driven classes derive their
+# tagged equations from the symbolic INS chain + project_onto_basis
+# (not from the hand-coded reference operators).
 
 
-@pytest.mark.small
-@pytest.mark.unittest
-@pytest.mark.core
-@pytest.mark.parametrize("level", [0, 1, 2])
-def test_vam_tagged_parity(level):
-    from zoomy_core.model.models.vam_model import VAMModel, VAMModelTagged
-    ref = VAMModel(level=level)
-    tag = VAMModelTagged(level=level)
-    ok, msg = _matrix_same(ref.flux(), tag.flux())
-    assert ok, f"flux mismatch at level={level}: {msg}"
-    ok, msg = _matrix_same(ref.hydrostatic_pressure(), tag.hydrostatic_pressure())
-    assert ok, f"hydrostatic mismatch at level={level}: {msg}"
-    ok, msg = _nc_same(ref.nonconservative_matrix(), tag.nonconservative_matrix())
-    assert ok, f"NC mismatch at level={level}: {msg}"
-    ok, msg = _matrix_same(list(ref.source()), list(tag.source()))
-    assert ok, f"source mismatch at level={level}: {msg}"
-
-
-@pytest.mark.small
-@pytest.mark.unittest
-@pytest.mark.core
-@pytest.mark.numpy
-@pytest.mark.parametrize("level", [0, 1, 2])
-def test_sme_tagged_end_to_end_solve(level):
-    """Full HyperbolicSolver run must produce bit-identical state."""
-    from zoomy_core.model.models.sme_model import SMEModel, SMEModelTagged
-    from zoomy_core.mesh import BaseMesh
-    from zoomy_core.fvm.solver_numpy import HyperbolicSolver
-    import zoomy_core.fvm.timestepping as ts
-    import zoomy_core.model.boundary_conditions as BC
-    import zoomy_core.model.initial_conditions as IC
-
-    def _run(cls):
-        np.random.seed(1)
-        m = cls(level=level)
-        m.boundary_conditions = BC.BoundaryConditions(
-            boundary_conditions_list=[BC.Extrapolation(tag=t) for t in ("left", "right")])
-        m.initial_conditions = IC.UserFunction(
-            function=lambda X: np.array(
-                [0.0, 0.5 + 0.1 * np.exp(-((X[0] - 5) ** 2) / 0.5)] + [0.0] * (level + 1)
-            )
-        )
-        mesh = BaseMesh.create_1d((0, 10), 40)
-        Q, _ = HyperbolicSolver(
-            time_end=0.05, compute_dt=ts.adaptive(CFL=0.3)
-        ).solve(mesh, m, write_output=False)
-        return Q
-
-    Q_ref = _run(SMEModel)
-    Q_tag = _run(SMEModelTagged)
-    assert np.allclose(Q_ref[:, :40], Q_tag[:, :40], rtol=0.0, atol=1e-14)
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers used above are kept for when the new parity tests land.
+# ──────────────────────────────────────────────────────────────────────────────
