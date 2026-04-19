@@ -97,6 +97,9 @@ model.describe()
 #
 # System-level mutation: ``model.apply(op)`` runs the op on every equation
 # of the system, returns ``self``, so ``.simplify()`` chains.
+# The internal simplify is linearity-only (``d(b+h)/dx → db/dx + dh/dx``)
+# and intentionally does **not** chain-rule-expand conservative forms like
+# ``∂_x(u²)``, so they survive for the Leibniz integration in Step 7.
 
 # %%
 model.apply(Newtonian(state)).simplify()
