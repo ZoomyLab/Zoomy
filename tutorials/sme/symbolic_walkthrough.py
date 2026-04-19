@@ -45,21 +45,54 @@
 import sys
 from pathlib import Path
 
+# -- Pin zoomy_core to the current worktree -----------------------------------
+#
+# zoomy_core is installed as a PEP 660 editable package.  Its finder is
+# registered on ``sys.meta_path`` with a hardcoded ``MAPPING`` that points
+# at whichever worktree ``pip install -e`` was run from.  That finder
+# runs BEFORE ``sys.path``, so a bare ``sys.path.insert`` is silently
+# ignored.  We locate the enclosing worktree and rewrite the finder's
+# MAPPING + clear any cached module so the next ``import zoomy_core``
+# picks up THIS worktree's code.
+
 _here = Path.cwd()
-while _here != _here.parent and not (_here / "library" / "zoomy_core").exists():
+while _here != _here.parent and not (_here / "library" / "zoomy_core" / "zoomy_core").exists():
     _here = _here.parent
-if (_here / "library" / "zoomy_core").exists():
-    sys.path.insert(0, str(_here / "library" / "zoomy_core"))
+_pkg_dir   = _here / "library" / "zoomy_core"
+_pkg_inner = _pkg_dir / "zoomy_core"
+assert _pkg_inner.exists(), f"could not find library/zoomy_core/zoomy_core from {Path.cwd()}"
+
+# Drop any cached modules so the next import is fresh.
+for _k in list(sys.modules):
+    if _k == "zoomy_core" or _k.startswith("zoomy_core."):
+        del sys.modules[_k]
+
+# Patch every editable finder on sys.meta_path whose module defines a
+# MAPPING that mentions zoomy_core.  (Each zoomy_* package has its own
+# finder; we only touch zoomy_core's.)
+_patched = False
+for _finder in sys.meta_path:
+    _mod_name = getattr(_finder, "__module__", "") or ""
+    _mod = sys.modules.get(_mod_name)
+    _mapping = getattr(_mod, "MAPPING", None) if _mod is not None else None
+    if isinstance(_mapping, dict) and "zoomy_core" in _mapping:
+        _mapping["zoomy_core"] = str(_pkg_inner)
+        _patched = True
+
+# Belt-and-braces: also prepend to sys.path.
+if str(_pkg_dir) not in sys.path:
+    sys.path.insert(0, str(_pkg_dir))
 
 import sympy as sp
-
+import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
 )
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
 
-import zoomy_core
-print("zoomy_core imported from:", zoomy_core.__file__)
+print("worktree root:", _here)
+print("zoomy_core.__file__:", zoomy_core.__file__)
+print("editable MAPPING patched:", _patched)
 
 # %% [markdown]
 # ## Step 1 — Start from the raw Navier-Stokes system
