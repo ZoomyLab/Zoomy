@@ -33,6 +33,11 @@ export class ZoomyCLI {
         if (!options.pyodide) throw new Error("ZoomyCLI: options.pyodide is required");
         if (!options.storage) throw new Error("ZoomyCLI: options.storage is required");
         this.storage = options.storage;
+        /* Mutable — app.js swaps this to a per-session PyodideAdapter
+           when a session becomes active. At construction it points at
+           the boot-time adapter; the first session to run code
+           "claims" that adapter (no cold-boot tax for the first
+           session); later sessions spawn their own. */
         this.pyodide = options.pyodide;
         this.http = options.httpAdapters instanceof Map
             ? options.httpAdapters
