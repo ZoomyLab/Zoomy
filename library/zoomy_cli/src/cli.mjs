@@ -46,12 +46,14 @@ export class ZoomyCLI {
     registerHttp(adapter) {
         if (!adapter || !adapter.tag) throw new Error("HttpAdapter without a tag");
         this.http.set(adapter.tag, adapter);
+        this._emitConnectionsChange();
         return adapter;
     }
 
     unregisterHttp(tag) {
         const a = this.http.get(tag);
         if (a) { try { a.disconnect(); } catch (e) {} this.http.delete(tag); }
+        this._emitConnectionsChange();
     }
 
     httpFor(tag) {
@@ -62,6 +64,117 @@ export class ZoomyCLI {
     isHttpConnected(tag) {
         const a = this.httpFor(tag);
         return !!(a && a.isConnected && a.isConnected());
+    }
+
+    /**
+     * List every tag we can execute against right now: `numpy` for the
+     * always-available Pyodide runtime, plus one entry per connected
+     * HttpAdapter. Returns pretty labels (tag + source) so the navbar
+     * can display them verbatim.
+     */
+    availableTags() {
+        const out = ["numpy (pyodide)"];
+        for (const [tag, a] of this.http) {
+            if (a.isConnected()) out.push(tag);
+        }
+        return out;
+    }
+
+    /**
+     * Unified "is this tag executable?" test. `numpy` (Pyodide) is
+     * always connected; other tags must have a live HttpAdapter.
+     */
+    isTagConnected(tag) {
+        if (tag === "numpy") return true;
+        return this.isHttpConnected(tag);
+    }
+
+    getUrlForTag(tag) {
+        const a = this.httpFor(tag);
+        return a ? a.url : null;
+    }
+
+    /**
+     * Register a listener that fires whenever the HTTP adapter set
+     * changes (register, unregister, or a heartbeat marks an adapter
+     * as lost). Returns an unsubscribe function.
+     */
+    onConnectionsChange(listener) {
+        if (!this._connectionListeners) this._connectionListeners = new Set();
+        this._connectionListeners.add(listener);
+        return () => this._connectionListeners.delete(listener);
+    }
+
+    _emitConnectionsChange() {
+        if (!this._connectionListeners) return;
+        for (const fn of this._connectionListeners) {
+            try { fn(); } catch (e) {}
+        }
+    }
+
+    /**
+     * High-level backend discovery: probe the default localhost URL
+     * and, on success, register an HttpAdapter for it. Used by the
+     * GUI's "Discover" button.
+     */
+    async discover(defaultUrl) {
+        try { return await this.connect(defaultUrl || "http://localhost:8080"); }
+        catch (e) { return null; }
+    }
+
+    /**
+     * Probe a URL's /health. On 200+ok, register an HttpAdapter for it
+     * and start a heartbeat that unregisters the adapter if /health
+     * stops responding. Returns the adapter on success, null on
+     * failure. The HttpAdapter class is resolved on first call via
+     * dynamic import to avoid a hard dep cycle.
+     */
+    async connect(url) {
+        if (!this._HttpAdapter) {
+            const mod = await import("./adapters/http_adapter.mjs");
+            this._HttpAdapter = mod.HttpAdapter;
+        }
+        const adapter = new this._HttpAdapter({ url });
+        try {
+            await adapter.connect();
+        } catch (e) {
+            return null;
+        }
+        this.registerHttp(adapter);
+        this._startHeartbeat(adapter);
+        return adapter;
+    }
+
+    disconnect(tag) {
+        const a = this.httpFor(tag);
+        if (!a) return;
+        this._stopHeartbeat(tag);
+        try { a.disconnect(); } catch (e) {}
+        this.http.delete(tag);
+        this._emitConnectionsChange();
+    }
+
+    _startHeartbeat(adapter) {
+        if (!this._heartbeats) this._heartbeats = new Map();
+        const tag = adapter.tag;
+        if (this._heartbeats.has(tag)) clearInterval(this._heartbeats.get(tag));
+        const handle = setInterval(async () => {
+            try {
+                const h = await adapter.health();
+                if (h.status !== "ok") throw new Error("bad status");
+            } catch (e) {
+                this._stopHeartbeat(tag);
+                this.http.delete(tag);
+                this._emitConnectionsChange();
+            }
+        }, 5000);
+        this._heartbeats.set(tag, handle);
+    }
+
+    _stopHeartbeat(tag) {
+        if (!this._heartbeats) return;
+        const h = this._heartbeats.get(tag);
+        if (h) { clearInterval(h); this._heartbeats.delete(tag); }
     }
 
     // ------------------------------------------------------------------
@@ -194,14 +307,6 @@ export class ZoomyCLI {
         }
         // Default = interrupt the local Pyodide.
         return this.pyodide.interrupt();
-    }
-
-    /** Connect-to-HTTP helper: creates an adapter, probes /health,
-     *  registers on success. */
-    async connectHttp(url, AdapterClass) {
-        const adapter = new AdapterClass({ url });
-        await adapter.connect();
-        return this.registerHttp(adapter);
     }
 
     /** Static helper so callers can test for the error type. */
