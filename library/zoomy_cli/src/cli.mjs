@@ -192,17 +192,51 @@ export class ZoomyCLI {
 
     /**
      * Load the cards for a given type dir (models / meshes / solvers /
-     * visualizations), merging `default.json`, `generated.json`, and
-     * `user.json` in that order. Missing files are silently skipped.
+     * visualizations), merging legacy tier files and, when a session is
+     * provided, per-session user-authored cards.
+     *
+     * Merge order (later wins on id collision):
+     *   1. cards/<dir>/default.json    (read-only, shipped)
+     *   2. cards/<dir>/generated.json  (read-only, shipped)
+     *   3. cards/<dir>/user.json       (legacy — kept for back-compat)
+     *   4. cards/sessions/<session>/<dir>/user/<id>/card.json  (new)
+     *
+     * Cards without an `id` are preserved in place (no dedup), which
+     * keeps existing test fixtures working.
+     *
+     * @param {string} dir
+     * @param {object} [opts]
+     * @param {string} [opts.session]  Active session id; when absent,
+     *    only the legacy tiers are loaded (pre-session behaviour).
      */
-    async listCards(dir) {
+    async listCards(dir, opts) {
+        opts = opts || {};
         const sources = ["default.json", "generated.json", "user.json"];
-        const out = [];
+        const buckets = [];
         for (const src of sources) {
             const list = await this.storage.tryReadJson("cards/" + dir + "/" + src);
-            if (Array.isArray(list)) out.push.apply(out, list);
+            if (Array.isArray(list)) buckets.push(list);
         }
-        return out;
+        if (opts.session) {
+            const { listUserCards } = await import("./user_cards.mjs");
+            const userCards = await listUserCards(this.storage, opts.session, dir);
+            if (userCards.length) buckets.push(userCards);
+        }
+        // Insertion-order merge with last-wins id dedup.
+        const idxById = new Map();
+        const result = [];
+        for (const bucket of buckets) {
+            for (const card of bucket) {
+                if (!card) continue;
+                if (card.id && idxById.has(card.id)) {
+                    result[idxById.get(card.id)] = card;
+                } else {
+                    if (card.id) idxById.set(card.id, result.length);
+                    result.push(card);
+                }
+            }
+        }
+        return result;
     }
 
     async fetchSnippet(path) {

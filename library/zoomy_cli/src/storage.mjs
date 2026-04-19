@@ -1,15 +1,22 @@
 /**
  * Storage abstraction for the CLI.
  *
- * Two flavours, same interface:
- *  - FetchStorage (browser): HTTP GET against the page's origin.
- *  - FsStorage (Node):       readFileSync from a local root.
+ * Two flavours, same interface (read + write):
+ *  - FetchStorage (browser): HTTP GET against the page's origin for
+ *    reads; an injected `overlay` (IdbStorage in the browser) handles
+ *    reads under `cards/sessions/` and all writes/deletes/lists. The
+ *    static origin never receives writes.
+ *  - FsStorage (Node): readFileSync / writeFileSync / rmSync under a
+ *    local root.
  *
- * Every `read*` method returns a Promise for symmetry; concrete
- * classes resolve synchronously where they can.
+ * Every method returns a Promise for symmetry; concrete classes resolve
+ * synchronously where they can.
  *
- * The GUI only needs the fetch-backed one. Node consumers (tests,
- * shell) can reach for FsStorage directly.
+ * Write surface (added when the project grew user-authored cards):
+ *   writeJson / writeText / writeBytes  — upsert at `path`.
+ *   deletePath                           — recursive (file or folder).
+ *   listDir                              — immediate child names.
+ *   exists                               — bool.
  */
 
 export class FetchStorage {
@@ -17,10 +24,15 @@ export class FetchStorage {
      * @param {object} [options]
      * @param {string} [options.baseUrl]  Base URL to resolve paths against
      *                                    (defaults to the page origin).
+     * @param {object} [options.overlay]  Optional writable overlay
+     *   (IdbStorage). When present, reads under `cards/sessions/` try
+     *   the overlay first and fall back to fetch; writes/deletes/lists
+     *   all go to the overlay (fetch origin is read-only).
      */
     constructor(options) {
         options = options || {};
         this.baseUrl = options.baseUrl || "";
+        this.overlay = options.overlay || null;
     }
 
     _url(path) {
@@ -29,30 +41,78 @@ export class FetchStorage {
         return this.baseUrl + path.replace(/^\//, "");
     }
 
+    /**
+     * Overlay-first applies only under `cards/sessions/`. Keeping this
+     * narrow avoids accidentally shadowing the shipped read-only card
+     * tiers (default.json, generated.json, snippets/) with stale
+     * IndexedDB entries.
+     */
+    _overlayFirst(path) {
+        return !!this.overlay && /^cards\/sessions\//.test(path);
+    }
+
     async readJson(path) {
+        if (this._overlayFirst(path)) {
+            const hit = await this.overlay.tryReadJson(path);
+            if (hit !== null) return hit;
+        }
         const r = await fetch(this._url(path));
         if (!r.ok) throw new Error("storage: HTTP " + r.status + " at " + path);
         return await r.json();
     }
 
     async readText(path) {
+        if (this._overlayFirst(path)) {
+            const hit = await this.overlay.tryReadText(path);
+            if (hit !== null) return hit;
+        }
         const r = await fetch(this._url(path));
         if (!r.ok) throw new Error("storage: HTTP " + r.status + " at " + path);
         return await r.text();
     }
 
     async readBytes(path) {
+        if (this._overlayFirst(path) && this.overlay.tryReadBytes) {
+            const hit = await this.overlay.tryReadBytes(path);
+            if (hit) return hit;
+        }
         const r = await fetch(this._url(path));
         if (!r.ok) throw new Error("storage: HTTP " + r.status + " at " + path);
         return await r.arrayBuffer();
     }
 
-    async tryReadJson(path) {
-        try { return await this.readJson(path); } catch (e) { return null; }
+    async tryReadJson(path)  { try { return await this.readJson(path); }  catch (e) { return null; } }
+    async tryReadText(path)  { try { return await this.readText(path); }  catch (e) { return null; } }
+    async tryReadBytes(path) { try { return await this.readBytes(path); } catch (e) { return null; } }
+
+    // ------------------------------------------------------------------
+    // Writes. The static origin can't accept POST/PUT, so every mutation
+    // goes to the overlay. Without an overlay these throw so callers see
+    // the problem early.
+    // ------------------------------------------------------------------
+
+    _requireOverlay(method) {
+        if (!this.overlay) {
+            throw new Error("FetchStorage." + method + ": no writable overlay");
+        }
     }
 
-    async tryReadText(path) {
-        try { return await this.readText(path); } catch (e) { return null; }
+    async writeJson(path, obj)    { this._requireOverlay("writeJson");  return this.overlay.writeJson(path, obj); }
+    async writeText(path, text)   { this._requireOverlay("writeText");  return this.overlay.writeText(path, text); }
+    async writeBytes(path, bytes) { this._requireOverlay("writeBytes"); return this.overlay.writeBytes(path, bytes); }
+    async deletePath(path)        { this._requireOverlay("deletePath"); return this.overlay.deletePath(path); }
+
+    async listDir(path) {
+        if (!this.overlay) return [];
+        return await this.overlay.listDir(path);
+    }
+
+    async exists(path) {
+        if (this.overlay && await this.overlay.exists(path)) return true;
+        try {
+            const r = await fetch(this._url(path), { method: "HEAD" });
+            return r.ok;
+        } catch (e) { return false; }
     }
 }
 
@@ -83,11 +143,55 @@ export class FsStorage {
         return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     }
 
-    async tryReadJson(path) {
-        try { return await this.readJson(path); } catch (e) { return null; }
+    async tryReadJson(path)  { try { return await this.readJson(path); }  catch (e) { return null; } }
+    async tryReadText(path)  { try { return await this.readText(path); }  catch (e) { return null; } }
+    async tryReadBytes(path) { try { return await this.readBytes(path); } catch (e) { return null; } }
+
+    // ------------------------------------------------------------------
+    // Writes. Parent dirs are created on demand so callers don't have to
+    // mkdir before each write.
+    // ------------------------------------------------------------------
+
+    async writeJson(path, obj) {
+        await this.writeText(path, JSON.stringify(obj, null, 2) + "\n");
     }
 
-    async tryReadText(path) {
-        try { return await this.readText(path); } catch (e) { return null; }
+    async writeText(path, text) {
+        const abs = this._resolve(path);
+        this._fs.mkdirSync(this._path.dirname(abs), { recursive: true });
+        this._fs.writeFileSync(abs, text, "utf8");
+    }
+
+    async writeBytes(path, bytes) {
+        const abs = this._resolve(path);
+        this._fs.mkdirSync(this._path.dirname(abs), { recursive: true });
+        let buf;
+        if (bytes instanceof Uint8Array) {
+            buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        } else if (bytes instanceof ArrayBuffer) {
+            buf = Buffer.from(bytes);
+        } else {
+            buf = Buffer.from(bytes);
+        }
+        this._fs.writeFileSync(abs, buf);
+    }
+
+    async deletePath(path) {
+        const abs = this._resolve(path);
+        if (!this._fs.existsSync(abs)) return false;
+        this._fs.rmSync(abs, { recursive: true, force: true });
+        return true;
+    }
+
+    async listDir(path) {
+        const abs = this._resolve(path);
+        if (!this._fs.existsSync(abs)) return [];
+        const stat = this._fs.statSync(abs);
+        if (!stat.isDirectory()) return [];
+        return this._fs.readdirSync(abs);
+    }
+
+    async exists(path) {
+        return this._fs.existsSync(this._resolve(path));
     }
 }
