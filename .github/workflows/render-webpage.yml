@@ -161,6 +161,14 @@ jobs:
           # Then overwrite with freshly generated cards + previews
           cp library/zoomy_gui/cards/meshes/generated.json docs/book/_build/html/gui/cards/meshes/generated.json
           cp -r library/zoomy_gui/previews/* docs/book/_build/html/gui/previews/ 2>/dev/null || true
+          # Copy the isomorphic CLI package so the GUI can import it as
+          # ./zoomy_cli/browser.mjs (see app.js). Strip node-only and
+          # dev detritus to keep the deploy small.
+          mkdir -p docs/book/_build/html/gui/zoomy_cli
+          cp library/zoomy_cli/browser.mjs docs/book/_build/html/gui/zoomy_cli/
+          cp library/zoomy_cli/node.mjs docs/book/_build/html/gui/zoomy_cli/
+          cp library/zoomy_cli/package.json docs/book/_build/html/gui/zoomy_cli/
+          cp -r library/zoomy_cli/src docs/book/_build/html/gui/zoomy_cli/
 
           # Write the real build version so users can see it in the footer
           GUI_COMMIT=$(git -C library/zoomy_gui rev-parse HEAD)

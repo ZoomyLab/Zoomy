@@ -1,0 +1,70 @@
+name: GUI grep-gate
+
+# Phase-3 exit criterion: the GUI must talk to backends only through
+# the ZoomyCLI façade. This job fails if app.js regresses to any of:
+#   - direct Pyodide Worker access  (_pyWorker, postMessage(cmd:...))
+#   - the legacy ZoomyBackend helper (we deleted backend.js)
+#   - inline fetch() calls against backend URLs
+# Keeps the refactor honest when future PRs are tempted to "just
+# use fetch() this one time".
+
+on:
+  pull_request:
+    paths:
+      - "library/zoomy_gui/**"
+      - ".github/workflows/gui-grep-gate.yml"
+  push:
+    branches: [ main, develop ]
+    paths:
+      - "library/zoomy_gui/**"
+      - ".github/workflows/gui-grep-gate.yml"
+
+jobs:
+  grep-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Forbidden symbols in library/zoomy_gui/app.js
+        run: |
+          set -e
+          FORBIDDEN=(
+            'ZoomyBackend'
+            '_pyWorker\.postMessage'
+            '_pyWorker\.addEventListener'
+            '_pyWorker\.terminate'
+            '\bpyCall\s*\('
+            'new Worker\('
+            'fetch\("https'
+          )
+          FAIL=0
+          for pat in "${FORBIDDEN[@]}"; do
+            # Allow /* */ and // comment lines so the descriptive
+            # references we left as breadcrumbs don't trip the gate.
+            MATCHES=$(grep -nE "$pat" library/zoomy_gui/app.js \
+                      | grep -vE '^[^:]*:[ \t]*(\*|/\*|\*/|//|\* )' \
+                      || true)
+            if [ -n "$MATCHES" ]; then
+              echo "::error ::Forbidden pattern /$pat/ found in app.js:"
+              echo "$MATCHES"
+              FAIL=1
+            fi
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            echo ""
+            echo "Phase 3 migration contract: every backend interaction"
+            echo "must go through the CLI. See library/zoomy_cli/ and"
+            echo "plan curious-yawning-wilkes.md for the rationale."
+            exit 1
+          fi
+          echo "OK: app.js is clean."
+
+      - name: backend.js must not return
+        run: |
+          if [ -f library/zoomy_gui/backend.js ]; then
+            echo "::error ::backend.js was re-added. Delete it — the CLI owns backend interactions now."
+            exit 1
+          fi
+          echo "OK: backend.js stays deleted."
