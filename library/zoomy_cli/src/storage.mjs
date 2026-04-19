@@ -107,6 +107,17 @@ export class FetchStorage {
         return await this.overlay.listDir(path);
     }
 
+    /**
+     * Recursive enumeration — every full path under `prefix`. The
+     * static origin has no way to enumerate itself, so this reports
+     * only what lives in the overlay. Used by the ZIP save path to
+     * collect user-authored cards for export.
+     */
+    async allPaths(prefix) {
+        if (!this.overlay) return [];
+        return await this.overlay.allPaths(prefix);
+    }
+
     async exists(path) {
         if (this.overlay && await this.overlay.exists(path)) return true;
         try {
@@ -189,6 +200,28 @@ export class FsStorage {
         const stat = this._fs.statSync(abs);
         if (!stat.isDirectory()) return [];
         return this._fs.readdirSync(abs);
+    }
+
+    /**
+     * Recursive walk — every file path under `prefix`, returned with
+     * the same leading prefix the caller passed in so paths round-trip
+     * cleanly through writeJson / writeBytes.
+     */
+    async allPaths(prefix) {
+        const abs = this._resolve(prefix);
+        if (!this._fs.existsSync(abs)) return [];
+        const out = [];
+        const rootPrefix = prefix.replace(/\/$/, "");
+        const walk = (dir, rel) => {
+            for (const entry of this._fs.readdirSync(dir, { withFileTypes: true })) {
+                const absChild = this._path.join(dir, entry.name);
+                const relChild = rel ? (rel + "/" + entry.name) : entry.name;
+                if (entry.isDirectory()) walk(absChild, relChild);
+                else out.push(rootPrefix + "/" + relChild);
+            }
+        };
+        walk(abs, "");
+        return out;
     }
 
     async exists(path) {

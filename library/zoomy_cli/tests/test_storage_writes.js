@@ -85,6 +85,19 @@ describe("FsStorage write surface", () => {
         await storage.writeText("broken.json", "{ not json");
         assert.strictEqual(await storage.tryReadJson("broken.json"), null);
     });
+
+    test("allPaths walks recursively and returns full paths", async () => {
+        await storage.writeText("root/a/1.txt", "1");
+        await storage.writeText("root/a/2.txt", "2");
+        await storage.writeText("root/b/c/3.txt", "3");
+        const got = (await storage.allPaths("root/")).sort();
+        assert.deepStrictEqual(got, [
+            "root/a/1.txt",
+            "root/a/2.txt",
+            "root/b/c/3.txt",
+        ]);
+        assert.deepStrictEqual(await storage.allPaths("missing/"), []);
+    });
 });
 
 describe("FetchStorage overlay plumbing (without network)", () => {

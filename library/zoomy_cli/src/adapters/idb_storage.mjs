@@ -175,4 +175,16 @@ export class IdbStorage {
         }
         return false;
     }
+
+    /**
+     * Every stored key that starts with `prefix`. IDB has no folder
+     * notion so this is a flat prefix-filter over getAllKeys. Returned
+     * with full paths so callers can feed them straight back into
+     * readText / readBytes.
+     */
+    async allPaths(prefix) {
+        const keys = await this._allKeys();
+        const norm = prefix.endsWith("/") ? prefix : prefix + "/";
+        return keys.map(String).filter((k) => k.startsWith(norm));
+    }
 }
