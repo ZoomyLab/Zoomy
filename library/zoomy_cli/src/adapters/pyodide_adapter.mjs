@@ -39,6 +39,9 @@ export class PyodideAdapter {
      * @param {function} [options.onLog]      cb({level, msg}) — optional.
      * @param {function} [options.onDisplay]  cb(cell) — optional.
      * @param {function} [options.onReady]    cb() when worker posts fully_ready.
+     * @param {function} [options.onBackgroundReady]
+     *          cb() when all tier-2 (matplotlib / jedi / zoomy_plotting)
+     *          installs have resolved and the worker is fully warm.
      * @param {SharedArrayBuffer} [options.interruptBuffer]
      *          When cross-origin isolated, this is used for cooperative cancel.
      */
@@ -49,6 +52,7 @@ export class PyodideAdapter {
         this.onLog = options.onLog || function () {};
         this.onDisplay = options.onDisplay || function () {};
         this.onReady = options.onReady || function () {};
+        this.onBackgroundReady = options.onBackgroundReady || function () {};
         this._interruptBuffer = options.interruptBuffer || null;
         this._interruptView = this._interruptBuffer ? new Uint8Array(this._interruptBuffer) : null;
 
@@ -71,7 +75,8 @@ export class PyodideAdapter {
     _wire(w) {
         w.onmessage = (e) => {
             const msg = e.data;
-            if (msg.type === "fully_ready") { this.onReady(); return; }
+            if (msg.type === "fully_ready")       { this.onReady(); return; }
+            if (msg.type === "background_ready")  { this.onBackgroundReady(); return; }
             if (msg.type === "log")     { this.onLog(msg); return; }
             if (msg.type === "display") { this.onDisplay(msg.cell); return; }
             const cb = this._pending.get(msg.id);
