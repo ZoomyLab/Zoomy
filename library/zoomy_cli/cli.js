@@ -145,7 +145,7 @@ function installCompletions() {
                 '#compdef zoomy',
                 '_zoomy() {',
                 '  local -a commands tabs session_cmds',
-                '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load)',
+                '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load card mesh)',
                 '  tabs=(model mesh solver visu)',
                 '  session_cmds=(new switch rename list)',
                 '  if (( CURRENT == 2 )); then',
@@ -206,7 +206,7 @@ function installCompletions() {
             var script = [
                 '_zoomy_completions() {',
                 '  local cur="${COMP_WORDS[COMP_CWORD]}" prev="${COMP_WORDS[COMP_CWORD-1]}"',
-                '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load"',
+                '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load card mesh"',
                 '  local tabs="model mesh solver visu"',
                 '  if [ "$COMP_CWORD" = 1 ]; then COMPREPLY=($(compgen -W "$cmds" -- "$cur"))',
                 '  elif [ "$prev" = "list" ] || [ "$prev" = "overview" ] || [ "$prev" = "select" ] || [ "$prev" = "show" ]; then COMPREPLY=($(compgen -W "$tabs" -- "$cur"))',
@@ -765,6 +765,155 @@ async function cmdLoad(proj, filepath) {
     console.log("Loaded " + count + " cards from " + filepath);
 }
 
+/* === User-authored cards ================================================
+
+   `zoomy card new|delete|list` and `zoomy mesh upload` write to on-disk
+   state under ./.zoomy/cards/sessions/<session_id>/<type>/user/<id>/.
+   The GUI doesn't read from disk — it reads user cards from IndexedDB,
+   so use `zoomy save` to ZIP the on-disk cards and load them in the
+   browser. The path layout is shared between GUI and CLI so the ZIP
+   round-trip is a straight file-copy. */
+
+function _argFlag(args, name) {
+    /* Accepts "--name value" and "--name=value". Removes the flag (and
+       its value) from args in place; returns the value or undefined. */
+    for (var i = 0; i < args.length; i++) {
+        var a = args[i];
+        if (a === name) {
+            var v = args[i + 1];
+            args.splice(i, 2);
+            return v;
+        }
+        if (a.indexOf(name + "=") === 0) {
+            var vv = a.slice(name.length + 1);
+            args.splice(i, 1);
+            return vv;
+        }
+    }
+    return undefined;
+}
+
+function _cliSession(proj, opts) {
+    return (opts && opts.session) ||
+           (proj && proj.sessions && proj.sessions.activeId) ||
+           "default";
+}
+
+async function _userCardsStorage() {
+    /* Fresh FsStorage rooted at cwd — state.json already lives under
+       ./.zoomy, and keeping user cards under ./cards/sessions/ matches
+       the GUI's relative paths so a ZIP round-trip is copy-only. */
+    var storageMod = await import("./src/storage.mjs");
+    var ucMod = await import("./src/user_cards.mjs");
+    return {
+        storage: new storageMod.FsStorage({ root: ".", fs: fs, path: path }),
+        userCards: ucMod,
+    };
+}
+
+async function cmdCardNew(proj, type, name, opts) {
+    if (!type || !name) {
+        console.error("Usage: zoomy card new <model|solver|mesh|vis> <name> [--session <id>]");
+        process.exit(1);
+    }
+    var env = await _userCardsStorage();
+    var dir = env.userCards.typeDir(type);
+    if (!dir) { console.error("Unknown card type: " + type); process.exit(1); }
+    var session = _cliSession(proj, opts);
+    var id = "user-" + env.userCards.slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
+    var starter = env.userCards.cardStarter(_normalizeType(type), name);
+    await env.userCards.writeUserCard(env.storage, {
+        session: session, type: dir, id: id,
+        meta: starter.meta, snippet: starter.snippet,
+    });
+    console.log("Created " + dir + "/user/" + id);
+    console.log("  session: " + session);
+    console.log("  path:    cards/sessions/" + session + "/" + dir + "/user/" + id + "/");
+}
+
+function _normalizeType(type) {
+    var map = { models: "model", solvers: "solver", meshes: "mesh",
+                visualizations: "vis", visualization: "vis", viz: "vis" };
+    return map[type] || type;
+}
+
+async function cmdCardDelete(proj, type, idOrName, opts) {
+    if (!type || !idOrName) {
+        console.error("Usage: zoomy card delete <type> <id-or-name> [--session <id>]");
+        process.exit(1);
+    }
+    var env = await _userCardsStorage();
+    var dir = env.userCards.typeDir(type);
+    if (!dir) { console.error("Unknown card type: " + type); process.exit(1); }
+    var session = _cliSession(proj, opts);
+    var id = idOrName;
+    if (id.indexOf("user-") !== 0) {
+        /* Try to find by title or by the user-<slug>-<rand> shape. */
+        var all = await env.userCards.listUserCards(env.storage, session, dir);
+        var slug = env.userCards.slugify(idOrName);
+        var matches = all.filter(function (c) {
+            return c.id === idOrName || c.title === idOrName || c.id.indexOf("user-" + slug) === 0;
+        });
+        if (matches.length === 0) {
+            console.error("No user card '" + idOrName + "' found in " + dir + " for session " + session);
+            process.exit(1);
+        }
+        if (matches.length > 1) {
+            console.error("Multiple matches — re-run with a full id:");
+            matches.forEach(function (c) { console.error("  " + c.id); });
+            process.exit(1);
+        }
+        id = matches[0].id;
+    }
+    var existed = await env.userCards.deleteUserCard(env.storage, session, dir, id);
+    console.log(existed ? ("Deleted " + dir + "/user/" + id)
+                        : ("(nothing to delete — " + id + " not found)"));
+}
+
+async function cmdCardList(proj, opts) {
+    var env = await _userCardsStorage();
+    var session = _cliSession(proj, opts);
+    var types = ["models", "solvers", "meshes", "visualizations"];
+    console.log("User cards in session " + session + ":");
+    var total = 0;
+    for (var i = 0; i < types.length; i++) {
+        var list = await env.userCards.listUserCards(env.storage, session, types[i]);
+        if (!list.length) continue;
+        console.log("  " + types[i] + ":");
+        list.forEach(function (c) {
+            console.log("    " + c.id.padEnd(40) + "  " + (c.title || ""));
+        });
+        total += list.length;
+    }
+    if (!total) console.log("  (none)");
+}
+
+async function cmdMeshUpload(proj, file, opts) {
+    if (!file) {
+        console.error("Usage: zoomy mesh upload <file.msh> [--session <id>] [--name <title>]");
+        process.exit(1);
+    }
+    if (!fs.existsSync(file)) { console.error("File not found: " + file); process.exit(1); }
+    var env = await _userCardsStorage();
+    var session = _cliSession(proj, opts);
+    var title = (opts && opts.name) || path.basename(file, path.extname(file));
+    var id = "user-mesh-" + env.userCards.slugify(title) + "-" + Math.random().toString(36).slice(2, 6);
+    var bytes = fs.readFileSync(file);
+    var vpath = "/tmp/zoomy_user/" + session + "/meshes/" + id + ".msh";
+    var starter = env.userCards.uploadedMeshStarter({
+        title: title, filename: path.basename(file), vpath: vpath, size: bytes.length,
+    });
+    await env.userCards.writeUserFile(env.storage, session, "meshes", id, "mesh.msh", bytes);
+    await env.userCards.writeUserCard(env.storage, {
+        session: session, type: "meshes", id: id,
+        meta: starter.meta, snippet: starter.snippet,
+    });
+    console.log("Uploaded " + path.basename(file) + " (" + bytes.length + " bytes)");
+    console.log("  session: " + session);
+    console.log("  id:      " + id);
+    console.log("  path:    cards/sessions/" + session + "/meshes/user/" + id + "/");
+}
+
 /* === Completion (zsh + bash) === */
 
 function cmdCompletion(shell) {
@@ -775,7 +924,7 @@ function cmdCompletion(shell) {
             '#compdef zoomy',
             '_zoomy() {',
             '  local -a commands tabs',
-            '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load)',
+            '  commands=(start overview status list select show session connect disconnect backends run watch jobs case save load card mesh)',
             '  tabs=(model mesh solver visualization)',
             '  if (( CURRENT == 2 )); then',
             '    _describe "command" commands',
@@ -802,7 +951,7 @@ function cmdCompletion(shell) {
             '_zoomy_completions() {',
             '  local cur="${COMP_WORDS[COMP_CWORD]}"',
             '  local prev="${COMP_WORDS[COMP_CWORD-1]}"',
-            '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load"',
+            '  local cmds="start overview status list select show session connect disconnect backends run watch jobs case save load card mesh"',
             '  local tabs="model mesh solver visualization"',
             '  if [ "$COMP_CWORD" = 1 ]; then',
             '    COMPREPLY=($(compgen -W "$cmds" -- "$cur"))',
@@ -867,6 +1016,12 @@ async function main() {
             "    zoomy save [path.zip]            Save modified cards to zip",
             "    zoomy load <path.zip>            Load project from zip",
             "",
+            "  USER CARDS:  (per-session; --session defaults to the active one)",
+            "    zoomy card new <type> <name>     Create a new user card (type: model|solver|mesh|vis)",
+            "    zoomy card delete <type> <id>    Delete a user card",
+            "    zoomy card list                  List user cards in the active session",
+            "    zoomy mesh upload <file.msh>     Wrap a gmsh file as a user mesh card",
+            "",
             ""
         ].join("\n"));
         return;
@@ -890,6 +1045,26 @@ async function main() {
     else if (cmd === "case") cmdCase(proj);
     else if (cmd === "save") await cmdSave(proj, args[1]);
     else if (cmd === "load") await cmdLoad(proj, args[1]);
+    else if (cmd === "card") {
+        /* zoomy card <subcmd> ... — user-authored card CRUD. */
+        var subcmd = args[1];
+        var rest = args.slice(2);
+        var session = _argFlag(rest, "--session");
+        var opts = { session: session };
+        if (subcmd === "new")         await cmdCardNew(proj, rest[0], rest.slice(1).join(" "), opts);
+        else if (subcmd === "delete") await cmdCardDelete(proj, rest[0], rest.slice(1).join(" "), opts);
+        else if (subcmd === "list")   await cmdCardList(proj, opts);
+        else console.log("Usage: zoomy card <new|delete|list> ...");
+    }
+    else if (cmd === "mesh") {
+        /* zoomy mesh upload <file> [--session …] [--name …] */
+        var msub = args[1];
+        var mrest = args.slice(2);
+        var msession = _argFlag(mrest, "--session");
+        var mname = _argFlag(mrest, "--name");
+        if (msub === "upload") await cmdMeshUpload(proj, mrest[0], { session: msession, name: mname });
+        else console.log("Usage: zoomy mesh upload <file.msh> [--session <id>] [--name <title>]");
+    }
     else console.log("Unknown command: " + cmd + ". Run 'zoomy --help'.");
 }
 
