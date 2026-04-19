@@ -35,14 +35,31 @@
 
 # %% [markdown]
 # ## Imports
+#
+# The path bootstrap below makes sure we import ``zoomy_core`` from the
+# worktree we're actually sitting in, not from whatever editable install
+# Python's site-packages happens to point at (different worktrees can be
+# at different commits).
 
 # %%
+import sys
+from pathlib import Path
+
+_here = Path.cwd()
+while _here != _here.parent and not (_here / "library" / "zoomy_core").exists():
+    _here = _here.parent
+if (_here / "library" / "zoomy_core").exists():
+    sys.path.insert(0, str(_here / "library" / "zoomy_core"))
+
 import sympy as sp
 
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
 )
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
+
+import zoomy_core
+print("zoomy_core imported from:", zoomy_core.__file__)
 
 # %% [markdown]
 # ## Step 1 — Start from the raw Navier-Stokes system
