@@ -13,7 +13,7 @@ const CLI_DIR = path.resolve(__dirname, "..");
 const SHARED_METHODS = [
     "connect", "disconnect",
     "runCode", "extractParams", "describeModel",
-    "openHdf5", "writeHdf5Bytes",
+    "openHdf5", "writeHdf5Bytes", "complete",
     "submitCase", "cancelJob",
     "listRegistry", "health",
 ];
@@ -43,9 +43,9 @@ describe("PyodideAdapter / HttpAdapter symmetry", () => {
         }
     });
 
-    test("HttpAdapter.extractParams / describeModel / openHdf5 / writeHdf5Bytes all throw NotSupportedError", () => {
+    test("HttpAdapter.extractParams / describeModel / openHdf5 / writeHdf5Bytes / complete all throw NotSupportedError", () => {
         const a = new mod.HttpAdapter({ url: "http://example.invalid" });
-        for (const method of ["extractParams", "describeModel", "openHdf5", "writeHdf5Bytes"]) {
+        for (const method of ["extractParams", "describeModel", "openHdf5", "writeHdf5Bytes", "complete"]) {
             try {
                 a[method]();
                 throw new Error("expected NotSupportedError for " + method);

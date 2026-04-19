@@ -154,4 +154,5 @@ export class HttpAdapter {
     describeModel()   { throw new NotSupportedError("describeModel"); }
     openHdf5()        { throw new NotSupportedError("openHdf5"); }
     writeHdf5Bytes()  { throw new NotSupportedError("writeHdf5Bytes"); }
+    complete()        { throw new NotSupportedError("complete"); }
 }

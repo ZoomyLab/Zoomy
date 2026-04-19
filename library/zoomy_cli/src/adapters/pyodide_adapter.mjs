@@ -151,6 +151,14 @@ export class PyodideAdapter {
     }
 
     /**
+     * Jedi-backed autocomplete. (row is 1-indexed for jedi; col is 0-indexed.)
+     * Returns { completions: [{name, type, signature, docstring, module}, ...] }.
+     */
+    async complete(code, row, col) {
+        return await this._postCmd({ cmd: "complete_code", code, row, col });
+    }
+
+    /**
      * Cooperative or forceful cancel. Prefers SIGINT on the shared
      * buffer (keeps the worker alive, no re-boot); falls back to a
      * full terminate + re-create if no buffer is configured.

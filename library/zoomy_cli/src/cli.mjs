@@ -259,6 +259,15 @@ export class ZoomyCLI {
         return await this.pyodide.preloadParams(cards);
     }
 
+    /**
+     * Autocomplete via jedi (Pyodide). Forwards the full source buffer
+     * + cursor to the worker; returns jedi's proposed completions.
+     * (row 1-indexed, col 0-indexed — matches jedi's API.)
+     */
+    async complete(code, row, col) {
+        return await this.pyodide.complete(code, row, col);
+    }
+
     // ------------------------------------------------------------------
     // Simulation submission — HTTP first, Pyodide as local fallback.
     // ------------------------------------------------------------------
