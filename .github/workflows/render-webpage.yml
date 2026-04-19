@@ -152,6 +152,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate zoomy_core type index for editor autocomplete
+        run: |
+          set -e
+          pip install library/zoomy_core library/zoomy_plotting 2>&1 | tail -3 || true
+          python library/zoomy_gui/generate_type_index.py zoomy_core zoomy_plotting \
+            -o library/zoomy_gui/types.json || {
+            echo "::warning ::types.json generation failed — editor autocomplete disabled."
+            echo '{"version":1,"symbols":{},"imports":{}}' > library/zoomy_gui/types.json
+          }
+          echo "types.json size: $(wc -c < library/zoomy_gui/types.json) bytes"
+
       - name: Copy GUI into docs site
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
