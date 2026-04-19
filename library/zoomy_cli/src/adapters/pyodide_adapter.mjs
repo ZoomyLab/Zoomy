@@ -151,6 +151,15 @@ export class PyodideAdapter {
         return await this._postCmd({ cmd: "write_hdf5_bytes", path, bytes });
     }
 
+    /**
+     * Materialise a user-uploaded mesh file (gmsh .msh bytes) into the
+     * Pyodide VFS at `path` so a mesh snippet can `meshio.read(path)`.
+     * Ensures meshio is installed in the worker on first call.
+     */
+    async writeUserMesh(path, bytes) {
+        return await this._postCmd({ cmd: "write_user_mesh", path, bytes });
+    }
+
     async preloadParams(cards) {
         return await this._postCmd({ cmd: "preload_params", cards });
     }
