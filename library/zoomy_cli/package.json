@@ -1,10 +1,23 @@
 {
   "name": "zoomy-cli",
-  "version": "0.1.0",
-  "description": "Zoomy CLI — manage projects, sessions, and simulations",
+  "version": "0.2.0",
+  "description": "Zoomy CLI — isomorphic (browser + Node) client for Zoomy backends",
   "main": "cli.js",
   "bin": {
     "zoomy": "cli.js"
+  },
+  "exports": {
+    ".": {
+      "browser": "./browser.mjs",
+      "node": "./node.mjs",
+      "default": "./browser.mjs"
+    },
+    "./browser": "./browser.mjs",
+    "./node": "./node.mjs",
+    "./src/*": "./src/*"
+  },
+  "scripts": {
+    "test": "node --test tests/test_cli_contract.js tests/test_adapter_symmetry.js"
   },
   "dependencies": {
     "jszip": "^3.10.1"
