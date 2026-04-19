@@ -109,8 +109,8 @@ model.describe()
 # Chained: ``apply(...)``→proxy, ``.simplify()``→proxy.
 
 # %%
-model.z_momentum.apply(hydrostatic_scaling(state)).simplify()
-model.z_momentum.describe()
+model.momentum.z.apply(hydrostatic_scaling(state)).simplify()
+model.momentum.z.describe()
 
 # %% [markdown]
 # ## Step 3 — Integrate z-momentum analytically to get $p(z)$
@@ -120,10 +120,10 @@ model.z_momentum.describe()
 # whole expression (needed for partial / running integrals).
 
 # %%
-model.z_momentum.apply(
+model.momentum.z.apply(
     Integrate(state.z, state.z, state.eta, method="analytical")
 )
-model.z_momentum.describe()
+model.momentum.z.describe()
 
 # %% [markdown]
 # ## Step 4 — Atmospheric-pressure BC at the free surface
@@ -131,15 +131,15 @@ model.z_momentum.describe()
 # $p(\eta) = 0$ (atmospheric gauge).  Plain substitution dict.
 
 # %%
-model.z_momentum.apply({state.p.subs(state.z, state.eta): 0}).simplify()
-model.z_momentum.describe()
+model.momentum.z.apply({state.p.subs(state.z, state.eta): 0}).simplify()
+model.momentum.z.describe()
 
 # %% [markdown]
 # ## Step 5 — Substitute the solved $p$ into x-momentum, then drop z-momentum
 
 # %%
-model.x_momentum.apply(model.z_momentum.solve_for(state.p)).simplify()
-model.z_momentum.remove()
+model.momentum.x.apply(model.momentum.z.solve_for(state.p)).simplify()
+model.momentum.z.remove()
 model.describe()
 
 # %% [markdown]
@@ -166,7 +166,7 @@ model.apply(Integrate(state.z, state.b, state.eta, method="auto"))
 model.continuity.describe()
 
 # %%
-model.x_momentum.describe()
+model.momentum.x.describe()
 
 # %% [markdown]
 # ## Step 8 — Resolve $w$ boundary terms via the kinematic BCs
@@ -184,7 +184,7 @@ kinematic_bcs = {
         sp.Derivative(state.eta, state.t) + u_at_eta * sp.Derivative(state.eta, state.x),
 }
 model.apply(kinematic_bcs).simplify()
-model.x_momentum.describe()
+model.momentum.x.describe()
 
 # %% [markdown]
 # ## Step 9 — Zero tangential stress at surface and bottom
@@ -199,7 +199,7 @@ no_tangential_normal_stress = {
     state.tau["xx"].subs(state.z, state.eta): 0,
 }
 model.apply(stress_free_surface).apply(no_tangential_normal_stress).simplify()
-model.x_momentum.describe()
+model.momentum.x.describe()
 
 # %% [markdown]
 # ## Step 10 — Bottom stress closure (Navier slip)
@@ -213,7 +213,7 @@ friction_closure = {
     state.tau["xz"].subs(state.z, state.b): state.rho * (lamda / tau_c) * u_at_b,
 }
 model.apply(friction_closure).simplify()
-model.x_momentum.describe()
+model.momentum.x.describe()
 
 # %% [markdown]
 # ## What's left on the board
