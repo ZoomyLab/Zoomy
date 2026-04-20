@@ -1,11 +1,14 @@
-"""Pin-down: tag-driven operators equal their hand-coded references.
+"""Pin-down: tag-driven solver-tag API + extraction rules.
 
-Guards the end-to-end symbolic→numeric pipeline:
+Guards the low-level symbolic pipeline:
   * catalog + Expression.solver_tag API
   * per-term survival of solver tags across .apply()
   * collect_solver_tag per-canonical extraction rules
-  * SMEModelTagged / VAMModelTagged parity vs SMEModel / VAMModel
-  * Full HyperbolicSolver run yields bit-identical state for SME.
+
+The end-to-end symbolic → solver path now lives in
+``test_symbolic_pipeline.py`` via ``SystemModel``; the legacy
+``SMEModelTagged`` / ``VAMModelTagged`` classes (removed) are
+replaced by that adapter.
 """
 
 from __future__ import annotations
@@ -187,34 +190,8 @@ def test_collect_strict_policy_raises_on_remainder():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Model parity: SMEModel vs SMEModelTagged
-# ──────────────────────────────────────────────────────────────────────────────
-
-def _matrix_same(a, b):
-    A, B = sp.Matrix(a), sp.Matrix(b)
-    if A.shape != B.shape:
-        return False, f"shape {A.shape} vs {B.shape}"
-    diff = sp.simplify(A - B)
-    return diff == sp.zeros(*A.shape), diff
-
-
-def _nc_same(ref, tag):
-    shape = ref.shape
-    for i in range(shape[0]):
-        for j in range(shape[1]):
-            for k in range(shape[2]):
-                d = sp.simplify(ref[i, j, k] - tag[i, j, k])
-                if d != 0:
-                    return False, f"nc[{i},{j},{k}] diff={d}"
-    return True, None
-
-
-# SMEModelTagged / VAMModelTagged parity tests were removed alongside the
-# implementations.  Re-add them once the tag-driven classes derive their
-# tagged equations from the symbolic INS chain + project_onto_basis
-# (not from the hand-coded reference operators).
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Helpers used above are kept for when the new parity tests land.
+# End-of-file.
+#
+# Model parity (hand-coded SME vs. tag-driven) now lives in
+# ``test_symbolic_pipeline.py`` against the ``SystemModel`` adapter.
 # ──────────────────────────────────────────────────────────────────────────────
