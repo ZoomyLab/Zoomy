@@ -66,7 +66,7 @@ import sympy as sp
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Inviscid, SimplifyIntegrals,
     InterfaceKBC, Basis, Multiply, ExpandProductRule, ZetaTransform,
-    EvaluateIntegrals, ContinuityClosure,
+    EvaluateIntegrals,
 )
 from zoomy_core.model.models.basisfunctions import LayeredBasis, Monomials, Legendre_shifted
 from zoomy_core.model.models.derived_system import combined_history_mermaid
@@ -335,18 +335,30 @@ def close_sme_layer(branch, basis, lower, upper, layer_idx, m_low=None, m_up=Non
         ExpandProductRule([state.t, state.x, state.z]),
         name="expand product rule",
     )
+    # Snapshot the pointwise continuity before depth-integration; the
+    # Step-14 w-closure runs the running integral ``∫_lower^z`` on it.
+    pointwise_continuity = branch.continuity.copy()
     branch.apply(Integrate(state.z, lower, upper, method="auto"),
                  name=f"∫ dz layer {layer_idx}")
     branch.apply(InterfaceKBC(state, lower, mass_flux=m_low)).simplify()
     branch.apply(InterfaceKBC(state, upper, mass_flux=m_up)).simplify()
-    # Close bulk w via continuity integrated from the layer's lower
-    # interface.  For an internal interface, include the mass-flux
-    # contribution supplied by ``m_low``.
-    branch.apply(ContinuityClosure(state, lower=lower, mass_flux=m_low),
-                 name=f"continuity closure (layer {layer_idx})")
+    # Close bulk w via the pointwise continuity running-integral pipeline:
+    #   w(t, x, z) = w|_lower − ∫_lower^z ∂_x u dz'.
+    # The algebraic identity is decoupled from the interface KBC — the
+    # freshly introduced ``w|_lower`` is closed immediately after by
+    # re-applying ``InterfaceKBC`` (carrying the layer's mass flux if any).
+    w_eq = pointwise_continuity.apply(
+        Integrate(state.z, lower, state.z, method="auto"),
+    )
+    w_closure = w_eq.solve_for(state.w)
+    branch.apply(w_closure,
+                 name=f"w-closure (layer {layer_idx})",
+                 description="w(t,x,z) = w|_lower - ∫_lower^z ∂_x u dz'").simplify()
+    branch.apply(InterfaceKBC(state, lower, mass_flux=m_low),
+                 name=f"close w|_lower (post-closure, layer {layer_idx})").simplify()
     branch.apply(ZetaTransform(state, lower=lower, upper=upper))
     # Close u twice: ζ-transformed form (outer integrals) and pointwise
-    # form (inner running integral from ContinuityClosure).
+    # form (inner running integral from the w-closure).
     branch.apply(basis.layer_expand(state.u, layer_idx, zeta_transformed=True))
     branch.apply(basis.layer_expand(state.u, layer_idx, zeta_transformed=False))
     branch.apply(EvaluateIntegrals(state)).simplify()

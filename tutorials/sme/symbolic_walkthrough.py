@@ -88,7 +88,7 @@ import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
     Basis, Multiply, ZetaTransform, EvaluateIntegrals,
-    ExpandProductRule, ContinuityClosure,
+    ExpandProductRule,
 )
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
@@ -223,6 +223,19 @@ model.momentum.x.apply(ExpandProductRule([state.t, state.x, state.z]),
                        description="φ·∂_v(f) → ∂_v(φ·f) − ∂_v(φ)·f")
 
 # %% [markdown]
+# ## Step 9b — Snapshot the pointwise continuity
+#
+# Before we depth-integrate continuity (which reduces it to the scalar
+# $\partial_t h + \partial_x(\alpha_0 h) = 0$), grab a detached copy of
+# the pointwise form $\partial_x u + \partial_z w = 0$.  In Step 14 we
+# run the running integral $\int_b^z$ on it and solve for $w$ to obtain
+# the algebraic closure $w(z) = w|_b - \int_b^z \partial_x u\,dz'$ —
+# without pre-baking the bottom KBC.
+
+# %%
+pointwise_continuity = model.continuity.copy()
+
+# %% [markdown]
 # ## Step 10 — Depth-integrate from $b$ to $\eta$
 #
 # One ``Integrate`` call at system level — per-term auto dispatch picks
@@ -281,22 +294,43 @@ model.apply(friction_closure,
             description="tau_xz|_b = rho * (lambda / tau_c) * u|_b").simplify()
 
 # %% [markdown]
-# ## Step 14 — Close the vertical velocity via continuity
+# ## Step 14 — Close the vertical velocity via continuity (pipeline)
 #
 # At this point the shear moment (``momentum.x.test_1``) still carries
 # a bulk ``w(t, x, z)`` inside an ``Integral`` from the ``∂_z(u w)``
 # non-conservative piece that ``ExpandProductRule`` left behind.
-# ``ContinuityClosure`` folds ``w`` via ``∂_x u + ∂_z w = 0`` plus the
-# bottom KBC::
 #
-#     w(t, x, z) = ∂_t b + u|_b · ∂_x b − ∫_b^z ∂_x u(t, x, z') dz'
+# The closure is built from the pointwise continuity snapshot we took
+# at Step 9b — a small, readable pipeline over the existing primitives:
 #
-# The inner running integral will be closed automatically in Step 15
+# 1. ``.apply(Integrate(z, b, z, "auto"))`` — running integral of
+#    ``∂_x u + ∂_z w`` from the bottom to the current height.  The
+#    ``∂_z w`` piece collapses by the fundamental theorem
+#    (``w(t,x,z) − w(t,x,b)``); the ``∂_x u`` piece stays as a running
+#    integral ``Integral(∂_x u, (z, b, z))``.
+# 2. ``.solve_for(state.w)`` — isolate ``w(t,x,z)``, returning an
+#    Expression whose ``_as_relation`` maps
+#    ``w(t,x,z) → w|_b − ∫_b^z ∂_x u dz'``.
+# 3. ``model.apply(w_closure)`` — replace bulk ``w(t,x,z)`` in every
+#    equation with that relation.  ``w|_b`` is kept **symbolic** here,
+#    decoupling the algebraic identity from the boundary condition.
+# 4. Re-apply ``kinematic_bcs`` to close the newly introduced ``w|_b``.
+#
+# The inner running integral ``∫_b^z ∂_x u dz'`` is closed in Step 15
 # once ``basis.expand`` substitutes ``u`` both pointwise and in its
 # ζ-transformed form.
 
 # %%
-model.apply(ContinuityClosure(state))
+w_eq = pointwise_continuity.apply(
+    Integrate(state.z, state.b, state.z, method="auto"),
+)
+w_closure = w_eq.solve_for(state.w)
+model.apply(w_closure,
+            name="w-closure from continuity",
+            description="w(t,x,z) = w|_b - ∫_b^z ∂_x u dz'").simplify()
+model.apply(kinematic_bcs,
+            name="close w|_b (post w-closure)",
+            description="close w|_b introduced by the w-closure").simplify()
 
 # %% [markdown]
 # ## Step 15 — Coordinate transform $z = \zeta\,h + b$
