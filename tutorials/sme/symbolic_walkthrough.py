@@ -88,7 +88,7 @@ import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
     Basis, Multiply, ZetaTransform, EvaluateIntegrals,
-    ExpandProductRule,
+    ExpandProductRule, ContinuityClosure,
 )
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
@@ -281,7 +281,25 @@ model.apply(friction_closure,
             description="tau_xz|_b = rho * (lambda / tau_c) * u|_b").simplify()
 
 # %% [markdown]
-# ## Step 14 — Coordinate transform $z = \zeta\,h + b$
+# ## Step 14 — Close the vertical velocity via continuity
+#
+# At this point the shear moment (``momentum.x.test_1``) still carries
+# a bulk ``w(t, x, z)`` inside an ``Integral`` from the ``∂_z(u w)``
+# non-conservative piece that ``ExpandProductRule`` left behind.
+# ``ContinuityClosure`` folds ``w`` via ``∂_x u + ∂_z w = 0`` plus the
+# bottom KBC::
+#
+#     w(t, x, z) = ∂_t b + u|_b · ∂_x b − ∫_b^z ∂_x u(t, x, z') dz'
+#
+# The inner running integral will be closed automatically in Step 15
+# once ``basis.expand`` substitutes ``u`` both pointwise and in its
+# ζ-transformed form.
+
+# %%
+model.apply(ContinuityClosure(state))
+
+# %% [markdown]
+# ## Step 15 — Coordinate transform $z = \zeta\,h + b$
 #
 # Rewrites every $\int_b^{\eta} f(z)\,dz$ into
 # $h\cdot\int_0^1 f(\zeta h + b)\,d\zeta$.
@@ -290,13 +308,17 @@ model.apply(friction_closure,
 model.apply(ZetaTransform(state))
 
 # %% [markdown]
-# ## Step 15 — Substitute the basis expansion
+# ## Step 16 — Substitute the basis expansion
+#
+# ``basis.expand`` now also supplies the pointwise substitution
+# ``u(t, x, z) → Σ α_k · φ_k((z−b)/h)``, which closes the inner
+# running integral produced by :class:`ContinuityClosure`.
 
 # %%
 model.apply(basis.expand(state.u))
 
 # %% [markdown]
-# ## Step 16 — Evaluate the $\zeta$-integrals
+# ## Step 17 — Evaluate the $\zeta$-integrals
 #
 # Orthogonality kicks in because the test function $\varphi_l$ is now
 # inside the ζ-integrand alongside ``u = Σ α_k φ_k(ζ)``.

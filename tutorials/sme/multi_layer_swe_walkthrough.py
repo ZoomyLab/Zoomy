@@ -66,7 +66,7 @@ import sympy as sp
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Inviscid, SimplifyIntegrals,
     InterfaceKBC, Basis, Multiply, ExpandProductRule, ZetaTransform,
-    EvaluateIntegrals,
+    EvaluateIntegrals, ContinuityClosure,
 )
 from zoomy_core.model.models.basisfunctions import LayeredBasis, Monomials, Legendre_shifted
 from zoomy_core.model.models.derived_system import combined_history_mermaid
@@ -339,8 +339,16 @@ def close_sme_layer(branch, basis, lower, upper, layer_idx, m_low=None, m_up=Non
                  name=f"∫ dz layer {layer_idx}")
     branch.apply(InterfaceKBC(state, lower, mass_flux=m_low)).simplify()
     branch.apply(InterfaceKBC(state, upper, mass_flux=m_up)).simplify()
+    # Close bulk w via continuity integrated from the layer's lower
+    # interface.  For an internal interface, include the mass-flux
+    # contribution supplied by ``m_low``.
+    branch.apply(ContinuityClosure(state, lower=lower, mass_flux=m_low),
+                 name=f"continuity closure (layer {layer_idx})")
     branch.apply(ZetaTransform(state, lower=lower, upper=upper))
+    # Close u twice: ζ-transformed form (outer integrals) and pointwise
+    # form (inner running integral from ContinuityClosure).
     branch.apply(basis.layer_expand(state.u, layer_idx, zeta_transformed=True))
+    branch.apply(basis.layer_expand(state.u, layer_idx, zeta_transformed=False))
     branch.apply(EvaluateIntegrals(state)).simplify()
 
 
