@@ -87,7 +87,10 @@ import sympy as sp
 import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
+    Basis, Multiply, ZetaTransform, EvaluateIntegrals,
+    ExpandProductRule,
 )
+from zoomy_core.model.models.basisfunctions import Legendre_shifted
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
 
 print("worktree root:", _here)
@@ -109,7 +112,9 @@ model.describe()
 # Chained: ``apply(...)``→proxy, ``.simplify()``→proxy.
 
 # %%
-model.momentum.z.apply(hydrostatic_scaling(state)).simplify()
+model.momentum.z.apply(hydrostatic_scaling(state),
+                       name="hydrostatic scaling",
+                       description="w = 0, tau_zz = tau_xz = tau_zx = 0 in z-momentum").simplify()
 model.momentum.z.describe()
 
 # %% [markdown]
@@ -131,7 +136,9 @@ model.momentum.z.describe()
 # $p(\eta) = 0$ (atmospheric gauge).  Plain substitution dict.
 
 # %%
-model.momentum.z.apply({state.p.subs(state.z, state.eta): 0}).simplify()
+model.momentum.z.apply({state.p.subs(state.z, state.eta): 0},
+                       name="atmospheric pressure",
+                       description="p(t, x, eta) = 0").simplify()
 model.momentum.z.describe()
 
 # %% [markdown]
@@ -156,23 +163,80 @@ model.apply(Newtonian(state)).simplify()
 model.describe()
 
 # %% [markdown]
-# ## Step 7 — Depth-integrate continuity and x-momentum from $b$ to $\eta$
+# ## Step 7 — Define the vertical basis and coefficients
+#
+# Pick a Legendre basis of ``LEVEL+1`` test functions.  We need the basis
+# now, **before** depth-integration, so the Galerkin test function
+# participates in the Leibniz rule — this is what produces the σ-SME
+# coupling terms (the ``W_σ·∂_σ u`` equivalents).
+#
+# * ``basis.phi``     — test functions as sympy expressions in $\zeta$
+#   (used after ``ZetaTransform``, inside integrands).
+# * ``basis.phi_of_z``— same test functions with $\zeta = (z-b)/h$ so
+#   they're explicit functions of ``z`` through ``b(t,x)``, ``h(t,x)``.
+#   Used now to multiply the pointwise z-equation so the z-dependence
+#   survives into the Leibniz rule.
+# * ``basis.alpha``   — coefficient **Functions** $\alpha_k(t, x)$.
+
+# %%
+LEVEL = 1
+basis = Basis(state, Legendre_shifted, level=LEVEL)
+print("phi(zeta): ", [getattr(basis.phi,      f"phi_{k}") for k in range(LEVEL + 1)])
+print("phi(z):    ", [getattr(basis.phi_of_z, f"phi_{k}") for k in range(LEVEL + 1)])
+print("alpha:     ", [getattr(basis.alpha,    f"alpha_{k}") for k in range(LEVEL + 1)])
+
+# %% [markdown]
+# ## Step 8 — Galerkin test: $u$-momentum $\times \varphi_l((z-b)/h)$
+#
+# ``Multiply(basis.phi_of_z, outer=True)`` turns the single
+# ``momentum.x`` leaf into a ``Zstruct(test_0, …, test_LEVEL)`` where
+# each ``test_l`` is ``φ_l((z-b)/h) · (pointwise equation)``.  The test
+# function is now a function of ``z`` through ``b``, ``h`` — it will
+# interact with the Leibniz rule in Step 10.
+
+# %%
+model.momentum.x.apply(Multiply(basis.phi_of_z, outer=True))
+model.momentum.describe()
+
+# %% [markdown]
+# ## Step 9 — Expand the product rule so Integrate can Leibniz
+#
+# Terms like $\varphi_l\bigl(\tfrac{z-b}{h}\bigr) \cdot \partial_x(u^2)$
+# are *not* in conservative form: the coefficient depends on ``x``
+# through ``b``, ``h``, so the default ``_extract_derivative`` check in
+# ``Integrate(method='auto')`` refuses them (this is the same safety
+# that protects us from double-counting chain rules).  ``ExpandProductRule``
+# rewrites each such term as
+#
+# $$
+#   \varphi_l \cdot \partial_v f = \partial_v(\varphi_l \cdot f) - \partial_v(\varphi_l) \cdot f
+# $$
+#
+# The first piece is conservative (Leibniz applies); the second gives
+# the non-conservative coupling — the ``∂_t b + ζ·∂_t h`` and
+# ``∂_x b + ζ·∂_x h`` combinations that play the role of the
+# σ-SME ``W_σ``.
+
+# %%
+model.momentum.x.apply(ExpandProductRule([state.t, state.x, state.z]),
+                       name="expand product rule",
+                       description="φ·∂_v(f) → ∂_v(φ·f) − ∂_v(φ)·f")
+
+# %% [markdown]
+# ## Step 10 — Depth-integrate from $b$ to $\eta$
 #
 # One ``Integrate`` call at system level — per-term auto dispatch picks
-# Leibniz for $\partial_x$ and the fundamental theorem for $\partial_z$.
+# Leibniz for $\partial_x / \partial_t$ and the fundamental theorem for
+# $\partial_z$.  Continuity integrates as a scalar (no test function);
+# each ``momentum.x.test_l`` integrates with ``φ_l((z-b)/h)`` as its
+# test weight.
 
 # %%
 model.apply(Integrate(state.z, state.b, state.eta, method="auto"))
 model.continuity.describe()
 
-# %%
-model.momentum.x.describe()
-
 # %% [markdown]
-# ## Step 8 — Resolve $w$ boundary terms via the kinematic BCs
-#
-# Two substitutions for the $w$ evaluations at bottom and surface.  System-level
-# ``apply(dict)`` applies the dict to every equation and chains into ``simplify``.
+# ## Step 11 — Resolve $w$ boundary terms via the kinematic BCs
 
 # %%
 u_at_b = state.u.subs(state.z, state.b)
@@ -183,14 +247,12 @@ kinematic_bcs = {
     state.w.subs(state.z, state.eta):
         sp.Derivative(state.eta, state.t) + u_at_eta * sp.Derivative(state.eta, state.x),
 }
-model.apply(kinematic_bcs).simplify()
-model.momentum.x.describe()
+model.apply(kinematic_bcs,
+            name="kinematic BCs",
+            description="w|_b, w|_eta via surface / bottom kinematic conditions").simplify()
 
 # %% [markdown]
-# ## Step 9 — Zero tangential stress at surface and bottom
-#
-# Stress-free surface ($\tau_{xz}|_\eta = 0$) and zero tangential normal
-# stress at both boundaries ($\tau_{xx}|_b = \tau_{xx}|_\eta = 0$).
+# ## Step 12 — Zero tangential stress at surface and bottom
 
 # %%
 stress_free_surface = {state.tau["xz"].subs(state.z, state.eta): 0}
@@ -198,13 +260,15 @@ no_tangential_normal_stress = {
     state.tau["xx"].subs(state.z, state.b): 0,
     state.tau["xx"].subs(state.z, state.eta): 0,
 }
-model.apply(stress_free_surface).apply(no_tangential_normal_stress).simplify()
-model.momentum.x.describe()
+model.apply(stress_free_surface,
+            name="stress-free surface",
+            description="tau_xz|_eta = 0").apply(
+    no_tangential_normal_stress,
+    name="no tangential normal stress",
+    description="tau_xx|_b = tau_xx|_eta = 0").simplify()
 
 # %% [markdown]
-# ## Step 10 — Bottom stress closure (Navier slip)
-#
-# $\tau_{xz}|_b = \rho\,(\lambda/\tau_c)\,u|_b$.  Dict + chain.
+# ## Step 13 — Bottom stress closure (Navier slip)
 
 # %%
 lamda = sp.Symbol("lamda", positive=True)
@@ -212,29 +276,121 @@ tau_c = sp.Symbol("tau_c", positive=True)
 friction_closure = {
     state.tau["xz"].subs(state.z, state.b): state.rho * (lamda / tau_c) * u_at_b,
 }
-model.apply(friction_closure).simplify()
-model.momentum.x.describe()
+model.apply(friction_closure,
+            name="Navier-slip friction",
+            description="tau_xz|_b = rho * (lambda / tau_c) * u|_b").simplify()
 
 # %% [markdown]
-# ## What's left on the board
+# ## Step 14 — Coordinate transform $z = \zeta\,h + b$
 #
-# At this point every equation is:
+# Rewrites every $\int_b^{\eta} f(z)\,dz$ into
+# $h\cdot\int_0^1 f(\zeta h + b)\,d\zeta$.
+
+# %%
+model.apply(ZetaTransform(state))
+
+# %% [markdown]
+# ## Step 15 — Substitute the basis expansion
+
+# %%
+model.apply(basis.expand(state.u))
+
+# %% [markdown]
+# ## Step 16 — Evaluate the $\zeta$-integrals
 #
-# * Depth-integrated over $[b,\eta]$.
-# * Closed for $w$, the tangential normal stress, and bottom shear.
-# * In terms of the velocity field $u(t,x,z)$, its surface/bottom evaluations
-#   $u|_b$, $u|_\eta$, and volume integrals $\int_b^\eta f\,dz$.
+# Orthogonality kicks in because the test function $\varphi_l$ is now
+# inside the ζ-integrand alongside ``u = Σ α_k φ_k(ζ)``.
+# Cross-products ``∫ φ_l · φ_k dζ`` collapse to ``δ_{lk} / (2l+1)``
+# (Legendre-shifted normalization), revealing the moment equations.
+
+# %%
+model.apply(EvaluateIntegrals(state)).simplify()
+model.describe()
+
+# %% [markdown]
+# ## Where it lands and what's still open
 #
-# The remaining step is projection against a vertical basis:
+# **Continuity — fully closed.**
+# $$
+#   \partial_t h + \partial_x(\alpha_0\,h) = 0
+# $$
+# The $\alpha_1$ volume integral vanishes by $\varphi_0, \varphi_1$
+# orthogonality, so the depth-average moment is exactly the SWE
+# continuity.
 #
-# * **SWE (level=0)** — constant vertical profile.  Substitute
-#   ``u(t,x,z) → u_mean(t,x)`` (both in the volume integrals and in the
-#   surface/bottom evaluations) and evaluate the resulting integrals.
-# * **SME (level≥1)** — expand ``u(t,x,z) = Σ α_k(t,x) φ_k(ζ)`` and Galerkin-
-#   test against each ``φ_l``.  Today this is ``Expression.project_onto_basis``;
-#   it rewrites ``Integral`` nodes and we complement it with explicit
-#   ``{u|_b: Σ α_k φ_k(0), u|_η: Σ α_k φ_k(1)}`` substitutions for the
-#   boundary evaluations.
+# **Momentum (test_0, test_1) — partially closed.**
+# The clean SME moment equations are visible:
+# temporal $\partial_t(h\alpha_k)$, convection $\alpha_i\alpha_j$-quadratic
+# forms, hydrostatic pressure, and boundary viscous stress
+# $\partial_x\alpha_k \cdot \partial_x\{b, h\}$ contributions.
 #
-# Both projections follow the same mutation pattern used above:
-# ``model.apply(...)`` + chained ``.simplify()``.
+# Two term classes remain unresolved:
+#
+# 1. **Volume $\int_0^1 \partial^2 u/\partial z^2 |_{z=\zeta h+b}\,d\zeta$**
+#    — produced because ``Integrate(method="auto")`` at Step 7 couldn't
+#    apply the fundamental theorem to second-order z-derivatives, so
+#    the ``-\nu\,\partial^2 u/\partial z^2`` term stayed inside an
+#    ``Integral``.  Closure options: integrate by parts inside the
+#    integral (IBP in $z$) to reduce to ``\partial u/\partial z`` at the
+#    boundaries, or express ``\partial u/\partial z`` directly in terms
+#    of the basis ``\sum \alpha_k\,\varphi_k'(\zeta)/h``.
+#
+# 2. **Cross term $\int \partial^2 w/\partial x\partial z\,d\zeta$** —
+#    arises from the Newtonian ``\tau_{xz}`` after z-integration.  Same
+#    story: needs a boundary closure or an additional depth-integration
+#    of the continuity equation to substitute $w(t,x,z)$.
+#
+# Both are *symbolic* — no numerical dispatch needed to resolve them.
+# The cleanest follow-up is an ``IntegrateByParts`` operation that
+# applies IBP to a specified ``Integral`` node, producing the
+# ``\partial u/\partial z`` boundary traces which then close under the
+# basis.
+#
+# At this point the tree is::
+#
+#     model
+#     ├── continuity            (scalar — fully closed)
+#     └── momentum
+#         └── x
+#             ├── test_0        (closed except 2 Integral classes above)
+#             └── test_1        (same)
+#
+# so ``model.leaves()``, ``eq.tags``, ``eq.untagged`` and the usual
+# ``.describe()`` all work; you can inspect and edit any leaf in place.
+
+# %% [markdown]
+# ## Derivation history — compact flowchart
+#
+# Every ``apply`` records a ``(name, description, target)`` entry in
+# ``model.history``.  The default ``history_mermaid()`` renders a
+# one-line-per-node left-to-right flowchart; hovering a node shows the
+# ``target`` and ``description`` as a tooltip.
+
+# %%
+model.history_mermaid()
+
+# %% [markdown]
+# ## Derivation history — full table
+#
+# For the per-step detail (target / description / name) that the
+# compact mermaid drops into tooltips, the companion table method
+# lays it out in markdown.
+
+# %%
+model.history_table()
+
+# %% [markdown]
+# ## Optional — verbose / grouped views
+#
+# * ``verbose=True`` — legacy three-line node layout (name / target /
+#   description).  Useful for offline diagrams when hover isn't
+#   available.
+# * ``group_by="target"`` — wraps consecutive same-target steps in
+#   ``subgraph`` blocks so it's obvious which tree position each
+#   phase acted on.
+# * ``direction="TD"`` — top-to-bottom (default is ``LR``).
+#
+# Pick whichever fits the screen real estate.
+
+# %%
+model.history_mermaid(group_by="target", direction="TD")
