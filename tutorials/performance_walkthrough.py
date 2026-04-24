@@ -104,10 +104,95 @@ def reset_clock():
 
 
 # %% [markdown]
+# # Part 0 — Extended general derivation
+#
+# Before branching into specific models, take two shared structural steps
+# that are usually buried inside each per-model pipeline:
+#
+# 1. **Eliminate `w` from `x`-momentum** via the w-closure.  Integrate
+#    pointwise continuity `∂_x u + ∂_z w = 0` from `b` to `z` to get
+#    `w(z) = w|_b − ∫_b^z ∂_x u dz'`; substitute that into x-momentum so
+#    the bulk `w` disappears.  The pointwise continuity itself is kept as a
+#    separate `Expression` (in case later closures need the full constraint).
+# 2. **Derive the h-evolution (mass balance) equation** from continuity.
+#    Depth-integrate continuity from `b` to `η` via Leibniz / FTC, apply
+#    the kinematic BCs at both interfaces — the `u·∂_x(…)` boundary terms
+#    telescope against the KBC-produced surface contributions and what's
+#    left is the clean `∂_t h + ∂_x ∫_b^η u dz = 0`.  This equation then
+#    *replaces* the in-place `continuity` leaf on the system; the
+#    pointwise form is held aside as ``pointwise_continuity``.
+#
+# Subsequent per-model parts below each restart with a fresh `FullINS` for
+# comparability — they don't consume this shared state.  But the timing
+# below is what a model-agnostic pre-processor would cost once, and is
+# directly subtractable from each per-model Part's cost.
+
+# %%
+set_part("0. Extended general prefix")
+reset_clock()
+state = StateSpace(dimension=2)
+t, x, z = state.t, state.x, state.z
+
+with timed("FullINS + hydrostatic + p-sub + drop z-momentum + Newtonian"):
+    model = FullINS(state)
+    model.momentum.z.apply(hydrostatic_scaling(state)).simplify()
+    model.momentum.z.apply(Integrate(z, z, state.eta, method="analytical"))
+    model.momentum.z.apply({state.p.subs(z, state.eta): 0}).simplify()
+    model.momentum.x.apply(model.momentum.z.solve_for(state.p)).simplify()
+    model.momentum.z.remove()
+    model.apply(Newtonian(state)).simplify()
+
+# %% [markdown]
+# ### Eliminate `w` via the w-closure (shared)
+
+# %%
+with timed("snapshot pointwise continuity"):
+    pointwise_continuity = model.continuity.copy()
+with timed("∫_{b}^{z} on continuity + solve_for(w)"):
+    w_eq = pointwise_continuity.apply(Integrate(z, state.b, z, method="auto"))
+    w_closure = w_eq.solve_for(state.w)
+with timed("apply(w_closure) on x-momentum + simplify"):
+    model.momentum.x.apply(w_closure).simplify()
+
+# %% [markdown]
+# ### Derive h-evolution from mass balance (shared)
+
+# %%
+with timed("∫_{b}^{η} on continuity"):
+    model.continuity.apply(Integrate(z, state.b, state.eta, method="auto"))
+
+u_at_b = state.u.subs(z, state.b)
+u_at_eta = state.u.subs(z, state.eta)
+kinematic_bcs = {
+    state.w.subs(z, state.b):
+        sp.Derivative(state.b, t) + u_at_b * sp.Derivative(state.b, x),
+    state.w.subs(z, state.eta):
+        sp.Derivative(state.eta, t) + u_at_eta * sp.Derivative(state.eta, x),
+}
+with timed("apply kinematic BCs on continuity → h-evolution"):
+    model.continuity.apply(kinematic_bcs).simplify()
+with timed("apply kinematic BCs on x-momentum → close w|_b"):
+    model.momentum.x.apply(kinematic_bcs).simplify()
+
+print()
+print("=== Part 0 results ===")
+print("pointwise continuity (kept aside):")
+print("   ", pointwise_continuity.expr)
+print()
+print("h-evolution (now on the system's continuity leaf):")
+print("   ", model.continuity._node.expr)
+print()
+print("x-momentum (w eliminated):")
+print("   ", model.momentum.x._node.expr)
+
+
+# %% [markdown]
 # # Part 1 — Single-layer SWE
 #
 # The classical shallow-water equations via `LayeredBasis` with one layer
 # `[b, η]`.  Constant vertical profile (level 0), inviscid closure.
+#
+# Restarts from a fresh `FullINS` for comparability with the other parts.
 
 # %%
 set_part("1. SWE single-layer")
