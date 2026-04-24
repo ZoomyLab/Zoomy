@@ -88,7 +88,7 @@ import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Newtonian,
     Basis, Multiply, ZetaTransform, EvaluateIntegrals,
-    ExpandProductRule,
+    ProductRule,
 )
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
@@ -205,8 +205,8 @@ model.momentum.describe()
 # are *not* in conservative form: the coefficient depends on ``x``
 # through ``b``, ``h``, so the default ``_extract_derivative`` check in
 # ``Integrate(method='auto')`` refuses them (this is the same safety
-# that protects us from double-counting chain rules).  ``ExpandProductRule``
-# rewrites each such term as
+# that protects us from double-counting chain rules).  ``ProductRule()``
+# (default inverse direction) rewrites each such term as
 #
 # $$
 #   \varphi_l \cdot \partial_v f = \partial_v(\varphi_l \cdot f) - \partial_v(\varphi_l) \cdot f
@@ -218,8 +218,8 @@ model.momentum.describe()
 # σ-SME ``W_σ``.
 
 # %%
-model.momentum.x.apply(ExpandProductRule([state.t, state.x, state.z]),
-                       name="expand product rule",
+model.momentum.x.apply(ProductRule(),
+                       name="product rule (inverse)",
                        description="φ·∂_v(f) → ∂_v(φ·f) − ∂_v(φ)·f")
 
 # %% [markdown]
@@ -298,7 +298,7 @@ model.apply(friction_closure,
 #
 # At this point the shear moment (``momentum.x.test_1``) still carries
 # a bulk ``w(t, x, z)`` inside an ``Integral`` from the ``∂_z(u w)``
-# non-conservative piece that ``ExpandProductRule`` left behind.
+# non-conservative piece that ``ProductRule`` left behind.
 #
 # The closure is built from the pointwise continuity snapshot we took
 # at Step 9b — a small, readable pipeline over the existing primitives:

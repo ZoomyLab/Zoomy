@@ -100,13 +100,13 @@ import zoomy_core
 from zoomy_core.model.models.ins_generator import (
     Basis,
     EvaluateIntegrals,
-    ExpandProductRule,
     FullINS,
     Integrate,
     InterfaceKBC,
     Inviscid,
     Multiply,
     Newtonian,
+    ProductRule,
     Recombine,
     SimplifyIntegrals,
     StateSpace,
@@ -510,21 +510,26 @@ sme.momentum.x.apply(Multiply(basis_sme.phi_of_z, outer=True),
 
 
 # %% [markdown]
-# ### Step 3.2 — `ExpandProductRule` to restore conservative form
+# ### Step 3.2 — `ProductRule()` to restore conservative form
 #
 # **Difficulty caught here.**  After the Galerkin multiply, terms
 # look like `φ · ∂_x(u²)`.  These are **not** in conservative form
 # — the coefficient `φ` depends on `x` through `b, h`.  When
 # `Integrate(method="auto")` hits them it refuses to apply Leibniz
 # (the extractor wants a single outer Derivative whose inner is
-# state-side-homogeneous).  `ExpandProductRule` rewrites
-# `φ · ∂_v f = ∂_v(φ · f) - ∂_v(φ) · f`: the first piece is now
-# conservative and Leibniz applies; the second piece is the NC
-# coupling that will be tagged later.
+# state-side-homogeneous).  `ProductRule()` (default inverse
+# direction) rewrites each such term
+# `φ · ∂_v f = ∂_v(φ · f) - ∂_v(φ).doit() · f`: the first piece is
+# now conservative and Leibniz applies; the second piece is the NC
+# coupling that will be tagged later.  The residual form is an exact
+# identity — if this transformation had been applied to one of a
+# matching product-rule-expanded sibling pair, the residual would
+# cancel under ``.simplify()``; here there is no sibling, so both
+# pieces remain and the NC piece is the real coupling.
 
 # %%
-sme.momentum.x.apply(ExpandProductRule([t, x, state.z]),
-                     name="expand product rule",
+sme.momentum.x.apply(ProductRule(),
+                     name="product rule (inverse)",
                      description="phi·∂_v(f) -> ∂_v(phi·f) - ∂_v(phi)·f")
 
 
@@ -974,8 +979,8 @@ model_v.momentum.x.apply(Multiply(basis_u.phi_of_z, outer=True),
                          name="Galerkin test — x-momentum")
 model_v.momentum.z.apply(Multiply(basis_u.phi_of_z, outer=True),
                          name="Galerkin test — z-momentum")
-model_v.momentum.x.apply(ExpandProductRule([t_v, x_v, z_v]))
-model_v.momentum.z.apply(ExpandProductRule([t_v, x_v, z_v]))
+model_v.momentum.x.apply(ProductRule())
+model_v.momentum.z.apply(ProductRule())
 
 
 # %% [markdown]
@@ -1112,7 +1117,7 @@ for path, eq in model_v.leaves():
 #   emitter with four keys per field.
 # * `Multiply(basis.phi_of_z, outer=True)` — rank-changing
 #   Galerkin projection.
-# * `ExpandProductRule` — restores conservative form after the
+# * `ProductRule()` (default inverse) — restores conservative form after the
 #   projection multiplies by a z-dependent `φ`.
 # * `ZetaTransform(state)` — rewrites depth integrals as ζ-integrals.
 # * `EvaluateIntegrals(state)` — the fixpoint-looped integrator.

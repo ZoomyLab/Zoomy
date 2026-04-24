@@ -63,7 +63,7 @@ if str(_pkg_dir) not in sys.path:
 import sympy as sp
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Inviscid,
-    InterfaceKBC, Basis, Multiply, ExpandProductRule, ZetaTransform,
+    InterfaceKBC, Basis, Multiply, ProductRule, ZetaTransform,
     EvaluateIntegrals,
 )
 from zoomy_core.model.models.basisfunctions import Legendre_shifted
@@ -121,8 +121,8 @@ model.momentum.x.apply(Multiply(basis_u.phi_of_z, outer=True),
 model.momentum.z.apply(Multiply(basis_u.phi_of_z, outer=True),
                        name="Galerkin test — z-momentum",
                        description="multiply z-momentum by phi_l((z-b)/h)")
-model.momentum.x.apply(ExpandProductRule([t, x, z]))
-model.momentum.z.apply(ExpandProductRule([t, x, z]))
+model.momentum.x.apply(ProductRule())
+model.momentum.z.apply(ProductRule())
 
 # %% [markdown]
 # ## Step 4 — Depth-integrate, KBCs, atmospheric pressure BC
@@ -239,7 +239,7 @@ for path, eq in model.leaves():
 #
 # * Hard-coding: there's no VAM-specific operator anywhere in this
 #   notebook.  The derivation reads as a straight sequence of the
-#   same `Integrate`, `InterfaceKBC`, `Multiply`, `ExpandProductRule`,
+#   same `Integrate`, `InterfaceKBC`, `Multiply`, `ProductRule`,
 #   `ZetaTransform`, `basis.expand`, `EvaluateIntegrals` steps used in
 #   the SWE / SME walkthroughs.  Swap `Inviscid` for `Newtonian`,
 #   change the basis, swap ``phi_of_z`` for a layered variant —
