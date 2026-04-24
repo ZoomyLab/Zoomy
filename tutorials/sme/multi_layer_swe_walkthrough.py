@@ -65,7 +65,7 @@ if str(_pkg_dir) not in sys.path:
 import sympy as sp
 from zoomy_core.model.models.ins_generator import (
     StateSpace, FullINS, Integrate, Inviscid, SimplifyIntegrals,
-    InterfaceKBC, Basis, Multiply, ExpandProductRule, ZetaTransform,
+    InterfaceKBC, Basis, Multiply, ProductRule, ZetaTransform,
     EvaluateIntegrals,
 )
 from zoomy_core.model.models.basisfunctions import LayeredBasis, Monomials, Legendre_shifted
@@ -313,10 +313,10 @@ for k, v in sme_basis.layer_expand(state.u, 0).items():
 # Same pipeline shape as the SWE case + per-moment Galerkin testing:
 # for each layer we multiply the momentum by the **layer-local**
 # Legendre test functions via `basis.layer_phi_of_z(i)`, run
-# `ExpandProductRule` so `φ·∂_v f` splits into conservative
-# (``∂_v(φ·f)``) and non-conservative (``∂_v(φ)·f``) pieces, then the
-# usual Integrate → KBCs → ZetaTransform → layer_expand →
-# EvaluateIntegrals chain.
+# `ProductRule()` (default inverse) so `φ·∂_v f` splits into
+# conservative (``∂_v(φ·f)``) and non-conservative (``∂_v(φ)·f``)
+# pieces, then the usual Integrate → KBCs → ZetaTransform →
+# layer_expand → EvaluateIntegrals chain.
 #
 # Continuity stays a single scalar equation per layer (no Galerkin);
 # momentum.x becomes a ``Zstruct(test_0, test_1)`` per layer.
@@ -332,8 +332,8 @@ def close_sme_layer(branch, basis, lower, upper, layer_idx, m_low=None, m_up=Non
     )
     # φ·∂_v(f) → ∂_v(φ·f) − ∂_v(φ)·f so Integrate can Leibniz.
     branch.momentum.x.apply(
-        ExpandProductRule([state.t, state.x, state.z]),
-        name="expand product rule",
+        ProductRule(),
+        name="product rule (inverse)",
     )
     # Snapshot the pointwise continuity before depth-integration; the
     # Step-14 w-closure runs the running integral ``∫_lower^z`` on it.
@@ -437,6 +437,9 @@ audit(layer_1_sme, "layer 1 SME")
 #
 # * **Continuity closure for `w`** (described above) — required for
 #   fully-closed multi-layer SME shear moments.
+# * **`ProductRule()`** — default inverse direction rewrites
+#   `φ·∂_v(f) → ∂_v(φ·f) − ∂_v(φ)·f` per term, restoring conservative
+#   form after the Galerkin-test multiply.
 # * **`Recombine(vars=[t, x])`** display op — fold `∂_t(h·α) +
 #   ∂_x(h·α²)` back into the conservative shape for readability.
 # * **Explicit `sp.simplify` pass** on the final branch — the output

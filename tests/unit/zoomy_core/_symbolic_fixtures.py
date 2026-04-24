@@ -15,13 +15,13 @@ import sympy as sp
 from zoomy_core.model.models.ins_generator import (
     Basis,
     EvaluateIntegrals,
-    ExpandProductRule,
     FullINS,
     Integrate,
     InterfaceKBC,
     Inviscid,
     Multiply,
     Newtonian,
+    ProductRule,
     Recombine,
     SimplifyIntegrals,
     StateSpace,
@@ -119,7 +119,7 @@ def build_sme_l1_system():
     basis = Basis(state, Legendre_shifted, level=1)
 
     model.momentum.x.apply(Multiply(basis.phi_of_z, outer=True))
-    model.momentum.x.apply(ExpandProductRule([state.t, state.x, state.z]))
+    model.momentum.x.apply(ProductRule())
 
     pointwise_continuity = model.continuity.copy()
 
