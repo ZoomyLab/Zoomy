@@ -253,6 +253,9 @@ model.momentum.x.describe()
 
 # %%
 dt_h_relation = model.continuity.solve_for(sp.Derivative(state.H, t))
+# Snapshot the substitution dict before .apply() consumes the relation
+# (we'll re-apply it as the bug-3 closure in step 14).
+_dt_h_rule_snapshot = dict(dt_h_relation._node._as_relation)
 model.momentum.x.apply(dt_h_relation,
                        name="eliminate ∂_t h via continuity").simplify()
 model.momentum.x.describe()
@@ -362,6 +365,92 @@ model.describe()
 cache = BasisIntegralCache(Legendre_shifted(level=LEVEL))
 model.apply(ProjectBasisIntegrals(cache),
             name="project basis integrals")
+model.simplify()
+model.describe()
+
+# %% [markdown]
+# ## Step 14 — Close bug-3 via the new primitive layer
+#
+# After step 13 the conservative branch of step 6's ``ProductRule``
+# leaves a held ``Derivative(α_l·h/(2l+1), t)`` atom for each ``l ≥ 1``.
+# Step 9's substitution rule for ``∂_t h`` already finished by this
+# point, so the ``α_l·∂_t h`` hidden inside that held atom is never
+# substituted — leaving a Wronskian-shape K&T-comparison asymmetry on
+# every level-≥1 equation.
+#
+# The new ``zoomy_core.symbolic`` primitive layer fixes this with an
+# explicit fixpoint: open the held Derivative via product rule,
+# substitute ``∂_t h``, project any newly-introduced
+# ``Derivative(Integral(u), x)`` atom, repeat until no free ``∂_t h``
+# remains.  The closure is mathematically rigorous (each step is
+# one textbook calculus rule applied to the matching atom) and
+# verified against K&T (2019) eq (4.13)/(4.14)/(4.17) at levels 0,
+# 1, 2 in ``tutorials/sme/kt2019_verification.py``.
+
+# %%
+from zoomy_core.symbolic import (
+    affine_change_of_variable,
+    canonicalise,
+    canonicalize_phi_derivative_subs,
+    distribute_derivative_over_add,
+    function_expand,
+    product_rule_forward,
+    project_basis_integrand,
+    split_integral_over_add,
+    subst,
+)
+
+
+def _has_free_dt_h(expr, h_sym, t_sym):
+    for d in expr.atoms(sp.Derivative):
+        if d.args[0] == h_sym:
+            wrt = []
+            for v in d.args[1:]:
+                wrt.append(v[0] if isinstance(v, (tuple, sp.Tuple)) else v)
+            if t_sym in wrt:
+                return True
+    return False
+
+
+def _close_bug3(expr, *, dt_h_relation, max_iter=10):
+    H, t_, x_, z_, b_ = state.H, state.t, state.x, state.z, state.b
+    zeta_hat = sp.Symbol(r"\hat{\zeta}", positive=True)
+
+    def _expand_held_dt(e):
+        def _walk(node):
+            if isinstance(node, sp.Derivative):
+                wrt = [v[0] if isinstance(v, (tuple, sp.Tuple)) else v
+                       for v in node.args[1:]]
+                if t_ in wrt and isinstance(node.args[0], (sp.Mul, sp.Pow)):
+                    return product_rule_forward(node, t_)
+            if node.args:
+                new_args = tuple(_walk(a) for a in node.args)
+                if any(n is not o for n, o in zip(new_args, node.args)):
+                    return node.func(*new_args)
+            return node
+        return distribute_derivative_over_add(_walk(e))
+
+    for _ in range(max_iter):
+        prev = expr
+        expr = _expand_held_dt(expr)
+        expr = subst(expr, dt_h_relation)
+        expr = function_expand(expr, state.u.func, _u_ansatz)
+        expr = affine_change_of_variable(expr, z_, b_, b_ + H, zeta_hat)
+        expr = canonicalize_phi_derivative_subs(expr)
+        expr = split_integral_over_add(expr)
+        expr = project_basis_integrand(expr, cache)
+        expr = canonicalise(expr)
+        if expr == prev or not _has_free_dt_h(expr, H, t_):
+            break
+    return expr
+
+
+for _k in range(LEVEL + 1):
+    _leaf = getattr(model.momentum.x, f"test_{_k}")
+    _new_expr = _close_bug3(_leaf.expr, dt_h_relation=_dt_h_rule_snapshot)
+    # Mutate the leaf in place (bypass the Operation layer for this
+    # post-projection rewrite — _close_bug3 is a single composite step).
+    model._tree["momentum"].x._filter_dict()[f"test_{_k}"].expr = _new_expr
 model.simplify()
 model.describe()
 
