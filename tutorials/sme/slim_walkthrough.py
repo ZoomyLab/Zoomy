@@ -236,13 +236,20 @@ model.momentum.x.describe()
 # %% [markdown]
 # ## Step 9 — Use the h-evolution to eliminate $\partial_t h$ from x-momentum
 #
-# Continuity gives us $\partial_t h = -\partial_x \int_0^1 h\,u(\zeta h+b)\,d\hat\zeta_0$.
-# ``solve_for(∂_t h)`` returns that as a substitution relation; ``apply``
-# substitutes it everywhere ``∂_t h`` appears as a free atom in
-# ``momentum.x``.  Importantly this fires only on the *boundary*
-# ``\phi_l|_{z=b+h}\,u|_{z=b+h}\,\partial_t h`` term — not inside the
-# conservative ``∂_t \int … dz`` (which holds it as a single
-# ``Derivative(integral, t)`` atom).
+# Continuity gives us $\partial_t h = -\partial_x \int_b^{b+h} u\,d\hat z$.
+# ``solve_for(∂_t h)`` (now protecting ``Derivative(Integral, x)``
+# against sympy's Leibniz expansion — see ``_NodeProxy.solve_for``)
+# returns the conservative substitution rule; ``apply`` substitutes it
+# everywhere ``∂_t h`` appears as a free atom in ``momentum.x``.
+#
+# **Known limitation**: only catches ``∂_t h`` atoms that are already
+# distributed.  Any ``∂_t h`` hidden inside a held ``Derivative(α_l·h/k, t)``
+# (from the conservative branch of step 6's ``ProductRule``) won't
+# materialise until after ``ProjectBasisIntegrals`` collapses the inner
+# integral and a subsequent product-rule expansion fires.  Those
+# residual ``∂_t h`` atoms are not caught here — they leave a
+# Wronskian-shaped ``α_1·∂_x α_0·h − α_0·∂_x α_1·h`` asymmetry in the
+# level-1 K&T comparison.
 
 # %%
 dt_h_relation = model.continuity.solve_for(sp.Derivative(state.H, t))
