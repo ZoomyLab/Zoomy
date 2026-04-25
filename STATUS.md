@@ -1,6 +1,6 @@
 # Phase 1 — overnight status
 
-Pushed to `symbolic-rework@ffa0c325`.
+Latest push: `symbolic-rework@a777815d`.
 
 ## Three literature matches
 
@@ -87,9 +87,40 @@ presentation.
 
 ## What's NOT done
 
-* Multi-layer SME (per-layer Legendre + Heaviside outer basis) — attempting next.
+* Multi-layer SME at level ≥ 1 (architectural sketch landed at
+  `tutorials/multilayer/ml_sme_prototype.py` — L=0 works, L≥1 raises
+  `NotImplementedError` with a 6-step recipe in the docstring; the next-step
+  extension once you decide the framework looks right).
 * Full slim_walkthrough.py migration to primitives — partial (step 14 only).
-* Other notebooks (`symbolic_walkthrough.py`, etc.) untouched.
+* Other notebooks (`symbolic_walkthrough.py`, `performance_walkthrough.py`,
+  `vam_zeta_projection.py`, `zeta_projection.py`, `projected_model.py`) untouched.
 
 The legacy single-layer pipeline at steps 1–13 of slim_walkthrough.py still works fine;
 the primitive-layer step 14 is what closes bug 3.  Nothing has regressed.
+
+## ML-SME architectural notes
+
+The framework you sketched composes cleanly: the Heaviside indicator selects each
+layer's integration interval [z_{α-1/2}, z_{α+1/2}], and within each layer the
+per-layer Legendre basis φ_k((z - z_{α-1/2})/h_α) expands the velocity profile.
+Mass exchanges G_{α±1/2} arise naturally from the kinematic BC at every interface
+(eq (5) of Aguillon).  At L=0 this collapses to MLSWE.
+
+The six steps to wire up L=1 (already in the prototype's docstring):
+1. Apply `Multiply(phi_k(zeta_alpha))` to the layer's momentum.
+2. `product_rule_inverse` per term to expose ∂_v(φ·f).
+3. `leibniz_general` / `fundamental_theorem` per term over the layer.
+4. `subst(kbc)` at both interfaces (yields G_{α±1/2}).
+5. `affine_change_of_variable` z → ζ·h_α + z_{α-1/2}, ζ ∈ [0, 1].
+6. `function_expand(ansatz)` + `project_basis_integrand` + bug-3 fixpoint
+   (`distribute_derivative_over_add` + `subst(dt_h_relation)` per layer).
+
+All six primitives exist in `zoomy_core.symbolic`.  The remaining work is the
+per-layer driver that composes them — paralleling
+`tutorials/sme/kt2019_verification.py` but with layer-α bounds and the per-layer
+∂_t h_α from layer-α continuity (instead of the single-layer ∂_t h from K&T).
+There's a subtle question about whether the layer-α continuity
+``∂_t h_α + ∂_x(h_α u_α) = G_{α+1/2} - G_{α-1/2}`` should be substituted into
+``α_{k,α}·∂_t h_α`` residuals — the paper's instruction was *not* to substitute
+``∂_t h_α`` via continuity for the L=0 case, so by analogy I'd leave the L≥1
+residuals symbolic too until you decide.
