@@ -48,16 +48,14 @@
 #   duplicates merge automatically.
 # * **Step 11** — ``IsolateBasisIntegrand`` — distribute ``Add`` inside
 #   each Integral and factor out every ζ̂-independent factor, leaving
-#   ``coeff · Integral(pure-basis kernel, dζ̂)``.  This is the form a
-#   basismatrices lookup pattern-matches against.
+#   ``coeff · Integral(pure-basis kernel, dζ̂)``.
 # * **Step 12** — insert the velocity ansatz
-#   ``u = α_0 + Σ_{k≥1} α_k · φ_k((z−b)/h)`` (K&T eq 39) via
-#   ``_FieldExpansion`` so the substitution descends into Derivatives /
-#   Subs / nested Integrals.
+#   ``u(z) = α_0 + Σ_{k≥1} α_k · φ_k((z − b)/h)`` (K&T eq 39) via
+#   ``_FieldExpansion``.
 # * **Step 13** — ``ProjectBasisIntegrals`` with a Legendre
 #   ``BasisIntegralCache``: every ``∫_0^1 (basis kernel) dζ̂`` collapses
-#   via orthogonality (``Poly.integrate``, no generic ``sp.integrate``);
-#   boundary evaluations ``φ_k|_{ζ=0/1}`` stay symbolic.
+#   via orthogonality (``Poly.integrate``, no generic ``sp.integrate``).
+#   Boundary evaluations ``φ_k|_{ζ=0/1}`` stay symbolic.
 
 # %%
 import sympy as sp
@@ -155,16 +153,21 @@ model.momentum.x.describe()
 
 # %%
 phi_fns = [sp.Function(f"phi_{k}") for k in range(LEVEL + 1)]
-# The basis lives on the physical column ``z ∈ [b, b+h]`` via the
-# canonical FEM mapping: ``phi_k(z) := φ̂_k((z − b)/h)`` where φ̂_k is
+# The basis lives on the physical column ``z ∈ [b, b+h]`` via the FEM
+# convention ``phi_k(z) := phi_k_ref((z − b)/h)`` where ``phi_k_ref`` is
 # the reference basis on [0, 1].  We write the reference-evaluated
-# form directly so that, after ``IntegralTransform`` substitutes
-# ``z → ζ·h + b`` inside an integrand, sympy auto-simplifies
-# ``((ζh+b) − b)/h → ζ``, ``(b − b)/h → 0``, ``((b+h) − b)/h → 1``,
-# i.e. the basis lands on the reference variable cleanly.  Chain-rule
-# / metric contributions enter naturally through ``ProductRule`` on
-# the ``(z − b)/h`` argument (b, h depend on x), giving the same
-# vertical coupling K&T captures via their ω operator (eq 22-23).
+# form ``phi_k((z − b)/h)`` directly so:
+#
+# * ``ProductRule``'s chain rule on ``∂_x phi_k((z−b)/h)`` fires
+#   automatically and produces the moving-boundary metric terms that
+#   K&T captures via their ω-coupling — packaged as a chain-rule
+#   residual integrand instead of as an integral-of-∂_ζ-of-h-u-ω.
+# * Leibniz boundary terms from ``Integrate(method="auto")`` and the
+#   chain-rule contributions cancel exactly as required.
+# * After ``IntegralTransform`` substitutes ``z → ζh + b``, the
+#   argument simplifies automatically: ``((ζh+b)−b)/h → ζ``,
+#   ``(b−b)/h → 0``, ``((b+h)−b)/h → 1``.  Boundary evaluations land
+#   on ``phi_k(0)`` / ``phi_k(1)`` directly.
 zeta_of_z = (state.z - state.b) / state.H
 phi_of_z_opaque = Zstruct(**{
     f"phi_{k}": phi_fns[k](zeta_of_z) for k in range(LEVEL + 1)
@@ -256,7 +259,15 @@ basis_alpha = [
 
 
 def _u_ansatz(*args):
-    """u(t, x, arg)  →  α_0(t, x) + Σ_{k≥1} α_k(t, x) · phi_k((arg − b)/h)."""
+    """u(t, x, arg)  →  α_0(t, x) + Σ_{k≥1} α_k(t, x) · phi_k((arg − b)/h).
+
+    Each newly-introduced ``phi_k`` lands directly in reference form
+    (``(arg − b)/h``) so that, for ``arg`` ∈ {``b``, ``b + h``, ``ζ·h + b``},
+    sympy auto-simplifies the argument to ``0`` / ``1`` / ``ζ``.  The
+    test functions multiplied in step 6 used ``phi_k(state.z)`` and
+    were rewritten by ``MapBasisToReference`` in step 12 — both ends
+    now read in the same canonical form.
+    """
     arg_z = args[-1]
     rhs = basis_alpha[0]
     for k in range(1, LEVEL + 1):
