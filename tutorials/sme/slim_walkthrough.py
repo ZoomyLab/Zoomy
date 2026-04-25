@@ -160,34 +160,60 @@ model.momentum.x.apply(w_closure,
 model.momentum.x.describe()
 
 # %% [markdown]
-# ## Step 6 — Galerkin test + inverse product rule
+# ## Step 6 — Galerkin test + inverse product rule (per-term, then blanket)
 #
-# Multiply by the opaque ``φ_k((z − b)/h)`` test functions; rewrite each
-# ``φ · ∂_v f`` as ``∂_v(φ · f) − ∂_v(φ) · f`` so the conservative form
-# is Leibniz-ready.
+# Multiply by the opaque ``φ_k((z − b)/h)`` test functions and inspect
+# the terms.  Each term has the shape ``φ_k · ∂_v f`` for some ``v``;
+# ``ProductRule`` rewrites it as ``∂_v(φ_k · f) − ∂_v(φ_k) · f`` so that
+# ``Integrate(method="auto")`` in step 7 can recognise the conservative
+# part ``∂_v(φ_k · f)`` and apply Leibniz.
+#
+# Chain-rule cost per direction (since ``φ_k`` lives at ``(z − b)/h``):
+#
+# * ``∂_z`` direction → ``∂_z φ_k = φ_k'·(1/h)`` — only ``1/h``, clean.
+# * ``∂_x`` direction → ``∂_x φ_k = φ_k'·(−∂_x b/h − (z − b)·∂_x h/h²)``
+#   — carries a transient ``1/h²``.
+# * ``∂_t`` direction → ditto.
+#
+# The horizontal ``1/h²`` factors are *transient*: after
+# ``IntegralTransform`` substitutes ``z → ζh + b``, ``(z − b) → ζh`` and
+# the Jacobian ``h`` cancel one ``h`` each, leaving polynomials in
+# ``ζ``, ``∂_x b``, ``∂_x h``.  Skipping ``ProductRule`` on the
+# horizontal terms is therefore *not* a free option — without it the
+# Leibniz step in `Integrate(method="auto")` cannot fire on
+# ``φ · ∂_v f`` (it needs the outer-most ``∂_v``), and the integrated
+# form ends up non-conservative.  The audit at the bottom of the
+# notebook checks that the *final* form (post-``ProjectBasisIntegrals``)
+# has no ``1/h²`` — i.e. all transient inverse-square factors got
+# absorbed by the Jacobian as expected.
+#
+# If you want to investigate term-by-term, the per-term apply is now
+# wired through:
+# ``model.momentum.x.test_1.apply_to_term(i, ProductRule())``.
 
 # %%
 phi_fns = [sp.Function(f"phi_{k}") for k in range(LEVEL + 1)]
-# The basis lives on the physical column ``z ∈ [b, b+h]`` via the FEM
-# convention ``phi_k(z) := phi_k_ref((z − b)/h)`` where ``phi_k_ref`` is
-# the reference basis on [0, 1].  We write the reference-evaluated
-# form ``phi_k((z − b)/h)`` directly so:
-#
-# * ``ProductRule``'s chain rule on ``∂_x phi_k((z−b)/h)`` fires
-#   automatically and produces the moving-boundary metric terms that
-#   K&T captures via their ω-coupling — packaged as a chain-rule
-#   residual integrand instead of as an integral-of-∂_ζ-of-h-u-ω.
-# * Leibniz boundary terms from ``Integrate(method="auto")`` and the
-#   chain-rule contributions cancel exactly as required.
-# * After ``IntegralTransform`` substitutes ``z → ζh + b``, the
-#   argument simplifies automatically: ``((ζh+b)−b)/h → ζ``,
-#   ``(b−b)/h → 0``, ``((b+h)−b)/h → 1``.  Boundary evaluations land
-#   on ``phi_k(0)`` / ``phi_k(1)`` directly.
 zeta_of_z = (state.z - state.b) / state.H
 phi_of_z_opaque = Zstruct(**{
     f"phi_{k}": phi_fns[k](zeta_of_z) for k in range(LEVEL + 1)
 })
 model.momentum.x.apply(Multiply(phi_of_z_opaque, outer=True))
+
+# Per-term inspection point — print each ``φ_k · ∂_v f`` with its
+# derivative direction so it is obvious which term contributes where.
+print("=== test_1 terms before ProductRule ===")
+for i, term in enumerate(model.momentum.x.test_1.terms):
+    diff_vars = sorted({
+        (v[0] if isinstance(v, tuple) else v)
+        for d in term.expr.atoms(sp.Derivative)
+        for v in d.args[1:]
+    }, key=str)
+    print(f"  [{i}] deriv vars {diff_vars}: {term.expr}")
+
+# Blanket apply of ProductRule — required for the conservative
+# Leibniz form on horizontal derivatives (see markdown above).  The
+# ``1/h²`` factors generated here are transient and get absorbed by
+# the affine Jacobian in step 10.
 model.momentum.x.apply(ProductRule(),
                        name="inverse product rule",
                        description="φ · ∂_v f → ∂_v(φ · f) − ∂_v(φ) · f")
@@ -450,3 +476,37 @@ print("test_0 coefficients (depth-averaged, mass matrix is 1):")
 for label, key in probes:
     c = sp.simplify(test0_expanded.coeff(key))
     print(f"  {label:<30}  →  {c}")
+
+# %% [markdown]
+# ### `1/h²` audit
+#
+# After step 13's ``ProjectBasisIntegrals`` the algebra should be free
+# of inverse powers of ``h`` higher than the ones the affine Jacobian
+# produces (i.e. ``1/h`` from a chain-rule on ``(z−b)/h`` against a
+# Jacobian of ``h`` cancels to a constant).  Anything containing
+# ``1/h²`` indicates a chain-rule contribution that didn't get the
+# matching Jacobian and should be investigated.
+
+# %%
+def find_inverse_h_powers(expr, h_sym, n_min=2):
+    """Return list of subexpressions containing h^(-k) with k >= n_min."""
+    hits = []
+    for p in sp.preorder_traversal(expr):
+        if isinstance(p, sp.Pow):
+            base, exp = p.args
+            if base == h_sym and exp.is_Integer and int(exp) <= -n_min:
+                hits.append(p)
+    return hits
+
+
+for label, e in [("test_0", test0_kt),
+                 ("test_1", test1_kt),
+                 ("test_0 expanded", test0_expanded),
+                 ("test_1 expanded", test1_expanded)]:
+    bad = find_inverse_h_powers(e, state.H, n_min=2)
+    if bad:
+        print(f"[!] {label} contains {len(bad)} subexpression(s) with 1/h^≥2:")
+        for b_ in bad[:5]:
+            print(f"    {b_}")
+    else:
+        print(f"[ok] {label} — no 1/h² or higher.")
