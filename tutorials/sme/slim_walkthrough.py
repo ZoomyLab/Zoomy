@@ -251,7 +251,67 @@ model.momentum.x.apply(dt_h_relation,
 model.momentum.x.describe()
 
 # %% [markdown]
-# ## Step 10 — `IntegralTransform` to the unit reference interval
+# ## Step 10 — Insert the velocity ansatz (in physical coordinates)
+#
+# K&T eq (39) writes the velocity as
+# $$
+#   u(t, x, z) = \alpha_0(t, x) + \sum_{j=1}^{N} \alpha_j(t, x)\,\hat\phi_j\!\bigl(\tfrac{z - b}{h}\bigr).
+# $$
+# In our notation ``\alpha_0 = u_m`` is the depth-averaged velocity (the
+# "mass moment") and ``\alpha_j`` for ``j ≥ 1`` are the higher Legendre
+# coefficients.  We use a function-level ``replace`` (via
+# ``_FieldExpansion``) so the substitution descends into
+# ``Derivative(u(t,x,arg), x)``, ``Subs(...)`` and the running-integral
+# integrands that ordinary ``.subs()`` skips.
+#
+# **Why this comes BEFORE ``IntegralTransform``**:  the integrand
+# carries opaque ``Derivative(u(t,x,ẑ), x)`` atoms whose chain rule on
+# the moving-frame argument ``(ẑ − b)/h`` is hidden as long as ``u``
+# is opaque.  If we transform the integration variable first
+# (``ẑ → ζ̂·h + b``), the basis argument simplifies to a clean
+# ``ζ̂`` and the chain-rule contribution
+# ``φ_k'·∂_x[(ẑ−b)/h]`` (which carries the ``∂_x b/h`` and
+# ``(ẑ−b)·∂_x h/h²`` moving-frame terms) is silently lost — a real
+# bug uncovered by the per-term diagnostic for ``T4``
+# (``/tmp/diag_T4_pen_and_paper.py``).
+#
+# **The rule**: an opaque function whose argument depends on the
+# differentiation variable must be made explicit *before* any
+# coordinate change, so all chain rules fire in the original frame
+# and propagate through substitution naturally.
+
+# %%
+basis_alpha = [
+    sp.Function(f"alpha_{k}", real=True)(state.t, state.x)
+    for k in range(LEVEL + 1)
+]
+
+
+def _u_ansatz(*args):
+    """u(t, x, arg)  →  α_0(t, x) + Σ_{k≥1} α_k(t, x) · phi_k((arg − b)/h).
+
+    Each newly-introduced ``phi_k`` lands directly in reference form
+    ``phi_k((arg − b)/h)`` so that, for ``arg`` ∈ {``b``, ``b + h``,
+    ``ẑ``} (the latter being the running-integral dummy), the argument
+    keeps explicit ``(b, h)`` dependence — letting sympy chain-rule
+    against the moving frame when it differentiates.  ``IntegralTransform``
+    in the next step substitutes ``ẑ → ζ̂·h + b`` and the argument
+    auto-simplifies to ``ζ̂`` afterwards.
+    """
+    arg_z = args[-1]
+    rhs = basis_alpha[0]
+    for k in range(1, LEVEL + 1):
+        rhs = rhs + basis_alpha[k] * phi_fns[k]((arg_z - state.b) / state.H)
+    return rhs
+
+
+model.apply(_FieldExpansion(state.u.func, _u_ansatz,
+                            name="u ansatz"))
+model.simplify()
+model.describe()
+
+# %% [markdown]
+# ## Step 11 — `IntegralTransform` to the unit reference interval
 
 # %%
 model.apply(IntegralTransform(), name="affine map to [0, 1]")
@@ -259,7 +319,7 @@ model.simplify()
 model.describe()
 
 # %% [markdown]
-# ## Step 11 — Isolate basis integrands: ``coeff · ∫ kernel d\hat\zeta``
+# ## Step 12 — Isolate basis integrands: ``coeff · ∫ kernel d\hat\zeta``
 #
 # For each Integral, we want the integrand to contain *only* the
 # integration-variable-dependent factors — i.e. the basis functions and
@@ -276,49 +336,6 @@ model.describe()
 
 # %%
 model.apply(IsolateBasisIntegrand(), name="isolate basis integrand").simplify()
-model.describe()
-
-# %% [markdown]
-# ## Step 12 — Insert the velocity ansatz
-#
-# K&T eq (39) writes the velocity as
-# $$
-#   u(t, x, z) = \alpha_0(t, x) + \sum_{j=1}^{N} \alpha_j(t, x)\,\hat\phi_j\!\bigl(\tfrac{z - b}{h}\bigr).
-# $$
-# In our notation ``\alpha_0 = u_m`` is the depth-averaged velocity (the
-# "mass moment") and ``\alpha_j`` for ``j ≥ 1`` are the higher Legendre
-# coefficients.  We use a function-level ``replace`` (via
-# ``_FieldExpansion``) so the substitution descends into
-# ``Derivative(u(t,x,arg), x)``, ``Subs(...)`` and the running-integral
-# integrands that ordinary ``.subs()`` skips.
-
-# %%
-basis_alpha = [
-    sp.Function(f"alpha_{k}", real=True)(state.t, state.x)
-    for k in range(LEVEL + 1)
-]
-
-
-def _u_ansatz(*args):
-    """u(t, x, arg)  →  α_0(t, x) + Σ_{k≥1} α_k(t, x) · phi_k((arg − b)/h).
-
-    Each newly-introduced ``phi_k`` lands directly in reference form
-    (``(arg − b)/h``) so that, for ``arg`` ∈ {``b``, ``b + h``, ``ζ·h + b``},
-    sympy auto-simplifies the argument to ``0`` / ``1`` / ``ζ``.  The
-    test functions multiplied in step 6 used ``phi_k(state.z)`` and
-    were rewritten by ``MapBasisToReference`` in step 12 — both ends
-    now read in the same canonical form.
-    """
-    arg_z = args[-1]
-    rhs = basis_alpha[0]
-    for k in range(1, LEVEL + 1):
-        rhs = rhs + basis_alpha[k] * phi_fns[k]((arg_z - state.b) / state.H)
-    return rhs
-
-
-model.apply(_FieldExpansion(state.u.func, _u_ansatz,
-                            name="u ansatz"))
-model.simplify()
 model.describe()
 
 # %% [markdown]
