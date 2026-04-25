@@ -19,7 +19,22 @@
 # Derive the **level-1 shallow-moment momentum equation** from incompressible
 # Navier–Stokes with a slim, inviscid model: all stresses dropped, opaque
 # basis ``φ_k`` kept symbolic on the *physical* column ``z ∈ [b, b+h]``
-# throughout.  Pipeline:
+# throughout.
+#
+# **Reference** — Kowalski & Torrilhon (K&T), arXiv:1801.00046, eq. (49) for
+# the level-1 SWE-with-shape-coefficient closure.  We aim for **eq (49)**
+# but in non-conservative `(α_0, α_1)` form (no `α₀·h`, `α₁·h` rescaling).
+#
+# **Debugging note** — earlier `coeff()` probes on the conservative form
+# (where `Derivative(α₀·α₁·h, x)` is held as one atom) suggested an
+# `α_0·α_1·∂_x h` mismatch.  After expanding the conservative
+# Derivatives via the product rule, that term is `0` here, matching K&T.
+# Compare the **expanded** (post-product-rule) coefficient table at the
+# bottom of the notebook to K&T eq (49); any remaining discrepancy will
+# show up there directly.  Each step's `describe()` is the trace to walk
+# back through if a coefficient looks wrong.
+#
+# **Pipeline**:
 #
 # * **Step 0** — start with the raw INS system.
 # * **Step 1** — drop **all** stresses ``τ_ij = 0``.
@@ -299,3 +314,139 @@ model.apply(ProjectBasisIntegrals(cache),
             name="project basis integrals")
 model.simplify()
 model.describe()
+
+# %% [markdown]
+# ## K&T comparison — substitute Legendre boundary values + flat bottom
+#
+# To compare against K&T eq (49) directly, we substitute:
+#
+# * **Legendre boundary values** for the shifted basis on `[0,1]`:
+#   `φ_0(0) = 1`, `φ_0(1) = 1`, `φ_1(0) = 1`, `φ_1(1) = −1`.
+# * **Flat bottom** `b ≡ 0` so `∂_x b = 0`, `∂_t b = 0`.  K&T's equation
+#   is written in this form.
+#
+# What's left in `momentum.x.test_k` should match K&T eq (49) for `k=0`
+# (depth-averaged momentum) and the level-1 closure for `k=1`.
+
+# %%
+phi_legendre = {
+    phi_fns[0](sp.S.Zero): 1,
+    phi_fns[0](sp.S.One): 1,
+    phi_fns[1](sp.S.Zero): 1,
+    phi_fns[1](sp.S.One): -1,
+}
+flat_bottom = {
+    state.b: 0,
+    sp.Derivative(state.b, x): 0,
+    sp.Derivative(state.b, t): 0,
+}
+
+
+def kt_form(expr):
+    """Apply Legendre boundary substitutions + flat bottom for K&T compare."""
+    return sp.expand(sp.expand(expr).subs(phi_legendre).subs(flat_bottom))
+
+
+def expand_derivatives(expr):
+    """Distribute Derivative(product, var) into product-rule terms.
+
+    `sp.expand` does not push through `Derivative` atoms.  K&T writes
+    the equations in expanded (non-conservative) form, so to compare
+    coefficients we need to push every `∂_x(α·β·h)` into
+    `∂_x α · β · h + α · ∂_x β · h + α · β · ∂_x h`.  Iterate to fixpoint.
+    """
+    def step(e):
+        if isinstance(e, sp.Add):
+            return sp.Add(*[step(a) for a in e.args])
+        if isinstance(e, sp.Mul):
+            return sp.Mul(*[step(a) for a in e.args])
+        if isinstance(e, sp.Derivative):
+            inner = step(e.expr)
+            wrt_pairs = e.variable_count
+            v, n = wrt_pairs[0]
+            rest = wrt_pairs[1:]
+            if n > 1:
+                rest = ((v, n - 1),) + tuple(rest)
+            if isinstance(inner, sp.Add):
+                out = sp.Add(*[sp.Derivative(a, v, *rest) for a in inner.args])
+                return step(out)
+            if isinstance(inner, sp.Mul):
+                factors = inner.args
+                out = sp.Add(*[
+                    sp.Mul(*(factors[:i] +
+                             (sp.Derivative(factors[i], v),) +
+                             factors[i + 1:]))
+                    for i in range(len(factors))
+                ])
+                if rest:
+                    out = sp.Derivative(out, *rest)
+                return step(out)
+            return e
+        return e
+
+    prev = None
+    cur = sp.expand(expr)
+    while prev != cur:
+        prev = cur
+        cur = sp.expand(step(cur))
+    return cur
+
+
+test0_kt = kt_form(model.momentum.x.test_0.expr)
+test1_kt = kt_form(model.momentum.x.test_1.expr)
+
+test0_expanded = expand_derivatives(test0_kt)
+test1_expanded = expand_derivatives(test1_kt)
+
+print("=== test_0 (depth-averaged momentum, K&T form, conservative) ===")
+sp.pprint(test0_kt)
+print()
+print("=== test_0 (with Derivatives expanded) ===")
+sp.pprint(test0_expanded)
+print()
+print("=== test_1 (level-1 closure, K&T form, conservative) ===")
+sp.pprint(test1_kt)
+print()
+print("=== test_1 (with Derivatives expanded) ===")
+sp.pprint(test1_expanded)
+
+# %% [markdown]
+# ### Term-by-term coefficients in `test_1` and `test_0`
+#
+# Coefficients are extracted from the **expanded** (post-product-rule)
+# form, so a conservative `∂_x(α·β·h)` has already been distributed.
+# `test_1` is multiplied by `3` to undo the level-1 mass-matrix entry
+# `1/3` so values can be compared row-by-row to K&T eq (49) at `k = 1`.
+# `test_0` uses mass-matrix entry `1` and compares to K&T eq (49) at
+# `k = 0` (depth-averaged momentum, no normalisation).
+#
+# Anything inconsistent with K&T eq (49) is the bug to chase.
+
+# %%
+H = state.H
+a0, a1 = basis_alpha[0], basis_alpha[1]
+dxH = sp.Derivative(H, x)
+
+probes = [
+    ("α_0² · ∂_x h",         a0 * a0 * dxH),
+    ("α_0 · α_1 · ∂_x h",    a0 * a1 * dxH),
+    ("α_1² · ∂_x h",         a1 * a1 * dxH),
+    ("α_0 · ∂_x α_0 · h",    a0 * sp.Derivative(a0, x) * H),
+    ("α_0 · ∂_x α_1 · h",    a0 * sp.Derivative(a1, x) * H),
+    ("α_1 · ∂_x α_0 · h",    a1 * sp.Derivative(a0, x) * H),
+    ("α_1 · ∂_x α_1 · h",    a1 * sp.Derivative(a1, x) * H),
+    ("∂_t α_0 · h",          sp.Derivative(a0, t) * H),
+    ("∂_t α_1 · h",          sp.Derivative(a1, t) * H),
+    ("∂_x η",                sp.Derivative(state.eta, x)),
+]
+
+print("test_1 coefficients (×3 to undo level-1 mass matrix 1/3):")
+for label, key in probes:
+    c = sp.simplify(3 * test1_expanded.coeff(key))
+    print(f"  {label:<30}  →  {c}")
+
+print()
+print("test_0 coefficients (depth-averaged, mass matrix is 1):")
+for label, key in probes:
+    c = sp.simplify(test0_expanded.coeff(key))
+    print(f"  {label:<30}  →  {c}")
