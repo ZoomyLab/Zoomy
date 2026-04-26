@@ -55,6 +55,36 @@ Wronskian asymmetry from a held `Derivative(Integral, t)` atom that step 9 misse
 fixed by an explicit fixpoint loop using `product_rule_forward`,
 `distribute_derivative_over_add`, `subst(dt_h_relation)`, then re-projecting).
 
+## Analytical-analysis library — `zoomy_core.analysis`
+
+A new package (`library/zoomy_core/zoomy_core/analysis/`) wraps a single unified
+representation `PDESystem(equations, fields, time, space)` and provides:
+
+| Module | Responsibility |
+|---|---|
+| `pde_system.py` | `PDESystem` dataclass — list of sympy LHS expressions = 0 |
+| `linearisation.py` | `linearise(system, base_state)` — generic O(ε) linearisation |
+| `plane_wave.py`    | `plane_wave_dispersion` — `det M(ω, k) = 0` solver |
+| `pencil.py`        | `extract_quasilinear_pencil` `(M_t, M_xa, M_0)`; symbolic + numerical generalised eigenvalues |
+| `hyperbolicity.py` | `sample_hyperbolicity` — random-sample states, return fraction with all-real eigenvalues |
+
+Ground rule: the package never reads model-specific attributes; every model
+(SWE, SME, VAM, ML-SWE, future ML-VAM, …) becomes a `PDESystem` and
+plugs into the same routines.  9 unit tests in
+`library/zoomy_core/tests/analysis/test_analysis.py`.
+
+**Verified results across the family** (everything in `tutorials/`):
+
+| Model | Tutorial | Result |
+|---|---|---|
+| VAM dispersion (1,2) | `tutorials/vam/escalante2024_dispersion.py` | C²/(gH) = 12(H²k² + 12)/(H⁴k⁴ + 60 H²k² + 144) ✓ matches Escalante 2024 eq (8) |
+| VAM dispersion (2,3) | same                                          | C²/(gH) = 24(H⁴k⁴ + 70 H²k² + 600) / (H⁶k⁶ + 264 H⁴k⁴ + 6480 H²k² + 14400) — fresh result |
+| SME dispersion       | `tutorials/sme/sme_dispersion.py`            | C² = gH at rest for L = 0, 1, 2 ✓ |
+| SWE eigenvalues      | (analysis test) | u_0 ± √(gH) ✓ |
+| SME L=1 eigenvalues  | (analysis test) | u_0, u_0 ± √(gH + u_1²) ✓ matches K&T 2019 |
+| SME L=2 hyperbolicity| `tutorials/sme/sme_hyperbolicity.py`         | 100% hyperbolic at typical ranges; 93.6% with `--U-range 5 --H-min 0.5 --g 1` (recovers K&T's loss-of-hyperbolicity regime) |
+| VAM (1,2) hyperbolicity | `tutorials/vam/escalante2024_hyperbolicity.py` | M_t rank 5/9 (4 constraints), 100% hyperbolic, 3 finite eigenvalues per sample matching the dispersion polynomial degree |
+
 ## Files added
 
 | Path | Purpose |
@@ -66,7 +96,16 @@ fixed by an explicit fixpoint loop using `product_rule_forward`,
 | `tutorials/sme/slim_walkthrough_primitives.py` | Full primitive-only port of slim_walkthrough (early draft, has equation-management wrinkles) |
 | `tutorials/multilayer/aguillon2026_derivation.py` | Multilayer SWE literature verification |
 | `tutorials/vam/escalante2024_derivation.py` | VAM eq (4)–(5) derivation (no hydrostatic; σ-coord Galerkin against shifted Legendre on [0,1]) |
+| `tutorials/vam/escalante2024_generic.py` | VAM derivation generalised to arbitrary (M, N) — verified at (1,2) and (2,3) |
 | `tutorials/vam/escalante2024_poisson.py` | VAM splitting → eq (15) Poisson form (linearity in P verified, leading coefficients extracted) |
+| `tutorials/vam/escalante2024_poisson_generic.py` | Poisson splitting at arbitrary (M, N) — verified at (1,2), (2,3), (3,4) |
+| `tutorials/vam/escalante2024_dispersion.py` | VAM dispersion via `zoomy_core.analysis` — matches paper eq (8); fresh result at (2,3) |
+| `tutorials/vam/escalante2024_hyperbolicity.py` | VAM hyperbolicity sampler (DAE pencil) |
+| `tutorials/sme/sme_builder.py` | Generic SME PDESystem builder for arbitrary level |
+| `tutorials/sme/sme_dispersion.py` | SME dispersion at any level (matches gH at rest) |
+| `tutorials/sme/sme_hyperbolicity.py` | SME hyperbolicity sampler (recovers K&T's L=2 loss-of-hyperbolicity) |
+| `library/zoomy_core/zoomy_core/analysis/` | New unified analysis library (PDESystem, linearise, plane_wave, pencil, hyperbolicity) |
+| `library/zoomy_core/tests/analysis/` | 9 unit tests for the analysis library |
 | `tutorials/sme/slim_walkthrough.py` | Updated — step 14 closes bug 3 via primitives |
 
 ## Open follow-ups (in priority order)
