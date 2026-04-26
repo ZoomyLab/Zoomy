@@ -1,10 +1,10 @@
 # Phase 1 — overnight status
 
-Latest push: `symbolic-rework@a777815d`.
+Latest push: `symbolic-rework@635168bb`.
 
-## Three literature matches
+## Four literature matches
 
-Pipeline reproduces published equations exactly across SWE + SME + multilayer SWE:
+Pipeline reproduces published equations exactly across SWE + SME + multilayer SWE + VAM:
 
 ```bash
 # SWE / SME up to level 2 — Kowalski & Torrilhon 2019 eqs (4.13), (4.14), (4.17)
@@ -17,10 +17,15 @@ python tutorials/multilayer/aguillon2026_derivation.py --N 2   # ✓ MATCH (×6)
 python tutorials/multilayer/aguillon2026_derivation.py --N 3   # ✓ MATCH (×9)
 python tutorials/multilayer/aguillon2026_derivation.py --N 5   # ✓ MATCH (×15)
 python tutorials/multilayer/aguillon2026_derivation.py --N 7   # ✓ MATCH (×21)
+
+# VAM (non-hydrostatic) — Escalante, Morales de Luna, Cantero-Chinchilla,
+# Castro-Orgaz 2024 eq (4)-(5) and the Poisson reduction eq (15)
+python tutorials/vam/escalante2024_derivation.py        # ✓ MATCH (×6: continuity j=0/j=1, x-mom j=0, z-mom j=0, I_2 from KBCs, w_2 closure)
+python tutorials/vam/escalante2024_poisson.py           # ✓ Poisson form verified (eq 15)
 ```
 
-All three of your requested cases — **SWE, SME Lvl 2, multilayer SWE** — work and match
-the literature you indicated.
+All four of your requested cases — **SWE, SME Lvl 2, multilayer SWE, VAM** — work and
+match the literature you indicated.
 
 ## What the pipelines actually verify
 
@@ -32,6 +37,18 @@ the literature you indicated.
   Reference equations transcribed literally from the paper.  Compared via
   `expand_derivatives` + `subst({∂_t z_b: 0, G_{1/2}: 0, G_{N+1/2}: 0})` to canonical
   normal form.
+* **Escalante 2024 VAM eq (4)–(5)**: the non-hydrostatic VAM model, derived in
+  σ-coordinates with the polynomial ansatz `u ∈ P_1[ξ]`, `w, p ∈ P_2[ξ]`.  Galerkin
+  projection against `φ_0` and `φ_1` (shifted Legendre on `[0, 1]`) gives the 6
+  evolution equations; the 3 closure constraints come from the KBCs at the surface
+  and the bottom (after eliminating `∂_t h` via j=0 continuity).  No hydrostatic
+  assumption is made — z-momentum is kept and projected on the same basis.
+* **Escalante 2024 VAM eq (15)** (the Poisson reduction): the splitting U^(k) =
+  U^(k̃) − Δt T(U^(k), P^(k), ∂_x P^(k), ∂_x b) is substituted into the constraints
+  I_1, I_2.  The script verifies that the result is **strictly linear** in
+  (`p_0, p_1, ∂_x p_0, ∂_x p_1, ∂_xx p_0, ∂_xx p_1`) — i.e. the same Poisson-like
+  2×2 system the paper claims, with leading coefficients `a_1 = b_1 = -Δt h`,
+  `a_4 = -Δt h/3`, `b_4 = 0`.
 
 The K&T matches go through the bug-3 closure on the symbolic-primitive layer (the
 Wronskian asymmetry from a held `Derivative(Integral, t)` atom that step 9 missed —
@@ -48,6 +65,8 @@ fixed by an explicit fixpoint loop using `product_rule_forward`,
 | `tutorials/sme/bug3_closure_via_primitives.py` | Bug-3 closure proof of concept (kept for reference) |
 | `tutorials/sme/slim_walkthrough_primitives.py` | Full primitive-only port of slim_walkthrough (early draft, has equation-management wrinkles) |
 | `tutorials/multilayer/aguillon2026_derivation.py` | Multilayer SWE literature verification |
+| `tutorials/vam/escalante2024_derivation.py` | VAM eq (4)–(5) derivation (no hydrostatic; σ-coord Galerkin against shifted Legendre on [0,1]) |
+| `tutorials/vam/escalante2024_poisson.py` | VAM splitting → eq (15) Poisson form (linearity in P verified, leading coefficients extracted) |
 | `tutorials/sme/slim_walkthrough.py` | Updated — step 14 closes bug 3 via primitives |
 
 ## Open follow-ups (in priority order)
