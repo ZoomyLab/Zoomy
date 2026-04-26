@@ -1,6 +1,37 @@
 # Phase 1 — overnight status
 
-Latest push: `symbolic-rework@635168bb`.
+Latest push: `symbolic-rework@1f0bc7c4`.
+
+## Tonight's work in 30 seconds
+
+1. **Generic VAM at (M, N)** — `escalante2024_generic.py` derives eq (4)–(5) for any
+   degree of u, w, p; `escalante2024_poisson_generic.py` derives the N×N Poisson
+   reduction; `escalante2024_dispersion.py` reproduces eq (8) of the paper at (1, 2)
+   and computes the next-order C²/(gH) at (2, 3) (a fresh result).
+2. **Unified analysis library `zoomy_core.analysis`** — `PDESystem(equations, fields,
+   time, space)` is the only model representation it touches; `linearise`,
+   `plane_wave_dispersion`, `extract_quasilinear_pencil`, `sample_hyperbolicity` work
+   on any `PDESystem`.  The same library handles SWE, SME, VAM (with constraints, via
+   the rank-deficient pencil), 2D SWE, and DAE-style toy systems.  9 unit tests.
+3. **SME hyperbolicity sampler** — `sme_hyperbolicity.py` recovers K&T 2019's L=2
+   loss-of-hyperbolicity in extreme regimes; L=0, L=1 are 100% hyperbolic at every
+   range tested (matches `u_0 ± √(gH + u_1²)` formula).
+4. **VAM hyperbolicity** — `escalante2024_hyperbolicity.py` exercises the
+   constraint-pencil path (M_t rank-deficient by exactly the number of algebraic
+   closures) and reports 100% hyperbolic at the rest-vicinity sample range.
+
+Things to discuss tomorrow:
+
+- The dispersion analysis works in the **principal-symbol limit** (`k → ∞`); for
+  finite k, the M_0 coupling adds a `1/(ik) M_0` term to the pencil that the current
+  `sample_hyperbolicity` ignores.  For VAM at non-rest states M_0 may matter; let's
+  decide if we want a finite-k sampling mode.
+- The analysis library is purely sympy/scipy; it doesn't go through `BaseModel`.  If
+  you want existing BaseModel-based models to plug in, we should write a thin
+  `adapt_basemodel(model) -> PDESystem` adapter (~30 lines).
+- 2D plane-wave dispersion takes `axis=0` or `axis=1` to pick a propagation
+  direction; verified on 2D SWE.  For full dispersion-curve plotting we'd want a
+  ``(k_x, k_y) → ω`` interface.
 
 ## Four literature matches
 
