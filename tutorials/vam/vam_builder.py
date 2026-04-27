@@ -47,6 +47,8 @@ h, b = flow.h, flow.b
 def build_vam_pde_system(M: int, N: int, *,
                          eliminate_closures: bool = False,
                          hyperbolic_predictor: bool = False,
+                         w_N_as_input: bool = False,
+                         p_N_as_input: bool = False,
                          ) -> Tuple[PDESystem, list, list, list]:
     """Build the VAM nonlinear PDESystem at degree (M, N).
 
@@ -66,13 +68,26 @@ def build_vam_pde_system(M: int, N: int, *,
             projection).  This produces the **underlying hyperbolic
             system** of eq (7) of Escalante 2024 — what the
             projection-correction predictor (eq 11) actually advances.
-            Hyperbolicity sampling on this form reproduces the paper's
-            eigenvalues from eq (12).  The full DAE form (default) has
-            additional pressure-related modes which are determined
-            algebraically at each time step rather than evolved.
+            The full DAE form (default) has additional pressure-related
+            modes which are determined algebraically at each time step
+            rather than evolved.
+        w_N_as_input:
+            If True, treat ``w_N`` as an opaque coefficient (parameter)
+            instead of a state variable: drop ``w_N`` from the field
+            list AND drop the KBC-bottom algebraic equation that
+            determines it.  ``w_N`` then appears only as a coefficient
+            in the remaining matrices.  Combined with
+            ``hyperbolic_predictor=True``, this reproduces the paper's
+            eigenvalue formula (eq 12) — the paper's matrix
+            ``A(U, w_2)`` treats ``w_2`` as a free input, exactly this.
+        p_N_as_input:
+            Same idea for ``p_N``: drop the surface-BC equation and
+            treat ``p_N`` as opaque.  Only meaningful when
+            ``hyperbolic_predictor=False`` (otherwise pressure is
+            already absent).
 
-    Returns ``(system, u_fields, w_fields, p_fields)``.  When
-    ``hyperbolic_predictor=True`` the ``p_fields`` is empty.
+    Returns ``(system, u_fields, w_fields, p_fields)``.  Fields treated
+    as inputs are excluded from the lists.
     """
     flow = NonHydrostaticFlow.with_defaults()
     # Hyperbolic-predictor mode drops the non-hydrostatic pressure
@@ -132,16 +147,37 @@ def build_vam_pde_system(M: int, N: int, *,
         fields = [flow.h] + u_fields + w_fields + p_fields
         equations = [cont_j0_subbed] + diff_eqs_subbed
     else:
-        eq_w_N = ansatz.w_coeffs[N] - w_N_rhs
         u_fields = list(ansatz.u_coeffs)
         w_fields = list(ansatz.w_coeffs)
         p_fields = list(ansatz.p_coeffs)
-        fields = [flow.h] + u_fields + w_fields + p_fields
-        algebraic_eqs = [eq_w_N]
-        if not hyperbolic_predictor:
+
+        # When w_N or p_N are treated as inputs, replace their
+        # ``Function(t, x)`` atoms by constant ``Symbol``s throughout
+        # the equations.  Otherwise sympy's ``linearise`` would still
+        # see them as t,x-dependent and pick up spurious ∂_x / ∂_t
+        # contributions.
+        input_subs = {}
+        if w_N_as_input:
+            sym = sp.Symbol(f"w_{N}_input", real=True)
+            input_subs[ansatz.w_coeffs[N]] = sym
+            w_fields = w_fields[:N]
+        if not hyperbolic_predictor and p_N_as_input:
+            sym = sp.Symbol(f"p_{N}_input", real=True)
+            input_subs[ansatz.p_coeffs[N]] = sym
+            p_fields = p_fields[:N]
+
+        algebraic_eqs = []
+        if not w_N_as_input:
+            algebraic_eqs.append(ansatz.w_coeffs[N] - w_N_rhs)
+        if not hyperbolic_predictor and not p_N_as_input:
             algebraic_eqs.append(ansatz.p_coeffs[N] - p_N_rhs)
+
+        fields = [flow.h] + u_fields + w_fields + p_fields
         equations = ([cont_j0] + xmom + zmom + cont_constraints
                      + algebraic_eqs)
+        if input_subs:
+            equations = [sp.expand(eq.xreplace(input_subs).doit())
+                         for eq in equations]
 
     return (PDESystem(equations=equations,
                       fields=fields,
