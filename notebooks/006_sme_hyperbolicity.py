@@ -267,6 +267,42 @@ print("forcing (1/3) u_1²·∂_x h.")
 # **~5× smaller than K&T**.
 
 # %% [markdown]
+# ### Analytic eigenstructure with the regularisation
+#
+# At ū_2 = 0 the regularised characteristic polynomial **factors into two
+# real quadratics** — the eigenvalues are closed-form:
+#
+# $$
+# \lambda \;=\; \bar u_0 \pm \sqrt{g\bar h + \tfrac{\bar u_1^2}{3}}
+# \qquad\text{(gravity wave)}
+# $$
+#
+# $$
+# \lambda \;=\; \bar u_0 \pm \tfrac{\bar u_1}{\sqrt 5}
+# \qquad\text{(moment mode)}
+# $$
+#
+# All four manifestly real for any `(ū_0, ū_1, h̄ > 0)`. Compare with the
+# *original* SME at ū_2 = 0:  λ = ū_0 ± √(g h̄ + **ū_1²**) for the gravity
+# wave (the moment-mode is unchanged). The regularisation **damps the
+# `ū_1²` correction by a factor 3** and the sound speed
+# `√(gh + ū_1²/3)` is always real.
+
+# %%
+# Verify symbolically.
+lam = sp.Symbol("lam", real=True)
+A_sym = M_t_a.inv() * M_x_a
+A_sym_mod = A_sym.copy()
+A_sym_mod[1, 2] = 0
+char = sp.expand((A_sym_mod.subs({base_a[u_2]: 0}) - lam * sp.eye(4)).det())
+print("Modified characteristic polynomial at ū_2 = 0 (factored):")
+print(" ", sp.factor(char))
+print()
+print("Eigenvalues at ū_2 = 0 with A[1,2]=0:")
+for s in sp.solve(char, lam):
+    print(f"  λ = {sp.simplify(s)}")
+
+# %% [markdown]
 # ## 5. Visualisation
 
 # %%
