@@ -151,7 +151,105 @@ print(f"char poly degree in λ: {sp.Poly(char_red, lam).total_degree()}")
 # spectra non-trivially?
 
 # %% [markdown]
-# ## 4.5 Paper inconsistency (Escalante 2024 eq 6)
+# ## 4.5 Standard literature for singular pencils
+#
+# **Kronecker Canonical Form (KCF)** — Gantmacher, *Theory of Matrices*
+# (1959).  Decomposes any pencil $A - \lambda B$ (singular or regular)
+# into block-diagonal canonical form with four block types:
+#
+# * **Regular Jordan blocks** — finite eigenvalues.
+# * **Regular nilpotent blocks** — infinite eigenvalues (rank-deficient $B$).
+# * **Right minimal indices ($L_r$)** — undetermined columns; correspond
+#   to free state directions.
+# * **Left minimal indices ($L_c$)** — redundant rows; correspond to
+#   linearly-dependent equations.
+#
+# The finite eigenvalues are **uniquely determined** by the pencil,
+# regardless of which row/column elimination one performs.
+#
+# Algorithms:
+# * Van Dooren (1979): "The computation of Kronecker's canonical form
+#   of a singular pencil", Linear Algebra Appl.
+# * Beelen & Van Dooren (1988): improved $O(m^2 n)$ algorithm.
+# * GUPTRI software (Demmel & Kågström): the de-facto numerical standard.
+# * SciPy's `scipy.linalg.eig(A, B)` (QZ algorithm) handles
+#   rank-deficient $B$ but doesn't extract the regular part of a
+#   *truly singular* pencil cleanly.
+#
+# **DAE index reduction** — Pantelides (1988), Pryce $\Sigma$-method,
+# Mattsson & Söderlind (1993) "dummy derivatives".  Differentiates
+# constraints + applies dummy derivatives to reach an index-1 form,
+# then standard ODE/eigenvalue analysis applies.  Effectively the
+# "substitute closures" route in our terminology.
+
+# %% [markdown]
+# ## 4.6 Combinatorial elimination experiment
+#
+# We tried the user's suggestion — start from the full augmented
+# pencil and find a regular sub-pencil by enumerating row/column
+# subsets.  Code in `tutorials/analysis/kcf_brute_subpencil.py`.
+#
+# **Result.** The brute-force *finds* a regular sub-pencil, but the
+# eigenvalues depend on which rows/columns one chooses to drop.  For
+# augmented SME L=1 it returned eigenvalues
+# $U_0 - U_1, 2U_0 \pm 2\sqrt{3}U_1/3$ — different from the standard
+# SME $U_0, U_0 \pm \sqrt{gH + U_1^2}$.
+#
+# **Why.** Different sub-pencils correspond to different *structural
+# choices* of which fields are "primary state" and which are
+# "constrained".  The KCF framework would extract a unique regular
+# part, but a naive sub-pencil search doesn't.
+
+# %% [markdown]
+# ## 4.7 Gaussian-then-eliminate experiment
+#
+# Try Gaussian elimination on $M_t$ first (to expose hidden algebraic
+# rows that arise only after combining evolution rows), then drop the
+# resulting all-zero $M_t$ rows.  Code in
+# `tutorials/analysis/kcf_gaussian_then_eliminate.py`.
+#
+# **Result.** Correctly identifies all 3 algebraic constraints in
+# augmented SME L=1 (after Gaussian step `M_t` shows rows 3, 4, 5 with
+# zero $M_t$).  But when eliminating fields, the column-elimination
+# step propagates substitutions back into $M_t$ and breaks the
+# structure — `rank(M_t)` drops from 3 to 1 over the iterations,
+# leaving the wrong reduced pencil.
+#
+# Adding a `prefer_eliminate=[w_0, w_1, w_2]` hint helps but doesn't
+# fully solve it: the algebraic-row coefficients on $w_i$ may be
+# zero (the algebraic content is on $h, u_0, u_1$ at that step), so
+# the algorithm still picks $h$ or $u_0$ to eliminate.
+#
+# **Conclusion.** A **proper KCF implementation** is needed for the
+# generic case — implementing Beelen-Van Dooren symbolically is
+# probably ~200 lines.  Alternative: for paper-matching specifically,
+# specify "input variables" (option II below) — much simpler.
+
+# %% [markdown]
+# ## 4.8 Recommended path forward
+#
+# Given the above, two routes:
+#
+# 1. **Generic (slow road)**: implement symbolic KCF (Beelen-Van Dooren
+#    in SymPy).  Produces unique regular-part eigenvalues for any
+#    PDE system with arbitrary algebraic constraints.  Probably 1-2
+#    days of careful work.
+#
+# 2. **Practical (fast road)**: add a `keep_as_input=[...]` parameter
+#    to `vam_builder`/`sme_builder` that drops the listed fields from
+#    the state vector AND drops the associated algebraic equations,
+#    treating those fields as opaque coefficients in the remaining
+#    matrices.  This gives the paper's eq (12) eigenvalues for VAM
+#    when called with `keep_as_input=[w_2]`, and recovers standard
+#    SME from augmented SME with `keep_as_input=[w_0, w_1, w_2]`.
+#    ~30 lines of code; tomorrow's discussion item.
+#
+# Most users will care about (2); (1) is for completeness and matters
+# only if/when we hit a system where the input-vs-state choice isn't
+# obvious.
+
+# %% [markdown]
+# ## 4.9 Paper inconsistency (Escalante 2024 eq 6)
 #
 # The paper writes the compact form $A(U, w_2) = J_F + G$ with
 # $U = (h, hu_0, hu_1, hw_0, hw_1)^T$, but the F, G, T vectors are

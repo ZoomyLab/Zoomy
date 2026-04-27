@@ -130,3 +130,66 @@
 # automatic chain rule, IBP, or $.doit()$ on Derivative/Integral atoms
 # inside its block.  Used to verify that derivations are explicit
 # (every math step is a named primitive).
+#
+# ## Pencil theory
+#
+# **Matrix pencil** — a parametrised matrix family $A - \lambda B$.
+# The generalised eigenvalue problem $A v = \lambda B v$ is the
+# pencil's spectral problem.
+#
+# **Regular pencil** — $\det(A - \lambda B) \not\equiv 0$.  Has finite
+# eigenvalues from the regular Jordan blocks plus possibly infinite
+# eigenvalues if $B$ is rank-deficient.
+#
+# **Singular pencil** — $\det(A - \lambda B) \equiv 0$ identically.
+# $A$ and $B$ share a common kernel direction.  Indicates the system
+# has algebraic constraints + redundant equations that need
+# elimination before the spectrum can be read off.
+#
+# **Kronecker Canonical Form (KCF)** — Gantmacher 1959.  The unique
+# block-diagonal canonical form of a pencil under strict equivalence:
+# regular Jordan blocks (finite eigenvalues), regular nilpotent blocks
+# (infinite eigenvalues), $L_r$ blocks (right minimal indices —
+# undetermined columns), $L_c$ blocks (left minimal indices —
+# redundant rows).
+#
+# **Right minimal indices ($L_r$)** — degrees of freedom in the
+# solution that are not constrained by the pencil.  Correspond to
+# "input variables" in DAE language.
+#
+# **Left minimal indices ($L_c$)** — linearly-dependent equations.
+# Can be dropped without losing information.
+#
+# **Generalised Schur decomposition / QZ algorithm** — Moler & Stewart
+# 1973.  Numerical algorithm that brings $(A, B)$ to upper-triangular
+# form simultaneously via unitary transformations.  Reads off
+# eigenvalues from the diagonal.  Doesn't fully handle truly singular
+# pencils; needs KCF reduction first.
+#
+# **GUPTRI** — Demmel & Kågström.  Numerical software for KCF
+# reduction.  De-facto standard for singular-pencil spectral analysis.
+#
+# **Beelen-Van Dooren algorithm** (1988) — $O(m^2 n)$ KCF reduction
+# using only unitary transformations; numerically stable.
+#
+# ## DAE theory
+#
+# **Differential-algebraic equation (DAE)** — system of the form
+# $F(x, \dot x, t) = 0$ where $\partial F / \partial \dot x$ may be
+# rank-deficient.  Mixes differential and algebraic equations.
+#
+# **Index** — the number of differentiations needed to reduce a DAE
+# to an explicit ODE.  Index 0 = ODE; index 1 = "easy" DAE; index 2+
+# = harder.
+#
+# **Pantelides algorithm** (1988) — graph-theoretical method for
+# index reduction: identifies equations to differentiate so the
+# system becomes index 1.
+#
+# **Dummy derivatives** — Mattsson & Söderlind 1993.  After
+# differentiating constraints, replace some derivatives by
+# "dummy" algebraic variables to keep dimensions matched.
+#
+# **Pryce $\Sigma$-method** — alternative to Pantelides; uses
+# signature matrix (Σ) of derivative orders.  Tends to be more
+# robust on tricky systems.
