@@ -35,6 +35,7 @@ from zoomy_core.derivation import (
     GalerkinProjection,
     kbc_bottom_solve_w_N,
     surface_bc_solve_p_N,
+    eliminate_constraints,
 )
 
 
@@ -46,6 +47,7 @@ h, b = flow.h, flow.b
 
 def build_vam_pde_system(M: int, N: int, *,
                          eliminate_closures: bool = False,
+                         solve_constraints_jointly: bool = False,
                          hyperbolic_predictor: bool = False,
                          w_N_as_input: bool = False,
                          p_N_as_input: bool = False,
@@ -62,6 +64,18 @@ def build_vam_pde_system(M: int, N: int, *,
             True  — pre-substitute the closures into every equation,
                     so ``w_N`` and ``p_N`` no longer appear; the system
                     is purely differential, ``M_t`` is non-singular.
+                    NOTE: gives a chain-rule-modified Jacobian; for
+                    paper-eq-(12) eigenvalues use
+                    ``solve_constraints_jointly=True`` instead.
+        solve_constraints_jointly:
+            If True, solve ALL algebraic constraints (continuity j=1..N
+            + KBC bottom + surface BC) as a SINGLE linear system in
+            (w_0..w_N, p_N) and substitute the solution back into the
+            evolution equations.  This gives the "underlying-hydrostatic"
+            reduced system used in the paper's eq (12) eigenvalue
+            analysis.  Equivalent to fully eliminating w_i via
+            depth-integrated continuity in the standard SME-style
+            derivation.
         hyperbolic_predictor:
             If True, additionally drop the non-hydrostatic pressure
             terms ``T(P)`` (set every ``p_i`` to zero before
@@ -107,8 +121,8 @@ def build_vam_pde_system(M: int, N: int, *,
     # z-mom j = 0..N-1 (j=N is the algebraic closure for w_N via KBC bottom).
     zmom = [proj.project_z_momentum(j) for j in range(N)]
     # Continuity j = 1..N (algebraic-in-time constraints).  Skipped in
-    # hyperbolic_predictor mode: those constraints are enforced by the
-    # corrector (Poisson) step, not by the predictor.
+    # hyperbolic_predictor mode (those are enforced by the corrector
+    # Poisson step, not the predictor).
     cont_constraints = ([proj.project_continuity(j) for j in range(1, N + 1)]
                         if not hyperbolic_predictor else [])
 
@@ -117,7 +131,69 @@ def build_vam_pde_system(M: int, N: int, *,
     p_N_rhs = (surface_bc_solve_p_N(ansatz, flow)
                if not hyperbolic_predictor else None)
 
-    if eliminate_closures:
+    if solve_constraints_jointly:
+        # Build the algebraic constraint set + the corresponding
+        # constrained fields.
+        #
+        # Hyperbolic-predictor mode (paper eq 7 / eq 12):
+        #   - Drop p entirely (already done via N_p=-1).
+        #   - Drop cont j=1..N constraints (those are corrector-only).
+        #   - Eliminate ONLY w_N via KBC bottom.
+        #   - Result: state = (h, u_0..u_M, w_0..w_{N-1}); w_N is
+        #     algebraically closed.
+        #
+        # Full DAE mode (eq 6 with pressure):
+        #   - Use cont j=1..N + KBC bottom to eliminate w_0..w_N (N+1
+        #     equations for N+1 unknowns).
+        #   - Use surface BC to eliminate p_N.
+        #   - Result: state = (h, u_0..u_M, p_0..p_{N-1}); pressure
+        #     drives the dynamics through the algebraic-elimination
+        #     chain rule.
+        constraint_eqs = []
+        constrained_fields = []
+        if hyperbolic_predictor:
+            # Only KBC bottom; close w_N.
+            constraint_eqs.append(ansatz.w_coeffs[N] - w_N_rhs)
+            constrained_fields.append(ansatz.w_coeffs[N])
+        else:
+            # cont j=1..N + KBC bottom for w_0..w_N (N+1 each).
+            constraint_eqs.extend(cont_constraints)
+            constraint_eqs.append(ansatz.w_coeffs[N] - w_N_rhs)
+            constrained_fields.extend(list(ansatz.w_coeffs))   # w_0..w_N
+            # Surface BC for p_N.
+            constraint_eqs.append(ansatz.p_coeffs[N] - p_N_rhs)
+            constrained_fields.append(ansatz.p_coeffs[N])
+
+        dt_h_rule = {sp.Derivative(flow.h, flow.t):
+                     -sp.Derivative(flow.h * ansatz.u_coeffs[0], flow.x)}
+
+        # Apply dt_h_rule to all diff eqs EXCEPT cont j=0 (which IS the
+        # rule's source — substituting into it would give 0 = 0).  Keep
+        # cont j=0 unchanged.
+        diff_eqs_other = xmom + zmom
+        diff_eqs_other_reduced = eliminate_constraints(
+            differential_eqs=diff_eqs_other,
+            constraint_eqs=constraint_eqs,
+            constrained_fields=constrained_fields,
+            apply_dt_h_rule=dt_h_rule,
+        )
+        # cont j=0 just needs the constraint substitution (no dt_h).
+        sol_only = eliminate_constraints(
+            differential_eqs=[cont_j0],
+            constraint_eqs=constraint_eqs,
+            constrained_fields=constrained_fields,
+            apply_dt_h_rule=None,
+        )
+        diff_eqs_reduced = sol_only + diff_eqs_other_reduced
+
+        u_fields = list(ansatz.u_coeffs)
+        # Keep w fields that were NOT eliminated.
+        w_fields = [w for w in ansatz.w_coeffs if w not in constrained_fields]
+        p_fields = ([p for p in ansatz.p_coeffs if p not in constrained_fields]
+                    if not hyperbolic_predictor else [])
+        fields = [flow.h] + u_fields + w_fields + p_fields
+        equations = diff_eqs_reduced
+    elif eliminate_closures:
         repl = {ansatz.w_coeffs[N]: w_N_rhs}
         if not hyperbolic_predictor:
             repl[ansatz.p_coeffs[N]] = p_N_rhs

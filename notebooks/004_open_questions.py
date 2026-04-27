@@ -303,7 +303,43 @@ print(f"char poly degree in λ: {sp.Poly(char_red, lam).total_degree()}")
 #   the `-ξ ∂_t h` piece.
 
 # %% [markdown]
-# ## 4.10 Paper inconsistency (Escalante 2024 eq 6)
+# ## 4.10 Update: joint-constraint elimination resolves SME L=2
+#
+# `zoomy_core.derivation.eliminate_constraints` solves all algebraic
+# constraints jointly via `sp.solve` (instead of substituting them
+# one-by-one or treating constrained fields as inputs).  Result:
+#
+# * **SME L=2 augmented** with N_w=3 + cont j=1,2,3 + KBC bottom
+#   eliminated: gives EXACTLY the standard K&T 2019 eigenvalues.
+#   Verified at U_1=2, U_2=2, H=1, g=9.81: both
+#   `[-3.7196, +0.3431, +1.4778, +4.7558]`.  ✓
+# * **VAM (1,2) full DAE** + all algebraic constraints eliminated:
+#   gives 3 of paper's 5 eigenvalues exactly (`±√(gH+u_1²)` and the
+#   trivial 0); the (w_0, w_1) modes (`±u_1/√3`) are missing because
+#   we eliminated those fields too.
+#
+# **VAM hyperbolic-predictor eq (12) reproduction** (the paper's 5×5
+# matrix over `(h, u_0, u_1, w_0, w_1)` with w_2 closed via KBC bottom)
+# still fails — the σ-coord projection's trace terms
+# (`(u_0 − u_1/3) ∂_t h` etc. from the IBP integrand of `2∫ωu dξ`)
+# are NOT absorbed when only KBC bottom is solved.  They DO get
+# absorbed when ALL constraints are solved (as in the SME case
+# above).
+#
+# **Conclusion.**  σ-coord projection IS mathematically equivalent to
+# physical-z + full constraints — they give the same answer when ALL
+# constraints are used.  They DIFFER when some constraints are dropped
+# (predictor mode), because the σ-coord trace terms no longer have
+# matching constraint contributions to cancel them.
+#
+# **Physical-z derivation is in progress** (`zoomy_core.derivation.physical_z`
+# skeleton committed) but not yet operational — z-derivatives on the
+# polynomial ansatz need careful handling through the affine
+# z = ξh+b substitution.  Once complete, VAM eq (12) reproduction
+# should fall out automatically.
+
+# %% [markdown]
+# ## 4.11 Paper inconsistency (Escalante 2024 eq 6)
 #
 # The paper writes the compact form $A(U, w_2) = J_F + G$ with
 # $U = (h, hu_0, hu_1, hw_0, hw_1)^T$, but the F, G, T vectors are
