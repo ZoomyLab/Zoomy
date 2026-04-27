@@ -249,7 +249,61 @@ print(f"char poly degree in λ: {sp.Poly(char_red, lam).total_degree()}")
 # obvious.
 
 # %% [markdown]
-# ## 4.9 Paper inconsistency (Escalante 2024 eq 6)
+# ## 4.9 Augmented vs standard SME L=2 — eigenvalue discrepancy
+#
+# **Setup.** Build SME L=2 in two ways:
+#
+# 1. **Standard** (`w_mode='from_continuity'` in the projection): w is
+#    depth-integrated from continuity, no algebraic constraints,
+#    pencil shape 4×4.
+# 2. **Augmented** (`w_mode='state'`, w polynomial of degree N_w=3):
+#    w_0..w_3 are state variables, plus continuity j=1..3 + KBC bottom
+#    as algebraic equations.  Pencil shape 8×8.
+#
+# Then "fully eliminate" the augmented form (drop all w_i as inputs +
+# drop all algebraic equations).  This SHOULD reduce to the standard
+# 4×4 (h, u_0, u_1, u_2) pencil.
+#
+# **Experiment** (`tutorials/analysis/sme_l2_partial_elimination.py`):
+#
+# At rest (U=0): standard and fully-eliminated augmented eigenvalues
+# agree exactly: ±√(gH).
+#
+# At non-rest (e.g. U_1=2, U_2=2):
+# * standard:               ±3.72, +0.34, +1.48, +4.76
+# * fully-eliminated aug:   ±3.78, −0.70, +1.59, +5.63
+#
+# **The eigenvalues differ — even though the elimination should make
+# the augmented form identical to the standard.**
+#
+# Investigation: my σ-coord projection of x-momentum has extra
+# `(u_0 − u_1/3) ∂_t h` and similar terms inside the IBP integrand
+# of `+2 ∫ω u dξ` (specifically from the `-ξ ∂_t h` piece of ω).
+# After full elimination at the augmented level, these survive as
+# extra coefficients that the standard projection (where w is
+# already substituted via depth-integrated continuity) doesn't have.
+#
+# The standard formulations of K&T 2019 (SME) and Escalante 2024
+# (VAM, eq 4) appear to apply additional algebraic identities (likely
+# continuity j=0 to substitute ∂_t h, OR some other reduction) that
+# we haven't replicated in the σ-coord projection module.
+#
+# **Same root cause** explains why my VAM (1,2) hyperbolic-predictor
+# matrix doesn't match paper eq (12) exactly — the `±u_1/√3`
+# eigenvalues match (those come from the (w_0, w_1) block which is
+# unaffected), but `±√(gH+u_1²)` is off by O(u_1²).
+#
+# **Open work item.** Identify the algebraic reduction the standard
+# formulations apply and propagate it through `GalerkinProjection`.
+# Likely candidates:
+# * Apply cont j=0 → ∂_t h substitution INSIDE the IBP integrand
+#   before projection.
+# * Use IBP with ``∂_t(h φ_j u)`` instead of `h ∂_t(φ_j u)`.
+# * Retain stress σ_xz and use viscous boundary condition to absorb
+#   the `-ξ ∂_t h` piece.
+
+# %% [markdown]
+# ## 4.10 Paper inconsistency (Escalante 2024 eq 6)
 #
 # The paper writes the compact form $A(U, w_2) = J_F + G$ with
 # $U = (h, hu_0, hu_1, hw_0, hw_1)^T$, but the F, G, T vectors are
