@@ -113,19 +113,42 @@ def build_vam_pdesystem(M: int = 1, N_w: int | None = None, N_p: int | None = No
     surface_bc = sp.expand(p_ansatz.xreplace({z: eta}))
 
     # ---- Assemble equations + fields ----
+    # Formulation 1 (matches Escalante's eq (4) + (5) row count and the
+    # user's reading: pure-KBC algebraics for VAM(1, 2, 2), one cont_j
+    # added per extra moment level beyond M = 1):
+    #   - explicit mass equation as evolution (∂_t h + ∂_x(h u_0) = 0)
+    #   - x-mom × (M+1) and z-mom × (N_w+1) as evolution
+    #   - kbc_top *with ∂_t h substituted out via the mass equation* —
+    #     becomes purely algebraic.  Equivalent to Escalante's eq (5)
+    #     constraint I_2 after the ∂_t h substitution.
+    #   - kbc_bot, surface_bc as algebraic
+    #   - cont_j projections for j = 1, …, M − 1  (zero for M = 1)
+    mass_eq = sp.Derivative(h, t) + sp.Derivative(h * u_funcs[0], x).doit()
+
+    # kbc_top originally:   w(η) − ∂_t η − u(η)·∂_x η = 0
+    #               i.e.,   w(η) − u(η)·∂_x η = ∂_t h + ∂_t b = ∂_t h     (b fixed)
+    # Substitute mass eq (∂_t h = −∂_x(h u_0)) → algebraic form:
+    #               w(η) − u(η)·∂_x η + ∂_x(h u_0) = 0
+    kbc_top_alg = sp.expand(
+        w_ansatz.xreplace({z: eta})
+        - u_ansatz.xreplace({z: eta}) * sp.Derivative(eta, x).doit()
+        + sp.Derivative(h * u_funcs[0], x).doit()
+    )
+
     equations = []
     eq_names = []
-    # Evolution rows (have ∂_t):
+    # Evolutions: 2M + 4 of them for VAM(M, M+1, M+1).
+    equations.append(mass_eq); eq_names.append("mass")
     for j, e in enumerate(xmom_js):
         equations.append(e); eq_names.append(f"xmom_j{j}")
     for j, e in enumerate(zmom_js):
         equations.append(e); eq_names.append(f"zmom_j{j}")
-    equations.append(kbc_top); eq_names.append("kbc_top")
-    # Algebraic rows (∂_t-free):
-    for j, e in enumerate(cont_js):
-        equations.append(e); eq_names.append(f"cont_j{j}")
+    # Algebraic constraints: M + 2 of them for VAM(M, M+1, M+1).
+    equations.append(kbc_top_alg); eq_names.append("kbc_top_alg")
     equations.append(kbc_bot); eq_names.append("kbc_bot")
     equations.append(surface_bc); eq_names.append("surface_bc")
+    for j in range(1, M):
+        equations.append(cont_js[j]); eq_names.append(f"cont_j{j}")
 
     fields = [h] + u_funcs + w_funcs + p_funcs
 
