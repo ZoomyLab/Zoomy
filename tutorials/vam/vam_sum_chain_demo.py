@@ -97,9 +97,9 @@ def derive_vam(level: int):
     basis_w = Legendre_shifted(level=level, symbol="eta")
     basis_p = Legendre_shifted(level=level, symbol="mu")
 
-    amps_u = [sp.Function(f"U_{k}", real=True)(t, x) for k in range(level + 1)]
-    amps_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
-    amps_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_u = [sp.Function(f"U_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
 
     test_phi_of_z = Zstruct(
         **{f"phi_{k}": basis_u.phi[k]((z - state.b) / state.H)
@@ -128,9 +128,9 @@ def derive_vam(level: int):
 
     # 5. Ansatz substitutions — produce unevaluated ``sp.Sum`` atoms
     #    holding opaque ``phi_fn``/``eta_fn``/``mu_fn`` Functions.
-    model.apply(Expand(state.u, basis=basis_u, amplitudes=amps_u, state=state))
-    model.apply(Expand(state.w, basis=basis_w, amplitudes=amps_w, state=state))
-    model.apply(Expand(state.p, basis=basis_p, amplitudes=amps_p, state=state))
+    model.apply(Expand(state.u, basis=basis_u, coefficients=coeffs_u, state=state))
+    model.apply(Expand(state.w, basis=basis_w, coefficients=coeffs_w, state=state))
+    model.apply(Expand(state.p, basis=basis_p, coefficients=coeffs_p, state=state))
 
     # 6. Resolve every Integral.  Internally:
     #    - Sums get ``.doit()``-ed (amp_fn auto-evaluates per index);
@@ -151,9 +151,9 @@ def derive_vam_intermediate(level: int):
     basis_u = Legendre_shifted(level=level, symbol="phi")
     basis_w = Legendre_shifted(level=level, symbol="eta")
     basis_p = Legendre_shifted(level=level, symbol="mu")
-    amps_u = [sp.Function(f"U_{k}", real=True)(t, x) for k in range(level + 1)]
-    amps_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
-    amps_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_u = [sp.Function(f"U_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
+    coeffs_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
     test_phi_of_z = Zstruct(
         **{f"phi_{k}": basis_u.phi[k]((z - state.b) / state.H)
            for k in range(level + 1)}
@@ -167,9 +167,9 @@ def derive_vam_intermediate(level: int):
     model.apply(InterfaceKBC(state, state.eta)).simplify()
     model.apply({state.p.subs(z, state.eta): 0}).simplify()
     model.apply(AffineProjection(state))
-    model.apply(Expand(state.u, basis=basis_u, amplitudes=amps_u, state=state))
-    model.apply(Expand(state.w, basis=basis_w, amplitudes=amps_w, state=state))
-    model.apply(Expand(state.p, basis=basis_p, amplitudes=amps_p, state=state))
+    model.apply(Expand(state.u, basis=basis_u, coefficients=coeffs_u, state=state))
+    model.apply(Expand(state.w, basis=basis_w, coefficients=coeffs_w, state=state))
+    model.apply(Expand(state.p, basis=basis_p, coefficients=coeffs_p, state=state))
     return model
 # -
 
