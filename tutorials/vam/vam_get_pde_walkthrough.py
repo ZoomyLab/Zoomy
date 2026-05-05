@@ -47,7 +47,7 @@ from zoomy_core.analysis import (
 )
 from zoomy_core.analysis.pde_system import PDESystem
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
-from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
+from zoomy_core.fvm.solver_splitting_numpy import FSFSplittingSolver
 from zoomy_core.mesh import BaseMesh
 import zoomy_core.fvm.timestepping as ts
 import zoomy_core.model.boundary_conditions as BC
@@ -160,16 +160,17 @@ rt = NumpyRuntimeModel(m2d)
 print("Compiled runtime functions:",
       sorted(rt.runtime_functions.keys())[:8], "…")
 
-# ## 5. 2D dam-break with `FreeSurfaceFlowSolver`
+# ## 5. 2D dam-break with `FSFSplittingSolver`
 #
-# `FreeSurfaceFlowSolver` is the canonical explicit RK + positive
-# Rusanov solver for SWE/SME/VAM with non-conservative products. It
-# accepts the model class directly — internally it calls the
-# `NumpyRuntimeModel` runtime from step 4.
-#
-# (Pressure-Poisson `SplittingSolver` is the right path for INS-style
-# 3D incompressible flow via `INS3DChorin`. For VAM in this notebook
-# the explicit hyperbolic solver is what runs.)
+# `FSFSplittingSolver` is the free-surface specialization of
+# `SplittingSolver`: explicit hyperbolic predictor (positive Rusanov
+# with hydrostatic reconstruction; b at index 0, h at index 1) plus
+# explicit viscous diffusion plus a pressure Poisson correction
+# (Chorin projection). This is the right solver for non-hydrostatic
+# VAM. It accepts the model class directly — internally it calls the
+# `NumpyRuntimeModel` runtime from step 4. Every substep is
+# ghost-cell-free: BCs are evaluated inline at boundary faces by
+# calling the BC's `face_value(...)` directly, no ghost-cell fill.
 
 # +
 def dam_break_ic(x, _nv=m2d.n_variables):
@@ -183,9 +184,10 @@ m2d.boundary_conditions = BC.BoundaryConditions([
 ])
 
 mesh = BaseMesh.create_2d((0.0, 10.0, 0.0, 10.0), nx=20, ny=20)
-solver = FreeSurfaceFlowSolver(time_end=0.05,
-                               compute_dt=ts.adaptive(CFL=0.3))
-Q, Qaux = solver.solve(mesh, m2d, write_output=False)
+solver = FSFSplittingSolver(time_end=0.05,
+                            compute_dt=ts.adaptive(CFL=0.3),
+                            viscosity=0.01)
+Q, p = solver.solve(mesh, m2d, write_output=False)
 nc = mesh.n_inner_cells
 h = Q[1, :nc]
 hu = Q[2, :nc]
@@ -193,12 +195,14 @@ hv = Q[3, :nc]
 hw = Q[4, :nc]
 
 print(f"Inner cells     : {nc}")
-print(f"All-finite      : {np.isfinite(Q[:, :nc]).all()}")
+print(f"All-finite Q    : {np.isfinite(Q[:, :nc]).all()}")
+print(f"All-finite p    : {np.isfinite(p[:nc]).all()}")
 print(f"Positivity h≥0  : {(h >= -1e-10).all()}")
 print(f"h range         : [{h.min():.4f}, {h.max():.4f}]")
 print(f"|u_max|         : {(np.abs(hu / h)).max():.4f}")
 print(f"|v_max|         : {(np.abs(hv / h)).max():.4f}")
 print(f"|w_max|         : {(np.abs(hw / h)).max():.4f}")
+print(f"|p|max          : {np.abs(p[:nc]).max():.4f}")
 mass = float(np.sum(h) * (10.0 * 10.0) / nc)
 mass_expected = 2.0 * 25.0 + 1.0 * 75.0
 print(f"mass {mass:.3f} (expected {mass_expected})")
