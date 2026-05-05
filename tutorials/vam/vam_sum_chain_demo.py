@@ -67,34 +67,40 @@ from zoomy_core.model.models.basisfunctions import Legendre_shifted
 #
 # The same chain runs for any L.  Per-step reasoning is in the
 # inline comments.
+#
+# ### Why `phi(k, (z-b)/h)` and not `phi(k, z)` directly
+#
+# The basis polynomials live on the reference element ξ ∈ [0, 1].
+# Galerkin-testing against them in a depth integral over physical
+# z ∈ [b, b+h] requires the relative coordinate (z-b)/h to be the
+# basis argument.  The composition `phi(k, (z-b)/h)` is the explicit
+# semantic bridge: "this is basis k evaluated at the relative
+# coordinate, expressed in terms of physical z."
+#
+# `AffineProjection` later substitutes `z → ζ·h + b` everywhere
+# structurally; the composition collapses cleanly:
+#
+#     phi(k, (z-b)/h)   z → ζ·h+b   →   phi(k, ζ)
+#
+# — and the integrand emerges in the reference-element form ready
+# for `EvaluateIntegrals`.  Writing `phi(k, z)` directly would leave
+# `phi(k, ζ·h+b)` after `AffineProjection`, which is *not* in [0, 1]
+# and has no orthogonality structure there.
 
 # +
 def derive_vam(level: int):
-    """Run the Sum-based Galerkin chain for VAM at the given level.
-
-    Returns the derived ``System`` (a tree of leaves with closed
-    equations) — caller can inspect any leaf's ``expr`` directly.
-    """
+    """Run the Sum-based Galerkin chain for VAM at the given level."""
     state = StateSpace(dimension=2)
     t, x, z = state.t, state.x, state.z
 
-    # Three independent bases on the same model.  Distinct ``symbol``
-    # values produce distinct sympy Function classes (``phi_…``,
-    # ``eta_…``, ``mu_…``); ``_basis`` back-references on each class
-    # carry the link to the basis instance for later resolution.
     basis_u = Legendre_shifted(level=level, symbol="phi")
     basis_w = Legendre_shifted(level=level, symbol="eta")
     basis_p = Legendre_shifted(level=level, symbol="mu")
 
-    # Pre-declared amplitudes: state-Function calls of (t, x).  These
-    # are what would be the model's evolved fields downstream — for
-    # the demo we just declare them inline.
     amps_u = [sp.Function(f"U_{k}", real=True)(t, x) for k in range(level + 1)]
     amps_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
     amps_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
 
-    # Test functions for Galerkin testing — these go into ``Multiply``.
-    # ``basis_u.phi[k](arg)`` calls the opaque 2-arg phi_fn at index k.
     test_phi_of_z = Zstruct(
         **{f"phi_{k}": basis_u.phi[k]((z - state.b) / state.H)
            for k in range(level + 1)}
@@ -105,8 +111,8 @@ def derive_vam(level: int):
     model.apply(Inviscid(state)).simplify()
 
     # 2. Galerkin test: multiply momentum.x and momentum.z by every
-    #    test function.  This lifts each scalar momentum equation
-    #    into a Zstruct of ``test_0..test_L`` sub-equations.
+    #    test function.  Each scalar momentum equation lifts into a
+    #    Zstruct of ``test_0..test_L`` sub-equations.
     model.momentum.x.apply(Multiply(test_phi_of_z, outer=True))
     model.momentum.z.apply(Multiply(test_phi_of_z, outer=True))
 
@@ -116,7 +122,8 @@ def derive_vam(level: int):
     model.apply(InterfaceKBC(state, state.eta)).simplify()
     model.apply({state.p.subs(z, state.eta): 0}).simplify()
 
-    # 4. Reference-element map (was ZetaTransform; renamed).
+    # 4. Reference-element map (was ZetaTransform; renamed to
+    #    AffineProjection).
     model.apply(AffineProjection(state))
 
     # 5. Ansatz substitutions — produce unevaluated ``sp.Sum`` atoms
@@ -132,20 +139,13 @@ def derive_vam(level: int):
     #      integration rule cache.
     model.apply(EvaluateIntegrals(state)).simplify()
 
-    return model, state
-# -
+    return model
 
 
-# ## Inspect intermediate Sum-form (before EvaluateIntegrals)
-#
-# Cut the chain just after `Expand` to see what `Sum` atoms look like
-# in the symbolic equation.  The Sum carries through `ProductRule`
-# (single-term op via `apply_to_term`) and `Integrate` as a single
-# atom — that's the whole point of step 2's redesign.
-
-# +
 def derive_vam_intermediate(level: int):
-    """Same chain but stop right after the Expand calls."""
+    """Same chain but stops right after the three Expand calls so we
+    can inspect the un-resolved ``sp.Sum`` form.
+    """
     state = StateSpace(dimension=2)
     t, x, z = state.t, state.x, state.z
     basis_u = Legendre_shifted(level=level, symbol="phi")
@@ -174,75 +174,38 @@ def derive_vam_intermediate(level: int):
 # -
 
 
-# ## Run at L=0 — print the closed equations
+# ## L=0 — closed VAM equations
+#
+# After the full chain, every leaf is closed in the basis amplitudes
+# `(U_0, W_0, P_0)`.  No remaining `Sum`s, `Integral`s, or
+# residual `state.u/w/p/ζ` atoms.
 
-# +
-print("=" * 72)
-print("Level 0 — closed VAM(level=0) equations")
-print("=" * 72)
-sys_L0, _ = derive_vam(0)
-for path, eq in sys_L0.leaves():
-    print(f"\n[{'.'.join(path)}]")
-    print(f"  {sp.expand(eq.expr)}")
-
-print()
-print("Expected (from the standard chain):")
-print("  continuity:  ∂_t h + ∂_x(U_0·h) = 0")
-print("  momentum.x:  ∂_t(U_0·h) + ∂_x(U_0²·h) + ∂_x(P_0·h/ρ) + P_0·∂_x b/ρ = 0")
-print("  momentum.z:  g·h + ∂_t(W_0·h) + ∂_x(U_0·W_0·h) − P_0/ρ = 0")
-# -
+model_L0 = derive_vam(0)
+model_L0.describe()
 
 
-# ## Inspect intermediate Sum-form at L=1
+# ## L=1 — Sum-form intermediates (after `Expand`, before `EvaluateIntegrals`)
+#
+# Each leaf carries a small number of `Sum` atoms — the ansatz is
+# unevaluated, so the equation is compact.  The Sum is a *single
+# term* in each leaf's Add decomposition, which is what makes
+# `ProductRule`'s `apply_to_term` cheap to use even at higher
+# levels.
 
-# +
-print()
-print("=" * 72)
-print("Level 1 — Sum-form intermediates (after Expand, before EvaluateIntegrals)")
-print("=" * 72)
-inter_L1 = derive_vam_intermediate(1)
-for path, eq in inter_L1.leaves():
-    n_sums = len(eq.expr.atoms(sp.Sum))
-    n_integrals = len(eq.expr.atoms(sp.Integral))
-    print(f"  [{'.'.join(path):<26}]  Sum atoms: {n_sums:>2d}   Integral atoms: {n_integrals:>2d}")
-print()
-print(
-    "Each leaf carries Sum atoms — the ansatz is unevaluated.\n"
-    "The Sum is a SINGLE term in the leaf's Add decomposition,\n"
-    "which is what makes ProductRule's apply_to_term cheap to use\n"
-    "(no need to apply L+1 times)."
-)
-# -
+intermediate_L1 = derive_vam_intermediate(1)
+intermediate_L1.describe()
 
 
-# ## Closure check across L=0, L=1, L=2
+# ## L=1 — closed system after `EvaluateIntegrals`
 
-# +
-print()
-print("=" * 72)
-print("Closure check — every leaf, every level")
-print("=" * 72)
-for L in (0, 1, 2):
-    print(f"\nLevel {L}:")
-    sys_L, state = derive_vam(L)
-    for path, eq in sys_L.leaves():
-        residuals = []
-        if eq.expr.has(state.u):
-            residuals.append("u")
-        if eq.expr.has(state.w):
-            residuals.append("w")
-        if eq.expr.has(state.p):
-            residuals.append("p")
-        if eq.expr.has(state.zeta):
-            residuals.append("ζ")
-        if eq.expr.atoms(sp.Sum):
-            residuals.append("Sum")
-        if eq.expr.atoms(sp.Integral):
-            residuals.append("Integral")
-        mark = "✓" if not residuals else "✗"
-        note = f"   residuals: {','.join(residuals)}" if residuals else ""
-        print(f"  {mark} [{'.'.join(path):<26}]  n_terms={len(eq):>4d}{note}")
-# -
+model_L1 = derive_vam(1)
+model_L1.describe()
+
+
+# ## L=2 — closed system
+
+model_L2 = derive_vam(2)
+model_L2.describe()
 
 
 # ## What this proves
