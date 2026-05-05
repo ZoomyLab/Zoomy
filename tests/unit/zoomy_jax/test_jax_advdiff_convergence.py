@@ -92,7 +92,7 @@ def test_advection_o2_convergence():
             initial_conditions=UserFunction(function=_smooth_ic),
             boundary_conditions=bcs,
         )
-        model.parameter_values = np.array([a])
+        model.parameters.update(dict(zip(model.parameters.keys(), [a])))
 
         mesh = _make_mesh(N)
         solver = HyperbolicSolver(
@@ -143,7 +143,7 @@ def test_advdiff_imex_o2_convergence():
             initial_conditions=UserFunction(function=_smooth_ic),
             boundary_conditions=bcs,
         )
-        model.parameter_values = np.array([a, nu])
+        model.parameters.update(dict(zip(model.parameters.keys(), [a, nu])))
 
         mesh = _make_mesh(N)
         solver = IMEXSourceSolverJax(
@@ -193,7 +193,7 @@ def test_diffusion_imex_o2_convergence():
             boundary_conditions=bcs,
         )
         # Zero advection velocity, only diffusion
-        model.parameter_values = np.array([0.0, nu])
+        model.parameters.update(dict(zip(model.parameters.keys(), [0.0, nu])))
 
         mesh = _make_mesh(N)
         solver = IMEXSourceSolverJax(

@@ -72,7 +72,7 @@ def test_chained_model_compiles():
     m = _ChainedModel(level=1)
     rt = NumpyRuntimeModel(m)
     Q = np.array([0.0, 0.5, 0.1, 0.01])
-    p = np.array(m.parameter_values, dtype=float)
+    p = np.array(list(m.parameters.values()), dtype=float)
     F = rt.flux(Q, np.array([]), p)
     assert F.shape == (4, 1)
     assert np.isfinite(F).all()
@@ -110,7 +110,7 @@ def test_sme_compile_and_evaluate():
     rt = NumpyRuntimeModel(m)
 
     Q = np.array([0.0, 0.5, 0.1, 0.01])
-    p = np.array(m.parameter_values, dtype=float)
+    p = np.array(list(m.parameters.values()), dtype=float)
     F = rt.flux(Q, np.array([]), p)
     S = rt.source(Q, np.array([]), p)
     assert np.isfinite(F).all()
@@ -249,7 +249,7 @@ def test_model_compiles_with_kernel():
     k = Kernel(m)
     rt = NumpyRuntimeModel(m, kernel=k)
     Q = np.array([0.0, 0.5, 0.1, 0.01])
-    p = np.array(m.parameter_values, dtype=float)
+    p = np.array(list(m.parameters.values()), dtype=float)
     F = rt.flux(Q, np.array([]), p)
     assert np.isfinite(F).all()
 
@@ -337,7 +337,7 @@ def test_full_pipeline_1d():
     Q = np.zeros((model.n_variables, lsq.n_cells))
     Q[1, :] = 0.5  # h
     Q[2, :] = 0.1  # hu0
-    p = np.array(model.parameter_values, dtype=float)
+    p = np.array(list(model.parameters.values()), dtype=float)
 
     for ic in range(lsq.n_inner_cells):
         F = rt.flux(Q[:, ic], np.array([]), p)
@@ -356,7 +356,7 @@ def test_3d_advection_solve():
     import zoomy_core.model.initial_conditions as IC
 
     model = ScalarAdvection(dimension=3)
-    model.parameter_values = np.array([1.0, 0.0, 0.0])
+    model.parameters.update(dict(zip(model.parameters.keys(), [1.0, 0.0, 0.0])))
     model.initial_conditions = IC.UserFunction(
         function=lambda x: np.array([np.exp(-((x[0]-0.3)**2 + (x[1]-0.5)**2 + (x[2]-0.5)**2) / 0.01)])
     )
@@ -399,7 +399,7 @@ def test_advection_diffusion_explicit_vs_implicit():
 
     # Explicit diffusion (HyperbolicSolver)
     m1 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
-    m1.parameter_values = np.array([1.0, nu])
+    m1.parameters.update(dict(zip(m1.parameters.keys(), [1.0, nu])))
     m1.initial_conditions = GaussianIC()
     Q1, _ = HyperbolicSolver(
         time_end=0.2, compute_dt=ts.adaptive(CFL=0.5, nu=nu)
@@ -407,7 +407,7 @@ def test_advection_diffusion_explicit_vs_implicit():
 
     # Implicit diffusion (IMEXSolver — no diffusive CFL, diffusion is implicit)
     m2 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
-    m2.parameter_values = np.array([1.0, nu])
+    m2.parameters.update(dict(zip(m2.parameters.keys(), [1.0, nu])))
     m2.initial_conditions = GaussianIC()
     Q2, _ = IMEXSolver(
         time_end=0.2, compute_dt=ts.adaptive(CFL=0.5)
@@ -425,7 +425,7 @@ def test_advection_diffusion_explicit_vs_implicit():
 
     # IMEX with larger dt (no diffusive CFL — implicit handles it)
     m3 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
-    m3.parameter_values = np.array([1.0, nu])
+    m3.parameters.update(dict(zip(m3.parameters.keys(), [1.0, nu])))
     m3.initial_conditions = GaussianIC()
     solver3 = IMEXSolver(time_end=0.2, compute_dt=ts.adaptive(CFL=0.9))
     Q3, _ = solver3.solve(mesh, m3, write_output=False)
@@ -469,7 +469,7 @@ def test_advection_diffusion_convergence():
     for N in [100, 200, 400]:
         mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
         m = ScalarAdvectionDiffusion(dimension=1, nu=nu)
-        m.parameter_values = np.array([1.0, nu])
+        m.parameters.update(dict(zip(m.parameters.keys(), [1.0, nu])))
         m.initial_conditions = GaussianIC()
         Q, _ = IMEXSolver(
             time_end=t_end, compute_dt=ts.adaptive(CFL=0.5)
@@ -507,7 +507,7 @@ def test_muscl_second_order_convergence():
     for N in [100, 200, 400]:
         mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
         m = ScalarAdvection(dimension=1)
-        m.parameter_values = np.array([1.0])
+        m.parameters.update(dict(zip(m.parameters.keys(), [1.0])))
         m.initial_conditions = GaussianIC()
         Q, _ = HyperbolicSolver(
             time_end=0.02, compute_dt=ts.adaptive(CFL=0.5),
@@ -542,7 +542,7 @@ def test_full_pipeline_2d():
     Q = np.zeros((model.n_variables, lsq.n_cells))
     Q[1, :] = 0.5
     Q[2, :] = 0.05
-    p = np.array(model.parameter_values, dtype=float)
+    p = np.array(list(model.parameters.values()), dtype=float)
 
     for ic in range(min(5, lsq.n_inner_cells)):
         F = rt.flux(Q[:, ic], np.array([]), p)

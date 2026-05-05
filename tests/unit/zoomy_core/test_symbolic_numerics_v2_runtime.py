@@ -49,7 +49,7 @@ def test_symbolic_numerics_v2_numpy_runtime_regression():
     aux_minus[0, :] = 1.0 / np.maximum(h_minus, 1e-12)
     aux_plus[0, :] = 1.0 / np.maximum(h_plus, 1e-12)
 
-    p = np.asarray(model.parameter_values, dtype=float)
+    p = np.asarray(list(model.parameters.values()), dtype=float)
     normal = np.ones((1, n_faces), dtype=float)
 
     fluxes = []

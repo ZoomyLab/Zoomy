@@ -26,7 +26,7 @@ def test_model_parameter_parsing_and_defaults():
     assert model.parameters.g.is_positive is True
     assert model.parameter_defaults_map["g"] == 9.81
     assert model.parameter_defaults_map["eps"] == 1e-9
-    assert model.parameter_values.shape[0] == 2
+    assert len(model.parameters) == 2
 
 
 @pytest.mark.small
