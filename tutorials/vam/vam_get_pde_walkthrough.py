@@ -49,6 +49,7 @@ import sympy as sp
 
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.models.system_model import SystemModel, InvertMassMatrix
+from zoomy_core.analysis.system_model_analysis import plane_wave_dispersion
 from zoomy_core.fvm.solver_splitting_numpy import FSFSplittingSolver
 from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
 from zoomy_core.mesh import BaseMesh
@@ -129,11 +130,14 @@ sm.describe(full=False)
 
 # ## 6. Analysis on `SystemModel`
 #
-# Substitute the symbolic state with a quiescent base state
-# `(b₀=0, h₀, hu₀=0, hw₀=0)`, fix `ez=1`, and read eigenvalues of
-# the quasilinear matrix in the x-direction.  No ``PDESystem``, no
-# ``linearise``, no hand-rolled symbols — the model's own state
-# Symbols (`m1d.variables.h` etc.) flow through to the substitution.
+# `plane_wave_dispersion(sm, base_state, axis, parameters)` lives in
+# ``zoomy_core.analysis.system_model_analysis`` — a SystemModel-direct
+# routine.  It linearises by substituting the base state into the
+# *quasilinear* matrix (i.e. on `∂F/∂Q + ∂P/∂Q + B`, the Jacobian
+# already taken) and solves ``det(M_x − λ M_t) = 0`` for the wave
+# speeds.  No ``PDESystem``, no ``linearise``-on-equations, no
+# hand-rolled symbols — the model's own state Symbols
+# (``m1d.variables.h`` etc.) flow through directly.
 
 # +
 h0 = sp.Symbol("h0", positive=True)
@@ -145,14 +149,10 @@ base_state = {
 }
 ez_param = next(s for s, v in sm.parameters.items() if str(s) == "ez")
 
-qm = sm.quasilinear_matrix()
-M_x = sp.Matrix(
-    sm.n_equations,
-    sm.n_equations,
-    lambda i, j: sp.simplify(qm[i, j, 0].subs(base_state).subs(ez_param, 1)),
+result = plane_wave_dispersion(
+    sm, base_state, axis=0, parameters={ez_param: 1}
 )
-eigenvalues = M_x.eigenvals()
-M_x, eigenvalues
+result
 # -
 
 
