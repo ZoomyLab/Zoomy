@@ -68,24 +68,23 @@ from zoomy_core.model.models.basisfunctions import Legendre_shifted
 # The same chain runs for any L.  Per-step reasoning is in the
 # inline comments.
 #
-# ### Why `phi(k, (z-b)/h)` and not `phi(k, z)` directly
+# ### Where the affine map lives
 #
-# The basis polynomials live on the reference element ξ ∈ [0, 1].
-# Galerkin-testing against them in a depth integral over physical
-# z ∈ [b, b+h] requires the relative coordinate (z-b)/h to be the
-# basis argument.  The composition `phi(k, (z-b)/h)` is the explicit
-# semantic bridge: "this is basis k evaluated at the relative
-# coordinate, expressed in terms of physical z."
+# The basis is **reference-defined** on ξ ∈ [0, 1] (Legendre
+# orthogonality, weight 1, etc.).  Author writes ``phi(k, z)`` —
+# physical-z argument, no manual composition.  ``AffineProjection``
+# then does the change of variables in one place:
 #
-# `AffineProjection` later substitutes `z → ζ·h + b` everywhere
-# structurally; the composition collapses cleanly:
+# 1. Substitute the integration variable ``z → ζ·h + b`` inside each
+#    Integral over ``[b, b+h]``.
+# 2. Multiply the integrand by the Jacobian ``h`` and change limits to
+#    ``[0, 1]`` in ``ζ``.
+# 3. Rewrite each basis atom's argument via ``arg → (arg − b)/h`` so
+#    physical-z basis calls collapse to reference form: ``ζ·h + b →
+#    ζ``, ``b → 0``, ``b + h → 1``.
 #
-#     phi(k, (z-b)/h)   z → ζ·h+b   →   phi(k, ζ)
-#
-# — and the integrand emerges in the reference-element form ready
-# for `EvaluateIntegrals`.  Writing `phi(k, z)` directly would leave
-# `phi(k, ζ·h+b)` after `AffineProjection`, which is *not* in [0, 1]
-# and has no orthogonality structure there.
+# The "physical-space basis" is *only* meaningful through the affine
+# composition; ``AffineProjection`` is what makes it concrete.
 
 # +
 def derive_vam(level: int):
@@ -102,8 +101,7 @@ def derive_vam(level: int):
     coeffs_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
 
     test_phi_of_z = Zstruct(
-        **{f"phi_{k}": basis_u.phi[k]((z - state.b) / state.H)
-           for k in range(level + 1)}
+        **{f"phi_{k}": basis_u.phi[k](z) for k in range(level + 1)}
     )
 
     # 1. Start from full INS, apply inviscid closure.
@@ -155,8 +153,7 @@ def derive_vam_intermediate(level: int):
     coeffs_w = [sp.Function(f"W_{k}", real=True)(t, x) for k in range(level + 1)]
     coeffs_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(level + 1)]
     test_phi_of_z = Zstruct(
-        **{f"phi_{k}": basis_u.phi[k]((z - state.b) / state.H)
-           for k in range(level + 1)}
+        **{f"phi_{k}": basis_u.phi[k](z) for k in range(level + 1)}
     )
     model = FullINS(state)
     model.apply(Inviscid(state)).simplify()
