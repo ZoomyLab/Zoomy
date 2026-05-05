@@ -1,5 +1,5 @@
 # ---
-# title: "VAM walkthrough: get_pde() → analysis → numerics → 2D simulation"
+# title: "VAM end-to-end: Model → SystemModel → analysis → 2D simulation"
 # author: Ingo Steldermann
 # format:
 #   html:
@@ -19,34 +19,30 @@
 #     name: python3
 # ---
 
-# # VAM walkthrough — full pipeline via the model class
+# # VAM end-to-end: full pipeline via the class hierarchy
 #
-# Demonstrates the canonical flow once `Model.get_pde()` exists:
+# Demonstrates the canonical flow from a `Model` instance through to a
+# 2D numerical simulation, using each layer for its job:
 #
-# 1. Instantiate a VAM model from the class hierarchy.
-# 2. Get the symbolic strong-form PDE via `model.get_pde()`.
-# 3. Analyse it with `zoomy_core.analysis` —
-#    `linearise → extract_quasilinear_pencil → generalised_eigenvalues`.
-# 4. Compile the symbolic model to a numpy runtime via the
-#    transformation pipeline.
-# 5. Run a small 2D dam-break with `FreeSurfaceFlowSolver`.
-#
-# No procedural builders, no `sys.path`, no manual sympy symbols —
-# every variant of the model is a class in
-# `library/zoomy_core/zoomy_core/model/models/`, every analysis routine
-# in `zoomy_core.analysis` is fully model-agnostic, every solver in
-# `zoomy_core.fvm` accepts the model class directly.
+# 1. **`Model`** — the derivation framework.  Carries the equation
+#    tree, history, and the operator-API methods that walk it.
+# 2. **`SystemModel`** — the operator-form sibling.  Built from a
+#    `Model` via `SystemModel.from_model(m)`; freezes the symbolic
+#    flux / NCP / source / mass / hydrostatic-pressure operators.
+#    Analysis and transformation consume it.
+# 3. **System-level operations** — `apply(InvertMassMatrix())` etc.
+#    Mutate the SystemModel's stored matrices.
+# 4. **Analysis** — quasilinear matrix evaluated at a base state,
+#    eigenvalues directly via sympy.
+# 5. **Numerics** — `FSFSplittingSolver` accepts the model class and
+#    runs a 2D dam-break.
 
 # +
 import numpy as np
 import sympy as sp
 
 from zoomy_core.model.models.vam_model import VAMModel
-from zoomy_core.analysis import (
-    linearise, extract_quasilinear_pencil, generalised_eigenvalues,
-)
-from zoomy_core.analysis.pde_system import PDESystem
-from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+from zoomy_core.model.models.system_model import SystemModel, InvertMassMatrix
 from zoomy_core.fvm.solver_splitting_numpy import FSFSplittingSolver
 from zoomy_core.mesh import BaseMesh
 import zoomy_core.fvm.timestepping as ts
@@ -54,12 +50,13 @@ import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 # -
 
+
 # ## 1. Model instantiation
 #
 # `VAMModel` derives from `INSModel(DerivedModel)` via the class
-# hierarchy in `vam_model.py`. The 1D variant (`ins_dimension=2`) is
-# the cleanest for a dispersion read; the 2D variant
-# (`ins_dimension=3`) is what we'll evolve in step 5.
+# hierarchy in `vam_model.py`.  The 1D variant (`ins_dimension=2`) is
+# what we'll analyse.  The 2D variant (`ins_dimension=3`) is what
+# step 5 evolves.
 
 # +
 class VAM1D(VAMModel):
@@ -70,107 +67,78 @@ class VAM2D(VAMModel):
 
 m1d = VAM1D(level=0)
 m2d = VAM2D(level=0)
-
-print("VAM 1D, level=0:")
-print("  variables    =", list(m1d.variables.keys()))
-print("  aux          =", list(m1d.aux_variables.keys()))
-print("  parameters   =", list(m1d.parameters.keys()))
-print()
-print("VAM 2D, level=0:")
-print("  variables    =", list(m2d.variables.keys()))
-print("  aux          =", list(m2d.aux_variables.keys()))
-print("  dimension    =", m2d.dimension)
+m1d.describe()
 # -
 
-# ## 2. Symbolic PDE in strong form
-#
-# `get_pde()` assembles
-#
-#     ∂_t Q + ∂_d (F + P)[:,d] + B[:,:,d] · ∂_d Q − S = 0
-#
-# from `flux()`, `hydrostatic_pressure()`, `nonconservative_matrix()`,
-# `source()`, plus any algebraic aux closures in `aux_equations`. It
-# returns a `zoomy_core.analysis.PDESystem` — the same struct every
-# analysis routine consumes.
 
-pde1d = m1d.get_pde()
-print(pde1d)
-print("fields:", pde1d.fields)
-print("aux_fields:", pde1d.aux_fields)
-print("parameters:", {k: v for k, v in pde1d.parameters.items()})
-print()
-print("Equation 1 (continuity):")
-sp.pprint(sp.expand(pde1d.equations[1]))
-print()
-print("Equation 2 (x-momentum):")
-sp.pprint(sp.expand(pde1d.equations[2]))
-
-# Rationals like `hu0²/h` come out as-is — that is the strong form,
-# no model-side regularisation has been applied.
-
-# ## 3. Dispersion via the single model-agnostic analysis path
+# ## 2. From `Model` to `SystemModel`
 #
-# `linearise(pde, base_state)` substitutes `Q → Q₀ + ε δQ`, expands to
-# first order in ε, and returns a linearised `PDESystem` whose fields
-# are the perturbations. For equations with rationals the routine
-# falls back to a `sp.series` Taylor expansion automatically.
+# `SystemModel.from_model(m)` reads the operator API of the model
+# once and freezes the result as stored sympy matrices.  The two
+# classes have the same operator-API surface — `flux`,
+# `nonconservative_matrix`, `source`, `mass_matrix`,
+# `hydrostatic_pressure`, `quasilinear_matrix` — but Model walks its
+# equation tree on every call while SystemModel returns the cached
+# matrices.  Decoupling derivation from the runtime/operator surface.
+
+sm = SystemModel.from_model(m1d)
+sm.describe(full=True)
+
+
+# ## 3. Apply a system-level operation
 #
-# `extract_quasilinear_pencil(linearised)` then reads `M_t`, `M_xa`,
-# `M_0` purely by matching coefficients of `Derivative(δq, t)`,
-# `Derivative(δq, x)`, and `δq` — no model knowledge required. This is
-# what makes the path **fully model-agnostic**: every matrix comes
-# from the same coefficient-extraction operation, regardless of where
-# the PDE came from.
+# `sm.apply(InvertMassMatrix())` brings the system to canonical
+# `∂_t Q + ∂_x F + B·∂_x Q − S = 0` form.  For VAM(level=0) the mass
+# matrix is already identity (the existing operator-API path returns
+# canonical form), so this is a no-op — but the call is still useful
+# because the resulting SystemModel carries the ``invert_mass_matrix``
+# entry in its history, which lets downstream solvers verify the
+# canonical-form invariant.
+
+sm.apply(InvertMassMatrix())
+sm.describe(full=False)
+
+
+# ## 4. Dispersion analysis via `SystemModel`
+#
+# Substitute the symbolic state with a quiescent base state
+# `(b₀, h₀, hu₀=0, hw₀=0)`, fix `ez=1` (vertical-gravity gauge), and
+# read eigenvalues of the quasilinear matrix in the x-direction.  No
+# `PDESystem`, no `linearise`, no hand-rolled symbols — the model's
+# own state Symbols flow through to the substitution.
 
 # +
-b_f, h_f, hu_f, hw_f = pde1d.fields
-h0, u0, w0 = sp.symbols("h0 u0 w0", positive=True)
+h0 = sp.Symbol("h0", positive=True)
+base_state = {
+    m1d.variables.b:   sp.Integer(0),
+    m1d.variables.h:   h0,
+    m1d.variables.hu0: sp.Integer(0),
+    m1d.variables.hw0: sp.Integer(0),
+}
+ez_param = next(s for s, v in sm.parameters.items() if str(s) == "ez")
 
-# Drop the trivial ∂_t b = 0 row by substituting b ≡ 0 into all
-# equations (flat-bottom assumption for the dispersion read).
-pde_red = PDESystem(
-    equations=[eq.xreplace({b_f: 0}) for eq in pde1d.equations[1:]],
-    fields=[h_f, hu_f, hw_f],
-    time=pde1d.time,
-    space=pde1d.space,
-    parameters=pde1d.parameters,
-    aux_fields=pde1d.aux_fields,
+qm = sm.quasilinear_matrix()
+M_x = sp.Matrix(
+    sm.n_equations,
+    sm.n_equations,
+    lambda i, j: sp.simplify(qm[i, j, 0].subs(base_state).subs(ez_param, 1)),
 )
-base = {h_f: h0, hu_f: h0 * u0, hw_f: h0 * w0}
-lin = linearise(pde_red, base)
-M_t, M_xa, M_0 = extract_quasilinear_pencil(lin)
-ez_par = next(s for s in pde1d.parameters if str(s) == "ez")
-lambdas = [sp.simplify(s.subs({u0: 0, w0: 0, ez_par: 1}))
-           for s in generalised_eigenvalues(M_xa[0], M_t)]
-print("Eigenvalues at quiescent base state (u₀ = w₀ = 0, ez = 1):")
-for s in lambdas:
-    print(f"  λ = {s}")
+eigenvalues = M_x.eigenvals()
+M_x, eigenvalues
 # -
 
-# ## 4. Code transformation — symbolic → numpy runtime
-#
-# `NumpyRuntimeModel(model)` walks every function registered on the
-# model (`flux`, `nonconservative_matrix`, `source`, `eigenvalues`,
-# BC kernels, …) and lambdifies each into a vectorised numpy
-# callable. This is the second of the two-step pipeline: the model
-# carries equations symbolically; the transformation compiles them to
-# numerical kernels.
-
-rt = NumpyRuntimeModel(m2d)
-print("Compiled runtime functions:",
-      sorted(rt.runtime_functions.keys())[:8], "…")
 
 # ## 5. 2D dam-break with `FSFSplittingSolver`
 #
-# `FSFSplittingSolver` is the free-surface specialization of
+# `FSFSplittingSolver` is the free-surface specialisation of
 # `SplittingSolver`: explicit hyperbolic predictor (positive Rusanov
 # with hydrostatic reconstruction; b at index 0, h at index 1) plus
 # explicit viscous diffusion plus a pressure Poisson correction
-# (Chorin projection). This is the right solver for non-hydrostatic
-# VAM. It accepts the model class directly — internally it calls the
-# `NumpyRuntimeModel` runtime from step 4. Every substep is
-# ghost-cell-free: BCs are evaluated inline at boundary faces by
-# calling the BC's `face_value(...)` directly, no ghost-cell fill.
+# (Chorin projection).  It accepts the model class directly —
+# internally it compiles via `NumpyRuntimeModel` to runtime kernels.
+# Every substep is ghost-cell-free: BCs are evaluated inline at
+# boundary faces by calling the BC's `face_value(...)` method
+# directly, no ghost-cell fill.
 
 # +
 def dam_break_ic(x, _nv=m2d.n_variables):
@@ -180,7 +148,7 @@ def dam_break_ic(x, _nv=m2d.n_variables):
 
 m2d.initial_conditions = IC.UserFunction(function=dam_break_ic)
 m2d.boundary_conditions = BC.BoundaryConditions([
-    BC.Extrapolation(tag=t) for t in ("left", "right", "bottom", "top")
+    BC.Extrapolation(tag=tag) for tag in ("left", "right", "bottom", "top")
 ])
 
 mesh = BaseMesh.create_2d((0.0, 10.0, 0.0, 10.0), nx=20, ny=20)
@@ -189,30 +157,44 @@ solver = FSFSplittingSolver(time_end=0.05,
                             viscosity=0.01)
 Q, p = solver.solve(mesh, m2d, write_output=False)
 nc = mesh.n_inner_cells
-h = Q[1, :nc]
-hu = Q[2, :nc]
-hv = Q[3, :nc]
-hw = Q[4, :nc]
-
-print(f"Inner cells     : {nc}")
-print(f"All-finite Q    : {np.isfinite(Q[:, :nc]).all()}")
-print(f"All-finite p    : {np.isfinite(p[:nc]).all()}")
-print(f"Positivity h≥0  : {(h >= -1e-10).all()}")
-print(f"h range         : [{h.min():.4f}, {h.max():.4f}]")
-print(f"|u_max|         : {(np.abs(hu / h)).max():.4f}")
-print(f"|v_max|         : {(np.abs(hv / h)).max():.4f}")
-print(f"|w_max|         : {(np.abs(hw / h)).max():.4f}")
-print(f"|p|max          : {np.abs(p[:nc]).max():.4f}")
-mass = float(np.sum(h) * (10.0 * 10.0) / nc)
-mass_expected = 2.0 * 25.0 + 1.0 * 75.0
-print(f"mass {mass:.3f} (expected {mass_expected})")
+diagnostics = {
+    "inner cells":      nc,
+    "all-finite Q":     bool(np.isfinite(Q[:, :nc]).all()),
+    "all-finite p":     bool(np.isfinite(p[:nc]).all()),
+    "h_min":            float(Q[1, :nc].min()),
+    "h_max":            float(Q[1, :nc].max()),
+    "|p|_max":          float(np.abs(p[:nc]).max()),
+    "mass":             float(np.sum(Q[1, :nc]) * 100.0 / nc),
+    "mass expected":    2.0 * 25.0 + 1.0 * 75.0,
+}
+diagnostics
 # -
+
 
 # ## Summary
 #
-# The full chain `Model class → get_pde() → analysis → transformation
-# → solver` runs end-to-end via a single model-agnostic path. Every
-# variant (level, dimension, regularization) is just a constructor or
-# subclass of `DerivedModel`. The analysis package never inspects
-# model attributes — it only consumes a `PDESystem` and extracts
-# pencil matrices via coefficient matching.
+# The full chain runs end-to-end:
+#
+# * `VAMModel(level=0)` → derivation, equation tree, operator-API
+#   methods.
+# * `SystemModel.from_model(m)` → frozen operator matrices, suitable
+#   for analysis and transformation.
+# * `sm.apply(InvertMassMatrix())` → canonical-form invariant
+#   recorded in history.
+# * `sm.quasilinear_matrix().subs(base_state)` → constant matrix,
+#   eigenvalues by direct sympy.
+# * `FSFSplittingSolver.solve(mesh, m2d)` → 2D dam-break with
+#   pressure Poisson correction.
+#
+# What's not yet rolled out (separate workstreams):
+#
+# * `VAMModel.derive_model` rebuild around the new chain
+#   (`Multiply` / `AffineProjection` / `Expand` /
+#   `EvaluateIntegrals`) + author-side term tagging.  The current
+#   model uses the existing manual-basis-matrix path, which produces
+#   correct operators but doesn't walk a tagged equation tree.
+# * `zoomy_core.analysis` package rewrite around `SystemModel`
+#   directly (currently still has the `PDESystem`-based linearise /
+#   pencil / dispersion routines).
+# * Transformation (`NumpyRuntimeModel` etc.) accepting `SystemModel`
+#   as input rather than `Model`.
