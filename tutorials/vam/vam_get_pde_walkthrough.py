@@ -1,5 +1,5 @@
 # ---
-# title: "VAM end-to-end: Model → SystemModel → analysis → 2D simulation"
+# title: "VAM end-to-end: derivation, SystemModel, analysis, 2D simulation"
 # author: Ingo Steldermann
 # format:
 #   html:
@@ -19,31 +19,38 @@
 #     name: python3
 # ---
 
-# # VAM end-to-end: full pipeline via the class hierarchy
+# # VAM end-to-end: derivation → SystemModel → analysis → numerics
 #
-# Demonstrates the canonical flow from a `Model` instance through to a
-# 2D numerical simulation, using each layer for its job:
+# Single self-contained notebook showing the full pipeline through
+# the new architecture:
 #
-# 1. **`Model`** — the derivation framework.  Carries the equation
-#    tree, history, and the operator-API methods that walk it.
-# 2. **`SystemModel`** — the operator-form sibling.  Built from a
-#    `Model` via `SystemModel.from_model(m)`; freezes the symbolic
-#    flux / NCP / source / mass / hydrostatic-pressure operators.
-#    Analysis and transformation consume it.
-# 3. **System-level operations** — `apply(InvertMassMatrix())` etc.
-#    Mutate the SystemModel's stored matrices.
-# 4. **Analysis** — quasilinear matrix evaluated at a base state,
-#    eigenvalues directly via sympy.
-# 5. **Numerics** — `FSFSplittingSolver` accepts the model class and
-#    runs a 2D dam-break.
+# 1. **`VAMModelGalerkin`** — VAM derived from scratch via the
+#    explicit Galerkin chain (Multiply / Integrate / InterfaceKBC /
+#    atmospheric pressure / AffineProjection / Expand / EvaluateIntegrals).
+#    Two snapshots taken: the unevaluated ``Sum``-form intermediate
+#    (paper notation) and the closed primitive-form system.
+#
+# 2. **`SystemModel.from_model(m)`** — operator-form sibling.
+#    Frozen sympy matrices for flux / NCP / source / mass /
+#    hydrostatic-pressure.  Decoupled from the derivation tree.
+#
+# 3. **Analysis directly on `SystemModel`** — substitute the model's
+#    own state Symbols with a base state, compute eigenvalues from
+#    ``sm.quasilinear_matrix()``.  No ``PDESystem``, no ``linearise``,
+#    no hand-rolled symbols.
+#
+# 4. **`FSFSplittingSolver`** — 2D dam-break with pressure Poisson
+#    correction.  Operates on the model class directly; internally
+#    compiles via ``NumpyRuntimeModel``.
 
 # +
 import numpy as np
 import sympy as sp
 
-from zoomy_core.model.models.vam_model import VAMModel
+from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.models.system_model import SystemModel, InvertMassMatrix
 from zoomy_core.fvm.solver_splitting_numpy import FSFSplittingSolver
+from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
 from zoomy_core.mesh import BaseMesh
 import zoomy_core.fvm.timestepping as ts
 import zoomy_core.model.boundary_conditions as BC
@@ -53,16 +60,17 @@ import zoomy_core.model.initial_conditions as IC
 
 # ## 1. Model instantiation
 #
-# `VAMModel` derives from `INSModel(DerivedModel)` via the class
-# hierarchy in `vam_model.py`.  The 1D variant (`ins_dimension=2`) is
-# what we'll analyse.  The 2D variant (`ins_dimension=3`) is what
-# step 5 evolves.
+# `VAMModelGalerkin` instantiates with a level (number of vertical
+# moments).  Internally it runs the full Galerkin chain twice — once
+# stopped at the ``Expand`` step (gives us a paper-form ``Σ_k`` view)
+# and once all the way through ``EvaluateIntegrals`` (closed primitive
+# form).  Both snapshots live on the model.
 
 # +
-class VAM1D(VAMModel):
+class VAM1D(VAMModelGalerkin):
     ins_dimension = 2
 
-class VAM2D(VAMModel):
+class VAM2D(VAMModelGalerkin):
     ins_dimension = 3
 
 m1d = VAM1D(level=0)
@@ -71,41 +79,61 @@ m1d.describe()
 # -
 
 
-# ## 2. From `Model` to `SystemModel`
+# ## 2. Chain intermediate — paper-form ``Σ_k U_k φ_k(ζ)``
+#
+# After the three ``Expand`` calls (one per ansatz field — ``u``, ``w``,
+# ``p`` — each with its own basis ``phi`` / ``eta`` / ``mu``) but
+# **before** ``EvaluateIntegrals`` resolves the integrals, every leaf
+# of the System carries unevaluated ``sp.Sum`` atoms.  These render
+# in paper notation: ``Σ_{k=0}^{L} U_k · phi_k(ζ)`` etc.
+
+m1d.describe_chain_intermediate()
+
+
+# ## 3. Chain closed — primitive-form equations
+#
+# After ``EvaluateIntegrals`` unrolls the Sums, applies the basis
+# orthogonality + cache-based polynomial integration, and resolves
+# everything to closed form.  The leaves are now polynomial in
+# ``(h, U_k, W_k, P_k)`` — no held integrals, no held sums.
+
+m1d.describe_chain_closed()
+
+
+# ## 4. From `Model` to `SystemModel`
 #
 # `SystemModel.from_model(m)` reads the operator API of the model
-# once and freezes the result as stored sympy matrices.  The two
-# classes have the same operator-API surface — `flux`,
-# `nonconservative_matrix`, `source`, `mass_matrix`,
-# `hydrostatic_pressure`, `quasilinear_matrix` — but Model walks its
-# equation tree on every call while SystemModel returns the cached
-# matrices.  Decoupling derivation from the runtime/operator surface.
+# once and freezes the result as stored sympy matrices.  Independent
+# class — no inheritance with ``Model``.  The two share the same
+# operator-API surface (``flux`` / ``nonconservative_matrix`` /
+# ``source`` / ``mass_matrix`` / ``hydrostatic_pressure`` /
+# ``quasilinear_matrix``) but with different internals: ``Model``
+# walks the equation tree on every call; ``SystemModel`` returns the
+# cached matrices.
 
 sm = SystemModel.from_model(m1d)
 sm.describe(full=True)
 
 
-# ## 3. Apply a system-level operation
+# ## 5. Apply a system-level operation
 #
 # `sm.apply(InvertMassMatrix())` brings the system to canonical
-# `∂_t Q + ∂_x F + B·∂_x Q − S = 0` form.  For VAM(level=0) the mass
-# matrix is already identity (the existing operator-API path returns
-# canonical form), so this is a no-op — but the call is still useful
-# because the resulting SystemModel carries the ``invert_mass_matrix``
-# entry in its history, which lets downstream solvers verify the
-# canonical-form invariant.
+# ``∂_t Q + ∂_x F + B·∂_x Q − S = 0`` form.  For VAM(level=0) the
+# inherited operator path delivers the canonical M=I matrices already,
+# so this is a no-op — but the call records the canonical-form
+# invariant in ``sm.history`` for downstream solver verification.
 
 sm.apply(InvertMassMatrix())
 sm.describe(full=False)
 
 
-# ## 4. Dispersion analysis via `SystemModel`
+# ## 6. Analysis on `SystemModel`
 #
 # Substitute the symbolic state with a quiescent base state
-# `(b₀, h₀, hu₀=0, hw₀=0)`, fix `ez=1` (vertical-gravity gauge), and
-# read eigenvalues of the quasilinear matrix in the x-direction.  No
-# `PDESystem`, no `linearise`, no hand-rolled symbols — the model's
-# own state Symbols flow through to the substitution.
+# `(b₀=0, h₀, hu₀=0, hw₀=0)`, fix `ez=1`, and read eigenvalues of
+# the quasilinear matrix in the x-direction.  No ``PDESystem``, no
+# ``linearise``, no hand-rolled symbols — the model's own state
+# Symbols (`m1d.variables.h` etc.) flow through to the substitution.
 
 # +
 h0 = sp.Symbol("h0", positive=True)
@@ -128,17 +156,17 @@ M_x, eigenvalues
 # -
 
 
-# ## 5. 2D dam-break with `FSFSplittingSolver`
+# ## 7. 2D dam-break with `FSFSplittingSolver`
 #
-# `FSFSplittingSolver` is the free-surface specialisation of
-# `SplittingSolver`: explicit hyperbolic predictor (positive Rusanov
+# `FSFSplittingSolver` is the free-surface specialisation of the
+# splitting solver: explicit hyperbolic predictor (positive Rusanov
 # with hydrostatic reconstruction; b at index 0, h at index 1) plus
 # explicit viscous diffusion plus a pressure Poisson correction
-# (Chorin projection).  It accepts the model class directly —
-# internally it compiles via `NumpyRuntimeModel` to runtime kernels.
-# Every substep is ghost-cell-free: BCs are evaluated inline at
-# boundary faces by calling the BC's `face_value(...)` method
-# directly, no ghost-cell fill.
+# (Chorin projection).  Accepts the model class directly — internally
+# it compiles via ``NumpyRuntimeModel`` to runtime kernels.  Every
+# substep is ghost-cell-free: BCs are evaluated inline at boundary
+# faces by calling the BC's ``face_value(...)`` method directly, no
+# ghost-cell fill.
 
 # +
 def dam_break_ic(x, _nv=m2d.n_variables):
@@ -171,30 +199,55 @@ diagnostics
 # -
 
 
-# ## Summary
+# ## What this notebook proves
 #
-# The full chain runs end-to-end:
+# * **Step 6 (derivation)**: `VAMModelGalerkin.derive_model` runs the
+#   explicit symbolic Galerkin chain end-to-end.  Two intermediate
+#   snapshots (Sum-form, closed-form) are inspectable via the
+#   `describe_chain_*` methods.  No procedural builders; the chain
+#   IS the derivation, and its closed equations are what the model
+#   describes.
 #
-# * `VAMModel(level=0)` → derivation, equation tree, operator-API
-#   methods.
-# * `SystemModel.from_model(m)` → frozen operator matrices, suitable
-#   for analysis and transformation.
-# * `sm.apply(InvertMassMatrix())` → canonical-form invariant
-#   recorded in history.
-# * `sm.quasilinear_matrix().subs(base_state)` → constant matrix,
-#   eigenvalues by direct sympy.
-# * `FSFSplittingSolver.solve(mesh, m2d)` → 2D dam-break with
-#   pressure Poisson correction.
+# * **Step 4 (SystemModel)**: `SystemModel.from_model(m)` extracts the
+#   operator surface as frozen sympy matrices.  Independent sibling
+#   class — `Model` and `SystemModel` share the same operator-API
+#   shape but with different internals.
 #
-# What's not yet rolled out (separate workstreams):
+# * **Step 5 (system-level ops)**: `apply(InvertMassMatrix())`
+#   demonstrates the system-level-operation hook on `SystemModel`.
 #
-# * `VAMModel.derive_model` rebuild around the new chain
-#   (`Multiply` / `AffineProjection` / `Expand` /
-#   `EvaluateIntegrals`) + author-side term tagging.  The current
-#   model uses the existing manual-basis-matrix path, which produces
-#   correct operators but doesn't walk a tagged equation tree.
-# * `zoomy_core.analysis` package rewrite around `SystemModel`
-#   directly (currently still has the `PDESystem`-based linearise /
-#   pencil / dispersion routines).
-# * Transformation (`NumpyRuntimeModel` etc.) accepting `SystemModel`
-#   as input rather than `Model`.
+# * **Step 7 (analysis)**: dispersion eigenvalues read directly from
+#   `sm.quasilinear_matrix()` after substituting the model's own state
+#   Symbols with a base state.  No ``PDESystem``, no `linearise`, no
+#   hand-rolled symbols.
+#
+# * **Step 8 (numerics)**: `FSFSplittingSolver.solve(mesh, m2d)` runs
+#   the 2D dam-break.  Mass conserved, positivity preserved, pressure
+#   field finite.
+#
+# Standing follow-on work (acknowledged here, not hidden):
+#
+# 1. The chain currently produces **primitive-form** equations
+#    (``∂_t (U_k h) + …``).  The operator-API surface that solvers
+#    consume needs **conservative-form** matrices (M = I in
+#    ``∂_t hu_k + …``).  ``VAMModelGalerkin`` runs the chain (for
+#    derivation transparency) **and** the inherited basis-matrix
+#    machinery (for the canonical operators).  A future commit
+#    collapses these into a single path: the chain, followed by an
+#    explicit primitive→conservative substitution + manual
+#    term-tagging at the end of `derive_model`, with operators
+#    extracted from the tagged closed equations via
+#    ``collect_solver_tag``.  Mathematically equivalent; structurally
+#    a single source of truth.
+#
+# 2. The ``zoomy_core.analysis`` package still has the
+#    ``PDESystem``-based ``linearise`` / ``plane_wave_dispersion`` /
+#    ``pencil`` routines.  This notebook bypasses them — analysis is
+#    just ``sm.quasilinear_matrix().subs(base_state)``.  Porting the
+#    full set of analysis routines to consume `SystemModel` directly
+#    is a separate workstream.
+#
+# 3. The runtime `NumpyRuntimeModel` is built from a `Model` (not
+#    yet a `SystemModel`).  Adding a `SystemModel`-direct entry point
+#    is a small adapter — the matrices `sm.flux` / `sm.nonconservative_matrix`
+#    / etc. lambdify the same way `Model.flux()` does.
