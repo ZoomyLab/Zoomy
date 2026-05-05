@@ -19,7 +19,7 @@
 #     name: python3
 # ---
 
-# # VAM end-to-end: derivation → SystemModel → analysis → numerics
+# # VAM end-to-end: derivation → SystemModel → analysis → transform → numerics
 #
 # Single self-contained notebook showing the full pipeline through
 # the new architecture:
@@ -39,7 +39,11 @@
 #    ``sm.quasilinear_matrix()``.  No ``PDESystem``, no ``linearise``,
 #    no hand-rolled symbols.
 #
-# 4. **`FSFSplittingSolver`** — 2D dam-break with pressure Poisson
+# 4. **Transform `SystemModel` → runtime** via
+#    ``NumpyRuntimeModel.from_system_model(sm)`` — lambdifies the
+#    cached sympy matrices to per-operator numpy callables.
+#
+# 5. **`FSFSplittingSolver`** — 2D dam-break with pressure Poisson
 #    correction.  Operates on the model class directly; internally
 #    compiles via ``NumpyRuntimeModel``.
 
@@ -50,6 +54,7 @@ import sympy as sp
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.models.system_model import SystemModel, InvertMassMatrix
 from zoomy_core.analysis.system_model_analysis import plane_wave_dispersion
+from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 from zoomy_core.fvm.solver_splitting_numpy import FSFSplittingSolver
 from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
 from zoomy_core.mesh import BaseMesh
@@ -156,7 +161,45 @@ result
 # -
 
 
-# ## 7. 2D dam-break with `FSFSplittingSolver`
+# ## 7. SystemModel → runtime kernels (`NumpyRuntimeModel.from_system_model`)
+#
+# The transformation pipeline can consume a ``SystemModel`` directly:
+# ``NumpyRuntimeModel.from_system_model(sm)`` lambdifies the stored
+# sympy matrices (``flux`` / ``nonconservative_matrix`` / ``source`` /
+# ``mass_matrix`` / ``hydrostatic_pressure``) into per-operator
+# numerical callables ``f(Q, Qaux, p)``.  Same operator-API surface as
+# the Model-based runtime, but built from the cached sympy matrices
+# rather than walking the equation tree on every call.
+#
+# Below: build the runtime, evaluate every operator on a sample state,
+# verify the identity mass matrix and the canonical SWE values
+# ``flux[1, 0] = h·u_mean`` / ``hydrostatic_pressure[2, 0] = g·h²/2``.
+
+# +
+rt = NumpyRuntimeModel.from_system_model(sm)
+
+Q_sample = np.array([0.0, 1.0, 0.5, 0.0])  # b=0, h=1, hu0=0.5, hw0=0
+Qaux_sample = np.zeros(rt.n_aux_variables, dtype=float)
+p_sample = rt.parameters
+
+runtime_outputs = {
+    "flux":                 rt.flux(Q_sample, Qaux_sample, p_sample),
+    "nonconservative":      rt.nonconservative_matrix(Q_sample, Qaux_sample, p_sample),
+    "source":               rt.source(Q_sample, Qaux_sample, p_sample),
+    "mass_matrix":          rt.mass_matrix(Q_sample, Qaux_sample, p_sample),
+    "hydrostatic_pressure": rt.hydrostatic_pressure(Q_sample, Qaux_sample, p_sample),
+}
+# Sanity: g · h² / 2 at the (h u0)-row column 0
+assert np.isclose(runtime_outputs["hydrostatic_pressure"][2, 0], 9.81 * 0.5)
+# Sanity: identity mass matrix (canonical M = I after InvertMassMatrix)
+assert np.allclose(runtime_outputs["mass_matrix"], np.eye(rt.n_variables))
+# Sanity: gravity body force on hw0
+assert np.isclose(runtime_outputs["source"][3, 0], 9.81)
+runtime_outputs
+# -
+
+
+# ## 8. 2D dam-break with `FSFSplittingSolver`
 #
 # `FSFSplittingSolver` is the free-surface specialisation of the
 # splitting solver: explicit hyperbolic predictor (positive Rusanov
@@ -216,10 +259,19 @@ diagnostics
 # * **Step 5 (system-level ops)**: `apply(InvertMassMatrix())`
 #   demonstrates the system-level-operation hook on `SystemModel`.
 #
-# * **Step 7 (analysis)**: dispersion eigenvalues read directly from
+# * **Step 6 (analysis)**: dispersion eigenvalues read directly from
 #   `sm.quasilinear_matrix()` after substituting the model's own state
 #   Symbols with a base state.  No ``PDESystem``, no `linearise`, no
 #   hand-rolled symbols.
+#
+# * **Step 7 (transform)**: `NumpyRuntimeModel.from_system_model(sm)`
+#   lambdifies the cached sympy matrices into per-operator numpy
+#   callables ``f(Q, Qaux, p)``.  Same surface as the Model-based
+#   runtime — ``rt.flux`` / ``rt.nonconservative_matrix`` /
+#   ``rt.source`` / ``rt.mass_matrix`` / ``rt.hydrostatic_pressure``.
+#   The SystemModel-direct compilation path is exercised end-to-end:
+#   sample evaluation gives ``g·h²/2`` in the hydrostatic-pressure row,
+#   identity mass matrix, gravity source on ``hw0``.
 #
 # * **Step 8 (numerics)**: `FSFSplittingSolver.solve(mesh, m2d)` runs
 #   the 2D dam-break.  Mass conserved, positivity preserved, pressure
