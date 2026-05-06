@@ -64,10 +64,22 @@ import zoomy_core.model.initial_conditions as IC
 # -
 
 
-# ## 1. Model instantiation
+# ## 1. Model instantiation — asymmetric basis levels (M, N_w, N_p)
 #
-# `VAMModelGalerkin` instantiates with a level (number of vertical
-# moments).  Internally it runs the full Galerkin chain twice — once
+# `VAMModelGalerkin` accepts three independent basis levels:
+#
+# * ``M`` — horizontal velocity ``u`` modes (M+1 of them).
+# * ``N_w`` — vertical velocity ``w`` modes (N_w+1).
+# * ``N_p`` — non-hydrostatic pressure ``p`` modes (N_p+1).
+#
+# Defaults: ``M = level``, ``N_w = N_p = M + 1``.  This matches the
+# canonical VAM(M=1, N_w=2, N_p=2) parametrisation in Escalante 2024 —
+# pressure and vertical velocity get one degree more than horizontal
+# velocity, which is what makes the surface BC ``p(η) = 0`` and the
+# bottom KBC produce non-trivial modal *constraints* rather than
+# collapsing to zero.
+#
+# Internally `VAMModelGalerkin` runs the Galerkin chain twice — once
 # stopped at the ``Expand`` step (gives us a paper-form ``Σ_k`` view)
 # and once all the way through ``EvaluateIntegrals`` (closed primitive
 # form).  Both snapshots live on the model.
@@ -79,9 +91,45 @@ class VAM1D(VAMModelGalerkin):
 class VAM2D(VAMModelGalerkin):
     ins_dimension = 3
 
-m1d = VAM1D(level=0)
-m2d = VAM2D(level=0)
+# level=1 ⇒ default M=1, N_w=N_p=2 (Escalante's canonical case).
+m1d = VAM1D(level=1)
+m2d = VAM2D(level=1)
+print(f"Chain levels: M={m1d._chain_M}, N_w={m1d._chain_N_w}, N_p={m1d._chain_N_p}")
 m1d.describe()
+# -
+
+
+# ## 1b. Chain projection structure — dynamic vs constraint
+#
+# At ``(M, N_w, N_p) = (1, 2, 2)`` the chain produces eight projected
+# equations.  The leaf set partitions into **dynamic equations**
+# (evolved in time by the solver) and **constraint equations**
+# (algebraic relations among the modes — they're carried alongside
+# the dynamics, the cancellations Escalante writes in eq (4) emerge
+# when the model imposes them).
+#
+# We deliberately do *not* substitute the constraints into the
+# dynamic equations: doing so would foreshadow the model's true
+# constraint structure (surface BC for ``p_NH``, KBC@b ``w``-closure,
+# continuity ``I_1`` / ``I_2``) and conflict with how the system is
+# actually closed downstream.
+
+# +
+chain_classification = {
+    "dynamic equations": [
+        ("continuity test_0", "evolves h"),
+        ("momentum.x test_0", "evolves hu_0"),
+        ("momentum.x test_1", "evolves hu_1"),
+        ("momentum.z test_0", "evolves hw_0"),
+    ],
+    "constraint equations": [
+        ("continuity test_1", "Escalante eq (5) I_1"),
+        ("continuity test_2", "Escalante eq (5) I_2"),
+        ("momentum.z test_1", "redundant w.r.t. I_1 / w_1 closure"),
+        ("momentum.z test_2", "redundant w.r.t. I_2 / w_2 closure"),
+    ],
+}
+chain_classification
 # -
 
 
@@ -124,10 +172,11 @@ sm.describe(full=True)
 # ## 5. Apply a system-level operation
 #
 # `sm.apply(InvertMassMatrix())` brings the system to canonical
-# ``∂_t Q + ∂_x F + B·∂_x Q − S = 0`` form.  For VAM(level=0) the
-# inherited operator path delivers the canonical M=I matrices already,
-# so this is a no-op — but the call records the canonical-form
-# invariant in ``sm.history`` for downstream solver verification.
+# ``∂_t Q + ∂_x F + B·∂_x Q − S = 0`` form.  The inherited operator
+# path delivers canonical M=I matrices already, so the call is a
+# no-op on the operators themselves — but it records the
+# canonical-form invariant in ``sm.history`` for downstream solver
+# verification.
 
 sm.apply(InvertMassMatrix())
 sm.describe(full=False)
@@ -146,11 +195,15 @@ sm.describe(full=False)
 
 # +
 h0 = sp.Symbol("h0", positive=True)
+# At level=1 the inherited state vector is
+# [b, h, hu_0, hu_1, hw_0, hw_1] — six entries.
 base_state = {
     m1d.variables.b:   sp.Integer(0),
     m1d.variables.h:   h0,
     m1d.variables.hu0: sp.Integer(0),
+    m1d.variables.hu1: sp.Integer(0),
     m1d.variables.hw0: sp.Integer(0),
+    m1d.variables.hw1: sp.Integer(0),
 }
 ez_param = next(s for s, v in sm.parameters.items() if str(s) == "ez")
 
@@ -178,7 +231,9 @@ result
 # +
 rt = NumpyRuntimeModel.from_system_model(sm)
 
-Q_sample = np.array([0.0, 1.0, 0.5, 0.0])  # b=0, h=1, hu0=0.5, hw0=0
+# At level=1: state = [b, h, hu_0, hu_1, hw_0, hw_1].  Sample state
+# with h=1 and only the mean horizontal mode hu_0 set.
+Q_sample = np.array([0.0, 1.0, 0.5, 0.0, 0.0, 0.0])
 Qaux_sample = np.zeros(rt.n_aux_variables, dtype=float)
 p_sample = rt.parameters
 
@@ -189,12 +244,13 @@ runtime_outputs = {
     "mass_matrix":          rt.mass_matrix(Q_sample, Qaux_sample, p_sample),
     "hydrostatic_pressure": rt.hydrostatic_pressure(Q_sample, Qaux_sample, p_sample),
 }
-# Sanity: g · h² / 2 at the (h u0)-row column 0
+# Sanity: g · h² / 2 at the (h u_0)-row column 0
 assert np.isclose(runtime_outputs["hydrostatic_pressure"][2, 0], 9.81 * 0.5)
 # Sanity: identity mass matrix (canonical M = I after InvertMassMatrix)
 assert np.allclose(runtime_outputs["mass_matrix"], np.eye(rt.n_variables))
-# Sanity: gravity body force on hw0
-assert np.isclose(runtime_outputs["source"][3, 0], 9.81)
+# Sanity: gravity body force on the first hw row
+hw0_row = 2 + m1d.dimension * (m1d._n_u)
+assert np.isclose(runtime_outputs["source"][hw0_row, 0], 9.81)
 runtime_outputs
 # -
 
@@ -258,6 +314,14 @@ diagnostics
 #
 # * **Step 5 (system-level ops)**: `apply(InvertMassMatrix())`
 #   demonstrates the system-level-operation hook on `SystemModel`.
+#
+# * **Step 1b (projection structure)**: the chain at
+#   ``(M=1, N_w=2, N_p=2)`` produces 4 dynamic equations + 4
+#   constraint equations, matching Escalante 2024 eq (4)/(5)
+#   structure before constraint resolution.  Constraints are kept
+#   as separate equations rather than substituted in — the
+#   cancellations Escalante writes will emerge when the model
+#   imposes them.
 #
 # * **Step 6 (analysis)**: dispersion eigenvalues read directly from
 #   `sm.quasilinear_matrix()` after substituting the model's own state
