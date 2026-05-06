@@ -83,10 +83,11 @@ def test_describe_renders_closed_chain(walkthrough_ns):
     assert "Integral(" not in md, (
         "describe() leaked un-evaluated Integral atoms — chain regression"
     )
-    # Positive checks: the closed system mentions the canonical leaf names.
-    assert "continuity" in md
-    assert "momentum.x" in md
-    assert "momentum.z" in md
+    # Positive checks: the augmented chain mentions every leaf the
+    # Escalante DAE carries (projections + algebraic constraints).
+    for label in ("momentum.x", "momentum.z",
+                  "mass", "kbc_top_alg", "kbc_bot", "surface_bc"):
+        assert label in md, f"missing {label!r} in describe() output"
 
 
 # ---------------------------------------------------------------------------
@@ -94,14 +95,20 @@ def test_describe_renders_closed_chain(walkthrough_ns):
 # ---------------------------------------------------------------------------
 
 EXPECTED_CHAIN_LEAVES = {
-    ("continuity", "test_0"),
-    ("continuity", "test_1"),
-    ("continuity", "test_2"),
+    # Projection leaves the chain primitives produce.
     ("momentum", "x", "test_0"),
     ("momentum", "x", "test_1"),
     ("momentum", "z", "test_0"),
     ("momentum", "z", "test_1"),
     ("momentum", "z", "test_2"),
+    # Algebraic constraint leaves added at the end of the chain
+    # (mass + KBC + surface BC, matching Escalante eq (4)+(5)).
+    ("mass",),
+    ("kbc_top_alg",),
+    ("kbc_bot",),
+    ("surface_bc",),
+    # cont test_0 → replaced by mass; cont test_1 / test_2 dropped
+    # (M=1: cont_j1..M-1 is empty; cont test_{N_w} is trivially 0).
 }
 
 

@@ -95,15 +95,15 @@ def test_chain_dae_dae_partition(m1d):
 
 
 def test_chain_dae_mass_equation(m1d):
-    """``mass`` row must be ``∂_t h + ∂_x(h · u_0) = 0``."""
+    """``mass`` row must be ``∂_t h + ∂_x(h · U_0) = 0``."""
     pdesys = m1d._chain_dae
     idx = pdesys.equation_names.index("mass")
     mass_expr = pdesys.equations[idx]
     fields_by_name = {f.func.__name__: f for f in pdesys.fields}
     h = fields_by_name["h"]
-    u_0 = fields_by_name["u_0"]
+    U_0 = fields_by_name["U_0"]
     t, x = pdesys.time, pdesys.space[0]
-    expected = sp.Derivative(h, t) + sp.Derivative(h * u_0, x).doit()
+    expected = sp.Derivative(h, t) + sp.Derivative(h * U_0, x).doit()
     diff = sp.simplify(sp.expand(mass_expr - expected))
     assert diff == 0, f"mass equation diverges: diff = {diff}"
 
@@ -121,16 +121,16 @@ def test_chain_dae_kbc_bot(m1d):
     fields_by_name = {f.func.__name__: f for f in pdesys.fields}
     # b is non-evolving (parameter-like); extract from equation atoms.
     b = next(a for a in kbc.atoms(sp.Function) if a.func.__name__ == "b")
-    u_funcs = [fields_by_name[f"u_{i}"] for i in range(2)]   # M+1 = 2
-    w_funcs = [fields_by_name[f"w_{i}"] for i in range(3)]   # N_w+1 = 3
+    U_funcs = [fields_by_name[f"U_{i}"] for i in range(2)]   # M+1 = 2
+    W_funcs = [fields_by_name[f"W_{i}"] for i in range(3)]   # N_w+1 = 3
     x = pdesys.space[0]
-    expected = (sum(w_funcs) - sum(u_funcs) * sp.Derivative(b, x).doit())
+    expected = (sum(W_funcs) - sum(U_funcs) * sp.Derivative(b, x).doit())
     diff = sp.simplify(sp.expand(kbc - expected))
     assert diff == 0, f"kbc_bot diverges: diff = {diff}"
 
 
 def test_chain_dae_surface_bc(m1d):
-    """``surface_bc`` row must be ``p_0 - p_1 + p_2`` (sum (-1)^k p_k).
+    """``surface_bc`` row must be ``P_0 - P_1 + P_2`` (sum (-1)^k P_k).
 
     For shifted Legendre: phi_k(1) = (-1)^k.
     """
@@ -138,8 +138,8 @@ def test_chain_dae_surface_bc(m1d):
     idx = pdesys.equation_names.index("surface_bc")
     sb = pdesys.equations[idx]
     fields_by_name = {f.func.__name__: f for f in pdesys.fields}
-    p_funcs = [fields_by_name[f"p_{i}"] for i in range(3)]   # N_p+1 = 3
-    expected = sum((-1) ** k * p_funcs[k] for k in range(3))
+    P_funcs = [fields_by_name[f"P_{i}"] for i in range(3)]   # N_p+1 = 3
+    expected = sum((-1) ** k * P_funcs[k] for k in range(3))
     diff = sp.simplify(sp.expand(sb - expected))
     assert diff == 0, f"surface_bc diverges: diff = {diff}"
 

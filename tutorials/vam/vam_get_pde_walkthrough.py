@@ -99,41 +99,45 @@ m1d.describe()
 # -
 
 
-# ## 1b. Chain projection structure — eight leaves
+# ## 1b. Chain DAE structure — projection + algebraic constraint leaves
 #
-# At ``(M, N_w, N_p) = (1, 2, 2)`` the chain produces eight projected
-# equations:
+# At ``(M, N_w, N_p) = (1, 2, 2)`` the chain produces 9 leaves
+# matching Escalante 2024 eq (4)+(5):
 #
-# * **continuity** projected against ``φ_0, φ_1, φ_2``  (3 leaves)
-# * **momentum.x** projected against ``φ_0, φ_1``       (2 leaves)
-# * **momentum.z** projected against ``φ_0, φ_1, φ_2``  (3 leaves)
+# * **momentum.x.test_0/1** — x-momentum projected against ``φ_0, φ_1``
+# * **momentum.z.test_0/1/2** — z-momentum projected against
+#   ``φ_0, φ_1, φ_2``
+# * **mass** — explicit depth-averaged continuity ``∂_t h + ∂_x(h u_0)``
+# * **kbc_top_alg** — kinematic BC at η (with ``∂_t h`` substituted)
+# * **kbc_bot** — kinematic BC at the bottom (``∂_t b = 0``)
+# * **surface_bc** — non-hydrostatic surface BC ``Σ_k (-1)^k P_k = 0``
 #
-# The chain applies the kinematic BCs at z=b and z=η as ``Relation``
-# substitutions — that's what produces the conservative form
-# ``∂_t(h U_k)``, ``∂_x(h U_k U_j …)``.  Every leaf carries a
-# ``Derivative(_, t)`` term, so the partition bridge classifies all
-# eight as evolution.
+# Continuity ``test_0`` is dropped (replaced by the explicit ``mass``
+# equation) and ``test_1, test_2`` are dropped because Escalante's
+# eq (5) only retains ``cont_j1..M-1`` (empty range for ``M=1``).
 #
-# The verified Escalante-aligned shape (next cell) instead carries
-# the KBCs and surface BC as explicit *algebraic* equations in the
-# system (kbc_top_alg, kbc_bot, surface_bc) rather than substituting
-# them inline.  Both representations are mathematically equivalent;
-# the second is what the DAE solver consumes.
+# All four DAE constraint equations are added via the existing
+# ``System.add_equation`` API — no new primitives.  The kinematic
+# BCs that the chain *also* applied as ``Relation`` substitutions
+# (which produces the conservative form for the projection rows)
+# are now ALSO carried as separate algebraic rows; the DAE solver
+# enforces them per-step.
 
 # +
 chain_leaf_paths = {p for p, _ in m1d._chain_system.leaves()}
 expected_chain_paths = {
-    ("continuity", "test_0"),
-    ("continuity", "test_1"),
-    ("continuity", "test_2"),
     ("momentum", "x", "test_0"),
     ("momentum", "x", "test_1"),
     ("momentum", "z", "test_0"),
     ("momentum", "z", "test_1"),
     ("momentum", "z", "test_2"),
+    ("mass",),
+    ("kbc_top_alg",),
+    ("kbc_bot",),
+    ("surface_bc",),
 }
 assert chain_leaf_paths == expected_chain_paths, (
-    f"chain projection structure regressed: {chain_leaf_paths}"
+    f"chain DAE structure regressed: {chain_leaf_paths}"
 )
 chain_leaf_paths
 # -
