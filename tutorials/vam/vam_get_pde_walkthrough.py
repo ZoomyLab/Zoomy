@@ -99,37 +99,96 @@ m1d.describe()
 # -
 
 
-# ## 1b. Chain projection structure — dynamic vs constraint
+# ## 1b. Chain projection structure — eight leaves
 #
 # At ``(M, N_w, N_p) = (1, 2, 2)`` the chain produces eight projected
-# equations.  The leaf set partitions into **dynamic equations**
-# (evolved in time by the solver) and **constraint equations**
-# (algebraic relations among the modes — they're carried alongside
-# the dynamics, the cancellations Escalante writes in eq (4) emerge
-# when the model imposes them).
+# equations:
 #
-# We deliberately do *not* substitute the constraints into the
-# dynamic equations: doing so would foreshadow the model's true
-# constraint structure (surface BC for ``p_NH``, KBC@b ``w``-closure,
-# continuity ``I_1`` / ``I_2``) and conflict with how the system is
-# actually closed downstream.
+# * **continuity** projected against ``φ_0, φ_1, φ_2``  (3 leaves)
+# * **momentum.x** projected against ``φ_0, φ_1``       (2 leaves)
+# * **momentum.z** projected against ``φ_0, φ_1, φ_2``  (3 leaves)
+#
+# The chain applies the kinematic BCs at z=b and z=η as ``Relation``
+# substitutions — that's what produces the conservative form
+# ``∂_t(h U_k)``, ``∂_x(h U_k U_j …)``.  Every leaf carries a
+# ``Derivative(_, t)`` term, so the partition bridge classifies all
+# eight as evolution.
+#
+# The verified Escalante-aligned shape (next cell) instead carries
+# the KBCs and surface BC as explicit *algebraic* equations in the
+# system (kbc_top_alg, kbc_bot, surface_bc) rather than substituting
+# them inline.  Both representations are mathematically equivalent;
+# the second is what the DAE solver consumes.
 
 # +
-chain_classification = {
-    "dynamic equations": [
-        ("continuity test_0", "evolves h"),
-        ("momentum.x test_0", "evolves hu_0"),
-        ("momentum.x test_1", "evolves hu_1"),
-        ("momentum.z test_0", "evolves hw_0"),
-    ],
-    "constraint equations": [
-        ("continuity test_1", "Escalante eq (5) I_1"),
-        ("continuity test_2", "Escalante eq (5) I_2"),
-        ("momentum.z test_1", "redundant w.r.t. I_1 / w_1 closure"),
-        ("momentum.z test_2", "redundant w.r.t. I_2 / w_2 closure"),
-    ],
+chain_leaf_paths = {p for p, _ in m1d._chain_system.leaves()}
+expected_chain_paths = {
+    ("continuity", "test_0"),
+    ("continuity", "test_1"),
+    ("continuity", "test_2"),
+    ("momentum", "x", "test_0"),
+    ("momentum", "x", "test_1"),
+    ("momentum", "z", "test_0"),
+    ("momentum", "z", "test_1"),
+    ("momentum", "z", "test_2"),
 }
-chain_classification
+assert chain_leaf_paths == expected_chain_paths, (
+    f"chain projection structure regressed: {chain_leaf_paths}"
+)
+chain_leaf_paths
+# -
+
+
+# ## 1c. Verified Escalante DAE partition — `build_vam_pdesystem`
+#
+# The April-2026 builder ``tutorials/vam/vam_pdesystem.build_vam_pdesystem``
+# produces VAM(M, N_w, N_p) directly via physical-z polynomial
+# integration (no Galerkin chain primitives — uses sympy +
+# ``polynomial_integrate``).  It carries the KBCs / surface BC as
+# **separate algebraic equations** in the PDESystem, giving the
+# canonical Escalante DAE shape:
+#
+# * ``2M+4`` evolution rows: ``mass`` + ``xmom_j0..M`` + ``zmom_j0..N_w``
+# * ``M+2`` algebraic rows: ``kbc_top_alg, kbc_bot, surface_bc``
+#   (+ ``cont_j1..cont_j(M-1)`` when ``M ≥ 2``)
+#
+# For ``(M=1, N_w=2, N_p=2)``: 9 equations / 9 fields, 6 dynamic + 3
+# algebraic.  ``dae_partition`` (the auto-classifier in
+# ``thesis/notebooks/verification/dae_solver/test_dae_partition_bridge.py``)
+# detects this partition by inspecting which rows of the linearised
+# system carry a non-zero ``∂_t`` coefficient.
+#
+# This partition is the reference for our chain to converge to —
+# the cancellations Escalante writes in eq (4) emerge once the
+# model imposes the algebraic constraints alongside the evolutions.
+
+# +
+import sys as _sys
+_sys.path.insert(0, "tutorials/vam")
+_sys.path.insert(0, "thesis/notebooks/verification/dae_solver")
+from vam_pdesystem import build_vam_pdesystem  # noqa: E402
+from test_dae_partition_bridge import dae_partition  # noqa: E402
+_sys.path[:2] = []
+
+april_pdesys = build_vam_pdesystem(M=1, N_w=2, N_p=2, flat_bottom=True)
+_dyn, _alg, _, _ = dae_partition(april_pdesys)
+escalante_partition = {
+    "evolution":  [april_pdesys.equation_names[i] for i in _dyn],
+    "algebraic":  [april_pdesys.equation_names[i] for i in _alg],
+    "n_fields":   len(april_pdesys.fields),
+    "n_equations": len(april_pdesys.equations),
+}
+# Sanity assertions: this is the verified canonical shape; if the
+# builder ever drifts, the walkthrough fails fast.
+assert escalante_partition["n_equations"] == 9
+assert escalante_partition["n_fields"] == 9
+assert escalante_partition["evolution"] == [
+    "mass", "xmom_j0", "xmom_j1", "zmom_j0", "zmom_j1", "zmom_j2",
+]
+assert escalante_partition["algebraic"] == [
+    "kbc_top_alg", "kbc_bot", "surface_bc",
+]
+escalante_partition
 # -
 
 
@@ -316,12 +375,20 @@ diagnostics
 #   demonstrates the system-level-operation hook on `SystemModel`.
 #
 # * **Step 1b (projection structure)**: the chain at
-#   ``(M=1, N_w=2, N_p=2)`` produces 4 dynamic equations + 4
-#   constraint equations, matching Escalante 2024 eq (4)/(5)
-#   structure before constraint resolution.  Constraints are kept
-#   as separate equations rather than substituted in — the
-#   cancellations Escalante writes will emerge when the model
-#   imposes them.
+#   ``(M=1, N_w=2, N_p=2)`` produces 8 leaves (3 continuity + 2
+#   x-momentum + 3 z-momentum), every one carrying a
+#   ``Derivative(_, t)`` term — the chain applies the KBCs as
+#   ``Relation`` substitutions, which is what generates the
+#   conservative form ``∂_t(h U_k)`` etc.
+#
+# * **Step 1c (verified Escalante DAE partition)**: the April-2026
+#   builder ``build_vam_pdesystem(1, 2, 2)`` produces the canonical
+#   Escalante DAE shape — 9 equations / 9 fields, 6 evolution rows
+#   (``mass`` + ``xmom_j0..1`` + ``zmom_j0..2``) and 3 algebraic
+#   rows (``kbc_top_alg, kbc_bot, surface_bc``).  This is the
+#   reference partition our chain should converge to once the KBC /
+#   surface-BC equations are carried alongside the evolutions
+#   instead of substituted inline.
 #
 # * **Step 6 (analysis)**: dispersion eigenvalues read directly from
 #   `sm.quasilinear_matrix()` after substituting the model's own state
