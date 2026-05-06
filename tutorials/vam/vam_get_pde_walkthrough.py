@@ -126,15 +126,14 @@ m1d.describe()
 # +
 chain_leaf_paths = {p for p, _ in m1d._chain_system.leaves()}
 expected_chain_paths = {
+    ("continuity",),
     ("momentum", "x", "test_0"),
     ("momentum", "x", "test_1"),
     ("momentum", "z", "test_0"),
     ("momentum", "z", "test_1"),
     ("momentum", "z", "test_2"),
-    ("mass",),
-    ("kbc_top_alg",),
+    ("kbc_top",),
     ("kbc_bot",),
-    ("surface_bc",),
 }
 assert chain_leaf_paths == expected_chain_paths, (
     f"chain DAE structure regressed: {chain_leaf_paths}"
