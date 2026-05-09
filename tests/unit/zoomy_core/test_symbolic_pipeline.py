@@ -315,7 +315,7 @@ def test_sme_l1_shear_residual_is_single_zeta_integral(sme_l1_fixture):
     """
     model, state, _basis = sme_l1_fixture
     expr = model.momentum.x.test_1._node.expr
-    zeta = state.zeta
+    zeta = state.zeta_ref
     integrals = [I for I in expr.atoms(sp.Integral) if I.has(zeta)]
     assert len(integrals) == 1, (
         f"expected exactly one ζ-Integral residual, got {len(integrals)}"

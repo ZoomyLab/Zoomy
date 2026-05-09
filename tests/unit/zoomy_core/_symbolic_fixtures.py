@@ -13,6 +13,7 @@ from __future__ import annotations
 import sympy as sp
 
 from zoomy_core.model.models.ins_generator import (
+    AffineProjection,
     Basis,
     EvaluateIntegrals,
     FullINS,
@@ -25,7 +26,6 @@ from zoomy_core.model.models.ins_generator import (
     Recombine,
     SimplifyIntegrals,
     StateSpace,
-    ZetaTransform,
 )
 from zoomy_core.model.models.basisfunctions import (
     LayeredBasis,
@@ -72,7 +72,7 @@ def build_swe_system():
 
     alpha = basis.alpha.alpha_0
     hu_fn = sp.Function("hu", real=True)(t, x)
-    swe.apply({alpha: hu_fn / state.H})
+    swe.apply({alpha: hu_fn / state.h})
     swe.apply(Recombine(vars=[t, x]))
 
     h_sym = sp.Symbol("h", positive=True)
@@ -82,7 +82,7 @@ def build_swe_system():
 
     sm = SystemModel(
         swe,
-        state_substitutions={state.H: h_sym, hu_fn: hu_sym, state.b: b_sym},
+        state_substitutions={state.h: h_sym, hu_fn: hu_sym, state.b: b_sym},
         state_variables=[b_sym, h_sym, hu_sym],
         equation_variable={("continuity",): h_sym,
                            ("momentum", "x"): hu_sym},
@@ -162,7 +162,7 @@ def build_sme_l1_system():
     model.apply(w_closure).simplify()
     model.apply(kinematic_bcs).simplify()
 
-    model.apply(ZetaTransform(state))
+    model.apply(AffineProjection(state))
     model.apply(basis.expand(state.u))
     model.apply(EvaluateIntegrals(state)).simplify()
 
