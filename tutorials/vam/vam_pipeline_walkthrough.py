@@ -248,9 +248,14 @@ sys.describe()
 #    ``mass, xmom_j0..M, zmom_j0..N_w−1, cont_j1..N_p``.
 
 # +
-mass_expr = sys._tree.continuity.test_0.expr
-dt_h_sub = {sp.Derivative(h, t):
-            -sp.Derivative(h * coeffs_u[0], x).doit()}
+# Derive the ∂_t h substitution **from** the mass leaf via solve_for
+# rather than hardcoding it.  The mass equation here is
+# ``∂_t h + ∂_x(h·U_0) = 0`` so the substitution comes out as
+# ``∂_t h ↦ -∂_x(h·U_0)``, but the same line works unchanged for any
+# closed form the chain delivers.
+mass_leaf = sys._tree.continuity.test_0
+mass_expr = mass_leaf.expr
+dt_h_sub = mass_leaf.solve_for(sp.Derivative(h, t))._as_relation
 
 ordered = [("mass", mass_expr)]
 for k in range(M + 1):
@@ -277,8 +282,37 @@ inline_chain_dae.equation_names = [n for n, _ in ordered]
 # ## 2. Same model via `VAMModelGalerkin`
 #
 # The class executes the same twelve steps internally and exposes
-# ``_chain_dae`` as the closed PDESystem.  We verify
-# bit-for-bit agreement with §1.
+# ``_chain_dae`` as the closed PDESystem.  We verify bit-for-bit
+# agreement with §1.
+#
+# **What we verify against Escalante 2024.**  The integration test
+# ``test_chain_dae_matches_escalante_reference`` (in
+# ``tests/integration/zoomy_core/test_vam_chain_dae.py``) compares
+# the **mass + ``xmom_j0`` + ``zmom_j0``** rows of our chain DAE to
+# Escalante's eq (4) bit-for-bit (see also
+# ``tests/integration/zoomy_core/test_vam_chain_dae.py::test_chain_dae_cont_j1_matches_I1``
+# and ``test_chain_dae_cont_j2_matches_neg_I2``, which lock the
+# pressure-projection rows ``cont_j1`` / ``cont_j2`` against the
+# Escalante derivations $I_1$ / $-I_2$).  These five rows match the
+# original Escalante formulation modulo state-symbol identity.
+#
+# **What is NOT a bit-for-bit match.**  The higher-order projections
+# ``xmom_j1`` and ``zmom_j1`` are **not** an Escalante reference
+# row (his paper writes the system in the form
+# $\partial_t Q + \partial_x F + B\,\partial_x Q - S = 0$ with **mass
+# matrix $M = I$** by absorbing the $\mu_k = 1/(2k+1)$ Galerkin
+# weights into the conservative state $h\,U_k$, $h\,W_k$).  Our chain
+# uses the **primitive** state $(h, U_k, W_k, P_k)$ — which is why
+# our mass matrix is non-diagonal (compound atoms like
+# $\partial_t(h\,U_k) = h\,\partial_t U_k + U_k\,\partial_t h$).
+# The two formulations are mathematically equivalent; only the
+# operator-form layout differs.
+#
+# Similarly, the $(\partial_x b)^2$ terms in the higher-order chain
+# rows are real, second-order topography couplings that the
+# Galerkin chain produces honestly — they vanish at linear order
+# (any dispersion check at the rest state with $b = 0$ skips them)
+# but are physically present for non-zero bottom slopes.
 
 # +
 class VAM1D(VAMModelGalerkin):
@@ -378,46 +412,42 @@ M_0
 
 # ### 3.2 Verify VAM(1, 2, 2) — analytical dispersion at rest
 #
-# Linearise the chain DAE around the rest state
-# $\big(h = h_0,\;U_k = W_k = P_k = 0,\;b = 0\big)$ and assemble the
-# dispersion matrix
+# The analysis layer ships
+# :func:`zoomy_core.analysis.system_model_analysis.plane_wave_dispersion`,
+# which takes a :class:`SystemModel` plus a base-state dict and assembles
+# the dispersion matrix
 #
 # $$
-# \mathbf{M}(\omega, k) \;=\; -i\omega\,\mathbf{M}_t \;+\; ik\,\mathbf{M}_x \;+\; \mathbf{M}_0.
+# \mathbf{M}(\omega, k) \;=\; -i\omega\,\mathbf{M}_t \;+\; ik\,\mathbf{M}_x \;+\; \mathbf{M}_0
 # $$
 #
-# The vanishing of $\det\mathbf{M}(\omega, k)$ defines the dispersion
-# curves $\omega(k)$.  Sympy solves it in closed form for VAM(1, 2, 2);
-# the leading-order limit recovers shallow water, and the finite-$k$
-# correction is the Boussinesq-style Padé fraction the higher modes
-# are designed to produce.
+# from the SystemModel's own ``mass_matrix`` / ``quasilinear_matrix`` /
+# ``source_jacobian_wrt_state`` accessors — the same operator surface
+# we just inspected in §3.  Solving $\det\mathbf{M}(\omega, k) = 0$
+# gives the dispersion curves $\omega(k)$.  No manual pencil
+# construction in the walkthrough.
 
 # +
-omega = sp.Symbol("omega", real=True)
-k = sp.Symbol("k", real=True, positive=True)
+from zoomy_core.analysis.system_model_analysis import plane_wave_dispersion
+
+g_param = next(s for s in sm.parameters if str(s) == "g")
+rho_param = next(s for s in sm.parameters if str(s) == "rho")
+b_sym = next(a for eq in class_chain_dae.equations
+             for a in eq.atoms(sp.Function) if a.func.__name__ == "b")
+
 h0 = sp.Symbol("h0", positive=True)
+rest_state = {sym: (h0 if str(sym) == "h" else sp.S.Zero) for sym in sm.state}
+extra_subs = {sp.Derivative(b_sym, x): sp.S.Zero,
+              sp.Derivative(b_sym, x, x): sp.S.Zero}
 
-rest = {f: (h0 if f.func.__name__ == "h" else sp.S.Zero)
-        for f in class_chain_dae.fields}
-linearised_rest = linearise(class_chain_dae, rest)
-M_t_rest, M_xa_rest, M_0_rest = extract_quasilinear_pencil(linearised_rest)
-M_x_rest = M_xa_rest[0]
-
-b_zero = {sp.Derivative(b, x): sp.S.Zero,
-          sp.Derivative(b, x, x): sp.S.Zero}
-M_t_rest = M_t_rest.subs(b_zero)
-M_x_rest = M_x_rest.subs(b_zero)
-M_0_rest = M_0_rest.subs(b_zero)
-
-g_param = next(s for s in class_chain_dae.parameters if str(s) == "g")
-rho_param = next(s for s in class_chain_dae.parameters if str(s) == "rho")
-
-M_disp = -sp.I * omega * M_t_rest + sp.I * k * M_x_rest + M_0_rest
-det_disp = sp.factor(M_disp.det(method="berkowitz"))
-omega_solutions = sp.solve(sp.Eq(det_disp, 0), omega)
+dispersion = plane_wave_dispersion(
+    sm, rest_state, parameters=extra_subs, return_omega_k=True,
+)
+omega_solutions = dispersion["omega_solutions"]
 nontrivial = [s for s in omega_solutions if s != 0]
 
 # Long-wave limit $k \to 0$: shallow-water recovery $c^2 \to g\,h_0$.
+k = dispersion["k"]
 c_sq = sp.simplify((nontrivial[0] / k) ** 2)
 c_long = sp.limit(c_sq, k, 0)
 assert sp.simplify(c_long - g_param * h0) == 0, (
@@ -426,7 +456,7 @@ assert sp.simplify(c_long - g_param * h0) == 0, (
 # -
 
 # Characteristic polynomial $\det\mathbf{M}(\omega, k)$, factored.
-det_disp
+sp.factor(dispersion["dispersion_determinant"])
 
 # Symbolic dispersion solutions $\omega(k)$.
 sp.Matrix(omega_solutions)
