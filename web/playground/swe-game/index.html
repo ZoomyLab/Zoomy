@@ -381,6 +381,14 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
               <option value="600">600 × 600 (extrem)</option>
             </select>
           </label>
+          <label style="margin-top:10px">
+            Farbschema
+            <select id="setting-colorscheme">
+              <option value="water" selected>Wasser (Tiefe)</option>
+              <option value="cooltowarm">Cool to Warm (ParaView)</option>
+              <option value="velocity">Geschwindigkeit (Viridis)</option>
+            </select>
+          </label>
           <div class="hint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
         </div>
       </div>
@@ -395,20 +403,35 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 <script>
 "use strict";
 
-// === Water-themed LUT ===
-// idx 0   = clay/wall (warm brown)
-// idx 1.. = water gradient (very pale → bright cyan → deep teal)
-const LUT = new Uint8ClampedArray(256 * 4);
-LUT[0]=139; LUT[1]=90; LUT[2]=43; LUT[3]=255;
-const STOPS = [
+// === Color schemes — three LUTs sharing the same wall colour ===
+// idx 0   = clay/wall (warm brown) — never replaced
+// idx 1.. = quantised field value mapped through the active scheme
+const WALL_COLOR = [139, 90, 43];
+
+const STOPS_WATER = [
   [0.00, 220, 235, 240],
   [0.30, 110, 200, 230],
   [0.70,  16, 130, 180],
   [1.00,   8,  60,  95],
 ];
-function lerp3(t) {
-  for (let i = 0; i < STOPS.length - 1; i++) {
-    const [t0,r0,g0,b0] = STOPS[i], [t1,r1,g1,b1] = STOPS[i+1];
+const STOPS_COOLTOWARM = [
+  [0.00,  59,  76, 192],
+  [0.25, 119, 154, 247],
+  [0.50, 221, 221, 221],
+  [0.75, 244, 154, 122],
+  [1.00, 180,   4,  38],
+];
+const STOPS_VIRIDIS = [
+  [0.00,  68,   1,  84],
+  [0.25,  59,  82, 139],
+  [0.50,  33, 144, 141],
+  [0.75,  94, 201,  98],
+  [1.00, 253, 231,  37],
+];
+
+function lerpStops(stops, t) {
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [t0,r0,g0,b0] = stops[i], [t1,r1,g1,b1] = stops[i+1];
     if (t >= t0 && t <= t1) {
       const u = (t - t0) / (t1 - t0);
       return [Math.round(r0+(r1-r0)*u), Math.round(g0+(g1-g0)*u), Math.round(b0+(b1-b0)*u)];
@@ -416,11 +439,21 @@ function lerp3(t) {
   }
   return [0,0,0];
 }
-for (let i = 1; i <= 255; i++) {
-  const t = (i - 1) / 254;
-  const [r,g,b] = lerp3(t);
-  LUT[i*4]=r; LUT[i*4+1]=g; LUT[i*4+2]=b; LUT[i*4+3]=255;
+function buildLUT(stops, wall) {
+  const lut = new Uint8ClampedArray(256 * 4);
+  lut[0]=wall[0]; lut[1]=wall[1]; lut[2]=wall[2]; lut[3]=255;
+  for (let i = 1; i <= 255; i++) {
+    const t = (i - 1) / 254;
+    const [r,g,b] = lerpStops(stops, t);
+    lut[i*4]=r; lut[i*4+1]=g; lut[i*4+2]=b; lut[i*4+3]=255;
+  }
+  return lut;
 }
+const LUT_WATER      = buildLUT(STOPS_WATER,      WALL_COLOR);
+const LUT_COOLTOWARM = buildLUT(STOPS_COOLTOWARM, WALL_COLOR);
+const LUT_VELOCITY   = buildLUT(STOPS_VIRIDIS,    WALL_COLOR);
+
+let activeLUT = LUT_WATER;
 
 // === Canvases (size set after worker reports IW/IH) ===
 const flowC = document.getElementById("flow-canvas");
@@ -474,11 +507,12 @@ function getRaster() {
 function renderFrame(buf) {
   if (buf.length !== W * H) return;  // stale frame after resolution swap
   const d = imgData.data;
+  const L = activeLUT;
   for (let i = 0; i < W*H; i++) {
     const v = buf[i] << 2;
-    d[(i<<2)]   = LUT[v];
-    d[(i<<2)+1] = LUT[v+1];
-    d[(i<<2)+2] = LUT[v+2];
+    d[(i<<2)]   = L[v];
+    d[(i<<2)+1] = L[v+1];
+    d[(i<<2)+2] = L[v+2];
     d[(i<<2)+3] = 255;
   }
   fCtx.putImageData(imgData, 0, 0);
@@ -551,6 +585,8 @@ let qh2, qhu2, qhv2;
 let raster;
 let gameTime, running, finished;
 let outflow;
+let MODE = "h";                 // "h" (height) or "vmag" (velocity magnitude)
+const VMAG_SCALE = 254 / 3.0;   // 3 m/s ⇒ idx 254 (saturates above)
 
 function wallSegs(op, nx) {
   const w = []; let p = 0;
@@ -722,10 +758,22 @@ function render() {
   const ng = NG;
   for (let j = 0; j < NX; j++) {
     for (let i = 0; i < NX; i++) {
-      const h = qh[(j+1)*N + (i+1)];
+      const k = (j+1)*N + (i+1);
+      const h = qh[k];
       const rj = j + ng, ri = i + ng;
       if (raster[rj*IW + ri] > 0) continue;
-      const v = Math.min(h * 1275, 254);
+      let v;
+      if (MODE === "vmag") {
+        if (h <= WET) { v = 0; }
+        else {
+          const u_ = qhu[k] / h;
+          const w_ = qhv[k] / h;
+          const vmag = Math.sqrt(u_*u_ + w_*w_);
+          v = Math.min(254, vmag * VMAG_SCALE);
+        }
+      } else {
+        v = Math.min(h * 1275, 254);
+      }
       img[rj*IW + ri] = (v | 0) + 1;
     }
   }
@@ -827,6 +875,16 @@ self.onmessage = function(e) {
   if      (m.type === "tick")  { tick(); }
   else if (m.type === "start") { startSim(m.raster); tick(); }
   else if (m.type === "reset") { init(); tick(); }
+  else if (m.type === "setmode") {
+    MODE = m.mode;
+    // Push a fresh frame with the new field — no simulation step.
+    const img = render();
+    self.postMessage({
+      type: "frame", image: img.buffer,
+      time: gameTime, of: outflow.slice(), fin: finished, ns: 0,
+      iw: IW, ih: IH
+    }, [img.buffer]);
+  }
 };
 `;
 
@@ -876,6 +934,11 @@ function createWorker(nx) {
       setupDrawCtx();
       imgData = fCtx.createImageData(W, H);
       document.getElementById("loading").style.display = "none";
+      // Re-apply current colour scheme (worker resets MODE on setup)
+      if (currentScheme && currentScheme !== "water") {
+        const mode = currentScheme === "velocity" ? "vmag" : "h";
+        worker.postMessage({type: "setmode", mode: mode});
+      }
     }
     else if (m.type === "frame") {
       if (m.iw !== W || m.ih !== H) return;  // stale frame from prior NX
@@ -944,6 +1007,20 @@ document.addEventListener("click", function(e) {
 });
 document.getElementById("setting-resolution").onchange = function() {
   applyResolution(parseInt(this.value, 10));
+};
+
+let currentScheme = "water";
+function setColorScheme(scheme) {
+  let lut, mode;
+  if      (scheme === "cooltowarm") { lut = LUT_COOLTOWARM; mode = "h";    }
+  else if (scheme === "velocity")   { lut = LUT_VELOCITY;   mode = "vmag"; }
+  else                              { lut = LUT_WATER;      mode = "h";    }
+  activeLUT = lut;
+  currentScheme = scheme;
+  if (worker) worker.postMessage({type: "setmode", mode: mode});
+}
+document.getElementById("setting-colorscheme").onchange = function() {
+  setColorScheme(this.value);
 };
 
 // === Mobile-friendly sidebar toggle + responsive board fit ===
