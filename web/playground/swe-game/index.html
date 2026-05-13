@@ -22,6 +22,8 @@
   --green:      #4ade80;
   --sidebar-w:  200px;
   --gutter:     80px;
+  --face-h:     56px;
+  --inflow-h:   56px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -60,7 +62,6 @@ body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
 .app{
   display:grid;
   grid-template-columns:var(--sidebar-w) 1fr;
-  grid-template-rows:auto 1fr;
   gap:12px;
   max-width:1100px;
   margin:0 auto;
@@ -70,28 +71,13 @@ body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
 }
 body.sidebar-closed .app{grid-template-columns:0 1fr}
 
-.hdr{grid-column:1/-1;text-align:center;padding:2px 4px 2px 56px}
-.hdr h1{font-size:1.2em;letter-spacing:.3px;margin-bottom:2px}
-.hdr p{font-size:.85em;opacity:.75}
-
-/* Side panel: score / timer / highscore */
+/* Sidebar — highscore only */
 .sidepanel{
-  grid-row:2;grid-column:1;
-  display:flex;flex-direction:column;gap:10px;
+  display:flex;flex-direction:column;
   min-height:0;min-width:0;overflow:hidden;
   transition:opacity .2s;
 }
 body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
-.stat{
-  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
-  border:1px solid var(--panel-edge);
-  border-radius:8px;
-  padding:10px 6px;
-  text-align:center;
-}
-.stat .v{font-size:1.9em;font-weight:700;line-height:1;color:var(--accent)}
-.stat .l{font-size:.7em;opacity:.7;margin-top:4px;letter-spacing:.5px;text-transform:uppercase}
-.stat.timer .v{color:var(--gold)}
 .hs{
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);
@@ -103,22 +89,48 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 .hs .row{font-size:.85em;display:flex;justify-content:space-between;padding:2px 4px;border-radius:3px}
 .hs .row.new{background:rgba(250,204,21,0.12);color:var(--gold);font-weight:600}
 
-/* Board */
-.board-wrap{
-  grid-row:2;grid-column:2;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:6px;
+/* Main area = three stacked parts: title / stats / game area, + controls */
+.main-area{
+  display:flex;flex-direction:column;gap:8px;
   min-height:0;min-width:0;
+}
+
+/* Part 1: header (title + subtitle) */
+.hdr{text-align:center;padding:2px 4px 2px 56px}
+.hdr h1{font-size:1.2em;letter-spacing:.3px;margin-bottom:2px}
+.hdr p{font-size:.85em;opacity:.75}
+
+/* Part 2: stats row (score + timer under title) */
+.stats-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.stat-card{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:6px 14px;
+  display:flex;flex-direction:column;align-items:center;
+  gap:2px;min-width:100px;
+}
+.stat-card .v{font-size:1.6em;font-weight:700;line-height:1;color:var(--accent)}
+.stat-card .l{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
+.stat-card.timer .v{color:var(--gold)}
+
+/* Part 3: game area — square zone with canvas centered and gardens in the gutter */
+.game-area-wrap{
+  flex:1;
+  display:flex;align-items:center;justify-content:center;
+  min-height:0;min-width:0;
+}
+.game-area{
   position:relative;
+  /* square; side set by fitGameArea() JS */
+  width:min(60vmin,660px);
+  height:min(60vmin,660px);
+  flex-shrink:0;
 }
 .board{
-  position:relative;
-  /* size set by fitBoard() JS — these are reasonable boot-time fallbacks */
-  width:min(60vmin,540px);
-  height:min(60vmin,540px);
-  margin:var(--gutter) 0;
-  flex-shrink:0;
+  position:absolute;
+  top:var(--gutter);left:var(--gutter);
+  right:var(--gutter);bottom:var(--gutter);
 }
 .canvas-frame{
   position:absolute;inset:0;
@@ -142,19 +154,22 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   font-size:1.05em;text-align:center;padding:1em;
 }
 
-/* Garden cards (positioned at outlet centers) */
+/* Garden cards (positioned at outlet centers; live in .board, hang into .game-area gutter) */
 .garden{
   position:absolute;z-index:5;
   display:flex;flex-direction:column;align-items:center;gap:4px;
-  width:78px;pointer-events:none;
+  pointer-events:none;
 }
 .garden img{
-  width:48px;height:48px;
+  height:var(--face-h);
+  width:auto;
+  max-width:60px;
+  object-fit:contain;
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));
   transition:filter .2s;
 }
 .garden progress{
-  width:70px;height:9px;
+  width:60px;height:8px;
   border:none;border-radius:5px;overflow:hidden;
   background:var(--panel);
   -webkit-appearance:none;appearance:none;
@@ -177,7 +192,8 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 
 .garden.t{bottom:100%;margin-bottom:8px;transform:translateX(-50%)}
 .garden.b{top:100%;margin-top:8px;transform:translateX(-50%)}
-.garden.r{left:100%;margin-left:8px;transform:translateY(-50%);width:64px}
+.garden.r{left:100%;margin-left:8px;transform:translateY(-50%)}
+.garden.r progress{width:50px}
 
 /* Inflow indicator */
 .inflow{
@@ -185,7 +201,10 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   transform:translateY(-50%);z-index:5;pointer-events:none;
 }
 .inflow img{
-  width:60px;height:auto;
+  height:var(--inflow-h);
+  width:auto;
+  max-width:60px;
+  object-fit:contain;
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
   animation:inflow-pulse 1.6s ease-in-out infinite;
 }
@@ -248,9 +267,9 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 }
 .footer a{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
 
-/* Mobile: ≤768px — sidebar becomes drawer; gardens shrink */
+/* Mobile: ≤768px — sidebar becomes drawer; gutter and images shrink */
 @media (max-width:768px){
-  :root{--sidebar-w:0px;--gutter:56px}
+  :root{--sidebar-w:0;--gutter:68px;--face-h:44px;--inflow-h:44px}
   .app{padding:6px 6px 0;gap:6px}
   .hdr{padding:2px 8px 2px 56px}
   .hdr h1{font-size:.95em}
@@ -268,13 +287,14 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
     overflow-y:auto;
   }
   body.sidebar-open .app{grid-template-columns:0 1fr}
-  /* Compact gardens */
-  .garden{width:60px;gap:3px}
-  .garden img{width:36px;height:36px}
-  .garden progress{width:52px;height:7px}
-  .garden.r{width:48px}
-  .garden.r progress{width:44px}
-  .inflow img{width:44px}
+  /* Compact stat cards */
+  .stats-row{gap:6px}
+  .stat-card{padding:4px 10px;min-width:80px}
+  .stat-card .v{font-size:1.25em}
+  /* Compact gardens (progress narrower, image height already in --face-h) */
+  .garden{gap:3px}
+  .garden progress{width:48px;height:7px}
+  .garden.r progress{width:38px}
   /* Compact buttons */
   .btn{padding:8px 14px;font-size:.85em}
   .btn-icon{padding:8px 10px}
@@ -283,14 +303,12 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 
 /* Very narrow phones */
 @media (max-width:380px){
-  :root{--gutter:48px}
+  :root{--gutter:58px;--face-h:38px;--inflow-h:38px}
   .hdr h1{font-size:.85em}
-  .garden{width:52px}
-  .garden img{width:30px;height:30px}
-  .garden progress{width:46px}
-  .garden.r{width:42px}
-  .garden.r progress{width:36px}
-  .inflow img{width:36px}
+  .stat-card{padding:4px 8px;min-width:70px}
+  .stat-card .v{font-size:1.15em}
+  .garden progress{width:42px}
+  .garden.r progress{width:32px}
 }
 </style>
 </head>
@@ -300,41 +318,48 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 <div class="backdrop" id="backdrop"></div>
 
 <div class="app">
-  <div class="hdr">
-    <h1>Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
-    <p>Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
-  </div>
-
-  <div class="sidepanel">
-    <div class="stat"><div class="v" id="score">0</div><div class="l">Punkte</div></div>
-    <div class="stat timer"><div class="v" id="timer">60.0</div><div class="l">Zeit</div></div>
+  <aside class="sidepanel">
     <div class="hs"><h3>Highscore</h3><div id="hs-list"></div></div>
-  </div>
+  </aside>
 
-  <div class="board-wrap">
-    <div class="board" id="board">
-      <div class="canvas-frame">
-        <canvas id="flow-canvas"></canvas>
-        <canvas id="draw-canvas"></canvas>
-        <div id="loading">⏳ Initialisiere…</div>
-      </div>
+  <main class="main-area">
+    <div class="hdr">
+      <h1>Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
+      <p>Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
+    </div>
 
-      <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="v" id="score">0</div><div class="l">Punkte</div></div>
+      <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l">Zeit</div></div>
+    </div>
 
-      <div class="garden t" id="g0" style="left:58.06%">
-        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-      </div>
-      <div class="garden r" id="g1" style="top:41.94%">
-        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-      </div>
-      <div class="garden r" id="g2" style="top:82.26%">
-        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-      </div>
-      <div class="garden b" id="g3" style="left:70.16%">
-        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-      </div>
-      <div class="garden b" id="g4" style="left:33.87%">
-        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+    <div class="game-area-wrap">
+      <div class="game-area" id="game-area">
+        <div class="board" id="board">
+          <div class="canvas-frame">
+            <canvas id="flow-canvas"></canvas>
+            <canvas id="draw-canvas"></canvas>
+            <div id="loading">⏳ Initialisiere…</div>
+          </div>
+
+          <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
+
+          <div class="garden t" id="g0" style="left:58.06%">
+            <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+          </div>
+          <div class="garden r" id="g1" style="top:41.94%">
+            <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+          </div>
+          <div class="garden r" id="g2" style="top:82.26%">
+            <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+          </div>
+          <div class="garden b" id="g3" style="left:70.16%">
+            <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+          </div>
+          <div class="garden b" id="g4" style="left:33.87%">
+            <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -360,7 +385,7 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
         </div>
       </div>
     </div>
-  </div>
+  </main>
 </div>
 
 <footer class="footer">
@@ -925,17 +950,20 @@ document.getElementById("setting-resolution").onchange = function() {
 const MOBILE_BREAK = 768;
 function isMobile() { return window.innerWidth <= MOBILE_BREAK; }
 
-function fitBoard() {
-  const wrap = document.querySelector('.board-wrap');
-  const board = document.getElementById('board');
-  if (!wrap || !board) return;
-  const gutter = isMobile() ? 56 : 80;
-  const aw = wrap.clientWidth  - 2 * gutter;
-  const ah = wrap.clientHeight - 2 * gutter;
-  const size = Math.max(160, Math.min(aw, ah, 540));
-  board.style.width  = size + "px";
-  board.style.height = size + "px";
+function fitGameArea() {
+  const wrap = document.querySelector('.game-area-wrap');
+  const area = document.getElementById('game-area');
+  if (!wrap || !area) return;
+  // .game-area is the square zone that contains the canvas plus the
+  // surrounding gutter where the gardens live. Pick the largest square
+  // that fits the available space inside .game-area-wrap.
+  const aw = wrap.clientWidth;
+  const ah = wrap.clientHeight;
+  const size = Math.max(220, Math.min(aw, ah, 660));
+  area.style.width  = size + "px";
+  area.style.height = size + "px";
 }
+const fitBoard = fitGameArea;  // back-compat alias
 
 function toggleSidebar() {
   if (isMobile()) {
@@ -943,12 +971,11 @@ function toggleSidebar() {
   } else {
     document.body.classList.toggle('sidebar-closed');
   }
-  // After the CSS grid transition (.25s) settles, refit the board
-  setTimeout(fitBoard, 270);
+  setTimeout(fitGameArea, 270);
 }
 function closeSidebar() {
   document.body.classList.remove('sidebar-open');
-  setTimeout(fitBoard, 270);
+  setTimeout(fitGameArea, 270);
 }
 
 document.getElementById('btn-menu').onclick = toggleSidebar;
@@ -966,12 +993,12 @@ window.addEventListener('resize', function() {
     document.body.classList.remove('sidebar-open', 'sidebar-closed');
     lastIsMobile = now;
   }
-  fitBoard();
+  fitGameArea();
 });
 
 // Initial sizing — run after layout settles
-requestAnimationFrame(fitBoard);
-window.addEventListener('load', fitBoard);
+requestAnimationFrame(fitGameArea);
+window.addEventListener('load', fitGameArea);
 
 setState(STATE.IDLE);
 createWorker(300);
