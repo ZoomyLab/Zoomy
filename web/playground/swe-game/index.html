@@ -1534,11 +1534,12 @@ float quantize(vec3 q) {
 
 void main() {
   ivec2 pix = ivec2(gl_FragCoord.xy);
-  // Map canvas pixel → solver cell (1..uN-2 = interior, 0 / uN-1 = ghost).
-  // Canvas pixel band [uNG, uNG+NX) → cells [1, uN-1).
+  // Map canvas pixel → solver cell.  WebGL framebuffer y=0 is at the canvas
+  // BOTTOM, but the CPU renderer puts solver j=0 (south) at the canvas TOP,
+  // and the gardens are positioned that way.  Flip y so this shader matches.
   int ci = pix.x - uNG + 1;
-  int cj = pix.y - uNG + 1;
-  int NXp1 = uN - 1;  // first invalid (=uN-1, last interior is uN-2)
+  int cj = (uN + uNG - 2) - pix.y;
+  int NXp1 = uN - 1;
 
   // Outside the interior strip → wall colour, but extend visible openings outward.
   if (ci < 1 || ci >= NXp1 || cj < 1 || cj >= NXp1) {
@@ -1687,7 +1688,12 @@ class WebGLSim {
       data[j*N + i] = bt;
     }
     gl.bindTexture(gl.TEXTURE_2D, this.tex.bmask);
+    // R8 row width (= N bytes) is rarely a multiple of 4 — set alignment 1
+    // or every row of the boundary mask gets a 2–3-byte shift, producing
+    // a progressively-skewed wall pattern over the grid.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, N, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
   _fillInitialState() {
     const gl = this.gl; const N = this.N;
@@ -1772,7 +1778,10 @@ class WebGLSim {
     const start = performance.now();
     const END_TIME = 60.0;
     let nSteps = 0;
-    const HARD_CAP = 50;
+    // Each step on the GPU is sub-millisecond; without a tight cap the
+    // game finishes in 1–2 wall seconds. Aim for ~2× sim/wall (matches
+    // the CPU pace) → ~3 sub-steps per 60 fps frame.
+    const HARD_CAP = 3;
     while (nSteps < HARD_CAP) {
       this._step(); nSteps++;
       if (this.gameTime >= END_TIME) {
