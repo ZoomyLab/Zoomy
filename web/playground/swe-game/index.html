@@ -71,13 +71,35 @@ body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
 }
 body.sidebar-closed .app{grid-template-columns:0 1fr}
 
-/* Sidebar — highscore only */
+/* Sidebar — player name + highscore */
 .sidepanel{
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:column;gap:10px;
   min-height:0;min-width:0;overflow:hidden;
   transition:opacity .2s;
 }
 body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
+.name-card{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:10px;
+}
+.name-card label{display:flex;flex-direction:column;gap:6px}
+.name-card .name-label{
+  font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase;
+}
+.name-card input{
+  background:#0a1d2a;border:1px solid var(--panel-edge);
+  color:var(--ink);
+  padding:6px 8px;border-radius:4px;
+  font-family:inherit;font-size:.95em;
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.name-card input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px var(--accent-glow);
+}
 .hs{
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);
@@ -319,6 +341,12 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 
 <div class="app">
   <aside class="sidepanel">
+    <div class="name-card">
+      <label>
+        <span class="name-label">Spielername</span>
+        <input type="text" id="player-name" placeholder="Dein Name" maxlength="20" autocomplete="off">
+      </label>
+    </div>
     <div class="hs"><h3>Highscore</h3><div id="hs-list"></div></div>
   </aside>
 
@@ -477,7 +505,43 @@ let state = STATE.IDLE;
 let pen = false;
 let active = false;
 let scoreSaved = false;
-const highscores = [];
+
+// === Player name + persistent highscores ===
+const NAME_KEY = "zoomy-swe-name";
+const HS_KEY   = "zoomy-swe-highscores";
+
+const nameInput = document.getElementById("player-name");
+nameInput.value = localStorage.getItem(NAME_KEY) || "";
+nameInput.addEventListener("input", function() {
+  localStorage.setItem(NAME_KEY, nameInput.value);
+});
+function getPlayerName() {
+  const n = (nameInput.value || "").trim();
+  return n || "Anonym";
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c];
+  });
+}
+
+let highscores;
+try { highscores = JSON.parse(localStorage.getItem(HS_KEY) || "[]"); }
+catch (_) { highscores = []; }
+if (!Array.isArray(highscores)) highscores = [];
+
+function saveHighscores() {
+  try { localStorage.setItem(HS_KEY, JSON.stringify(highscores)); } catch (_) {}
+}
+function renderHighscores() {
+  document.getElementById("hs-list").innerHTML = highscores.map(function(h, i) {
+    const name = escapeHTML(h.name || "Anonym");
+    return "<div class='row" + (h.isNew ? " new" : "") + "'>" +
+      "<span>" + (i+1) + ". " + name + "</span>" +
+      "<span>" + h.score + "</span></div>";
+  }).join("");
+}
+renderHighscores();
 
 // === Freehand drawing (only allowed in IDLE) ===
 function pos(e) {
@@ -548,13 +612,11 @@ function updateUI(time, of, fin) {
   if (fin && !scoreSaved) {
     scoreSaved = true;
     for (const h of highscores) h.isNew = false;
-    highscores.push({score: sc, isNew: true});
-    highscores.sort((a,b) => b.score - a.score);
+    highscores.push({score: sc, name: getPlayerName(), isNew: true});
+    highscores.sort(function(a, b) { return b.score - a.score; });
     highscores.length = Math.min(highscores.length, 8);
-    document.getElementById("hs-list").innerHTML =
-      highscores.map((h,i) =>
-        "<div class='row" + (h.isNew ? " new" : "") + "'><span>" + (i+1) + ".</span><span>" + h.score + "</span></div>"
-      ).join("");
+    saveHighscores();
+    renderHighscores();
     setState(STATE.FINISHED);
   }
 }
