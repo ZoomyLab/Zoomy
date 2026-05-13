@@ -570,8 +570,10 @@ if (!Array.isArray(highscores)) highscores = [];
 function saveHighscores() {
   try { localStorage.setItem(HS_KEY, JSON.stringify(highscores)); } catch (_) {}
 }
+const HS_TOP_N = 10;
 function renderHighscores() {
-  document.getElementById("hs-list").innerHTML = highscores.map(function(h, i) {
+  // Keep all entries in storage; render only the top N
+  document.getElementById("hs-list").innerHTML = highscores.slice(0, HS_TOP_N).map(function(h, i) {
     const name = escapeHTML(h.name || "Anonym");
     return "<div class='row" + (h.isNew ? " new" : "") + "'>" +
       "<span>" + (i+1) + ". " + name + "</span>" +
@@ -795,7 +797,7 @@ function updateUI(time, of, fin) {
     for (const h of highscores) h.isNew = false;
     highscores.push({score: sc, name: getPlayerName(), isNew: true});
     highscores.sort(function(a, b) { return b.score - a.score; });
-    highscores.length = Math.min(highscores.length, 8);
+    // All entries stay in storage; renderHighscores() slices to the top N.
     saveHighscores();
     renderHighscores();
     setState(STATE.FINISHED);
