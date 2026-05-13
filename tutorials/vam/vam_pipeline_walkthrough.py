@@ -1,5 +1,5 @@
 # ---
-# title: "VAM(1, 2, 2) pipeline: inline derivation → class → SystemModel → splitter"
+# title: "VAM(1, 2, 2) pipeline: inline derivation → class → SystemModel"
 # author: Ingo Steldermann
 # format:
 #   html:
@@ -21,17 +21,21 @@
 
 # # VAM(1, 2, 2) pipeline walkthrough
 #
-# A clean, four-section walk through the full VAM derivation pipeline:
+# A clean walk through the VAM derivation pipeline, in three parts:
 #
 # 1. **Line-by-line derivation** of VAM(M=1, N_w=2, N_p=2) using the
-#    chain primitives end-to-end (System B / Escalante cont-projection
+#    chain primitives end-to-end (Escalante 2024 cont-projection
 #    formulation, opaque-ζ test args).
 # 2. **Class-based generation** via :class:`VAMModelGalerkin` — verifies
 #    bit-for-bit equivalence with §1.
-# 3. **Transfer to SystemModel** via :meth:`SystemModel.from_pdesystem`.
-# 4. **Pressure splitting** via :func:`split_for_pressure` — the
-#    predictor / pressure-elliptic / corrector decomposition used by the
-#    splitting solver.
+# 3. **Transfer to SystemModel** via :func:`SystemModel.from_model`,
+#    followed by an explicit change-of-variables to Form B
+#    (conservative state).
+#
+# **No PDESystem.**  The chain System tree feeds directly into the
+# operator-form SystemModel via tag-walking on the model's
+# ``flux()`` / ``source()`` / etc. accessors.  ``SystemModel.from_model``
+# is the single entry point for analysis.
 
 # +
 import copy
@@ -46,19 +50,13 @@ from zoomy_core.model.models.ins_generator import (
 )
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.models.system_model import SystemModel
-from zoomy_core.model.splitter import (
-    build_pressure_elliptic_block,
-    split_for_pressure,
-    verify_p_linearity,
-)
-from zoomy_core.analysis import PDESystem
 # -
 
 
 # ## 1. Line-by-line derivation of VAM(1, 2, 2)
 #
 # Twelve numbered steps mirroring
-# :meth:`VAMModelGalerkin.derive_model`.  The asymmetric levels are
+# :meth:`VAMModelGalerkin._build_chain`.  The asymmetric levels are
 #
 # * ``M = 1``    — two x-velocity modes ``U_0, U_1``.
 # * ``N_w = 2``  — three z-velocity modes ``W_0, W_1, W_2``;
@@ -78,9 +76,8 @@ M, N_w, N_p = 1, 2, 2
 
 state = StateSpace(dimension=2)
 t, x, z = state.t, state.x, state.z
-b, h, eta = state.b, state.h, state.eta
 
-basis_u = Legendre_shifted(level=M,   symbol="phi_u")
+basis_u = Legendre_shifted(level=M, symbol="phi_u")
 basis_w = Legendre_shifted(level=N_w, symbol="phi_w")
 basis_p = Legendre_shifted(level=N_p, symbol="phi_p")
 
@@ -90,14 +87,12 @@ coeffs_p = [sp.Function(f"P_{k}", real=True)(t, x) for k in range(N_p + 1)]
 
 # Test-function arguments use the opaque ``state.zeta(t, x, z)`` so
 # sympy's chain rule fires through ``ProductRule`` for ∂_t / ∂_x / ∂_z.
-# ``AffineProjection`` collapses the ζ atoms to ``(z−b)/h`` after the
-# affine map.
-test_phi_u = Zstruct(
-    **{f"phi_{k}": basis_u.phi[k](state.zeta) for k in range(M + 1)})
-test_phi_w = Zstruct(
-    **{f"phi_{k}": basis_w.phi[k](state.zeta) for k in range(N_w)})
-test_phi_cont = Zstruct(
-    **{f"phi_{k}": basis_p.phi[k](state.zeta) for k in range(N_p + 1)})
+test_phi_u = Zstruct(**{f"phi_{k}": basis_u.phi[k](state.zeta)
+                        for k in range(M + 1)})
+test_phi_w = Zstruct(**{f"phi_{k}": basis_w.phi[k](state.zeta)
+                        for k in range(N_w)})
+test_phi_cont = Zstruct(**{f"phi_{k}": basis_p.phi[k](state.zeta)
+                           for k in range(N_p + 1)})
 # -
 
 
@@ -105,15 +100,14 @@ test_phi_cont = Zstruct(
 #
 # Start from the full Navier–Stokes system, drop viscous stresses, and
 # split the pressure into hydrostatic + non-hydrostatic remainder
-# ``p = ρ g (η − z) + p_NH``.  The hydrostatic piece is closed-form;
-# the chain works on ``p_NH``.
+# ``p = ρ g (η − z) + p_NH``.
 
 # +
 sys = FullINS(state)
 sys.apply(Inviscid(state)).simplify()
-
 p_NH = sp.Function("p_NH", real=True)(t, x, z)
-sys.apply({state.p: state.rho * state.g * (eta - z) + p_NH}).simplify()
+sys.apply({state.p: state.rho * state.g * (state.eta - z) + p_NH}
+          ).simplify()
 # -
 
 
@@ -125,59 +119,44 @@ sys.apply({state.p: state.rho * state.g * (eta - z) + p_NH}).simplify()
 
 # +
 sys.continuity.apply(Multiply(test_phi_cont, outer=True))
-sys.momentum.x.apply(Multiply(test_phi_u,    outer=True))
-sys.momentum.z.apply(Multiply(test_phi_w,    outer=True))
+sys.momentum.x.apply(Multiply(test_phi_u, outer=True))
+sys.momentum.z.apply(Multiply(test_phi_w, outer=True))
 # -
 
 
 # ### 1.4 Step 3+4 — ProductRule, then depth-integrate
 #
 # ``ProductRule`` distributes ``φ(ζ)·∂_v F → ∂_v(φ(ζ)·F) − F·φ'(ζ)·∂_v ζ``
-# for every variable ``v ∈ {t, x, z}``.  Adding ``t`` to the variable
-# list (vs the older mixed convention) is what makes
-# ``Integrate(method="auto")`` fire Leibniz on the ``∂_t u`` / ``∂_t w``
-# integrands.
-#
-# ``Integrate(z, b, η, method="auto")`` then depth-integrates each
-# leaf — Leibniz on ∂_t / ∂_x boundaries, fundamental theorem on the
-# remaining ∂_z divergences.
+# for every variable ``v ∈ {t, x, z}``.  ``Integrate`` then applies
+# Leibniz on ``∂_t / ∂_x`` and the Fundamental Theorem on ``∂_z``.
 
 # +
 sys.apply(ProductRule(variables=[t, x, z]))
-sys.apply(Integrate(z, b, eta, method="auto"))
+sys.apply(Integrate(z, state.b, state.eta, method="auto"))
 # -
 
 
-# ### 1.5 Step 5+6 — Kinematic BCs, drop ∂_t b, and surface p_NH closure
+# ### 1.5 Step 5+6 — Kinematic BCs, drop ∂_t b, surface p_NH closure
 #
-# The surface KBC at ``z = η`` substitutes
-# ``∂_t η = ∂_t b + ∂_t h``; the bottom KBC substitutes
-# ``w(b) = ∂_t b + u(b)·∂_x b``.  We immediately drop the ``∂_t b``
-# atom (static-bottom assumption) — doing it here, while the atom is
-# still bare, avoids a system-wide ``.doit()`` later that would
-# expand every conservative ``Derivative(F, x)`` flux atom and
-# prevent solver-tag extraction in conservative form.
-#
-# The non-hydrostatic pressure is set to zero on the free surface
-# (Dirichlet BC).
+# After Leibniz, the residuals contain ``u(η)·w(η)``, ``u(b)·w(b)``,
+# ``∂_t η``, ``∂_t b`` atoms.  ``InterfaceKBC`` substitutes
+# ``w(η) → ∂_t η + u(η)·∂_x η`` and ``w(b) → u(b)·∂_x b``.  Static
+# bottom: ``∂_t b → 0``.  Surface pressure: ``p_NH(η) = 0``.
 
 # +
-sys.apply(InterfaceKBC(state, b)).simplify()
-sys.apply(InterfaceKBC(state, eta)).simplify()
-sys.apply({sp.Derivative(b, t): sp.S.Zero}).simplify()
-sys.apply({p_NH.subs(z, eta): 0}).simplify()
+sys.apply(InterfaceKBC(state, state.b)).simplify()
+sys.apply(InterfaceKBC(state, state.eta)).simplify()
+sys.apply({sp.Derivative(state.b, t): sp.S.Zero}).simplify()
+sys.apply({p_NH.subs(z, state.eta): 0}).simplify()
 # -
 
 
 # ### 1.6 Step 7 — affine map + ansatz expansion (Sum-form intermediate)
 #
-# ``AffineProjection`` turns the integration variable into the affine
-# coordinate ``ζ_ref ∈ [0, 1]`` and collapses every ``ζ(t, x, z)`` atom
-# from the test-function side via ``z → ζ·h + b``.  ``rewrite_basis_args``
-# is off because the test-function args are already in opaque-ζ form.
-#
-# ``Expand`` substitutes the polynomial ansatz
-# ``u = Σ_k U_k(t, x) φ_u_k(ζ)`` (and the same for ``w`` and ``p_NH``).
+# Change of variables ``z → ζ = (z − b)/h`` on the integration
+# variable, then expand ``u``, ``w``, ``p_NH`` into modal sums
+# ``Σ_k coeff_k · φ_k(ζ)``.  The Sum-form intermediate (paper notation)
+# is snapshotted here.
 
 # +
 sys.apply(AffineProjection(state, rewrite_basis_args=False))
@@ -188,40 +167,60 @@ sys.apply(Expand(p_NH,    basis=basis_p, coefficients=coeffs_p, state=state))
 chain_intermediate = copy.deepcopy(sys)
 # -
 
-# Render the **Sum-form intermediate** — paper notation, integrals not
-# yet resolved.
-chain_intermediate.describe()
 
-
-# ### 1.7 Step 8 — evaluate integrals (compound ∂_x atoms preserved)
+# ### 1.7 Step 8 — EvaluateIntegrals (boundary atoms collapse here)
 #
-# ``EvaluateIntegrals`` resolves the polynomial ζ integrals via the
-# basis cache.  Compound ``Derivative(F(Q), x)`` atoms are preserved
-# (no system-wide ``.doit()``) so downstream tag extraction can read
-# them as conservative fluxes.  ``EvaluateIntegrals`` can re-introduce
-# ``Derivative(b, t)`` via boundary-evaluation pull-throughs in the
-# ``test_1`` (and higher) leaves, so we re-apply the static-bottom
-# rule afterwards to clear them.
+# ``EvaluateIntegrals`` does **two** things, both via the basis cache:
+#
+# 1. **Bulk integrals**: resolve every polynomial ζ integral
+#    ``∫_0^1 φ_i(ζ)·φ_j(ζ)·… dζ`` to its concrete rational value.
+# 2. **Boundary atoms**: ``φ_k(0)``, ``φ_k(1)`` atoms (introduced by
+#    Leibniz boundary terms at z=b ↔ ζ=0 and z=η ↔ ζ=1) are also
+#    looked up in the basis cache and replaced by their concrete
+#    rational values.
+#
+# After this step the system has **no opaque basis atoms left** — only
+# ``U_k``, ``W_k``, ``P_k``, ``h``, ``b``, and their derivatives.
 
 # +
 sys.apply(EvaluateIntegrals(state)).simplify()
-sys.apply({sp.Derivative(b, t): sp.S.Zero}).simplify()
+sys.apply({sp.Derivative(state.b, t): sp.S.Zero}).simplify()
 # -
 
 
-# ### 1.8 Step 10+11 — modal closures for W_{N_w} and P_{N_p}
+# ### 1.8 Step 9 — Modal closures: solve KBC bot for ``W_{N_w}``,
+# # surface BC for ``P_{N_p}``
 #
-# Bottom KBC at the basis level: ``Σ_k W_k φ_w_k(0) − (Σ_k U_k φ_u_k(0))·∂_x b = 0``
-# is a single algebraic relation that we solve for the topmost mode
-# ``W_2`` and substitute everywhere.
+# The bulk basis sums have ``N_w + 1`` W-modes and ``N_p + 1`` P-modes,
+# but only ``N_w`` momentum projections and ``N_p`` cont-projections.
+# **The system is underdetermined by exactly 1 mode for W and 1 for P.**
+# We close by solving the algebraic boundary conditions at the basis
+# level:
 #
-# Surface BC for the pressure: ``Σ_k φ_p_k(1)·P_k = 0`` solved for
-# ``P_2``.
+# * Bottom KBC: ``Σ_k W_k·φ_w_k(0) − Σ_k U_k·φ_u_k(0)·∂_x b = 0``
+#   solved for ``W_{N_w}``:
+#
+#   $$W_{N_w} = \frac{\sum_k U_k \, \varphi_{u,k}(0) \, \partial_x b
+#                     - \sum_{k < N_w} W_k \, \varphi_{w,k}(0)}
+#                    {\varphi_{w,N_w}(0)}.$$
+#
+#   The solution is substituted **everywhere** ``W_{N_w}`` appears in
+#   the system.
+# * Surface BC: ``Σ_k φ_p_k(1)·P_k = 0`` solved analogously for
+#   ``P_{N_p}``.
+#
+# **Where the ``(∂_x b)²`` cross-terms come from.**  The residual on
+# the j ≥ 1 rows already carries ``∂_x b`` factors (from the
+# ``∂_x η = ∂_x b + ∂_x h`` substitution in §1.5).  Substituting the
+# ``∂_x b``-containing ``W_{N_w}`` cross-multiplies, producing
+# ``(∂_x b)²`` terms in higher-order rows.  These are zero **on the
+# constraint surface** ``cont_j1 = cont_j2 = 0``; they do not appear
+# in Escalante eq (4), which is pre-reduced.
 
 # +
 u_at_b = sum(coeffs_u[k] * basis_u.eval(k, sp.S.Zero) for k in range(M + 1))
 w_at_b = sum(coeffs_w[k] * basis_w.eval(k, sp.S.Zero) for k in range(N_w + 1))
-bot_kbc = w_at_b - u_at_b * sp.Derivative(b, x).doit()
+bot_kbc = w_at_b - u_at_b * sp.Derivative(state.b, x).doit()
 w_top_sol = sp.solve(bot_kbc, coeffs_w[N_w])[0]
 sys.apply({coeffs_w[N_w]: w_top_sol}).simplify()
 
@@ -230,305 +229,273 @@ p_top_sol = sp.solve(p_at_eta, coeffs_p[N_p])[0]
 sys.apply({coeffs_p[N_p]: p_top_sol}).simplify()
 # -
 
-# The closed chain — render at this point to see all seven leaves.
+
+# ### 1.9 Step 10+11 — mass equation substitution → DAE structure;
+# # auto-tag every row
+#
+# Continuity row 0 (j=0) is the **mass evolution**.  Rows j=1, …, N_p
+# would otherwise carry ``∂_t h`` from compound atoms; substituting the
+# mass equation ``∂_t h = −∂_x(h·U_0)`` eliminates the time derivative
+# entirely, making those rows **purely algebraic constraints**.  The
+# resulting system has 5 evolution rows + 2 algebraic rows = a DAE.
+#
+# Each row's terms are then auto-tagged with canonical solver tags
+# (``time_derivative``, ``flux``, ``hydrostatic_pressure``,
+# ``nonconservative_flux``, ``source``) so the downstream
+# ``SystemModel.from_model`` can route them into operator matrices.
+#
+# The fully-closed tagged System tree is what the **class version in §2
+# produces directly** — let's render it now to confirm:
+
 sys.describe()
-
-
-# ### 1.9 Step 12 — package as a PDESystem
-#
-# Two pieces of post-processing go into the PDESystem:
-#
-# 1. The ``j = 0`` continuity row is the **mass evolution**;
-#    rows ``j = 1, …, N_p`` are made purely **algebraic** by
-#    substituting the mass equation
-#    ``∂_t h = −∂_x(h U_0)``.  This zeroes the time-derivative on the
-#    pressure constraint rows so they have an all-zero row in the mass
-#    matrix (DAE algebraic constraints).
-# 2. Equations are reordered into the canonical chain layout:
-#    ``mass, xmom_j0..M, zmom_j0..N_w−1, cont_j1..N_p``.
-
-# +
-# Derive the ∂_t h substitution **from** the mass leaf via solve_for
-# rather than hardcoding it.  The mass equation here is
-# ``∂_t h + ∂_x(h·U_0) = 0`` so the substitution comes out as
-# ``∂_t h ↦ -∂_x(h·U_0)``, but the same line works unchanged for any
-# closed form the chain delivers.
-mass_leaf = sys._tree.continuity.test_0
-mass_expr = mass_leaf.expr
-dt_h_sub = mass_leaf.solve_for(sp.Derivative(h, t))._as_relation
-
-ordered = [("mass", mass_expr)]
-for k in range(M + 1):
-    ordered.append((f"xmom_j{k}",
-                    getattr(sys._tree.momentum.x, f"test_{k}").expr))
-for k in range(N_w):
-    ordered.append((f"zmom_j{k}",
-                    getattr(sys._tree.momentum.z, f"test_{k}").expr))
-for k in range(1, N_p + 1):
-    cont_jk = getattr(sys._tree.continuity, f"test_{k}").expr
-    ordered.append((f"cont_j{k}", sp.expand(cont_jk.doit().subs(dt_h_sub))))
-
-inline_chain_dae = PDESystem(
-    equations=[expr for _, expr in ordered],
-    fields=[h] + coeffs_u + coeffs_w[:N_w] + coeffs_p[:N_p],
-    time=t,
-    space=[x],
-    parameters={state.g: state.g, state.rho: state.rho},
-)
-inline_chain_dae.equation_names = [n for n, _ in ordered]
-# -
 
 
 # ## 2. Same model via `VAMModelGalerkin`
 #
-# The class executes the same twelve steps internally and exposes
-# ``_chain_dae`` as the closed PDESystem.  We verify bit-for-bit
-# agreement with §1.
+# The class executes the same chain primitives in
+# :meth:`VAMModelGalerkin._build_chain` and exposes:
 #
-# **What we verify against Escalante 2024.**  The integration test
-# ``test_chain_dae_matches_escalante_reference`` (in
-# ``tests/integration/zoomy_core/test_vam_chain_dae.py``) compares
-# the **mass + ``xmom_j0`` + ``zmom_j0``** rows of our chain DAE to
-# Escalante's eq (4) bit-for-bit (see also
-# ``tests/integration/zoomy_core/test_vam_chain_dae.py::test_chain_dae_cont_j1_matches_I1``
-# and ``test_chain_dae_cont_j2_matches_neg_I2``, which lock the
-# pressure-projection rows ``cont_j1`` / ``cont_j2`` against the
-# Escalante derivations $I_1$ / $-I_2$).  These five rows match the
-# original Escalante formulation modulo state-symbol identity.
-#
-# **What is NOT a bit-for-bit match.**  The higher-order projections
-# ``xmom_j1`` and ``zmom_j1`` are **not** an Escalante reference
-# row (his paper writes the system in the form
-# $\partial_t Q + \partial_x F + B\,\partial_x Q - S = 0$ with **mass
-# matrix $M = I$** by absorbing the $\mu_k = 1/(2k+1)$ Galerkin
-# weights into the conservative state $h\,U_k$, $h\,W_k$).  Our chain
-# uses the **primitive** state $(h, U_k, W_k, P_k)$ — which is why
-# our mass matrix is non-diagonal (compound atoms like
-# $\partial_t(h\,U_k) = h\,\partial_t U_k + U_k\,\partial_t h$).
-# The two formulations are mathematically equivalent; only the
-# operator-form layout differs.
-#
-# Similarly, the $(\partial_x b)^2$ terms in the higher-order chain
-# rows are real, second-order topography couplings that the
-# Galerkin chain produces honestly — they vanish at linear order
-# (any dispersion check at the rest state with $b = 0$ skips them)
-# but are physically present for non-zero bottom slopes.
+# * ``m._chain_system`` — the System tree (same as our inline ``sys``).
+# * ``m.equations`` — dict mapping canonical row name (``mass``,
+#   ``xmom_j0``, …) to its tagged ``Expression`` leaf.
+# * ``m.flux()``, ``m.hydrostatic_pressure()``,
+#   ``m.nonconservative_matrix()``, ``m.source()``, ``m.mass_matrix()``
+#   — operator-API methods implemented as tag-walks over
+#   ``m._chain_system``.
 
 # +
-class VAM1D(VAMModelGalerkin):
-    ins_dimension = 2
-
-
-m1d = VAM1D(level=1)
-class_chain_dae = m1d._chain_dae
-
-assert class_chain_dae.equation_names == inline_chain_dae.equation_names
-for name, inline_eq, class_eq in zip(
-    inline_chain_dae.equation_names,
-    inline_chain_dae.equations,
-    class_chain_dae.equations,
-):
-    inline_raw = inline_eq.expr if hasattr(inline_eq, "expr") else inline_eq
-    class_raw = class_eq.expr if hasattr(class_eq, "expr") else class_eq
-    diff = sp.simplify(sp.expand(inline_raw - class_raw))
-    assert diff == 0, f"{name}: inline vs class disagree, diff = {diff}"
+m1d = VAMModelGalerkin(level=1)
+print("State:", list(m1d.variables.keys()))
+print("Equation names:", m1d.equation_names)
 # -
 
 
-# ## 3. Transfer to `SystemModel`
+# ### 2.1 Three normal forms
 #
-# :meth:`SystemModel.from_pdesystem` walks the chain DAE rows (which
-# are tagged ``Expression`` objects after step 13 of derive_model)
-# and assembles the canonical operator matrices via
-# :func:`collect_solver_tag`:
+# The model produces the system in **Form A — primitive state**:
 #
-# * **time_derivative** tags → coefficients of $\partial_t Q$ → mass
-#   matrix $M(Q)$ (extracted via the linearised pencil).
-# * **flux** tags → flux vector $F(Q)$ (rows of the conservative
-#   $\partial_x F$ contributions).
-# * **hydrostatic_pressure** tags → flux-like $P(Q)$ slot
-#   (rendered separately so a solver can handle hydrostatic
-#   equilibrium specially).
-# * **nonconservative_flux** tags → non-conservative product matrix
-#   $B(Q)$.
-# * **source** tags → algebraic right-hand side $S(Q)$ (the catch-all
-#   for terms that don't fit the other categories — e.g. parameter
-#   spatial derivatives like $\partial_x b$, raw state coupling
-#   $W_k$, etc.).
+# $$
+# Q^{A} = (h,\; U_0,\; U_1,\; W_0,\; W_1,\; P_0,\; P_1).
+# $$
+#
+# Two other forms appear later:
+#
+# * **Form B — conservative state**:
+#   $Q^{B} = (h,\; hU_0,\; hU_1,\; hW_0,\; hW_1,\; P_0,\; P_1)$.
+#   Same residuals, but state entries are the conserved quantities
+#   $q_{U_k} = h\,U_k$, $q_{W_k} = h\,W_k$.  Reached via
+#   :meth:`SystemModel.change_state_variables`.
+# * **Form C — Escalante paper form** (eq (4) in his 2024 JCP paper).
+#   Conservative state like Form B, but with kinematic pressure
+#   $p_k = P_k/\rho$.
+#
+# **Form A ↔ Form B** is an algebraic identity.  The non-identity
+# entries of the Form A mass matrix migrate into the operator slots
+# when we change variables — but the j=1 rows retain a residual
+# off-diagonal entry from the Galerkin cross-terms (see §2.4).
+#
+# **Form A ↔ Form C** agrees **pointwise** on rows ``mass``,
+# ``xmom_j0``, ``zmom_j0``, ``cont_j1``, ``cont_j2``.  On rows
+# ``xmom_j1`` and ``zmom_j1`` it is **not** pointwise equal: the chain
+# residual carries non-conservative ``∂_t h`` and ``W_k`` cross-terms
+# that only vanish on the constraint surface ``cont_j1 = cont_j2 = 0``.
+# Step 1 tests (``test_chain_xmom_j1_constraint_equivalent_to_escalante``,
+# ``test_chain_zmom_j1_constraint_equivalent_to_escalante``) lock this
+# constraint-modulo equivalence in.
+
+
+# ### 2.2 Transfer to SystemModel
+#
+# :func:`SystemModel.from_model` reads the operator-API methods on
+# ``m1d`` and freezes the resulting matrices.  No PDESystem
+# intermediate.  No state-rewriting between equation form and operator
+# form — the tag-walk produces the matrices directly.
 
 # +
-sm = SystemModel.from_pdesystem(class_chain_dae)
-sm.describe(full=True)
+sm = SystemModel.from_model(m1d)
+print("sm.state:", sm.state)
+print("sm.equation_names:", sm.equation_names)
 # -
 
 
-# ### 3.1 Vector / pencil form
+# ### 2.3 Form A mass matrix (non-identity, primitive state)
 #
-# Linearising the chain DAE around the symbolic state collapses it to
-# the **pencil form**
+# The chain residual on row 1 (xmom_j0) is
+# ``∂_t(h·U_0) + ∂_x(...) + ... = 0``.  Expanding the compound
+# time-derivative via product rule:
+# ``∂_t(h·U_0) = U_0·∂_t h + h·∂_t U_0``.  So row 1 of the mass matrix
+# in Form A has ``M[1, h-col] = U_0``, ``M[1, U_0-col] = h``.  The
+# higher-order rows pick up additional Galerkin cross-terms.
+
+sm.mass_matrix
+
+
+# ### 2.4 Form B via `change_state_variables`
 #
-# $$
-# \mathbf{M}_t\,\partial_t \delta Q
-# + \mathbf{M}_x\,\partial_x \delta Q
-# + \mathbf{M}_0\,\delta Q \;=\; 0,
-# $$
+# Apply the conservative transform ``U_k → q_{U_k}/h``,
+# ``W_k → q_{W_k}/h``.  The Jacobian rule transforms the operator
+# slots:
 #
-# with $Q = [h,\,U_0,\,U_1,\,W_0,\,W_1,\,P_0,\,P_1]^\top$.  Each
-# pencil matrix maps to a chunk of $\sm.describe$:
-#
-# * $\mathbf{M}_t$ matches ``sm.mass_matrix`` — five non-zero rows
-#   (the evolution rows, with state-coefficient entries from
-#   $\partial_t(h\,U_k)$ etc.) plus two all-zero rows for the
-#   algebraic ``cont_jk`` constraints.
-# * $\mathbf{M}_x$ = $\partial F/\partial Q + B(Q)$ — the spatial
-#   Jacobian, combining the flux derivative and the non-conservative
-#   product matrix.
-# * $\mathbf{M}_0$ = $-\partial S/\partial Q$ plus algebraic
-#   couplings.
+# * Mass matrix on j=0 rows (mass, xmom_j0, zmom_j0) becomes the
+#   identity row ``[…, 1, …]`` — the conservative state is precisely
+#   the natural state for those rows.
+# * Mass matrix on j=1 rows (xmom_j1, zmom_j1) retains a non-zero
+#   ``∂_t h``-column entry equal to ``(-q_{k-1} + q_k/3) / h`` — the
+#   genuine Galerkin chain-rule cross-term that does NOT vanish under
+#   the naive primitive→conservative change of variables.  It vanishes
+#   only on the constraint surface (Step 1 tests).
 
 # +
-from zoomy_core.analysis.linearisation import linearise
-from zoomy_core.analysis.pencil import extract_quasilinear_pencil
-
-base_state_sym = {f: f for f in class_chain_dae.fields}
-linearised = linearise(class_chain_dae, base_state_sym)
-M_t, M_xa, M_0 = extract_quasilinear_pencil(linearised)
-M_x = M_xa[0]
-# -
-
-# State vector $Q$ (column).
-Q_vec = sp.Matrix(list(class_chain_dae.fields))
-Q_vec
-
-# Mass matrix $\mathbf{M}_t$.
-M_t
-
-# Spatial coefficient $\mathbf{M}_x$ (= $\partial F/\partial Q + B(Q)$).
-M_x
-
-# Zero-derivative coefficient $\mathbf{M}_0$.
-M_0
-
-
-# ### 3.2 Verify VAM(1, 2, 2) — analytical dispersion at rest
-#
-# The analysis layer ships
-# :func:`zoomy_core.analysis.system_model_analysis.plane_wave_dispersion`,
-# which takes a :class:`SystemModel` plus a base-state dict and assembles
-# the dispersion matrix
-#
-# $$
-# \mathbf{M}(\omega, k) \;=\; -i\omega\,\mathbf{M}_t \;+\; ik\,\mathbf{M}_x \;+\; \mathbf{M}_0
-# $$
-#
-# from the SystemModel's own ``mass_matrix`` / ``quasilinear_matrix`` /
-# ``source_jacobian_wrt_state`` accessors — the same operator surface
-# we just inspected in §3.  Solving $\det\mathbf{M}(\omega, k) = 0$
-# gives the dispersion curves $\omega(k)$.  No manual pencil
-# construction in the walkthrough.
-
-# +
-from zoomy_core.analysis.system_model_analysis import plane_wave_dispersion
-
-g_param = next(s for s in sm.parameters if str(s) == "g")
-rho_param = next(s for s in sm.parameters if str(s) == "rho")
-b_sym = next(a for eq in class_chain_dae.equations
-             for a in eq.atoms(sp.Function) if a.func.__name__ == "b")
-
-h0 = sp.Symbol("h0", positive=True)
-rest_state = {sym: (h0 if str(sym) == "h" else sp.S.Zero) for sym in sm.state}
-extra_subs = {sp.Derivative(b_sym, x): sp.S.Zero,
-              sp.Derivative(b_sym, x, x): sp.S.Zero}
-
-dispersion = plane_wave_dispersion(
-    sm, rest_state, parameters=extra_subs, return_omega_k=True,
+sm_B = SystemModel.from_model(m1d)
+h_sym, U_0_sym, U_1_sym, W_0_sym, W_1_sym, P_0_sym, P_1_sym = sm_B.state
+q_U0 = sp.Symbol("q_U0", real=True)
+q_U1 = sp.Symbol("q_U1", real=True)
+q_W0 = sp.Symbol("q_W0", real=True)
+q_W1 = sp.Symbol("q_W1", real=True)
+sm_B.change_state_variables(
+    new_state=[h_sym, q_U0, q_U1, q_W0, q_W1, P_0_sym, P_1_sym],
+    transform={U_0_sym: q_U0 / h_sym, U_1_sym: q_U1 / h_sym,
+               W_0_sym: q_W0 / h_sym, W_1_sym: q_W1 / h_sym},
 )
-omega_solutions = dispersion["omega_solutions"]
-nontrivial = [s for s in omega_solutions if s != 0]
-
-# Long-wave limit $k \to 0$: shallow-water recovery $c^2 \to g\,h_0$.
-k = dispersion["k"]
-c_sq = sp.simplify((nontrivial[0] / k) ** 2)
-c_long = sp.limit(c_sq, k, 0)
-assert sp.simplify(c_long - g_param * h0) == 0, (
-    f"Long-wave limit failed: c² → {c_long}, expected g·h_0"
-)
+print("Form B state:", [str(s) for s in sm_B.state])
 # -
 
-# Characteristic polynomial $\det\mathbf{M}(\omega, k)$, factored.
-sp.factor(dispersion["dispersion_determinant"])
-
-# Symbolic dispersion solutions $\omega(k)$.
-sp.Matrix(omega_solutions)
-
-# Phase speed squared $c^2(k) = (\omega/k)^2$ for the surface modes.
-c_sq
+sm_B.mass_matrix
 
 
-# ## 4. Pressure splitting
+# ### 2.5 Form B flux matches Escalante eq (4) — bit-for-bit on j=0 rows
 #
-# :func:`split_for_pressure` turns the chain DAE into three
-# :class:`SystemModel` sub-systems sharing the same 7-state Q vector
-# but updating different subsets via rectangular operators.  The
-# pipeline ``Q → Q_1 → Q_2 → Q_3 = Q^{n+1}`` is implicit: each stage
-# overwrites only its indexed state entries, others pass through
-# verbatim.
+# Row 1 (xmom_j0) flux in Form B:
+# ``q_U0²/h + q_U1²/(3·h) + h·P_0/ρ`` — matches Escalante eq (4) row 2
+# inviscid flux argument.
+
+sm_B.flux[1, 0]
+
+
+# Row 3 (zmom_j0) flux: ``q_U0·q_W0/h + q_U1·q_W1/(3·h)``:
+
+sm_B.flux[3, 0]
+
+
+# Row 3 (zmom_j0) source ``S[3, 0]``.  Convention reminder:
+# SystemModel residual form is ``... − S(Q) = 0``, so a LHS term of
+# ``−2·P_1/ρ`` becomes ``S = +2·P_1/ρ`` (the LHS equals ``−S``).
+
+sm_B.source[3, 0]
+
+
+# ### 2.6 Residual reconstruction — sanity check
+#
+# ``sm.reconstruct_residuals()`` rebuilds each equation's residual from
+# its operator slots: ``M·∂_t Q + ∂_x F + ∂_x P + B·∂_x Q − S``.  Three
+# uses across the codebase:
+#
+# 1. Test comparisons against Escalante's eq (4) term-by-term.
+# 2. Linearisation for stability / dispersion analysis (no separate
+#    equation object after the refactor; analysis pulls residuals from
+#    operator slots).
+# 3. Splitter input — to substitute corrector updates into the
+#    cont-projection rows you need the full residual.
 
 # +
-fields_by_name = {f.func.__name__: f for f in class_chain_dae.fields}
-P_0 = fields_by_name["P_0"]
-P_1 = fields_by_name["P_1"]
+residuals = sm.reconstruct_residuals()
+for name, res in zip(sm.equation_names, residuals):
+    print(f"--- {name} ---")
+    print(sp.expand(res))
+# -
+
+
+# ## 3. Pressure splitting
+#
+# ``split_for_pressure(sm, pressure_vars, dt)`` decomposes the chain
+# DAE into three rectangular sub-SystemModels — the Chorin-style
+# projection-correction scheme of Escalante 2024 eq (11)–(13):
+#
+# * ``SM_pred`` — predictor (5 evolution rows on
+#   ``(h, U_0, U_1, W_0, W_1)``, pressure frozen at the previous
+#   time step).
+# * ``SM_press`` — pressure stage (2 algebraic elliptic rows in
+#   ``(P_0, P_1)``).  Mass matrix is zero.
+# * ``SM_corr`` — corrector (4 algebraic update rows for the
+#   velocity moments using the new pressure).  Mass matrix is zero.
+#
+# All three share the same 7-entry state ``Q`` and the same parameters.
+# Each carries an ``equation_to_state_index`` that records which
+# entries of ``Q`` it updates; other entries pass through unchanged.
+
+# +
+from zoomy_core.model.splitter import (
+    split_for_pressure, build_pressure_elliptic_block, verify_p_linearity,
+)
+
+name_to_sym = {str(s): s for s in sm.state}
+P_0 = name_to_sym["P_0"]
+P_1 = name_to_sym["P_1"]
 dt = sp.Symbol(r"\Delta t", positive=True)
 
-split = split_for_pressure(class_chain_dae, [P_0, P_1], dt)
+split = split_for_pressure(sm, [P_0, P_1], dt)
+print("SM_pred:  n_eq=", split.SM_pred.n_equations,
+      "rows=", split.SM_pred.equation_names,
+      "updates idx=", split.SM_pred.equation_to_state_index)
+print("SM_press: n_eq=", split.SM_press.n_equations,
+      "rows=", split.SM_press.equation_names,
+      "updates idx=", split.SM_press.equation_to_state_index)
+print("SM_corr:  n_eq=", split.SM_corr.n_equations,
+      "rows=", split.SM_corr.equation_names,
+      "updates idx=", split.SM_corr.equation_to_state_index)
 # -
 
 
-# ### 4.1 Predictor stage — `SM_pred`
+# ### 3.1 Pressure sources `T_u`, `T_w`
 #
-# Five evolution equations (mass + 2 xmom + 2 zmom) updating
-# $Q[0..4] = (h, U_0, U_1, W_0, W_1)$ with $P_k$ frozen at the previous
-# time step $P_k^n$.  The pressure entries pass through unchanged.
-
-split.SM_pred.describe(full=True)
-
-
-# ### 4.2 Pressure stage — `SM_press`
-#
-# Two algebraic equations (the elliptic block in $(P_0, P_1)$) updating
-# $Q[5..6]$.  Mass matrix is all-zero; the elliptic structure lives in
-# the source slot.  ``verify_p_linearity`` checks that the rows are
-# strictly linear in $(P_l,\,\partial_x P_l,\,\partial_{xx} P_l)$.
-
-split.SM_press.describe(full=True)
+# The elliptic-block builder extracts per-conservative-variable
+# pressure sources ``T_u[k]``, ``T_w[k]`` from the chain ``xmom_jk`` /
+# ``zmom_jk`` rows.  These are the linear-in-P parts that drive the
+# corrector update.
 
 # +
-elliptic_rows = {
-    int(name[len("elliptic_j"):]): -split.SM_press.source[i, 0]
-    for i, name in enumerate(split.SM_press.equation_names)
-}
-linearity = verify_p_linearity(elliptic_rows, [P_0, P_1], x)
-
-# Strict-linearity check passed — every row is in the linear span of
-# the six pressure atoms.
-assert set(linearity["coefficients"].keys()) == {1, 2}
+block = build_pressure_elliptic_block(sm, [P_0, P_1], dt)
+for k, T in enumerate(block["T_u"]):
+    print(f"T_u[{k}] =", sp.expand(T))
+for k, T in enumerate(block["T_w"]):
+    print(f"T_w[{k}] =", sp.expand(T))
 # -
 
 
-# ### 4.3 Corrector stage — `SM_corr`
+# ### 3.2 Elliptic block rows
 #
-# Four algebraic update equations
-# $Q_k = Q_k^{*} - (\Delta t / h)\,T_{*}[k](P^{n+1})$
-# updating $Q[1..4] = (U_0, U_1, W_0, W_1)$.  The corrector source
-# entries embed the $T_u$ / $T_w$ pressure-source expressions; $h$ and
-# $P_k$ pass through unchanged.
+# After substituting the corrector update ``Q_k → Q_k^(k̃) - (Δt/h)·T``
+# into the cont-projection rows, the result is linear in
+# ``(P_l, ∂_x P_l, ∂_xx P_l)``.  ``verify_p_linearity`` confirms this
+# strict linearity and reads off the coefficient matrix — the
+# discretised Poisson operator.
 
-split.SM_corr.describe(full=True)
+# +
+linearity = verify_p_linearity(block["rows"], block["pressure_vars"],
+                               sm.space[0])
+assert set(linearity["coefficients"].keys()) == {1, 2}, (
+    "elliptic block should have exactly 2 rows for VAM(1, 2, 2)"
+)
+print("Elliptic block rows are strictly linear in (P, ∂_x P, ∂_xx P)")
+print()
+print("Coefficients of row 1 (elliptic_j1):")
+for atom_name, coeff in linearity["coefficients"][1].items():
+    if sp.simplify(coeff) != 0:
+        print(f"  {atom_name}: {sp.expand(coeff)}")
+# -
 
 
-# That closes the pipeline:
-# **chain primitives → PDESystem → SystemModel → predictor / pressure / corrector**.
-# Each sub-system is a first-class :class:`SystemModel` carrying its own
-# rectangular ``mass_matrix``, ``flux``, ``source``, and an explicit
-# ``equation_to_state_index`` telling the solver which Q entries the
-# stage updates.
+# ### 3.3 Three sub-SystemModels rendered
+#
+# Each stage carries the canonical operator slots (`flux`,
+# `hydrostatic_pressure`, `nonconservative_matrix`, `source`,
+# `mass_matrix`) populated by tag-walking — the same pipeline as the
+# parent chain DAE.
+
+split.SM_pred.describe(full=False)
+
+
+split.SM_press.describe(full=False)
+
+
+split.SM_corr.describe(full=False)

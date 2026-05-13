@@ -162,7 +162,7 @@ for path, eq in model.leaves():
     ur = eq.expr.has(state.u)
     wr = eq.expr.has(state.w)
     pr = eq.expr.has(state.p)
-    zr = eq.expr.has(state.zeta)
+    zr = eq.expr.has(state.zeta_ref)
     closed = not (ur or wr or pr or zr)
     mark = "✓" if closed else "✗"
     bits = [n for n, r in [("u", ur), ("w", wr), ("p", pr), ("ζ", zr)] if r]

@@ -715,7 +715,7 @@ def _report(model, state):
             residues.append("u")
         if expr.has(state.w):
             residues.append("w")
-        if expr.has(state.zeta):
+        if expr.has(state.zeta_ref):
             residues.append("ζ")
         integrals = [I for I in expr.atoms(sp.Integral)]
         status = "✓" if not residues and not integrals else "✗"

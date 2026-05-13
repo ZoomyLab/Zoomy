@@ -206,48 +206,17 @@ class VAM2D(VAMModelGalerkin):
 m1d = VAM1D(level=1)
 m2d = VAM2D(level=1)
 
-# Both PDESystems live on different StateSpace instances — align by
-# field name to compare equation-for-equation.
+# NOTE: The inline-vs-class equation comparison below is currently
+# skipped because the class derivation has migrated to the
+# Escalante / cont-projection formulation (System B; see
+# ``thesis/chapters/derivation_vam.md`` §5.7) while the inline block
+# above still uses the System A KBC-row formulation.  Reinstating
+# this comparison is a Phase 1 task — it requires rewriting the
+# inline derivation to project continuity at j = 1, …, N_p and to
+# close ``W_{N_w}`` via the bottom KBC at the basis level.  Until
+# then we just expose the class PDESystem for downstream cells.
 class_pdesys = m1d._chain_dae
-
-inline_fields = {f.func.__name__: f for f in
-                 [h] + coeffs_u + coeffs_w + coeffs_p[:N_p]}
-class_fields  = {f.func.__name__: f for f in class_pdesys.fields}
-
-inline_b = state.b
-class_b = next(a for a in class_pdesys.equations[
-                   class_pdesys.equation_names.index("kbc_bot")].atoms(sp.Function)
-               if a.func.__name__ == "b")
-
-inline_g, inline_rho = state.g, state.rho
-class_g   = next(s for s in class_pdesys.parameters if str(s) == "g")
-class_rho = next(s for s in class_pdesys.parameters if str(s) == "rho")
-
-align = {**{inline_fields[n]: class_fields[n] for n in inline_fields},
-         inline_b: class_b,
-         state.t: class_pdesys.time,
-         state.x: class_pdesys.space[0],
-         inline_g: class_g,
-         inline_rho: class_rho}
-
-
-def inline_equation(name):
-    if name == "mass":
-        return inline_sys.equations["continuity"].expr
-    if name in ("kbc_top", "kbc_bot"):
-        return getattr(inline_sys._tree, name).expr
-    # xmom_jK / zmom_jK
-    side, _, k = name.partition("_j")
-    component = "x" if side == "xmom" else "z"
-    return inline_sys.equations[f"momentum.{component}.test_{k}"].expr
-
-
-for i, name in enumerate(class_pdesys.equation_names):
-    inline_eq = inline_equation(name).xreplace(align)
-    class_eq = class_pdesys.equations[i]
-    diff = sp.simplify(sp.expand(inline_eq - class_eq))
-    assert diff == 0, f"{name}: inline ≠ class, diff = {diff}"
-"VAMModelGalerkin(level=1) and the inline derivation match equation-by-equation"
+"VAMModelGalerkin(level=1) chain DAE built (System B; inline comparison TODO)"
 # -
 
 
@@ -284,6 +253,27 @@ ez_param = next(s for s, v in sm.parameters.items() if str(s) == "ez")
 dispersion = plane_wave_dispersion(
     sm, base_state, axis=0, parameters={ez_param: 1})
 dispersion["eigenvalues"]
+# -
+
+
+# ### 7b. True ω(k) dispersion relation (G7)
+#
+# The eigenvalues above are wave speeds at the rest base state — phase
+# velocities, no k-dependence.  ``plane_wave_dispersion`` returns the
+# full ``ω(k)`` curves by default (``return_omega_k=True``); they live
+# in the ``omega_solutions`` and ``phase_velocity_solutions`` keys.
+# This is the dispersion relation the chain DAE actually produces when
+# linearised around the rest state.
+
+# +
+omega_solutions = dispersion["omega_solutions"]
+phase_velocity_solutions = dispersion["phase_velocity_solutions"]
+print(f"VAM(1, 2, 2) ω(k) solutions at rest:")
+for s in omega_solutions:
+    print(f"  ω = {sp.simplify(s)}")
+print(f"\nPhase velocities ω/k at rest:")
+for s in phase_velocity_solutions:
+    print(f"  c = {sp.simplify(s)}")
 # -
 
 

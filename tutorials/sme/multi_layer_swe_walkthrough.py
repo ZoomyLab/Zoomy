@@ -384,7 +384,7 @@ def audit(branch, tag):
     for path, eq in branch.leaves():
         ur = eq.expr.has(state.u)
         wr = eq.expr.has(state.w)
-        zr = eq.expr.has(state.zeta)
+        zr = eq.expr.has(state.zeta_ref)
         closed = not (ur or wr or zr)
         mark = "✓" if closed else "✗"
         note = ""

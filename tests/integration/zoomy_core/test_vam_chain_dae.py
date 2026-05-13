@@ -1,26 +1,12 @@
-"""TDD tests for VAMModelGalerkin._chain_dae and SystemModel-from-chain.
+"""Tests for the chain-DAE SystemModel produced by
+``SystemModel.from_model(VAMModelGalerkin(level=...))``.
 
-These tests drive the loop closure in two steps:
+At ``(M=1, N_w=2, N_p=2)`` the chain closes to 7 equations / 7 fields:
 
-* **Step 1** — chain produces an Escalante-aligned DAE.  Tests:
-  - ``test_chain_dae_attribute_exists``  : ``m._chain_dae`` returns a
-    ``PDESystem`` (or compatible) at default level=1.
-  - ``test_chain_dae_equation_count``    : 9 equations / 9 fields at
-    (M=1, N_w=2, N_p=2).
-  - ``test_chain_dae_equation_names``    : names match April's
-    ``build_vam_pdesystem`` exactly.
-  - ``test_chain_dae_dae_partition``     : 6 evolution + 3 algebraic.
-  - ``test_chain_dae_mass_equation``     : the ``mass`` row is
-    ``∂_t h + ∂_x(h · u_0)`` modulo symbol identity.
-  - ``test_chain_dae_kbc_equations``     : ``kbc_top_alg`` / ``kbc_bot``
-    / ``surface_bc`` match Escalante's reference shapes.
-
-* **Step 2** — SystemModel built from chain DAE has the right
-  hyperbolic + constraint structure.  Tests:
-  - ``test_systemmodel_from_chain_dae_shapes`` : flux / NCP / source /
-    mass_matrix have the right shape.
-  - ``test_systemmodel_mass_matrix_diagonal`` : 1 on evolution rows,
-    0 on algebraic rows.
+  fields    = ``h, U_0, U_1, W_0, W_1, P_0, P_1``  (W_2 closed via
+              bottom KBC; P_2 closed via surface BC)
+  equations = ``mass, xmom_j0, xmom_j1, zmom_j0, zmom_j1,
+              cont_j1, cont_j2``  (5 evolution + 2 algebraic)
 
 Run::
     pytest tests/integration/zoomy_core/test_vam_chain_dae.py -v
@@ -37,155 +23,137 @@ import sympy as sp
 REPO = Path(__file__).resolve().parents[3]
 
 
+# ---------------------------------------------------------------------------
+# Fixtures.
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture(scope="module")
 def m1d():
-    """VAM1D at level=1 (M=1, N_w=2, N_p=2 by default)."""
+    """VAMModelGalerkin at level=1 (M=1, N_w=2, N_p=2 by default)."""
     from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
+    return VAMModelGalerkin(level=1)
 
-    class VAM1D(VAMModelGalerkin):
-        ins_dimension = 2
 
-    return VAM1D(level=1)
+@pytest.fixture(scope="module")
+def sm1d(m1d):
+    from zoomy_core.model.models.system_model import SystemModel
+    return SystemModel.from_model(m1d)
+
+
+@pytest.fixture(scope="module")
+def m1d_233():
+    """VAMModelGalerkin at level=2 → (M=2, N_w=3, N_p=3)."""
+    from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
+    return VAMModelGalerkin(level=2)
+
+
+@pytest.fixture(scope="module")
+def sm1d_233(m1d_233):
+    from zoomy_core.model.models.system_model import SystemModel
+    return SystemModel.from_model(m1d_233)
+
+
+def _state_by_name(sm):
+    return {str(s): s for s in sm.state}
 
 
 # ---------------------------------------------------------------------------
-# STEP 1 — chain DAE structure
+# Step 1 — chain DAE structure
 # ---------------------------------------------------------------------------
 
-def test_chain_dae_attribute_exists(m1d):
-    """``m._chain_dae`` must exist and be accessible after model
-    construction — currently FAILS because we haven't added it yet."""
-    assert hasattr(m1d, "_chain_dae"), (
-        "VAMModelGalerkin needs a ``_chain_dae`` attribute holding the "
-        "Escalante-aligned DAE (mass + projections + KBC + surface BC)."
-    )
-    assert m1d._chain_dae is not None
+
+def test_chain_systemmodel_n_state(sm1d):
+    """7 state entries after eliminating W_2 (bottom KBC) and P_2
+    (surface BC)."""
+    assert sm1d.n_state == 7
+    assert sm1d.n_equations == 7
 
 
-def test_chain_dae_equation_count(m1d):
-    """8 equations / 8 fields after eliminating ``P_{N_p}`` via the
-    non-hydrostatic surface BC."""
-    pdesys = m1d._chain_dae
-    assert len(pdesys.equations) == 8
-    assert len(pdesys.fields) == 8
+def test_chain_systemmodel_state_names(sm1d):
+    expected = ["h", "U_0", "U_1", "W_0", "W_1", "P_0", "P_1"]
+    assert [str(s) for s in sm1d.state] == expected
 
 
-def test_chain_dae_equation_names(m1d):
+def test_chain_systemmodel_equation_names(sm1d):
     expected = [
         "mass",
         "xmom_j0", "xmom_j1",
-        "zmom_j0", "zmom_j1", "zmom_j2",
-        "kbc_top", "kbc_bot",
+        "zmom_j0", "zmom_j1",
+        "cont_j1", "cont_j2",
     ]
-    assert m1d._chain_dae.equation_names == expected
+    assert sm1d.equation_names == expected
 
 
-def test_chain_dae_dae_partition(m1d):
-    """6 evolution + 2 algebraic per Escalante (with ``P_2``
-    eliminated via the surface BC, ``surface_bc`` is consumed and
-    only the two kinematic BCs remain as algebraic rows)."""
-    sys.path.insert(0, str(REPO / "thesis/notebooks/verification/dae_solver"))
-    try:
-        from test_dae_partition_bridge import dae_partition  # type: ignore
-    finally:
-        sys.path.remove(str(REPO / "thesis/notebooks/verification/dae_solver"))
-    dyn, alg, _, _ = dae_partition(m1d._chain_dae)
-    pdesys = m1d._chain_dae
-    dyn_names = [pdesys.equation_names[i] for i in dyn]
-    alg_names = [pdesys.equation_names[i] for i in alg]
-    assert dyn_names == ["mass", "xmom_j0", "xmom_j1",
-                         "zmom_j0", "zmom_j1", "zmom_j2"]
-    assert alg_names == ["kbc_top", "kbc_bot"]
-
-
-def test_chain_dae_mass_equation(m1d):
-    """``mass`` row must be ``∂_t h + ∂_x(h · U_0) = 0``."""
-    pdesys = m1d._chain_dae
-    idx = pdesys.equation_names.index("mass")
-    mass_expr = pdesys.equations[idx]
-    fields_by_name = {f.func.__name__: f for f in pdesys.fields}
-    h = fields_by_name["h"]
-    U_0 = fields_by_name["U_0"]
-    t, x = pdesys.time, pdesys.space[0]
-    expected = sp.Derivative(h, t) + sp.Derivative(h * U_0, x).doit()
-    diff = sp.simplify(sp.expand(mass_expr - expected))
-    assert diff == 0, f"mass equation diverges: diff = {diff}"
-
-
-def test_chain_dae_kbc_bot(m1d):
-    """``kbc_bot`` row must be ``w|_b - u|_b · ∂_x b``.
-
-    For shifted Legendre on [0,1]:
-        w|_b = sum_k W_k · phi_k(0) = sum_k W_k     (phi_k(0) = 1)
-        u|_b = sum_k U_k · phi_k(0) = sum_k U_k
-    """
-    pdesys = m1d._chain_dae
-    idx = pdesys.equation_names.index("kbc_bot")
-    kbc = pdesys.equations[idx]
-    fields_by_name = {f.func.__name__: f for f in pdesys.fields}
-    # b is non-evolving (parameter-like); extract from equation atoms.
-    b = next(a for a in kbc.atoms(sp.Function) if a.func.__name__ == "b")
-    U_funcs = [fields_by_name[f"U_{i}"] for i in range(2)]   # M+1 = 2
-    W_funcs = [fields_by_name[f"W_{i}"] for i in range(3)]   # N_w+1 = 3
-    x = pdesys.space[0]
-    expected = (sum(W_funcs) - sum(U_funcs) * sp.Derivative(b, x).doit())
-    diff = sp.simplify(sp.expand(kbc - expected))
-    assert diff == 0, f"kbc_bot diverges: diff = {diff}"
-
-
-def test_chain_dae_p_top_eliminated(m1d):
-    """``P_{N_p}`` is consumed by the surface BC and absent from
-    every equation in the DAE (eliminated via
-    ``Σ_k phi_p_k(1) · P_k = 0`` solved for ``P_{N_p}``)."""
-    pdesys = m1d._chain_dae
-    fields_by_name = {f.func.__name__: f for f in pdesys.fields}
-    # P_2 must NOT appear as a field at default (M=1, N_w=N_p=2).
-    assert "P_2" not in fields_by_name, (
-        f"P_2 should be eliminated; fields = {list(fields_by_name)}"
-    )
-    # No equation should reference P_2 either.
-    for name, eq in zip(pdesys.equation_names, pdesys.equations):
-        assert "P_2" not in str(eq), (
-            f"equation {name!r} still references eliminated P_2"
+def test_chain_systemmodel_dae_partition(sm1d):
+    """5 evolution + 2 algebraic.  Algebraic rows have zero mass-matrix
+    row; evolution rows have at least one non-zero entry."""
+    n = sm1d.n_equations
+    M = sm1d.mass_matrix
+    # Evolution rows: 0..4 (mass + 2 xmom + 2 zmom).
+    for i in range(5):
+        row = [M[i, j] for j in range(n)]
+        assert any(r != 0 for r in row), (
+            f"evolution row {i} has all-zero mass matrix"
+        )
+    # Algebraic rows: 5, 6 (cont_j1, cont_j2).
+    for i in (5, 6):
+        row = [M[i, j] for j in range(n)]
+        assert all(r == 0 for r in row), (
+            f"algebraic row {i} has nonzero mass matrix entries: {row}"
         )
 
 
-def test_chain_dae_matches_escalante_reference(m1d):
-    """Bit-for-bit comparison of the chain's three j=0 evolution
-    equations against the verified Escalante reference equations
-    from ``thesis/notebooks/modeling/transparent_derivations/
-    vam_l1_physical_z.py``.
+# ---------------------------------------------------------------------------
+# Step 2 — residual reconstruction matches Escalante eq (4) for j=0 rows
+# ---------------------------------------------------------------------------
 
-    Compared after substituting the chain's ``U_k / W_k / P_k``
-    coefficient functions with the reference's ``u_k / w_k / p_k``
-    convention so symbolic identity is well-defined.
-    """
-    pdesys = m1d._chain_dae
-    fields_by_name = {f.func.__name__: f for f in pdesys.fields}
 
-    # Chain symbols.
-    h = fields_by_name["h"]
-    U_0, U_1 = fields_by_name["U_0"], fields_by_name["U_1"]
-    W_0, W_1 = fields_by_name["W_0"], fields_by_name["W_1"]
-    P_0, P_1 = fields_by_name["P_0"], fields_by_name["P_1"]
-    t, x = pdesys.time, pdesys.space[0]
-    g = next(s for s in pdesys.parameters if str(s) == "g")
-    # The chain's ``b`` is a Function on (t, x) with ``∂_t b = 0``
-    # already substituted; pull it from the kbc_bot equation.
-    kbc_bot = pdesys.equations[pdesys.equation_names.index("kbc_bot")]
-    b = next(a for a in kbc_bot.atoms(sp.Function)
-             if a.func.__name__ == "b")
+def test_chain_mass_residual(sm1d):
+    """Reconstructed ``mass`` residual equals ``∂_t h + ∂_x(h·U_0)``."""
+    residuals = sm1d.reconstruct_residuals()
+    idx = sm1d.equation_names.index("mass")
+    state_by_name = _state_by_name(sm1d)
+    h_sym = state_by_name["h"]
+    U_0_sym = state_by_name["U_0"]
+    t = sm1d.time
+    x = sm1d.space[0]
+    h_fn = sp.Function(str(h_sym), real=True)(t, x)
+    U_0_fn = sp.Function(str(U_0_sym), real=True)(t, x)
+    expected = sp.Derivative(h_fn, t) + sp.Derivative(h_fn * U_0_fn, x).doit()
+    diff = sp.simplify(sp.expand(residuals[idx] - expected))
+    assert diff == 0, f"mass residual diverges: diff = {diff}"
 
-    # Escalante eq (4) reference equations expressed in chain
-    # symbols.  Note we have to multiply Escalante's pressure terms
-    # by ``rho`` because his ``p_k`` is the kinematic non-hydrostatic
-    # pressure (already divided by density), whereas our ``P_k`` is
-    # the dynamic pressure with units of stress.
-    rho = next(s for s in pdesys.parameters if str(s) == "rho")
+
+def test_chain_xmom_j0_residual_matches_escalante(sm1d):
+    """``xmom_j0`` residual equals Escalante eq (4) row 2 (inviscid)."""
+    residuals = sm1d.reconstruct_residuals()
+    idx = sm1d.equation_names.index("xmom_j0")
+    name_to_sym = _state_by_name(sm1d)
+    t = sm1d.time
+    x = sm1d.space[0]
+
+    def _fn(name):
+        return sp.Function(name, real=True)(t, x)
+
+    h = _fn("h")
+    U_0, U_1 = _fn("U_0"), _fn("U_1")
+    P_0, P_1 = _fn("P_0"), _fn("P_1")
+    g = next(s for s in sm1d.parameters if str(s) == "g")
+    rho = next(s for s in sm1d.parameters if str(s) == "rho")
+    # Locate the bottom topography Function in residuals.
+    b = None
+    for r in residuals:
+        for a in r.atoms(sp.Function):
+            if a.func.__name__ == "b":
+                b = a
+                break
+        if b is not None:
+            break
     eta = b + h
-    ref_mass = sp.Derivative(h, t) + sp.Derivative(h * U_0, x).doit()
-    ref_xmom_j0 = (
-        sp.Derivative(h * U_0, t)
+
+    expected = (
+        sp.Derivative(h * U_0, t).doit()
         + sp.Derivative(
             h * U_0**2
             + sp.Rational(1, 3) * h * U_1**2
@@ -193,75 +161,322 @@ def test_chain_dae_matches_escalante_reference(m1d):
         + g * h * sp.Derivative(eta, x).doit()
         + 2 * P_1 * sp.Derivative(b, x).doit() / rho
     )
-    ref_zmom_j0 = (
-        sp.Derivative(h * W_0, t)
+    diff = sp.expand(residuals[idx].doit() - sp.expand(expected))
+    diff = sp.simplify(diff)
+    assert diff == 0, f"xmom_j0 diverges: diff = {diff}"
+
+
+def test_chain_zmom_j0_residual_matches_escalante(sm1d):
+    """``zmom_j0`` residual equals Escalante eq (4) row 3 (inviscid)."""
+    residuals = sm1d.reconstruct_residuals()
+    idx = sm1d.equation_names.index("zmom_j0")
+    t = sm1d.time
+    x = sm1d.space[0]
+
+    def _fn(name):
+        return sp.Function(name, real=True)(t, x)
+
+    h = _fn("h")
+    U_0, U_1 = _fn("U_0"), _fn("U_1")
+    W_0, W_1 = _fn("W_0"), _fn("W_1")
+    P_1 = _fn("P_1")
+    rho = next(s for s in sm1d.parameters if str(s) == "rho")
+
+    expected = (
+        sp.Derivative(h * W_0, t).doit()
         + sp.Derivative(
             h * U_0 * W_0
             + sp.Rational(1, 3) * h * U_1 * W_1, x).doit()
         - 2 * P_1 / rho
     )
+    diff = sp.expand(residuals[idx].doit() - sp.expand(expected))
+    diff = sp.simplify(diff)
+    assert diff == 0, f"zmom_j0 diverges: diff = {diff}"
 
-    def _diff(name, ref):
-        idx = pdesys.equation_names.index(name)
-        chain_expr = pdesys.equations[idx]
-        return sp.simplify(sp.expand(chain_expr - ref))
 
-    assert _diff("mass", ref_mass) == 0, "mass diverges from Escalante eq (4) row 1"
-    assert _diff("xmom_j0", ref_xmom_j0) == 0, (
-        "xmom_j0 diverges from Escalante eq (4) row 2"
+def test_chain_cont_j1_residual_matches_I1(sm1d):
+    """``cont_j1`` residual equals Escalante's I_1."""
+    residuals = sm1d.reconstruct_residuals()
+    idx = sm1d.equation_names.index("cont_j1")
+    t = sm1d.time
+    x = sm1d.space[0]
+
+    def _fn(name):
+        return sp.Function(name, real=True)(t, x)
+
+    h = _fn("h")
+    U_0, U_1 = _fn("U_0"), _fn("U_1")
+    W_0 = _fn("W_0")
+    b = None
+    for r in residuals:
+        for a in r.atoms(sp.Function):
+            if a.func.__name__ == "b":
+                b = a
+                break
+        if b is not None:
+            break
+
+    expected = (h * sp.Derivative(U_0, x).doit()
+                + sp.Rational(1, 3) * sp.Derivative(h * U_1, x).doit()
+                + sp.Rational(1, 3) * U_1 * sp.Derivative(h, x).doit()
+                + 2 * (W_0 - U_0 * sp.Derivative(b, x).doit()))
+    diff = sp.simplify(sp.expand(residuals[idx] - expected))
+    assert diff == 0, f"cont_j1 diverges: diff = {diff}"
+
+
+def test_chain_cont_j2_residual_matches_neg_I2(sm1d):
+    """``cont_j2`` residual equals ``-I_2``."""
+    residuals = sm1d.reconstruct_residuals()
+    idx = sm1d.equation_names.index("cont_j2")
+    t = sm1d.time
+    x = sm1d.space[0]
+
+    def _fn(name):
+        return sp.Function(name, real=True)(t, x)
+
+    h = _fn("h")
+    U_0, U_1 = _fn("U_0"), _fn("U_1")
+    W_1 = _fn("W_1")
+    b = None
+    for r in residuals:
+        for a in r.atoms(sp.Function):
+            if a.func.__name__ == "b":
+                b = a
+                break
+        if b is not None:
+            break
+
+    I_2 = (h * sp.Derivative(U_0, x).doit()
+           + U_1 * sp.Derivative(h, x).doit()
+           + 2 * (U_1 * sp.Derivative(b, x).doit() - W_1))
+    expected = -I_2
+    diff = sp.simplify(sp.expand(residuals[idx] - expected))
+    assert diff == 0, f"cont_j2 diverges: diff = {diff}"
+
+
+def test_chain_p2_eliminated(sm1d):
+    """``P_2`` does not appear as a state entry and does not appear in
+    any operator slot."""
+    state_names = [str(s) for s in sm1d.state]
+    assert "P_2" not in state_names
+    # No matrix entry should reference P_2.
+    P_2 = sp.Symbol("P_2", real=True)
+    for i in range(sm1d.n_equations):
+        for j in range(sm1d.n_state):
+            assert not sm1d.mass_matrix[i, j].has(P_2)
+            for d in range(sm1d.n_dim):
+                assert not sm1d.flux[i, d].has(P_2)
+                assert not sm1d.hydrostatic_pressure[i, d].has(P_2)
+                assert not sp.sympify(
+                    sm1d.nonconservative_matrix[i, j, d]).has(P_2)
+        assert not sm1d.source[i, 0].has(P_2)
+
+
+# ---------------------------------------------------------------------------
+# Step 1 (new) — constraint-modulo paper match for j ≥ 1 rows
+# ---------------------------------------------------------------------------
+#
+# The j=1 rows are NOT pointwise equal to Escalante eq (4) — they
+# carry Galerkin chain-rule cross-terms.  They ARE equal modulo
+# {mass, cont_j1, cont_j2}.  Reduction recipe:
+#   1. ``.doit()`` to expand ``Derivative(product, var)`` atoms.
+#   2. Solve ``cont_j1=0`` for W_0; ``cont_j2=0`` for W_1; substitute.
+#   3. Substitute ``∂_t h → -∂_x(h·U_0)`` from mass.
+
+
+def _common_xmom_j1_setup(sm1d):
+    residuals = sm1d.reconstruct_residuals()
+    t = sm1d.time
+    x = sm1d.space[0]
+
+    def _fn(name):
+        return sp.Function(name, real=True)(t, x)
+
+    h, U_0, U_1 = _fn("h"), _fn("U_0"), _fn("U_1")
+    W_0, W_1 = _fn("W_0"), _fn("W_1")
+    P_0, P_1 = _fn("P_0"), _fn("P_1")
+    rho = next(s for s in sm1d.parameters if str(s) == "rho")
+    b = None
+    for r in residuals:
+        for a in r.atoms(sp.Function):
+            if a.func.__name__ == "b":
+                b = a
+                break
+        if b is not None:
+            break
+
+    cont_j1 = residuals[sm1d.equation_names.index("cont_j1")].doit()
+    cont_j2 = residuals[sm1d.equation_names.index("cont_j2")].doit()
+    W_0_sol = sp.solve(cont_j1, W_0)[0]
+    W_1_sol = sp.solve(cont_j2, W_1)[0]
+
+    return {
+        "residuals": residuals, "t": t, "x": x, "h": h,
+        "U_0": U_0, "U_1": U_1, "W_0": W_0, "W_1": W_1,
+        "P_0": P_0, "P_1": P_1, "rho": rho, "b": b,
+        "W_0_sol": W_0_sol, "W_1_sol": W_1_sol,
+    }
+
+
+def test_chain_xmom_j1_constraint_equivalent_to_escalante(sm1d):
+    """``xmom_j1`` residual equals Escalante eq (4) row 5 (inviscid)
+    modulo the ideal generated by ``{mass, cont_j1, cont_j2}``."""
+    s = _common_xmom_j1_setup(sm1d)
+    h, U_0, U_1 = s["h"], s["U_0"], s["U_1"]
+    P_0, P_1, rho, b = s["P_0"], s["P_1"], s["rho"], s["b"]
+    x = s["x"]
+
+    chain = s["residuals"][sm1d.equation_names.index("xmom_j1")].doit()
+    ref = (
+        sp.Rational(1, 3) * sp.Derivative(h * U_1, s["t"]).doit()
+        + sp.Rational(1, 3) * sp.Derivative(
+            2 * h * U_0 * U_1 + h * P_1 / rho, x).doit()
+        - sp.Rational(1, 3) * U_0 * sp.Derivative(h * U_1, x).doit()
+        - (P_0 / rho - P_1 / (3 * rho)) * sp.Derivative(h, x).doit()
+        - 2 * (P_0 - P_1) / rho * sp.Derivative(b, x).doit()
     )
-    assert _diff("zmom_j0", ref_zmom_j0) == 0, (
-        "zmom_j0 diverges from Escalante eq (4) row 3"
+
+    diff = sp.expand(chain - ref)
+    diff = diff.subs({s["W_0"]: s["W_0_sol"], s["W_1"]: s["W_1_sol"]})
+    diff = sp.expand(diff)
+    diff = diff.subs(sp.Derivative(h, s["t"]),
+                     -sp.Derivative(h * U_0, x).doit())
+    reduced = sp.simplify(sp.expand(diff))
+    assert reduced == 0, (
+        f"xmom_j1 not equivalent to Escalante eq (4) row 5 modulo "
+        f"{{mass, cont_j1, cont_j2}}; reduced diff = {reduced}"
+    )
+
+
+def test_chain_zmom_j1_constraint_equivalent_to_escalante(sm1d):
+    """``zmom_j1`` residual equals Escalante eq (4) row 6 (inviscid)
+    modulo ``{mass, cont_j1, cont_j2}`` and the closures already baked
+    into the chain (``W_2`` via bottom KBC, ``P_2`` via surface BC)."""
+    s = _common_xmom_j1_setup(sm1d)
+    h, U_0, U_1 = s["h"], s["U_0"], s["U_1"]
+    W_0, W_1 = s["W_0"], s["W_1"]
+    P_0, P_1, rho, b = s["P_0"], s["P_1"], s["rho"], s["b"]
+    x, t = s["x"], s["t"]
+
+    W_2_sub = -(W_0 + W_1) + (U_0 + U_1) * sp.Derivative(b, x).doit()
+    P_2_sub = P_1 - P_0
+    p_b = P_0 + P_1 + P_2_sub          # = 2*P_1
+
+    chain = s["residuals"][sm1d.equation_names.index("zmom_j1")].doit()
+    ref = (
+        sp.Rational(1, 3) * sp.Derivative(h * W_1, t).doit()
+        + sp.Rational(1, 3) * sp.Derivative(
+            h * U_0 * W_1
+            + U_1 * (h * W_0 + sp.Rational(2, 5) * h * W_2_sub),
+            x,
+        ).doit()
+        + sp.Rational(1, 3) * (sp.Rational(1, 5) * W_2_sub - W_0)
+        * sp.Derivative(h * U_1, x).doit()
+        + 2 * P_0 / rho - p_b / rho
+    )
+
+    diff = sp.expand(chain - ref)
+    diff = diff.subs({W_0: s["W_0_sol"], W_1: s["W_1_sol"]})
+    diff = sp.expand(diff)
+    diff = diff.subs(sp.Derivative(h, t),
+                     -sp.Derivative(h * U_0, x).doit())
+    reduced = sp.simplify(sp.expand(diff))
+    assert reduced == 0, (
+        f"zmom_j1 not equivalent to Escalante eq (4) row 6 modulo "
+        f"{{mass, cont_j1, cont_j2}}; reduced diff = {reduced}"
     )
 
 
 # ---------------------------------------------------------------------------
-# STEP 2 — SystemModel built from chain DAE
+# Form A residual fixture dump
 # ---------------------------------------------------------------------------
 
-def test_systemmodel_from_chain_dae_attribute(m1d):
-    """``m._chain_dae_systemmodel`` must hold a SystemModel built from
-    the chain DAE — currently FAILS because we haven't wired this yet."""
-    assert hasattr(m1d, "_chain_dae_systemmodel"), (
-        "Need a SystemModel built from the chain DAE (mass matrix has "
-        "0 rows for kbc_top_alg / kbc_bot / surface_bc)."
+
+def test_chain_form_A_residuals_match_fixture(sm1d):
+    """Pretty-printed Form A residuals for VAM(1, 2, 2) match the
+    committed fixture file."""
+    fixture_path = (REPO / "tests" / "fixtures"
+                    / "vam_122_chain_form_A.txt")
+    assert fixture_path.exists(), (
+        f"Missing fixture file: {fixture_path}.\n"
+        "Generate it with the helper script in tests/fixtures/."
     )
-    sm = m1d._chain_dae_systemmodel
-    assert sm is not None
+
+    residuals = sm1d.reconstruct_residuals()
+    lines = []
+    for name, res in zip(sm1d.equation_names, residuals):
+        lines.append(f"=== {name} ===")
+        lines.append(sp.pretty(sp.expand(res), use_unicode=True))
+        lines.append("")
+    actual = "\n".join(lines).rstrip() + "\n"
+    expected = fixture_path.read_text()
+    assert actual == expected, (
+        "Chain Form A residual dump differs from fixture.\n"
+        "Either regenerate the fixture intentionally, or investigate "
+        "what changed in the chain primitives."
+    )
 
 
-def test_systemmodel_mass_matrix_evolution_vs_algebraic(m1d):
-    """Mass matrix rows partition the system into evolution / algebraic.
+# ---------------------------------------------------------------------------
+# VAM(2, 3, 3) — structural tests only
+# ---------------------------------------------------------------------------
 
-    The PDESystem is in primitive form (state = ``[h, u_0, ..., w_0,
-    ..., p_0, ...]``); ``∂_t(h u_0)`` therefore expands via product
-    rule to ``h ∂_t u_0 + u_0 ∂_t h``, which gives off-diagonal
-    entries on the xmom rows (``M[xmom_j0, h] = u_0``,
-    ``M[xmom_j0, u_0] = h``).  The contract that matters for the
-    DAE solver is:
 
-      * **algebraic rows** (``kbc_top_alg``, ``kbc_bot``,
-        ``surface_bc``, indices 6..8) — the *whole row* of the mass
-        matrix is zero (no time derivative present).
-      * **evolution rows** (``mass``, ``xmom_j0/j1``,
-        ``zmom_j0/j1/j2``, indices 0..5) — at least one entry in the
-        row is non-zero.
+def test_vam_233_n_state_and_equations(sm1d_233):
+    """VAM(2, 3, 3): 10 equations / 10 state entries after closures.
+
+    Active state: ``h, U_0..U_2, W_0..W_2, P_0..P_2`` (W_3 closed via
+    bot KBC; P_3 closed via surface BC).
     """
-    sm = m1d._chain_dae_systemmodel
-    M_mat = sm.mass_matrix
-    n = M_mat.shape[0]
-    assert n == 8
+    assert sm1d_233.n_equations == 10
+    assert sm1d_233.n_state == 10
 
-    # First 6 rows = evolutions (mass + xmom_j0/j1 + zmom_j0/j1/j2).
-    for i in range(6):
-        row = [M_mat[i, j] for j in range(n)]
+
+def test_vam_233_state_names(sm1d_233):
+    expected = {
+        "h",
+        "U_0", "U_1", "U_2",
+        "W_0", "W_1", "W_2",
+        "P_0", "P_1", "P_2",
+    }
+    assert {str(s) for s in sm1d_233.state} == expected
+
+
+def test_vam_233_equation_names(sm1d_233):
+    expected = [
+        "mass",
+        "xmom_j0", "xmom_j1", "xmom_j2",
+        "zmom_j0", "zmom_j1", "zmom_j2",
+        "cont_j1", "cont_j2", "cont_j3",
+    ]
+    assert sm1d_233.equation_names == expected
+
+
+def test_vam_233_dae_partition(sm1d_233):
+    """7 evolution + 3 algebraic at VAM(2, 3, 3)."""
+    n = sm1d_233.n_equations
+    M = sm1d_233.mass_matrix
+    for i in range(7):
+        row = [M[i, j] for j in range(n)]
         assert any(r != 0 for r in row), (
-            f"evolution row {i} has all-zero mass matrix; "
-            f"row contents: {row}"
+            f"evolution row {i} has all-zero mass matrix"
         )
-    # Last 2 rows = kbc_top / kbc_bot — algebraic, all-zero.
-    for i in range(6, 8):
-        row = [M_mat[i, j] for j in range(n)]
+    for i in range(7, 10):
+        row = [M[i, j] for j in range(n)]
         assert all(r == 0 for r in row), (
             f"algebraic row {i} has nonzero mass matrix entries: {row}"
         )
+
+
+def test_vam_233_w3_p3_eliminated(sm1d_233):
+    """W_3 and P_3 are eliminated everywhere in operators."""
+    state_names = [str(s) for s in sm1d_233.state]
+    assert "W_3" not in state_names
+    assert "P_3" not in state_names
+    W_3 = sp.Symbol("W_3", real=True)
+    P_3 = sp.Symbol("P_3", real=True)
+    for i in range(sm1d_233.n_equations):
+        for d in range(sm1d_233.n_dim):
+            assert not sm1d_233.flux[i, d].has(W_3, P_3)
+            assert not sm1d_233.hydrostatic_pressure[i, d].has(W_3, P_3)
+        assert not sm1d_233.source[i, 0].has(W_3, P_3)
