@@ -20,6 +20,8 @@
   --sand:       #e3d4ac;
   --gold:       #facc15;
   --green:      #4ade80;
+  --sidebar-w:  200px;
+  --gutter:     80px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -32,19 +34,43 @@ body{
   display:flex;
   flex-direction:column;
 }
+
+/* Hamburger menu button — fixed top-left, always reachable */
+.menu-btn{
+  position:fixed;top:10px;left:10px;z-index:150;
+  width:40px;height:40px;
+  border:1px solid var(--panel-edge);border-radius:6px;
+  background:var(--panel);color:var(--ink);
+  font-size:1.3em;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .05s;
+}
+.menu-btn:hover{background:var(--panel-edge)}
+.menu-btn:active{transform:translateY(1px)}
+
+/* Backdrop — visible only while drawer is open on mobile */
+.backdrop{
+  position:fixed;inset:0;z-index:90;
+  background:rgba(0,0,0,0.5);
+  opacity:0;pointer-events:none;
+  transition:opacity .25s ease;
+}
+body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
+
 .app{
   display:grid;
-  grid-template-columns:200px 1fr;
+  grid-template-columns:var(--sidebar-w) 1fr;
   grid-template-rows:auto 1fr;
   gap:12px;
   max-width:1100px;
   margin:0 auto;
   padding:10px 12px 0;
-  flex:1;
-  min-height:0;
-  width:100%;
+  flex:1;min-height:0;width:100%;
+  transition:grid-template-columns .25s ease;
 }
-.hdr{grid-column:1/-1;text-align:center;padding:2px 4px}
+body.sidebar-closed .app{grid-template-columns:0 1fr}
+
+.hdr{grid-column:1/-1;text-align:center;padding:2px 4px 2px 56px}
 .hdr h1{font-size:1.2em;letter-spacing:.3px;margin-bottom:2px}
 .hdr p{font-size:.85em;opacity:.75}
 
@@ -52,8 +78,10 @@ body{
 .sidepanel{
   grid-row:2;grid-column:1;
   display:flex;flex-direction:column;gap:10px;
-  min-height:0;
+  min-height:0;min-width:0;overflow:hidden;
+  transition:opacity .2s;
 }
+body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 .stat{
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);
@@ -80,15 +108,17 @@ body{
   grid-row:2;grid-column:2;
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  gap:6px;min-height:0;
+  gap:6px;
+  min-height:0;min-width:0;
+  position:relative;
 }
 .board{
-  --canvas:min(58vmin,540px);
-  --gutter:min(13vmin,100px);
   position:relative;
-  width:var(--canvas);
-  height:var(--canvas);
+  /* size set by fitBoard() JS — these are reasonable boot-time fallbacks */
+  width:min(60vmin,540px);
+  height:min(60vmin,540px);
   margin:var(--gutter) 0;
+  flex-shrink:0;
 }
 .canvas-frame{
   position:absolute;inset:0;
@@ -217,9 +247,57 @@ body{
   padding:4px 0 6px;color:var(--ink-dim);
 }
 .footer a{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
+
+/* Mobile: ≤768px — sidebar becomes drawer; gardens shrink */
+@media (max-width:768px){
+  :root{--sidebar-w:0px;--gutter:56px}
+  .app{padding:6px 6px 0;gap:6px}
+  .hdr{padding:2px 8px 2px 56px}
+  .hdr h1{font-size:.95em}
+  .hdr p{display:none}
+  body.sidebar-open .sidepanel{
+    position:fixed;left:0;top:0;
+    width:80vw;max-width:280px;
+    height:100vh;
+    background:var(--bg-deep);
+    z-index:100;
+    padding:60px 14px 14px;
+    opacity:1;pointer-events:auto;
+    border-right:1px solid var(--panel-edge);
+    box-shadow:6px 0 20px rgba(0,0,0,.5);
+    overflow-y:auto;
+  }
+  body.sidebar-open .app{grid-template-columns:0 1fr}
+  /* Compact gardens */
+  .garden{width:60px;gap:3px}
+  .garden img{width:36px;height:36px}
+  .garden progress{width:52px;height:7px}
+  .garden.r{width:48px}
+  .garden.r progress{width:44px}
+  .inflow img{width:44px}
+  /* Compact buttons */
+  .btn{padding:8px 14px;font-size:.85em}
+  .btn-icon{padding:8px 10px}
+  .settings-panel{min-width:200px}
+}
+
+/* Very narrow phones */
+@media (max-width:380px){
+  :root{--gutter:48px}
+  .hdr h1{font-size:.85em}
+  .garden{width:52px}
+  .garden img{width:30px;height:30px}
+  .garden progress{width:46px}
+  .garden.r{width:42px}
+  .garden.r progress{width:36px}
+  .inflow img{width:36px}
+}
 </style>
 </head>
 <body>
+
+<button class="menu-btn" id="btn-menu" aria-label="Seitenleiste umschalten">☰</button>
+<div class="backdrop" id="backdrop"></div>
 
 <div class="app">
   <div class="hdr">
@@ -234,29 +312,29 @@ body{
   </div>
 
   <div class="board-wrap">
-    <div class="board">
+    <div class="board" id="board">
       <div class="canvas-frame">
         <canvas id="flow-canvas"></canvas>
         <canvas id="draw-canvas"></canvas>
         <div id="loading">⏳ Initialisiere…</div>
+      </div>
 
-        <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
+      <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
 
-        <div class="garden t" id="g0" style="left:58.06%">
-          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-        </div>
-        <div class="garden r" id="g1" style="top:41.94%">
-          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-        </div>
-        <div class="garden r" id="g2" style="top:82.26%">
-          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-        </div>
-        <div class="garden b" id="g3" style="left:70.16%">
-          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-        </div>
-        <div class="garden b" id="g4" style="left:33.87%">
-          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
-        </div>
+      <div class="garden t" id="g0" style="left:58.06%">
+        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+      </div>
+      <div class="garden r" id="g1" style="top:41.94%">
+        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+      </div>
+      <div class="garden r" id="g2" style="top:82.26%">
+        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+      </div>
+      <div class="garden b" id="g3" style="left:70.16%">
+        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+      </div>
+      <div class="garden b" id="g4" style="left:33.87%">
+        <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
       </div>
     </div>
 
@@ -842,6 +920,58 @@ document.addEventListener("click", function(e) {
 document.getElementById("setting-resolution").onchange = function() {
   applyResolution(parseInt(this.value, 10));
 };
+
+// === Mobile-friendly sidebar toggle + responsive board fit ===
+const MOBILE_BREAK = 768;
+function isMobile() { return window.innerWidth <= MOBILE_BREAK; }
+
+function fitBoard() {
+  const wrap = document.querySelector('.board-wrap');
+  const board = document.getElementById('board');
+  if (!wrap || !board) return;
+  const gutter = isMobile() ? 56 : 80;
+  const aw = wrap.clientWidth  - 2 * gutter;
+  const ah = wrap.clientHeight - 2 * gutter;
+  const size = Math.max(160, Math.min(aw, ah, 540));
+  board.style.width  = size + "px";
+  board.style.height = size + "px";
+}
+
+function toggleSidebar() {
+  if (isMobile()) {
+    document.body.classList.toggle('sidebar-open');
+  } else {
+    document.body.classList.toggle('sidebar-closed');
+  }
+  // After the CSS grid transition (.25s) settles, refit the board
+  setTimeout(fitBoard, 270);
+}
+function closeSidebar() {
+  document.body.classList.remove('sidebar-open');
+  setTimeout(fitBoard, 270);
+}
+
+document.getElementById('btn-menu').onclick = toggleSidebar;
+document.getElementById('backdrop').onclick = closeSidebar;
+// Tap outside (on board area, on mobile while drawer is open) closes drawer
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.body.classList.contains('sidebar-open')) closeSidebar();
+});
+
+// Reset sidebar state when crossing the mobile/desktop breakpoint, then refit
+let lastIsMobile = isMobile();
+window.addEventListener('resize', function() {
+  const now = isMobile();
+  if (now !== lastIsMobile) {
+    document.body.classList.remove('sidebar-open', 'sidebar-closed');
+    lastIsMobile = now;
+  }
+  fitBoard();
+});
+
+// Initial sizing — run after layout settles
+requestAnimationFrame(fitBoard);
+window.addEventListener('load', fitBoard);
 
 setState(STATE.IDLE);
 createWorker(300);
