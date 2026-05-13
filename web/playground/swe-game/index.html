@@ -136,6 +136,31 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 .stat-card .l{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
 .stat-card.timer .v{color:var(--gold)}
 
+/* Inflow q(t) curve editor (between stats-row and game-area) */
+.qcurve-card{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:6px 8px 4px;
+  align-self:center;
+  max-width:300px;
+  width:100%;
+}
+.qcurve-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.qcurve-label{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
+.qcurve-reset{
+  background:none;border:1px solid var(--panel-edge);
+  color:var(--ink-dim);width:20px;height:20px;border-radius:4px;
+  cursor:pointer;font-size:.85em;display:flex;align-items:center;justify-content:center;
+}
+.qcurve-reset:hover{background:var(--panel-edge);color:var(--ink)}
+#qcurve-canvas{
+  display:block;width:100%;height:auto;
+  background:#0a1d2a;border-radius:4px;
+  cursor:crosshair;touch-action:none;
+}
+.qcurve-hint{font-size:.62em;opacity:.5;margin-top:3px;text-align:center}
+
 /* Part 3: game area — square zone with canvas centered and gardens in the gutter */
 .game-area-wrap{
   flex:1;
@@ -313,6 +338,10 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   .stats-row{gap:6px}
   .stat-card{padding:4px 10px;min-width:80px}
   .stat-card .v{font-size:1.25em}
+  /* Compact q-curve editor */
+  .qcurve-card{padding:4px 6px 2px;max-width:260px}
+  .qcurve-hint{display:none}
+  #qcurve-canvas{height:50px}
   /* Compact gardens (progress narrower, image height already in --face-h) */
   .garden{gap:3px}
   .garden progress{width:48px;height:7px}
@@ -359,6 +388,15 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
     <div class="stats-row">
       <div class="stat-card"><div class="v" id="score">0</div><div class="l">Punkte</div></div>
       <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l">Zeit</div></div>
+    </div>
+
+    <div class="qcurve-card">
+      <div class="qcurve-header">
+        <span class="qcurve-label">Zufluss q(t)</span>
+        <button class="qcurve-reset" id="btn-qcurve-reset" title="Standardkurve">⟲</button>
+      </div>
+      <canvas id="qcurve-canvas" width="280" height="70"></canvas>
+      <div class="qcurve-hint">Punkte ziehen · Doppelklick: Punkt hinzufügen · Rechtsklick: löschen</div>
     </div>
 
     <div class="game-area-wrap">
@@ -542,6 +580,150 @@ function renderHighscores() {
 }
 renderHighscores();
 
+// === Inflow q(t) curve editor — draggable points, linear interpolation ===
+const QCURVE_KEY = "zoomy-swe-qcurve";
+const Q_TMAX = 60.0;
+const Q_QMAX = 1.2;
+const DEFAULT_QCURVE = [{t:0,q:1},{t:30,q:1},{t:45,q:0.2},{t:60,q:0}];
+
+let qCurve;
+try { qCurve = JSON.parse(localStorage.getItem(QCURVE_KEY) || "null"); }
+catch (_) { qCurve = null; }
+if (!Array.isArray(qCurve) || qCurve.length < 2) {
+  qCurve = DEFAULT_QCURVE.map(function(p){ return {t:p.t, q:p.q}; });
+}
+function saveQCurve(){ try{ localStorage.setItem(QCURVE_KEY, JSON.stringify(qCurve)); }catch(_){} }
+function sendQCurveToWorker(){
+  if (worker) worker.postMessage({type:"setqcurve", curve: qCurve.map(function(p){return {t:p.t, q:p.q};})});
+}
+
+const qCanvas = document.getElementById("qcurve-canvas");
+const qCtx = qCanvas.getContext("2d");
+let qIndicatorTime = 0;
+let qDragIdx = -1;
+let qLastTapMs = 0;
+
+function qToCanvas(t, q) {
+  return [t / Q_TMAX * qCanvas.width, qCanvas.height - q / Q_QMAX * qCanvas.height];
+}
+function canvasToQ(x, y) {
+  return [x / qCanvas.width * Q_TMAX, (1 - y / qCanvas.height) * Q_QMAX];
+}
+function qCanvasPos(e) {
+  const r = qCanvas.getBoundingClientRect();
+  return [
+    (e.clientX - r.left) / r.width  * qCanvas.width,
+    (e.clientY - r.top)  / r.height * qCanvas.height
+  ];
+}
+function qNearestPoint(x, y) {
+  const T = 12; let best = -1, bestD = T*T;
+  for (let i = 0; i < qCurve.length; i++) {
+    const p = qToCanvas(qCurve[i].t, qCurve[i].q);
+    const d = (p[0]-x)*(p[0]-x) + (p[1]-y)*(p[1]-y);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+function sortQCurve(){ qCurve.sort(function(a,b){return a.t - b.t;}); }
+
+function drawQCurve() {
+  const w = qCanvas.width, h = qCanvas.height;
+  qCtx.clearRect(0, 0, w, h);
+  // grid
+  qCtx.strokeStyle = "rgba(56,189,248,0.08)";
+  qCtx.lineWidth = 1;
+  for (let i = 1; i < 6; i++) {
+    const y = i/6 * h; qCtx.beginPath(); qCtx.moveTo(0,y); qCtx.lineTo(w,y); qCtx.stroke();
+    const x = i/6 * w; qCtx.beginPath(); qCtx.moveTo(x,0); qCtx.lineTo(x,h); qCtx.stroke();
+  }
+  // q=1 reference (dashed)
+  qCtx.strokeStyle = "rgba(56,189,248,0.25)";
+  qCtx.setLineDash([3,3]);
+  const yRef = h - (1/Q_QMAX)*h;
+  qCtx.beginPath(); qCtx.moveTo(0, yRef); qCtx.lineTo(w, yRef); qCtx.stroke();
+  qCtx.setLineDash([]);
+  // current-time indicator
+  if (qIndicatorTime > 0 && qIndicatorTime < Q_TMAX) {
+    qCtx.strokeStyle = "rgba(250,204,21,0.55)";
+    const xt = qIndicatorTime / Q_TMAX * w;
+    qCtx.beginPath(); qCtx.moveTo(xt, 0); qCtx.lineTo(xt, h); qCtx.stroke();
+  }
+  // polyline
+  qCtx.strokeStyle = "#38bdf8";
+  qCtx.lineWidth = 2; qCtx.lineCap = "round"; qCtx.lineJoin = "round";
+  qCtx.beginPath();
+  for (let i = 0; i < qCurve.length; i++) {
+    const p = qToCanvas(qCurve[i].t, qCurve[i].q);
+    if (i === 0) qCtx.moveTo(p[0], p[1]); else qCtx.lineTo(p[0], p[1]);
+  }
+  qCtx.stroke();
+  // points
+  for (let i = 0; i < qCurve.length; i++) {
+    const p = qToCanvas(qCurve[i].t, qCurve[i].q);
+    qCtx.fillStyle = qDragIdx === i ? "#facc15" : "#0284c7";
+    qCtx.strokeStyle = "#38bdf8";
+    qCtx.lineWidth = 2;
+    qCtx.beginPath(); qCtx.arc(p[0], p[1], 5, 0, Math.PI*2); qCtx.fill(); qCtx.stroke();
+  }
+}
+
+qCanvas.addEventListener("pointerdown", function(e) {
+  const pos = qCanvasPos(e);
+  const now = performance.now();
+  const isDouble = (now - qLastTapMs) < 320;
+  qLastTapMs = now;
+  const idx = qNearestPoint(pos[0], pos[1]);
+  if (idx >= 0) {
+    qDragIdx = idx;
+    qCanvas.setPointerCapture(e.pointerId);
+    drawQCurve();
+  } else if (isDouble) {
+    const tq = canvasToQ(pos[0], pos[1]);
+    const t = Math.max(0, Math.min(Q_TMAX, tq[0]));
+    const q = Math.max(0, Math.min(Q_QMAX, tq[1]));
+    qCurve.push({t: t, q: q});
+    sortQCurve();
+    saveQCurve(); sendQCurveToWorker(); drawQCurve();
+  }
+});
+qCanvas.addEventListener("pointermove", function(e) {
+  if (qDragIdx < 0) return;
+  const pos = qCanvasPos(e);
+  const tq = canvasToQ(pos[0], pos[1]);
+  let t = tq[0], q = tq[1];
+  // Endpoints stay at t=0 / t=Q_TMAX
+  if (qDragIdx === 0) t = 0;
+  else if (qDragIdx === qCurve.length - 1) t = Q_TMAX;
+  t = Math.max(0, Math.min(Q_TMAX, t));
+  q = Math.max(0, Math.min(Q_QMAX, q));
+  qCurve[qDragIdx].t = t; qCurve[qDragIdx].q = q;
+  drawQCurve();
+});
+qCanvas.addEventListener("pointerup", function() {
+  if (qDragIdx < 0) return;
+  sortQCurve();
+  saveQCurve(); sendQCurveToWorker(); qDragIdx = -1; drawQCurve();
+});
+qCanvas.addEventListener("pointercancel", function() { qDragIdx = -1; drawQCurve(); });
+qCanvas.addEventListener("contextmenu", function(e) {
+  e.preventDefault();
+  const pos = qCanvasPos(e);
+  const idx = qNearestPoint(pos[0], pos[1]);
+  // Keep at least 2 points; protect first/last endpoints
+  if (idx > 0 && idx < qCurve.length - 1) {
+    qCurve.splice(idx, 1);
+    saveQCurve(); sendQCurveToWorker(); drawQCurve();
+  }
+});
+
+document.getElementById("btn-qcurve-reset").onclick = function() {
+  qCurve = DEFAULT_QCURVE.map(function(p){return {t:p.t, q:p.q};});
+  saveQCurve(); sendQCurveToWorker(); drawQCurve();
+};
+
+drawQCurve();
+
 // === Freehand drawing (only allowed in IDLE) ===
 function pos(e) {
   const r = drawC.getBoundingClientRect();
@@ -657,6 +839,22 @@ let gameTime, running, finished;
 let outflow;
 let MODE = "h";                 // "h" (height) or "vmag" (velocity magnitude)
 const VMAG_SCALE = 254 / 3.0;   // 3 m/s ⇒ idx 254 (saturates above)
+// Inflow multiplier as a piecewise-linear function of gameTime; main thread
+// pushes this via setqcurve. Default = constant unity multiplier.
+let Q_CURVE = [[0, 1.0], [60.0, 1.0]];
+function qMultiplier(t) {
+  if (t <= Q_CURVE[0][0]) return Q_CURVE[0][1];
+  const last = Q_CURVE.length - 1;
+  if (t >= Q_CURVE[last][0]) return Q_CURVE[last][1];
+  for (let i = 0; i < last; i++) {
+    const t0 = Q_CURVE[i][0], t1 = Q_CURVE[i+1][0];
+    if (t >= t0 && t <= t1) {
+      const u = (t - t0) / (t1 - t0);
+      return Q_CURVE[i][1] * (1 - u) + Q_CURVE[i+1][1] * u;
+    }
+  }
+  return 1.0;
+}
 
 function wallSegs(op, nx) {
   const w = []; let p = 0;
@@ -722,11 +920,12 @@ function applyBCOf(qH, qHu, qHv) {
       qHu[jN+N-1] = Math.max(qHu[jN+N-2], 0);
     }
   }
+  const Q_now = Q_IN * qMultiplier(gameTime);
   for (const [a,b] of O_IN) {
     for (let j = a; j < b; j++) {
       const jN = j * N;
       qH[jN]  = Math.max(qH[jN+1], H_IN);
-      qHu[jN] = qHu[jN+1] >= 0 ? Q_IN : qHu[jN+1];
+      qHu[jN] = qHu[jN+1] >= 0 ? Q_now : qHu[jN+1];
     }
   }
   const jn = (N-1)*N, j2 = (N-2)*N;
@@ -1157,6 +1356,11 @@ self.onmessage = function(e) {
       iw: IW, ih: IH
     }, [img.buffer]);
   }
+  else if (m.type === "setqcurve") {
+    if (Array.isArray(m.curve) && m.curve.length >= 2) {
+      Q_CURVE = m.curve.map(function(p){ return [p.t, p.q]; });
+    }
+  }
 };
 `;
 
@@ -1211,11 +1415,16 @@ function createWorker(nx) {
         const mode = currentScheme === "velocity" ? "vmag" : "h";
         worker.postMessage({type: "setmode", mode: mode});
       }
+      // Push the inflow curve so the new worker has it
+      if (typeof sendQCurveToWorker === "function") sendQCurveToWorker();
     }
     else if (m.type === "frame") {
       if (m.iw !== W || m.ih !== H) return;  // stale frame from prior NX
       renderFrame(new Uint8Array(m.image));
       updateUI(m.time, m.of, m.fin);
+      // Update the indicator line on the q-curve canvas
+      qIndicatorTime = m.time;
+      drawQCurve();
       if (active && !m.fin) {
         requestAnimationFrame(() => worker.postMessage({type:"tick"}));
       } else if (m.fin) {
