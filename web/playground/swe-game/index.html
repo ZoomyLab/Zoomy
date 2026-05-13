@@ -970,14 +970,15 @@ function applyResolution(nx) {
 function startSim() {
   active = true; scoreSaved = false;
   setState(STATE.RUNNING);
+  // Keep the drawing visible across runs — only "Skizze löschen" clears it.
+  // getRaster() reads the current canvas pixels; the worker stamps them
+  // as clay walls in the rendered flow, and the gold strokes stay on top.
   const r = getRaster();
-  dCtx.clearRect(0, 0, W, H);
   worker.postMessage({type:"start", raster: r.buffer}, [r.buffer]);
 }
 
 function resetSim() {
   active = false; scoreSaved = false;
-  dCtx.clearRect(0, 0, W, H);
   resetUI();
   worker.postMessage({type:"reset"});
   setState(STATE.IDLE);
