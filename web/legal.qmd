@@ -1,3 +1,7 @@
+---
+sidebar: false
+---
+
 ## Legal notice and data protection
 
 **Responsible for the content of these pages:**

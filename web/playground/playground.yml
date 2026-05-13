@@ -14,5 +14,5 @@
 
     - title: Shallow Water Game based on Zoomy
       subtitle: " - interact and play"
-      href: no-playground.qmd
+      href: /playground/swe-game/index.html
       thumbnail: /images/playground/swe-game.gif

@@ -185,6 +185,13 @@ jobs:
           rm -f docs/book/_build/html/gui/generate_mesh_previews.py
           rm -f docs/book/_build/html/gui/generate_previews.py
 
+      - name: Copy SWE game into docs site
+        run: |
+          mkdir -p docs/book/_build/html/playground/swe-game
+          cp -r web/playground/swe-game/. docs/book/_build/html/playground/swe-game/
+          echo "Copied SWE game to /playground/swe-game/"
+          ls docs/book/_build/html/playground/swe-game/ | head
+
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v4

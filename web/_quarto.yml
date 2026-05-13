@@ -1,9 +1,10 @@
 
 project:
   type: website
-  resources: 
+  resources:
     - "jupyter-lite/_output/"
     - "./images/"
+    - "playground/swe-game/"
 bibliography: bibliography.bib
 
 quartodoc:

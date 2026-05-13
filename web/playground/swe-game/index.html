@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWE Irrigation Game</title>
+<style>
+:root {
+  --bg-deep:    #07131c;
+  --bg-glow:    #16384e;
+  --panel:      #0f2939;
+  --panel-edge: #1f4868;
+  --ink:        #e6f1f7;
+  --ink-dim:    #8fb2c8;
+  --accent:     #38bdf8;
+  --accent-deep:#0284c7;
+  --accent-glow:rgba(56,189,248,0.35);
+  --clay:       #8b5a2b;
+  --clay-dim:   #6b421e;
+  --sand:       #e3d4ac;
+  --gold:       #facc15;
+  --green:      #4ade80;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Segoe UI",system-ui,sans-serif;
+  background:radial-gradient(ellipse at top,var(--bg-glow) 0%,var(--bg-deep) 65%);
+  color:var(--ink);
+  overflow:hidden;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+.app{
+  display:grid;
+  grid-template-columns:200px 1fr;
+  grid-template-rows:auto 1fr;
+  gap:12px;
+  max-width:1100px;
+  margin:0 auto;
+  padding:10px 12px 0;
+  flex:1;
+  min-height:0;
+  width:100%;
+}
+.hdr{grid-column:1/-1;text-align:center;padding:2px 4px}
+.hdr h1{font-size:1.2em;letter-spacing:.3px;margin-bottom:2px}
+.hdr p{font-size:.85em;opacity:.75}
+
+/* Side panel: score / timer / highscore */
+.sidepanel{
+  grid-row:2;grid-column:1;
+  display:flex;flex-direction:column;gap:10px;
+  min-height:0;
+}
+.stat{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:10px 6px;
+  text-align:center;
+}
+.stat .v{font-size:1.9em;font-weight:700;line-height:1;color:var(--accent)}
+.stat .l{font-size:.7em;opacity:.7;margin-top:4px;letter-spacing:.5px;text-transform:uppercase}
+.stat.timer .v{color:var(--gold)}
+.hs{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:8px;
+  flex:1;min-height:0;overflow:hidden;
+}
+.hs h3{font-size:.75em;opacity:.7;margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;text-align:center}
+.hs .row{font-size:.85em;display:flex;justify-content:space-between;padding:2px 4px;border-radius:3px}
+.hs .row.new{background:rgba(250,204,21,0.12);color:var(--gold);font-weight:600}
+
+/* Board */
+.board-wrap{
+  grid-row:2;grid-column:2;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:6px;min-height:0;
+}
+.board{
+  --canvas:min(58vmin,540px);
+  --gutter:min(13vmin,100px);
+  position:relative;
+  width:var(--canvas);
+  height:var(--canvas);
+  margin:var(--gutter) 0;
+}
+.canvas-frame{
+  position:absolute;inset:0;
+  background:var(--clay-dim);
+  border:3px solid var(--clay-dim);
+  border-radius:6px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5),0 8px 28px rgba(0,0,0,.55);
+  overflow:hidden;
+}
+.canvas-frame canvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  image-rendering:pixelated;
+  display:block;
+}
+#draw-canvas{z-index:2;cursor:crosshair;touch-action:none}
+#loading{
+  position:absolute;inset:0;z-index:3;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.85);color:var(--ink);
+  font-size:1.05em;text-align:center;padding:1em;
+}
+
+/* Garden cards (positioned at outlet centers) */
+.garden{
+  position:absolute;z-index:5;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  width:78px;pointer-events:none;
+}
+.garden img{
+  width:48px;height:48px;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));
+  transition:filter .2s;
+}
+.garden progress{
+  width:70px;height:9px;
+  border:none;border-radius:5px;overflow:hidden;
+  background:var(--panel);
+  -webkit-appearance:none;appearance:none;
+}
+.garden progress::-webkit-progress-bar{background:var(--panel);border-radius:5px}
+.garden progress::-webkit-progress-value{
+  background:linear-gradient(90deg,var(--accent-deep),var(--accent));
+  transition:width .1s linear;
+}
+.garden progress::-moz-progress-bar{
+  background:linear-gradient(90deg,var(--accent-deep),var(--accent));
+}
+.garden.full progress::-webkit-progress-value{background:linear-gradient(90deg,#16a34a,var(--green))}
+.garden.full progress::-moz-progress-bar{background:linear-gradient(90deg,#16a34a,var(--green))}
+.garden.full img{
+  filter:drop-shadow(0 0 8px var(--green)) drop-shadow(0 2px 4px rgba(0,0,0,.6));
+  animation:pop .35s ease-out;
+}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+.garden.t{bottom:100%;margin-bottom:8px;transform:translateX(-50%)}
+.garden.b{top:100%;margin-top:8px;transform:translateX(-50%)}
+.garden.r{left:100%;margin-left:8px;transform:translateY(-50%);width:64px}
+
+/* Inflow indicator */
+.inflow{
+  position:absolute;right:100%;margin-right:8px;
+  transform:translateY(-50%);z-index:5;pointer-events:none;
+}
+.inflow img{
+  width:60px;height:auto;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
+  animation:inflow-pulse 1.6s ease-in-out infinite;
+}
+@keyframes inflow-pulse{
+  0%,100%{transform:translateX(0);opacity:.85}
+  50%{transform:translateX(6px);opacity:1}
+}
+
+/* Controls */
+.ctrl-row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.btn{
+  padding:9px 18px;border:none;border-radius:6px;
+  font-size:.9em;font-weight:600;letter-spacing:.3px;
+  cursor:pointer;font-family:inherit;
+  transition:background .15s,transform .05s,opacity .15s;
+}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{
+  background:linear-gradient(180deg,var(--accent) 0%,var(--accent-deep) 100%);
+  color:white;box-shadow:0 2px 10px var(--accent-glow);
+}
+.btn-primary:hover:not(:disabled){background:linear-gradient(180deg,#67c8ff,var(--accent))}
+.btn-restart{
+  background:linear-gradient(180deg,#fbbf24 0%,#d97706 100%);
+  color:#1a1a1a;box-shadow:0 2px 10px rgba(251,191,36,.35);
+}
+.btn-restart:hover:not(:disabled){background:linear-gradient(180deg,#fcd34d,#f59e0b)}
+.btn-secondary{
+  background:var(--panel);border:1px solid var(--panel-edge);color:var(--ink-dim);
+}
+.btn-secondary:hover:not(:disabled){background:var(--panel-edge);color:var(--ink)}
+.btn-icon{padding:9px 12px;display:inline-flex;align-items:center}
+.btn-icon svg{width:18px;height:18px;fill:currentColor}
+
+/* Settings panel */
+.settings-wrap{position:relative}
+.settings-panel{
+  position:absolute;bottom:calc(100% + 8px);right:0;
+  background:var(--panel);border:1px solid var(--panel-edge);
+  border-radius:8px;padding:14px;min-width:220px;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+  z-index:20;
+}
+.settings-panel label{
+  display:flex;flex-direction:column;gap:6px;
+  font-size:.85em;color:var(--ink-dim);
+}
+.settings-panel select{
+  background:#0a1d2a;border:1px solid var(--panel-edge);
+  color:var(--ink);padding:6px 8px;border-radius:4px;
+  font-family:inherit;font-size:.9em;
+}
+.settings-panel .hint{font-size:.7em;opacity:.6;margin-top:10px;line-height:1.4}
+
+/* Footer */
+.footer{
+  text-align:center;font-size:.72em;opacity:.55;
+  padding:4px 0 6px;color:var(--ink-dim);
+}
+.footer a{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="hdr">
+    <h1>Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
+    <p>Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
+  </div>
+
+  <div class="sidepanel">
+    <div class="stat"><div class="v" id="score">0</div><div class="l">Punkte</div></div>
+    <div class="stat timer"><div class="v" id="timer">60.0</div><div class="l">Zeit</div></div>
+    <div class="hs"><h3>Highscore</h3><div id="hs-list"></div></div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board">
+      <div class="canvas-frame">
+        <canvas id="flow-canvas"></canvas>
+        <canvas id="draw-canvas"></canvas>
+        <div id="loading">⏳ Initialisiere…</div>
+
+        <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
+
+        <div class="garden t" id="g0" style="left:58.06%">
+          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+        </div>
+        <div class="garden r" id="g1" style="top:41.94%">
+          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+        </div>
+        <div class="garden r" id="g2" style="top:82.26%">
+          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+        </div>
+        <div class="garden b" id="g3" style="left:70.16%">
+          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+        </div>
+        <div class="garden b" id="g4" style="left:33.87%">
+          <img src="images/sad.png" alt=""><progress value="0" max="100"></progress>
+        </div>
+      </div>
+    </div>
+
+    <div class="ctrl-row">
+      <button class="btn btn-primary" id="btn-primary">Schleuse öffnen</button>
+      <button class="btn btn-secondary" id="btn-clear">Skizze löschen</button>
+      <div class="settings-wrap">
+        <button class="btn btn-secondary btn-icon" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">
+          <svg viewBox="0 0 24 24"><path d="M19.14,12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4,2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24,0-.43.17-.47.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-.22-.08-.47,0-.59.22L2.74,8.87c-.12.21-.08.47.12.61l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s.02.64.07.94l-2.03,1.58c-.18.14-.23.41-.12.61l1.92,3.32c.12.22.37.29.59.22l2.39-.96c.5.38,1.03.7,1.62.94l.36,2.54c.05.24.24.41.48.41h3.84c.24,0,.44-.17.47-.41l.36-2.54c.59-.24,1.13-.56,1.62-.94l2.39.96c.22.08.47,0,.59-.22l1.92-3.32c.12-.22.07-.47-.12-.61L19.14,12.94zM12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6 3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+        </button>
+        <div class="settings-panel" id="settings-panel" hidden>
+          <label>
+            Auflösung
+            <select id="setting-resolution">
+              <option value="200">200 × 200 (schnell)</option>
+              <option value="300" selected>300 × 300 (Standard)</option>
+              <option value="400">400 × 400 (hoch)</option>
+              <option value="500">500 × 500 (sehr hoch)</option>
+              <option value="600">600 × 600 (extrem)</option>
+            </select>
+          </label>
+          <div class="hint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  by <a href="https://www.mbd.rwth-aachen.de/" target="_blank" rel="noopener">Ingo Steldermann</a>
+</footer>
+
+<script>
+"use strict";
+
+// === Water-themed LUT ===
+// idx 0   = clay/wall (warm brown)
+// idx 1.. = water gradient (very pale → bright cyan → deep teal)
+const LUT = new Uint8ClampedArray(256 * 4);
+LUT[0]=139; LUT[1]=90; LUT[2]=43; LUT[3]=255;
+const STOPS = [
+  [0.00, 220, 235, 240],
+  [0.30, 110, 200, 230],
+  [0.70,  16, 130, 180],
+  [1.00,   8,  60,  95],
+];
+function lerp3(t) {
+  for (let i = 0; i < STOPS.length - 1; i++) {
+    const [t0,r0,g0,b0] = STOPS[i], [t1,r1,g1,b1] = STOPS[i+1];
+    if (t >= t0 && t <= t1) {
+      const u = (t - t0) / (t1 - t0);
+      return [Math.round(r0+(r1-r0)*u), Math.round(g0+(g1-g0)*u), Math.round(b0+(b1-b0)*u)];
+    }
+  }
+  return [0,0,0];
+}
+for (let i = 1; i <= 255; i++) {
+  const t = (i - 1) / 254;
+  const [r,g,b] = lerp3(t);
+  LUT[i*4]=r; LUT[i*4+1]=g; LUT[i*4+2]=b; LUT[i*4+3]=255;
+}
+
+// === Canvases (size set after worker reports IW/IH) ===
+const flowC = document.getElementById("flow-canvas");
+const drawC = document.getElementById("draw-canvas");
+let W = 310, H = 310;
+flowC.width = drawC.width = W;
+flowC.height = drawC.height = H;
+const fCtx = flowC.getContext("2d");
+const dCtx = drawC.getContext("2d");
+function setupDrawCtx() {
+  dCtx.strokeStyle = "rgba(250,204,21,0.85)";
+  dCtx.lineWidth = Math.max(4, Math.round(W / 60));
+  dCtx.lineCap = dCtx.lineJoin = "round";
+}
+setupDrawCtx();
+let imgData = fCtx.createImageData(W, H);
+
+// === State ===
+const STATE = { IDLE: 'idle', RUNNING: 'running', FINISHED: 'finished' };
+let state = STATE.IDLE;
+let pen = false;
+let active = false;
+let scoreSaved = false;
+const highscores = [];
+
+// === Freehand drawing (only allowed in IDLE) ===
+function pos(e) {
+  const r = drawC.getBoundingClientRect();
+  return [(e.clientX-r.left)/r.width*W, (e.clientY-r.top)/r.height*H];
+}
+drawC.addEventListener("pointerdown", e => {
+  if (state !== STATE.IDLE) return;
+  pen = true; const [x,y] = pos(e);
+  dCtx.beginPath(); dCtx.moveTo(x,y);
+  drawC.setPointerCapture(e.pointerId);
+});
+drawC.addEventListener("pointermove", e => {
+  if (!pen) return; const [x,y] = pos(e);
+  dCtx.lineTo(x,y); dCtx.stroke(); dCtx.beginPath(); dCtx.moveTo(x,y);
+});
+drawC.addEventListener("pointerup", () => pen = false);
+drawC.addEventListener("pointercancel", () => pen = false);
+
+function getRaster() {
+  const px = dCtx.getImageData(0, 0, W, H);
+  const r = new Uint8Array(W * H);
+  for (let i = 0; i < W*H; i++) r[i] = px.data[i*4+3] > 30 ? 255 : 0;
+  return r;
+}
+
+function renderFrame(buf) {
+  if (buf.length !== W * H) return;  // stale frame after resolution swap
+  const d = imgData.data;
+  for (let i = 0; i < W*H; i++) {
+    const v = buf[i] << 2;
+    d[(i<<2)]   = LUT[v];
+    d[(i<<2)+1] = LUT[v+1];
+    d[(i<<2)+2] = LUT[v+2];
+    d[(i<<2)+3] = 255;
+  }
+  fCtx.putImageData(imgData, 0, 0);
+}
+
+// === Faces ===
+const FACE_HAPPY = "images/happy.png";
+const FACE_NEUTRAL = "images/neutral.png";
+const FACE_SAD = "images/sad.png";
+function faceFor(v) { return v >= 80 ? FACE_HAPPY : v >= 33 ? FACE_NEUTRAL : FACE_SAD; }
+
+function updateUI(time, of, fin) {
+  document.getElementById("timer").textContent = Math.max(0, 60-time).toFixed(1);
+  let tot = 0;
+  for (let i = 0; i < 5; i++) {
+    const v = Math.min(100, Math.max(0, Math.round(of[i]/3*100)));
+    const g = document.getElementById("g"+i);
+    g.querySelector("progress").value = v;
+    const img = g.querySelector("img");
+    const desired = faceFor(v);
+    if (img.getAttribute("src") !== desired) img.setAttribute("src", desired);
+    const wasFull = g.classList.contains("full");
+    if (v >= 100 && !wasFull) g.classList.add("full");
+    else if (v < 100 && wasFull) g.classList.remove("full");
+    tot += v;
+  }
+  let sc = tot;
+  if (tot === 500) {
+    const tf = 1 + (1 - Math.exp(-(60-time)/60));
+    sc = Math.round(tot * tf + 0.4);
+  }
+  document.getElementById("score").textContent = sc;
+  if (fin && !scoreSaved) {
+    scoreSaved = true;
+    for (const h of highscores) h.isNew = false;
+    highscores.push({score: sc, isNew: true});
+    highscores.sort((a,b) => b.score - a.score);
+    highscores.length = Math.min(highscores.length, 8);
+    document.getElementById("hs-list").innerHTML =
+      highscores.map((h,i) =>
+        "<div class='row" + (h.isNew ? " new" : "") + "'><span>" + (i+1) + ".</span><span>" + h.score + "</span></div>"
+      ).join("");
+    setState(STATE.FINISHED);
+  }
+}
+
+// === Worker source (inlined; canonical modules: library/zoomy_js/{solver,flux,swe}.js) ===
+const workerSrc = `
+"use strict";
+
+const G = 9.81, HALF_G = 0.5 * G;
+const WET = 1e-6, CFL = 0.45;
+const DT_MIN = 1e-4, DT_MAX = 0.5;
+const END_TIME = 60.0, BUDGET = 0.08;
+const H_IN = 0.1, Q_IN = 0.01;
+
+// Openings expressed as fractions of NX so they scale with resolution.
+const OPF = {
+  IN:  [[0.5833, 0.7500]],
+  OUT: [[0.3333, 0.5000], [0.7500, 0.9167]],
+  TOP: [[0.2500, 0.4167], [0.6667, 0.7500]],
+  BOT: [[0.5000, 0.6667]],
+};
+
+let NX, NG = 5, IW, IH, N, NN, DX;
+let O_IN, O_OUT, O_TOP, O_BOT;
+let W_IN, W_OUT, W_TOP, W_BOT;
+let qh, qhu, qhv, qw;
+let qh2, qhu2, qhv2;
+let raster;
+let gameTime, running, finished;
+let outflow;
+
+function wallSegs(op, nx) {
+  const w = []; let p = 0;
+  for (const [a,b] of op) { w.push([p,a]); p = b; }
+  w.push([p, nx]); return w;
+}
+function scaleFrac(arr, nx) { return arr.map(([a,b]) => [Math.round(a*nx), Math.round(b*nx)]); }
+
+function setup(nx) {
+  NX = nx;
+  IW = NX + 2*NG; IH = IW;
+  N = NX + 2; NN = N * N;
+  DX = 20.0 / N;
+  O_IN  = scaleFrac(OPF.IN,  NX);
+  O_OUT = scaleFrac(OPF.OUT, NX);
+  O_TOP = scaleFrac(OPF.TOP, NX);
+  O_BOT = scaleFrac(OPF.BOT, NX);
+  W_IN  = wallSegs(O_IN,  NX);
+  W_OUT = wallSegs(O_OUT, NX);
+  W_TOP = wallSegs(O_TOP, NX);
+  W_BOT = wallSegs(O_BOT, NX);
+  init();
+}
+
+function init() {
+  qh  = new Float32Array(NN); qhu = new Float32Array(NN);
+  qhv = new Float32Array(NN); qw  = new Float32Array(NN);
+  qh2 = new Float32Array(NN); qhu2 = new Float32Array(NN); qhv2 = new Float32Array(NN);
+  qh.fill(0.01);
+  raster = new Uint8Array(IW * IH);
+  gameTime = 0; running = false; finished = false;
+  outflow = [0,0,0,0,0];
+  applyBC();
+}
+
+function wetDry() {
+  for (let k = 0; k < NN; k++) {
+    if (qh[k] <= WET) { qh[k] = 0; qhu[k] = 0; qhv[k] = 0; }
+  }
+}
+
+function applyBC() {
+  for (let j = 0; j < N; j++) {
+    const jN = j * N;
+    qh[jN+N-1]  = qh[jN+N-2];
+    qhu[jN+N-1] = -qhu[jN+N-2];
+    qhv[jN+N-1] = qhv[jN+N-2];
+    qw[jN+N-1]  = qw[jN+N-2];
+    qh[jN]  = qh[jN+1];
+    qhu[jN] = -qhu[jN+1];
+    qhv[jN] = qhv[jN+1];
+    qw[jN]  = qw[jN+1];
+  }
+  for (const [a,b] of O_OUT) {
+    for (let j = a; j < b; j++) {
+      const jN = j * N;
+      qhu[jN+N-1] = Math.max(qhu[jN+N-2], 0);
+    }
+  }
+  for (const [a,b] of O_IN) {
+    for (let j = a; j < b; j++) {
+      const jN = j * N;
+      qh[jN]  = Math.max(qh[jN+1], H_IN);
+      qhu[jN] = qhu[jN+1] >= 0 ? Q_IN : qhu[jN+1];
+    }
+  }
+  const jn = (N-1)*N, j2 = (N-2)*N;
+  for (let i = 0; i < N; i++) {
+    qh[jn+i]  = qh[j2+i];
+    qhu[jn+i] = qhu[j2+i];
+    qhv[jn+i] = -qhv[j2+i];
+    qw[jn+i]  = qw[j2+i];
+    qh[i]     = qh[N+i];
+    qhu[i]    = qhu[N+i];
+    qhv[i]    = -qhv[N+i];
+    qw[i]     = qw[N+i];
+  }
+  for (const [a,b] of O_TOP) {
+    for (let i = a; i < b; i++) {
+      qhv[jn+i] = Math.max(qhv[j2+i], 0);
+    }
+  }
+  for (const [a,b] of O_BOT) {
+    for (let i = a; i < b; i++) {
+      qhv[i] = Math.min(qhv[N+i], 0);
+    }
+  }
+}
+
+function step() {
+  wetDry();
+  let sMax = 1e-10;
+  for (let k = 0; k < NN; k++) {
+    const h = qh[k];
+    if (h <= 0) continue;
+    const u = qhu[k] / h, v = qhv[k] / h;
+    const c = Math.sqrt(G * h);
+    const su = Math.abs(u) + c, sv = Math.abs(v) + c;
+    if (su > sMax) sMax = su;
+    if (sv > sMax) sMax = sv;
+  }
+  const dt = Math.max(DT_MIN, Math.min(CFL * DX / sMax, DT_MAX));
+  const r = dt / DX;
+
+  for (let j = 1; j < N-1; j++) {
+    for (let i = 1; i < N-1; i++) {
+      const c  = j*N + i;
+      const cn = (j+1)*N + i;
+      const cs = (j-1)*N + i;
+      const ce = j*N + (i+1);
+      const cw = j*N + (i-1);
+
+      const hi = qh[c], hui = qhu[c], hvi = qhv[c];
+      let hn = qh[cn], hun = qhu[cn], hvn = qhv[cn];
+      if (qw[cn] > 0) { hn = hi; hun = -hui; hvn = -hvi; }
+      let hs = qh[cs], hus = qhu[cs], hvs = qhv[cs];
+      if (qw[cs] > 0) { hs = hi; hus = -hui; hvs = -hvi; }
+      let he = qh[ce], hue = qhu[ce], hve = qhv[ce];
+      if (qw[ce] > 0) { he = hi; hue = -hui; hve = -hvi; }
+      let hw = qh[cw], huw = qhu[cw], hvw = qhv[cw];
+      if (qw[cw] > 0) { hw = hi; huw = -hui; hvw = -hvi; }
+
+      const shi = hi > 0 ? hi : 1, ui = hi > 0 ? hui/shi : 0, vi = hi > 0 ? hvi/shi : 0;
+      const fxi0=hi*ui, fxi1=hi*ui*ui+HALF_G*hi*hi, fxi2=hi*ui*vi;
+      const fyi0=hi*vi, fyi1=hi*ui*vi, fyi2=hi*vi*vi+HALF_G*hi*hi;
+
+      const shn = hn > 0 ? hn : 1, un = hn > 0 ? hun/shn : 0, vn = hn > 0 ? hvn/shn : 0;
+      const fyn0=hn*vn, fyn1=hn*un*vn, fyn2=hn*vn*vn+HALF_G*hn*hn;
+
+      const shs = hs > 0 ? hs : 1, us_ = hs > 0 ? hus/shs : 0, vs = hs > 0 ? hvs/shs : 0;
+      const fys0=hs*vs, fys1=hs*us_*vs, fys2=hs*vs*vs+HALF_G*hs*hs;
+
+      const she = he > 0 ? he : 1, ue = he > 0 ? hue/she : 0, ve = he > 0 ? hve/she : 0;
+      const fxe0=he*ue, fxe1=he*ue*ue+HALF_G*he*he, fxe2=he*ue*ve;
+
+      const shw = hw > 0 ? hw : 1, uw = hw > 0 ? huw/shw : 0, vw = hw > 0 ? hvw/shw : 0;
+      const fxw0=hw*uw, fxw1=hw*uw*uw+HALF_G*hw*hw, fxw2=hw*uw*vw;
+
+      const fw0 = 0.5*(fxw0+fxi0 - sMax*(hi-hw));
+      const fw1 = 0.5*(fxw1+fxi1 - sMax*(hui-huw));
+      const fw2 = 0.5*(fxw2+fxi2 - sMax*(hvi-hvw));
+      const fe0 = 0.5*(fxi0+fxe0 - sMax*(he-hi));
+      const fe1 = 0.5*(fxi1+fxe1 - sMax*(hue-hui));
+      const fe2 = 0.5*(fxi2+fxe2 - sMax*(hve-hvi));
+      const gn0 = 0.5*(fyi0+fyn0 - sMax*(hn-hi));
+      const gn1 = 0.5*(fyi1+fyn1 - sMax*(hun-hui));
+      const gn2 = 0.5*(fyi2+fyn2 - sMax*(hvn-hvi));
+      const gs0 = 0.5*(fys0+fyi0 - sMax*(hi-hs));
+      const gs1 = 0.5*(fys1+fyi1 - sMax*(hui-hus));
+      const gs2 = 0.5*(fys2+fyi2 - sMax*(hvi-hvs));
+
+      qh2[c]  = hi  + r * (fw0 - fe0 + gs0 - gn0);
+      qhu2[c] = hui + r * (fw1 - fe1 + gs1 - gn1);
+      qhv2[c] = hvi + r * (fw2 - fe2 + gs2 - gn2);
+    }
+  }
+
+  const th = qh, thu = qhu, thv = qhv;
+  qh = qh2; qhu = qhu2; qhv = qhv2;
+  qh2 = th; qhu2 = thu; qhv2 = thv;
+
+  wetDry();
+  applyBC();
+  return dt;
+}
+
+function render() {
+  const img = new Uint8Array(IW * IH);
+  const ng = NG;
+  for (let j = 0; j < NX; j++) {
+    for (let i = 0; i < NX; i++) {
+      const h = qh[(j+1)*N + (i+1)];
+      const rj = j + ng, ri = i + ng;
+      if (raster[rj*IW + ri] > 0) continue;
+      const v = Math.min(h * 1275, 254);
+      img[rj*IW + ri] = (v | 0) + 1;
+    }
+  }
+  for (const [a,b] of W_IN)  for (let j=a;j<b;j++) for (let i=0;i<ng;i++) img[(j+ng)*IW+i]=0;
+  for (const [a,b] of W_OUT) for (let j=a;j<b;j++) for (let i=IW-ng;i<IW;i++) img[(j+ng)*IW+i]=0;
+  for (const [a,b] of W_TOP) for (let j=IH-ng;j<IH;j++) for (let i=a+ng;i<b+ng;i++) img[j*IW+i]=0;
+  for (const [a,b] of W_BOT) for (let j=0;j<ng;j++) for (let i=a+ng;i<b+ng;i++) img[j*IW+i]=0;
+  for (const [a,b] of O_IN) {
+    for (let j=a;j<b;j++) {
+      const v = img[(j+ng)*IW + ng];
+      for (let i=0;i<ng;i++) img[(j+ng)*IW+i] = v;
+    }
+  }
+  for (const [a,b] of O_OUT) {
+    for (let j=a;j<b;j++) {
+      const v = img[(j+ng)*IW + (IW-ng-1)];
+      for (let i=IW-ng;i<IW;i++) img[(j+ng)*IW+i] = v;
+    }
+  }
+  for (const [a,b] of O_TOP) {
+    for (let i=a;i<b;i++) {
+      const v = img[(IH-ng-1)*IW + (i+ng)];
+      for (let j=IH-ng;j<IH;j++) img[j*IW+(i+ng)] = v;
+    }
+  }
+  for (const [a,b] of O_BOT) {
+    for (let i=a;i<b;i++) {
+      const v = img[ng*IW + (i+ng)];
+      for (let j=0;j<ng;j++) img[j*IW+(i+ng)] = v;
+    }
+  }
+  for (let k = 0; k < IW*IH; k++) { if (raster[k] > 0) img[k] = 0; }
+  return img;
+}
+
+function startSim(rasterBuf) {
+  raster = new Uint8Array(rasterBuf);
+  for (let j = 0; j < NX; j++)
+    for (let i = 0; i < NX; i++)
+      qw[(j+1)*N + (i+1)] = raster[(j+NG)*IW + (i+NG)] > 0 ? 1 : 0;
+  running = true;
+}
+
+function tick() {
+  let ns = 0;
+  if (running) {
+    const t0 = performance.now();
+    let dtacc = 0;
+    while ((performance.now() - t0) < BUDGET * 1000) {
+      const dt = step();
+      gameTime += dt; dtacc += dt; ns++;
+      if (gameTime >= END_TIME) { running = false; finished = true; gameTime = END_TIME; break; }
+    }
+    // Outflow accumulation — 5 gardens, clockwise from top of canvas:
+    //   g0 = top of canvas (solver-south, O_BOT[0])
+    //   g1 = right-upper  (O_OUT[0])
+    //   g2 = right-lower  (O_OUT[1])
+    //   g3 = bot-right    (solver-north, O_TOP[1])
+    //   g4 = bot-left     (solver-north, O_TOP[0])
+    {
+      const [a,b] = O_BOT[0];
+      let s = 0;
+      for (let i = a; i < b; i++) s += -qhv[1*N + i];
+      outflow[0] += s * dtacc;
+    }
+    for (let oi = 0; oi < O_OUT.length; oi++) {
+      const [a,b] = O_OUT[oi];
+      let s = 0;
+      for (let j = a; j < b; j++) s += qhu[j*N + (N-2)];
+      outflow[1 + oi] += s * dtacc;
+    }
+    for (let oi = 0; oi < O_TOP.length; oi++) {
+      const [a,b] = O_TOP[oi];
+      let s = 0;
+      for (let i = a; i < b; i++) s += qhv[(N-2)*N + i];
+      outflow[oi === 1 ? 3 : 4] += s * dtacc;
+    }
+    for (let j = 0; j < NX; j++)
+      for (let i = 0; i < NX; i++)
+        qw[(j+1)*N + (i+1)] = raster[(j+NG)*IW + (i+NG)] > 0 ? 1 : 0;
+  }
+  const img = render();
+  self.postMessage({
+    type: "frame", image: img.buffer,
+    time: gameTime, of: outflow.slice(), fin: finished, ns: ns,
+    iw: IW, ih: IH
+  }, [img.buffer]);
+}
+
+self.onmessage = function(e) {
+  const m = e.data;
+  if (m.type === "config") {
+    setup(m.nx);
+    tick();
+    self.postMessage({type: "ready", iw: IW, ih: IH, nx: NX});
+    return;
+  }
+  if (NX === undefined) return;          // not yet configured: ignore
+  if      (m.type === "tick")  { tick(); }
+  else if (m.type === "start") { startSim(m.raster); tick(); }
+  else if (m.type === "reset") { init(); tick(); }
+};
+`;
+
+let worker;
+
+function setState(s) {
+  state = s;
+  const btn = document.getElementById("btn-primary");
+  const clr = document.getElementById("btn-clear");
+  if (s === STATE.IDLE) {
+    btn.textContent = "Schleuse öffnen";
+    btn.className = "btn btn-primary";
+    btn.disabled = false;
+    clr.disabled = false;
+  } else if (s === STATE.RUNNING) {
+    btn.textContent = "Neustart";
+    btn.className = "btn btn-restart";
+    btn.disabled = false;
+    clr.disabled = true;
+  } else {
+    btn.textContent = "Neustart";
+    btn.className = "btn btn-restart";
+    btn.disabled = false;
+    clr.disabled = true;
+  }
+}
+
+function resetUI() {
+  document.getElementById("score").textContent = "0";
+  document.getElementById("timer").textContent = "60.0";
+  for (let i = 0; i < 5; i++) {
+    const g = document.getElementById("g"+i);
+    g.querySelector("progress").value = 0;
+    g.querySelector("img").setAttribute("src", FACE_SAD);
+    g.classList.remove("full");
+  }
+}
+
+function createWorker(nx) {
+  worker = new Worker(URL.createObjectURL(new Blob([workerSrc], {type:"text/javascript"})));
+  worker.onmessage = function(e) {
+    const m = e.data;
+    if (m.type === "ready") {
+      W = m.iw; H = m.ih;
+      flowC.width = drawC.width = W;
+      flowC.height = drawC.height = H;
+      setupDrawCtx();
+      imgData = fCtx.createImageData(W, H);
+      document.getElementById("loading").style.display = "none";
+    }
+    else if (m.type === "frame") {
+      if (m.iw !== W || m.ih !== H) return;  // stale frame from prior NX
+      renderFrame(new Uint8Array(m.image));
+      updateUI(m.time, m.of, m.fin);
+      if (active && !m.fin) {
+        requestAnimationFrame(() => worker.postMessage({type:"tick"}));
+      } else if (m.fin) {
+        active = false;
+      }
+    }
+  };
+  worker.postMessage({type: "config", nx: nx});
+}
+
+function applyResolution(nx) {
+  active = false;
+  scoreSaved = false;
+  setState(STATE.IDLE);
+  resetUI();
+  dCtx.clearRect(0, 0, W, H);
+  const ld = document.getElementById("loading");
+  ld.style.display = "flex";
+  ld.textContent = "⏳ Auflösung " + nx + " × " + nx + "…";
+  if (worker) worker.terminate();
+  createWorker(nx);
+}
+
+function startSim() {
+  active = true; scoreSaved = false;
+  setState(STATE.RUNNING);
+  const r = getRaster();
+  dCtx.clearRect(0, 0, W, H);
+  worker.postMessage({type:"start", raster: r.buffer}, [r.buffer]);
+}
+
+function resetSim() {
+  active = false; scoreSaved = false;
+  dCtx.clearRect(0, 0, W, H);
+  resetUI();
+  worker.postMessage({type:"reset"});
+  setState(STATE.IDLE);
+}
+
+document.getElementById("btn-primary").onclick = function() {
+  if (state === STATE.IDLE) startSim();
+  else resetSim();
+};
+document.getElementById("btn-clear").onclick = function() {
+  if (state !== STATE.IDLE) return;
+  dCtx.clearRect(0, 0, W, H);
+};
+
+// Settings panel
+const btnSettings = document.getElementById("btn-settings");
+const settingsPanel = document.getElementById("settings-panel");
+btnSettings.onclick = function(e) {
+  e.stopPropagation();
+  settingsPanel.hidden = !settingsPanel.hidden;
+};
+document.addEventListener("click", function(e) {
+  if (settingsPanel.hidden) return;
+  if (settingsPanel.contains(e.target)) return;
+  if (e.target === btnSettings || btnSettings.contains(e.target)) return;
+  settingsPanel.hidden = true;
+});
+document.getElementById("setting-resolution").onchange = function() {
+  applyResolution(parseInt(this.value, 10));
+};
+
+setState(STATE.IDLE);
+createWorker(300);
+</script>
+</body>
+</html>
