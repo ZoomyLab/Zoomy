@@ -139,68 +139,67 @@ function local_max_abs_eigenvalue(Q, Qaux, p, n, res) {
     res[0] = max_wavespeed(Q[0], Q[1], Q[2], p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30], p[31], p[32], p[33], p[34], p[35], p[36], p[37], p[38], p[39], p[40], p[41], p[42], n[0], n[1]);
 }
 
-function boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n, res) {
-    res[0] = 0.0;
-    res[1] = 0.0;
-    res[2] = 0.0;
-    if (bc_idx == 0) {
-        const t0 = -time;
-        const t1 = p[4] + t0;
-        const t2 = (1.0 / (-p[3] + p[4]));
-        const t3 = p[5] + t0;
-        const t4 = (1.0 / (-p[4] + p[5]));
-        const t5 = p[6] + t0;
-        const t6 = (1.0 / (-p[5] + p[6]));
-        const t7 = p[7] + t0;
-        const t8 = (1.0 / (-p[6] + p[7]));
-        const t9 = p[8] + t0;
-        const t10 = (1.0 / (-p[7] + p[8]));
-        const t11 = p[9] + t0;
-        const t12 = (1.0 / (-p[8] + p[9]));
-        const t13 = p[10] + t0;
-        const t14 = (1.0 / (-p[9] + p[10]));
-        const t15 = p[11] + t0;
-        const t16 = (1.0 / (-p[10] + p[11]));
-        const t17 = p[12] + t0;
-        const t18 = -p[12];
-        const t19 = (1.0 / (-p[11] - t18));
-        const t20 = (1.0 / (p[13] + t18));
-        const t21 = p[13] + t0;
-        const t22 = p[14] + t0;
-        const t23 = (1.0 / (-p[13] + p[14]));
-        const t24 = p[15] + t0;
-        const t25 = (1.0 / (-p[14] + p[15]));
-        const t26 = p[16] + t0;
-        const t27 = (1.0 / (-p[15] + p[16]));
-        const t28 = p[17] + t0;
-        const t29 = (1.0 / (-p[16] + p[17]));
-        const t30 = p[18] + t0;
-        const t31 = (1.0 / (-p[17] + p[18]));
-        const t32 = p[19] + t0;
-        const t33 = (1.0 / (-p[18] + p[19]));
-        const t34 = p[20] + t0;
-        const t35 = (1.0 / (-p[19] + p[20]));
-        const t36 = p[21] + t0;
-        const t37 = (1.0 / (-p[20] + p[21]));
-        const t38 = (1.0 / (-p[21] + p[22]));
-        const t39 = ((p[3] >= time) ? (p[23]) : (((p[4] >= time) ? (p[23]*t1*t2 + p[24]*t2*(-p[3] - t0)) : (((p[5] >= time) ? (p[24]*t3*t4 - p[25]*t1*t4) : (((p[6] >= time) ? (p[25]*t5*t6 - p[26]*t3*t6) : (((p[7] >= time) ? (p[26]*t7*t8 - p[27]*t5*t8) : (((p[8] >= time) ? (p[27]*t10*t9 - p[28]*t10*t7) : (((p[9] >= time) ? (p[28]*t11*t12 - p[29]*t12*t9) : (((p[10] >= time) ? (p[29]*t13*t14 - p[30]*t11*t14) : (((p[11] >= time) ? (p[30]*t15*t16 - p[31]*t13*t16) : (((p[12] >= time) ? (p[31]*t17*t19 - p[32]*t15*t19) : (((p[13] >= time) ? (-p[33]*t17*t20 + p[32]*t20*t21) : (((p[14] >= time) ? (p[33]*t22*t23 - p[34]*t21*t23) : (((p[15] >= time) ? (p[34]*t24*t25 - p[35]*t22*t25) : (((p[16] >= time) ? (p[35]*t26*t27 - p[36]*t24*t27) : (((p[17] >= time) ? (p[36]*t28*t29 - p[37]*t26*t29) : (((p[18] >= time) ? (p[37]*t30*t31 - p[38]*t28*t31) : (((p[19] >= time) ? (p[38]*t32*t33 - p[39]*t30*t33) : (((p[20] >= time) ? (p[39]*t34*t35 - p[40]*t32*t35) : (((p[21] >= time) ? (p[40]*t36*t37 - p[41]*t34*t37) : (((p[22] >= time) ? (p[41]*t38*(p[22] + t0) - p[42]*t36*t38) : ((p[42])))))))))))))))))))))))))))))))))))))))));
-        res[0] = Q[0] + t39*Math.max(0, -Q[0] + p[1]);
-        res[1] = ((Q[1] >= 0) ? (p[2]*t39) : (Q[1]));
-        res[2] = Q[2];
-    } else if (bc_idx == 1) {
-        res[0] = Q[0];
-        res[1] = Q[1];
-        res[2] = Q[2];
-    } else if (bc_idx == 2) {
-        const t0 = Q[2]*n[1];
-        const t1 = Q[1]*n[0] + t0;
-        const t2 = 1.0*n[0];
-        const t3 = 1.0*Q[1]*n[0] + 1.0*t0;
-        const t4 = 1.0*n[1];
-        res[0] = Q[0];
-        res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
-        res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
-    }
+function bc_inflow(time, X, dX, Q, Qaux, p, n, res) {
+    const t0 = -time;
+    const t1 = p[4] + t0;
+    const t2 = (1.0 / (-p[3] + p[4]));
+    const t3 = p[5] + t0;
+    const t4 = (1.0 / (-p[4] + p[5]));
+    const t5 = p[6] + t0;
+    const t6 = (1.0 / (-p[5] + p[6]));
+    const t7 = p[7] + t0;
+    const t8 = (1.0 / (-p[6] + p[7]));
+    const t9 = p[8] + t0;
+    const t10 = (1.0 / (-p[7] + p[8]));
+    const t11 = p[9] + t0;
+    const t12 = (1.0 / (-p[8] + p[9]));
+    const t13 = p[10] + t0;
+    const t14 = (1.0 / (-p[9] + p[10]));
+    const t15 = p[11] + t0;
+    const t16 = (1.0 / (-p[10] + p[11]));
+    const t17 = p[12] + t0;
+    const t18 = -p[12];
+    const t19 = (1.0 / (-p[11] - t18));
+    const t20 = (1.0 / (p[13] + t18));
+    const t21 = p[13] + t0;
+    const t22 = p[14] + t0;
+    const t23 = (1.0 / (-p[13] + p[14]));
+    const t24 = p[15] + t0;
+    const t25 = (1.0 / (-p[14] + p[15]));
+    const t26 = p[16] + t0;
+    const t27 = (1.0 / (-p[15] + p[16]));
+    const t28 = p[17] + t0;
+    const t29 = (1.0 / (-p[16] + p[17]));
+    const t30 = p[18] + t0;
+    const t31 = (1.0 / (-p[17] + p[18]));
+    const t32 = p[19] + t0;
+    const t33 = (1.0 / (-p[18] + p[19]));
+    const t34 = p[20] + t0;
+    const t35 = (1.0 / (-p[19] + p[20]));
+    const t36 = p[21] + t0;
+    const t37 = (1.0 / (-p[20] + p[21]));
+    const t38 = (1.0 / (-p[21] + p[22]));
+    const t39 = ((p[3] >= time) ? (p[23]) : (((p[4] >= time) ? (p[23]*t1*t2 + p[24]*t2*(-p[3] - t0)) : (((p[5] >= time) ? (p[24]*t3*t4 - p[25]*t1*t4) : (((p[6] >= time) ? (p[25]*t5*t6 - p[26]*t3*t6) : (((p[7] >= time) ? (p[26]*t7*t8 - p[27]*t5*t8) : (((p[8] >= time) ? (p[27]*t10*t9 - p[28]*t10*t7) : (((p[9] >= time) ? (p[28]*t11*t12 - p[29]*t12*t9) : (((p[10] >= time) ? (p[29]*t13*t14 - p[30]*t11*t14) : (((p[11] >= time) ? (p[30]*t15*t16 - p[31]*t13*t16) : (((p[12] >= time) ? (p[31]*t17*t19 - p[32]*t15*t19) : (((p[13] >= time) ? (-p[33]*t17*t20 + p[32]*t20*t21) : (((p[14] >= time) ? (p[33]*t22*t23 - p[34]*t21*t23) : (((p[15] >= time) ? (p[34]*t24*t25 - p[35]*t22*t25) : (((p[16] >= time) ? (p[35]*t26*t27 - p[36]*t24*t27) : (((p[17] >= time) ? (p[36]*t28*t29 - p[37]*t26*t29) : (((p[18] >= time) ? (p[37]*t30*t31 - p[38]*t28*t31) : (((p[19] >= time) ? (p[38]*t32*t33 - p[39]*t30*t33) : (((p[20] >= time) ? (p[39]*t34*t35 - p[40]*t32*t35) : (((p[21] >= time) ? (p[40]*t36*t37 - p[41]*t34*t37) : (((p[22] >= time) ? (p[41]*t38*(p[22] + t0) - p[42]*t36*t38) : ((p[42])))))))))))))))))))))))))))))))))))))))));
+    res[0] = Q[0] + t39*Math.max(0, -Q[0] + p[1]);
+    res[1] = ((Q[1] >= 0) ? (p[2]*t39) : (Q[1]));
+    res[2] = Q[2];
 }
 
-export { boundary_conditions, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };
+function bc_outflow(time, X, dX, Q, Qaux, p, n, res) {
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+}
+
+function bc_wall(time, X, dX, Q, Qaux, p, n, res) {
+    const t0 = Q[2]*n[1];
+    const t1 = Q[1]*n[0] + t0;
+    const t2 = 1.0*n[0];
+    const t3 = 1.0*Q[1]*n[0] + 1.0*t0;
+    const t4 = 1.0*n[1];
+    res[0] = Q[0];
+    res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
+    res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
+}
+
+export { bc_inflow, bc_outflow, bc_wall, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };

@@ -61,7 +61,10 @@ export function createSWE2DModel() {
     flux: K.flux,
     numericalFlux: K.numerical_flux,
     eigenvalues: K.eigenvalues,
-    boundaryConditions: K.boundary_conditions,
+    // Per-tag boundary kernels, indexed by tag (BoundaryConditions
+    // sorts tags) — bcIdx 0/1/2 ↦ bc_inflow / bc_outflow / bc_wall.
+    // No symbolic Piecewise: the solver indexes this array directly.
+    boundaryConditions: META.boundaryTags.map((tag) => K["bc_" + tag]),
     /** Wet/dry clamp — the one model-specific hook codegen doesn't emit. */
     positivityFix(q) {
       if (q[0] <= WET) {

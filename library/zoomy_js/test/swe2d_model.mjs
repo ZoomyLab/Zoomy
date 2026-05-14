@@ -25,7 +25,9 @@ export const swe2dModel = {
   flux: K.flux,
   numericalFlux: K.numerical_flux,
   eigenvalues: K.eigenvalues,
-  boundaryConditions: K.boundary_conditions,
+  // Per-tag BC kernels indexed by tag — this fixture has a single
+  // "wall" tag, so index 0 = bc_wall.
+  boundaryConditions: [K.bc_wall],
 
   /** Wet/dry clamp — drop a near-dry cell to a true dry state. */
   positivityFix(q) {

@@ -141,20 +141,15 @@ function local_max_abs_eigenvalue(Q, Qaux, p, n, res) {
     res[0] = max_wavespeed(Q[0], Q[1], Q[2], p[0], n[0], n[1]);
 }
 
-function boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n, res) {
-    res[0] = 0.0;
-    res[1] = 0.0;
-    res[2] = 0.0;
-    if (bc_idx == 0) {
-        const t0 = Q[2]*n[1];
-        const t1 = Q[1]*n[0] + t0;
-        const t2 = 1.0*n[0];
-        const t3 = 1.0*Q[1]*n[0] + 1.0*t0;
-        const t4 = 1.0*n[1];
-        res[0] = Q[0];
-        res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
-        res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
-    }
+function bc_wall(time, X, dX, Q, Qaux, p, n, res) {
+    const t0 = Q[2]*n[1];
+    const t1 = Q[1]*n[0] + t0;
+    const t2 = 1.0*n[0];
+    const t3 = 1.0*Q[1]*n[0] + 1.0*t0;
+    const t4 = 1.0*n[1];
+    res[0] = Q[0];
+    res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
+    res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
 }
 
-export { boundary_conditions, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };
+export { bc_wall, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };

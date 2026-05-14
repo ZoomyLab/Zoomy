@@ -18,11 +18,36 @@ from pathlib import Path
 
 from sympy import Matrix, sqrt
 
-from zoomy_core.misc.misc import ZArray
+from zoomy_core.misc.misc import ZArray, Zstruct
+from zoomy_core.model.basefunction import Function
 from zoomy_core.model.basemodel import Model
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall
 from zoomy_core.fvm.riemann_solvers import HLLC
 from zoomy_core.transformation.to_js import JsModel, JsNumerics
+
+
+def per_tag_bc_kernels(model, printer):
+    """Codegen one kernel per boundary tag (``bc_<tag>``) — see the
+    matching helper in apps/swe-game/generate.py."""
+    m = model
+    blocks = []
+    for bc in m.boundary_conditions.boundary_conditions_list:
+        defn = bc.compute_boundary_condition(
+            m.time, m.position.get_list(), m.distance,
+            m.variables.get_list(), m.aux_variables.get_list(),
+            m._parameter_symbols.get_list(), m.normal.get_list(),
+        )
+        fn = Function(
+            name=f"bc_{bc.tag}",
+            args=Zstruct(
+                time=m.time, position=m.position, distance=m.distance,
+                variables=m.variables, aux_variables=m.aux_variables,
+                parameters=m._parameter_symbols, normal=m.normal,
+            ),
+            definition=defn,
+        )
+        blocks.append(printer._generate_bc_kernel(fn))
+    return "\n\n".join(blocks)
 
 
 class MiniSWE(Model):
@@ -70,7 +95,7 @@ def main():
         "// Real zoomy_core codegen output (MiniSWE + HLLC + Wall BC).",
         JsModel(model).generate(),
         JsNumerics(numerics).generate(),
-        JsModel(model).generate_boundary_conditions(),
+        per_tag_bc_kernels(model, JsModel(model)),
     ]
     code = "\n\n".join(blocks)
 

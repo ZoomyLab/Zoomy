@@ -137,8 +137,8 @@ export class HyperbolicSolver2D {
       if (n.length > 1) n[1] = ny0;
       X[0] = (cIn % Nx) * dx;
       X[1] = ((cIn / Nx) | 0) * dx;
-      model.boundaryConditions(
-        bcIdx, time, X, dx, qIn, auxIn, params, n, this._kbc
+      model.boundaryConditions[bcIdx](
+        time, X, dx, qIn, auxIn, params, n, this._kbc
       );
       for (let v = 0; v < nVars; v++) Qarr[v][cGhost] = this._kbc[v];
     };
@@ -226,16 +226,15 @@ export class HyperbolicSolver2D {
     return true;
   }
 
-  /** Wall-side state for an interior obstacle face — the generated
-   *  `boundaryConditions` kernel evaluated with the solver's wall tag,
-   *  written into `out`. */
+  /** Wall-side state for an interior obstacle face — the dedicated wall
+   *  BC kernel (no dispatch), written into `out`. */
   _wallState(qInner, auxInner, axisNormal, time, out) {
     const n = this._n;
     n.fill(0);
     for (let d = 0; d < n.length; d++) n[d] = axisNormal[d] || 0;
     this._X[0] = 0; this._X[1] = 0;
-    this.model.boundaryConditions(
-      this.bc.wall, time, this._X, this.dx,
+    this.model.boundaryConditions[this.bc.wall](
+      time, this._X, this.dx,
       qInner, auxInner, this.model.params, n, out
     );
   }

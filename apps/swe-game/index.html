@@ -1247,20 +1247,44 @@ vec3 slopeY(int i, int j) {
 void toArr(vec3 v, out float a[3]) { a[0]=v.x; a[1]=v.y; a[2]=v.z; }
 vec3 toVec(float a[3]) { return vec3(a[0], a[1], a[2]); }
 
-// Numerical (Riemann) flux across a face with normal n.
-vec3 numFlux(vec3 L, vec3 R, float n[2]) {
+// Numerical (Riemann) flux — direction-specialised: the *const* normal
+// lets the GLSL compiler inline numerical_flux and constant-fold the
+// ·n projection, so the off-axis terms drop out (≈ a hand-written
+// hllcX / hllcY, from the one generic kernel).
+vec3 numFluxX(vec3 L, vec3 R) {
+  const float n[2] = float[2](1.0, 0.0);
+  float QL[3]; float QR[3]; float res[3];
+  toArr(L, QL); toArr(R, QR);
+  numerical_flux(QL, QR, uP, n, res);
+  return toVec(res);
+}
+vec3 numFluxY(vec3 L, vec3 R) {
+  const float n[2] = float[2](0.0, 1.0);
   float QL[3]; float QR[3]; float res[3];
   toArr(L, QL); toArr(R, QR);
   numerical_flux(QL, QR, uP, n, res);
   return toVec(res);
 }
 
-// Generated boundary state for tag bcIdx given the inner state and normal.
-vec3 bcState(int bcIdx, vec3 qIn, float n[2]) {
+// Wall-side state — the dedicated bc_wall kernel, no dispatch. This is
+// the hot path (every cell adjacent to a drawn obstacle).
+vec3 wallReflect(vec3 qIn, float n[2]) {
   float Qin[3]; float res[3];
   float X[3] = float[3](0.0, 0.0, 0.0);
   toArr(qIn, Qin);
-  boundary_conditions(bcIdx, uTime, X, uDx, Qin, uP, n, res);
+  bc_wall(uTime, X, uDx, Qin, uP, n, res);
+  return toVec(res);
+}
+
+// Edge ghost state — per-tag kernel dispatch. Only the ~4·N edge cells
+// hit this, and each branch is one cheap kernel (no fat Piecewise).
+vec3 edgeGhost(int bcIdx, vec3 qIn, float n[2]) {
+  float Qin[3]; float res[3];
+  float X[3] = float[3](0.0, 0.0, 0.0);
+  toArr(qIn, Qin);
+  if (bcIdx == BC_INFLOW)       bc_inflow(uTime, X, uDx, Qin, uP, n, res);
+  else if (bcIdx == BC_OUTFLOW) bc_outflow(uTime, X, uDx, Qin, uP, n, res);
+  else                          bc_wall(uTime, X, uDx, Qin, uP, n, res);
   return toVec(res);
 }
 
@@ -1275,7 +1299,7 @@ void main() {
   if (bt == 9) { oQ = vec4(qC, 0.0); return; }
 
   // Edge ghost cell: read the interior neighbour, dispatch to the
-  // generated boundary_conditions kernel.
+  // per-tag boundary kernel.
   if (bt != 0) {
     int iIn = i, jIn = j;
     float nx0 = 0.0, ny0 = 0.0;
@@ -1287,7 +1311,7 @@ void main() {
     if (bt == 5) bcIdx = BC_INFLOW;
     else if (bt == 6 || bt == 7 || bt == 8) bcIdx = BC_OUTFLOW;
     float n[2] = float[2](nx0, ny0);
-    oQ = vec4(bcState(bcIdx, readA(iIn, jIn), n), 0.0);
+    oQ = vec4(edgeGhost(bcIdx, readA(iIn, jIn), n), 0.0);
     return;
   }
 
@@ -1305,13 +1329,14 @@ void main() {
   qCS.x = max(qCS.x, 0.0); qSN.x = max(qSN.x, 0.0);
   float nX[2] = float[2](1.0, 0.0);
   float nY[2] = float[2](0.0, 1.0);
-  // Wall-face reflection for user-drawn obstacles, via the generated BC kernel.
-  if (readBT(i+1,j) == 9) qEL = bcState(BC_WALL, qCR, nX);
-  if (readBT(i-1,j) == 9) qWR = bcState(BC_WALL, qCL, nX);
-  if (readBT(i,j+1) == 9) qNS = bcState(BC_WALL, qCN, nY);
-  if (readBT(i,j-1) == 9) qSN = bcState(BC_WALL, qCS, nY);
-  vec3 fE = numFlux(qCR, qEL, nX), fW = numFlux(qWR, qCL, nX);
-  vec3 fN = numFlux(qCN, qNS, nY), fS = numFlux(qSN, qCS, nY);
+  // Wall-face reflection for user-drawn obstacles — the dedicated
+  // bc_wall kernel, called directly (no dispatch).
+  if (readBT(i+1,j) == 9) qEL = wallReflect(qCR, nX);
+  if (readBT(i-1,j) == 9) qWR = wallReflect(qCL, nX);
+  if (readBT(i,j+1) == 9) qNS = wallReflect(qCN, nY);
+  if (readBT(i,j-1) == 9) qSN = wallReflect(qCS, nY);
+  vec3 fE = numFluxX(qCR, qEL), fW = numFluxX(qWR, qCL);
+  vec3 fN = numFluxY(qCN, qNS), fS = numFluxY(qSN, qCS);
   vec3 rhs = (fW - fE + fS - fN) / uDx;
   vec3 res;
   if (uStage == 0) res = qC + uDt * rhs;

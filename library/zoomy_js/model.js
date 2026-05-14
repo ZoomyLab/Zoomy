@@ -28,10 +28,12 @@
  * @property {(Q:Float64Array, Qaux:Float64Array, p:Float64Array,
  *             n:Float64Array, res:Float64Array) => void} eigenvalues
  *   Eigenvalues of the normal-projected system into `res` (length nVars).
- * @property {(bcIdx:number, time:number, X:Float64Array, dX:number,
+ * @property {Array<(time:number, X:Float64Array, dX:number,
  *             Q:Float64Array, Qaux:Float64Array, p:Float64Array,
- *             n:Float64Array, res:Float64Array) => void} boundaryConditions
- *   Boundary-side state for tag `bcIdx` into `res` (length nVars).
+ *             n:Float64Array, res:Float64Array) => void>} boundaryConditions
+ *   Per-tag boundary kernels, indexed by boundary-tag index — each
+ *   writes the boundary-side state for its tag into `res` (length
+ *   nVars). One cheap kernel per tag instead of a Piecewise dispatch.
  * @property {(q:Float64Array) => void} [positivityFix]
  *   Optional in-place positivity / wet-dry clamp on a single cell state.
  *   The one model-specific hook the codegen pipeline does not (yet)

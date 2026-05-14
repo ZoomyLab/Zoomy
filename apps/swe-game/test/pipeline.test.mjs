@@ -65,8 +65,12 @@ test("generated kernels load and expose the Model2D contract", () => {
   const { model } = createSWE2DModel();
   assert.equal(model.nVars, 3);
   assert.equal(model.dimension, 2);
-  for (const fn of ["flux", "numericalFlux", "eigenvalues", "boundaryConditions"])
+  for (const fn of ["flux", "numericalFlux", "eigenvalues"])
     assert.equal(typeof model[fn], "function", `missing ${fn}`);
+  // boundaryConditions is an array of per-tag kernels.
+  assert.ok(Array.isArray(model.boundaryConditions), "boundaryConditions array");
+  for (const k of model.boundaryConditions)
+    assert.equal(typeof k, "function", "per-tag BC kernel");
   // flux of a still pond: F_x = [hu, hu²/h+½gh², huv/h] = [0, ½gh², 0]
   // (out-parameter kernels — the result is written into `F`).
   const F = new Float64Array(model.nVars * model.dimension);

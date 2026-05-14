@@ -139,66 +139,65 @@ void local_max_abs_eigenvalue(float Q[3], float p[43], float n[2], out float res
     res[0] = max(abs(Q[0]), max(abs(Q[1]), max(abs(Q[2]), max(abs(p[0]), max(abs(p[1]), max(abs(p[2]), max(abs(p[3]), max(abs(p[4]), max(abs(p[5]), max(abs(p[6]), max(abs(p[7]), max(abs(p[8]), max(abs(p[9]), max(abs(p[10]), max(abs(p[11]), max(abs(p[12]), max(abs(p[13]), max(abs(p[14]), max(abs(p[15]), max(abs(p[16]), max(abs(p[17]), max(abs(p[18]), max(abs(p[19]), max(abs(p[20]), max(abs(p[21]), max(abs(p[22]), max(abs(p[23]), max(abs(p[24]), max(abs(p[25]), max(abs(p[26]), max(abs(p[27]), max(abs(p[28]), max(abs(p[29]), max(abs(p[30]), max(abs(p[31]), max(abs(p[32]), max(abs(p[33]), max(abs(p[34]), max(abs(p[35]), max(abs(p[36]), max(abs(p[37]), max(abs(p[38]), max(abs(p[39]), max(abs(p[40]), max(abs(p[41]), max(abs(p[42]), max(abs(n[0]), abs(n[1]))))))))))))))))))))))))))))))))))))))))))))))));
 }
 
-void boundary_conditions(int bc_idx, float time, float X[3], float dX, float Q[3], float p[43], float n[2], out float res[3]) {
-    res[0] = 0.0;
-    res[1] = 0.0;
-    res[2] = 0.0;
-    if ((bc_idx == 0)) {
-        float t0 = -time;
-        float t1 = p[4] + t0;
-        float t2 = (1.0 / ((-p[3] + p[4])));
-        float t3 = p[5] + t0;
-        float t4 = (1.0 / ((-p[4] + p[5])));
-        float t5 = p[6] + t0;
-        float t6 = (1.0 / ((-p[5] + p[6])));
-        float t7 = p[7] + t0;
-        float t8 = (1.0 / ((-p[6] + p[7])));
-        float t9 = p[8] + t0;
-        float t10 = (1.0 / ((-p[7] + p[8])));
-        float t11 = p[9] + t0;
-        float t12 = (1.0 / ((-p[8] + p[9])));
-        float t13 = p[10] + t0;
-        float t14 = (1.0 / ((-p[9] + p[10])));
-        float t15 = p[11] + t0;
-        float t16 = (1.0 / ((-p[10] + p[11])));
-        float t17 = p[12] + t0;
-        float t18 = -p[12];
-        float t19 = (1.0 / ((-p[11] - t18)));
-        float t20 = (1.0 / ((p[13] + t18)));
-        float t21 = p[13] + t0;
-        float t22 = p[14] + t0;
-        float t23 = (1.0 / ((-p[13] + p[14])));
-        float t24 = p[15] + t0;
-        float t25 = (1.0 / ((-p[14] + p[15])));
-        float t26 = p[16] + t0;
-        float t27 = (1.0 / ((-p[15] + p[16])));
-        float t28 = p[17] + t0;
-        float t29 = (1.0 / ((-p[16] + p[17])));
-        float t30 = p[18] + t0;
-        float t31 = (1.0 / ((-p[17] + p[18])));
-        float t32 = p[19] + t0;
-        float t33 = (1.0 / ((-p[18] + p[19])));
-        float t34 = p[20] + t0;
-        float t35 = (1.0 / ((-p[19] + p[20])));
-        float t36 = p[21] + t0;
-        float t37 = (1.0 / ((-p[20] + p[21])));
-        float t38 = (1.0 / ((-p[21] + p[22])));
-        float t39 = (((p[3] >= time)) ? (p[23]) : ((((p[4] >= time)) ? (p[23]*t1*t2 + p[24]*t2*(-p[3] - t0)) : ((((p[5] >= time)) ? (p[24]*t3*t4 - p[25]*t1*t4) : ((((p[6] >= time)) ? (p[25]*t5*t6 - p[26]*t3*t6) : ((((p[7] >= time)) ? (p[26]*t7*t8 - p[27]*t5*t8) : ((((p[8] >= time)) ? (p[27]*t10*t9 - p[28]*t10*t7) : ((((p[9] >= time)) ? (p[28]*t11*t12 - p[29]*t12*t9) : ((((p[10] >= time)) ? (p[29]*t13*t14 - p[30]*t11*t14) : ((((p[11] >= time)) ? (p[30]*t15*t16 - p[31]*t13*t16) : ((((p[12] >= time)) ? (p[31]*t17*t19 - p[32]*t15*t19) : ((((p[13] >= time)) ? (-p[33]*t17*t20 + p[32]*t20*t21) : ((((p[14] >= time)) ? (p[33]*t22*t23 - p[34]*t21*t23) : ((((p[15] >= time)) ? (p[34]*t24*t25 - p[35]*t22*t25) : ((((p[16] >= time)) ? (p[35]*t26*t27 - p[36]*t24*t27) : ((((p[17] >= time)) ? (p[36]*t28*t29 - p[37]*t26*t29) : ((((p[18] >= time)) ? (p[37]*t30*t31 - p[38]*t28*t31) : ((((p[19] >= time)) ? (p[38]*t32*t33 - p[39]*t30*t33) : ((((p[20] >= time)) ? (p[39]*t34*t35 - p[40]*t32*t35) : ((((p[21] >= time)) ? (p[40]*t36*t37 - p[41]*t34*t37) : ((((p[22] >= time)) ? (p[41]*t38*(p[22] + t0) - p[42]*t36*t38) : ((p[42])))))))))))))))))))))))))))))))))))))))));
-        res[0] = Q[0] + t39*max(0.0, -Q[0] + p[1]);
-        res[1] = (((Q[1] >= 0.0)) ? (p[2]*t39) : (Q[1]));
-        res[2] = Q[2];
-    } else if ((bc_idx == 1)) {
-        res[0] = Q[0];
-        res[1] = Q[1];
-        res[2] = Q[2];
-    } else if ((bc_idx == 2)) {
-        float t0 = Q[2]*n[1];
-        float t1 = Q[1]*n[0] + t0;
-        float t2 = 1.0*n[0];
-        float t3 = 1.0*Q[1]*n[0] + 1.0*t0;
-        float t4 = 1.0*n[1];
-        res[0] = Q[0];
-        res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
-        res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
-    }
+void bc_inflow(float time, float X[3], float dX, float Q[3], float p[43], float n[2], out float res[3]) {
+    float t0 = -time;
+    float t1 = p[4] + t0;
+    float t2 = (1.0 / ((-p[3] + p[4])));
+    float t3 = p[5] + t0;
+    float t4 = (1.0 / ((-p[4] + p[5])));
+    float t5 = p[6] + t0;
+    float t6 = (1.0 / ((-p[5] + p[6])));
+    float t7 = p[7] + t0;
+    float t8 = (1.0 / ((-p[6] + p[7])));
+    float t9 = p[8] + t0;
+    float t10 = (1.0 / ((-p[7] + p[8])));
+    float t11 = p[9] + t0;
+    float t12 = (1.0 / ((-p[8] + p[9])));
+    float t13 = p[10] + t0;
+    float t14 = (1.0 / ((-p[9] + p[10])));
+    float t15 = p[11] + t0;
+    float t16 = (1.0 / ((-p[10] + p[11])));
+    float t17 = p[12] + t0;
+    float t18 = -p[12];
+    float t19 = (1.0 / ((-p[11] - t18)));
+    float t20 = (1.0 / ((p[13] + t18)));
+    float t21 = p[13] + t0;
+    float t22 = p[14] + t0;
+    float t23 = (1.0 / ((-p[13] + p[14])));
+    float t24 = p[15] + t0;
+    float t25 = (1.0 / ((-p[14] + p[15])));
+    float t26 = p[16] + t0;
+    float t27 = (1.0 / ((-p[15] + p[16])));
+    float t28 = p[17] + t0;
+    float t29 = (1.0 / ((-p[16] + p[17])));
+    float t30 = p[18] + t0;
+    float t31 = (1.0 / ((-p[17] + p[18])));
+    float t32 = p[19] + t0;
+    float t33 = (1.0 / ((-p[18] + p[19])));
+    float t34 = p[20] + t0;
+    float t35 = (1.0 / ((-p[19] + p[20])));
+    float t36 = p[21] + t0;
+    float t37 = (1.0 / ((-p[20] + p[21])));
+    float t38 = (1.0 / ((-p[21] + p[22])));
+    float t39 = (((p[3] >= time)) ? (p[23]) : ((((p[4] >= time)) ? (p[23]*t1*t2 + p[24]*t2*(-p[3] - t0)) : ((((p[5] >= time)) ? (p[24]*t3*t4 - p[25]*t1*t4) : ((((p[6] >= time)) ? (p[25]*t5*t6 - p[26]*t3*t6) : ((((p[7] >= time)) ? (p[26]*t7*t8 - p[27]*t5*t8) : ((((p[8] >= time)) ? (p[27]*t10*t9 - p[28]*t10*t7) : ((((p[9] >= time)) ? (p[28]*t11*t12 - p[29]*t12*t9) : ((((p[10] >= time)) ? (p[29]*t13*t14 - p[30]*t11*t14) : ((((p[11] >= time)) ? (p[30]*t15*t16 - p[31]*t13*t16) : ((((p[12] >= time)) ? (p[31]*t17*t19 - p[32]*t15*t19) : ((((p[13] >= time)) ? (-p[33]*t17*t20 + p[32]*t20*t21) : ((((p[14] >= time)) ? (p[33]*t22*t23 - p[34]*t21*t23) : ((((p[15] >= time)) ? (p[34]*t24*t25 - p[35]*t22*t25) : ((((p[16] >= time)) ? (p[35]*t26*t27 - p[36]*t24*t27) : ((((p[17] >= time)) ? (p[36]*t28*t29 - p[37]*t26*t29) : ((((p[18] >= time)) ? (p[37]*t30*t31 - p[38]*t28*t31) : ((((p[19] >= time)) ? (p[38]*t32*t33 - p[39]*t30*t33) : ((((p[20] >= time)) ? (p[39]*t34*t35 - p[40]*t32*t35) : ((((p[21] >= time)) ? (p[40]*t36*t37 - p[41]*t34*t37) : ((((p[22] >= time)) ? (p[41]*t38*(p[22] + t0) - p[42]*t36*t38) : ((p[42])))))))))))))))))))))))))))))))))))))))));
+    res[0] = Q[0] + t39*max(0.0, -Q[0] + p[1]);
+    res[1] = (((Q[1] >= 0.0)) ? (p[2]*t39) : (Q[1]));
+    res[2] = Q[2];
+}
+
+void bc_outflow(float time, float X[3], float dX, float Q[3], float p[43], float n[2], out float res[3]) {
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+}
+
+void bc_wall(float time, float X[3], float dX, float Q[3], float p[43], float n[2], out float res[3]) {
+    float t0 = Q[2]*n[1];
+    float t1 = Q[1]*n[0] + t0;
+    float t2 = 1.0*n[0];
+    float t3 = 1.0*Q[1]*n[0] + 1.0*t0;
+    float t4 = 1.0*n[1];
+    res[0] = Q[0];
+    res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
+    res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
 }
