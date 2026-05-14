@@ -50,6 +50,19 @@ body{
 .menu-btn:hover{background:var(--panel-edge)}
 .menu-btn:active{transform:translateY(1px)}
 
+/* Language toggle — sits just right of the hamburger */
+.lang-btn{
+  position:fixed;top:10px;left:58px;z-index:150;
+  height:40px;padding:0 12px;
+  border:1px solid var(--panel-edge);border-radius:6px;
+  background:var(--panel);color:var(--ink);
+  font-size:.85em;font-weight:700;letter-spacing:.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .05s;
+}
+.lang-btn:hover{background:var(--panel-edge)}
+.lang-btn:active{transform:translateY(1px)}
+
 /* Backdrop — visible only while drawer is open on mobile */
 .backdrop{
   position:fixed;inset:0;z-index:90;
@@ -379,39 +392,40 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 </head>
 <body>
 
-<button class="menu-btn" id="btn-menu" aria-label="Seitenleiste umschalten">☰</button>
+<button class="menu-btn" id="btn-menu" data-i18n-attr="aria-label:menuAria">☰</button>
+<button class="lang-btn" id="btn-lang" aria-label="Language">EN</button>
 <div class="backdrop" id="backdrop"></div>
 
 <div class="app">
   <aside class="sidepanel">
     <div class="name-card">
       <label>
-        <span class="name-label">Spielername</span>
-        <input type="text" id="player-name" placeholder="Dein Name" maxlength="20" autocomplete="off">
+        <span class="name-label" data-i18n="playerName">Spielername</span>
+        <input type="text" id="player-name" data-i18n-attr="placeholder:playerNamePh" placeholder="Dein Name" maxlength="20" autocomplete="off">
       </label>
     </div>
-    <div class="hs"><h3>Highscore</h3><div id="hs-list"></div></div>
+    <div class="hs"><h3 data-i18n="highscore">Highscore</h3><div id="hs-list"></div></div>
   </aside>
 
   <main class="main-area">
     <div class="hdr">
-      <h1>Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
-      <p>Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
+      <h1 data-i18n="title">Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
+      <p data-i18n="subtitle">Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
     </div>
 
     <div class="top-row">
       <div class="stats-row">
-        <div class="stat-card"><div class="v" id="score">0</div><div class="l">Punkte</div></div>
-        <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l">Zeit</div></div>
+        <div class="stat-card"><div class="v" id="score">0</div><div class="l" data-i18n="score">Punkte</div></div>
+        <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l" data-i18n="time">Zeit</div></div>
       </div>
 
       <div class="qcurve-card">
       <div class="qcurve-header">
-        <span class="qcurve-label">Zufluss q(t)</span>
-        <button class="qcurve-reset" id="btn-qcurve-reset" title="Standardkurve">⟲</button>
+        <span class="qcurve-label" data-i18n="inflowLabel">Zufluss q(t)</span>
+        <button class="qcurve-reset" id="btn-qcurve-reset" data-i18n-attr="title:qcurveResetTitle" title="Standardkurve">⟲</button>
       </div>
       <canvas id="qcurve-canvas" width="280" height="70"></canvas>
-      <div class="qcurve-hint">Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen</div>
+      <div class="qcurve-hint" data-i18n="qcurveHint">Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen</div>
       </div>
     </div>
 
@@ -421,7 +435,7 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
           <div class="canvas-frame">
             <canvas id="flow-canvas"></canvas>
             <canvas id="draw-canvas"></canvas>
-            <div id="loading">⏳ Initialisiere…</div>
+            <div id="loading" data-i18n="loading">⏳ Initialisiere…</div>
           </div>
 
           <div class="inflow" style="top:66.13%"><img src="images/inflow.png" alt="Zufluss"></div>
@@ -446,48 +460,48 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
     </div>
 
     <div class="ctrl-row">
-      <button class="btn btn-primary" id="btn-primary">Schleuse öffnen</button>
-      <button class="btn btn-secondary" id="btn-clear">Skizze löschen</button>
+      <button class="btn btn-primary" id="btn-primary" data-i18n="btnStart">Schleuse öffnen</button>
+      <button class="btn btn-secondary" id="btn-clear" data-i18n="btnClear">Skizze löschen</button>
       <div class="settings-wrap">
-        <button class="btn btn-secondary btn-icon" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">
+        <button class="btn btn-secondary btn-icon" id="btn-settings" data-i18n-attr="title:settingsTitle,aria-label:settingsTitle" title="Einstellungen" aria-label="Einstellungen">
           <svg viewBox="0 0 24 24"><path d="M19.14,12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4,2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24,0-.43.17-.47.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-.22-.08-.47,0-.59.22L2.74,8.87c-.12.21-.08.47.12.61l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s.02.64.07.94l-2.03,1.58c-.18.14-.23.41-.12.61l1.92,3.32c.12.22.37.29.59.22l2.39-.96c.5.38,1.03.7,1.62.94l.36,2.54c.05.24.24.41.48.41h3.84c.24,0,.44-.17.47-.41l.36-2.54c.59-.24,1.13-.56,1.62-.94l2.39.96c.22.08.47,0,.59-.22l1.92-3.32c.12-.22.07-.47-.12-.61L19.14,12.94zM12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6 3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
         </button>
         <div class="settings-panel" id="settings-panel" hidden>
           <label>
-            Auflösung
+            <span data-i18n="resolution">Auflösung</span>
             <select id="setting-resolution">
-              <option value="200" selected>200 × 200 (Standard)</option>
-              <option value="300">300 × 300 (hoch)</option>
-              <option value="400">400 × 400 (sehr hoch)</option>
-              <option value="500">500 × 500 (extrem)</option>
-              <option value="600">600 × 600</option>
-              <option value="800">800 × 800</option>
-              <option value="1000">1000 × 1000 (nur GPU)</option>
-              <option value="1200">1200 × 1200 (nur GPU)</option>
+              <option value="200" selected data-i18n="res200">200 × 200 (Standard)</option>
+              <option value="300" data-i18n="res300">300 × 300 (hoch)</option>
+              <option value="400" data-i18n="res400">400 × 400 (sehr hoch)</option>
+              <option value="500" data-i18n="res500">500 × 500 (extrem)</option>
+              <option value="600" data-i18n="res600">600 × 600</option>
+              <option value="800" data-i18n="res800">800 × 800</option>
+              <option value="1000" data-i18n="res1000">1000 × 1000 (nur GPU)</option>
+              <option value="1200" data-i18n="res1200">1200 × 1200 (nur GPU)</option>
             </select>
           </label>
           <label style="margin-top:10px">
-            Stiftstärke
+            <span data-i18n="penWidth">Stiftstärke</span>
             <input type="range" id="setting-penwidth" min="1" max="10" step="1" style="width:100%;accent-color:var(--accent)">
-            <div class="hint" style="margin-top:2px"><span id="penwidth-val">3</span> Zellen</div>
+            <div class="hint" style="margin-top:2px"><span id="penwidth-val">3</span> <span data-i18n="cells">Zellen</span></div>
           </label>
           <label style="margin-top:10px">
-            Feld
+            <span data-i18n="field">Feld</span>
             <select id="setting-field">
-              <option value="h" selected>Wassertiefe h</option>
-              <option value="vmag">Geschwindigkeit |u|</option>
+              <option value="h" selected data-i18n="fieldH">Wassertiefe h</option>
+              <option value="vmag" data-i18n="fieldV">Geschwindigkeit |u|</option>
             </select>
           </label>
           <label style="margin-top:10px">
-            Farbschema
+            <span data-i18n="colorScheme">Farbschema</span>
             <select id="setting-colorscheme">
-              <option value="water" selected>Wasser (blau-türkis)</option>
-              <option value="cooltowarm">Cool to Warm (ParaView)</option>
-              <option value="viridis">Viridis</option>
+              <option value="water" selected data-i18n="schemeWater">Wasser (blau-türkis)</option>
+              <option value="cooltowarm" data-i18n="schemeCoolWarm">Cool to Warm (ParaView)</option>
+              <option value="viridis" data-i18n="schemeViridis">Viridis</option>
             </select>
           </label>
-          <div class="hint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
-          <button type="button" id="btn-reset-highscore" style="margin-top:12px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">Highscore zurücksetzen</button>
+          <div class="hint" data-i18n="resHint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
+          <button type="button" id="btn-reset-highscore" data-i18n="resetHighscore" style="margin-top:12px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">Highscore zurücksetzen</button>
           <button type="button" id="btn-engine-toggle" style="margin-top:8px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">GPU-Engine testen (experimentell)</button>
         </div>
       </div>
@@ -496,11 +510,94 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 </div>
 
 <footer class="footer">
-  by <a href="https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qqpkz/ingo-steldermann/?allou=1&amp;lidx=1" target="_blank" rel="noopener">Ingo Steldermann</a>
+  <span data-i18n="footerBy">von</span> <a href="https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qqpkz/ingo-steldermann/?allou=1&amp;lidx=1" target="_blank" rel="noopener">Ingo Steldermann</a>
 </footer>
 
 <script>
 "use strict";
+
+// ═══════════════════════════════════════════════════════════════════════
+// i18n — string table + t() lookup + applyLang() DOM updater.
+// Static text carries data-i18n="key" (or data-i18n-attr="attr:key,...").
+// Dynamic strings (button labels, loading text) call t(key) directly.
+// ═══════════════════════════════════════════════════════════════════════
+const I18N = {
+  de: {
+    title: "Gesucht: Ingenieur für antike Bewässerungssysteme",
+    subtitle: "Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!",
+    score: "Punkte", time: "Zeit", highscore: "Highscore",
+    playerName: "Spielername", playerNamePh: "Dein Name",
+    inflowLabel: "Zufluss q(t)", qcurveResetTitle: "Standardkurve",
+    qcurveHint: "Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen",
+    btnStart: "Schleuse öffnen", btnRestart: "Neustart", btnClear: "Skizze löschen",
+    settingsTitle: "Einstellungen", resolution: "Auflösung",
+    penWidth: "Stiftstärke", cells: "Zellen",
+    field: "Feld", fieldH: "Wassertiefe h", fieldV: "Geschwindigkeit |u|",
+    colorScheme: "Farbschema",
+    schemeWater: "Wasser (blau-türkis)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
+    resHint: "Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.",
+    resetHighscore: "Highscore zurücksetzen",
+    engineTest: "GPU-Engine testen (experimentell)", engineBack: "Zurück zur CPU-Engine",
+    loading: "⏳ Initialisiere…", loadingRes: "⏳ Auflösung",
+    anon: "Anonym", footerBy: "von", menuAria: "Seitenleiste umschalten",
+    confirmResetHs: "Highscore-Liste wirklich löschen?",
+    res200: "200 × 200 (Standard)", res300: "300 × 300 (hoch)",
+    res400: "400 × 400 (sehr hoch)", res500: "500 × 500 (extrem)",
+    res600: "600 × 600", res800: "800 × 800",
+    res1000: "1000 × 1000 (nur GPU)", res1200: "1200 × 1200 (nur GPU)",
+  },
+  en: {
+    title: "Wanted: Engineer for ancient irrigation systems",
+    subtitle: "Draw your irrigation system and open the gate. <b>Goal</b>: Fill the gardens — as fast as you can!",
+    score: "Points", time: "Time", highscore: "Highscore",
+    playerName: "Player name", playerNamePh: "Your name",
+    inflowLabel: "Inflow q(t)", qcurveResetTitle: "Default curve",
+    qcurveHint: "Drag points · Double-click empty space: add point · Double-click point: delete",
+    btnStart: "Open the gate", btnRestart: "Restart", btnClear: "Clear sketch",
+    settingsTitle: "Settings", resolution: "Resolution",
+    penWidth: "Pen width", cells: "cells",
+    field: "Field", fieldH: "Water depth h", fieldV: "Velocity |u|",
+    colorScheme: "Colour scheme",
+    schemeWater: "Water (blue-teal)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
+    resHint: "Higher resolution looks nicer but is more compute-heavy — the simulated game then runs slower.",
+    resetHighscore: "Reset highscore",
+    engineTest: "Try GPU engine (experimental)", engineBack: "Back to CPU engine",
+    loading: "⏳ Initializing…", loadingRes: "⏳ Resolution",
+    anon: "Anonymous", footerBy: "by", menuAria: "Toggle sidebar",
+    confirmResetHs: "Really clear the highscore list?",
+    res200: "200 × 200 (default)", res300: "300 × 300 (high)",
+    res400: "400 × 400 (very high)", res500: "500 × 500 (extreme)",
+    res600: "600 × 600", res800: "800 × 800",
+    res1000: "1000 × 1000 (GPU only)", res1200: "1200 × 1200 (GPU only)",
+  },
+};
+let lang = (function() {
+  const s = localStorage.getItem("zoomy-swe-lang");
+  if (s === "de" || s === "en") return s;
+  return (navigator.language || "de").toLowerCase().startsWith("en") ? "en" : "de";
+})();
+function t(key) {
+  return (I18N[lang] && I18N[lang][key]) || I18N.de[key] || key;
+}
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(function(el) {
+    el.innerHTML = t(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-attr]").forEach(function(el) {
+    el.getAttribute("data-i18n-attr").split(",").forEach(function(pair) {
+      const idx = pair.indexOf(":");
+      el.setAttribute(pair.slice(0, idx), t(pair.slice(idx + 1)));
+    });
+  });
+  // Dynamic, JS-built strings
+  if (typeof setState === "function" && typeof state !== "undefined") setState(state);
+  if (typeof renderHighscores === "function") renderHighscores();
+  const lb = document.getElementById("btn-lang");
+  if (lb) lb.textContent = (lang === "de") ? "EN" : "DE";
+  const et = document.getElementById("btn-engine-toggle");
+  if (et && typeof useGPU !== "undefined") et.textContent = t(useGPU ? "engineBack" : "engineTest");
+}
 
 // === Color schemes — three LUTs sharing the same wall colour ===
 // idx 0   = clay/wall (warm brown) — never replaced
@@ -599,7 +696,7 @@ nameInput.addEventListener("input", function() {
 });
 function getPlayerName() {
   const n = (nameInput.value || "").trim();
-  return n || "Anonym";
+  return n || t("anon");
 }
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, function(c) {
@@ -619,7 +716,7 @@ const HS_TOP_N = 10;
 function renderHighscores() {
   // Keep all entries in storage; render only the top N
   document.getElementById("hs-list").innerHTML = highscores.slice(0, HS_TOP_N).map(function(h, i) {
-    const name = escapeHTML(h.name || "Anonym");
+    const name = escapeHTML(h.name || t("anon"));
     return "<div class='row" + (h.isNew ? " new" : "") + "'>" +
       "<span>" + (i+1) + ". " + name + "</span>" +
       "<span>" + h.score + "</span></div>";
@@ -2034,17 +2131,17 @@ function setState(s) {
   const btn = document.getElementById("btn-primary");
   const clr = document.getElementById("btn-clear");
   if (s === STATE.IDLE) {
-    btn.textContent = "Schleuse öffnen";
+    btn.textContent = t("btnStart");
     btn.className = "btn btn-primary";
     btn.disabled = false;
     clr.disabled = false;
   } else if (s === STATE.RUNNING) {
-    btn.textContent = "Neustart";
+    btn.textContent = t("btnRestart");
     btn.className = "btn btn-restart";
     btn.disabled = false;
     clr.disabled = true;
   } else {
-    btn.textContent = "Neustart";
+    btn.textContent = t("btnRestart");
     btn.className = "btn btn-restart";
     btn.disabled = false;
     clr.disabled = true;
@@ -2110,7 +2207,7 @@ function applyResolution(nx) {
   dCtx.clearRect(0, 0, W, H);
   const ld = document.getElementById("loading");
   ld.style.display = "flex";
-  ld.textContent = "⏳ Auflösung " + nx + " × " + nx + "…";
+  ld.textContent = t("loadingRes") + " " + nx + " × " + nx + "…";
   engineApplyResolution(nx);
 }
 
@@ -2201,7 +2298,7 @@ if (penInput) {
 const btnResetHs = document.getElementById("btn-reset-highscore");
 if (btnResetHs) {
   btnResetHs.onclick = function() {
-    if (confirm("Highscore-Liste wirklich löschen?")) {
+    if (confirm(t("confirmResetHs"))) {
       highscores.length = 0;
       saveHighscores();
       renderHighscores();
@@ -2213,7 +2310,7 @@ if (btnResetHs) {
 // so we can swap the flow-canvas context cleanly.
 const btnEngineToggle = document.getElementById("btn-engine-toggle");
 if (btnEngineToggle) {
-  btnEngineToggle.textContent = useGPU ? "Zurück zur CPU-Engine" : "GPU-Engine testen (experimentell)";
+  btnEngineToggle.textContent = t(useGPU ? "engineBack" : "engineTest");
   btnEngineToggle.onclick = function() {
     const url = new URL(location.href);
     if (useGPU) url.searchParams.delete("gpu");
@@ -2313,7 +2410,18 @@ window.addEventListener('resize', function() {
 requestAnimationFrame(fitGameArea);
 window.addEventListener('load', fitGameArea);
 
+// Language toggle button
+const btnLang = document.getElementById("btn-lang");
+if (btnLang) {
+  btnLang.onclick = function() {
+    lang = (lang === "de") ? "en" : "de";
+    localStorage.setItem("zoomy-swe-lang", lang);
+    applyLang();
+  };
+}
+
 setState(STATE.IDLE);
+applyLang();
 engineConfigure(200);
 
 // Test/profile hook (only enabled via ?profile=1). Lets an external driver
