@@ -472,15 +472,23 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
             <div class="hint" style="margin-top:2px"><span id="penwidth-val">3</span> Zellen</div>
           </label>
           <label style="margin-top:10px">
+            Feld
+            <select id="setting-field">
+              <option value="h" selected>Wassertiefe h</option>
+              <option value="vmag">Geschwindigkeit |u|</option>
+            </select>
+          </label>
+          <label style="margin-top:10px">
             Farbschema
             <select id="setting-colorscheme">
-              <option value="water" selected>Wasser (Tiefe)</option>
+              <option value="water" selected>Wasser (blau-türkis)</option>
               <option value="cooltowarm">Cool to Warm (ParaView)</option>
-              <option value="velocity">Geschwindigkeit (Viridis)</option>
+              <option value="viridis">Viridis</option>
             </select>
           </label>
           <div class="hint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
-          <button type="button" id="btn-engine-toggle" style="margin-top:12px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">GPU-Engine testen (experimentell)</button>
+          <button type="button" id="btn-reset-highscore" style="margin-top:12px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">Highscore zurücksetzen</button>
+          <button type="button" id="btn-engine-toggle" style="margin-top:8px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">GPU-Engine testen (experimentell)</button>
         </div>
       </div>
     </div>
@@ -827,9 +835,14 @@ function faceFor(v) { return v >= 80 ? FACE_HAPPY : v >= 33 ? FACE_NEUTRAL : FAC
 
 function updateUI(time, of, fin) {
   document.getElementById("timer").textContent = Math.max(0, 60-time).toFixed(1);
+  // Garden is "full" at FILL_THRESHOLD m³ of accumulated outflow (per unit
+  // z-depth). 0.2 ≈ what the old dimensionless threshold of 3.0 corresponded
+  // to at the original NX=300 tuning (3.0 × DX|NX=300 ≈ 0.2). Now resolution-
+  // independent because the outflow integral is DX-scaled.
+  const FILL_THRESHOLD = 0.2;
   let tot = 0;
   for (let i = 0; i < 5; i++) {
-    const v = Math.min(100, Math.max(0, Math.round(of[i]/3*100)));
+    const v = Math.min(100, Math.max(0, Math.round(of[i]/FILL_THRESHOLD*100)));
     const g = document.getElementById("g"+i);
     g.querySelector("progress").value = v;
     const img = g.querySelector("img");
@@ -1286,6 +1299,15 @@ function step() {
 }
 
 function render() {
+  // Auto-tune the field colour scale to the inflow strength: a stronger
+  // q(t) drives deeper water and faster flow, so saturate the colormap at
+  // a proportionally larger value. qpeak = max of the inflow multiplier.
+  let qpeak = 0.1;
+  for (let qi = 0; qi < Q_CURVE.length; qi++) {
+    if (Q_CURVE[qi][1] > qpeak) qpeak = Q_CURVE[qi][1];
+  }
+  const hScale = 1275 / Math.max(0.5, qpeak);        // idx 254 ≈ h of 0.2·qpeak m
+  const vScale = (254 / 1.5) / Math.max(0.3, qpeak); // idx 254 ≈ |u| of 1.5·qpeak m/s
   const img = new Uint8Array(IW * IH);
   const ng = NG;
   for (let j = 0; j < NX; j++) {
@@ -1301,10 +1323,10 @@ function render() {
           const u_ = qhu[k] / h;
           const w_ = qhv[k] / h;
           const vmag = Math.sqrt(u_*u_ + w_*w_);
-          v = Math.min(254, vmag * VMAG_SCALE);
+          v = Math.min(254, vmag * vScale);
         }
       } else {
-        v = Math.min(h * 1275, 254);
+        v = Math.min(h * hScale, 254);
       }
       img[rj*IW + ri] = (v | 0) + 1;
     }
@@ -1365,23 +1387,28 @@ function tick() {
     //   g2 = right-lower  (O_OUT[1])
     //   g3 = bot-right    (solver-north, O_TOP[1])
     //   g4 = bot-left     (solver-north, O_TOP[0])
+    // Sum of (h·u) over the opening cells has units m²/s × cells, which is
+    // resolution-dependent. Multiply by DX (m/cell) to recover a physical
+    // volumetric flux (m³/s per unit z-depth); then × dt gives a true
+    // accumulated volume (m³ per unit z-depth), so the same player skill
+    // yields the same garden fill at any resolution.
     {
       const [a,b] = O_BOT[0];
       let s = 0;
       for (let i = a; i < b; i++) s += -qhv[1*N + i];
-      outflow[0] += s * dtacc;
+      outflow[0] += s * DX * dtacc;
     }
     for (let oi = 0; oi < O_OUT.length; oi++) {
       const [a,b] = O_OUT[oi];
       let s = 0;
       for (let j = a; j < b; j++) s += qhu[j*N + (N-2)];
-      outflow[1 + oi] += s * dtacc;
+      outflow[1 + oi] += s * DX * dtacc;
     }
     for (let oi = 0; oi < O_TOP.length; oi++) {
       const [a,b] = O_TOP[oi];
       let s = 0;
       for (let i = a; i < b; i++) s += qhv[(N-2)*N + i];
-      outflow[oi === 1 ? 3 : 4] += s * dtacc;
+      outflow[oi === 1 ? 3 : 4] += s * DX * dtacc;
     }
     for (let j = 0; j < NX; j++)
       for (let i = 0; i < NX; i++)
@@ -1859,28 +1886,36 @@ class WebGLSim {
     if (dtAcc <= 0) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.A);
     const buf = new Float32Array(N * 4);
+    const dx = this.dx;   // m/cell — makes the integral resolution-independent
     // O_BOT: row j=1
     gl.readPixels(0, 1, N, 1, gl.RGBA, gl.FLOAT, buf);
-    { const [a, b] = this.O_BOT[0]; let s = 0; for (let i = a; i < b; i++) s += -buf[i*4 + 2]; this.outflow[0] += s * dtAcc; }
+    { const [a, b] = this.O_BOT[0]; let s = 0; for (let i = a; i < b; i++) s += -buf[i*4 + 2]; this.outflow[0] += s * dx * dtAcc; }
     // O_OUT: col i=N-2
     gl.readPixels(N-2, 0, 1, N, gl.RGBA, gl.FLOAT, buf);
     for (let oi = 0; oi < this.O_OUT.length; oi++) {
       const [a, b] = this.O_OUT[oi]; let s = 0;
       for (let j = a; j < b; j++) s += buf[j*4 + 1];
-      this.outflow[1 + oi] += s * dtAcc;
+      this.outflow[1 + oi] += s * dx * dtAcc;
     }
     // O_TOP: row j=N-2
     gl.readPixels(0, N-2, N, 1, gl.RGBA, gl.FLOAT, buf);
     for (let oi = 0; oi < this.O_TOP.length; oi++) {
       const [a, b] = this.O_TOP[oi]; let s = 0;
       for (let i = a; i < b; i++) s += buf[i*4 + 2];
-      this.outflow[oi === 1 ? 3 : 4] += s * dtAcc;
+      this.outflow[oi === 1 ? 3 : 4] += s * dx * dtAcc;
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
   render() {
     const gl = this.gl;
     if (!this.lutTex) return;
+    // Auto-tune colour scale to inflow strength (see worker render()).
+    let qpeak = 0.1;
+    for (let i = 0; i < this.qCurveData.length; i++) {
+      if (this.qCurveData[i][1] > qpeak) qpeak = this.qCurveData[i][1];
+    }
+    const hScale = 1275 / Math.max(0.5, qpeak);
+    const vScale = (254 / 1.5) / Math.max(0.3, qpeak);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.IW, this.IW);
     gl.useProgram(this.renderProg);
@@ -1892,7 +1927,7 @@ class WebGLSim {
     gl.uniform1i(loc("uA"), 0); gl.uniform1i(loc("uBmask"), 1); gl.uniform1i(loc("uLUT"), 2);
     gl.uniform1i(loc("uMode"), this.mode === "vmag" ? 1 : 0);
     gl.uniform1i(loc("uNG"), this.NG); gl.uniform1i(loc("uN"), this.N);
-    gl.uniform1f(loc("uHScale"), 1275); gl.uniform1f(loc("uVScale"), 254/1.5);
+    gl.uniform1f(loc("uHScale"), hScale); gl.uniform1f(loc("uVScale"), vScale);
     gl.uniform1f(loc("uWet"), 1e-6);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
@@ -1912,7 +1947,7 @@ function engineConfigure(nx) {
     if (!gpuSim) gpuSim = new WebGLSim(flowC);
     gpuSim.configure(nx);
     if (typeof activeLUT !== "undefined") gpuSim.setLUT(activeLUT);
-    gpuSim.setMode(currentScheme === "velocity" ? "vmag" : "h");
+    gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     if (typeof qCurve !== "undefined") gpuSim.setQCurve(qCurve);
     // Sync visible canvas resolution; the WebGL canvas draws at IW × IW.
     W = gpuSim.IW; H = gpuSim.IW;
@@ -1962,7 +1997,7 @@ function engineApplyResolution(nx) {
   if (currentEngine === "gpu") {
     gpuSim.configure(nx);
     gpuSim.setLUT(activeLUT);
-    gpuSim.setMode(currentScheme === "velocity" ? "vmag" : "h");
+    gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     gpuSim.setQCurve(qCurve);
     W = gpuSim.IW; H = gpuSim.IW;
     drawC.width  = W;
@@ -2039,9 +2074,8 @@ function createWorker(nx) {
       imgData = fCtx.createImageData(W, H);
       document.getElementById("loading").style.display = "none";
       // Re-apply current colour scheme (worker resets MODE on setup)
-      if (currentScheme && currentScheme !== "water") {
-        const mode = currentScheme === "velocity" ? "vmag" : "h";
-        worker.postMessage({type: "setmode", mode: mode});
+      if (typeof currentField !== "undefined" && currentField !== "h") {
+        worker.postMessage({type: "setmode", mode: currentField});
       }
       // Push the inflow curve so the new worker has it
       if (typeof sendQCurveToWorker === "function") sendQCurveToWorker();
@@ -2123,19 +2157,31 @@ document.getElementById("setting-resolution").onchange = function() {
   applyResolution(parseInt(this.value, 10));
 };
 
-let currentScheme = "water";
-function setColorScheme(scheme) {
-  let lut, mode;
-  if      (scheme === "cooltowarm") { lut = LUT_COOLTOWARM; mode = "h";    }
-  else if (scheme === "velocity")   { lut = LUT_VELOCITY;   mode = "vmag"; }
-  else                              { lut = LUT_WATER;      mode = "h";    }
+// Field (what scalar is shown) and colour scheme are now independent.
+let currentField = "h";        // "h" or "vmag"
+let currentScheme = "water";   // "water" | "cooltowarm" | "viridis"
+function applyVisualization() {
+  let lut;
+  if      (currentScheme === "cooltowarm") lut = LUT_COOLTOWARM;
+  else if (currentScheme === "viridis")    lut = LUT_VELOCITY;
+  else                                     lut = LUT_WATER;
   activeLUT = lut;
-  currentScheme = scheme;
   engineSetLUT(lut);
-  engineSetMode(mode);
+  engineSetMode(currentField);
 }
+// Kept for the worker-ready re-sync path; maps the old combined scheme id.
+function setColorScheme(scheme) {
+  if (scheme === "velocity") { currentField = "vmag"; currentScheme = "viridis"; }
+  else { currentScheme = scheme; }
+  applyVisualization();
+}
+document.getElementById("setting-field").onchange = function() {
+  currentField = this.value;
+  applyVisualization();
+};
 document.getElementById("setting-colorscheme").onchange = function() {
-  setColorScheme(this.value);
+  currentScheme = this.value;
+  applyVisualization();
 };
 // Pen width slider
 const penInput = document.getElementById("setting-penwidth");
@@ -2148,6 +2194,18 @@ if (penInput) {
     penValSpan.textContent = String(penWidthCells);
     localStorage.setItem(PEN_KEY, String(penWidthCells));
     setupDrawCtx();
+  };
+}
+
+// Reset highscore list
+const btnResetHs = document.getElementById("btn-reset-highscore");
+if (btnResetHs) {
+  btnResetHs.onclick = function() {
+    if (confirm("Highscore-Liste wirklich löschen?")) {
+      highscores.length = 0;
+      saveHighscores();
+      renderHighscores();
+    }
   };
 }
 
