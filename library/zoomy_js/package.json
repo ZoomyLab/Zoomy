@@ -1,0 +1,10 @@
+{
+  "name": "zoomy-js",
+  "version": "0.1.0",
+  "description": "Generic 2D structured-grid finite-volume solver glue for Zoomy codegen kernels (CPU + WebGL).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "private": true
+}

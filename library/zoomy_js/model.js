@@ -1,76 +1,58 @@
 /**
- * zoomy_js/model.js — Model interface for 2D structured-grid FVM solvers.
+ * zoomy_js/model.js — Model2D interface for the generic FVM solver.
  *
- * Mirrors zoomy_core.model.basemodel.Model.
+ * A Model2D bundles the kernels generated from a zoomy_core SystemModel
+ * (via zoomy_core.transformation.to_js — JsModel / JsNumerics) with the
+ * metadata the solver needs. The solver is physics-agnostic: it only
+ * ever calls the functions on this object.
  *
- * A model is a plain object implementing some or all of these methods.
- * The solver calls them via the model reference — no base class needed.
+ * Kernel signatures match the JsModel / JsNumerics codegen output:
  *
  * @typedef {Object} Model2D
+ * @property {number} nVars       conserved variables
+ * @property {number} nAux        auxiliary variables (static, e.g. bathymetry)
+ * @property {number} dimension   spatial dimension (2 for the grid solver)
+ * @property {Float64Array} params  model parameter vector `p`
  *
- * Required (for any solver):
- * @property {number} nVars — number of conserved variables
- * @property {function(Float32Array[], number, Float32Array, Float32Array): void}
- *   flux(vars, k, outFx, outFy) — physical flux F_x, F_y at cell k
- * @property {function(Float32Array[], number): number}
- *   maxWaveSpeed(vars, k) — max |eigenvalue| at cell k (for CFL)
- * @property {function(Float32Array[], Float32Array): void}
- *   applyBC(vars, wall) — set ghost cells (boundary conditions)
- * @property {function(Float32Array[]): void}
- *   positivityFix(vars) — positivity / wet-dry fix
- * @property {function(Float32Array, number): boolean}
- *   isWall(wall, k) — true if cell k is an obstacle
- * @property {function(Float32Array[], number, number, number[]): void}
- *   wallReflect(vars, ki, kj, out) — reflected state at obstacle neighbour
- * @property {function(Float32Array[]): void}
- *   initConditions(vars) — set initial conditions
- *
- * Optional (for IMEX source splitting):
- * @property {function(Float32Array[], number, Float32Array): void}
- *   source(vars, k, out) — source term S(Q) at cell k (nVars components)
- * @property {function(Float32Array[], number, Float32Array): void}
- *   sourceJacobian(vars, k, outJ) — dS/dQ Jacobian at cell k (nVars×nVars flat)
- *
- * Optional (for non-conservative / path-conservative fluxes):
- * @property {function(Float32Array[], number, number[], Float32Array): void}
- *   quasilinearMatrix(vars, k, normal, outA) — A(Q)·n at cell k (nVars×nVars flat)
+ * @property {(Q:Float64Array, Qaux:Float64Array, p:Float64Array) => Float64Array} flux
+ *   Physical flux tensor, row-major (nVars, dimension).
+ * @property {(Qm:Float64Array, Qp:Float64Array, Qauxm:Float64Array,
+ *             Qauxp:Float64Array, p:Float64Array, n:Float64Array) => Float64Array} numericalFlux
+ *   Numerical (Riemann) flux across a face with unit normal `n`; length nVars.
+ * @property {(Q:Float64Array, Qaux:Float64Array, p:Float64Array,
+ *             n:Float64Array) => Float64Array} eigenvalues
+ *   Eigenvalues of the normal-projected system; length nVars.
+ * @property {(bcIdx:number, time:number, X:Float64Array, dX:number,
+ *             Q:Float64Array, Qaux:Float64Array, p:Float64Array,
+ *             n:Float64Array) => Float64Array} boundaryConditions
+ *   Boundary-side state for tag `bcIdx`; length nVars.
+ * @property {(q:Float64Array) => void} [positivityFix]
+ *   Optional in-place positivity / wet-dry clamp on a single cell state.
+ *   The one model-specific hook the codegen pipeline does not (yet)
+ *   produce; supply it from the app for free-surface models.
  */
 
 /**
- * Helper: solve a small dense linear system A*x = b in-place.
- * A is nVars×nVars stored row-major flat, b is nVars. Result written to b.
- * Uses partial pivoting Gaussian elimination.
+ * Max |eigenvalue| at a cell over the axis-aligned normals — the per-cell
+ * signal speed used for the CFL time-step estimate.
  *
- * @param {number} n — system size
- * @param {Float64Array} A — n×n matrix (row-major, MODIFIED)
- * @param {Float64Array} b — RHS vector (MODIFIED to contain solution)
+ * @param {Model2D} model
+ * @param {Float64Array} q     cell state, length nVars
+ * @param {Float64Array} qaux  cell aux state, length nAux
+ * @returns {number}
  */
-export function solveSmallLinear(n, A, b) {
-  for (let col = 0; col < n; col++) {
-    // Partial pivot
-    let maxVal = Math.abs(A[col * n + col]), maxRow = col;
-    for (let row = col + 1; row < n; row++) {
-      const v = Math.abs(A[row * n + col]);
-      if (v > maxVal) { maxVal = v; maxRow = row; }
-    }
-    if (maxRow !== col) {
-      for (let j = col; j < n; j++) {
-        const tmp = A[col * n + j]; A[col * n + j] = A[maxRow * n + j]; A[maxRow * n + j] = tmp;
-      }
-      const tmp = b[col]; b[col] = b[maxRow]; b[maxRow] = tmp;
-    }
-    // Eliminate
-    const pivot = A[col * n + col];
-    if (Math.abs(pivot) < 1e-30) continue;
-    for (let row = col + 1; row < n; row++) {
-      const factor = A[row * n + col] / pivot;
-      for (let j = col + 1; j < n; j++) A[row * n + j] -= factor * A[col * n + j];
-      b[row] -= factor * b[col];
+export function cellMaxWaveSpeed(model, q, qaux) {
+  const { params, dimension } = model;
+  const n = new Float64Array(dimension);
+  let s = 0;
+  for (let d = 0; d < dimension; d++) {
+    n.fill(0);
+    n[d] = 1;
+    const ev = model.eigenvalues(q, qaux, params, n);
+    for (let v = 0; v < ev.length; v++) {
+      const a = Math.abs(ev[v]);
+      if (a > s) s = a;
     }
   }
-  // Back-substitute
-  for (let row = n - 1; row >= 0; row--) {
-    for (let j = row + 1; j < n; j++) b[row] -= A[row * n + j] * b[j];
-    b[row] /= A[row * n + row];
-  }
+  return s;
 }
