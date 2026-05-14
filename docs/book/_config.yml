@@ -53,4 +53,4 @@ sphinx:
       use_download_button: false
       navigation_depth: 4
       show_nav_level: 2
-      extra_footer: '<a href="about.html">About</a> · <a href="legal.html">Legal notice and data protection</a>'
+      extra_footer: '<a href="https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qqpkz/ingo-steldermann/?allou=1&amp;lidx=1" target="_blank" rel="noopener">About</a> · <a href="legal.html">Legal notice and data protection</a>'
