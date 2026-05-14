@@ -374,8 +374,8 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
    shown on phones (a screen you're already holding). */
 .qr-banner{
   position:fixed;right:14px;bottom:28px;z-index:60;
-  display:none;flex-direction:column;align-items:center;gap:5px;
-  padding:8px 8px 6px;
+  display:none;flex-direction:row;align-items:center;gap:10px;
+  padding:8px 14px 8px 8px;
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);border-radius:10px;
   box-shadow:0 6px 20px rgba(0,0,0,.5);
@@ -385,10 +385,11 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 body.show-qr .qr-banner{display:flex}
 .qr-banner:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--accent-glow)}
 .qr-title{
-  font-size:.66em;font-weight:700;letter-spacing:.6px;
+  font-size:.78em;font-weight:700;letter-spacing:.5px;
   color:var(--accent);text-transform:uppercase;
+  text-align:left;max-width:96px;line-height:1.25;
 }
-#qr-canvas{display:block;width:104px;height:104px;border-radius:4px;image-rendering:pixelated}
+#qr-canvas{display:block;width:96px;height:96px;border-radius:4px;image-rendering:pixelated;flex-shrink:0}
 @media (max-width:760px){ body.show-qr .qr-banner{display:none} }
 
 /* Mobile: ≤768px — sidebar becomes drawer; gutter and images shrink */
@@ -575,8 +576,8 @@ body.show-qr .qr-banner{display:flex}
 </div>
 
 <a class="qr-banner" id="qr-banner" href="https://zoomylab.github.io/Zoomy/playground/swe-game/index.html" target="_blank" rel="noopener">
-  <div class="qr-title" data-i18n="playAtHome">Zuhause spielen</div>
   <canvas id="qr-canvas" width="164" height="164"></canvas>
+  <div class="qr-title" data-i18n="playAtHome">Zuhause spielen</div>
 </a>
 
 <footer class="footer">
@@ -743,32 +744,21 @@ const NG_CONST = 5;
 const LEVELS = {
   1: { obstacles: [] },
   2: { obstacles: [
-    // Two walls from the top and bottom edges leave a squeezed central gap
-    // (further pinched by a circle); then a second staggered wall stands in
-    // front of the right-edge outlets, so the player must weave around to
-    // reach the farmers on the right.
-    { type: "rect",   x: 0.46, y: 0.00, w: 0.08, h: 0.40 },
-    { type: "rect",   x: 0.46, y: 0.60, w: 0.08, h: 0.40 },
-    { type: "circle", cx: 0.50, cy: 0.50, r: 0.085 },
-    { type: "rect",   x: 0.70, y: 0.26, w: 0.08, h: 0.48 },
-    { type: "circle", cx: 0.87, cy: 0.18, r: 0.06 },
-    { type: "circle", cx: 0.87, cy: 0.82, r: 0.06 },
+    // Two thin vertical bars guarding the right-side outlets (x ≈ 0.80),
+    // a gap between them (~64% of the height blocked, ≤70%); plus a
+    // central triangle with its tip pointing back toward the inlet.
+    { type: "rect", x: 0.795, y: 0.10, w: 0.025, h: 0.32 },
+    { type: "rect", x: 0.795, y: 0.58, w: 0.025, h: 0.32 },
+    { type: "tri",  pts: [[0.38, 0.50], [0.56, 0.34], [0.56, 0.66]] },
   ] },
   3: { obstacles: [
-    // A dense field of small circles and squares to thread the flow through.
-    { type: "circle", cx: 0.27, cy: 0.20, r: 0.045 },
-    { type: "rect",   x: 0.39, y: 0.16, w: 0.08, h: 0.08 },
-    { type: "circle", cx: 0.57, cy: 0.20, r: 0.045 },
-    { type: "rect",   x: 0.70, y: 0.16, w: 0.08, h: 0.08 },
-    { type: "rect",   x: 0.21, y: 0.39, w: 0.08, h: 0.08 },
-    { type: "circle", cx: 0.41, cy: 0.44, r: 0.045 },
-    { type: "rect",   x: 0.54, y: 0.39, w: 0.08, h: 0.08 },
-    { type: "circle", cx: 0.74, cy: 0.44, r: 0.045 },
-    { type: "circle", cx: 0.29, cy: 0.65, r: 0.045 },
-    { type: "rect",   x: 0.43, y: 0.61, w: 0.08, h: 0.08 },
-    { type: "circle", cx: 0.61, cy: 0.65, r: 0.045 },
-    { type: "rect",   x: 0.73, y: 0.61, w: 0.08, h: 0.08 },
-    { type: "circle", cx: 0.50, cy: 0.83, r: 0.045 },
+    // Two layers of the "double bar": one at x ≈ 0.30, one at x ≈ 0.70,
+    // with the gaps staggered so the flow has to weave between them.
+    // Each layer blocks ≤70% of the height.
+    { type: "rect", x: 0.285, y: 0.06, w: 0.025, h: 0.34 },
+    { type: "rect", x: 0.285, y: 0.60, w: 0.025, h: 0.34 },
+    { type: "rect", x: 0.690, y: 0.06, w: 0.025, h: 0.28 },
+    { type: "rect", x: 0.690, y: 0.52, w: 0.025, h: 0.28 },
   ] },
 };
 let currentLevel = (function() {
@@ -835,6 +825,24 @@ function rasterizeLevelObstacles(w, h) {
       const x1 = Math.round(NG_CONST + (o.x+o.w)*nx), y1 = Math.round(NG_CONST + (o.y+o.h)*nx);
       for (let y = Math.max(0,y0); y < Math.min(h,y1); y++)
         for (let x = Math.max(0,x0); x < Math.min(w,x1); x++) out[y*w + x] = 255;
+    } else if (o.type === "tri") {
+      // Three vertices in domain fractions → canvas px; fill via the
+      // same-side (sign-of-cross-product) point-in-triangle test.
+      const A = [NG_CONST + o.pts[0][0]*nx, NG_CONST + o.pts[0][1]*nx];
+      const B = [NG_CONST + o.pts[1][0]*nx, NG_CONST + o.pts[1][1]*nx];
+      const C = [NG_CONST + o.pts[2][0]*nx, NG_CONST + o.pts[2][1]*nx];
+      const minx = Math.max(0, Math.floor(Math.min(A[0],B[0],C[0])));
+      const maxx = Math.min(w, Math.ceil(Math.max(A[0],B[0],C[0])));
+      const miny = Math.max(0, Math.floor(Math.min(A[1],B[1],C[1])));
+      const maxy = Math.min(h, Math.ceil(Math.max(A[1],B[1],C[1])));
+      for (let y = miny; y < maxy; y++) for (let x = minx; x < maxx; x++) {
+        const d1 = (x-B[0])*(A[1]-B[1]) - (A[0]-B[0])*(y-B[1]);
+        const d2 = (x-C[0])*(B[1]-C[1]) - (B[0]-C[0])*(y-C[1]);
+        const d3 = (x-A[0])*(C[1]-A[1]) - (C[0]-A[0])*(y-A[1]);
+        const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+        const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+        if (!(hasNeg && hasPos)) out[y*w + x] = 255;
+      }
     } else {
       const cx = NG_CONST + o.cx*nx, cy = NG_CONST + o.cy*nx, r = o.r*nx, r2 = r*r;
       for (let y = Math.max(0,Math.floor(cy-r)); y < Math.min(h,Math.ceil(cy+r)); y++)
@@ -1758,6 +1766,19 @@ self.onmessage = function(e) {
   if      (m.type === "tick")  { tick(); }
   else if (m.type === "start") { startSim(m.raster); tick(); }
   else if (m.type === "reset") { init(); tick(); }
+  else if (m.type === "setwalls") {
+    // Refresh the wall mask without running — keeps the IDLE render in sync
+    // after the sketch is cleared or the level is switched.
+    raster = new Uint8Array(m.raster);
+    for (let j = 0; j < NX; j++) for (let i = 0; i < NX; i++)
+      qw[(j+1)*N + (i+1)] = raster[(j+NG)*IW + (i+NG)] > 0 ? 1 : 0;
+    const img = render();
+    self.postMessage({
+      type: "frame", image: img.buffer,
+      time: gameTime, of: outflow.slice(), fin: finished, ns: 0,
+      iw: IW, ih: IH, maxH: 0, maxV: 0
+    }, [img.buffer]);
+  }
   else if (m.type === "setmode") {
     MODE = m.mode;
     // Push a fresh frame with the new field — no simulation step.
@@ -2149,7 +2170,10 @@ class WebGLSim {
     }
     return 1.0;
   }
-  start(userRasterUint8) {
+  // Set the wall mask from a W×H raster without starting the run. Used both
+  // by start() and by the main thread to refresh walls after clear/level
+  // switch, so the IDLE render never shows a stale drawing as clay.
+  setWalls(userRasterUint8) {
     const N = this.N, IW = this.IW, NG = this.NG;
     const mask = new Uint8Array(N * N);
     for (let j = 0; j < this.nx; j++) for (let i = 0; i < this.nx; i++) {
@@ -2157,6 +2181,9 @@ class WebGLSim {
     }
     this.lastRasterBuf = userRasterUint8;
     this._uploadBoundaryMask(mask);
+  }
+  start(userRasterUint8) {
+    this.setWalls(userRasterUint8);
     this.running = true; this.finished = false;
   }
   reset() {
@@ -2329,6 +2356,15 @@ function engineStart(rasterUint8) {
     worker.postMessage({type: "start", raster: rasterUint8.buffer}, [rasterUint8.buffer]);
   }
 }
+// Refresh the engine's wall mask (without starting) so the IDLE render
+// reflects the current sketch + level obstacles — not a stale drawing.
+function engineSetWalls(rasterUint8) {
+  if (currentEngine === "gpu") {
+    if (gpuSim) { gpuSim.setWalls(rasterUint8); gpuSim.render(); }
+  } else if (worker) {
+    worker.postMessage({type: "setwalls", raster: rasterUint8.buffer}, [rasterUint8.buffer]);
+  }
+}
 function engineReset() {
   if (currentEngine === "gpu") {
     gpuSim.reset();
@@ -2499,6 +2535,10 @@ function resetSim() {
   active = false; scoreSaved = false;
   resetUI();
   engineReset();
+  // Re-apply walls = current sketch + current level obstacles, so the IDLE
+  // render shows exactly that (and never a stale drawing baked into the
+  // engine's mask from the previous run / level).
+  engineSetWalls(getCombinedRaster());
   setState(STATE.IDLE);
 }
 
