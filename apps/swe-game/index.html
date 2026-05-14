@@ -583,6 +583,8 @@ body.show-qr .qr-banner{display:flex}
   <span data-i18n="footerBy">von</span> <a href="https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qqpkz/ingo-steldermann/?allou=1&amp;lidx=1" target="_blank" rel="noopener">Ingo Steldermann</a>
 </footer>
 
+<!-- Generated SWE GLSL kernels + metadata (window.SWE2D); see generate.py. -->
+<script src="generated/swe2d_glsl.js"></script>
 <script>
 "use strict";
 
@@ -1199,15 +1201,30 @@ in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
 `;
 
-const FS_SIM = `#version 300 es
+// The simulation shader is assembled at runtime: the generated GLSL
+// kernels (window.SWE2D.glsl — numerical_flux, boundary_conditions, …)
+// are spliced in, and the hand-written part below is just the
+// model-agnostic glue (MUSCL reconstruction + Heun stepping + the
+// boundary-tag dispatch).  Same split as the CPU solver.
+function buildSimShader(kernels, nParams) {
+  return `#version 300 es
 precision highp float;
 precision highp sampler2D;
 uniform sampler2D uA;
 uniform sampler2D uB;
 uniform sampler2D uBmask;
-uniform float uDt, uDx, uG, uHalfG, uWet, uHIn, uQNow, uQScale;
+uniform float uDt, uDx, uTime;
 uniform int uStage;
+uniform float uP[${nParams}];      // model parameters (g, h_in, q_in, Q(t) timeline)
 out vec4 oQ;
+
+// ── Generated SWE kernels (codegen'd from the symbolic model) ──
+${kernels}
+
+// Boundary-tag indices — BoundaryConditions sorts tags: inflow<outflow<wall.
+const int BC_INFLOW = 0;
+const int BC_OUTFLOW = 1;
+const int BC_WALL = 2;
 
 vec3 readA(int i, int j) { return texelFetch(uA, ivec2(i, j), 0).xyz; }
 vec3 readB(int i, int j) { return texelFetch(uB, ivec2(i, j), 0).xyz; }
@@ -1215,7 +1232,6 @@ int readBT(int i, int j) { return int(texelFetch(uBmask, ivec2(i, j), 0).r * 255
 
 float mm1(float a, float b) { if (a*b <= 0.0) return 0.0; return abs(a) < abs(b) ? a : b; }
 vec3 mm3(vec3 a, vec3 b) { return vec3(mm1(a.x,b.x), mm1(a.y,b.y), mm1(a.z,b.z)); }
-
 bool wallAt(int i, int j) { return readBT(i,j) != 0; }
 
 vec3 slopeX(int i, int j) {
@@ -1227,54 +1243,25 @@ vec3 slopeY(int i, int j) {
   return mm3(readA(i,j) - readA(i,j-1), readA(i,j+1) - readA(i,j));
 }
 
-vec3 hllcX(vec3 L, vec3 R) {
-  float hL = max(L.x, 0.0), huL = L.y, hvL = L.z;
-  float hR = max(R.x, 0.0), huR = R.y, hvR = R.z;
-  float uL = hL > uWet ? huL/hL : 0.0;
-  float vL = hL > uWet ? hvL/hL : 0.0;
-  float uR = hR > uWet ? huR/hR : 0.0;
-  float vR = hR > uWet ? hvR/hR : 0.0;
-  float cL = sqrt(uG*hL), cR = sqrt(uG*hR);
-  float sL = min(uL-cL, uR-cR), sR = max(uL+cL, uR+cR);
-  vec3 FL = vec3(huL, huL*uL + uHalfG*hL*hL, huL*vL);
-  vec3 FR = vec3(huR, huR*uR + uHalfG*hR*hR, huR*vR);
-  if (sL >= 0.0) return FL;
-  if (sR <= 0.0) return FR;
-  float denom = hR*(uR - sR) - hL*(uL - sL);
-  float sStar = abs(denom) < 1e-12 ? 0.5*(uL+uR) : (sL*hR*(uR-sR) - sR*hL*(uL-sL))/denom;
-  if (sStar >= 0.0) {
-    float f = (sL - uL)/(sL - sStar);
-    float hS = hL*f;
-    return FL + sL*(vec3(hS, hS*sStar, hS*vL) - vec3(hL, huL, hvL));
-  }
-  float f = (sR - uR)/(sR - sStar);
-  float hS = hR*f;
-  return FR + sR*(vec3(hS, hS*sStar, hS*vR) - vec3(hR, huR, hvR));
+// vec3 ⇄ float[3] glue for the generated (array-parameter) kernels.
+void toArr(vec3 v, out float a[3]) { a[0]=v.x; a[1]=v.y; a[2]=v.z; }
+vec3 toVec(float a[3]) { return vec3(a[0], a[1], a[2]); }
+
+// Numerical (Riemann) flux across a face with normal n.
+vec3 numFlux(vec3 L, vec3 R, float n[2]) {
+  float QL[3]; float QR[3]; float res[3];
+  toArr(L, QL); toArr(R, QR);
+  numerical_flux(QL, QR, uP, n, res);
+  return toVec(res);
 }
 
-vec3 hllcY(vec3 L, vec3 R) {
-  float hL = max(L.x, 0.0), huL = L.y, hvL = L.z;
-  float hR = max(R.x, 0.0), huR = R.y, hvR = R.z;
-  float uL = hL > uWet ? huL/hL : 0.0;
-  float vL = hL > uWet ? hvL/hL : 0.0;
-  float uR = hR > uWet ? huR/hR : 0.0;
-  float vR = hR > uWet ? hvR/hR : 0.0;
-  float cL = sqrt(uG*hL), cR = sqrt(uG*hR);
-  float sL = min(vL-cL, vR-cR), sR = max(vL+cL, vR+cR);
-  vec3 GL = vec3(hvL, hvL*uL, hvL*vL + uHalfG*hL*hL);
-  vec3 GR = vec3(hvR, hvR*uR, hvR*vR + uHalfG*hR*hR);
-  if (sL >= 0.0) return GL;
-  if (sR <= 0.0) return GR;
-  float denom = hR*(vR - sR) - hL*(vL - sL);
-  float sStar = abs(denom) < 1e-12 ? 0.5*(vL+vR) : (sL*hR*(vR-sR) - sR*hL*(vL-sL))/denom;
-  if (sStar >= 0.0) {
-    float f = (sL - vL)/(sL - sStar);
-    float hS = hL*f;
-    return GL + sL*(vec3(hS, hS*uL, hS*sStar) - vec3(hL, huL, hvL));
-  }
-  float f = (sR - vR)/(sR - sStar);
-  float hS = hR*f;
-  return GR + sR*(vec3(hS, hS*uR, hS*sStar) - vec3(hR, huR, hvR));
+// Generated boundary state for tag bcIdx given the inner state and normal.
+vec3 bcState(int bcIdx, vec3 qIn, float n[2]) {
+  float Qin[3]; float res[3];
+  float X[3] = float[3](0.0, 0.0, 0.0);
+  toArr(qIn, Qin);
+  boundary_conditions(bcIdx, uTime, X, uDx, Qin, uP, n, res);
+  return toVec(res);
 }
 
 void main() {
@@ -1283,26 +1270,31 @@ void main() {
   int bt = readBT(i, j);
   vec3 qC = readA(i, j);
 
-  // Ghost-cell BCs (same as worker applyBC)
-  if (bt == 1) { vec3 q = readA(i+1, j); oQ = vec4(q.x, -q.y, q.z, 0.0); return; }
-  if (bt == 2) { vec3 q = readA(i-1, j); oQ = vec4(q.x, -q.y, q.z, 0.0); return; }
-  if (bt == 3) { vec3 q = readA(i, j+1); oQ = vec4(q.x, q.y, -q.z, 0.0); return; }
-  if (bt == 4) { vec3 q = readA(i, j-1); oQ = vec4(q.x, q.y, -q.z, 0.0); return; }
-  if (bt == 5) {
-    vec3 q = readA(i+1, j);
-    float ghostH = q.x + max(0.0, uHIn - q.x) * uQScale;
-    oQ = vec4(ghostH, q.y >= 0.0 ? uQNow : q.y, q.z, 0.0);
-    return;
-  }
-  if (bt == 6) { vec3 q = readA(i-1, j); oQ = vec4(q.x, max(q.y, 0.0), q.z, 0.0); return; }
-  if (bt == 7) { vec3 q = readA(i, j-1); oQ = vec4(q.x, q.y, max(q.z, 0.0), 0.0); return; }
-  if (bt == 8) { vec3 q = readA(i, j+1); oQ = vec4(q.x, q.y, min(q.z, 0.0), 0.0); return; }
+  // Interior obstacle cell: not evolved — its faces are handled by the
+  // neighbouring fluid cells' wall-face reflection below.
   if (bt == 9) { oQ = vec4(qC, 0.0); return; }
 
-  // Interior MUSCL + HLLC
-  vec3 sxC = slopeX(i, j), sxE = slopeX(i+1, j), sxW = slopeX(i-1, j);
-  vec3 syC = slopeY(i, j), syN = slopeY(i, j+1), syS = slopeY(i, j-1);
-  vec3 qE = readA(i+1, j), qW = readA(i-1, j), qN = readA(i, j+1), qS = readA(i, j-1);
+  // Edge ghost cell: read the interior neighbour, dispatch to the
+  // generated boundary_conditions kernel.
+  if (bt != 0) {
+    int iIn = i, jIn = j;
+    float nx0 = 0.0, ny0 = 0.0;
+    if (bt == 1 || bt == 5)      { iIn = i+1; nx0 = -1.0; }
+    else if (bt == 2 || bt == 6) { iIn = i-1; nx0 =  1.0; }
+    else if (bt == 3 || bt == 8) { jIn = j+1; ny0 = -1.0; }
+    else                         { jIn = j-1; ny0 =  1.0; }   // bt 4 / 7
+    int bcIdx = BC_WALL;
+    if (bt == 5) bcIdx = BC_INFLOW;
+    else if (bt == 6 || bt == 7 || bt == 8) bcIdx = BC_OUTFLOW;
+    float n[2] = float[2](nx0, ny0);
+    oQ = vec4(bcState(bcIdx, readA(iIn, jIn), n), 0.0);
+    return;
+  }
+
+  // Interior fluid cell: MUSCL reconstruction + generated numerical flux.
+  vec3 sxC = slopeX(i,j), sxE = slopeX(i+1,j), sxW = slopeX(i-1,j);
+  vec3 syC = slopeY(i,j), syN = slopeY(i,j+1), syS = slopeY(i,j-1);
+  vec3 qE = readA(i+1,j), qW = readA(i-1,j), qN = readA(i,j+1), qS = readA(i,j-1);
   vec3 qCR = qC + 0.5*sxC, qEL = qE - 0.5*sxE;
   vec3 qCL = qC - 0.5*sxC, qWR = qW + 0.5*sxW;
   vec3 qCN = qC + 0.5*syC, qNS = qN - 0.5*syN;
@@ -1311,21 +1303,24 @@ void main() {
   qCL.x = max(qCL.x, 0.0); qWR.x = max(qWR.x, 0.0);
   qCN.x = max(qCN.x, 0.0); qNS.x = max(qNS.x, 0.0);
   qCS.x = max(qCS.x, 0.0); qSN.x = max(qSN.x, 0.0);
-  // Wall-face reflections (user-drawn obstacles next to this cell)
-  if (readBT(i+1, j) == 9) qEL = vec3(qCR.x, -qCR.y, qCR.z);
-  if (readBT(i-1, j) == 9) qWR = vec3(qCL.x, -qCL.y, qCL.z);
-  if (readBT(i, j+1) == 9) qNS = vec3(qCN.x, qCN.y, -qCN.z);
-  if (readBT(i, j-1) == 9) qSN = vec3(qCS.x, qCS.y, -qCS.z);
-  vec3 fE = hllcX(qCR, qEL), fW = hllcX(qWR, qCL);
-  vec3 fN = hllcY(qCN, qNS), fS = hllcY(qSN, qCS);
+  float nX[2] = float[2](1.0, 0.0);
+  float nY[2] = float[2](0.0, 1.0);
+  // Wall-face reflection for user-drawn obstacles, via the generated BC kernel.
+  if (readBT(i+1,j) == 9) qEL = bcState(BC_WALL, qCR, nX);
+  if (readBT(i-1,j) == 9) qWR = bcState(BC_WALL, qCL, nX);
+  if (readBT(i,j+1) == 9) qNS = bcState(BC_WALL, qCN, nY);
+  if (readBT(i,j-1) == 9) qSN = bcState(BC_WALL, qCS, nY);
+  vec3 fE = numFlux(qCR, qEL, nX), fW = numFlux(qWR, qCL, nX);
+  vec3 fN = numFlux(qCN, qNS, nY), fS = numFlux(qSN, qCS, nY);
   vec3 rhs = (fW - fE + fS - fN) / uDx;
   vec3 res;
   if (uStage == 0) res = qC + uDt * rhs;
   else { vec3 qN0 = readB(i, j); res = 0.5 * (qN0 + qC + uDt * rhs); }
-  if (res.x <= uWet) res = vec3(0.0);
+  if (res.x <= 1e-6) res = vec3(0.0);
   oQ = vec4(res, 0.0);
 }
 `;
+}
 
 const FS_RENDER = `#version 300 es
 precision highp float;
@@ -1394,7 +1389,11 @@ class WebGLSim {
     if (!gl) throw new Error("WebGL2 not available");
     if (!gl.getExtension("EXT_color_buffer_float")) throw new Error("EXT_color_buffer_float not available");
     this.gl = gl; this.canvas = canvas;
-    this.simProg = this._buildProgram(VS_QUAD, FS_SIM);
+    if (!window.SWE2D) throw new Error("generated SWE kernels (window.SWE2D) not loaded");
+    this.meta = window.SWE2D.meta;
+    this.params = null;   // model parameter vector (set in configure)
+    this.simProg = this._buildProgram(
+      VS_QUAD, buildSimShader(window.SWE2D.glsl, this.meta.parameterNames.length));
     this.renderProg = this._buildProgram(VS_QUAD, FS_RENDER);
     this._setupQuad();
     this.NG = 5;
@@ -1454,7 +1453,11 @@ class WebGLSim {
     this.O_OUT = [r(0.3333, 0.5000), r(0.7500, 0.9167)];
     this.O_TOP = [r(0.2500, 0.4167), r(0.6667, 0.7500)];
     this.O_BOT = [r(0.5000, 0.6667)];
-    this.dt = 0.4 * this.dx / 3.0;   // fixed sMax estimate
+    this.dt = 0.4 * this.dx / 3.0;   // fixed sMax estimate (constant-dt GPU)
+    // Model parameter vector — the generated kernels read uP[]; the
+    // Q(t) editor curve is sampled into the timeline block.
+    this.params = Float32Array.from(this.meta.parameterDefaults);
+    this._applyQCurve();
     this._destroyTextures();
     this._createTextures();
     this._uploadBoundaryMask(null);
@@ -1531,7 +1534,37 @@ class WebGLSim {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, N, gl.RGBA, gl.FLOAT, data);
   }
   setMode(m) { this.mode = m; }
-  setQCurve(c) { if (Array.isArray(c) && c.length >= 2) this.qCurveData = c.map(p => [p.t, p.q]); }
+  setQCurve(c) {
+    if (Array.isArray(c) && c.length >= 1) this.qCurveData = c.map(p => [p.t, p.q]);
+    this._applyQCurve();
+  }
+  // Sample the editor curve at the model's fixed timeline times and
+  // write the values into the Q(t) parameter block — mirrors
+  // swe2d_model.mjs's setQCurve. Editing the curve rewrites a
+  // contiguous slice of `params`; the times stay at their defaults.
+  _applyQCurve() {
+    if (!this.params) return;
+    const tb = this.meta.timelineBlock;
+    const c0 = this.qCurveData[0] || [0, 1];
+    const pts = this.qCurveData.length >= 2 ? this.qCurveData : [c0, [60, c0[1]]];
+    for (let i = 0; i < tb.nPoints; i++) {
+      this.params[tb.valueStart + i] =
+        this._lerpCurve(pts, this.params[tb.timeStart + i]);
+    }
+  }
+  _lerpCurve(pts, t) {
+    if (t <= pts[0][0]) return pts[0][1];
+    const last = pts[pts.length - 1];
+    if (t >= last[0]) return last[1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [t0, v0] = pts[i], [t1, v1] = pts[i + 1];
+      if (t >= t0 && t <= t1) {
+        const u = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+        return v0 * (1 - u) + v1 * u;
+      }
+    }
+    return last[1];
+  }
   setScales(hMax, vMax) {
     if (hMax > 0) this.scaleHMax = hMax;
     if (vMax > 0) this.scaleVMax = vMax;
@@ -1547,17 +1580,6 @@ class WebGLSim {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     } else gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  }
-  qMul(t) {
-    const c = this.qCurveData;
-    if (t <= c[0][0]) return c[0][1];
-    const L = c.length - 1;
-    if (t >= c[L][0]) return c[L][1];
-    for (let i = 0; i < L; i++) if (t >= c[i][0] && t <= c[i+1][0]) {
-      const u = (t - c[i][0]) / (c[i+1][0] - c[i][0]);
-      return c[i][1]*(1-u) + c[i+1][1]*u;
-    }
-    return 1.0;
   }
   // Set the wall mask from a W×H raster without starting the run. Used both
   // by start() and by the main thread to refresh walls after clear/level
@@ -1582,31 +1604,26 @@ class WebGLSim {
   }
   _step() {
     const gl = this.gl; const N = this.N;
-    const Q_IN = 0.01;
-    const qScale = this.qMul(this.gameTime);
-    const qNow = Q_IN * qScale;
-    const G_ = 9.81;
     gl.useProgram(this.simProg);
     gl.bindVertexArray(this.vao);
     gl.viewport(0, 0, N, N);
     const loc = (n) => this._uloc(this.simProg, n);
     gl.uniform1i(loc("uA"), 0); gl.uniform1i(loc("uB"), 1); gl.uniform1i(loc("uBmask"), 2);
     gl.uniform1f(loc("uDt"), this.dt); gl.uniform1f(loc("uDx"), this.dx);
-    gl.uniform1f(loc("uG"), G_); gl.uniform1f(loc("uHalfG"), 0.5*G_);
-    gl.uniform1f(loc("uWet"), 1e-6); gl.uniform1f(loc("uHIn"), 0.1);
-    gl.uniform1f(loc("uQNow"), qNow);
-    gl.uniform1f(loc("uQScale"), qScale);
+    gl.uniform1fv(loc("uP"), this.params);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.tex.bmask);
-    // Stage 1: A -> B
+    // Stage 1: A → B   (boundary kernels see time = t)
+    gl.uniform1f(loc("uTime"), this.gameTime);
+    gl.uniform1i(loc("uStage"), 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.B);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex.A);
-    gl.uniform1i(loc("uStage"), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-    // Stage 2: B (slopes/fluxes) + A (averaging) -> C
+    // Stage 2: B (q*) + A (q^n) → C   (boundary kernels see time = t + dt)
+    gl.uniform1f(loc("uTime"), this.gameTime + this.dt);
+    gl.uniform1i(loc("uStage"), 1);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.C);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex.B);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.tex.A);
-    gl.uniform1i(loc("uStage"), 1);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     // Swap A and C
     const tT = this.tex.A; this.tex.A = this.tex.C; this.tex.C = tT;
