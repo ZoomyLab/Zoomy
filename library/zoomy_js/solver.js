@@ -100,6 +100,11 @@ export class HyperbolicSolver2D {
     this._auxR = new Float64Array(nAux);
     this._X = new Float64Array(3);
     this._n = new Float64Array(this.model.dimension || 2);
+    // Out-parameter scratch for the generated kernels — reused every
+    // call so the hot loop never allocates.
+    this._kres = new Float64Array(nVars);   // numericalFlux result
+    this._kbc = new Float64Array(nVars);    // boundaryConditions result
+    this._kev = new Float64Array(nVars);    // eigenvalues result
   }
 
   /** Flat index from (j, i). */
@@ -132,10 +137,10 @@ export class HyperbolicSolver2D {
       if (n.length > 1) n[1] = ny0;
       X[0] = (cIn % Nx) * dx;
       X[1] = ((cIn / Nx) | 0) * dx;
-      const ghost = model.boundaryConditions(
-        bcIdx, time, X, dx, qIn, auxIn, params, n
+      model.boundaryConditions(
+        bcIdx, time, X, dx, qIn, auxIn, params, n, this._kbc
       );
-      for (let v = 0; v < nVars; v++) Qarr[v][cGhost] = ghost[v];
+      for (let v = 0; v < nVars; v++) Qarr[v][cGhost] = this._kbc[v];
     };
 
     for (let j = 1; j <= ny; j++) {
@@ -200,14 +205,14 @@ export class HyperbolicSolver2D {
       for (let v = 0; v < nVars; v++)
         qR[v] = Qarr[v][cR] - 0.5 * slope[v][cR];
       for (let a = 0; a < nAux; a++) auxL[a] = auxR[a];
-      const reflected = this._wallState(qR, auxR, axisNormal, time);
-      for (let v = 0; v < nVars; v++) qL[v] = reflected[v];
+      this._wallState(qR, auxR, axisNormal, time, this._kbc);
+      for (let v = 0; v < nVars; v++) qL[v] = this._kbc[v];
     } else if (wR) {
       for (let v = 0; v < nVars; v++)
         qL[v] = Qarr[v][cL] + 0.5 * slope[v][cL];
       for (let a = 0; a < nAux; a++) auxR[a] = auxL[a];
-      const reflected = this._wallState(qL, auxL, axisNormal, time);
-      for (let v = 0; v < nVars; v++) qR[v] = reflected[v];
+      this._wallState(qL, auxL, axisNormal, time, this._kbc);
+      for (let v = 0; v < nVars; v++) qR[v] = this._kbc[v];
     } else {
       for (let v = 0; v < nVars; v++) {
         qL[v] = Qarr[v][cL] + 0.5 * slope[v][cL];
@@ -222,15 +227,16 @@ export class HyperbolicSolver2D {
   }
 
   /** Wall-side state for an interior obstacle face — the generated
-   *  `boundaryConditions` kernel evaluated with the solver's wall tag. */
-  _wallState(qInner, auxInner, axisNormal, time) {
+   *  `boundaryConditions` kernel evaluated with the solver's wall tag,
+   *  written into `out`. */
+  _wallState(qInner, auxInner, axisNormal, time, out) {
     const n = this._n;
     n.fill(0);
     for (let d = 0; d < n.length; d++) n[d] = axisNormal[d] || 0;
     this._X[0] = 0; this._X[1] = 0;
-    return this.model.boundaryConditions(
+    this.model.boundaryConditions(
       this.bc.wall, time, this._X, this.dx,
-      qInner, auxInner, this.model.params, n
+      qInner, auxInner, this.model.params, n, out
     );
   }
 
@@ -252,10 +258,10 @@ export class HyperbolicSolver2D {
           for (let v = 0; v < nVars; v++) fx[v][cL] = 0;
           continue;
         }
-        const f = model.numericalFlux(
-          this._qL, this._qR, this._auxL, this._auxR, params, nX
+        model.numericalFlux(
+          this._qL, this._qR, this._auxL, this._auxR, params, nX, this._kres
         );
-        for (let v = 0; v < nVars; v++) fx[v][cL] = f[v];
+        for (let v = 0; v < nVars; v++) fx[v][cL] = this._kres[v];
       }
     }
 
@@ -267,10 +273,10 @@ export class HyperbolicSolver2D {
           for (let v = 0; v < nVars; v++) fy[v][cL] = 0;
           continue;
         }
-        const f = model.numericalFlux(
-          this._qL, this._qR, this._auxL, this._auxR, params, nY
+        model.numericalFlux(
+          this._qL, this._qR, this._auxL, this._auxR, params, nY, this._kres
         );
-        for (let v = 0; v < nVars; v++) fy[v][cL] = f[v];
+        for (let v = 0; v < nVars; v++) fy[v][cL] = this._kres[v];
       }
     }
 
@@ -328,7 +334,7 @@ export class HyperbolicSolver2D {
         if (this.wall[c]) continue;
         for (let v = 0; v < nVars; v++) qc[v] = Q[v][c];
         for (let a = 0; a < this.nAux; a++) auxc[a] = this.Qaux[a][c];
-        const s = cellMaxWaveSpeed(model, qc, auxc);
+        const s = cellMaxWaveSpeed(model, qc, auxc, this._n, this._kev);
         if (s > sMax) sMax = s;
       }
     }

@@ -6,42 +6,35 @@
 // Aux variables (0): []
 // Parameters (43): {'g': 9.81, 'h_in': 0.1, 'q_in': 0.01, 'q_t_0': 0.0, 'q_t_1': 3.1578947368421053, 'q_t_2': 6.315789473684211, 'q_t_3': 9.473684210526315, 'q_t_4': 12.631578947368421, 'q_t_5': 15.789473684210526, 'q_t_6': 18.94736842105263, 'q_t_7': 22.105263157894736, 'q_t_8': 25.263157894736842, 'q_t_9': 28.42105263157895, 'q_t_10': 31.57894736842105, 'q_t_11': 34.73684210526316, 'q_t_12': 37.89473684210526, 'q_t_13': 41.05263157894737, 'q_t_14': 44.21052631578947, 'q_t_15': 47.36842105263158, 'q_t_16': 50.526315789473685, 'q_t_17': 53.68421052631579, 'q_t_18': 56.8421052631579, 'q_t_19': 60.0, 'q_v_0': 1.0, 'q_v_1': 1.0, 'q_v_2': 1.0, 'q_v_3': 1.0, 'q_v_4': 1.0, 'q_v_5': 1.0, 'q_v_6': 1.0, 'q_v_7': 1.0, 'q_v_8': 1.0, 'q_v_9': 1.0, 'q_v_10': 1.0, 'q_v_11': 1.0, 'q_v_12': 1.0, 'q_v_13': 1.0, 'q_v_14': 1.0, 'q_v_15': 1.0, 'q_v_16': 1.0, 'q_v_17': 1.0, 'q_v_18': 1.0, 'q_v_19': 1.0}
 
-function flux(Q, Qaux, p) {
+function flux(Q, Qaux, p, res) {
     const t0 = 0.5*p[0]*((Q[0]) * (Q[0]));
     const t1 = (1.0 / (Q[0]));
     const t2 = Q[1]*Q[2]*t1;
-    const res = new Float64Array(6);
     res[0] = Q[1];
     res[1] = Q[2];
     res[2] = ((Q[1]) * (Q[1]))*t1 + t0;
     res[3] = t2;
     res[4] = t2;
     res[5] = ((Q[2]) * (Q[2]))*t1 + t0;
-    return res;
 }
 
-function source(Q, Qaux, p) {
-    const res = new Float64Array(3);
+function source(Q, Qaux, p, res) {
     res[0] = 0;
     res[1] = 0;
     res[2] = 0;
-    return res;
 }
 
-function eigenvalues(Q, Qaux, p, n) {
+function eigenvalues(Q, Qaux, p, n, res) {
     const t0 = Math.sqrt(p[0])*Math.sqrt(Q[0]);
     const t1 = (1.0 / (Q[0]));
     const t2 = Q[1]*n[0] + Q[2]*n[1];
     const t3 = t1*t2;
-    const res = new Float64Array(3);
     res[0] = -t0 + t1*t2;
     res[1] = t0 + t3;
     res[2] = t3;
-    return res;
 }
 
-function source_jacobian_wrt_variables(Q, Qaux, p) {
-    const res = new Float64Array(9);
+function source_jacobian_wrt_variables(Q, Qaux, p, res) {
     res[0] = 0;
     res[1] = 0;
     res[2] = 0;
@@ -51,17 +44,15 @@ function source_jacobian_wrt_variables(Q, Qaux, p) {
     res[6] = 0;
     res[7] = 0;
     res[8] = 0;
-    return res;
 }
 
-function quasilinear_matrix(Q, Qaux, p) {
+function quasilinear_matrix(Q, Qaux, p, res) {
     const t0 = 1.0*p[0]*Q[0];
     const t1 = (1.0 / Math.pow(Q[0], 2));
     const t2 = -Q[1]*Q[2]*t1;
     const t3 = (1.0 / (Q[0]));
     const t4 = Q[1]*t3;
     const t5 = Q[2]*t3;
-    const res = new Float64Array(18);
     res[0] = 0;
     res[1] = 0;
     res[2] = 1;
@@ -80,14 +71,13 @@ function quasilinear_matrix(Q, Qaux, p) {
     res[15] = 0;
     res[16] = t4;
     res[17] = 2*t5;
-    return res;
 }
 
 // Generated JS numerics: HLLC
 
 // nVars = 3
 
-function numerical_flux(Q_minus, Q_plus, Qaux_minus, Qaux_plus, p, n) {
+function numerical_flux(Q_minus, Q_plus, Qaux_minus, Qaux_plus, p, n, res) {
     const t0 = (1.0 / (Q_minus[0]));
     const t1 = Q_minus[1]*n[0];
     const t2 = Q_minus[2]*n[1];
@@ -131,31 +121,28 @@ function numerical_flux(Q_minus, Q_plus, Qaux_minus, Qaux_plus, p, n) {
     const t40 = Q_minus[2]*t0*t1 + n[1]*(((Q_minus[2]) * (Q_minus[2]))*t0 + t33);
     const t41 = n[1]*t26;
     const t42 = Q_plus[2]*t5*t6 + n[1]*(((Q_plus[2]) * (Q_plus[2]))*t5 + t38);
-    const res = new Float64Array(3);
     res[0] = ((t18) ? (t3) : (((t27) ? (t17*(-Q_minus[0] + t29) + t3) : (((t30) ? (t20*(-Q_plus[0] + t31) + t8) : (t8))))));
     res[1] = ((t18) ? (t34) : (((t27) ? (t17*(-Q_minus[1] + t29*(Q_minus[1]*t23 - n[0]*t35 + t36)) + t34) : (((t30) ? (t20*(-Q_plus[1] + t31*(Q_plus[1]*t19 - n[0]*t37 + t36)) + t39) : (t39))))));
     res[2] = ((t18) ? (t40) : (((t27) ? (t17*(-Q_minus[2] + t29*(Q_minus[2]*t23 - n[1]*t35 + t41)) + t40) : (((t30) ? (t20*(-Q_plus[2] + t31*(Q_plus[2]*t19 - n[1]*t37 + t41)) + t42) : (t42))))));
-    return res;
 }
 
-function numerical_fluctuations(Q_minus, Q_plus, Qaux_minus, Qaux_plus, p, n) {
-    const res = new Float64Array(6);
+function numerical_fluctuations(Q_minus, Q_plus, Qaux_minus, Qaux_plus, p, n, res) {
     res[0] = 0;
     res[1] = 0;
     res[2] = 0;
     res[3] = 0;
     res[4] = 0;
     res[5] = 0;
-    return res;
 }
 
-function local_max_abs_eigenvalue(Q, Qaux, p, n) {
-    const res = new Float64Array(1);
+function local_max_abs_eigenvalue(Q, Qaux, p, n, res) {
     res[0] = max_wavespeed(Q[0], Q[1], Q[2], p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24], p[25], p[26], p[27], p[28], p[29], p[30], p[31], p[32], p[33], p[34], p[35], p[36], p[37], p[38], p[39], p[40], p[41], p[42], n[0], n[1]);
-    return res;
 }
 
-function boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n) {
+function boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n, res) {
+    res[0] = 0.0;
+    res[1] = 0.0;
+    res[2] = 0.0;
     if (bc_idx == 0) {
         const t0 = -time;
         const t1 = p[4] + t0;
@@ -197,40 +184,23 @@ function boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n) {
         const t37 = (1.0 / (-p[20] + p[21]));
         const t38 = (1.0 / (-p[21] + p[22]));
         const t39 = ((p[3] >= time) ? (p[23]) : (((p[4] >= time) ? (p[23]*t1*t2 + p[24]*t2*(-p[3] - t0)) : (((p[5] >= time) ? (p[24]*t3*t4 - p[25]*t1*t4) : (((p[6] >= time) ? (p[25]*t5*t6 - p[26]*t3*t6) : (((p[7] >= time) ? (p[26]*t7*t8 - p[27]*t5*t8) : (((p[8] >= time) ? (p[27]*t10*t9 - p[28]*t10*t7) : (((p[9] >= time) ? (p[28]*t11*t12 - p[29]*t12*t9) : (((p[10] >= time) ? (p[29]*t13*t14 - p[30]*t11*t14) : (((p[11] >= time) ? (p[30]*t15*t16 - p[31]*t13*t16) : (((p[12] >= time) ? (p[31]*t17*t19 - p[32]*t15*t19) : (((p[13] >= time) ? (-p[33]*t17*t20 + p[32]*t20*t21) : (((p[14] >= time) ? (p[33]*t22*t23 - p[34]*t21*t23) : (((p[15] >= time) ? (p[34]*t24*t25 - p[35]*t22*t25) : (((p[16] >= time) ? (p[35]*t26*t27 - p[36]*t24*t27) : (((p[17] >= time) ? (p[36]*t28*t29 - p[37]*t26*t29) : (((p[18] >= time) ? (p[37]*t30*t31 - p[38]*t28*t31) : (((p[19] >= time) ? (p[38]*t32*t33 - p[39]*t30*t33) : (((p[20] >= time) ? (p[39]*t34*t35 - p[40]*t32*t35) : (((p[21] >= time) ? (p[40]*t36*t37 - p[41]*t34*t37) : (((p[22] >= time) ? (p[41]*t38*(p[22] + t0) - p[42]*t36*t38) : ((p[42])))))))))))))))))))))))))))))))))))))))));
-        const res = new Float64Array(3);
         res[0] = Q[0] + t39*Math.max(0, -Q[0] + p[1]);
         res[1] = ((Q[1] >= 0) ? (p[2]*t39) : (Q[1]));
         res[2] = Q[2];
-        return res;
     } else if (bc_idx == 1) {
-        const res = new Float64Array(3);
         res[0] = Q[0];
         res[1] = Q[1];
         res[2] = Q[2];
-        return res;
     } else if (bc_idx == 2) {
         const t0 = Q[2]*n[1];
         const t1 = Q[1]*n[0] + t0;
         const t2 = 1.0*n[0];
         const t3 = 1.0*Q[1]*n[0] + 1.0*t0;
         const t4 = 1.0*n[1];
-        const res = new Float64Array(3);
         res[0] = Q[0];
         res[1] = 1.0*Q[1] - t1*t2 - t2*t3;
         res[2] = 1.0*Q[2] - t1*t4 - t3*t4;
-        return res;
     }
-    const default_res = new Float64Array(3);
-    return default_res;
 }
 
-function aux_boundary_conditions(bc_idx, time, X, dX, Q, Qaux, p, n) {
-    if (bc_idx == 0 || bc_idx == 1 || bc_idx == 2) {
-        const res = new Float64Array(0);
-        return res;
-    }
-    const default_res = new Float64Array(0);
-    return default_res;
-}
-
-export { aux_boundary_conditions, boundary_conditions, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };
+export { boundary_conditions, eigenvalues, flux, local_max_abs_eigenvalue, numerical_fluctuations, numerical_flux, quasilinear_matrix, source, source_jacobian_wrt_variables };

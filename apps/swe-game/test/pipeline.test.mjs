@@ -68,7 +68,9 @@ test("generated kernels load and expose the Model2D contract", () => {
   for (const fn of ["flux", "numericalFlux", "eigenvalues", "boundaryConditions"])
     assert.equal(typeof model[fn], "function", `missing ${fn}`);
   // flux of a still pond: F_x = [hu, hu²/h+½gh², huv/h] = [0, ½gh², 0]
-  const F = model.flux(Float64Array.of(2.0, 0, 0), new Float64Array(0), model.params);
+  // (out-parameter kernels — the result is written into `F`).
+  const F = new Float64Array(model.nVars * model.dimension);
+  model.flux(Float64Array.of(2.0, 0, 0), new Float64Array(0), model.params, F);
   assert.ok(Math.abs(F[0]) < 1e-12 && Math.abs(F[1]) < 1e-12);
   assert.ok(F[2] > 0, "expected nonzero hydrostatic x-momentum flux");
 });
