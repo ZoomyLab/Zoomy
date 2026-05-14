@@ -1778,10 +1778,10 @@ class WebGLSim {
     const start = performance.now();
     const END_TIME = 60.0;
     let nSteps = 0;
-    // Each step on the GPU is sub-millisecond; without a tight cap the
-    // game finishes in 1–2 wall seconds. Aim for ~2× sim/wall (matches
-    // the CPU pace) → ~3 sub-steps per 60 fps frame.
-    const HARD_CAP = 3;
+    // Generous step cap; the maxMs budget below is what really caps us on
+    // weaker GPUs. On a modern GPU one step is ~1–2 ms and we comfortably
+    // fit ~10 sub-steps per 60 fps frame → ~6× sim/wall.
+    const HARD_CAP = 12;
     while (nSteps < HARD_CAP) {
       this._step(); nSteps++;
       if (this.gameTime >= END_TIME) {
@@ -1917,11 +1917,19 @@ function engineApplyResolution(nx) {
 
 function gpuTickLoop() {
   if (currentEngine !== "gpu" || !gpuSim) return;
+  const t0 = performance.now();
   if (gpuSim.running) gpuSim.advance(50);
+  const t1 = performance.now();
   gpuSim.render();
+  const t2 = performance.now();
   updateUI(gpuSim.gameTime, gpuSim.outflow, gpuSim.finished);
   qIndicatorTime = gpuSim.gameTime;
   drawQCurve();
+  if (window.__prof) {
+    window.__prof.frames++;
+    window.__prof.advanceMs += (t1 - t0);
+    window.__prof.renderMs += (t2 - t1);
+  }
   if (gpuSim.running) requestAnimationFrame(gpuTickLoop);
 }
 
@@ -1984,6 +1992,11 @@ function createWorker(nx) {
       // Update the indicator line on the q-curve canvas
       qIndicatorTime = m.time;
       drawQCurve();
+      if (window.__prof) {
+        window.__prof.frames++;
+        window.__prof.lastTime = m.time;
+        window.__prof.nsLastFrame = m.ns || 0;
+      }
       if (active && !m.fin) {
         requestAnimationFrame(() => worker.postMessage({type:"tick"}));
       } else if (m.fin) {
@@ -2133,6 +2146,33 @@ window.addEventListener('load', fitGameArea);
 
 setState(STATE.IDLE);
 engineConfigure(200);
+
+// Test/profile hook (only enabled via ?profile=1). Lets an external driver
+// (Playwright/Puppeteer) start runs and read state without touching internals.
+if (new URLSearchParams(location.search).get("profile") === "1") {
+  window.__prof = { frames: 0, advanceMs: 0, renderMs: 0, lastTime: 0, nsLastFrame: 0 };
+  window.__game = {
+    get engine() { return currentEngine; },
+    get gpuSim() { return gpuSim; },
+    get worker() { return worker; },
+    get running() { return active; },
+    get gameTime() {
+      if (currentEngine === "gpu" && gpuSim) return gpuSim.gameTime;
+      return window.__prof.lastTime;
+    },
+    get outflow() {
+      if (currentEngine === "gpu" && gpuSim) return gpuSim.outflow.slice();
+      // CPU outflow is updated via updateUI from worker frames; reading the
+      // DOM score is the simplest cross-engine proxy.
+      return null;
+    },
+    get prof() { return window.__prof; },
+    start() { startSim(); },
+    reset() { resetSim(); },
+    setResolution(nx) { applyResolution(nx); },
+    setColorScheme(s) { setColorScheme(s); },
+  };
+}
 </script>
 </body>
 </html>
