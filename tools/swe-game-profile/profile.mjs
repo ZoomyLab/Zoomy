@@ -31,7 +31,8 @@ const NX = Number(args.nx || 200);
 const CHROME_PATH = "/usr/bin/google-chrome";
 
 async function run(engine) {
-  const search = engine === "gpu" ? "?gpu=1&profile=1" : "?profile=1";
+  // GPU is the default engine now; ?gpu=0 forces the CPU worker.
+  const search = engine === "gpu" ? "?gpu=1&profile=1" : "?gpu=0&profile=1";
   const url = URL_BASE.replace(/\/$/, "") + "/" + search;
 
   const browser = await chromium.launch({

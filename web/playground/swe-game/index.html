@@ -135,27 +135,25 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 .hdr h1{font-size:1.2em;letter-spacing:.3px;margin-bottom:2px}
 .hdr p{font-size:.85em;opacity:.75}
 
-/* Part 2: stats + Q(t) editor on a single row — stats stacked on the left,
-   q-curve takes the remaining width. */
+/* Part 2: stats + Q(t) editor on a single compact row — Punkte/Zeit side
+   by side on the left, Q(t) editor filling the rest. */
 .top-row{
-  display:flex;gap:10px;align-items:stretch;justify-content:center;
+  display:flex;gap:10px;align-items:flex-start;justify-content:center;
   flex-wrap:wrap;
 }
-.stats-row{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
-/* Level selector — fills the leftover height so its bottom lines up
-   with the Q(t) editor card next to it. */
+.stats-row{display:flex;flex-direction:row;gap:8px;flex:0 0 auto}
+/* Level selector lives in the sidebar (under the player name). */
 .level-select{
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);
   border-radius:8px;
-  padding:6px 8px;
-  flex:1;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:6px;
+  padding:10px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
 }
 .level-label{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
-.level-btns{display:flex;gap:4px}
+.level-btns{display:flex;gap:6px}
 .level-btns button{
-  width:30px;height:30px;
+  width:34px;height:34px;
   border:1px solid var(--panel-edge);border-radius:6px;
   background:#0a1d2a;color:var(--ink-dim);
   font-family:inherit;font-size:1em;font-weight:700;cursor:pointer;
@@ -184,12 +182,11 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   border:1px solid var(--panel-edge);
   border-radius:8px;
   padding:6px 8px 4px;
-  flex:1 1 200px;
-  min-width:180px;
+  flex:1 1 220px;
+  min-width:200px;
   max-width:400px;
   display:flex;flex-direction:column;
 }
-.qcurve-card #qcurve-canvas{flex:1;min-height:60px}
 .qcurve-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
 .qcurve-label{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
 .qcurve-reset{
@@ -199,7 +196,7 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 }
 .qcurve-reset:hover{background:var(--panel-edge);color:var(--ink)}
 #qcurve-canvas{
-  display:block;width:100%;height:auto;
+  display:block;width:100%;height:64px;
   background:#0a1d2a;border-radius:4px;
   cursor:crosshair;touch-action:none;
 }
@@ -213,17 +210,11 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 }
 .game-area{
   position:relative;
-  /* Square; default size set by fitGameArea() JS. User can drag the
-     bottom-right corner to resize (CSS resize); the chosen size is
-     persisted to localStorage. We override the value-via-JS only on
-     window resize beyond the user's chosen extent. */
+  /* Square; side set by fitGameArea() — auto-maximised to the available
+     space inside .game-area-wrap. */
   width:min(60vmin,660px);
   height:min(60vmin,660px);
   flex-shrink:0;
-  resize:both;
-  overflow:hidden;
-  min-width:200px;min-height:200px;
-  max-width:1200px;max-height:1200px;
 }
 .board{
   position:absolute;
@@ -429,6 +420,14 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
         <input type="text" id="player-name" data-i18n-attr="placeholder:playerNamePh" placeholder="Dein Name" maxlength="20" autocomplete="off">
       </label>
     </div>
+    <div class="level-select" id="level-select">
+      <div class="level-label" data-i18n="level">Level</div>
+      <div class="level-btns">
+        <button type="button" data-level="1" class="active">1</button>
+        <button type="button" data-level="2">2</button>
+        <button type="button" data-level="3">3</button>
+      </div>
+    </div>
     <div class="hs"><h3 data-i18n="highscore">Highscore</h3><div id="hs-list"></div></div>
   </aside>
 
@@ -442,14 +441,6 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
       <div class="stats-row">
         <div class="stat-card"><div class="v" id="score">0</div><div class="l" data-i18n="score">Punkte</div></div>
         <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l" data-i18n="time">Zeit</div></div>
-        <div class="level-select" id="level-select">
-          <div class="level-label" data-i18n="level">Level</div>
-          <div class="level-btns">
-            <button type="button" data-level="1" class="active">1</button>
-            <button type="button" data-level="2">2</button>
-            <button type="button" data-level="3">3</button>
-          </div>
-        </div>
       </div>
 
       <div class="qcurve-card">
@@ -571,7 +562,7 @@ const I18N = {
     schemeWater: "Wasser (blau-türkis)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
     resHint: "Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.",
     resetHighscore: "Highscore zurücksetzen",
-    engineTest: "GPU-Engine testen (experimentell)", engineBack: "Zurück zur CPU-Engine",
+    engineTest: "GPU-Engine verwenden", engineBack: "Zur CPU-Engine wechseln",
     loading: "⏳ Initialisiere…", loadingRes: "⏳ Auflösung",
     anon: "Anonym", footerBy: "von", menuAria: "Seitenleiste umschalten",
     confirmResetHs: "Highscore-Liste wirklich löschen?",
@@ -595,7 +586,7 @@ const I18N = {
     schemeWater: "Water (blue-teal)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
     resHint: "Higher resolution looks nicer but is more compute-heavy — the simulated game then runs slower.",
     resetHighscore: "Reset highscore",
-    engineTest: "Try GPU engine (experimental)", engineBack: "Back to CPU engine",
+    engineTest: "Use GPU engine", engineBack: "Switch to CPU engine",
     loading: "⏳ Initializing…", loadingRes: "⏳ Resolution",
     anon: "Anonymous", footerBy: "by", menuAria: "Toggle sidebar",
     confirmResetHs: "Really clear the highscore list?",
@@ -692,9 +683,9 @@ const lvlC  = document.getElementById("level-canvas");  // pre-placed level obst
 let W = 310, H = 310;
 flowC.width = drawC.width = lvlC.width = W;
 flowC.height = drawC.height = lvlC.height = H;
-// Phase-1 WebGL experiment: append ?gpu=1 to the URL to use the WebGL2
-// engine; without the flag the worker CPU solver still drives the game.
-const useGPU = new URLSearchParams(location.search).get("gpu") === "1";
+// WebGL2 GPU engine is the default; append ?gpu=0 to fall back to the
+// CPU worker (kept around as the reference / compatibility engine).
+const useGPU = new URLSearchParams(location.search).get("gpu") !== "0";
 const fCtx = useGPU ? null : flowC.getContext("2d");
 const dCtx = drawC.getContext("2d");
 const lvlCtx = lvlC.getContext("2d");
@@ -2444,6 +2435,7 @@ document.getElementById("btn-primary").onclick = function() {
 document.getElementById("btn-clear").onclick = function() {
   if (state !== STATE.IDLE) return;
   dCtx.clearRect(0, 0, W, H);
+  resetSim();   // re-render the field so nothing of the old run lingers
 };
 
 // Settings panel
@@ -2517,6 +2509,7 @@ function setLevel(level) {
   renderHighscores();
   drawLevelObstacles();
   updateLevelButtons();
+  dCtx.clearRect(0, 0, W, H);   // drop the old sketch — fresh start per level
   // Apply this level's stored colour scale.
   engineSetScales(levelScales[level].hMax, levelScales[level].vMax);
   resetSim();          // re-init the field so the new obstacles take effect
@@ -2545,8 +2538,8 @@ if (btnEngineToggle) {
   btnEngineToggle.textContent = t(useGPU ? "engineBack" : "engineTest");
   btnEngineToggle.onclick = function() {
     const url = new URL(location.href);
-    if (useGPU) url.searchParams.delete("gpu");
-    else        url.searchParams.set("gpu", "1");
+    if (useGPU) url.searchParams.set("gpu", "0");  // → CPU worker
+    else        url.searchParams.delete("gpu");     // → default (GPU)
     location.href = url.toString();
   };
 }
@@ -2555,57 +2548,33 @@ if (btnEngineToggle) {
 const MOBILE_BREAK = 768;
 function isMobile() { return window.innerWidth <= MOBILE_BREAK; }
 
-// User-chosen game-area side (persisted). Null = auto-fit.
-const GAME_SIZE_KEY = "zoomy-swe-game-size";
-let userGameSize = (function() {
-  const v = parseInt(localStorage.getItem(GAME_SIZE_KEY) || "0", 10);
-  return Number.isFinite(v) && v >= 200 ? v : null;
-})();
-let __fitJsFlag = false;
+// Auto-maximise the (square) game area to whatever space .game-area-wrap
+// has — works the same on full screen, a half-width window, or mobile,
+// because .game-area-wrap is a flex:1 child that already absorbs all the
+// leftover height. No manual resize handle, no persisted size.
 function fitGameArea() {
   const wrap = document.querySelector('.game-area-wrap');
   const area = document.getElementById('game-area');
   if (!wrap || !area) return;
-  const aw = wrap.clientWidth;
-  const ah = wrap.clientHeight;
-  // Honor user-resized size (clamped to viewport) if they've dragged the
-  // corner before; otherwise pick the largest square that fits.
-  let size;
-  if (userGameSize) {
-    size = Math.max(200, Math.min(userGameSize, aw, ah, 1200));
-  } else {
-    size = Math.max(220, Math.min(aw, ah, 660));
-  }
-  __fitJsFlag = true;
+  const size = Math.max(180, Math.min(wrap.clientWidth, wrap.clientHeight));
   area.style.width  = size + "px";
   area.style.height = size + "px";
-  // Clear the flag after the ResizeObserver round-trip.
-  requestAnimationFrame(() => requestAnimationFrame(() => { __fitJsFlag = false; }));
 }
-// Watch for user-driven CSS resize (the corner handle). On change, enforce
-// square aspect ratio and persist the new size.
-(function setupGameAreaResize() {
-  const area = document.getElementById('game-area');
-  if (!area || typeof ResizeObserver === "undefined") return;
-  const ro = new ResizeObserver(function(entries) {
-    if (__fitJsFlag) return;          // ignore size changes we just applied
-    const r = entries[0].contentRect;
-    const w = r.width, h = r.height;
-    const side = Math.round(Math.min(w, h));
-    if (Math.abs(w - h) > 0.5) {
-      // Force square (only one dimension was dragged)
-      area.style.width  = side + "px";
-      area.style.height = side + "px";
-      return;
-    }
-    if (side !== userGameSize) {
-      userGameSize = side;
-      try { localStorage.setItem(GAME_SIZE_KEY, String(side)); } catch (_) {}
-    }
-  });
-  ro.observe(area);
-})();
 const fitBoard = fitGameArea;  // back-compat alias
+
+// Keep the q-curve canvas backing buffer matched to its on-screen size so
+// it never looks pixelated. devicePixelRatio-aware.
+function fitQCanvas() {
+  if (typeof qCanvas === "undefined" || !qCanvas) return;
+  const r = qCanvas.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+  if (qCanvas.width !== w || qCanvas.height !== h) {
+    qCanvas.width = w; qCanvas.height = h;
+  }
+  if (typeof drawQCurve === "function") drawQCurve();
+}
 
 function toggleSidebar() {
   if (isMobile()) {
@@ -2636,11 +2605,12 @@ window.addEventListener('resize', function() {
     lastIsMobile = now;
   }
   fitGameArea();
+  fitQCanvas();
 });
 
 // Initial sizing — run after layout settles
-requestAnimationFrame(fitGameArea);
-window.addEventListener('load', fitGameArea);
+requestAnimationFrame(function() { fitGameArea(); fitQCanvas(); });
+window.addEventListener('load', function() { fitGameArea(); fitQCanvas(); });
 
 // Language toggle button
 const btnLang = document.getElementById("btn-lang");
