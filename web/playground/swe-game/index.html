@@ -84,11 +84,14 @@ body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
 }
 body.sidebar-closed .app{grid-template-columns:0 1fr}
 
-/* Sidebar — player name + highscore */
+/* Sidebar — player name + level + highscore */
 .sidepanel{
   display:flex;flex-direction:column;gap:10px;
   min-height:0;min-width:0;overflow:hidden;
   transition:opacity .2s;
+  /* Start below the fixed hamburger + language buttons (which live at
+     top:10px, height 40px) so they never sit on top of the sidebar. */
+  padding-top:52px;
 }
 body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 .name-card{
@@ -732,14 +735,32 @@ const NG_CONST = 5;
 const LEVELS = {
   1: { obstacles: [] },
   2: { obstacles: [
-    { type: "rect",   x: 0.28, y: 0.30, w: 0.16, h: 0.16 },
-    { type: "circle", cx: 0.66, cy: 0.63, r: 0.09 },
+    // Two walls from the top and bottom edges leave a squeezed central gap
+    // (further pinched by a circle); then a second staggered wall stands in
+    // front of the right-edge outlets, so the player must weave around to
+    // reach the farmers on the right.
+    { type: "rect",   x: 0.46, y: 0.00, w: 0.08, h: 0.40 },
+    { type: "rect",   x: 0.46, y: 0.60, w: 0.08, h: 0.40 },
+    { type: "circle", cx: 0.50, cy: 0.50, r: 0.085 },
+    { type: "rect",   x: 0.70, y: 0.26, w: 0.08, h: 0.48 },
+    { type: "circle", cx: 0.87, cy: 0.18, r: 0.06 },
+    { type: "circle", cx: 0.87, cy: 0.82, r: 0.06 },
   ] },
   3: { obstacles: [
-    { type: "circle", cx: 0.34, cy: 0.37, r: 0.10 },
-    { type: "circle", cx: 0.62, cy: 0.33, r: 0.07 },
-    { type: "rect",   x: 0.42, y: 0.58, w: 0.22, h: 0.07 },
-    { type: "circle", cx: 0.30, cy: 0.72, r: 0.06 },
+    // A dense field of small circles and squares to thread the flow through.
+    { type: "circle", cx: 0.27, cy: 0.20, r: 0.045 },
+    { type: "rect",   x: 0.39, y: 0.16, w: 0.08, h: 0.08 },
+    { type: "circle", cx: 0.57, cy: 0.20, r: 0.045 },
+    { type: "rect",   x: 0.70, y: 0.16, w: 0.08, h: 0.08 },
+    { type: "rect",   x: 0.21, y: 0.39, w: 0.08, h: 0.08 },
+    { type: "circle", cx: 0.41, cy: 0.44, r: 0.045 },
+    { type: "rect",   x: 0.54, y: 0.39, w: 0.08, h: 0.08 },
+    { type: "circle", cx: 0.74, cy: 0.44, r: 0.045 },
+    { type: "circle", cx: 0.29, cy: 0.65, r: 0.045 },
+    { type: "rect",   x: 0.43, y: 0.61, w: 0.08, h: 0.08 },
+    { type: "circle", cx: 0.61, cy: 0.65, r: 0.045 },
+    { type: "rect",   x: 0.73, y: 0.61, w: 0.08, h: 0.08 },
+    { type: "circle", cx: 0.50, cy: 0.83, r: 0.045 },
   ] },
 };
 let currentLevel = (function() {
@@ -782,17 +803,18 @@ function drawLevelObstacles() {
   lvlCtx.clearRect(0, 0, W, H);
   const obs = LEVELS[currentLevel].obstacles;
   if (!obs.length) return;
-  const nx = W - 2 * NG_CONST;
-  lvlCtx.fillStyle = CLAY_HEX;
-  for (const o of obs) {
-    if (o.type === "rect") {
-      lvlCtx.fillRect(NG_CONST + o.x*nx, NG_CONST + o.y*nx, o.w*nx, o.h*nx);
-    } else {
-      lvlCtx.beginPath();
-      lvlCtx.arc(NG_CONST + o.cx*nx, NG_CONST + o.cy*nx, o.r*nx, 0, Math.PI*2);
-      lvlCtx.fill();
+  // Paint exactly the cells the simulation treats as walls (the rasterised
+  // mask), so the overlay is pixel-identical to what the solver blocks —
+  // no anti-aliased fringe that makes a circle look "not 100% solid".
+  const mask = rasterizeLevelObstacles(W, H);
+  const img = lvlCtx.createImageData(W, H);
+  const d = img.data;
+  for (let k = 0; k < W * H; k++) {
+    if (mask[k]) {
+      d[k*4] = 139; d[k*4+1] = 90; d[k*4+2] = 43; d[k*4+3] = 255;  // clay
     }
   }
+  lvlCtx.putImageData(img, 0, 0);
 }
 function rasterizeLevelObstacles(w, h) {
   const out = new Uint8Array(w * h);
@@ -1075,7 +1097,9 @@ drawC.addEventListener("pointercancel", () => pen = false);
 function getRaster() {
   const px = dCtx.getImageData(0, 0, W, H);
   const r = new Uint8Array(W * H);
-  for (let i = 0; i < W*H; i++) r[i] = px.data[i*4+3] > 30 ? 255 : 0;
+  // Low alpha threshold so the anti-aliased stroke fringe counts as wall —
+  // keeps thin hand-drawn walls watertight (no 1-cell diagonal gaps).
+  for (let i = 0; i < W*H; i++) r[i] = px.data[i*4+3] > 10 ? 255 : 0;
   return r;
 }
 // User drawing OR the current level's pre-placed obstacles. This is what the
