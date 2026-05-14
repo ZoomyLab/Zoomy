@@ -374,8 +374,8 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
    shown on phones (a screen you're already holding). */
 .qr-banner{
   position:fixed;right:14px;bottom:28px;z-index:60;
-  display:none;flex-direction:row;align-items:center;gap:10px;
-  padding:8px 14px 8px 8px;
+  display:none;flex-direction:column;align-items:center;gap:5px;
+  padding:8px 8px 6px;
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);border-radius:10px;
   box-shadow:0 6px 20px rgba(0,0,0,.5);
@@ -385,11 +385,10 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 body.show-qr .qr-banner{display:flex}
 .qr-banner:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--accent-glow)}
 .qr-title{
-  font-size:.78em;font-weight:700;letter-spacing:.5px;
+  font-size:.66em;font-weight:700;letter-spacing:.6px;
   color:var(--accent);text-transform:uppercase;
-  text-align:left;max-width:96px;line-height:1.25;
 }
-#qr-canvas{display:block;width:96px;height:96px;border-radius:4px;image-rendering:pixelated;flex-shrink:0}
+#qr-canvas{display:block;width:104px;height:104px;border-radius:4px;image-rendering:pixelated}
 @media (max-width:760px){ body.show-qr .qr-banner{display:none} }
 
 /* Mobile: ≤768px — sidebar becomes drawer; gutter and images shrink */
@@ -576,8 +575,8 @@ body.show-qr .qr-banner{display:flex}
 </div>
 
 <a class="qr-banner" id="qr-banner" href="https://zoomylab.github.io/Zoomy/playground/swe-game/index.html" target="_blank" rel="noopener">
-  <canvas id="qr-canvas" width="164" height="164"></canvas>
   <div class="qr-title" data-i18n="playAtHome">Zuhause spielen</div>
+  <canvas id="qr-canvas" width="164" height="164"></canvas>
 </a>
 
 <footer class="footer">
