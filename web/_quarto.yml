@@ -4,7 +4,8 @@ project:
   resources:
     - "jupyter-lite/_output/"
     - "./images/"
-    - "playground/swe-game/"
+    # The SWE game lives in apps/swe-game/ and is deployed to
+    # /playground/swe-game/ by .github/workflows/render-webpage.yml.
 bibliography: bibliography.bib
 
 quartodoc:

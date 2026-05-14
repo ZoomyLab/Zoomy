@@ -1,5 +1,5 @@
 /**
- * apps/swe-game/swe2d_model.mjs — app-side Model2D adapter.
+ * apps/swe-game/swe2d_model.js — app-side Model2D adapter.
  *
  * The thin adapter between the codegen pipeline and the generic
  * solver: it maps the snake_case kernels emitted by generate.py onto

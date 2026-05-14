@@ -1565,7 +1565,7 @@ class WebGLSim {
   }
   // Sample the editor curve at the model's fixed timeline times and
   // write the values into the Q(t) parameter block — mirrors
-  // swe2d_model.mjs's setQCurve. Editing the curve rewrites a
+  // swe2d_model.js's setQCurve. Editing the curve rewrites a
   // contiguous slice of `params`; the times stay at their defaults.
   _applyQCurve() {
     if (!this.params) return;
@@ -1898,8 +1898,8 @@ function resetUI() {
 function createWorker(nx) {
   // Module worker: the CPU numerics core is now the generic
   // HyperbolicSolver2D (library/zoomy_js) driven by the codegen'd SWE
-  // kernels. See apps/swe-game/worker.mjs.
-  worker = new Worker(new URL("worker.mjs", document.baseURI), {type: "module"});
+  // kernels. See apps/swe-game/worker.js.
+  worker = new Worker(new URL("worker.js", document.baseURI), {type: "module"});
   worker.onmessage = function(e) {
     const m = e.data;
     if (m.type === "ready") {

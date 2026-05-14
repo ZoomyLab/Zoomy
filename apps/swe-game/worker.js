@@ -1,16 +1,16 @@
 /**
- * apps/swe-game/worker.mjs — CPU simulation worker (module worker).
+ * apps/swe-game/worker.js — CPU simulation worker (module worker).
  *
  * Replaces the old inlined MUSCL/HLLC/Heun worker: the numerics core
  * is now the generic HyperbolicSolver2D from library/zoomy_js driven
- * by the codegen'd SWE kernels (see generate.py / swe2d_model.mjs).
+ * by the codegen'd SWE kernels (see generate.py / swe2d_model.js).
  * Everything game-specific — the opening layout, the raster image, the
  * outflow gauges, the colour scaling, the message protocol — stays
  * here. The main thread talks to this worker exactly as before.
  */
 
 import { HyperbolicSolver2D } from "../../library/zoomy_js/solver.js";
-import { createSWE2DModel } from "./swe2d_model.mjs";
+import { createSWE2DModel } from "./swe2d_model.js";
 
 // ── Game constants ──────────────────────────────────────────────────
 const WET = 1e-6;

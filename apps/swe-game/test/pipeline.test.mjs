@@ -3,7 +3,7 @@
  *
  * Exercises the whole codegen → solver chain on the *real* game model:
  * the kernels emitted by generate.py (SWE + HLLC + parametric inflow
- * boundary), wrapped by swe2d_model.mjs, driven by the generic
+ * boundary), wrapped by swe2d_model.js, driven by the generic
  * HyperbolicSolver2D from library/zoomy_js.
  *
  * Run:  node --test test/   (from apps/swe-game)
@@ -13,7 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { HyperbolicSolver2D } from "../../../library/zoomy_js/solver.js";
-import { createSWE2DModel } from "../swe2d_model.mjs";
+import { createSWE2DModel } from "../swe2d_model.js";
 
 if (typeof performance === "undefined") {
   globalThis.performance = { now: () => Number(process.hrtime.bigint()) / 1e6 };

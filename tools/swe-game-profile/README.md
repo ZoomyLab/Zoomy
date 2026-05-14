@@ -12,8 +12,14 @@ npm install
 Pulls `playwright-core` (no bundled browser) and `qrcode` (used to
 regenerate the game's "Play at home" QR matrix). Uses the system
 Chrome at `/usr/bin/google-chrome`; no big browser download. Requires
-a local HTTP server serving the game on `http://localhost:8765/`
-(e.g. `python3 -m http.server 8765` in `web/playground/swe-game/`).
+a local HTTP server serving the **repo root** (the game's module
+worker imports `../../library/zoomy_js/`), e.g. `python3 -m http.server
+8770` from the Zoomy repo root — the game is then at
+`/apps/swe-game/index.html`.
+
+`cpu_smoke.mjs` / `gpu_smoke.mjs` are quick single-engine
+correctness checks (load the game, run a window, assert it advances
+with no errors); `profile.mjs` is the fuller CPU-vs-GPU profiler.
 
 ## Usage
 

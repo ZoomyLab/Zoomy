@@ -14,6 +14,8 @@ on:
       - "docs/**"
       - "web/**"
       - "library/zoomy_gui/**"
+      - "library/zoomy_js/**"
+      - "apps/swe-game/**"
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
@@ -187,9 +189,20 @@ jobs:
 
       - name: Copy SWE game into docs site
         run: |
+          # The game lives in apps/swe-game/; its module worker imports the
+          # generic solver from library/zoomy_js/. Deploy both, mirroring the
+          # repo layout so the worker's "../../library/zoomy_js/" import
+          # resolves: game at /playground/swe-game/, solver at /library/zoomy_js/.
           mkdir -p docs/book/_build/html/playground/swe-game
-          cp -r web/playground/swe-game/. docs/book/_build/html/playground/swe-game/
-          echo "Copied SWE game to /playground/swe-game/"
+          cp -r apps/swe-game/. docs/book/_build/html/playground/swe-game/
+          # Drop dev-only bits from the deployed game.
+          rm -rf docs/book/_build/html/playground/swe-game/test
+          rm -f  docs/book/_build/html/playground/swe-game/generate.py
+          rm -f  docs/book/_build/html/playground/swe-game/package.json
+          mkdir -p docs/book/_build/html/library/zoomy_js
+          cp library/zoomy_js/solver.js library/zoomy_js/model.js \
+             docs/book/_build/html/library/zoomy_js/
+          echo "Copied SWE game to /playground/swe-game/ (+ library/zoomy_js)"
           ls docs/book/_build/html/playground/swe-game/ | head
 
       # CHANGED: Replaced upload-artifact with configure-pages
