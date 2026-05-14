@@ -142,6 +142,30 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   flex-wrap:wrap;
 }
 .stats-row{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+/* Level selector — fills the leftover height so its bottom lines up
+   with the Q(t) editor card next to it. */
+.level-select{
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);
+  border-radius:8px;
+  padding:6px 8px;
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;
+}
+.level-label{font-size:.7em;opacity:.7;letter-spacing:.5px;text-transform:uppercase}
+.level-btns{display:flex;gap:4px}
+.level-btns button{
+  width:30px;height:30px;
+  border:1px solid var(--panel-edge);border-radius:6px;
+  background:#0a1d2a;color:var(--ink-dim);
+  font-family:inherit;font-size:1em;font-weight:700;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.level-btns button:hover{background:var(--panel-edge);color:var(--ink)}
+.level-btns button.active{
+  background:linear-gradient(180deg,var(--accent),var(--accent-deep));
+  color:#fff;border-color:var(--accent);
+}
 .stat-card{
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);
@@ -220,6 +244,7 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   image-rendering:pixelated;
   display:block;
 }
+#level-canvas{z-index:1;pointer-events:none}
 #draw-canvas{z-index:2;cursor:crosshair;touch-action:none}
 #loading{
   position:absolute;inset:0;z-index:3;
@@ -417,6 +442,14 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
       <div class="stats-row">
         <div class="stat-card"><div class="v" id="score">0</div><div class="l" data-i18n="score">Punkte</div></div>
         <div class="stat-card timer"><div class="v" id="timer">60.0</div><div class="l" data-i18n="time">Zeit</div></div>
+        <div class="level-select" id="level-select">
+          <div class="level-label" data-i18n="level">Level</div>
+          <div class="level-btns">
+            <button type="button" data-level="1" class="active">1</button>
+            <button type="button" data-level="2">2</button>
+            <button type="button" data-level="3">3</button>
+          </div>
+        </div>
       </div>
 
       <div class="qcurve-card">
@@ -434,6 +467,7 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
         <div class="board" id="board">
           <div class="canvas-frame">
             <canvas id="flow-canvas"></canvas>
+            <canvas id="level-canvas"></canvas>
             <canvas id="draw-canvas"></canvas>
             <div id="loading" data-i18n="loading">⏳ Initialisiere…</div>
           </div>
@@ -525,7 +559,7 @@ const I18N = {
   de: {
     title: "Gesucht: Ingenieur für antike Bewässerungssysteme",
     subtitle: "Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!",
-    score: "Punkte", time: "Zeit", highscore: "Highscore",
+    score: "Punkte", time: "Zeit", level: "Level", highscore: "Highscore",
     playerName: "Spielername", playerNamePh: "Dein Name",
     inflowLabel: "Zufluss q(t)", qcurveResetTitle: "Standardkurve",
     qcurveHint: "Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen",
@@ -654,14 +688,76 @@ let activeLUT = LUT_WATER;
 // === Canvases (size set after worker reports IW/IH) ===
 const flowC = document.getElementById("flow-canvas");
 const drawC = document.getElementById("draw-canvas");
+const lvlC  = document.getElementById("level-canvas");  // pre-placed level obstacles
 let W = 310, H = 310;
-flowC.width = drawC.width = W;
-flowC.height = drawC.height = H;
+flowC.width = drawC.width = lvlC.width = W;
+flowC.height = drawC.height = lvlC.height = H;
 // Phase-1 WebGL experiment: append ?gpu=1 to the URL to use the WebGL2
 // engine; without the flag the worker CPU solver still drives the game.
 const useGPU = new URLSearchParams(location.search).get("gpu") === "1";
 const fCtx = useGPU ? null : flowC.getContext("2d");
 const dCtx = drawC.getContext("2d");
+const lvlCtx = lvlC.getContext("2d");
+
+// === Levels — pre-placed, non-deletable obstacles. Coords are fractions of
+// the interior NX×NX domain (the canvas band [NG, NG+NX)). ===
+const NG_CONST = 5;
+const LEVELS = {
+  1: { obstacles: [] },
+  2: { obstacles: [
+    { type: "rect",   x: 0.28, y: 0.30, w: 0.16, h: 0.16 },
+    { type: "circle", cx: 0.66, cy: 0.63, r: 0.09 },
+  ] },
+  3: { obstacles: [
+    { type: "circle", cx: 0.34, cy: 0.37, r: 0.10 },
+    { type: "circle", cx: 0.62, cy: 0.33, r: 0.07 },
+    { type: "rect",   x: 0.42, y: 0.58, w: 0.22, h: 0.07 },
+    { type: "circle", cx: 0.30, cy: 0.72, r: 0.06 },
+  ] },
+};
+let currentLevel = (function() {
+  const v = parseInt(localStorage.getItem("zoomy-swe-level") || "1", 10);
+  return (v === 1 || v === 2 || v === 3) ? v : 1;
+})();
+const CLAY_HEX = "#8b5a2b";
+function drawLevelObstacles() {
+  lvlCtx.clearRect(0, 0, W, H);
+  const obs = LEVELS[currentLevel].obstacles;
+  if (!obs.length) return;
+  const nx = W - 2 * NG_CONST;
+  lvlCtx.fillStyle = CLAY_HEX;
+  for (const o of obs) {
+    if (o.type === "rect") {
+      lvlCtx.fillRect(NG_CONST + o.x*nx, NG_CONST + o.y*nx, o.w*nx, o.h*nx);
+    } else {
+      lvlCtx.beginPath();
+      lvlCtx.arc(NG_CONST + o.cx*nx, NG_CONST + o.cy*nx, o.r*nx, 0, Math.PI*2);
+      lvlCtx.fill();
+    }
+  }
+}
+function rasterizeLevelObstacles(w, h) {
+  const out = new Uint8Array(w * h);
+  const obs = LEVELS[currentLevel].obstacles;
+  if (!obs.length) return out;
+  const nx = w - 2 * NG_CONST;
+  for (const o of obs) {
+    if (o.type === "rect") {
+      const x0 = Math.round(NG_CONST + o.x*nx), y0 = Math.round(NG_CONST + o.y*nx);
+      const x1 = Math.round(NG_CONST + (o.x+o.w)*nx), y1 = Math.round(NG_CONST + (o.y+o.h)*nx);
+      for (let y = Math.max(0,y0); y < Math.min(h,y1); y++)
+        for (let x = Math.max(0,x0); x < Math.min(w,x1); x++) out[y*w + x] = 255;
+    } else {
+      const cx = NG_CONST + o.cx*nx, cy = NG_CONST + o.cy*nx, r = o.r*nx, r2 = r*r;
+      for (let y = Math.max(0,Math.floor(cy-r)); y < Math.min(h,Math.ceil(cy+r)); y++)
+        for (let x = Math.max(0,Math.floor(cx-r)); x < Math.min(w,Math.ceil(cx+r)); x++) {
+          const dx = x-cx, dy = y-cy;
+          if (dx*dx + dy*dy <= r2) out[y*w + x] = 255;
+        }
+    }
+  }
+  return out;
+}
 // User-tunable pen width (in solver cells / internal canvas pixels). Saved
 // to localStorage; default is 3 cells so a single stroke covers ~3 grid
 // cells regardless of resolution → drawings get visibly finer at higher NX.
@@ -685,9 +781,9 @@ let pen = false;
 let active = false;
 let scoreSaved = false;
 
-// === Player name + persistent highscores ===
+// === Player name + per-level persistent highscores ===
 const NAME_KEY = "zoomy-swe-name";
-const HS_KEY   = "zoomy-swe-highscores";
+function hsKey(level) { return "zoomy-swe-highscores-L" + level; }
 
 const nameInput = document.getElementById("player-name");
 nameInput.value = localStorage.getItem(NAME_KEY) || "";
@@ -704,13 +800,22 @@ function escapeHTML(s) {
   });
 }
 
-let highscores;
-try { highscores = JSON.parse(localStorage.getItem(HS_KEY) || "[]"); }
-catch (_) { highscores = []; }
-if (!Array.isArray(highscores)) highscores = [];
-
+function loadHighscores(level) {
+  try {
+    const a = JSON.parse(localStorage.getItem(hsKey(level)) || "[]");
+    return Array.isArray(a) ? a : [];
+  } catch (_) { return []; }
+}
+// One-time migration: the old single-list key becomes Level 1's list.
+(function migrateOldHighscores() {
+  const old = localStorage.getItem("zoomy-swe-highscores");
+  if (old && !localStorage.getItem(hsKey(1))) {
+    localStorage.setItem(hsKey(1), old);
+  }
+})();
+let highscores = loadHighscores(currentLevel);
 function saveHighscores() {
-  try { localStorage.setItem(HS_KEY, JSON.stringify(highscores)); } catch (_) {}
+  try { localStorage.setItem(hsKey(currentLevel), JSON.stringify(highscores)); } catch (_) {}
 }
 const HS_TOP_N = 10;
 function renderHighscores() {
@@ -908,6 +1013,15 @@ function getRaster() {
   const r = new Uint8Array(W * H);
   for (let i = 0; i < W*H; i++) r[i] = px.data[i*4+3] > 30 ? 255 : 0;
   return r;
+}
+// User drawing OR the current level's pre-placed obstacles. This is what the
+// simulation actually gets — "Skizze löschen" only clears the user part.
+function getCombinedRaster() {
+  const user = getRaster();
+  const lvl = rasterizeLevelObstacles(W, H);
+  const out = new Uint8Array(W * H);
+  for (let i = 0; i < W*H; i++) out[i] = (user[i] || lvl[i]) ? 255 : 0;
+  return out;
 }
 
 function renderFrame(buf) {
@@ -2048,9 +2162,10 @@ function engineConfigure(nx) {
     if (typeof qCurve !== "undefined") gpuSim.setQCurve(qCurve);
     // Sync visible canvas resolution; the WebGL canvas draws at IW × IW.
     W = gpuSim.IW; H = gpuSim.IW;
-    drawC.width  = W;
-    drawC.height = H;
+    drawC.width = lvlC.width = W;
+    drawC.height = lvlC.height = H;
     setupDrawCtx();
+    drawLevelObstacles();
     document.getElementById("loading").style.display = "none";
     gpuSim.render();
     requestAnimationFrame(gpuTickLoop);
@@ -2097,9 +2212,10 @@ function engineApplyResolution(nx) {
     gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     gpuSim.setQCurve(qCurve);
     W = gpuSim.IW; H = gpuSim.IW;
-    drawC.width  = W;
-    drawC.height = H;
+    drawC.width = lvlC.width = W;
+    drawC.height = lvlC.height = H;
     setupDrawCtx();
+    drawLevelObstacles();
     gpuSim.render();
     document.getElementById("loading").style.display = "none";
   } else {
@@ -2165,9 +2281,10 @@ function createWorker(nx) {
     const m = e.data;
     if (m.type === "ready") {
       W = m.iw; H = m.ih;
-      flowC.width = drawC.width = W;
-      flowC.height = drawC.height = H;
+      flowC.width = drawC.width = lvlC.width = W;
+      flowC.height = drawC.height = lvlC.height = H;
       setupDrawCtx();
+      drawLevelObstacles();
       imgData = fCtx.createImageData(W, H);
       document.getElementById("loading").style.display = "none";
       // Re-apply current colour scheme (worker resets MODE on setup)
@@ -2217,7 +2334,7 @@ function startSim() {
   // Keep the drawing visible across runs — only "Skizze löschen" clears it.
   // getRaster() reads the canvas pixels; the engine stamps them as clay
   // walls in the rendered flow, and the gold strokes stay on top.
-  const r = getRaster();
+  const r = getCombinedRaster();
   engineStart(r);
 }
 
@@ -2293,6 +2410,27 @@ if (penInput) {
     setupDrawCtx();
   };
 }
+
+// Level selector — switches obstacles + per-level highscore board.
+function updateLevelButtons() {
+  document.querySelectorAll("#level-select .level-btns button").forEach(function(b) {
+    b.classList.toggle("active", parseInt(b.getAttribute("data-level"), 10) === currentLevel);
+  });
+}
+function setLevel(level) {
+  if (level === currentLevel) return;
+  currentLevel = level;
+  localStorage.setItem("zoomy-swe-level", String(level));
+  highscores = loadHighscores(level);
+  renderHighscores();
+  drawLevelObstacles();
+  updateLevelButtons();
+  resetSim();          // re-init the field so the new obstacles take effect
+}
+document.querySelectorAll("#level-select .level-btns button").forEach(function(b) {
+  b.onclick = function() { setLevel(parseInt(b.getAttribute("data-level"), 10)); };
+});
+updateLevelButtons();
 
 // Reset highscore list
 const btnResetHs = document.getElementById("btn-reset-highscore");
