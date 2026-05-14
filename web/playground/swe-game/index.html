@@ -720,6 +720,37 @@ let currentLevel = (function() {
   return (v === 1 || v === 2 || v === 3) ? v : 1;
 })();
 const CLAY_HEX = "#8b5a2b";
+
+// Per-level colour-scale database: shipped defaults (m and m/s), overwritten
+// by the maximum depth / speed observed at the end of each completed run so
+// the colormap auto-tunes to what the level actually produces.
+const LEVEL_SCALE_DEFAULTS = {
+  1: { hMax: 0.25, vMax: 1.5 },
+  2: { hMax: 0.30, vMax: 1.8 },
+  3: { hMax: 0.32, vMax: 1.8 },
+};
+let levelScales = (function() {
+  let db = null;
+  try { db = JSON.parse(localStorage.getItem("zoomy-swe-level-scales") || "null"); } catch (_) {}
+  if (!db || typeof db !== "object") db = {};
+  for (const lvl of [1, 2, 3]) {
+    if (!db[lvl] || typeof db[lvl] !== "object") db[lvl] = {};
+    if (!(db[lvl].hMax > 0)) db[lvl].hMax = LEVEL_SCALE_DEFAULTS[lvl].hMax;
+    if (!(db[lvl].vMax > 0)) db[lvl].vMax = LEVEL_SCALE_DEFAULTS[lvl].vMax;
+  }
+  return db;
+})();
+function saveLevelScales() {
+  try { localStorage.setItem("zoomy-swe-level-scales", JSON.stringify(levelScales)); } catch (_) {}
+}
+// Blend the observed maxima from a finished run into the level's stored scale.
+function updateLevelScales(maxH, maxV) {
+  const s = levelScales[currentLevel];
+  if (maxH > 0.01) s.hMax = 0.55 * s.hMax + 0.45 * maxH;
+  if (maxV > 0.05) s.vMax = 0.55 * s.vMax + 0.45 * maxV;
+  saveLevelScales();
+  engineSetScales(s.hMax, s.vMax);
+}
 function drawLevelObstacles() {
   lvlCtx.clearRect(0, 0, W, H);
   const obs = LEVELS[currentLevel].obstacles;
@@ -1044,7 +1075,7 @@ const FACE_NEUTRAL = "images/neutral.png";
 const FACE_SAD = "images/sad.png";
 function faceFor(v) { return v >= 80 ? FACE_HAPPY : v >= 33 ? FACE_NEUTRAL : FACE_SAD; }
 
-function updateUI(time, of, fin) {
+function updateUI(time, of, fin, maxH, maxV) {
   document.getElementById("timer").textContent = Math.max(0, 60-time).toFixed(1);
   // Garden is "full" at FILL_THRESHOLD m³ of accumulated outflow (per unit
   // z-depth). 0.2 ≈ what the old dimensionless threshold of 3.0 corresponded
@@ -1078,6 +1109,10 @@ function updateUI(time, of, fin) {
     // All entries stay in storage; renderHighscores() slices to the top N.
     saveHighscores();
     renderHighscores();
+    // Refine this level's colour-scale database from what the run produced.
+    if (typeof maxH === "number" || typeof maxV === "number") {
+      updateLevelScales(maxH || 0, maxV || 0);
+    }
     setState(STATE.FINISHED);
   }
 }
@@ -1118,7 +1153,10 @@ let raster;
 let gameTime, running, finished;
 let outflow;
 let MODE = "h";                 // "h" (height) or "vmag" (velocity magnitude)
-const VMAG_SCALE = 254 / 1.5;   // 1.5 m/s ⇒ idx 254 — matches the typical inflow + wave-speed range so most of the field actually lights up
+// Field colour scale — saturate the colormap at SCALE_HMAX metres of depth
+// and SCALE_VMAX m/s of speed. Set per level by the main thread, which
+// keeps a small database (shipped defaults, overwritten by observed maxima).
+let SCALE_HMAX = 0.25, SCALE_VMAX = 1.5;
 // Inflow multiplier as a piecewise-linear function of gameTime; main thread
 // pushes this via setqcurve. Default = constant unity multiplier.
 let Q_CURVE = [[0, 1.0], [60.0, 1.0]];
@@ -1510,15 +1548,9 @@ function step() {
 }
 
 function render() {
-  // Auto-tune the field colour scale to the inflow strength: a stronger
-  // q(t) drives deeper water and faster flow, so saturate the colormap at
-  // a proportionally larger value. qpeak = max of the inflow multiplier.
-  let qpeak = 0.1;
-  for (let qi = 0; qi < Q_CURVE.length; qi++) {
-    if (Q_CURVE[qi][1] > qpeak) qpeak = Q_CURVE[qi][1];
-  }
-  const hScale = 1275 / Math.max(0.5, qpeak);        // idx 254 ≈ h of 0.2·qpeak m
-  const vScale = (254 / 1.5) / Math.max(0.3, qpeak); // idx 254 ≈ |u| of 1.5·qpeak m/s
+  // Colour scale saturates at the per-level reference depth/speed.
+  const hScale = 254 / Math.max(0.05, SCALE_HMAX);
+  const vScale = 254 / Math.max(0.10, SCALE_VMAX);
   const img = new Uint8Array(IW * IH);
   const ng = NG;
   for (let j = 0; j < NX; j++) {
@@ -1626,10 +1658,26 @@ function tick() {
         qw[(j+1)*N + (i+1)] = raster[(j+NG)*IW + (i+NG)] > 0 ? 1 : 0;
   }
   const img = render();
+  // On the final frame, scan the interior for the max depth / speed so the
+  // main thread can refine its per-level colour-scale database.
+  let maxH = 0, maxV = 0;
+  if (finished) {
+    for (let j = 1; j < N-1; j++) for (let i = 1; i < N-1; i++) {
+      const k = j*N + i;
+      if (qw[k] > 0) continue;
+      const h = qh[k];
+      if (h > maxH) maxH = h;
+      if (h > WET) {
+        const u = qhu[k]/h, vv = qhv[k]/h;
+        const vm = Math.sqrt(u*u + vv*vv);
+        if (vm > maxV) maxV = vm;
+      }
+    }
+  }
   self.postMessage({
     type: "frame", image: img.buffer,
     time: gameTime, of: outflow.slice(), fin: finished, ns: ns,
-    iw: IW, ih: IH
+    iw: IW, ih: IH, maxH: maxH, maxV: maxV
   }, [img.buffer]);
 }
 
@@ -1654,6 +1702,10 @@ self.onmessage = function(e) {
       time: gameTime, of: outflow.slice(), fin: finished, ns: 0,
       iw: IW, ih: IH
     }, [img.buffer]);
+  }
+  else if (m.type === "setscales") {
+    if (m.hMax > 0) SCALE_HMAX = m.hMax;
+    if (m.vMax > 0) SCALE_VMAX = m.vMax;
   }
   else if (m.type === "setqcurve") {
     if (Array.isArray(m.curve) && m.curve.length >= 2) {
@@ -1877,6 +1929,10 @@ class WebGLSim {
     this.outflow = [0,0,0,0,0];
     this.mode = "h";
     this.qCurveData = [[0, 1], [60, 1]];
+    this.scaleHMax = 0.25;   // colour-scale saturation depth (m)
+    this.scaleVMax = 1.5;    // colour-scale saturation speed (m/s)
+    this.lastMaxH = 0;       // observed max depth on the last finished run
+    this.lastMaxV = 0;
     this.lutTex = null;
     this.lastRasterBuf = null;   // saved for "drawing persists across runs"
     this._lastAccumTime = 0;
@@ -2001,6 +2057,10 @@ class WebGLSim {
   }
   setMode(m) { this.mode = m; }
   setQCurve(c) { if (Array.isArray(c) && c.length >= 2) this.qCurveData = c.map(p => [p.t, p.q]); }
+  setScales(hMax, vMax) {
+    if (hMax > 0) this.scaleHMax = hMax;
+    if (vMax > 0) this.scaleVMax = vMax;
+  }
   setLUT(bytes) {
     const gl = this.gl;
     if (!this.lutTex) {
@@ -2081,14 +2141,38 @@ class WebGLSim {
     // weaker GPUs. On a modern GPU one step is ~1–2 ms and we comfortably
     // fit ~10 sub-steps per 60 fps frame → ~6× sim/wall.
     const HARD_CAP = 12;
+    let justFinished = false;
     while (nSteps < HARD_CAP) {
       this._step(); nSteps++;
       if (this.gameTime >= END_TIME) {
-        this.gameTime = END_TIME; this.finished = true; this.running = false; break;
+        this.gameTime = END_TIME; this.finished = true; this.running = false;
+        justFinished = true;
+        break;
       }
       if (performance.now() - start >= maxMs) break;
     }
     this._accumulateOutflow();
+    if (justFinished) this._measureMaxField();
+  }
+  // Full-state readback once, at game end, to find observed max depth/speed.
+  _measureMaxField() {
+    const gl = this.gl, N = this.N;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.A);
+    const buf = new Float32Array(N * N * 4);
+    gl.readPixels(0, 0, N, N, gl.RGBA, gl.FLOAT, buf);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    let mh = 0, mv = 0;
+    for (let k = 0; k < N * N; k++) {
+      const h = buf[k*4];
+      if (h > mh) mh = h;
+      if (h > 1e-6) {
+        const u = buf[k*4+1] / h, v = buf[k*4+2] / h;
+        const vm = Math.sqrt(u*u + v*v);
+        if (vm > mv) mv = vm;
+      }
+    }
+    this.lastMaxH = mh;
+    this.lastMaxV = mv;
   }
   _accumulateOutflow() {
     const gl = this.gl; const N = this.N;
@@ -2120,13 +2204,9 @@ class WebGLSim {
   render() {
     const gl = this.gl;
     if (!this.lutTex) return;
-    // Auto-tune colour scale to inflow strength (see worker render()).
-    let qpeak = 0.1;
-    for (let i = 0; i < this.qCurveData.length; i++) {
-      if (this.qCurveData[i][1] > qpeak) qpeak = this.qCurveData[i][1];
-    }
-    const hScale = 1275 / Math.max(0.5, qpeak);
-    const vScale = (254 / 1.5) / Math.max(0.3, qpeak);
+    // Colour scale saturates at the per-level reference depth/speed.
+    const hScale = 254 / Math.max(0.05, this.scaleHMax);
+    const vScale = 254 / Math.max(0.10, this.scaleVMax);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.IW, this.IW);
     gl.useProgram(this.renderProg);
@@ -2160,6 +2240,8 @@ function engineConfigure(nx) {
     if (typeof activeLUT !== "undefined") gpuSim.setLUT(activeLUT);
     gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     if (typeof qCurve !== "undefined") gpuSim.setQCurve(qCurve);
+    if (typeof levelScales !== "undefined")
+      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax);
     // Sync visible canvas resolution; the WebGL canvas draws at IW × IW.
     W = gpuSim.IW; H = gpuSim.IW;
     drawC.width = lvlC.width = W;
@@ -2205,12 +2287,18 @@ function engineSetLUT(lut) {
   if (gpuSim) gpuSim.setLUT(lut);
   // CPU LUT lives in main thread already (activeLUT) — no upload needed.
 }
+function engineSetScales(hMax, vMax) {
+  if (gpuSim) gpuSim.setScales(hMax, vMax);
+  if (worker) worker.postMessage({type: "setscales", hMax: hMax, vMax: vMax});
+}
 function engineApplyResolution(nx) {
   if (currentEngine === "gpu") {
     gpuSim.configure(nx);
     gpuSim.setLUT(activeLUT);
     gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     gpuSim.setQCurve(qCurve);
+    if (typeof levelScales !== "undefined")
+      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax);
     W = gpuSim.IW; H = gpuSim.IW;
     drawC.width = lvlC.width = W;
     drawC.height = lvlC.height = H;
@@ -2231,7 +2319,7 @@ function gpuTickLoop() {
   const t1 = performance.now();
   gpuSim.render();
   const t2 = performance.now();
-  updateUI(gpuSim.gameTime, gpuSim.outflow, gpuSim.finished);
+  updateUI(gpuSim.gameTime, gpuSim.outflow, gpuSim.finished, gpuSim.lastMaxH, gpuSim.lastMaxV);
   qIndicatorTime = gpuSim.gameTime;
   drawQCurve();
   if (window.__prof) {
@@ -2293,11 +2381,15 @@ function createWorker(nx) {
       }
       // Push the inflow curve so the new worker has it
       if (typeof sendQCurveToWorker === "function") sendQCurveToWorker();
+      if (typeof levelScales !== "undefined") {
+        const s = levelScales[currentLevel];
+        worker.postMessage({type: "setscales", hMax: s.hMax, vMax: s.vMax});
+      }
     }
     else if (m.type === "frame") {
       if (m.iw !== W || m.ih !== H) return;  // stale frame from prior NX
       renderFrame(new Uint8Array(m.image));
-      updateUI(m.time, m.of, m.fin);
+      updateUI(m.time, m.of, m.fin, m.maxH, m.maxV);
       // Update the indicator line on the q-curve canvas
       qIndicatorTime = m.time;
       drawQCurve();
@@ -2425,6 +2517,8 @@ function setLevel(level) {
   renderHighscores();
   drawLevelObstacles();
   updateLevelButtons();
+  // Apply this level's stored colour scale.
+  engineSetScales(levelScales[level].hMax, levelScales[level].vMax);
   resetSim();          // re-init the field so the new obstacles take effect
 }
 document.querySelectorAll("#level-select .level-btns button").forEach(function(b) {
