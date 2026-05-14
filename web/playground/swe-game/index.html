@@ -369,10 +369,12 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 }
 .footer a{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
 
-/* "Play at home" QR banner — fixed bottom-right */
+/* "Play at home" QR banner — fixed bottom-right. Opt-in: hidden unless the
+   body carries .show-qr (toggled from settings, default off), and never
+   shown on phones (a screen you're already holding). */
 .qr-banner{
   position:fixed;right:14px;bottom:28px;z-index:60;
-  display:flex;flex-direction:column;align-items:center;gap:5px;
+  display:none;flex-direction:column;align-items:center;gap:5px;
   padding:8px 8px 6px;
   background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
   border:1px solid var(--panel-edge);border-radius:10px;
@@ -380,21 +382,23 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   text-decoration:none;
   transition:transform .15s,box-shadow .15s;
 }
+body.show-qr .qr-banner{display:flex}
 .qr-banner:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--accent-glow)}
 .qr-title{
   font-size:.66em;font-weight:700;letter-spacing:.6px;
   color:var(--accent);text-transform:uppercase;
 }
 #qr-canvas{display:block;width:104px;height:104px;border-radius:4px;image-rendering:pixelated}
-/* On phones the QR just clutters a screen you're already holding — hide it. */
-@media (max-width:760px){ .qr-banner{display:none} }
+@media (max-width:760px){ body.show-qr .qr-banner{display:none} }
 
 /* Mobile: ≤768px — sidebar becomes drawer; gutter and images shrink */
 @media (max-width:768px){
   :root{--sidebar-w:0;--gutter:68px;--face-h:44px;--inflow-h:44px}
   .app{padding:6px 6px 0;gap:6px}
-  .hdr{padding:2px 8px 2px 56px}
-  .hdr h1{font-size:.95em}
+  /* Clear BOTH fixed top-left buttons (hamburger ~50px + language ~46px)
+     and flow the title from there instead of centring it in a tiny box. */
+  .hdr{padding:2px 8px 2px 108px;text-align:left}
+  .hdr h1{font-size:.92em;line-height:1.2}
   .hdr p{display:none}
   body.sidebar-open .sidepanel{
     position:fixed;left:0;top:0;
@@ -558,7 +562,11 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
             </select>
           </label>
           <div class="hint" data-i18n="resHint">Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.</div>
-          <button type="button" id="btn-reset-highscore" data-i18n="resetHighscore" style="margin-top:12px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">Highscore zurücksetzen</button>
+          <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:.85em;color:var(--ink-dim);cursor:pointer">
+            <input type="checkbox" id="setting-qr" style="accent-color:var(--accent);cursor:pointer">
+            <span data-i18n="showQr">QR-Code anzeigen</span>
+          </label>
+          <button type="button" id="btn-reset-highscore" data-i18n="resetHighscore" style="margin-top:10px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">Highscore zurücksetzen</button>
           <button type="button" id="btn-engine-toggle" style="margin-top:8px;width:100%;padding:7px 10px;background:#0a1d2a;border:1px solid var(--panel-edge);color:var(--ink-dim);border-radius:4px;font-family:inherit;font-size:.8em;cursor:pointer;">GPU-Engine testen (experimentell)</button>
         </div>
       </div>
@@ -599,7 +607,7 @@ const I18N = {
     colorScheme: "Farbschema",
     schemeWater: "Wasser (blau-türkis)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
     resHint: "Höhere Auflösung sieht schöner aus, ist aber rechenintensiver — das simulierte Spiel läuft dann langsamer ab.",
-    resetHighscore: "Highscore zurücksetzen",
+    resetHighscore: "Highscore zurücksetzen", showQr: "QR-Code anzeigen",
     engineTest: "GPU-Engine verwenden", engineBack: "Zur CPU-Engine wechseln",
     loading: "⏳ Initialisiere…", loadingRes: "⏳ Auflösung",
     anon: "Anonym", footerBy: "von", menuAria: "Seitenleiste umschalten",
@@ -624,7 +632,7 @@ const I18N = {
     colorScheme: "Colour scheme",
     schemeWater: "Water (blue-teal)", schemeCoolWarm: "Cool to Warm (ParaView)", schemeViridis: "Viridis",
     resHint: "Higher resolution looks nicer but is more compute-heavy — the simulated game then runs slower.",
-    resetHighscore: "Reset highscore",
+    resetHighscore: "Reset highscore", showQr: "Show QR code",
     engineTest: "Use GPU engine", engineBack: "Switch to CPU engine",
     loading: "⏳ Initializing…", loadingRes: "⏳ Resolution",
     anon: "Anonymous", footerBy: "by", menuAria: "Toggle sidebar",
@@ -2584,6 +2592,18 @@ document.querySelectorAll("#level-select .level-btns button").forEach(function(b
   b.onclick = function() { setLevel(parseInt(b.getAttribute("data-level"), 10)); };
 });
 updateLevelButtons();
+
+// QR-code visibility toggle (opt-in, persisted; never shown on phones).
+const qrCheckbox = document.getElementById("setting-qr");
+if (qrCheckbox) {
+  const qrOn = localStorage.getItem("zoomy-swe-show-qr") === "1";
+  qrCheckbox.checked = qrOn;
+  document.body.classList.toggle("show-qr", qrOn);
+  qrCheckbox.onchange = function() {
+    document.body.classList.toggle("show-qr", qrCheckbox.checked);
+    localStorage.setItem("zoomy-swe-show-qr", qrCheckbox.checked ? "1" : "0");
+  };
+}
 
 // Reset highscore list
 const btnResetHs = document.getElementById("btn-reset-highscore");
