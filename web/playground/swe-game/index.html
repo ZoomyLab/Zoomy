@@ -746,19 +746,19 @@ const LEVELS = {
   2: { obstacles: [
     // Two thin vertical bars guarding the right-side outlets (x ≈ 0.80),
     // a gap between them (~64% of the height blocked, ≤70%); plus a
-    // central triangle with its tip pointing back toward the inlet.
-    { type: "rect", x: 0.795, y: 0.10, w: 0.025, h: 0.32 },
-    { type: "rect", x: 0.795, y: 0.58, w: 0.025, h: 0.32 },
-    { type: "tri",  pts: [[0.38, 0.50], [0.56, 0.34], [0.56, 0.66]] },
+    // central circular blocker on the inlet path.
+    { type: "rect",   x: 0.795, y: 0.10, w: 0.025, h: 0.32 },
+    { type: "rect",   x: 0.795, y: 0.58, w: 0.025, h: 0.32 },
+    { type: "circle", cx: 0.47, cy: 0.50, r: 0.11 },
   ] },
   3: { obstacles: [
-    // Two layers of the "double bar": one at x ≈ 0.30, one at x ≈ 0.70,
-    // with the gaps staggered so the flow has to weave between them.
-    // Each layer blocks ≤70% of the height.
+    // Two layers of the "double bar": one at x ≈ 0.30, one at x ≈ 0.70.
+    // The second column is shifted down ~15% of the height so the gaps
+    // are staggered and the flow has to weave between them.
     { type: "rect", x: 0.285, y: 0.06, w: 0.025, h: 0.34 },
     { type: "rect", x: 0.285, y: 0.60, w: 0.025, h: 0.34 },
-    { type: "rect", x: 0.690, y: 0.06, w: 0.025, h: 0.28 },
-    { type: "rect", x: 0.690, y: 0.52, w: 0.025, h: 0.28 },
+    { type: "rect", x: 0.690, y: 0.21, w: 0.025, h: 0.28 },
+    { type: "rect", x: 0.690, y: 0.67, w: 0.025, h: 0.28 },
   ] },
 };
 let currentLevel = (function() {
