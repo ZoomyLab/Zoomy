@@ -118,8 +118,17 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   border:1px solid var(--panel-edge);
   border-radius:8px;
   padding:8px;
-  flex:1;min-height:0;overflow:hidden;
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
 }
+#hs-list{
+  flex:1;min-height:0;overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:var(--panel-edge) transparent;
+}
+#hs-list::-webkit-scrollbar{width:5px}
+#hs-list::-webkit-scrollbar-thumb{background:var(--panel-edge);border-radius:3px}
+#hs-list::-webkit-scrollbar-track{background:transparent}
 .hs h3{font-size:.75em;opacity:.7;margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;text-align:center}
 .hs .row{font-size:.85em;display:flex;justify-content:space-between;padding:2px 4px;border-radius:3px}
 .hs .row.new{background:rgba(250,204,21,0.12);color:var(--gold);font-weight:600}
@@ -357,6 +366,26 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
 }
 .footer a{color:inherit;text-decoration:none;border-bottom:1px dashed currentColor}
 
+/* "Play at home" QR banner — fixed bottom-right */
+.qr-banner{
+  position:fixed;right:14px;bottom:28px;z-index:60;
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:8px 8px 6px;
+  background:linear-gradient(180deg,var(--panel) 0%,#0a1d2a 100%);
+  border:1px solid var(--panel-edge);border-radius:10px;
+  box-shadow:0 6px 20px rgba(0,0,0,.5);
+  text-decoration:none;
+  transition:transform .15s,box-shadow .15s;
+}
+.qr-banner:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--accent-glow)}
+.qr-title{
+  font-size:.66em;font-weight:700;letter-spacing:.6px;
+  color:var(--accent);text-transform:uppercase;
+}
+#qr-canvas{display:block;width:104px;height:104px;border-radius:4px;image-rendering:pixelated}
+/* On phones the QR just clutters a screen you're already holding — hide it. */
+@media (max-width:760px){ .qr-banner{display:none} }
+
 /* Mobile: ≤768px — sidebar becomes drawer; gutter and images shrink */
 @media (max-width:768px){
   :root{--sidebar-w:0;--gutter:68px;--face-h:44px;--inflow-h:44px}
@@ -534,6 +563,11 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   </main>
 </div>
 
+<a class="qr-banner" id="qr-banner" href="https://zoomylab.github.io/Zoomy/playground/swe-game/index.html" target="_blank" rel="noopener">
+  <div class="qr-title" data-i18n="playAtHome">Zuhause spielen</div>
+  <canvas id="qr-canvas" width="164" height="164"></canvas>
+</a>
+
 <footer class="footer">
   <span data-i18n="footerBy">von</span> <a href="https://www.mbd.rwth-aachen.de/cms/mbd/der-lehrstuhl/team/~qqpkz/ingo-steldermann/?allou=1&amp;lidx=1" target="_blank" rel="noopener">Ingo Steldermann</a>
 </footer>
@@ -551,6 +585,7 @@ const I18N = {
     title: "Gesucht: Ingenieur für antike Bewässerungssysteme",
     subtitle: "Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!",
     score: "Punkte", time: "Zeit", level: "Level", highscore: "Highscore",
+    playAtHome: "Zuhause spielen",
     playerName: "Spielername", playerNamePh: "Dein Name",
     inflowLabel: "Zufluss q(t)", qcurveResetTitle: "Standardkurve",
     qcurveHint: "Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen",
@@ -574,7 +609,8 @@ const I18N = {
   en: {
     title: "Wanted: Engineer for ancient irrigation systems",
     subtitle: "Draw your irrigation system and open the gate. <b>Goal</b>: Fill the gardens — as fast as you can!",
-    score: "Points", time: "Time", highscore: "Highscore",
+    score: "Points", time: "Time", level: "Level", highscore: "Highscore",
+    playAtHome: "Play at home",
     playerName: "Player name", playerNamePh: "Your name",
     inflowLabel: "Inflow q(t)", qcurveResetTitle: "Default curve",
     qcurveHint: "Drag points · Double-click empty space: add point · Double-click point: delete",
@@ -839,10 +875,9 @@ let highscores = loadHighscores(currentLevel);
 function saveHighscores() {
   try { localStorage.setItem(hsKey(currentLevel), JSON.stringify(highscores)); } catch (_) {}
 }
-const HS_TOP_N = 10;
 function renderHighscores() {
-  // Keep all entries in storage; render only the top N
-  document.getElementById("hs-list").innerHTML = highscores.slice(0, HS_TOP_N).map(function(h, i) {
+  // Render the full list (sorted high→low); #hs-list scrolls if it overflows.
+  document.getElementById("hs-list").innerHTML = highscores.map(function(h, i) {
     const name = escapeHTML(h.name || t("anon"));
     return "<div class='row" + (h.isNew ? " new" : "") + "'>" +
       "<span>" + (i+1) + ". " + name + "</span>" +
@@ -855,7 +890,14 @@ renderHighscores();
 const QCURVE_KEY = "zoomy-swe-qcurve";
 const Q_TMAX = 60.0;
 const Q_QMAX = 1.2;
-const DEFAULT_QCURVE = [{t:0,q:1},{t:30,q:1},{t:45,q:0.2},{t:60,q:0}];
+// 80% for the first 25% of the game, off until 50%, 100% until 75%, off to end.
+// Short 0.5 s ramps stand in for vertical steps (the editor's lerp needs t0≠t1).
+const DEFAULT_QCURVE = [
+  {t:0, q:0.8}, {t:15, q:0.8},
+  {t:15.5, q:0}, {t:30, q:0},
+  {t:30.5, q:1.0}, {t:45, q:1.0},
+  {t:45.5, q:0}, {t:60, q:0},
+];
 
 let qCurve;
 try { qCurve = JSON.parse(localStorage.getItem(QCURVE_KEY) || "null"); }
@@ -2621,6 +2663,28 @@ if (btnLang) {
     applyLang();
   };
 }
+
+// === "Play at home" QR — matrix pre-generated for the game URL,
+//     rendered themed (light cyan on near-black) onto the banner canvas. ===
+const QR_MATRIX = ["1111111001011011001010101000001111111","1000001000001101101101000101001000001","1011101011101001101111101001001011101","1011101010101110110110101100001011101","1011101011001010001110010100101011101","1000001011110101101010101111101000001","1111111010101010101010101010101111111","0000000010100111100110010001000000000","1011111001100011001111111111101111100","0011010110100001110000000100100101010","0010101011110010000010111111100100111","0000110011001110101001110001100110001","0010001111000110010000011111011110111","1011000110111110111101011100100100010","0110101110001111110011001001011111011","0010000010111001111001111001111110010","0101101001010011100101000110001010110","1111100101011111001010101010100100010","1111111010100111101100100111010100111","0111010111101001000111101011110000001","1001001110011111110111101111011011100","1101010111010010100110110000100001000","0110111011100101101010100011110111001","0010110100111000100010000001010110001","0011001000100100001111101110011010111","1110100011011011110000000100100100000","1010111010000010001010011001010110011","1001000110111100100001010010110101010","1011101000110010010000110110111111110","0000000010000000111111010110100011000","1111111001111001010011001010101010111","1000001011101110011111101010100011000","1011101011110101100101011111111110110","1011101011111101001010101000011010110","1011101010110111110100101010100000001","1000001000111001000111100001100010001","1111111011011011110100111110011011111"];
+function drawQR() {
+  const c = document.getElementById("qr-canvas");
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  const sz = QR_MATRIX.length, quiet = 2, total = sz + 2 * quiet;
+  const px = Math.floor(c.width / total);
+  const off = Math.floor((c.width - px * total) / 2) + quiet * px;
+  ctx.fillStyle = "#07131c";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = "#bae6fd";
+  for (let y = 0; y < sz; y++) {
+    const row = QR_MATRIX[y];
+    for (let x = 0; x < sz; x++) {
+      if (row.charCodeAt(x) === 49) ctx.fillRect(off + x*px, off + y*px, px, px);
+    }
+  }
+}
+drawQR();
 
 setState(STATE.IDLE);
 applyLang();

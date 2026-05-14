@@ -6,13 +6,14 @@ GPU engine without a UI.
 ## Setup
 
 ```
-npm install --no-save playwright-core
+npm install
 ```
 
-Uses the system Chrome at `/usr/bin/google-chrome`; no big browser
-download. Requires a local HTTP server serving the game on
-`http://localhost:8765/` (e.g. `python3 -m http.server 8765` in
-`web/playground/swe-game/`).
+Pulls `playwright-core` (no bundled browser) and `qrcode` (used to
+regenerate the game's "Play at home" QR matrix). Uses the system
+Chrome at `/usr/bin/google-chrome`; no big browser download. Requires
+a local HTTP server serving the game on `http://localhost:8765/`
+(e.g. `python3 -m http.server 8765` in `web/playground/swe-game/`).
 
 ## Usage
 

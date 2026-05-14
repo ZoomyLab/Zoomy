@@ -9,5 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "playwright-core": "^1.49.0",
+    "qrcode": "^1.5.4"
+  }
 }
