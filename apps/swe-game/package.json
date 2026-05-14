@@ -1,0 +1,10 @@
+{
+  "name": "zoomy-swe-game",
+  "version": "0.1.0",
+  "description": "Zoomy Shallow Water Equations browser game — generated solver kernels + game UI.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "private": true
+}
