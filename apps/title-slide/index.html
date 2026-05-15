@@ -88,16 +88,14 @@
     <h2>Visualization</h2>
     <div class="row">
       <div>
-        <label>Field</label>
+        <label>Preview field</label>
         <select id="mode">
           <option value="h" selected>Water height h</option>
           <option value="vmag">Velocity |v|</option>
-          <option value="hu">Discharge hu (x)</option>
-          <option value="hv">Discharge hv (y)</option>
         </select>
       </div>
       <div>
-        <label>Colormap</label>
+        <label>Preview colormap</label>
         <select id="cmap">
           <option value="water" selected>Water</option>
           <option value="deepwater">Deepwater</option>
@@ -110,21 +108,25 @@
       </div>
     </div>
     <div class="row">
-      <div><label>Scale saturation</label><input id="scale" type="number" value="0.25" step="0.05"></div>
-      <div><label>Auto-scale</label><select id="autoScale">
+      <div><label>Preview scale (saturation)</label><input id="scale" type="number" value="0.25" step="0.05"></div>
+      <div><label>Auto-scale preview</label><select id="autoScale">
         <option value="off">Off</option>
         <option value="run" selected>At end of preview</option>
       </select></div>
     </div>
+    <small>Field / colormap / scale only affect the live preview. The raw
+           ``(h, hu, hv)`` state is captured; postprocess.py picks the
+           field, computes the timeline scale, and applies the colormap.</small>
 
     <h2>Run</h2>
     <button id="preview">Preview (live)</button>
-    <button id="generate" class="secondary">Generate frames → folder…</button>
+    <button id="generate" class="secondary">Capture raw field → folder…</button>
     <button id="stop" class="secondary" disabled>Stop</button>
     <div class="status" id="status">Ready.</div>
-    <small>Frame capture needs Chrome/Edge (showDirectoryPicker). PNGs are written
-           as frame_00001.png, … into the folder you select. Then run
-           <code>postprocess.py</code> to assemble the video.</small>
+    <small>Capture writes a single <code>frames.npy</code> (shape T×NY×NX×3, float32)
+           and <code>manifest.json</code> into the chosen folder. Needs Chrome/Edge
+           (showDirectoryPicker). Then run <code>postprocess.py</code> to colour and
+           assemble the video.</small>
   </div>
 
   <div class="stage">
@@ -238,10 +240,35 @@ async function previewRun() {
   loop();
 }
 
+/**
+ * Build a numpy .npy v1.0 header for a float32 little-endian array of
+ * the given shape. The total header is 64-byte aligned (numpy's
+ * current default).
+ */
+function npyHeaderFloat32(shape) {
+  const shapeStr = shape.length === 1
+    ? `(${shape[0]},)`
+    : `(${shape.join(", ")})`;
+  const dict = `{'descr': '<f4', 'fortran_order': False, 'shape': ${shapeStr}, }`;
+  let headerLen = dict.length + 1;
+  while ((10 + headerLen) % 64 !== 0) headerLen++;
+  const buf = new Uint8Array(10 + headerLen);
+  buf[0] = 0x93;
+  buf[1] = 0x4e; buf[2] = 0x55; buf[3] = 0x4d;
+  buf[4] = 0x50; buf[5] = 0x59;
+  buf[6] = 1; buf[7] = 0;
+  buf[8] = headerLen & 0xFF;
+  buf[9] = (headerLen >> 8) & 0xFF;
+  for (let i = 0; i < dict.length; i++) buf[10 + i] = dict.charCodeAt(i);
+  for (let i = dict.length; i < headerLen - 1; i++) buf[10 + i] = 0x20;
+  buf[10 + headerLen - 1] = 0x0a;
+  return buf;
+}
+
 async function generateFrames() {
   if (running) return;
   if (!window.showDirectoryPicker) {
-    status("frame capture needs Chrome/Edge (showDirectoryPicker not available).");
+    status("capture needs Chrome/Edge (showDirectoryPicker not available).");
     return;
   }
   let cfg;
@@ -255,49 +282,63 @@ async function generateFrames() {
   running = true; stopRequested = false;
   $("preview").disabled = true; $("generate").disabled = true; $("stop").disabled = false;
 
-  // Manifest helps postprocess.py pick sensible defaults.
+  // Open frames.npy and write the header up-front — we know T = nFrames.
+  const fh = await dirHandle.getFileHandle("frames.npy", { create: true });
+  const writer = await fh.createWritable();
+  const header = npyHeaderFloat32([cfg.nFrames, cfg.ny, cfg.nx, 3]);
+  await writer.write(header);
+
   const manifestObj = {
-    nx: cfg.nx, ny: cfg.ny, endTime: cfg.endTime, nFrames: cfg.nFrames,
-    field: $("mode").value, colormap: $("cmap").value,
-    scale: parseFloat($("scale").value),
+    nx: cfg.nx, ny: cfg.ny,
+    endTime: cfg.endTime, nFrames: cfg.nFrames,
+    frameDt: cfg.endTime / (cfg.nFrames - 1),
+    channels: ["h", "hu", "hv"],
     inletFracY: cfg.inletFracY, outletFracY: cfg.outletFracY,
     hIn: cfg.hIn, qIn: cfg.qIn, qCurve: cfg.qCurve,
+    previewField: $("mode").value, previewColormap: $("cmap").value,
     createdAt: new Date().toISOString(),
   };
 
   const t0 = performance.now();
-  const pad = i => String(i).padStart(5, "0");
   const frameDt = cfg.endTime / (cfg.nFrames - 1);
+  let framesWritten = 0;
+  let bytesWritten = header.byteLength;
 
   for (let frame = 0; frame < cfg.nFrames; frame++) {
     if (stopRequested) break;
     const tTarget = frame === 0 ? 0 : Math.min(cfg.endTime, frame * frameDt);
     engine.stepTo(tTarget);
-    engine.render();
-    // toBlob returns a flipped (top-down) PNG.
-    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-    const fh = await dirHandle.getFileHandle(`frame_${pad(frame + 1)}.png`, { create: true });
-    const w = await fh.createWritable();
-    await w.write(blob); await w.close();
-    if (frame % 10 === 0) {
+    engine.render();   // live preview keeps updating while we capture
+    const arr = engine.readInteriorRGB();
+    await writer.write(new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength));
+    bytesWritten += arr.byteLength;
+    framesWritten++;
+    if (frame % 30 === 0) {
+      const mb = (bytesWritten / (1024 * 1024)).toFixed(1);
       status(`capturing  ${frame + 1}/${cfg.nFrames}  t=${engine.time.toFixed(2)}s  `
-             + `(${((performance.now() - t0) / 1000).toFixed(1)}s elapsed)`);
-      // Yield to the event loop so the UI stays responsive.
+             + `(${mb} MB, ${((performance.now() - t0) / 1000).toFixed(1)}s elapsed)`);
       await new Promise(r => setTimeout(r, 0));
     }
   }
+
+  await writer.close();
+
+  // If we stopped early, the .npy header still claims nFrames frames —
+  // record what was actually written so postprocess can truncate.
+  manifestObj.framesActuallyWritten = framesWritten;
 
   try {
     const mh = await dirHandle.getFileHandle("manifest.json", { create: true });
     const mw = await mh.createWritable();
     await mw.write(JSON.stringify(manifestObj, null, 2));
     await mw.close();
-  } catch (_) { /* manifest write is best-effort */ }
+  } catch (_) {}
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  const mb = (bytesWritten / (1024 * 1024)).toFixed(1);
   status(stopRequested
-    ? `stopped after ${engine.time.toFixed(2)}s sim, ${elapsed}s wall.`
-    : `done. ${cfg.nFrames} frames written in ${elapsed}s wall. Run postprocess.py on the folder.`);
+    ? `stopped at frame ${framesWritten}/${cfg.nFrames}, ${mb} MB, ${elapsed}s wall.`
+    : `done. ${framesWritten} frames, ${mb} MB in frames.npy (${elapsed}s wall). Run postprocess.py on the folder.`);
   running = false; stopRequested = false;
   $("preview").disabled = false; $("generate").disabled = false; $("stop").disabled = true;
 }

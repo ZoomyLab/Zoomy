@@ -142,7 +142,7 @@ precision highp float;
 precision highp sampler2D;
 uniform sampler2D uA;
 uniform sampler2D uLUT;
-uniform int uMode;          // 0 = h, 1 = |v|, 2 = hu, 3 = hv
+uniform int uMode;          // 0 = h, 1 = |v|
 uniform int uNY;
 uniform float uScale, uWet;
 out vec4 oColor;
@@ -150,21 +150,16 @@ out vec4 oColor;
 vec3 readA(int i, int j) { return texelFetch(uA, ivec2(i, j), 0).xyz; }
 
 float quantize(vec3 q) {
-  // uScale = 254 / saturation_value (see render() — JS multiplies in).
-  // For h / |v|: map [0, sat] → [0, 254]. For signed hu, hv: map
-  // [-sat, +sat] → [0, 254] so the colormap centre is "no flow".
+  // uScale = 254 / saturation_value (JS multiplies in).
+  // Always maps [0, sat] → [0, 254].
   float val = 0.0;
-  if (uMode == 0) {
-    val = q.x * uScale;
-  } else if (uMode == 1) {
+  if (uMode == 1) {
     if (q.x > uWet) {
       float u_ = q.y/q.x, v_ = q.z/q.x;
       val = sqrt(u_*u_ + v_*v_) * uScale;
     }
-  } else if (uMode == 2) {
-    val = q.y * 0.5 * uScale + 127.0;
   } else {
-    val = q.z * 0.5 * uScale + 127.0;
+    val = q.x * uScale;
   }
   return clamp(val, 0.0, 254.0);
 }
@@ -478,9 +473,7 @@ export class TitleSlideEngine {
   render() {
     const gl = this.gl;
     if (!this.lutTex) return;
-    const modeIdx = this.mode === "vmag" ? 1
-                  : this.mode === "hu"   ? 2
-                  : this.mode === "hv"   ? 3 : 0;
+    const modeIdx = this.mode === "vmag" ? 1 : 0;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(this.renderProg);
@@ -497,7 +490,34 @@ export class TitleSlideEngine {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
-  /** Readback the interior h field — for auto-scaling the colormap. */
+  /**
+   * Read the interior state (h, hu, hv) back from the GPU as a
+   * Float32Array of length ``nx * ny * 3`` in row-major order with
+   * ``j`` increasing south → north (i.e. j=0 is the first row of the
+   * output, matching the WebGL framebuffer y origin). This is the
+   * canonical raw field the postprocess script colours.
+   */
+  readInteriorRGB() {
+    const gl = this.gl;
+    const NX = this.NX_full, NY = this.NY_full;
+    const buf = new Float32Array(NX * NY * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.A);
+    gl.readPixels(0, 0, NX, NY, gl.RGBA, gl.FLOAT, buf);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const out = new Float32Array(this.nx * this.ny * 3);
+    for (let j = 0; j < this.ny; j++) {
+      for (let i = 0; i < this.nx; i++) {
+        const src = ((j + 1) * NX + (i + 1)) * 4;
+        const dst = (j * this.nx + i) * 3;
+        out[dst]     = buf[src];
+        out[dst + 1] = buf[src + 1];
+        out[dst + 2] = buf[src + 2];
+      }
+    }
+    return out;
+  }
+
+  /** Readback the interior h field — for auto-scaling the live preview. */
   measureMaxField() {
     const gl = this.gl;
     const NX = this.NX_full, NY = this.NY_full;
