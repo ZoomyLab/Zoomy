@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Colour and assemble a title-slide capture into a video.
 
-The browser app writes the *raw* SWE state into ``frames.npy``
-(shape ``T × NY × NX × 3``, dtype float32, channels ``[h, hu, hv]``)
-plus a ``manifest.json``. This script picks a field, computes the
-colour scale from the **whole timeline** (so every frame uses the same
-saturation), applies a colormap, and pipes RGB to ffmpeg.
+The simulation runner (TBD — JAX-based, coming when the JAX solver
+returns) writes the raw SWE state into ``frames.npy``:
+
+  * shape  ``(T, NY, NX, 3)``
+  * dtype  ``float32``
+  * channels  ``[h, hu, hv]``  (water height + the two discharges)
+  * row order  ``j`` increasing south → north (postprocess vflips for the video)
+
+…plus a ``manifest.json`` with at least ``{nx, ny, nFrames, endTime}``.
+This script picks a field, computes the colour scale from the **whole
+timeline** (so every frame uses the same saturation), applies a
+colormap, and pipes RGB to ffmpeg.
 
 Three user-facing knobs map directly to the requirements:
 
