@@ -46,6 +46,8 @@ def test_chorin_solver_constructor_takes_three_subsystems(split_122):
     assert solver.sm_corr is split_122.SM_corr
     assert solver.time_end == 0.2
     assert solver.reconstruction_order == 2
+    # Pressure-solver knobs come from ChorinSplitVAMSolver itself.
+    assert solver.pressure_tol > 0
     # The 7-state must be shared across all three sub-systems.
     assert solver.n_state == 7
     assert [str(s) for s in solver.state] == [
@@ -95,8 +97,8 @@ def test_chorin_solver_setup_simulation_builds_runtimes(split_122):
 
     assert Q.shape == (7, 16)
     assert solver.nc == 16
-    # Three runtimes built.
-    assert hasattr(solver, "rt_pred")
+    # Pressure + corrector runtimes built (predictor runtime is the
+    # parent's ``self._sim_model``).
     assert hasattr(solver, "rt_press")
     assert hasattr(solver, "rt_corr")
     # State-index slices match the sub-systems' equation_to_state_index.
@@ -120,6 +122,8 @@ def test_chorin_solver_step_runs_without_crash(split_122):
     Q0 = solver.setup_simulation(mesh)
     nc = solver.nc
     x = solver._sim_mesh.cell_centers[0, :nc]
+    # Apply IC after setup_simulation (HyperbolicSolver may have run
+    # an aux fill already).
     # Non-trivial IC: h has a bump, U_0 has a gradient.  Drives both
     # mass advection (h transport) and pressure response.
     Q0[0, :] = 1.0 + 0.01 * np.cos(2 * np.pi * x / 4.0)
