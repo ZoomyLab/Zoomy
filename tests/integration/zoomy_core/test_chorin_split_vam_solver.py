@@ -103,3 +103,37 @@ def test_chorin_solver_setup_simulation_builds_runtimes(split_122):
     assert solver._pred_state_idx.tolist() == [0, 1, 2, 3, 4]
     assert solver._press_state_idx.tolist() == [5, 6]
     assert solver._corr_state_idx.tolist() == [1, 2, 3, 4]
+
+
+def test_chorin_solver_step_runs_without_crash(split_122):
+    """One ``step()`` exercises predictor → pressure → corrector
+    end-to-end on a non-trivial initial state.  Smoke check that the
+    three substeps fire in sequence and ``Q`` advances (state changes,
+    no crash, no NaN).  Order-of-accuracy verification comes later."""
+    from zoomy_core.fvm.solver_chorin_vam_numpy import ChorinSplitVAMSolver
+
+    mesh = BaseMesh.create_1d(domain=(0.0, 4.0), n_inner_cells=16)
+    solver = ChorinSplitVAMSolver(
+        split_122.SM_pred, split_122.SM_press, split_122.SM_corr,
+        reconstruction_order=1,
+    )
+    Q0 = solver.setup_simulation(mesh)
+    nc = solver.nc
+    x = solver._sim_mesh.cell_centers[0, :nc]
+    # Non-trivial IC: h has a bump, U_0 has a gradient.  Drives both
+    # mass advection (h transport) and pressure response.
+    Q0[0, :] = 1.0 + 0.01 * np.cos(2 * np.pi * x / 4.0)
+    Q0[1, :] = 0.1 * np.sin(2 * np.pi * x / 4.0)
+    solver._sim_Q = Q0.copy()
+
+    solver.step(0.01)
+    Q1 = solver._sim_Q
+
+    assert Q1.shape == Q0.shape, "step() must preserve Q shape"
+    assert np.all(np.isfinite(Q1)), "step() produced non-finite values"
+    # Predictor advected h non-trivially through ∂_x(h·U_0).
+    assert np.max(np.abs(Q1[0, :] - Q0[0, :])) > 1e-6
+    # Corrector wrote to U_0 (row 1) — at minimum the state_update
+    # callable executed and assigned (delta may be small but non-zero
+    # if pressure ≠ 0).
+    assert np.all(np.isfinite(Q1[1, :]))

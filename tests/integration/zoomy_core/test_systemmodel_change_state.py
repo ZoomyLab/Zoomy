@@ -291,10 +291,20 @@ def test_change_state_round_trip_preserves_operators(m1d):
         transform=inverse_transform,
     )
 
-    # Check operators.
-    assert sp.simplify(sm.flux - F_before) == sp.zeros(*F_before.shape)
-    assert sp.simplify(sm.source - S_before) == sp.zeros(*S_before.shape)
-    assert sp.simplify(sm.mass_matrix - M_before) == sp.zeros(*M_before.shape)
+    # Check operators.  ``sp.simplify`` may strip ZArray type back to
+    # plain NDimArray, which compares unequal to Matrix even with
+    # identical content — so iterate the flat element view.
+    def _flatten(nested):
+        if isinstance(nested, list):
+            for x in nested:
+                yield from _flatten(x)
+        else:
+            yield nested
+    for diff in (sm.flux - F_before,
+                 sm.source - S_before,
+                 sm.mass_matrix - M_before):
+        for e in _flatten(diff.tolist()):
+            assert sp.simplify(e) == 0
     for i in range(n_eq):
         for j in range(n_st):
             for d in range(n_dim):
