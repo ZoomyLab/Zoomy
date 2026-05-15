@@ -58,13 +58,35 @@ def _find_b_row(sm):
 
 @pytest.fixture(scope="module")
 def split_122():
+    """Chain DAE → conservative form → split for pressure.
+
+    The chain DAE's primitive-form mass matrix has state-dependent
+    entries on the higher-order momentum rows (e.g. row 1 is
+    ``[U_0, h, 0, …]`` ⇒ residual ``∂_t(h·U_0)``).  Going to
+    conservative state ``q_k = h·U_k/c_k`` (with ``c_k = 2k+1``)
+    cleans the j=0 rows to ``M=I``; HyperbolicSolver then correctly
+    integrates ``∂_t q = -∂_x F + S`` on those rows without the
+    missing 1/h factor (the "cheating" we'd otherwise have).
+
+    The j=1 rows retain residual state-dependent off-diagonals
+    ``(-q_U0 + q_U1)/h`` in the ∂_t h column — these are zero at
+    lake-at-rest and small under modest dynamics, but a complete
+    cleanup needs a chain-derivation-level rewrite (push the cross-
+    coupling into the NCP via the continuity equation).
+    """
     m = VAMModelGalerkin(level=1)
     sm = SystemModel.from_model(m)
-    name_to_sym = {str(s): s for s in sm.state}
-    dt = sp.Symbol(r"\Delta t", positive=True)
-    return split_for_pressure(
-        sm, [name_to_sym["P_0"], name_to_sym["P_1"]], dt,
+    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    q_U0, q_U1, q_W0, q_W1 = sp.symbols(
+        "q_U0 q_U1 q_W0 q_W1", real=True,
     )
+    sm.change_state_variables(
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+        transform={U_0: q_U0 / h,     U_1: 3 * q_U1 / h,
+                   W_0: q_W0 / h,     W_1: 3 * q_W1 / h},
+    )
+    dt = sp.Symbol("dt", positive=True)   # Python-safe Symbol name
+    return split_for_pressure(sm, [P_0, P_1], dt)
 
 
 @pytest.fixture
