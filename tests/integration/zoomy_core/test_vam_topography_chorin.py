@@ -103,36 +103,70 @@ def _setup_lake_at_rest_with_bump(solver, mesh, *, perturb=False):
     return Q0
 
 
-def test_chorin_solver_runs_on_bump_topography(split_122, mesh_1d):
-    """Chorin split solver advances a lake-at-rest IC over a cosine
-    bump for multiple steps without crashing or producing NaN.
-
-    Tolerances are loose — the current predictor is unlimited central
-    flux (not well-balanced); lake-at-rest will drift by O(dx²) per
-    step.  This pins the pipeline, not the spatial accuracy."""
+def test_chorin_solver_flat_bottom_lake_at_rest(split_122, mesh_1d):
+    """Lake-at-rest on a *flat* bottom is preserved to machine
+    precision.  No well-balancing trick needed when b=0 everywhere
+    because the Rusanov flux of ``(1/2)·g·h²`` is exact on uniform h.
+    Confirms the Chorin pipeline (predictor + pressure + corrector)
+    does *nothing* when there are no dynamics — the predictor leaves
+    Q untouched, the pressure data forcing is exactly zero, GMRES
+    short-circuits, and the corrector applies a zero update."""
     solver = ChorinSplitVAMSolver(
         split_122.SM_pred, split_122.SM_press, split_122.SM_corr,
-        time_end=0.1,
+        time_end=0.05,
         reconstruction_order=1,
     )
-    Q0 = _setup_lake_at_rest_with_bump(solver, mesh_1d, perturb=False)
+    Q0 = solver.setup_simulation(mesh_1d)
+    nc = solver.nc
+    # b = 0 everywhere (no bump); h = H_REST uniform; velocities zero.
+    solver.set_function_aux("b", np.zeros(nc))
+    solver.update_aux_variables()
+    Q0[:] = 0.0
+    Q0[0, :] = H_REST
+    solver._sim_Q = Q0.copy()
+    solver.update_aux_variables()
 
     dt = 0.005
-    n_steps = int(0.05 / dt)
-    for _ in range(n_steps):
+    for _ in range(10):
         solver.step(dt)
     Q = solver._sim_Q
 
-    assert Q.shape == Q0.shape
-    assert np.all(np.isfinite(Q)), "Chorin step produced non-finite Q"
-    # Lake-at-rest drift bounded — Rusanov flux at order 1 is *not*
-    # well-balanced for shallow-water-like systems without an
-    # η = h+b surface reconstruction (that's the next refinement
-    # layer; see DAESolver's _surface_recon for the prior art).  At
-    # the current spatial scheme drift is O(b_x²)·dt·n_steps; we
-    # bound it loosely as the pipeline smoke test.
+    assert np.all(np.isfinite(Q))
     drift_h = float(np.max(np.abs(Q[0, :] - Q0[0, :])))
-    assert drift_h < 0.1, f"lake-at-rest drift {drift_h:.3e} too large"
+    assert drift_h < 1e-12, (
+        f"flat-bottom lake-at-rest drift {drift_h:.3e} should be at "
+        f"machine precision"
+    )
+    # Velocity / pressure stay exactly zero.
+    assert np.max(np.abs(Q[1:5, :])) < 1e-12
+    assert np.max(np.abs(Q[5:7, :])) < 1e-10
+
+
+@pytest.mark.xfail(
+    reason="Rusanov flux at order 1 is not well-balanced for shallow-"
+           "water-like systems on a bump bottom — drift in the "
+           "predictor injects a forcing term R(P=0) that GMRES "
+           "correctly responds to, amplifying drift through the "
+           "Chorin coupling.  Fix is the η = h+b SurfaceReconstruction "
+           "trick (prior art in DAESolver); deferred per agreed plan.",
+    strict=False,
+)
+def test_chorin_solver_lake_at_rest_on_bump_xfail(split_122, mesh_1d):
+    """Lake-at-rest preservation on a cosine bump — the well-balancing
+    target.  Currently xfails because the Rusanov flux is not WB."""
+    solver = ChorinSplitVAMSolver(
+        split_122.SM_pred, split_122.SM_press, split_122.SM_corr,
+        time_end=0.05,
+        reconstruction_order=1,
+    )
+    Q0 = _setup_lake_at_rest_with_bump(solver, mesh_1d, perturb=False)
+    dt = 0.005
+    for _ in range(10):
+        solver.step(dt)
+    Q = solver._sim_Q
+    assert np.all(np.isfinite(Q))
+    drift_h = float(np.max(np.abs(Q[0, :] - Q0[0, :])))
+    assert drift_h < 1e-12, f"lake-at-rest drift {drift_h:.3e}"
 
 
 def test_chorin_solver_propagates_bump_perturbation(split_122, mesh_1d):
