@@ -10,7 +10,7 @@
 :gutter: 3
 
 :::{grid-item}
-![Figure 1](../../web/images/wip.png)
+![Figure 1](../images/wip.png)
 :::
 :::{grid-item}
 Example of 1d slide? Or dam break? Or OF to SWE modeling dilemma? Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
@@ -28,7 +28,7 @@ Example of 1d slide? Or dam break? Or OF to SWE modeling dilemma? Lorem ipsum do
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
 :::
 :::{grid-item}
-![Figure 2](../../web/images/wip.png)
+![Figure 2](../images/wip.png)
 :::
 
 ::::
@@ -39,7 +39,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vi
 :gutter: 3
 
 :::{grid-item}
-![Figure 3](../../web/images/wip.png)
+![Figure 3](../images/wip.png)
 :::
 :::{grid-item}
 **What have we done**  
@@ -58,7 +58,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vi
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum.
 :::
 :::{grid-item}
-![Figure 4](../../web/images/wip.png)
+![Figure 4](../images/wip.png)
 :::
 
 ::::
@@ -69,7 +69,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vi
 :gutter: 3
 
 :::{grid-item}
-![Figure 5](../../web/images/wip.png)
+![Figure 5](../images/wip.png)
 :::
 :::{grid-item}
 **Playground, publication, videos, give a call, mail**  

@@ -45,7 +45,7 @@ def _discover_notebooks() -> list[Path]:
     roots = [
         Path("tutorials"),
         Path("notebooks"),
-        Path("web/jupyter-lite/notebooks"),
+        Path("tutorials/pyodide"),
     ]
     out: list[Path] = []
     for root in roots:

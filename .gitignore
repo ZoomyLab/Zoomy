@@ -63,7 +63,6 @@ library/model/models/\
 of_coupling/of-original/dynamicCode
 of_coupling/of-original/export1
 tests/vtk.js/webview/paraview-lite
-web/tutorials/vam/simple_files/execute-results/html.json
 logs/log.log
 
 *.F90
@@ -77,17 +76,6 @@ data/ca_debrisflow.raw
 data/ca_debrisflow.tif
 data/ca_elev.raw
 data/ca_elev.tif
-web/tutorials/amrex/adjusted_adjusted_adjusted_adjusted_adjusted_evel_artificial.tif
-web/tutorials/amrex/adjusted_adjusted_adjusted_adjusted_evel_artificial.tif
-web/tutorials/amrex/adjusted_adjusted_adjusted_evel_artificial.tif
-web/tutorials/amrex/adjusted_adjusted_ca_debrisflow.tif
-web/tutorials/amrex/adjusted_adjusted_evel_artificial.tif
-web/tutorials/amrex/adjusted_ca_debrisflow.raw
-web/tutorials/amrex/adjusted_ca_debrisflow.tif
-web/tutorials/amrex/adjusted_ca_elev.raw
-web/tutorials/amrex/adjusted_ca_elev.tif
-web/tutorials/amrex/adjusted_evel_artificial.raw
-web/tutorials/amrex/adjusted_evel_artificial.tif
 data/ca_debrisflow.raw
 data/ca_debrisflow.tif
 data/ca_elev.raw
@@ -100,8 +88,6 @@ data/ca_debrisflow.raw
 data/ca_debrisflow.tif
 data/ca_elev.raw
 data/ca_elev.tif
-web/tutorials/amrex/adjusted_release_artificial.raw
-web/tutorials/amrex/adjusted_release_artificial.tif
 
 
 0.*
@@ -119,7 +105,6 @@ yPlus
 **/0/uniform/
 dynamicCode
 functionObjects
-web/tutorials/precice/from_tut/fl1.save
 processor*
 core*
 *.neu
@@ -143,7 +128,6 @@ dist
 
 *.egg-info
 *.sif
-web/_freeze/
 *.whl
 jupyter-lite/.jupyterlite.doit.db
 .jupyterlite.doit.db

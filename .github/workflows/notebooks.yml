@@ -12,7 +12,6 @@ on:
     paths:
       - "tutorials/**/*.ipynb"
       - "notebooks/**/*.ipynb"
-      - "web/jupyter-lite/notebooks/**/*.ipynb"
       - "tests/notebooks/**"
       - "tests/reporting/check_notebooks.py"
       - "tests/reporting/requirements.txt"
@@ -38,7 +37,6 @@ jobs:
             notebooks:
               - 'tutorials/**/*.ipynb'
               - 'notebooks/**/*.ipynb'
-              - 'web/jupyter-lite/notebooks/**/*.ipynb'
 
   notebooks-validate:
     needs: [changed-notebooks]

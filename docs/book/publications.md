@@ -6,7 +6,7 @@
 :gutter: 3
 
 :::{grid-item}
-![click to view the video](../../web/images/wip.png)
+![click to view the video](../images/wip.png)
 :::
 :::{grid-item}
 **Abstract**  
@@ -23,7 +23,7 @@ Add the short abstract text here.
 Add the key publication result summary here.
 :::
 :::{grid-item}
-![Main result](../../web/images/wip.png)
+![Main result](../images/wip.png)
 :::
 
 ::::

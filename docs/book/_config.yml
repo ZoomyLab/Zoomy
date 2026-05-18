@@ -1,6 +1,6 @@
 title: Zoomy Documentation
 author: ZoomyLab
-logo: ../../web/images/logo.svg
+logo: ../images/logo.svg
 
 execute:
   execute_notebooks: "off"
