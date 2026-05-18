@@ -1,7 +1,0 @@
-# Function reference {.doc .doc-index}
-
-
-
-| | |
-| --- | --- |
-| [fvm.solver_jax.Settings](fvm.solver_jax.Settings.qmd#zoomy_jax.fvm.solver_jax.Settings) |  |
