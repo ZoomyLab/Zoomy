@@ -66,13 +66,13 @@ Zoomy builds on, integrates with, or uses logos from the following open-source p
 | [SymPy](https://www.sympy.org/) | symbolic modeling layer | BSD-3-Clause | logo by Fredrik Johansson, free use under the same terms as SymPy |
 | [NumPy](https://numpy.org/) | reference solver, arrays | BSD-3-Clause | |
 | [JAX](https://jax.readthedocs.io/) | `zoomy_jax` backend | Apache-2.0 | |
-| [Firedrake](https://www.firedrakeproject.org/) | `zoomy_firedrake` backend | LGPL-3.0 | |
-| [FEniCSx / DOLFINx](https://fenicsproject.org/) | `zoomy_fenicsx` backend | LGPL-3.0 | |
+| [Firedrake](https://www.firedrakeproject.org/) | `zoomy_firedrake` backend | LGPLv3+ | |
+| [FEniCSx / DOLFINx](https://fenicsproject.org/) | `zoomy_fenicsx` backend | LGPLv3+ | |
 | [PETSc](https://petsc.org/) | DMPlex backend, Firedrake | BSD-2-Clause | |
-| [AMReX](https://amrex-codes.github.io/) | `zoomy_amrex` backend | BSD-3-Clause-LBNL | |
+| [AMReX](https://amrex-codes.github.io/) | `zoomy_amrex` backend | BSD-3-Clause | |
 | [OpenFOAM](https://openfoam.org/) | OpenFOAM backend | GPL-3.0 | logo: *Carnby, CC BY-SA 4.0, via Wikimedia Commons* |
-| [preCICE](https://precice.org/) | coupling framework | LGPL-3.0 | |
-| [Gmsh](https://gmsh.info/) | mesh generation | GPL-2.0 | |
+| [preCICE](https://precice.org/) | coupling framework | LGPLv3+ | |
+| [Gmsh](https://gmsh.info/) | mesh generation | GPLv2+ | |
 | [ParaView](https://www.paraview.org/) | post-processing | BSD-3-Clause | macros in `tools/paraview_macros/` |
 | [Jupyter Book](https://jupyterbook.org/) | this documentation site | BSD-3-Clause | |
 | [JupyterLite](https://jupyterlite.readthedocs.io/) / [Pyodide](https://pyodide.org/) | in-browser notebook execution | BSD-3-Clause / MPL-2.0 | |
