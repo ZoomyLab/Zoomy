@@ -14,4 +14,4 @@ distributed meshes.
 compiler. Build with the usual CMake workflow inside `library/zoomy_dmplex`.
 
 **Repository**: [`library/zoomy_dmplex`](https://github.com/ZoomyLab/zoomy-dmplex)  
-**API reference**: see [dmplex](../api/dmplex.rst).
+**API reference**: see [dmplex](../api/dmplex.md).

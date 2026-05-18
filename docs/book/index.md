@@ -16,21 +16,21 @@ Zoomy's main objective is to provide a convenient modeling interface for complex
 :::{grid-item-card} Open the GUI
 :link: gui/index.html
 :link-type: url
-![GUI](/images/gui.png)
+![GUI](images/gui.png)
 Configure simulations, run in the browser, and share via URL. No installation required.
 :::
 
 :::{grid-item-card} Play the SWE Game
 :link: playground/swe-game/index.html
 :link-type: url
-![SWE Game](/images/swe-game.png)
+![SWE Game](images/swe-game.png)
 Sketch your own irrigation system, open the gate and fill the gardens — a shallow-water-equation game running entirely in your browser.
 :::
 
 :::{grid-item-card} Testing and CI Reports
 :link: ci-reports.html
 :link-type: url
-![Testing](/images/tests.png)
+![Testing](images/tests.png)
 Review testing policy, marker model, and generated CI summaries.
 :::
 

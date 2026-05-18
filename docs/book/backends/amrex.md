@@ -14,4 +14,4 @@ Follow the AMReX
 then build `library/zoomy_amrex`.
 
 **Repository**: [`library/zoomy_amrex`](https://github.com/ZoomyLab/zoomy-amrex)  
-**API reference**: see [amrex](../api/amrex.rst).
+**API reference**: see [amrex](../api/amrex.md).

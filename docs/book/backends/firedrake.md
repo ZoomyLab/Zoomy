@@ -18,4 +18,4 @@ pip install -e library/zoomy_firedrake
 ```
 
 **Repository**: [`library/zoomy_firedrake`](https://github.com/ZoomyLab/zoomy-firedrake)  
-**API reference**: see [firedrake](../api/firedrake.rst).
+**API reference**: see [firedrake](../api/firedrake.md).
