@@ -30,6 +30,19 @@ jobs:
       - name: Forbidden symbols in library/zoomy_gui/app.js
         run: |
           set -e
+          # Strip JS comments before grepping. Preserves newlines so
+          # the grep -n line numbers still point at the original file.
+          # Handles /* ... */ blocks (multi-line, including continuation
+          # lines without a `*` prefix) and // line comments.
+          python3 - <<'PY' > /tmp/app-nocomments.js
+          import re, pathlib
+          src = pathlib.Path("library/zoomy_gui/app.js").read_text()
+          src = re.sub(r"/\*.*?\*/",
+                       lambda m: "\n" * m.group(0).count("\n"),
+                       src, flags=re.S)
+          src = re.sub(r"//[^\n]*", "", src)
+          print(src, end="")
+          PY
           FORBIDDEN=(
             'ZoomyBackend'
             '_pyWorker\.postMessage'
@@ -41,11 +54,7 @@ jobs:
           )
           FAIL=0
           for pat in "${FORBIDDEN[@]}"; do
-            # Allow /* */ and // comment lines so the descriptive
-            # references we left as breadcrumbs don't trip the gate.
-            MATCHES=$(grep -nE "$pat" library/zoomy_gui/app.js \
-                      | grep -vE '^[^:]*:[ \t]*(\*|/\*|\*/|//|\* )' \
-                      || true)
+            MATCHES=$(grep -nE "$pat" /tmp/app-nocomments.js || true)
             if [ -n "$MATCHES" ]; then
               echo "::error ::Forbidden pattern /$pat/ found in app.js:"
               echo "$MATCHES"
