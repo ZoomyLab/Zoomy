@@ -7,242 +7,74 @@ Flexible modeling and simulation software for free-surface flows.
 
 ![](docs/images/overview2.png)
 
-Zoomy's main objective is to provide a convenient modeling interface for complex free-surface flow models. Zoomy transitions from a **symbolic** modeling layer to **numerical** layer, compatible with a multitude of numerical solvers, e.g. Numpy, Jax, Firedrake, FenicsX, OpenFOAM and AMReX. Additionally, we support the PreCICE coupling framework for some numerical backends, enabling convenient integration of our solver with your existing code.
+Zoomy's main objective is to provide a convenient modeling interface for complex free-surface flow models. Zoomy transitions from a **symbolic** modeling layer to a **numerical** layer, compatible with a multitude of numerical solvers, e.g. NumPy, JAX, Firedrake, FEniCSx, OpenFOAM, and AMReX. Additionally, we support the preCICE coupling framework for some numerical backends, enabling convenient integration of our solver with your existing code.
 
 ## Documentation
 
-See our [Documentation](https://mbd-rwth.github.io/Zoomy/) for details on
+See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user guide, tutorials, API reference, and full installation / development setup.
 
--   how to get started
--   tutorials
--   examples
--   API
--   ...
+## Citation
 
-## License
-
-The Zoomy code is free open-source software, licensed under version 3 or later of the GNU General Public License. See the file [LICENSE](LICENSE) for full copying permissions.
-
-## BibTex Citation
-
-T.b.d.
+```bibtex
+@online{Zoomy,
+  author  = {Ingo Steldermann},
+  title   = {Zoomy: Flexible modeling and simulation software for free-surface flows},
+  year    = 2026,
+  url     = {https://github.com/ZoomyLab/Zoomy},
+  urldate = {YYYY-MM-DD}
+}
+```
 
 ## Installation
 
-ZoomyLab consists of a 
-
-* Base repository (Zoomy): Symbolic Layer (Models), Pre/Postprocessing, NumPy solver
-* Solver backends, each with it's own (sub-)repository
-    * JAX (zoomy_jax)
-    * Firedrake (zoomy_firedrake)
-    * FenicsX (zoomy_fenicsx)
-    * AMReX (zoomy_amrex)
-* Utility backend
-    * meshes (currently GMSH mesh definition files)
-    * data (data repository for large scale test cases)
-
-### Getting started in seconds
-
-A good way to have an **interactive** first impression of Zoomy is to use one of the following options
-
-#### JupyterLite
-
-[Click and Play](https://zoomylab.github.io/Zoomy/jupyter-lite/_output/lab/index.html?path=pyodide.ipynb)
-
-#### Cloud-based GUI
-
-WIP
-
-### Cloning the repository
-
-The Zoomy repository pins **exact commits** for each submodule (reproducible checkouts). The submodule entries in `.gitmodules` also record `branch = main` so you can optionally move submodules to the **latest `main`** of their own repos.
-
-#### 1) Full tree at the pins recorded by Zoomy (typical)
-
-```bash
-git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-```
-
-If you already cloned without submodules:
-
-```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule sync --recursive
-git submodule update --init --recursive
-```
-
-#### 2) Full tree with every submodule moved to the latest `main`
-
-Use this when you want all libraries on the current tip of their default branch (may be less stable than the pins on `Zoomy`’s `main`).
-
-```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule sync --recursive
-git submodule update --init --recursive
-git submodule update --remote --merge --recursive
-```
-
-Or, after a `--recurse-submodules` clone, run only:
-
-```bash
-cd Zoomy
-git submodule update --remote --merge --recursive
-```
-
-#### 3) Clone Zoomy only, then initialize **selected** submodules
-
-```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule update --init meshes
-git submodule update --init library/zoomy_core
-git submodule update --init library/zoomy_jax
-```
-
-Paths match `.gitmodules` (e.g. `library/zoomy_firedrake`, `library/zoomy_dmplex`, `data`, …).
-
-#### 4) One submodule: fetch it and stay on latest `main`
-
-From the root of your Zoomy clone:
-
-```bash
-git submodule update --init path/to/submodule
-git submodule update --remote --merge path/to/submodule
-```
-
-Example for JAX only:
-
-```bash
-git submodule update --init library/zoomy_jax
-git submodule update --remote --merge library/zoomy_jax
-```
-
-That uses the `branch = main` entry for that submodule in `.gitmodules`. To persist the new commit in **your** Zoomy fork/branch (so others see the same pin):
-
-```bash
-git add library/zoomy_jax
-git commit -m "Bump zoomy_jax submodule to latest main"
-```
-
-**Pulling Zoomy later** does not automatically advance submodules; use:
-
-```bash
-git pull --recurse-submodules
-# and if you want submodules to track their remotes again:
-git submodule update --remote --merge --recursive
-```
-
-The different subrepositories are listed under [ZoomyLab](https://github.com/ZoomyLab) on GitHub.
-
-
-
-
-### Devcontainers / Usage directly in VS-Code
-
-Clone the repository (see above) and open the repository in your IDE / VS-Code. A pop-up will appear if you want to open the workspace in a container. You can choose between:
-
-* Zoomy + Jax
-* Zoomy + Firedrake
-
-**Requirements**:
-* Docker installation
-* 'Dev Container' extension in VS-Code
-
-**Restrictions**:
-* On Windows, you need to use Linux Containers for Docker.
-
-
-### Docker images
-
-**Standalone versions**:
-These versions do not allow for changes of the zoomy library.
-
-* Zoomy + JAX: `docker pull docker push ghcr.io/zoomylab/zoomy_jax_standalone:latest`
-* Zoomy + Firedrake: `docker pull docker push ghcr.io/zoomylab/zoomy_firedrake_standalone:latest`
-
-**Development versions**:
-These versions do allow for changes of the zoomy library. They require to 'pip install' the local zoomy libraries or the use of the .devcontainers.
-
-We offer Docker containers for
-
-* Zoomy + JAX: `docker pull docker push ghcr.io/zoomylab/zoomy_jax:latest`
-* Zoomy + Firedrake: `docker pull docker push ghcr.io/zoomylab/zoomy_firedrake:latest`
-
-**Restrictions**:
-* On Windows, you need to use Linux Containers for Docker.
-
-### Conda / Mamba / Micromamba installation
-
-1. Clone the repository (see above)
-2. Install Zoomy and the respective solver backends, e.g.
-
-* Zoomy (Numpy solver backend + GMSH support): 
-
-```
-conda env create -f install/Zoomy.yml
-conda activate zoomy
-conda env update -f install/meshes.yml
-python3 -m pip install library/zoomy_core
-```
-
-* Zoomy + JAX (Numpy + JAX solver backend + GMSH support)
-
-```
-conda env create -f install/Zoomy.yml
-conda activate zoomy
-conda env update -f install/zoomy_jax.yml
-conda env update -f install/meshes.yml
-python3 -m pip install library/zoomy_core
-python3 -m pip install library/zoomy_jax
-```
-
-
-### Advanced
-
-#### AMReX
-
-Note that the AMReX installation is *completely indepdenent* and the AMReX solver does not depend on the Conda/Mamba environment. Follow the instructions on the [AMReX Webpage](https://amrex-codes.github.io/amrex/docs_html/Introduction.html)
-
-WIP 
-
-#### OpenFOAM 12 (Linux / Mac)
-
-WIP
-
-#### PreCICE
-
-WIP
-
-
-#### Manual installation
-
-
-See the `install/*.yml` for a complete list of requirements. 
-
-TODO: complete list of dependencies
-
-#### Environment variables
-
-The following environment variables can be set 
-
-```{bash}
-ZOOMY_DIR=/path/to/Zoomy 
-JAX_ENABLE_X64=True
-PETSC_DIR=/path/to/petsc/installation
-PETSC_ARCH=architecture used for compiling petsc
-```
+- **Try it now in your browser** — interactive GUI at [zoomylab.github.io/Zoomy/gui](https://zoomylab.github.io/Zoomy/gui/).
+- **Try a notebook in your browser** — JupyterLite playground *(coming back soon — deployment is being rebuilt)*.
+- **Pip install the core**:
+  ```bash
+  pip install zoomy_core
+  ```
+- **Everything else** (full repo clone, submodules, Apptainer / Docker, devcontainer, Conda/Mamba, backend-specific setup, development workflow) — see [Documentation → Installation](https://zoomylab.github.io/Zoomy/installation.html).
+
+## Backends
+
+Zoomy's symbolic layer compiles to several solver backends. Each one has its own page in the documentation:
+
+- [NumPy](https://zoomylab.github.io/Zoomy/backends/numpy.html)
+- [JAX](https://zoomylab.github.io/Zoomy/backends/jax.html)
+- [Firedrake](https://zoomylab.github.io/Zoomy/backends/firedrake.html)
+- [PETSc DMPlex](https://zoomylab.github.io/Zoomy/backends/dmplex.html)
+- [AMReX](https://zoomylab.github.io/Zoomy/backends/amrex.html)
+
+### Currently out-of-service
+- [FEniCSx](https://zoomylab.github.io/Zoomy/backends/fenicsx.html)
+- [OpenFOAM](https://zoomylab.github.io/Zoomy/backends/openfoam.html)
 
 ## Testing
 
-WIP
+CI test reports for each backend are published with the docs site: see [CI Reports](https://zoomylab.github.io/Zoomy/ci-reports.html).
 
-## Publications
+## License
 
-WIP
+The Zoomy source code is free open-source software, licensed under version 3 or later of the GNU General Public License. See [LICENSE](LICENSE) for full copying permissions.
 
-## Dependencies and acknowledgements
+## Acknowledgements
 
-WIP
+Zoomy builds on, integrates with, or uses logos from the following open-source projects. We gratefully acknowledge their authors and the licenses under which we use their work:
+
+| Project | Role in Zoomy | License | Notes |
+|---|---|---|---|
+| [SymPy](https://www.sympy.org/) | symbolic modeling layer | BSD-3-Clause | logo by Fredrik Johansson, free use under the same terms as SymPy |
+| [NumPy](https://numpy.org/) | reference solver, arrays | BSD-3-Clause | |
+| [JAX](https://jax.readthedocs.io/) | `zoomy_jax` backend | Apache-2.0 | |
+| [Firedrake](https://www.firedrakeproject.org/) | `zoomy_firedrake` backend | LGPL-3.0 | |
+| [FEniCSx / DOLFINx](https://fenicsproject.org/) | `zoomy_fenicsx` backend | LGPL-3.0 | |
+| [PETSc](https://petsc.org/) | DMPlex backend, Firedrake | BSD-2-Clause | |
+| [AMReX](https://amrex-codes.github.io/) | `zoomy_amrex` backend | BSD-3-Clause-LBNL | |
+| [OpenFOAM](https://openfoam.org/) | OpenFOAM backend | GPL-3.0 | logo: *Carnby, CC BY-SA 4.0, via Wikimedia Commons* |
+| [preCICE](https://precice.org/) | coupling framework | LGPL-3.0 | |
+| [Gmsh](https://gmsh.info/) | mesh generation | GPL-2.0 | |
+| [ParaView](https://www.paraview.org/) | post-processing | BSD-3-Clause | macros in `tools/paraview_macros/` |
+| [Jupyter Book](https://jupyterbook.org/) | this documentation site | BSD-3-Clause | |
+| [JupyterLite](https://jupyterlite.readthedocs.io/) / [Pyodide](https://pyodide.org/) | in-browser notebook execution | BSD-3-Clause / MPL-2.0 | |
+
+If you spot a project we use but haven't credited, please open an issue.

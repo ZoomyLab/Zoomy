@@ -8,13 +8,21 @@ parts:
           - file: user-guide-gui
           - file: user-guide-cli
       - file: installation
+      - file: backends/index
+        sections:
+          - file: backends/numpy
+          - file: backends/jax
+          - file: backends/firedrake
+          - file: backends/fenicsx
+          - file: backends/dmplex
+          - file: backends/amrex
+          - file: backends/openfoam
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
         sections:
           - file: tutorials/ipynb/swe/simple_numpy
           - file: tutorials/ipynb/swe/simple_jax
-          - file: notebooks/pyodide_sample
       - file: tutorials/sme
         sections:
           - file: tutorials/ipynb/sme/simple
@@ -28,6 +36,11 @@ parts:
         sections:
           - file: tutorials/ipynb/amrex/from_DEM
           - file: tutorials/ipynb/amrex/buoy
+  - caption: Notebooks
+    chapters:
+      - file: notebooks
+        sections:
+          - file: notebooks/pyodide_sample
   - caption: Developer Guide
     chapters:
       - file: dev-guide
@@ -48,7 +61,7 @@ parts:
   - caption: Legal
     chapters:
       - file: legal
-  - caption: Archive (under review)
+  - caption: WIP
     chapters:
       - file: software
       - file: documentation
