@@ -36,7 +36,7 @@ def test_catalog_canonicalizes_aliases():
     assert canonical_solver_tag("convection") == "flux"
     assert canonical_solver_tag("convective") == "flux"
     assert canonical_solver_tag("ncp") == "nonconservative_flux"
-    assert canonical_solver_tag("viscous") == "diffusive_flux"
+    assert canonical_solver_tag("viscous") == "implicit_diffusion"
     assert canonical_solver_tag("pressure") == "hydrostatic_pressure"
     assert canonical_solver_tag("temporal") == "time_derivative"
 
@@ -86,12 +86,12 @@ def test_solver_tag_survives_untouched_term():
     )
     # Substitute only u → stays in flux, drops source? f is in source, u is in flux.
     eq_after_u = eq.apply({u: 2 * u})
-    assert "source" in eq_after_u.solver_tags  # source doesn't reference u → survives
+    assert "implicit_source" in eq_after_u.solver_tags  # source doesn't reference u → survives
     assert "flux" not in eq_after_u.solver_tags  # flux references u → dropped
 
     eq_after_f = eq.apply({f: 2 * f})
     assert "flux" in eq_after_f.solver_tags
-    assert "source" not in eq_after_f.solver_tags
+    assert "implicit_source" not in eq_after_f.solver_tags
 
 
 # ──────────────────────────────────────────────────────────────────────────────
