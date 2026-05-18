@@ -55,7 +55,7 @@ CI test reports for each backend are published with the docs site: see [CI Repor
 
 ## License
 
-The Zoomy source code is free open-source software, licensed under version 3 or later of the GNU General Public License. See [LICENSE](LICENSE) for full copying permissions.
+The Zoomy source code is free open-source software, licensed under version 3 or later of the GNU Lesser General Public License (LGPLv3+). See [LICENSE](LICENSE) for full copying permissions.
 
 ## Acknowledgements
 
