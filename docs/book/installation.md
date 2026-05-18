@@ -97,7 +97,6 @@ After cloning the repository:
 ```bash
 conda env create -f install/Zoomy.yml
 conda activate zoomy
-conda env update -f install/meshes.yml
 pip install library/zoomy_core
 ```
 
@@ -107,7 +106,6 @@ pip install library/zoomy_core
 conda env create -f install/Zoomy.yml
 conda activate zoomy
 conda env update -f install/zoomy_jax.yml
-conda env update -f install/meshes.yml
 pip install library/zoomy_core
 pip install library/zoomy_jax
 ```
