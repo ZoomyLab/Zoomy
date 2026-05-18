@@ -32,7 +32,6 @@ RUN cd /opt/petsc && \
         --download-scalapack \
         --download-parmetis \
         --download-superlu_dist \
-        --download-pastix \
         --download-metis \
         --download-mmg \
         --download-parmmg \
