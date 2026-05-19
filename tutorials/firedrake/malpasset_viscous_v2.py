@@ -178,6 +178,7 @@ class MalpassetSWE(Model):
     def source(self):
         _, h, hu, hv, hinv = self._primitives()
         p = self._parameter_symbols
+        # Velocity (matches the legacy malpasset_viscous.py form):
         u = hu * hinv
         w = hv * hinv
         u_mag = sqrt(u * u + w * w + 1e-12)
@@ -193,19 +194,41 @@ class MalpassetSWE(Model):
         h_safe = sp.Max(h, sp.Float(H_FRICTION_FLOOR))
         friction_div = h_safe ** (-sp.Rational(1, 3))
         factor = -p.n ** 2 * p.g * friction_div * u_mag
+        # Manning's source on the momentum equation is
+        # ``-g n² u |u| / h^(1/3)`` (velocity form).  Multiplying by
+        # ``u`` (NOT ``hu``) is critical: the conservative form is
+        # ``-g n² hu |u| / h^(4/3)``, so writing ``factor * hu`` here
+        # would yield an extra factor of ``h`` and under-damp the wave
+        # in shallow downstream cells.
         S_b = sp.S.Zero
         S_h = sp.S.Zero
-        S_hu = factor * hu
-        S_hv = factor * hv
+        S_hu = factor * u
+        S_hv = factor * w
         return ZArray([S_b, S_h, S_hu, S_hv])
 
     def diffusion_matrix_explicit(self):
-        """Depth-weighted eddy viscosity on momentum rows — **explicit
+        """Depth-averaged eddy viscosity on momentum rows — **explicit
         treatment** (folded into the convective step at ``Qn``).
 
-        Routed via the SystemModel ``diffusion_matrix_explicit`` slot
-        (the explicit IMEX companion to ``diffusion_matrix``).  For the
-        Malpasset dam-break (ν=1, h_cell≈50–200 m) the parabolic CFL
+        Diffuses **velocity** ``u = hu/h`` (matching the standard
+        depth-averaged SWE viscous term and the legacy
+        ``malpasset_viscous.py`` TPFA flux), NOT momentum ``hu``::
+
+            ∇·(ν h ∇u) = ν ∇·(∇(hu) − u ∇h) = ν ∇²(hu) − ν ∇·(u ∇h)
+
+        So the A-tensor carries both a diagonal term on ``hu`` AND a
+        cross-state term on ``h``::
+
+            F_diff[hu, d] = ν · ∂_d(hu) − ν · u · ∂_d(h)
+                          = A[hu, hu, d, d] · ∂_d(hu) + A[hu, h, d, d] · ∂_d(h)
+
+        Writing only ``A[hu, hu, d, d] = ν h`` (the operator-form
+        analogue of "diffuse momentum") gives ``∇·(ν h ∇(hu))``, which
+        scales like ``h²`` in the reservoir and like ``h`` in the
+        shallow front — too strong in deep water, too weak at the wave
+        toe, and the front propagates too far.
+
+        Why explicit: for ν=1 and h_cell≈50–200 m the parabolic CFL
         ``dt ≤ h²/(2ν)`` is ≈1250–20000 s — ~30 000× looser than the
         hyperbolic CFL (~0.04 s) — so explicit treatment never
         constrains the step.  Putting diffusion in the explicit slot
@@ -213,12 +236,20 @@ class MalpassetSWE(Model):
         (mass + Manning friction) → cell-local block-Jacobi PC
         becomes exact and Newton converges in 1 iter.
         """
-        _, h, _, _, _ = self._primitives()
+        _, h, hu, hv, hinv = self._primitives()
         nu = self._parameter_symbols.nu
+        u = hu * hinv
+        w = hv * hinv
         A = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        for i_row in (2, 3):       # hu, hv
-            for d in (0, 1):
-                A[i_row, i_row, d, d] = nu * h
+        for d in (0, 1):
+            # ν · ∂_d(hu) term  →  diagonal in momentum row
+            A[2, 2, d, d] = nu
+            A[3, 3, d, d] = nu
+            # − ν · u · ∂_d(h) cross-term  →  couples h-gradient
+            # into the momentum flux (chain rule on hu/h).  Vanishes
+            # at lake-at-rest (u = w = 0) so well-balancing is intact.
+            A[2, 1, d, d] = -nu * u
+            A[3, 1, d, d] = -nu * w
         return ZArray(A)
 
     # ---- State hygiene exposed via the SystemModel slot --------------
@@ -237,17 +268,24 @@ class MalpassetSWE(Model):
         v = self.variables
         h, hu, hv = v.h, v.hu, v.hv
         u_max = sp.Float(30.0)
-        # ``max(h, 0)`` zeroes the cap in dry cells (h ≤ 0) without
-        # touching ``h`` itself.
-        h_eff = sp.Max(h, sp.S.Zero)
-        max_hu = h_eff * u_max
+        h_dry = sp.Float(EPS_WD)
+        # Wet-mask cap matches the legacy ``malpasset_viscous.update_Q``
+        # semantics: in cells with ``h ≤ h_dry`` (= 1e-2 m by default),
+        # ``hu`` is clamped to **zero** — not just velocity-capped.
+        # Otherwise a nearly-dry "bleeding-edge" cell can keep carrying
+        # ``|u| = u_max = 30 m/s`` of momentum, which pushes the wave
+        # front farther than the depth-averaged physics supports
+        # (observed: wave climbing topography it shouldn't reach).
+        # Using ``max(h − h_dry, 0)·u_max`` as the cap collapses
+        # smoothly to zero at ``h = h_dry`` while staying ``Max``/``Min``-
+        # only (no Heaviside / sign — those don't lower through UFL).
+        h_wet = sp.Max(h - h_dry, sp.S.Zero)
+        max_hu = h_wet * u_max
 
         def cap(c):
             # Symmetric clamp to ``[-max_hu, max_hu]`` using only ``Min``
             # / ``Max`` (which lambdify cleanly through every backend's
-            # module dict).  Avoids ``sp.sign`` / ``sp.Abs`` whose UFL
-            # lowering of the eager numerical-coercion path was failing
-            # with ``Indexed.__float__ returned NotImplemented``.
+            # module dict).
             return sp.Max(-max_hu, sp.Min(c, max_hu))
 
         return ZArray([v.b, h, cap(hu), cap(hv)])
@@ -428,4 +466,9 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
 if __name__ == "__main__":
     print(f"[malpasset] ν={NU}  time_end={TIME_END}  CFL={CFL}  BC=wall")
     solver_dg0 = run(dg_degree=0, limiter="none", tag="dg0_tpfa_wall")
-    #solver_dg1 = run(dg_degree=1, limiter="vertex", tag="dg1_ipdg_vert_wall")
+    # solver_dg1 = run(dg_degree=1, limiter="vertex", tag="dg1_ipdg_vert_wall")
+    # DG(1) dt-collapses at the wet/dry shoreline (centroid-only CFL
+    # misses sub-cell h-minima).  Re-enable after the positivity work
+    # planned in `~/.claude/plans/we-are-currently-working-tingly-whale.md`
+    # Part B (sub-cell CFL + Kurganov–Petrova desingularization, then
+    # Zhang–Shu positivity limiter if needed).
