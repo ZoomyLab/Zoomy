@@ -333,3 +333,237 @@ def test_change_state_history_recorded(m1d):
     )
     assert len(sm.history) == n_history_before + 1
     assert sm.history[-1]["name"] == "change_state_variables"
+
+
+# ---------------------------------------------------------------------------
+# remove_non_diagonal_h: push M[:, h] cross-terms into the NCP matrix B.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def m1d_cantero():
+    """VAMModelGalerkin at level=1 with the default ``cantero_chinchilla``
+    quadratic form — keeps the j ≥ 1 ``∂_t h`` cross-terms explicit, so
+    ``remove_non_diagonal_h`` has work to do."""
+    from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
+    return VAMModelGalerkin(level=1, quadratic_form="cantero_chinchilla")
+
+
+def _sm_cantero_conservative(m):
+    """Conservative-state SystemModel with the walkthrough's modal
+    rescaling ``q_U1 = h U_1 / 3``, ``q_W1 = h W_1 / 3``.  Returns
+    ``(sm, syms)``."""
+    from zoomy_core.model.models.system_model import SystemModel
+
+    sm = SystemModel.from_model(m)
+    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    q_U0 = sp.Symbol("q_U0", real=True)
+    q_U1 = sp.Symbol("q_U1", real=True)
+    q_W0 = sp.Symbol("q_W0", real=True)
+    q_W1 = sp.Symbol("q_W1", real=True)
+    sm.change_state_variables(
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+        transform={U_0: q_U0 / h, U_1: 3 * q_U1 / h,
+                   W_0: q_W0 / h, W_1: 3 * q_W1 / h},
+    )
+    return sm, {"h": h, "q_U0": q_U0, "q_U1": q_U1,
+                "q_W0": q_W0, "q_W1": q_W1}
+
+
+def test_remove_non_diagonal_h_122_conservative(m1d_cantero):
+    """In conservative state with modal rescaling, the j = 1 momentum
+    rows carry an ``M[i, h] = (q_U_k − q_U_{k+1})/h`` cross-term.
+    After ``remove_non_diagonal_h`` the ``h``-column is zero on all
+    rows, the diagonal ``M[xmom_j1, q_U1] = 1`` is preserved, and the
+    NCP matrix picks up exactly the predicted entry."""
+    sm, sy = _sm_cantero_conservative(m1d_cantero)
+    h, q_U0, q_U1 = sy["h"], sy["q_U0"], sy["q_U1"]
+    q_W0, q_W1 = sy["q_W0"], sy["q_W1"]
+
+    # Cache the NCP slab before the pass so we can measure the delta.
+    n_eq, n_st, n_dim = sm.n_equations, sm.n_state, sm.n_dim
+    B_before = sp.MutableDenseNDimArray(
+        sm.nonconservative_matrix.tolist(),
+        shape=tuple(sm.nonconservative_matrix.shape),
+    )
+
+    sm.remove_non_diagonal_h()
+
+    # Mass matrix: h-column zero on every row except the mass row itself
+    # (which keeps its `M[mass, h] = 1`).
+    assert sp.simplify(sm.mass_matrix[0, 0] - 1) == 0    # mass row preserved
+    for i in range(1, n_eq):
+        assert sp.simplify(sm.mass_matrix[i, 0]) == 0, (
+            f"M[{i}, h] = {sm.mass_matrix[i, 0]} after pass (expected 0)"
+        )
+
+    # Diagonal entries on j = 1 rows preserved (the rescaling already
+    # normalised them to 1 in conservative form).
+    assert sp.simplify(sm.mass_matrix[2, 2] - 1) == 0    # xmom_j1, q_U1
+    assert sp.simplify(sm.mass_matrix[4, 4] - 1) == 0    # zmom_j1, q_W1
+
+    # B-delta on j = 1 momentum rows, ∂_x q_U0 column.
+    # F[mass, x] = q_U0 ⇒ ∂F/∂q_U0 = 1 ⇒ delta = -coeff·1.
+    expected_xmom = (q_U0 - q_U1) / h
+    expected_zmom = (q_W0 - q_W1) / h
+    delta_x = sp.simplify(sm.nonconservative_matrix[2, 1, 0]
+                          - B_before[2, 1, 0])
+    delta_z = sp.simplify(sm.nonconservative_matrix[4, 1, 0]
+                          - B_before[4, 1, 0])
+    assert sp.simplify(delta_x - expected_xmom) == 0, (
+        f"B[xmom_j1, q_U0, x] gained {delta_x}, expected {expected_xmom}"
+    )
+    assert sp.simplify(delta_z - expected_zmom) == 0, (
+        f"B[zmom_j1, q_U0, x] gained {delta_z}, expected {expected_zmom}"
+    )
+
+
+def test_remove_non_diagonal_h_122_primitive(m1d_cantero):
+    """In primitive state the j = 1 momentum rows have a
+    state-dependent ``∂_t h``-column AND a state-dependent diagonal
+    (``M[xmom_j1, U_1] = h/3``).  ``remove_non_diagonal_h`` clears the
+    ``h``-column but **leaves the diagonal alone** — that is the input
+    to ``InvertMassMatrix``, not this op's job."""
+    from zoomy_core.model.models.system_model import SystemModel
+
+    sm = SystemModel.from_model(m1d_cantero)
+    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    sm.remove_non_diagonal_h()
+
+    # h-column cleared everywhere except the mass row itself.
+    assert sp.simplify(sm.mass_matrix[0, 0] - 1) == 0
+    for i in range(1, sm.n_equations):
+        assert sp.simplify(sm.mass_matrix[i, 0]) == 0
+
+    # State-dependent diagonals preserved (not normalised).
+    assert sp.simplify(sm.mass_matrix[1, 1] - h) == 0       # xmom_j0
+    assert sp.simplify(sm.mass_matrix[2, 2] - h / 3) == 0    # xmom_j1
+    assert sp.simplify(sm.mass_matrix[3, 3] - h) == 0       # zmom_j0
+    assert sp.simplify(sm.mass_matrix[4, 4] - h / 3) == 0    # zmom_j1
+
+    # NCP gained the j = 1 cross-term in the U_0 column (primitive
+    # mass flux F[mass, x] = h·U_0 ⇒ ∂F/∂U_0 = h, ∂F/∂h = U_0; the
+    # j = 1 row's old M[i, h] = -U_0 + 2 U_1/3 propagates to
+    # B[xmom_j1, U_0, x] = -(-U_0 + 2 U_1/3) · h = h (U_0 − 2 U_1/3)).
+    expected_xmom_U0 = h * (U_0 - sp.Rational(2, 3) * U_1)
+    expected_zmom_U0 = h * (W_0 - sp.Rational(2, 3) * W_1)
+    assert sp.simplify(sm.nonconservative_matrix[2, 1, 0]
+                       - expected_xmom_U0) == 0
+    assert sp.simplify(sm.nonconservative_matrix[4, 1, 0]
+                       - expected_zmom_U0) == 0
+
+
+def test_remove_non_diagonal_h_residual_equivalence(m1d_cantero):
+    """The substitution is exact modulo the mass equation: for every
+    affected row, the change in (M ∂_t Q + ∂_x F + ∂_x P + B ∂_x Q − S)
+    equals ``M_old[i, h] · (mass-residual)``."""
+    from zoomy_core.model.models.system_model import SystemModel
+
+    sm = SystemModel.from_model(m1d_cantero)
+    n_eq, n_st, n_dim = sm.n_equations, sm.n_state, sm.n_dim
+    t = sm.time
+    space = sm.space
+    state = list(sm.state)
+
+    # Snapshot every primary before the pass.
+    M_before = sp.Matrix(sm.mass_matrix.tolist())
+    S_before = sp.Matrix(sm.source.tolist())
+    B_before = sp.MutableDenseNDimArray(
+        sm.nonconservative_matrix.tolist(),
+        shape=tuple(sm.nonconservative_matrix.shape),
+    )
+
+    # Treat state entries as functions of (t, *space) so chain-rule
+    # divergences materialise as honest derivative atoms.
+    field = {s: sp.Function(f"_{s.name}")(t, *space) for s in state}
+
+    def _residual_row(i, M, B, S):
+        """LHS = Σ_k M[i,k] ∂_t Q_k + Σ_d ∂_d F[i,d] + Σ_d ∂_d P[i,d]
+        + Σ_{k,d} B[i,k,d] ∂_d Q_k - S[i, 0], all evaluated under the
+        field-substitution."""
+        lhs = sp.S.Zero
+        for k in range(n_st):
+            lhs += M[i, k].xreplace(field) * sp.diff(field[state[k]], t)
+        for d in range(n_dim):
+            f_id = sm.flux[i, d].xreplace(field)
+            p_id = sm.hydrostatic_pressure[i, d].xreplace(field)
+            lhs += sp.diff(f_id, space[d])
+            lhs += sp.diff(p_id, space[d])
+        for k in range(n_st):
+            for d in range(n_dim):
+                lhs += (B[i, k, d].xreplace(field)
+                        * sp.diff(field[state[k]], space[d]))
+        lhs -= S[i, 0].xreplace(field)
+        return lhs
+
+    mass_row = 0
+    mass_residual = _residual_row(mass_row, M_before, B_before, S_before)
+
+    sm.remove_non_diagonal_h()
+
+    M_after = sp.Matrix(sm.mass_matrix.tolist())
+    S_after = sp.Matrix(sm.source.tolist())
+    B_after = sp.MutableDenseNDimArray(
+        sm.nonconservative_matrix.tolist(),
+        shape=tuple(sm.nonconservative_matrix.shape),
+    )
+
+    for i in range(n_eq):
+        if i == mass_row:
+            continue
+        before = _residual_row(i, M_before, B_before, S_before)
+        after = _residual_row(i, M_after, B_after, S_after)
+        coeff = M_before[i, 0].xreplace(field)
+        delta = sp.expand(after - before)
+        # The substitution must absorb exactly `-coeff · mass_residual`
+        # of LHS content (because the row LHS originally contained
+        # `coeff · ∂_t h` which we rewrote using ∂_t h = − rest_of_mass).
+        # We compare under the field-substitution to keep all the
+        # ∂_d Q_k atoms honest.
+        expected = sp.expand(-coeff * mass_residual)
+        diff = sp.expand(delta - expected)
+        assert sp.simplify(diff) == 0, (
+            f"row {i}: residual delta {delta} ≠ expected {expected}"
+        )
+
+
+def test_remove_non_diagonal_h_history(m1d_cantero):
+    """``remove_non_diagonal_h`` appends a history entry."""
+    from zoomy_core.model.models.system_model import SystemModel
+
+    sm = SystemModel.from_model(m1d_cantero)
+    n_history_before = len(sm.history)
+    sm.remove_non_diagonal_h()
+    assert len(sm.history) == n_history_before + 1
+    assert sm.history[-1]["name"] == "remove_non_diagonal_h"
+
+
+def test_remove_non_diagonal_h_idempotent(m1d_cantero):
+    """Applying twice is a no-op the second time (h-column is already 0)."""
+    from zoomy_core.model.models.system_model import SystemModel
+
+    sm = SystemModel.from_model(m1d_cantero)
+    sm.remove_non_diagonal_h()
+    snap_M = sp.Matrix(sm.mass_matrix.tolist())
+    snap_B = sp.MutableDenseNDimArray(
+        sm.nonconservative_matrix.tolist(),
+        shape=tuple(sm.nonconservative_matrix.shape),
+    )
+    snap_S = sp.Matrix(sm.source.tolist())
+
+    sm.remove_non_diagonal_h()
+
+    # M unchanged.
+    for i in range(sm.n_equations):
+        for k in range(sm.n_state):
+            assert sp.simplify(sm.mass_matrix[i, k] - snap_M[i, k]) == 0
+    # B unchanged.
+    for i in range(sm.n_equations):
+        for k in range(sm.n_state):
+            for d in range(sm.n_dim):
+                assert sp.simplify(
+                    sm.nonconservative_matrix[i, k, d] - snap_B[i, k, d]
+                ) == 0
+    # S unchanged.
+    for i in range(sm.n_equations):
+        assert sp.simplify(sm.source[i, 0] - snap_S[i, 0]) == 0

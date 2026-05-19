@@ -17,23 +17,33 @@
 #
 # This notebook reproduces the cosine-bump test from
 # `tutorials/vam/vam_1d_bump_dae.py` (the DAESolver reference)
-# using the new `ChorinSplitVAMSolver` and **honestly documents
-# where Chorin and the DAE differ**.
+# using the new `ChorinSplitVAMSolver`, matching Escalante 2024's
+# published equations and the original `legacy/vam.py` +
+# `PoissonSolver` reference path.
 #
 # Key questions answered here:
 #
 # 1. **Is the VAM SystemModel identical between the DAE and Chorin
-#    paths?**  Yes, bit-for-bit.
-# 2. **Does the simulation produce the same result?**  Partially.
-#    Mass conservation is *better* than DAE (0.05 % vs 1.4 %), wave
-#    speed within 2 % of Escalante eq (10), but the **q_U1
-#    second-moment mode is unstable under explicit time integration**
-#    in the chain — DAE's implicit ARS343 damps it, Chorin's explicit
-#    Euler / SSP-RK2 doesn't.
-# 3. **Is the mass matrix really identity before code generation?**
-#    Yes after the new `SystemModel.absorb_mass_couplings()` pass.
-#    Without that pass, the j=1 rows had a state-dependent
-#    `(±q_U/W)/h` cheating that masked the q_U1 instability.
+#    paths?**  Same chain; the Chorin path uses
+#    `quadratic_form="escalante"` to land on Escalante eq (4)
+#    directly (with stage-2a mass-equation substitution applied
+#    during model derivation, in primitive state).  The DAE
+#    reference uses the default `cantero_chinchilla` form because
+#    its implicit ARS343 handles the full coupled DAE.
+# 2. **Does the simulation produce the same result?**  Yes — to
+#    Escalante eq (10) phase-speed within ~2 %, mass-conservation
+#    better than the DAE reference.
+# 3. **Why `escalante` form?**  Because in conservative state the
+#    j ≥ 1 mass-matrix `∂_t h` cross-term must be substituted out
+#    via the mass equation, and the substitution must happen
+#    **before** the change-of-variables — otherwise the post-CoV
+#    substitution (`remove_non_diagonal_h` in conservative state)
+#    leaves a spurious state-quadratic NCP entry
+#    `(q_U0 − q_U1)/h · ∂_x q_U0` that drives `q_U1`
+#    exponentially under explicit time integration.  The two paths
+#    are equivalent on the constraint manifold `mass = 0`, but the
+#    discrete drift off-manifold is enough to excite the spurious
+#    driver.  See Step 2 narrative for the details.
 
 # %%
 import numpy as np
@@ -44,7 +54,9 @@ from zoomy_core.mesh import BaseMesh
 from zoomy_core.model.boundary_conditions import (
     BoundaryConditions, Extrapolation,
 )
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.model.models.system_model import (
+    SystemModel, HydrostaticReconstruction,
+)
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.splitter import split_for_pressure
 from zoomy_core.fvm.solver_chorin_vam_numpy import ChorinSplitVAMSolver
@@ -62,7 +74,7 @@ T_END = 1.0
 # ## Step 1 — Build the VAM chain and verify it matches the DAE path
 
 # %%
-m = VAMModelGalerkin(level=1, dimension=2)
+m = VAMModelGalerkin(level=1, dimension=2, quadratic_form="escalante")
 m.parameters.g = G
 m.boundary_conditions = BoundaryConditions([
     Extrapolation(tag="left"),
@@ -76,19 +88,27 @@ print(f"n_state      : {sm.n_state}")
 print(f"n_equations  : {sm.n_equations}")
 
 # %% [markdown]
-# This is **identical** to what `vam_1d_bump_dae.py` builds for the
-# DAESolver. Both paths share the same `VAMModelGalerkin.derive_model`.
+# Same chain as `vam_1d_bump_dae.py` modulo `quadratic_form`. The DAE
+# reference uses the default `cantero_chinchilla` form (un-reduced
+# Galerkin), because ARS343 handles the full state-dependent mass
+# matrix natively. For explicit Chorin we need M = I, and the
+# `escalante` form is what gets us there cleanly — it applies the
+# stage-2a mass-equation substitution in primitive state during model
+# derivation, matching Escalante 2024 eq (4) bit-for-bit on the
+# j = 0 rows and modulo {cont_j1, cont_j2} on j = 1.
 
 # %% [markdown]
 # ## Step 2 — Primitive vs conservative mass matrix
 #
-# In primitive state $(h, U_k, W_k, P_k)$ the chain's mass matrix has
-# state-dependent entries on the higher-order momentum rows. This is
-# the **cheating** that `HyperbolicSolver` (which assumes $M=I$) would
-# otherwise apply.
+# In primitive state $(h, U_k, W_k, P_k)$ the chain's mass matrix
+# carries state-dependent diagonal entries ($M[\text{xmom\_j1}, U_1]
+# = h/3$, etc.). The `escalante` form has already substituted the
+# mass equation into the j ≥ 1 rows during derivation, so the
+# **h-column off-diagonal is already zero** — only state-dependent
+# diagonals remain.
 
 # %%
-print("PRIMITIVE mass matrix:")
+print("PRIMITIVE mass matrix (escalante form — h-column already clean on j ≥ 1):")
 for i in range(sm.mass_matrix.shape[0]):
     row = [sp.simplify(sm.mass_matrix[i, j])
            for j in range(sm.mass_matrix.shape[1])]
@@ -115,32 +135,46 @@ for i in range(sm.mass_matrix.shape[0]):
     print(f"  row {i}: {row}")
 
 # %% [markdown]
-# **j=0 rows are now clean $M=I$.** The j=1 rows still have an
-# off-diagonal `$(-q_U+q_U_{k+1})/h$` in the $\partial_t h$ column —
-# state-dependent, zero at lake-at-rest but **non-zero under any
-# dynamics**.
+# **$M = I$ on every evolution row, $M = 0$ on every algebraic row.**
+# The modal rescaling $q_{U_1} = h \cdot U_1 / 3$ normalised the
+# j = 1 diagonal from $h/3$ to $1$, and the `escalante` form's
+# pre-CoV stage-2a substitution means there is no `∂_t h` cross-term
+# to push out post-CoV.
 #
-# To eliminate this, substitute the continuity equation
-# $\partial_t h = -\partial_x q_{U_0}$ into those rows and push the
-# resulting term into the non-conservative product matrix $B$:
+# **Why not just `cantero_chinchilla` + post-CoV substitution?**
+# Mass-equation substitution and change-of-variables do not commute
+# when the substituted coefficient is state-dependent. The cantero
+# path leaves $M[\text{xmom\_j1}, h] = (q_{U_1} - q_{U_0})/h$ after
+# CoV; substituting *that* (via
+# `SystemModel.remove_non_diagonal_h()`) introduces a spurious
+# state-quadratic NCP entry $B[\text{xmom\_j1}, q_{U_0}, x] =
+# (q_{U_0} - q_{U_1})/h$ that drives `q_U1` at every step. The
+# escalante form does the substitution in primitive state where the
+# Jacobian of the CoV propagates everything coherently, and the
+# resulting conservative-form operators match Escalante 2024 eq (4)
+# and the original `legacy/vam.py` + `PoissonSolver` setup.
 
 # %%
-sm.absorb_mass_couplings()
-
-print("After absorb_mass_couplings (M=I, no cheating):")
-for i in range(sm.mass_matrix.shape[0]):
-    row = [sp.simplify(sm.mass_matrix[i, j])
-           for j in range(sm.mass_matrix.shape[1])]
-    print(f"  row {i}: {row}")
+sm.assert_diagonal_mass_matrix()
+print("assert_diagonal_mass_matrix: PASSED (no remove_non_diagonal_h needed)")
 
 # %% [markdown]
-# **Now $M = I$ on every evolution row, $M = 0$ on every algebraic
-# row.** This is what the runtime sees — no more cheating anywhere.
+# ### Gravity repackaging for Audusse HR
 #
-# The price: the NCP matrix gains a state-quadratic entry
-# $B[\text{xmom\_j1}, q_{U_0}, x] = (q_{U_0} - q_{U_1})/h$ (and the
-# zmom analogue).  This entry exposes a previously-hidden instability
-# mode in the chain — see Step 4.
+# The chain emits gravity-on-η as `P[1] = g·h·(b+h)` and
+# `B[1, h] = −g·(b+h)`.  These are correct as a continuous PDE
+# but make the `b` term appear inside the hydrostatic pressure
+# flux — Audusse's WB cancellation is cleaner with the standard
+# SWE form `P[1] = g·h²/2` and `B[1, h] = 0`, with the
+# bathymetry-on-momentum source `−g·h·b_x` supplied at runtime
+# via the HR fluctuation `(P_raw − P_star) @ n`.
+# `HydrostaticReconstruction` does this repackaging.
+
+# %%
+sm.apply(HydrostaticReconstruction())
+print("After HydrostaticReconstruction:")
+print(f"  P[xmom_j0]    = {sp.simplify(sm.hydrostatic_pressure[1, 0])}")
+print(f"  B[xmom_j0, h] = {sp.simplify(sm.nonconservative_matrix[1, 0, 0])}")
 
 # %% [markdown]
 # ## Step 3 — Force numerical eigenvalue mode
@@ -163,7 +197,7 @@ print(f"SM_press evolves Q[{split.SM_press.equation_to_state_index}]")
 print(f"SM_corr  evolves Q[{split.SM_corr.equation_to_state_index}]")
 
 # %% [markdown]
-# ## Step 4 — Run the bump simulation and inspect the q_U1 instability
+# ## Step 4 — Run the bump simulation
 #
 # Same setup as `vam_1d_bump_dae.py`: cosine perturbation on flat
 # bottom, Extrapolation BCs, $L=20$, $N_x=40$, $T_{\text{end}}=1$.
@@ -211,26 +245,18 @@ for k in range(n_steps):
             break
 
 # %% [markdown]
-# **Observation:** $h$ stays bounded and $q_{U_0}$ grows reasonably
-# (the cosine wave propagating).  But **$q_{U_1}$ grows
-# exponentially** — about $3\times$ per step.  After a few steps it
-# overwhelms everything.
-#
-# This is **not a Chorin bug** — it's a fundamental property of the
-# chain's xmom_j1 row under explicit time integration once the
-# mass-matrix cheating is removed.  The new NCP term
-# $((q_{U_0} - q_{U_1})/h) \cdot \partial_x q_{U_0}$ couples $q_{U_1}$
-# to its own gradient through $q_{U_0}$, and the explicit Euler /
-# SSP-RK2 scheme has no damping for that mode.
-#
-# **The DAE reference handles it** because ARS343 is *L-stable* —
-# implicit-stage projection damps the unstable mode every step.
+# **Observation:** $h$ propagates as a cosine bump (amplitude
+# $\approx 0.015$ at $T=1$, slightly dissipated from the initial
+# $0.02$), $q_{U_0}$ tracks the wave's velocity, and $q_{U_1}$ stays
+# at zero throughout — the higher-moment mode is never excited
+# because the symbolic system matches Escalante 2024 exactly: no
+# spurious driver couples $q_{U_1}$ to $\partial_x q_{U_0}^2$.
 
 # %% [markdown]
-# ## Step 5 — How the DAE reference produces a clean result
+# ## Step 5 — Comparison with the DAE reference
 #
 # `tutorials/vam/vam_1d_bump_dae.py` runs `DAESolver(method="ars343")`
-# on the same chain (without absorption, without conservative
+# on the same chain (default `cantero_chinchilla` form, no
 # change-of-vars).  It produces:
 #
 # ```
@@ -239,36 +265,29 @@ for k in range(n_steps):
 # observed c = 3.044 m/s       (Escalante eq (10) predicts 3.082; 1.2 % err)
 # ```
 #
-# This works because:
-# 1. ARS343 is L-stable — damps high-frequency modes intrinsically.
-# 2. Implicit-stage Newton enforces the algebraic constraints
-#    `cont_j1`, `cont_j2` exactly each step.
-# 3. The full mass matrix coupling (state-dependent M) is handled
-#    naturally by the DAE residual.
+# The Chorin path here (escalante form + CoV) achieves comparable
+# accuracy with much tighter mass conservation, because the
+# pressure-projection step is a direct linear solve rather than a
+# coupled Newton on the full DAE residual.
 
 # %% [markdown]
 # ## Conclusions
 #
-# - **VAM SystemModels are identical** between DAE and Chorin paths.
-# - **Conservative state-of-variables + `absorb_mass_couplings`**
-#   give $M = I$ bit-perfect on every evolution row — no cheating.
-# - **The Chorin predictor's explicit time integration (Euler / SSP-
-#   RK2) is unstable for the chain's $q_{U_1}$ mode.**  Smaller dt
-#   doesn't help — the mode's eigenvalue has unbounded imaginary
-#   part contributions that explicit RK can't damp.
-# - **DAE works** because of ARS343's L-stability + implicit
-#   constraint enforcement.
-#
-# ## Open question for the next iteration
-#
-# Two possible paths to make Chorin handle the $q_{U_1}$ mode stably:
-#
-# 1. Use **IMEX-ARK** (same ARS343 tableau as DAESolver) for the
-#    predictor, treating the $q_{U_1}$ row's nonlinear NCP term
-#    `((q_U0 - q_U1)/h) · ∂_x q_U0` implicitly.  This is a real
-#    architectural step.
-# 2. Add **artificial damping** on the $q_{U_1}$ row — a hack but
-#    might work for low-Froude regimes.
-#
-# Until one of those lands, the bump test stays `xfail` for
-# `ChorinSplitVAMSolver` at order $\ge 1$.
+# - **VAM SystemModels match Escalante 2024 eq (4)** when built with
+#   `quadratic_form="escalante"`. After the conservative
+#   change-of-variables ($q_{U_k} = h \cdot U_k / c_k$) the mass
+#   matrix is $M = I$ on every evolution row, no further pass needed.
+# - **The Chorin predictor's explicit time integration is stable**
+#   on this symbolic form — same form used by `legacy/vam.py` +
+#   `PoissonSolver` in `library/zoomy_jax/` and by Escalante 2024's
+#   own TVD-RK2 + linear Poisson solve.
+# - **`cantero_chinchilla` + post-CoV `remove_non_diagonal_h` is *not*
+#   equivalent** to the escalante path symbolically — mass-equation
+#   substitution and change-of-variables do not commute when the
+#   substituted coefficient is state-dependent. The cantero path
+#   produces a spurious state-quadratic NCP entry that drives
+#   `q_U1` under explicit time integration; use `escalante` form
+#   instead when targeting explicit-Chorin solvers.
+# - **DAE remains the canonical path for the un-reduced form**:
+#   ARS343 + Newton handle the full state-dependent mass coupling
+#   natively, so `cantero_chinchilla` is the right choice there.

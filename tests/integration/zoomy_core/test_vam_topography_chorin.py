@@ -53,15 +53,20 @@ def _escalante_eq10_c(k, H_=H, g_=G):
 
 @pytest.fixture(scope="module")
 def chorin_chain():
-    """Build the VAM chain DAE, convert to conservative form, split.
+    """Build the VAM chain (escalante form), convert to conservative
+    form, split.
 
-    Same chain as ``vam_1d_bump_dae.py`` uses for the DAESolver path,
-    routed through ``change_state_variables`` so HyperbolicSolver
-    integrates the j=0 evolution rows correctly (M=I after the
-    transform; without it, the primitive chain forces a missing 1/h
-    factor on the time derivative).
+    Uses ``quadratic_form="escalante"`` so the j ≥ 1 momentum rows
+    have the stage-2a mass-equation substitution applied in
+    *primitive state* during model derivation, matching Escalante 2024
+    eq (4) directly.  After the conservative change-of-variables, M
+    is already I on every evolution row — no ``remove_non_diagonal_h``
+    needed.  The cantero+post-CoV substitution path produces a
+    spurious state-quadratic NCP entry that destabilises the explicit
+    Chorin predictor; see ``tutorials/vam/vam_chorin_split_walkthrough``
+    for the analysis.
     """
-    m = VAMModelGalerkin(level=1, dimension=2)
+    m = VAMModelGalerkin(level=1, dimension=2, quadratic_form="escalante")
     m.parameters.g = G
     # Critical — without explicit BCs the default is an empty
     # BoundaryConditions list, which produces a degenerate BC kernel
@@ -82,11 +87,10 @@ def chorin_chain():
         transform={U_0: q_U0 / h, U_1: 3 * q_U1 / h,
                    W_0: q_W0 / h, W_1: 3 * q_W1 / h},
     )
-    # Consistency check + trivial diagonal inversion.  If the
-    # variable transform doesn't produce a diagonal mass matrix on
-    # the evolution rows, ``assert_diagonal_mass_matrix`` raises with
-    # a precise location — the user picked wrong variables for this
-    # system.
+    # Consistency check + trivial diagonal inversion.  Escalante form
+    # + conservative CoV produces M = I on evolution rows directly;
+    # InvertMassMatrix is a no-op but kept for symmetry with the
+    # canonical pipeline.
     sm.assert_diagonal_mass_matrix()
     sm.apply(InvertMassMatrix())
     # The chain DAE's symbolic eigenvalues come from sp.solve on a
@@ -116,19 +120,6 @@ def _build_solver_with_ic(chorin_chain):
     return solver, Q0, x
 
 
-@pytest.mark.xfail(
-    reason=(
-        "VAM chain has a q_U1 (second-moment) mode that grows "
-        "exponentially under explicit time integration once the "
-        "j=1 mass-matrix cheating is removed (via "
-        "absorb_mass_couplings).  DAESolver handles it via implicit "
-        "ARS343; the Chorin explicit predictor (RK1 or SSP-RK2) "
-        "doesn't have the damping mechanism.  Either: switch "
-        "predictor to a higher-order implicit IMEX-style step on the "
-        "evolution rows; or treat q_U1 as a stiff source.  Deferred."
-    ),
-    strict=False,
-)
 def test_chorin_cosine_bump_runs_to_T1(chorin_chain):
     """Chorin solver runs the cosine-bump IC to T = 1.0 without
     blowup; mass conservation holds; h amplitude stays bounded
@@ -154,12 +145,6 @@ def test_chorin_cosine_bump_runs_to_T1(chorin_chain):
     )
 
 
-@pytest.mark.xfail(
-    reason="Same as test_chorin_cosine_bump_runs_to_T1 — the q_U1 "
-           "explicit-time-integration instability prevents the wave "
-           "from cleanly propagating to T=1.",
-    strict=False,
-)
 def test_chorin_cosine_bump_phase_speed_matches_escalante(chorin_chain):
     """The Chorin-propagated wave speed agrees with Escalante eq (10)
     to within 5 %.  DAE reference on this setup: 1.2 % error;
