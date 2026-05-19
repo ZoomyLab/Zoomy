@@ -1,11 +1,12 @@
 # JAX + graph/GNN stack (jraph, equinox, optax). Consumed by containers/zoomy_jax_dev.
+# Pinned to match install/Zoomy.yml.
 channels:
   - conda-forge
 
 dependencies:
-  - jax
-  - jaxlib
-  - jaxopt
+  - jax=0.9.2
+  - jaxlib=0.9.2
+  - jaxopt=0.8.4
   - pip
   - pip:
       - jraph
