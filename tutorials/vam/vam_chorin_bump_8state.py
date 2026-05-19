@@ -43,14 +43,11 @@
 # `build_pressure_elliptic_block` for the dt-baked elliptic block
 # and the closed-form corrector update.
 #
-# **Solver wiring.**  This setup is now compatible with both
-# `ChorinSplitVAMSolver` (Audusse-HR `PositiveNonconservativeRusanov`,
-# predictor-press-corrector) and `LegacyStyleChorinVAMSolver`
-# (Audusse-HR `PositiveQuasilinearRusanov`, SSPRK2-wrap full cycle).
-# Both `_build_numerics` overrides exclude `b` from
-# `scaled_q_indices` (added in this round) because `b` is static
-# bathymetry, not a momentum density that needs the HR mass-
-# preserving rescaling.
+# **Solver wiring.**  Audusse-HR `PositiveNonconservativeRusanov` via
+# `ChorinSplitVAMSolver` (predictor → pressure → corrector).  The
+# `_build_numerics` override excludes `b` from `scaled_q_indices`
+# because `b` is static bathymetry, not a momentum density that
+# needs the HR mass-preserving rescaling.
 #
 # **Tests in this notebook.**
 #
@@ -74,9 +71,7 @@ from zoomy_core.model.boundary_conditions import (
 from zoomy_core.model.initial_conditions import UserFunction
 from zoomy_core.model.models.system_model import SystemModel
 from zoomy_core.model.splitter import split_simple
-from zoomy_core.fvm.solver_chorin_vam_numpy import (
-    ChorinSplitVAMSolver, LegacyStyleChorinVAMSolver,
-)
+from zoomy_core.fvm.solver_chorin_vam_numpy import ChorinSplitVAMSolver
 
 # %% [markdown]
 # ## Digitized experimental data
@@ -298,7 +293,7 @@ def build_8state_sm(bc_list):
 # machine precision.
 
 # %%
-def test_lake_at_rest(SolverCls=LegacyStyleChorinVAMSolver, n_steps=15):
+def test_lake_at_rest(SolverCls=ChorinSplitVAMSolver, n_steps=15):
     bc = BoundaryConditions([Extrapolation(tag="left"),
                              Extrapolation(tag="right")])
     sm = build_8state_sm(bc)
