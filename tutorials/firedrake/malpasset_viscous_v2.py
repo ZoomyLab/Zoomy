@@ -76,7 +76,7 @@ import firedrake as fd
 import meshio
 
 from zoomy_core.fvm.solver_numpy import Settings
-from zoomy_core.fvm.riemann_solvers import PositiveHLL
+from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL
 from zoomy_core.misc.misc import Zstruct, ZArray
 from zoomy_core.model.basemodel import Model
 import zoomy_core.model.boundary_conditions as BC
@@ -93,7 +93,7 @@ MANNING_N = float(os.environ.get("MALPASSET_MANNING", "0.033"))
 EPS_WD = float(os.environ.get("MALPASSET_EPS_WD", "1e-2"))
 H_FRICTION_FLOOR = float(os.environ.get("MALPASSET_H_FRICTION", "0.5"))
 NU = float(os.environ.get("MALPASSET_NU", "1.0"))
-TIME_END = float(os.environ.get("MALPASSET_TIME_END", "5.0"))
+TIME_END = float(os.environ.get("MALPASSET_TIME_END", "100.0"))
 CFL = float(os.environ.get("MALPASSET_CFL", "0.5"))
 
 main_dir = misc.get_main_directory()
@@ -407,7 +407,7 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
         CFL=CFL,
         dg_degree=dg_degree,
         limiter=limiter,
-        riemann_solver_cls=PositiveHLL,
+        riemann_solver_cls=PositiveNonconservativeHLL,
     )
     # Setup pre-time-loop so we can sample initial mass before stepping.
     solver.setup_simulation(INPUT_MESH, model)
@@ -428,4 +428,4 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
 if __name__ == "__main__":
     print(f"[malpasset] ν={NU}  time_end={TIME_END}  CFL={CFL}  BC=wall")
     solver_dg0 = run(dg_degree=0, limiter="none", tag="dg0_tpfa_wall")
-    solver_dg1 = run(dg_degree=1, limiter="vertex", tag="dg1_ipdg_vert_wall")
+    #solver_dg1 = run(dg_degree=1, limiter="vertex", tag="dg1_ipdg_vert_wall")
