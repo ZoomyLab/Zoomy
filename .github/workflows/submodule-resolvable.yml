@@ -1,0 +1,73 @@
+name: Submodule pointers resolvable
+
+# Fast canary that catches the push-race where a superproject commit
+# references a submodule SHA that hasn't been pushed to the submodule's
+# remote yet. Fails in ~30s with a clear error pointing at the broken
+# submodule, rather than letting it cascade through Containers / Smart
+# Tests / Render Webpage with cryptic "upload-pack: not our ref" errors.
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # NOTE: deliberately NOT --recursive; we do our own per-submodule
+        # check so the failure message names the offending submodule.
+
+      - name: Verify every submodule pointer is reachable on its remote
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          fail=0
+          paths=$(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
+          for p in $paths; do
+            url=$(git config -f .gitmodules --get "submodule.${p}.url")
+            sha=$(git ls-tree HEAD "$p" | awk '{print $3}')
+            if [ -z "$sha" ]; then
+              continue
+            fi
+            # Rewrite SSH submodule URLs to HTTPS-with-token so this works
+            # with the same GITHUB_TOKEN auth that actions/checkout uses.
+            probe_url="$url"
+            case "$url" in
+              git@github.com:*)
+                repo="${url#git@github.com:}"
+                repo="${repo%.git}"
+                probe_url="https://x-access-token:${GH_TOKEN}@github.com/${repo}.git"
+                ;;
+            esac
+            # Try to fetch the exact SHA. GitHub allows reachable-SHA-in-want
+            # by default; non-ref commits resolve as long as some ref reaches them.
+            tmpdir=$(mktemp -d)
+            git init -q "$tmpdir"
+            if ! git -C "$tmpdir" -c uploadpack.allowReachableSHA1InWant=true \
+                  fetch --depth=1 "$probe_url" "$sha" 2>/dev/null; then
+              echo "::error file=.gitmodules::Submodule pointer not reachable: ${p} @ ${sha}"
+              echo "  submodule path: ${p}"
+              echo "  submodule url:  ${url}"
+              echo "  pinned sha:     ${sha}"
+              fail=1
+            fi
+            rm -rf "$tmpdir"
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "One or more submodule commits were not pushed to their remotes"
+            echo "before the superproject was pushed."
+            echo ""
+            echo "Fix from the worktree that produced this push:"
+            echo "    git -C <submodule-path> push origin main"
+            echo "Then re-push the superproject."
+            echo ""
+            echo "To prevent this class of race in the future:"
+            echo "    git config --global push.recurseSubmodules on-demand"
+            exit 1
+          fi
+          echo "OK: all submodule pointers reachable on their remotes."
