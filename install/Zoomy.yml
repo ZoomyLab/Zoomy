@@ -29,9 +29,7 @@ dependencies:
   - gmsh
   - python-gmsh
   - jupytext
-  - precice
   - rasterio
-  - openmpi-mpicc
   - pip
   - jupyter-cache
   - pip:
