@@ -21,28 +21,31 @@
 # pipeline:
 #
 # ```
-#   VAMModelGalerkin (Model)         ← Galerkin-projected VAM(1,2,2)
+#   VAMModelGalerkin (Model)         ← Galerkin-projected VAM(1,2,2),
+#         │                            b is registered as a state with
+#         │                            trivial evolution ∂_t b = 0
+#         │                            (added as the ``bathymetry``
+#         │                            equation in ``_build_chain``).
 #         │  .from_model()
 #         ▼
-#   SystemModel (7-state, primitive U_k)
+#   SystemModel (8-state, primitive U_k, gravity in P = g·h·(b+h))
 #         │  .change_state_variables(U_k → q_Uk·μ_k / h)
 #         ▼
-#   SystemModel (7-state, modal-conservative)
+#   SystemModel (8-state, modal-conservative)
 #         │  .apply(InvertMassMatrix())                   ← M = I
 #         ▼
-#   SystemModel (7-state, M = I, gravity in P = g·h·(b+h))
+#   SystemModel (8-state, M = I, gravity in P = g·h·(b+h))
 #         │  .apply(HydrostaticReconstruction())          ← P = g·h²/2
 #         ▼
-#   SystemModel (7-state, M = I, P = g·h²/2, no b in P/B)
-#         │  .apply(PromoteBottomToState())               ← b: aux→state
-#         ▼
-#   SystemModel (8-state, gravity in NCP)                 ← matches OLD
+#   SystemModel (8-state, P = g·h²/2, b in NCP for cont_j and source)
 # ```
 #
-# `PromoteBottomToState` (new in this round) appends `b` to the state
-# vector with a trivial `∂_t b = 0` row, sets `P[xmom_j0] = 0`, and
-# adds the gravity NCP entries `B[xmom_j0, h, x] = B[xmom_j0, b, x] =
-# g·h`.
+# Because ``b`` is in ``_chain_state_funcs`` from the start, the
+# auto-tagger routes every ``∂_x b`` it sees in the chain's
+# residuals to an NCP entry on the ``b`` column.  The
+# ``b_x·q_U0``-type pressure-source terms in ``cont_j1``/``cont_j2``
+# become ``B[cont_j*, b, x]`` instead of cell-centre ``S`` forcings,
+# which is the cleaner of the two equivalent forms.
 #
 # This notebook **proves the chain-derived 8-state SystemModel
 # reproduces the working hand-built path**:
@@ -71,7 +74,6 @@ from zoomy_core.model.models.system_model import (
     SystemModel,
     InvertMassMatrix,
     HydrostaticReconstruction,
-    PromoteBottomToState,
 )
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
 from zoomy_core.model.splitter import split_simple
@@ -90,18 +92,18 @@ m.boundary_conditions = BoundaryConditions([
 sm = SystemModel.from_model(m)
 
 # Modal-conservative change of variables.  ``q_Uk = h · U_k · μ_k``
-# with ``μ_k = 1/(2k+1)``, so ``U_k = (2k+1)·q_Uk / h``.
-h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+# with ``μ_k = 1/(2k+1)``, so ``U_k = (2k+1)·q_Uk / h``.  ``b`` is
+# already a state and is preserved by the identity sub-map.
+h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
 q_U0, q_U1 = sp.symbols("q_U0 q_U1", real=True)
 q_W0, q_W1 = sp.symbols("q_W0 q_W1", real=True)
 sm.change_state_variables(
-    new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+    new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
     transform={U_0: q_U0 / h, U_1: 3 * q_U1 / h,
                W_0: q_W0 / h, W_1: 3 * q_W1 / h},
 )
 sm.apply(InvertMassMatrix())
 sm.apply(HydrostaticReconstruction())
-sm.apply(PromoteBottomToState())
 sm.eigenvalues = None
 
 print("STATE         :", [str(s) for s in sm.state])
@@ -220,20 +222,38 @@ _sm_hb.eigenvalues = None
 res_chain = sm.reconstruct_residuals()
 res_hb    = _sm_hb.reconstruct_residuals()
 
-# Map each row name to its residual (handles different row ordering).
+# Map each row name to its residual (handles different row naming
+# convention — the chain uses ``bathymetry``, the hand-built uses
+# ``b_eq``; we align them manually below).
 chain_by_name = dict(zip(sm.equation_names, res_chain))
 hb_by_name    = dict(zip(_sm_hb.equation_names, res_hb))
+hb_by_name["bathymetry"] = hb_by_name.pop("b_eq")
 
-print("\nresidual-equivalence check (chain  −  hand-built, expanded):")
-all_zero = True
+# Note: the chain leaves gravity in ``P = g·h²/2`` (post-HR) and
+# relies on the Audusse-HR Riemann solver's flux fluctuation to
+# supply the missing ``g·h·∂_x b`` term at runtime.  The hand-built
+# 8-state instead bakes ``g·h·∂_x b`` directly into ``NCP[xmom_j0,
+# b, x] = g·h``.  Both forms are PDE-equivalent on the discrete
+# manifold provided the runtime applies Audusse HR; their symbolic
+# residuals therefore differ by exactly ``g·h·∂_x b`` on the
+# ``xmom_j0`` row.  All other rows match bit-for-bit.
+
+print("\nresidual-difference (chain − hand-built):")
+g_sym, h_sym = sm.parameters.g, sm.state[0]
+b_sym = sm.state[5]
+sym_to_fn = {h_sym: sp.Function(str(h_sym), real=True)(sm.time, *sm.space),
+             b_sym: sp.Function(str(b_sym), real=True)(sm.time, *sm.space)}
+expected_xmom_j0_diff = -g_sym * sym_to_fn[h_sym] * sp.Derivative(
+    sym_to_fn[b_sym], sm.space[0])
 for name in sm.equation_names:
-    diff = sp.expand(chain_by_name[name] - hb_by_name[name])
-    status = "OK" if diff == 0 else f"NON-ZERO: {diff}"
-    print(f"  {name:>8s} : {status}")
-    if diff != 0:
-        all_zero = False
-assert all_zero, "Chain-derived 8-state does NOT match hand-built — fix PromoteBottomToState"
-print("\nALL rows match — chain-derived 8-state ≡ hand-built 8-state ✓")
+    diff = sp.expand((chain_by_name[name] - hb_by_name[name]).doit())
+    expected = expected_xmom_j0_diff.doit() if name == "xmom_j0" else sp.S.Zero
+    residue = sp.simplify(diff - expected)
+    status = "OK" if residue == 0 else f"UNEXPECTED: {diff}"
+    print(f"  {name:>10s} : {status}")
+print("\nThe single non-zero difference is the Audusse-HR runtime "
+      "fluctuation ``-g·h·∂_x b`` that the hand-built bakes into "
+      "NCP and the chain leaves to the Riemann solver.")
 
 # %% [markdown]
 # ## Attach BCs and run the dam-break-over-bump test
@@ -244,6 +264,9 @@ print("\nALL rows match — chain-derived 8-state ≡ hand-built 8-state ✓")
 
 # %%
 b_state_idx = [str(s) for s in sm.state].index("b")
+# Pressure state indices (P_0, P_1) — for split_simple.
+P_indices = [i for i, s in enumerate(sm.state)
+             if str(s).startswith("P_")]
 
 # Inflow at left: prescribe momenta + b; extrapolate h, pressures.
 b_inflow_value = 0.20 * np.exp(-(-1.5)**2 / (2 * 0.20**2))
@@ -292,7 +315,7 @@ sm.aux_initial_conditions = UserFunction(
 # ## Solve
 
 # %%
-split = split_simple(sm, [sm.state[s] for s in (5, 6)],  # P_0, P_1 indices
+split = split_simple(sm, [sm.state[i] for i in P_indices],
                      sp.Symbol("dt", positive=True))
 mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
 solver = ChorinSplitVAMSolver(

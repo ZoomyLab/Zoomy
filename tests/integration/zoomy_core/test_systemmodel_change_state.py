@@ -63,13 +63,13 @@ def sm_form_B(m1d):
     from zoomy_core.model.models.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d)
-    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
     q_U0 = sp.Symbol("q_U0", real=True)
     q_U1 = sp.Symbol("q_U1", real=True)
     q_W0 = sp.Symbol("q_W0", real=True)
     q_W1 = sp.Symbol("q_W1", real=True)
     sm.change_state_variables(
-        new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
         transform={U_0: q_U0 / h, U_1: q_U1 / h,
                    W_0: q_W0 / h, W_1: q_W1 / h},
     )
@@ -153,13 +153,13 @@ def test_change_state_122_j0_rows_mass_diagonal(sm_form_B):
 
 
 def test_change_state_122_algebraic_rows_stay_zero(sm_form_B):
-    """Rows ``cont_j1``, ``cont_j2`` (indices 5, 6) keep all-zero mass
-    matrix after change of variables.
+    """Rows ``cont_j1``, ``cont_j2`` (indices 6, 7 with b promoted to
+    state) keep all-zero mass matrix after change of variables.
     """
     sm, _ = sm_form_B
     M = sm.mass_matrix
     n = sm.n_state
-    for i in (5, 6):
+    for i in (6, 7):
         for j in range(n):
             assert M[i, j] == 0, f"M[{i}, {j}] = {M[i, j]} (expected 0)"
 
@@ -260,7 +260,7 @@ def test_change_state_round_trip_preserves_operators(m1d):
     from zoomy_core.model.models.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d)
-    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
 
     F_before = sp.Matrix(sm.flux)
     S_before = sp.Matrix(sm.source)
@@ -278,7 +278,7 @@ def test_change_state_round_trip_preserves_operators(m1d):
     q_U1 = sp.Symbol("q_U1", real=True)
     q_W0 = sp.Symbol("q_W0", real=True)
     q_W1 = sp.Symbol("q_W1", real=True)
-    forward_state = [h, q_U0, q_U1, q_W0, q_W1, P_0, P_1]
+    forward_state = [h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1]
     forward_transform = {U_0: q_U0 / h, U_1: q_U1 / h,
                          W_0: q_W0 / h, W_1: q_W1 / h}
     inverse_transform = {q_U0: h * U_0, q_U1: h * U_1,
@@ -287,7 +287,7 @@ def test_change_state_round_trip_preserves_operators(m1d):
     sm.change_state_variables(new_state=forward_state,
                               transform=forward_transform)
     sm.change_state_variables(
-        new_state=[h, U_0, U_1, W_0, W_1, P_0, P_1],
+        new_state=[h, U_0, U_1, W_0, W_1, b, P_0, P_1],
         transform=inverse_transform,
     )
 
@@ -321,13 +321,13 @@ def test_change_state_history_recorded(m1d):
 
     sm = SystemModel.from_model(m1d)
     n_history_before = len(sm.history)
-    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
     q_U0 = sp.Symbol("q_U0", real=True)
     q_U1 = sp.Symbol("q_U1", real=True)
     q_W0 = sp.Symbol("q_W0", real=True)
     q_W1 = sp.Symbol("q_W1", real=True)
     sm.change_state_variables(
-        new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
         transform={U_0: q_U0 / h, U_1: q_U1 / h,
                    W_0: q_W0 / h, W_1: q_W1 / h},
     )
@@ -356,13 +356,13 @@ def _sm_cantero_conservative(m):
     from zoomy_core.model.models.system_model import SystemModel
 
     sm = SystemModel.from_model(m)
-    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
     q_U0 = sp.Symbol("q_U0", real=True)
     q_U1 = sp.Symbol("q_U1", real=True)
     q_W0 = sp.Symbol("q_W0", real=True)
     q_W1 = sp.Symbol("q_W1", real=True)
     sm.change_state_variables(
-        new_state=[h, q_U0, q_U1, q_W0, q_W1, P_0, P_1],
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
         transform={U_0: q_U0 / h, U_1: 3 * q_U1 / h,
                    W_0: q_W0 / h, W_1: 3 * q_W1 / h},
     )
@@ -427,7 +427,7 @@ def test_remove_non_diagonal_h_122_primitive(m1d_cantero):
     from zoomy_core.model.models.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d_cantero)
-    h, U_0, U_1, W_0, W_1, P_0, P_1 = sm.state
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
     sm.remove_non_diagonal_h()
 
     # h-column cleared everywhere except the mass row itself.

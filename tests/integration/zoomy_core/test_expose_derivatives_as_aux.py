@@ -88,12 +88,16 @@ def test_aux_registry_structure(sm_auto):
 
 
 def test_auto_scan_names_match_convention(sm_auto):
-    """Aux Symbols are named ``{target}`` (bare Function) or
-    ``{target}_{axes}`` (Derivative)."""
+    """Aux Symbols are named ``{target}_{axes}`` (Derivative).  ``b``
+    is now a STATE (with trivial ``∂_t b = 0`` evolution), so it
+    isn't in ``aux_state``; only its spatial derivative ``b_x``
+    appears."""
     aux_names = {str(s) for s in sm_auto.aux_state}
+    state_names = {str(s) for s in sm_auto.state}
     # 1D chain: VAMModelGalerkin(level=1, dimension=2).
-    assert "b" in aux_names          # topography
-    assert "b_x" in aux_names        # ∂_x b
+    assert "b" in state_names        # topography is state
+    assert "b" not in aux_names      # and NOT aux
+    assert "b_x" in aux_names        # ∂_x b — spatial deriv of state
     assert "h_x" in aux_names        # ∂_x h
     # The 2D chain (dimension=3) would additionally have b_y, h_y, …
 

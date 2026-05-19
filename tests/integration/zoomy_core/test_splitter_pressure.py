@@ -87,7 +87,8 @@ def test_elliptic_block_122_pressure_atoms_present(sm_122):
 
 def test_split_for_pressure_122_returns_three_subsystems(sm_122):
     """``split_for_pressure`` returns three rectangular SystemModels
-    sharing the 7-state Q."""
+    sharing the 8-state Q (``b`` is in the state vector with
+    ``∂_t b = 0`` as the ``bathymetry`` row)."""
     from zoomy_core.model.models.system_model import SystemModel
     from zoomy_core.model.splitter import (
         split_for_pressure, SplitForPressureResult,
@@ -102,20 +103,20 @@ def test_split_for_pressure_122_returns_three_subsystems(sm_122):
     for sm in (result.SM_pred, result.SM_press, result.SM_corr):
         assert isinstance(sm, SystemModel)
         assert [str(s) for s in sm.state] == [
-            "h", "U_0", "U_1", "W_0", "W_1", "P_0", "P_1"
+            "h", "U_0", "U_1", "W_0", "W_1", "b", "P_0", "P_1"
         ]
-        assert sm.n_state == 7
+        assert sm.n_state == 8
 
-    # Predictor.
-    assert result.SM_pred.n_equations == 5
-    assert result.SM_pred.equation_to_state_index == [0, 1, 2, 3, 4]
+    # Predictor: mass + 2 xmom + 2 zmom + bathymetry.
+    assert result.SM_pred.n_equations == 6
+    assert result.SM_pred.equation_to_state_index == [0, 1, 2, 3, 4, 5]
     assert result.SM_pred.equation_names == [
-        "mass", "xmom_j0", "xmom_j1", "zmom_j0", "zmom_j1"
+        "mass", "xmom_j0", "xmom_j1", "zmom_j0", "zmom_j1", "bathymetry"
     ]
 
     # Pressure stage.
     assert result.SM_press.n_equations == 2
-    assert result.SM_press.equation_to_state_index == [5, 6]
+    assert result.SM_press.equation_to_state_index == [6, 7]
     assert result.SM_press.mass_matrix.is_zero_matrix
     assert result.SM_press.equation_names == ["elliptic_j1", "elliptic_j2"]
 

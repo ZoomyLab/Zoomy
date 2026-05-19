@@ -84,10 +84,11 @@ def test_plane_wave_dispersion_legacy_mode(vam_122_systemmodel):
     assert "phase_velocity_solutions" not in result
 
 
-def _find_b_aux_symbol(sm):
-    """Locate the topography aux Symbol ``b`` added by
-    ``SystemModel.expose_aux_atoms``."""
-    for s in sm.aux_state:
+def _find_b_symbol(sm):
+    """Locate the bathymetry Symbol ``b`` — now a STATE entry (with
+    trivial evolution ``∂_t b = 0`` from the ``bathymetry`` row in
+    :class:`VAMModelGalerkin`).  Returns ``None`` if absent."""
+    for s in sm.state:
         if str(s) == "b":
             return s
     return None
@@ -109,12 +110,13 @@ def test_plane_wave_dispersion_matches_escalante_eq10(vam_122_systemmodel):
     m, sm = vam_122_systemmodel
     h0 = sp.Symbol("h0", positive=True)
     base_state = _rest_base_state(sm, h0)
-    b_sym = _find_b_aux_symbol(sm)
-    assert b_sym is not None, "Expected aux Symbol 'b' after auto-scan"
-    # Flat bottom: zero ``b`` *and* every derivative-aux entry whose
-    # target is ``b`` (``b_x``, ``b_y``, …).
+    b_sym = _find_b_symbol(sm)
+    assert b_sym is not None, "Expected state Symbol 'b' in VAMModelGalerkin"
+    # Flat bottom: zero ``b`` in the state base AND every derivative-
+    # aux entry whose target is ``b`` (``b_x``, ``b_y``, …).
+    base_state[b_sym] = sp.S.Zero
     for s in sm.aux_state:
-        if str(s) == "b" or str(s).startswith("b_"):
+        if str(s).startswith("b_"):
             base_state[s] = sp.S.Zero
     ez_param = next(s for s, v in sm.parameters.items() if str(s) == "ez")
     g_param = next(s for s in sm.parameters if str(s) == "g")
@@ -128,19 +130,24 @@ def test_plane_wave_dispersion_matches_escalante_eq10(vam_122_systemmodel):
     k = result["k"]
     det = sp.simplify(result["dispersion_determinant"])
 
-    # det carries an ω prefactor (from the algebraic constraint rows) and
-    # constant scaling.  Strip it.
+    # The 8-state dispersion matrix carries an extra ``i·omega`` factor
+    # from the trivial ``bathymetry`` row (``∂_t b = 0`` has ω = 0 as
+    # its only eigenvalue, contributing a cofactor of ``iω`` to the
+    # determinant).  The algebraic constraint rows and chain's
+    # structural constants contribute the original ``prefactor``;
+    # both factors must be stripped to isolate the Escalante
+    # surface-wave polynomial.
     prefactor = -sp.I * h0**2 * omega / (27 * rho_param**2)
-    det_poly = sp.expand(det / prefactor)
+    det_poly = sp.expand(det / (prefactor * sp.I * omega))
 
-    # Escalante eq (10) polynomial.  det_poly = −144 × Escalante (sign
+    # Escalante eq (10) polynomial.  det_poly = 144 × Escalante (sign
     # is irrelevant for det = 0).
     escalante = (omega**2 * (1 + 5*(k*h0)**2/12 + (k*h0)**4/144)
                  - g_param*h0*k**2 * (1 + (k*h0)**2/12))
-    diff = sp.expand(det_poly + 144 * escalante)
+    diff = sp.expand(det_poly - 144 * escalante)
     assert sp.simplify(diff) == 0, (
         f"Dispersion polynomial differs from Escalante eq (10): "
-        f"det/prefactor + 144·Escalante = {diff}"
+        f"det/(prefactor·iω) − 144·Escalante = {diff}"
     )
 
     # Non-trivial ω solutions + long-wave limit c² → g·H.

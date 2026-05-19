@@ -40,13 +40,14 @@ def test_dae_solver_setup(mesh_1d, vam_model):
                        compute_dt=ts.constant(dt=0.05))
     Q = solver.setup_simulation(mesh_1d, vam_model)
 
-    assert Q.shape == (7, mesh_1d.n_inner_cells)
-    # 5 evolution + 2 algebraic rows.
-    assert solver.evol_idx.tolist() == [0, 1, 2, 3, 4]
-    assert solver.alg_idx.tolist() == [5, 6]
-    # Auto-scan picks up b (function) and b_x, h_x (derivatives).
+    assert Q.shape == (8, mesh_1d.n_inner_cells)
+    # 6 evolution (mass + 2 xmom + 2 zmom + bathymetry) + 2 algebraic.
+    assert solver.evol_idx.tolist() == [0, 1, 2, 3, 4, 5]
+    assert solver.alg_idx.tolist() == [6, 7]
+    # ``b`` is now a STATE; auto-scan still picks up derivatives such
+    # as ``b_x`` (target_kind="state", state_index pointing at b).
     aux_names = {str(s) for s in solver.sm.aux_state}
-    assert "b" in aux_names
+    assert "b" not in aux_names, "b should be a state, not aux"
     assert "b_x" in aux_names
     assert "h_x" in aux_names
 
