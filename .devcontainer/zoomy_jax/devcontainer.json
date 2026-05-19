@@ -12,12 +12,12 @@
   },
   "settings": {
     "terminal.integrated.defaultProfile.linux": "bash",
-    "python.defaultInterpreterPath": "/opt/zoomy/envs/zoomy/bin/python"
+    "python.defaultInterpreterPath": "/opt/conda/envs/zoomy/bin/python"
   },
   "remoteEnv": {
     "ZOOMY_DIR": "/workspace"
   },
-  "postCreateCommand": "/opt/zoomy/envs/zoomy/bin/python -m pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_jax -e /workspace/library/zoomy_tests",
+  "postCreateCommand": "/opt/conda/envs/zoomy/bin/python -m pip install -e /workspace/library/zoomy_core -e /workspace/library/zoomy_jax -e /workspace/library/zoomy_tests",
   "extensions": [
     "ms-python.python",
     "ms-toolsai.jupyter",

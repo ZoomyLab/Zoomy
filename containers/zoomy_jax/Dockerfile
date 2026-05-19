@@ -3,13 +3,13 @@ ARG JAX_DEV_IMAGE=ghcr.io/zoomylab/zoomy_jax_dev:latest
 FROM ${JAX_DEV_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
-ENV PATH=/opt/zoomy/envs/zoomy/bin:$PATH
-ENV CONDA_PREFIX=/opt/zoomy/envs/zoomy
+ENV PATH=/opt/conda/envs/zoomy/bin:$PATH
+ENV CONDA_PREFIX=/opt/conda/envs/zoomy
 
 COPY library/zoomy_core /tmp/zoomy_src/zoomy_core
 COPY library/zoomy_jax /tmp/zoomy_src/zoomy_jax
 
-RUN /opt/zoomy/envs/zoomy/bin/python -m pip install --no-cache-dir \
+RUN /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
       /tmp/zoomy_src/zoomy_core \
       /tmp/zoomy_src/zoomy_jax \
       pytest-html \
