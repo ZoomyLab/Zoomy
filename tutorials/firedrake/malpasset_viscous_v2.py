@@ -24,19 +24,49 @@
 # block into the weak form.  Here we:
 #
 # - define an equivalent `MalpassetSWE` Model that returns
-#   `flux`, `nonconservative_matrix`, `source` and `diffusion_matrix`
+#   `flux`, `nonconservative_matrix`, `source` and `diffusion_matrix_explicit`
 #   in the new operator-form convention;
 # - let `SystemModel.from_model` extract the operators;
-# - let `Rusanov(SystemModel).to_runtime_ufl()` lower the Riemann
-#   numerics to UFL;
+# - let `PositiveHLL(SystemModel).to_runtime_ufl()` lower the
+#   Audusse-Bristeau-Klein well-balanced Riemann numerics to UFL;
 # - rely on the solver's built-in TPFA (DG(0)) and IP-DG (DG(1+))
 #   diffusion paths — no per-app weak-form override.
+#
+# ## Running
+#
+# Serial::
+#
+#     python tutorials/firedrake/malpasset_viscous_v2.py
+#
+# Parallel (MPI, recommended for larger meshes / longer runs)::
+#
+#     mpirun -n 4 python tutorials/firedrake/malpasset_viscous_v2.py
+#
+# The MPI halo workaround for PETSc 3.20+ is applied automatically at
+# import time.  Both serial and parallel paths use the solver's GAMG
+# defaults (see
+# :attr:`FiredrakeHyperbolicSolver.DEFAULT_NONLINEAR_SOLVER_PARAMETERS`)
+# which were tuned via the
+# ``tutorials/firedrake/bench_*`` optimisation campaign:
+# **~9× faster** than the previous LU-based default in serial; scales
+# cleanly under MPI.  Override per-run by passing
+# ``linear_solver_parameters=...`` / ``nonlinear_solver_parameters=...``
+# to the solver constructor.
 #
 # Two runs at the bottom: DG(0), then DG(1) with vertex-based limiter.
 
 # %%
 import os
+import sys
 import time
+
+# MPI halo-exchange workaround for PETSc 3.20+: must run BEFORE
+# importing firedrake.  No-op when COMM_WORLD.size == 1, so safe to
+# import unconditionally — both ``python script.py`` and
+# ``mpirun -n N python script.py`` use this entry point.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _mpi_halo_patch
+_mpi_halo_patch.apply()
 
 import numpy as np
 import sympy as sp
@@ -169,7 +199,20 @@ class MalpassetSWE(Model):
         S_hv = factor * hv
         return ZArray([S_b, S_h, S_hu, S_hv])
 
-    def diffusion_matrix(self):
+    def diffusion_matrix_explicit(self):
+        """Depth-weighted eddy viscosity on momentum rows — **explicit
+        treatment** (folded into the convective step at ``Qn``).
+
+        Routed via the SystemModel ``diffusion_matrix_explicit`` slot
+        (the explicit IMEX companion to ``diffusion_matrix``).  For the
+        Malpasset dam-break (ν=1, h_cell≈50–200 m) the parabolic CFL
+        ``dt ≤ h²/(2ν)`` is ≈1250–20000 s — ~30 000× looser than the
+        hyperbolic CFL (~0.04 s) — so explicit treatment never
+        constrains the step.  Putting diffusion in the explicit slot
+        leaves the implicit source-step Jacobian block-diagonal
+        (mass + Manning friction) → cell-local block-Jacobi PC
+        becomes exact and Newton converges in 1 iter.
+        """
         _, h, _, _, _ = self._primitives()
         nu = self._parameter_symbols.nu
         A = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
