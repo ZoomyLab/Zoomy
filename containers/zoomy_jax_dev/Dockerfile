@@ -21,8 +21,9 @@ ARG MAMBA_NO_BASHRC=1
 COPY install/Zoomy.yml /tmp/Zoomy.yml
 COPY install/zoomy_jax.yml /tmp/zoomy_jax.yml
 
-RUN micromamba create -y -n zoomy -f /tmp/Zoomy.yml && \
-    micromamba env update -n zoomy -f /tmp/zoomy_jax.yml && \
+RUN micromamba create -y -n zoomy \
+        -f /tmp/Zoomy.yml \
+        -f /tmp/zoomy_jax.yml && \
     micromamba clean --all --yes
 
 FROM ubuntu:22.04
