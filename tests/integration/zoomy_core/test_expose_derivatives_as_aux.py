@@ -125,12 +125,19 @@ def test_runtime_responds_to_aux_values(sm_auto):
     """Source row 4 (``zmom_j1``) responds when ``b``, ``b_x``,
     ``h_x`` values are supplied through Qaux at runtime."""
     rt = NumpyRuntimeModel.from_system_model(sm_auto)
-    p = np.array([float(sm_auto.parameters[s])
+    # ``sm.parameters`` is the Zstruct of name → Symbol; the numeric
+    # defaults live on ``parameter_values``.  Pre-Zstruct-symbol-key
+    # support, ``parameters[s]`` for a Symbol ``s`` raised TypeError,
+    # so this line never actually ran — now it would return the Symbol
+    # (not a float).  Use ``parameter_values`` for the numeric path.
+    p = np.array([float(sm_auto.parameter_values[s])
                   for s in sm_auto.parameters])
     aux_names = [str(s) for s in sm_auto.aux_state]
     i_bx = aux_names.index("b_x")
 
-    Q = np.array([1.0, 0.1, 0.05, 0.0, 0.0, 0.0, 0.0])
+    # 8-state baseline: [h, U_0, U_1, W_0, W_1, b, P_0, P_1] now that
+    # VAMModelGalerkin promotes b to a state with ∂_t b = 0.
+    Q = np.array([1.0, 0.1, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0])
     Qaux_zero = np.zeros(len(aux_names))
     src_zero = rt.source(Q, Qaux_zero, p).flatten()
 
