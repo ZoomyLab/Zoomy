@@ -73,6 +73,8 @@ import sympy as sp
 from sympy import Matrix, sqrt, Piecewise
 
 import firedrake as fd
+from firedrake.petsc import PETSc
+from mpi4py import MPI
 import meshio
 
 from zoomy_core.fvm.solver_numpy import Settings
@@ -340,11 +342,29 @@ class MalpassetSWE(Model):
         return ZArray(gated)
 
     def update_aux_variables(self):
-        """hinv = 1 / max(h, eps)."""
+        """Kurganov–Petrova desingularized inverse depth.
+
+        Returns ``hinv = √2 · h / √(h⁴ + max(h, eps)⁴)`` instead of the
+        naïve ``1 / max(h, eps)``.  The two agree exactly for ``h ≥ eps``
+        (both give ``1/h``), but below the threshold the KP form
+        smoothly tends to **zero** as ``h → 0`` rather than saturating
+        at ``1/eps``.  Consequence: in any sub-cell quad point with
+        ``h < eps`` (a routine occurrence at DG(1) wet/dry interfaces
+        where ``h`` is a polynomial and can dip below its cell
+        average), the derived velocity ``u = hu · hinv`` decays
+        smoothly to zero instead of jumping up to ``hu / eps``.  This
+        is the standard Kurganov–Petrova (2007) regularization for
+        wet/dry SWE and is the missing piece that lets DG(1) avoid
+        dt-collapse at the shoreline.
+        """
         v = self.variables
         p = self._parameter_symbols
-        h_safe = sp.Max(v.h, p.eps)
-        return ZArray([1 / h_safe])
+        h = v.h
+        eps = p.eps
+        h_floor = sp.Max(h, eps)
+        denom = sqrt(h ** 4 + h_floor ** 4)
+        hinv_kp = sqrt(2) * h / denom
+        return ZArray([hinv_kp])
 
 
 # %% [markdown]
@@ -424,6 +444,28 @@ def _total_water_volume(solver):
     return float(fd.assemble(h * fd.dx))
 
 
+def _b_stats(solver):
+    """Per-rank and global min/max/integral of the bathymetry component
+    ``Q[0] = b`` on the active state.  Used to detect spurious b
+    modification at DG(1): b is stationary in the model (S_b = 0,
+    A[b, *] = 0, F[b, *] = 0), so b at step 1 must equal b at step 0
+    bit-for-bit.  Any drift fingers the slope limiter / update_Q /
+    halo path as the culprit."""
+    s = solver._state
+    b = s.Qnp1[0]
+    b_func = fd.Function(fd.FunctionSpace(
+        s.Qnp1.function_space().mesh(), "DG", solver.dg_degree
+    )).interpolate(b)
+    arr = b_func.dat.data_ro
+    comm = s.Qnp1.function_space().mesh().comm
+    rank = comm.Get_rank()
+    local = (float(arr.min()), float(arr.max()), float(arr.mean()))
+    g_min = comm.allreduce(local[0], op=MPI.MIN)
+    g_max = comm.allreduce(local[1], op=MPI.MAX)
+    g_int = float(fd.assemble(b * fd.dx))
+    return rank, local, (g_min, g_max, g_int)
+
+
 def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
     model = MalpassetSWE()
     out_tag = tag or f"dg{dg_degree}_lim{limiter}"
@@ -450,25 +492,63 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
     # Setup pre-time-loop so we can sample initial mass before stepping.
     solver.setup_simulation(INPUT_MESH, model)
     V0 = _total_water_volume(solver)
+    rank0, b0_local, b0_global = _b_stats(solver)
     t0 = time.perf_counter()
     solver.run_simulation()
     t1 = time.perf_counter()
     V1 = _total_water_volume(solver)
+    rank1, b1_local, b1_global = _b_stats(solver)
     dV_rel = (V1 - V0) / V0 if V0 != 0.0 else float("nan")
+    # Per-rank b stats printed by every rank so MPI-rank-localised
+    # corruption (e.g. halo) is visible.  Use PETSc.Sys.syncPrint to
+    # interleave cleanly.
+    PETSc.Sys.syncPrint(
+        f"[malpasset {out_tag}] rank={rank0:2d}  "
+        f"b_local_before=({b0_local[0]:+.6e}, {b0_local[1]:+.6e}, mean={b0_local[2]:+.6e})  "
+        f"b_local_after =({b1_local[0]:+.6e}, {b1_local[1]:+.6e}, mean={b1_local[2]:+.6e})  "
+        f"Δb_max_rank={max(abs(b1_local[0]-b0_local[0]), abs(b1_local[1]-b0_local[1])):.3e}"
+    )
+    PETSc.Sys.syncFlush()
     print(
         f"[malpasset {out_tag}] wall_time={t1 - t0:.2f}s  "
-        f"V0={V0:.6e}  V1={V1:.6e}  ΔV/V0={dV_rel:+.3e}"
+        f"V0={V0:.6e}  V1={V1:.6e}  ΔV/V0={dV_rel:+.3e}  "
+        f"b_global_before=(min={b0_global[0]:+.3e}, max={b0_global[1]:+.3e}, ∫b={b0_global[2]:+.6e})  "
+        f"b_global_after =(min={b1_global[0]:+.3e}, max={b1_global[1]:+.3e}, ∫b={b1_global[2]:+.6e})  "
+        f"Δ∫b/∫b={(b1_global[2]-b0_global[2])/abs(b0_global[2]) if b0_global[2] != 0 else float('nan'):+.3e}"
+    )
+    # Compact per-step throughput line for benchmark tables.
+    n_iter = int(getattr(solver._state, "last_iteration_count", 0))
+    final_t = float(getattr(solver._state, "sim_time", 0.0))
+    avg_dt = (final_t / n_iter) if n_iter > 0 else float("nan")
+    ms_per_iter = ((t1 - t0) * 1000.0 / n_iter) if n_iter > 0 else float("nan")
+    print(
+        f"[malpasset {out_tag} BENCH] n_iter={n_iter}  final_t={final_t:.3f}  "
+        f"avg_dt={avg_dt:.4f}s  wall={t1 - t0:.2f}s  "
+        f"ms/iter={ms_per_iter:.1f}  wall/sim_s={(t1 - t0) / final_t if final_t > 0 else float('nan'):.2f}"
     )
     return solver
 
 
 # %%
 if __name__ == "__main__":
-    print(f"[malpasset] ν={NU}  time_end={TIME_END}  CFL={CFL}  BC=wall")
-    solver_dg0 = run(dg_degree=0, limiter="none", tag="dg0_tpfa_wall")
-    # solver_dg1 = run(dg_degree=1, limiter="vertex", tag="dg1_ipdg_vert_wall")
-    # DG(1) dt-collapses at the wet/dry shoreline (centroid-only CFL
-    # misses sub-cell h-minima).  Re-enable after the positivity work
-    # planned in `~/.claude/plans/we-are-currently-working-tingly-whale.md`
-    # Part B (sub-cell CFL + Kurganov–Petrova desingularization, then
-    # Zhang–Shu positivity limiter if needed).
+    # ONE_STEP mode: short t_end (~1–2 steps) for both DG(0) and DG(1).
+    # Goal is to compare bathymetry b before and after a single step
+    # at DG(0) (where b is provably conserved) vs DG(1) (where the
+    # user observes immediate b flicker at MPI rank boundaries +
+    # spurious mass injection).  Set MALPASSET_ONE_STEP=0 to fall
+    # back to the full TIME_END run.
+    one_step = bool(int(os.environ.get("MALPASSET_ONE_STEP", "1")))
+    t_end = 0.05 if one_step else TIME_END
+    print(f"[malpasset] ν={NU}  time_end={t_end}  CFL={CFL}  BC=wall"
+          f"  one_step={one_step}")
+    solver_dg0 = run(dg_degree=0, limiter="none", time_end=t_end,
+                     tag="dg0_tpfa_wall")
+    # DG(1) probe — also run with limiter="none" to discriminate
+    # whether the residual b-flicker + mass-injection come from the
+    # limiter (excluded for b but still active on h) or from somewhere
+    # else (MPI halo, source Newton, etc.).  If ΔV/V0 → 0 here, the
+    # h-limiter is the culprit.
+    solver_dg1_nolim = run(dg_degree=1, limiter="none", time_end=t_end,
+                           tag="dg1_ipdg_nolim_wall")
+    solver_dg1 = run(dg_degree=1, limiter="vertex", time_end=t_end,
+                     tag="dg1_ipdg_vert_wall")
