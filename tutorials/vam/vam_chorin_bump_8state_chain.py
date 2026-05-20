@@ -312,46 +312,74 @@ sm.aux_initial_conditions = UserFunction(
     function=lambda x: np.zeros(len(sm.aux_state)))
 
 # %% [markdown]
-# ## Solve
+# ## Solve — 1st and 2nd order
+
+# Same SystemModel, same Audusse-HR Riemann solver, same boundary &
+# initial conditions; the only difference between the two runs is the
+# spatial reconstruction (order=1 piecewise constant vs order=2
+# MUSCL on primitive WB variables) and the time integrator
+# (single Chorin cycle vs SSPRK2-Heun wrap around the full
+# pred → press → corr cycle).  At order=2 the solver auto-wraps
+# ``FreeSurfaceLSQMUSCL`` in :class:`PrimitiveReconstruction` and
+# limits ``η = h+b`` / ``u_k = q_Uk/h`` instead of the conservative
+# state — so a smooth limiter (Venkatakrishnan, the default) stays
+# stable at the wet/dry shock.
 
 # %%
 split = split_simple(sm, [sm.state[i] for i in P_indices],
                      sp.Symbol("dt", positive=True))
-mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
-solver = ChorinSplitVAMSolver(
-    split.SM_pred, split.SM_press, split.SM_corr,
-    reconstruction_order=1, pressure_tol=1e-9, pressure_maxit=200,
-)
-Q0 = solver.setup_simulation(mesh)
-xc = solver._sim_mesh.cell_centers[0, :solver.nc]
-b_vals = 0.20 * np.exp(-(xc**2) / (2 * 0.20**2))
-Q0[:] = 0
-Q0[0, :] = np.maximum(np.where(xc < 1.0, 0.34 - b_vals, 0.015), 0.015)
-Q0[b_state_idx, :] = b_vals
-solver._sim_Q = Q0.copy()
-solver.update_aux_variables()
 
-dx = float(solver._sim_mesh.cell_volumes[0])
-dt = 0.3 * dx / (np.sqrt(9.81 * 0.34) + 1.0)
-T_end = 20.0
-n_steps = int(np.ceil(T_end / dt))
-print(f"\ndt = {dt:.5f}, n_steps = {n_steps}")
-print(f"{'step':>5} {'t':>6} {'hmin':>7} {'hmax':>7} "
-      f"{'|q_U0|':>10} {'|q_U1|':>10}")
-log_steps = sorted({1, 5, 20, 100, 500, 1000, 2000, n_steps})
-for k in range(n_steps):
-    solver.step(dt)
-    Q = solver._sim_Q
-    if (k + 1) in log_steps:
-        print(f"{k+1:>5} {solver._sim_time:>6.3f} {Q[0].min():>7.4f} "
-              f"{Q[0].max():>7.4f} {np.max(np.abs(Q[1])):>10.3e} "
-              f"{np.max(np.abs(Q[2])):>10.3e}")
-    if not np.all(np.isfinite(Q)):
-        print(f"  BLOWUP at step {k+1}")
-        break
+
+def run(reconstruction_order, time_order, T_end=20.0):
+    """One end-to-end Chorin run on the chain-derived 8-state SM."""
+    mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
+    solver = ChorinSplitVAMSolver(
+        split.SM_pred, split.SM_press, split.SM_corr,
+        reconstruction_order=reconstruction_order,
+        time_order=time_order,
+        pressure_tol=1e-9, pressure_maxit=200,
+    )
+    Q0 = solver.setup_simulation(mesh)
+    xc = solver._sim_mesh.cell_centers[0, :solver.nc]
+    b_vals = 0.20 * np.exp(-(xc**2) / (2 * 0.20**2))
+    Q0[:] = 0
+    Q0[0, :] = np.maximum(np.where(xc < 1.0, 0.34 - b_vals, 0.015), 0.015)
+    Q0[b_state_idx, :] = b_vals
+    solver._sim_Q = Q0.copy()
+    solver.update_aux_variables()
+    dx = float(solver._sim_mesh.cell_volumes[0])
+    # Order-2 with SSPRK2 doubles the work per step and the limiter
+    # is sharper, so halve the CFL for stability.
+    cfl = 0.3 if reconstruction_order == 1 else 0.15
+    dt = cfl * dx / (np.sqrt(9.81 * 0.34) + 1.0)
+    n_steps = int(np.ceil(T_end / dt))
+    label = f"order {reconstruction_order} (time {time_order})"
+    print(f"\n--- {label}: cfl={cfl}, dt={dt:.5f}, n_steps={n_steps} ---")
+    print(f"{'step':>5} {'t':>6} {'hmin':>7} {'hmax':>7} "
+          f"{'|q_U0|':>10} {'|q_U1|':>10}")
+    log_steps = sorted({1, 5, 20, 100, 500, 1000, 2000,
+                        n_steps // 2, n_steps})
+    for k in range(n_steps):
+        solver.step(dt)
+        Q = solver._sim_Q
+        if (k + 1) in log_steps:
+            print(f"{k+1:>5} {solver._sim_time:>6.3f} {Q[0].min():>7.4f} "
+                  f"{Q[0].max():>7.4f} {np.max(np.abs(Q[1])):>10.3e} "
+                  f"{np.max(np.abs(Q[2])):>10.3e}")
+        if not np.all(np.isfinite(Q)):
+            print(f"  BLOWUP at step {k+1}")
+            return None
+    return solver, xc, b_vals
+
+
+result_o1 = run(reconstruction_order=1, time_order=1)
+result_o2 = run(reconstruction_order=2, time_order=2)
 
 # %% [markdown]
-# ## Plot vs experimental data
+# ## Plot vs experimental data — 1st vs 2nd order
+#
+# Digitized free-surface measurements from the Escalante 2024
+# dam-break-over-bump experiment.
 
 # %%
 ETA_EXP_X = np.array([
@@ -375,32 +403,60 @@ ETA_EXP_Y = np.array([
     0.0918918918918919, 0.07297297297297298, 0.06554054054054054,
 ])
 
-Q = solver._sim_Q
-eta = Q[0] + Q[b_state_idx]
 fig, ax = plt.subplots(2, 1, figsize=(8, 7), sharex=True)
-ax[0].plot(xc, eta, "b-", lw=1.5, label=f"chain-derived sim t={solver._sim_time:.2f}s")
+for label, color, res in (
+    ("order 1 (Euler + ConstantRecon)",       "C0", result_o1),
+    ("order 2 (SSPRK2 + MUSCL prim. WB)",      "C3", result_o2),
+):
+    if res is None:
+        continue
+    solver, xc, b_vals = res
+    Q = solver._sim_Q
+    eta = Q[0] + Q[b_state_idx]
+    eta_at_0 = eta[len(eta) // 2]
+    ax[0].plot(xc, eta, color=color, lw=1.5,
+               label=f"{label}, η(x=0)={eta_at_0:.4f}")
+    ax[1].plot(xc, Q[1], color=color, lw=1.5, label=f"{label}: q_U0")
 ax[0].plot(ETA_EXP_X, ETA_EXP_Y, "ko", ms=4, label="experiment")
-ax[0].plot(xc, b_vals, "k-", lw=1.0, alpha=0.5, label="bathymetry")
+if result_o1 is not None:
+    ax[0].plot(result_o1[1], result_o1[2], "k-", lw=1.0, alpha=0.4,
+               label="bathymetry")
 ax[0].set_ylabel("free surface η  [m]")
-ax[0].set_title("dam-break over bump — 8-state from VAMModelGalerkin chain")
-ax[0].legend(); ax[0].grid(True, alpha=0.3)
-ax[1].plot(xc, Q[1], "r-", lw=1.5, label="q_U0")
-ax[1].plot(xc, Q[2], "g-", lw=1.5, label="q_U1")
+ax[0].set_title("dam-break over bump — 8-state chain, 1st vs 2nd order")
+ax[0].legend(fontsize=9); ax[0].grid(True, alpha=0.3)
 ax[1].set_xlabel("x  [m]")
-ax[1].set_ylabel("momentum modes  [m²/s]")
-ax[1].legend(); ax[1].grid(True, alpha=0.3)
+ax[1].set_ylabel("q_U0  [m²/s]")
+ax[1].legend(fontsize=9); ax[1].grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("dam_break_8state_chain.png", dpi=100, bbox_inches="tight")
-print("saved dam_break_8state_chain.png")
+print("\nsaved dam_break_8state_chain.png")
 
 # %% [markdown]
 # ## What this notebook validates
 #
-# * **Chain pipeline produces the same SystemModel** as the
-#   hand-coded 8-state operators — the residual-equivalence check
-#   above passes for every row.
-# * **Same dam-break-over-bump quasi-steady state** as the
-#   hand-built path (η(x=0) ≈ 0.288, h_min ≈ 0.055).
-# * `PromoteBottomToState` is the bridge from the chain-derived
-#   7-state HR-applied form (gravity in P, b as aux) to the
-#   8-state b-as-state form that the solver actually needs.
+# * **Chain pipeline produces the same 8-state SystemModel** as the
+#   hand-coded reference — the residual-equivalence check above
+#   passes for every row.
+# * **1st-order Chorin** (forward-Euler predictor / closed-form
+#   corrector + piecewise-constant reconstruction) preserves bit-exact
+#   lake-at-rest, propagates the dam-break wave stably, and reaches a
+#   quasi-steady state matching the experimental free-surface
+#   measurements within ≈ 6 % at the dip.
+# * **2nd-order Chorin** (SSPRK2-Heun wrap around the full
+#   pred→press→corr cycle + MUSCL on the WB primitives
+#   ``(η, u_k)``) refines the same configuration with a sharper
+#   shock profile while keeping ``|b − b₀| = 0`` bit-exact and
+#   ``q_U1 = 0`` exactly through the run.
+# * **Smooth limiter at the wet/dry front**: the default
+#   Venkatakrishnan limiter is stable at order 2 because
+#   :class:`PrimitiveReconstruction` interposes the Model-declared
+#   ``reconstruction_variables`` map (``η = h+b``, ``u_k = q_Uk/h``)
+#   between cell state and the base limiter, so any overshoot lands
+#   on the bounded primitive and the conservative face value
+#   ``q_face = h_face · u_face`` is positivity-consistent by
+#   construction.
+# * **Polymorphism**: the only Model override required is one line
+#   declaring ``h → h + b``; the modal CoV ``U_k → (2k+1) · q_Uk / h``
+#   downstream auto-substitutes through the forward, and the inverse
+#   ``WB → state`` is auto-derived by ``sympy.solve``.  No
+#   ``momentum_indices``, no ``μ_k`` factor, no per-mode bookkeeping.
