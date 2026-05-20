@@ -48,16 +48,31 @@ don't match.
 
     conda activate zoomy-host-mpi
     mpirun -n 4 apptainer exec --bind $PWD:$PWD zoomy_firedrake.sif bash -c '
-      # Container ships Firedrake + zoomy from PyPI.  The overlay
-      # lines are only needed until the DG(1) MPI fixes land in a
-      # published wheel — drop them once they do.
+      # The published image ships zoomy_core + zoomy_firedrake from
+      # PyPI as a pip wheel under /usr/local/lib/.../dist-packages.
+      # Until the DG(1) MPI fixes land in a published wheel, override
+      # those baked-in wheels by putting the bind-mounted repo at the
+      # **front of PYTHONPATH** — this is bullet-proof (no install
+      # state to manage, no pip --force-reinstall games against a
+      # Debian-managed pip).
       pip install -q meshio --no-cache-dir 2>&1 | tail -1
-      pip install -q -e library/zoomy_core --no-deps 2>&1 | tail -1
-      pip install -q --no-deps -e library/zoomy_firedrake 2>&1 | tail -1
+      PYTHONPATH=$PWD/library/zoomy_core:$PWD/library/zoomy_firedrake:$PYTHONPATH \\
       ZOOMY_DIR=$PWD python3 -u tutorials/firedrake/run_malpasset_mpi.py \\
           --time-end 100 --dg-degree 1 --limiter vertex \\
           --output-tag prod
     '
+
+To verify the overlay takes precedence, print the source path of one
+of the new classes before launching::
+
+    apptainer exec --bind $PWD:$PWD zoomy_firedrake.sif bash -c '
+      PYTHONPATH=$PWD/library/zoomy_core:$PYTHONPATH python3 -c \\
+      "from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL as C; \\
+       import inspect; print(inspect.getsourcefile(C))"
+    '
+
+The output should be ``$PWD/library/zoomy_core/zoomy_core/fvm/riemann_solvers.py``,
+not the ``/usr/local/lib/.../dist-packages`` version.
 
 **Slurm** — same idea, ``srun`` replacing ``mpirun``::
 
@@ -67,8 +82,7 @@ don't match.
         bash -c '
           cd /scratch/$USER/Zoomy
           pip install -q meshio --no-cache-dir 2>&1 | tail -1
-          pip install -q -e library/zoomy_core --no-deps 2>&1 | tail -1
-          pip install -q --no-deps -e library/zoomy_firedrake 2>&1 | tail -1
+          PYTHONPATH=$PWD/library/zoomy_core:$PWD/library/zoomy_firedrake:$PYTHONPATH \\
           ZOOMY_DIR=$PWD python3 -u \\
               tutorials/firedrake/run_malpasset_mpi.py \\
               --time-end 100 --dg-degree 1 --limiter vertex \\
