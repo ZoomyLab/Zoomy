@@ -27,41 +27,58 @@ The project publishes a Firedrake apptainer-compatible image at
 ``docs/book/installation.md``.  **Don't build a custom SIF**; use the
 published one:
 
-**One-time** — pull and convert to SIF::
-
     apptainer build zoomy_firedrake.sif \\
         docker://ghcr.io/zoomylab/zoomy_firedrake:latest
 
-**Run** — single-host, 4 ranks::
+**One-time host setup** — create a slim conda env with the **same
+Open MPI version** the container ships (4.1.6).  Open MPI 4.1.x is
+ABI-stable, so the host launcher and the container's libmpi speak
+the same wire protocol::
 
-    mpirun -n 4 apptainer exec \\
-        --bind $PWD:/work \\
-        zoomy_firedrake.sif \\
-        bash -c '
-          # Editable-install overlay: needed only while the
-          # DG(1) MPI fixes are unpublished.  Drop these two lines
-          # once a wheel containing them is on PyPI / in the image.
-          pip install -q -e /work/library/zoomy_core --no-deps 2>&1 | tail -1
-          pip install -q --no-deps -e /work/library/zoomy_firedrake 2>&1 | tail -1
-          ZOOMY_DIR=/work python3 -u \\
-              /work/tutorials/firedrake/run_malpasset_mpi.py \\
-              --time-end 100 --dg-degree 1 --limiter vertex \\
-              --output-tag prod
-        '
+    mamba env create -f install/zoomy_host_mpi.yml
+    conda activate zoomy-host-mpi
+    mpirun --version    # confirm Open MPI 4.1.x
 
-**Run on a Slurm cluster** — typical pattern::
+Without this step you'll see ``RuntimeWarning: suspicious MPI
+execution environment ... Your environment has PMI_SIZE=N set, but
+mpi4py was built with Open MPI`` — host launcher and container MPI
+don't match.
+
+**Run — single host, 4 ranks**::
+
+    conda activate zoomy-host-mpi
+    mpirun -n 4 apptainer exec --bind $PWD:$PWD zoomy_firedrake.sif bash -c '
+      # Container ships Firedrake + zoomy from PyPI.  The overlay
+      # lines are only needed until the DG(1) MPI fixes land in a
+      # published wheel — drop them once they do.
+      pip install -q meshio --no-cache-dir 2>&1 | tail -1
+      pip install -q -e library/zoomy_core --no-deps 2>&1 | tail -1
+      pip install -q --no-deps -e library/zoomy_firedrake 2>&1 | tail -1
+      ZOOMY_DIR=$PWD python3 -u tutorials/firedrake/run_malpasset_mpi.py \\
+          --time-end 100 --dg-degree 1 --limiter vertex \\
+          --output-tag prod
+    '
+
+**Slurm** — same idea, ``srun`` replacing ``mpirun``::
 
     srun -n $SLURM_NTASKS apptainer exec \\
-        --bind /scratch/$USER/Zoomy:/work \\
+        --bind /scratch/$USER/Zoomy:/scratch/$USER/Zoomy \\
         zoomy_firedrake.sif \\
         bash -c '
-          pip install -q -e /work/library/zoomy_core --no-deps 2>&1 | tail -1
-          pip install -q --no-deps -e /work/library/zoomy_firedrake 2>&1 | tail -1
-          ZOOMY_DIR=/work python3 -u \\
-              /work/tutorials/firedrake/run_malpasset_mpi.py \\
+          cd /scratch/$USER/Zoomy
+          pip install -q meshio --no-cache-dir 2>&1 | tail -1
+          pip install -q -e library/zoomy_core --no-deps 2>&1 | tail -1
+          pip install -q --no-deps -e library/zoomy_firedrake 2>&1 | tail -1
+          ZOOMY_DIR=$PWD python3 -u \\
+              tutorials/firedrake/run_malpasset_mpi.py \\
               --time-end 100 --dg-degree 1 --limiter vertex \\
               --output-tag $SLURM_JOB_ID
         '
+
+On a Slurm cluster the system MPI module typically provides the
+matching Open MPI build instead of the conda env — load it first
+(``module load openmpi/4.1.6`` or similar) and skip the
+``zoomy-host-mpi`` env.
 
 Output lands in ``outputs/malpasset_<tag>/simulation.pvd`` (open in
 ParaView).  Per-step iteration logs go to stdout via Firedrake's logger.

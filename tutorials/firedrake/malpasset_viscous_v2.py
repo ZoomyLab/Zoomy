@@ -75,7 +75,11 @@ from sympy import Matrix, sqrt, Piecewise
 import firedrake as fd
 from firedrake.petsc import PETSc
 from mpi4py import MPI
-import meshio
+# ``meshio`` is only needed for reading the Malpasset mesh's vertex
+# point-data (initial condition).  Imported lazily inside the IC
+# loader so that importing this module — e.g. ``from
+# malpasset_viscous_v2 import MalpassetSWE`` from the production
+# runner — works even on images that don't ship meshio.
 
 from zoomy_core.fvm.solver_numpy import Settings
 from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL
@@ -103,8 +107,20 @@ INPUT_MESH = os.path.join(main_dir, "data", "malpasset",
                           "geo_malpasset-small.msh")
 assert os.path.exists(INPUT_MESH), f"missing mesh: {INPUT_MESH}"
 
-# Loaded once and reused for IC projection.
-MESHIO_MESH = meshio.read(INPUT_MESH)
+# Loaded lazily inside ``MalpassetSolver.set_initial_condition``
+# to keep ``import malpasset_viscous_v2`` working on images that
+# don't ship meshio (e.g. the published GHCR zoomy_firedrake image
+# pre-meshio dependency).
+_MESHIO_MESH_CACHE = None
+
+
+def _meshio_mesh():
+    """Lazy ``meshio.read(INPUT_MESH)`` with module-level caching."""
+    global _MESHIO_MESH_CACHE
+    if _MESHIO_MESH_CACHE is None:
+        import meshio  # local import — keeps top-level cheap
+        _MESHIO_MESH_CACHE = meshio.read(INPUT_MESH)
+    return _MESHIO_MESH_CACHE
 
 
 # %% [markdown]
@@ -403,8 +419,9 @@ class MalpassetSolver(FiredrakeHyperbolicSolver):
         V_CG = fd.VectorFunctionSpace(mesh, "CG", 1,
                                       dim=Q.function_space().value_size)
         Q_CG = fd.Function(V_CG)
-        perm = _build_vertex_permutation(mesh, MESHIO_MESH)
-        pd = MESHIO_MESH.point_data
+        mio = _meshio_mesh()
+        perm = _build_vertex_permutation(mesh, mio)
+        pd = mio.point_data
         Q_CG.dat.data[:, 0] = pd["B"][perm]
         Q_CG.dat.data[:, 1] = pd["H"][perm]
         Q_CG.dat.data[:, 2] = (pd["H"] * pd["U"])[perm]

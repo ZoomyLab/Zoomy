@@ -1,0 +1,30 @@
+name: zoomy-host-mpi
+# Slim host-side conda environment for launching MPI runs INTO the
+# published ``ghcr.io/zoomylab/zoomy_firedrake`` apptainer image.
+#
+# The container ships **Open MPI 4.1.6** (from the
+# ``firedrakeproject/firedrake-vanilla-default`` base).  The host
+# launcher (``mpirun``) and the container's ``libmpi`` must come from
+# the same Open MPI series so the wire protocol matches —
+# Open MPI 4.1.x is ABI-stable, so any 4.1.x on the host works.
+#
+# Usage::
+#
+#     mamba env create -f install/zoomy_host_mpi.yml
+#     conda activate zoomy-host-mpi
+#     mpirun --version          # confirm Open MPI 4.1.x
+#
+# then proceed with the ``mpirun -n N apptainer exec ...`` command in
+# tutorials/firedrake/run_malpasset_mpi.py
+#
+# The pin to ``4.1.6`` (not ``=4.1.*``) keeps the host bit-identical
+# to the container.  Loosen to ``=4.1.*`` if your conda channel
+# doesn't carry 4.1.6 for your platform.
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - openmpi=4.1.6
+  - mpi4py            # optional, for local pre-flight tests
