@@ -78,7 +78,7 @@ import time
 # ----------------------------------------------------------------------
 # Test-case parameters — edit these to define a sibling configuration.
 # ----------------------------------------------------------------------
-TIME_END = 10.0      # Physical simulation end time [s]
+TIME_END = 2.0      # Physical simulation end time [s]
 CFL = 0.5             # CFL safety factor on top of the RKDG bound (≤ 1)
 DG_DEGREE = 0         # DG polynomial degree (0 or 1)
 LIMITER = "none"    # Slope limiter: "none" | "vertex" | "p_weighted"
