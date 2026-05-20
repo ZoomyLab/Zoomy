@@ -5,6 +5,7 @@ FROM ${FD_DEV_IMAGE}
 # Do not `pip install --upgrade pip` here: Firedrake uses Debian's python3-pip (no RECORD), which breaks uninstall.
 RUN python3 -m pip install --no-cache-dir \
       zoomy_core \
+      meshio \
       pytest-html \
       jupytext \
       nbformat \

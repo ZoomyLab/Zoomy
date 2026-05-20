@@ -393,7 +393,7 @@ class MalpassetSWE(Model):
 # %%
 def _build_vertex_permutation(fd_mesh, meshio_mesh, decimal=12):
     """See `malpasset_baseline.py` — Firedrake reorders nodes."""
-    dim = fd_mesh.geometric_dimension()
+    dim = fd_mesh.geometric_dimension
     coords_fd = np.round(fd_mesh.coordinates.dat.data_ro[:, :dim], decimal)
     coords_mio = np.round(meshio_mesh.points[:, :dim], decimal)
     lookup = {tuple(c): i for i, c in enumerate(coords_mio)}
