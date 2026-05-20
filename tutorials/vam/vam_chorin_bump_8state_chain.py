@@ -403,34 +403,7 @@ ETA_EXP_Y = np.array([
     0.0918918918918919, 0.07297297297297298, 0.06554054054054054,
 ])
 
-# Experimental bottom pressure (m-head equivalent), digitized from the
-# Escalante 2024 paper.  Source:
-# ``library/zoomy_tests/zoomy_tests/swashes/plots_paper.py::vam_analytical_p``.
-PB_EXP_X = np.array([
-    -0.6001390820584145, -0.5556328233657858, -0.5041724617524339,
-    -0.4485396383866481, -0.3998609179415855, -0.35396383866481224,
-    -0.30389429763560505, -0.24965229485396384, -0.2051460361613352,
-    -0.15229485396383868, -0.1008344923504868, -0.05354659248956889,
-    -0.0006954102920723737, 0.0521557719054242, 0.09805285118219742,
-    0.15090403337969394, 0.20236439499304582, 0.24826147426981915,
-    0.30111265646731566, 0.3539638386648122, 0.4026425591098748,
-    0.45271210013908203, 0.5013908205841446, 0.5514603616133518,
-])
-PB_EXP_Y = np.array([
-    0.3319327731092437, 0.33053221288515405, 0.32212885154061627,
-    0.30952380952380953, 0.29061624649859946, 0.27450980392156865,
-    0.25, 0.22338935574229693, 0.18417366946778713,
-    0.15756302521008403, 0.12394957983193278, 0.09453781512605042,
-    0.0700280112044818, 0.04201680672268908, 0.04481792717086835,
-    0.03431372549019608, 0.04831932773109244, 0.058823529411764705,
-    0.06022408963585434, 0.06932773109243698, 0.0742296918767507,
-    0.0861344537815126, 0.08473389355742297, 0.07913165266106442,
-])
-
-G = 9.81
-
 fig, ax = plt.subplots(2, 1, figsize=(8, 7), sharex=True)
-P_1_state_idx = [str(s) for s in sm.state].index("P_1")
 for label, color, res in (
     ("order 1 (Euler + ConstantRecon)",       "C0", result_o1),
     ("order 2 (SSPRK2 + MUSCL prim. WB)",      "C3", result_o2),
@@ -441,15 +414,10 @@ for label, color, res in (
     Q = solver._sim_Q
     eta = Q[0] + Q[b_state_idx]
     eta_at_0 = eta[len(eta) // 2]
-    # Bottom pressure as m-head:  p_b = (g·h + 2·P_1) / g  = h + 2·P_1/g.
-    pb = Q[0] + 2.0 * Q[P_1_state_idx] / G
-    pb_at_0 = pb[len(pb) // 2]
     ax[0].plot(xc, eta, color=color, lw=1.5,
                label=f"{label}, η(x=0)={eta_at_0:.4f}")
-    ax[1].plot(xc, pb, color=color, lw=1.5,
-               label=f"{label}, p_b(x=0)={pb_at_0:.4f}")
+    ax[1].plot(xc, Q[1], color=color, lw=1.5, label=f"{label}: q_U0")
 ax[0].plot(ETA_EXP_X, ETA_EXP_Y, "ko", ms=4, label="experiment")
-ax[1].plot(PB_EXP_X, PB_EXP_Y, "ko", ms=4, label="experiment")
 if result_o1 is not None:
     ax[0].plot(result_o1[1], result_o1[2], "k-", lw=1.0, alpha=0.4,
                label="bathymetry")
@@ -457,7 +425,7 @@ ax[0].set_ylabel("free surface η  [m]")
 ax[0].set_title("dam-break over bump — 8-state chain, 1st vs 2nd order")
 ax[0].legend(fontsize=9); ax[0].grid(True, alpha=0.3)
 ax[1].set_xlabel("x  [m]")
-ax[1].set_ylabel(r"bottom pressure  $p_b / g$  [m]")
+ax[1].set_ylabel("q_U0  [m²/s]")
 ax[1].legend(fontsize=9); ax[1].grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("dam_break_8state_chain.png", dpi=100, bbox_inches="tight")
