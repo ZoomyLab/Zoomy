@@ -78,12 +78,15 @@ import time
 # ----------------------------------------------------------------------
 # Test-case parameters — edit these to define a sibling configuration.
 # ----------------------------------------------------------------------
-TIME_END = 2.0      # Physical simulation end time [s]
-CFL = 0.5             # CFL safety factor on top of the RKDG bound (≤ 1)
-DG_DEGREE = 0         # DG polynomial degree (0 or 1)
-LIMITER = "none"    # Slope limiter: "none" | "vertex" | "p_weighted"
+TIME_END = 100.0      # Physical simulation end time [s]
+CFL = 0.4             # CFL safety factor on top of the RKDG bound (≤ 1).
+                      # 0.4 is ≤ Xing-Zhang 2013 triangle bound ŵ₁=1/2 in
+                      # the |K|/perimeter form (CellDiameter-based formula
+                      # overshoots that by ~15% on shape-regular triangles).
+DG_DEGREE = 1         # DG polynomial degree (0 or 1)
+LIMITER = "ofdg"      # "none" | "vertex" | "p_weighted" | "ofdg"
 SNAPSHOTS = 20        # Number of evenly-spaced ParaView snapshots
-OUTPUT_TAG = "test"   # Label appended to the output directory
+OUTPUT_TAG = "prod"
 MESH_PATH = None      # None ⇒ data/malpasset/geo_malpasset-small.msh under $ZOOMY_DIR
 
 
@@ -124,7 +127,10 @@ from malpasset_viscous_v2 import (  # noqa: E402
     NU,
 )
 from zoomy_core.fvm.solver_numpy import Settings  # noqa: E402
-from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL  # noqa: E402
+from zoomy_core.fvm.riemann_solvers import (  # noqa: E402
+    PositiveNonconservativeHLL,
+    PositiveNonconservativeRusanov,
+)
 from zoomy_core.misc.misc import Zstruct  # noqa: E402
 
 
@@ -166,7 +172,16 @@ def main():
         CFL=CFL,
         dg_degree=DG_DEGREE,
         limiter=LIMITER,
-        riemann_solver_cls=PositiveNonconservativeHLL,
+        # Xing-Zhang 2013 (JSC 57:19-41) — the cell-mean positivity
+        # proof for DG-SWE on unstructured triangles is for the
+        # Lax-Friedrichs / Rusanov flux with Audusse hydrostatic
+        # reconstruction.  HLL+Audusse is *not* within scope of that
+        # theorem and produces ``h̄ < 0`` (up to ~30cm) at wet/dry
+        # wave fronts on triangle meshes (eigenvalue-gating breaks the
+        # convex-combination decomposition the proof relies on).
+        # Switching to ``PositiveNonconservativeRusanov`` restores
+        # the paper-proven combination.
+        riemann_solver_cls=PositiveNonconservativeRusanov,
     )
 
     # Setup once so we can sample initial mass + bath before stepping.

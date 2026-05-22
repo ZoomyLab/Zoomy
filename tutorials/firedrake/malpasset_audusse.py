@@ -66,8 +66,11 @@ from zoomy_core.misc.misc import Zstruct, ZArray  # noqa: E402
 # ----------------------------------------------------------------------
 TIME_END = 2.0
 CFL = 0.5
-DG_DEGREE = 0          # DG(0) for this Audusse debugging pass
-LIMITER = "none"
+DG_DEGREE = 1
+LIMITER = "ofdg"       # OFDG damping (Liu-Lu-Tao-Xia 2022) — mass-
+                       # conservative oscillation suppression that
+                       # composes with Audusse HR / hydrostatic
+                       # pressure on the cell mean.
 SNAPSHOTS = 20
 OUTPUT_TAG = "audusse"
 
