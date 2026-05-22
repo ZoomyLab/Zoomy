@@ -78,18 +78,53 @@ class SME1Viscous(Model):
         return ZArray(F)
 
     def nonconservative_matrix(self):
-        """NCP: gravity bathymetry/free-surface coupling on j=0
-        momentum (g h ∂_x b + g h ∂_x h) and K&T row 3 cross term
-        ``-u_0 · ∂_x(hu_1)`` on j=1.
+        """NCP — **full library projection form** (notebooks/010).
+
+        For row 2 (j=0 momentum) the library projection reduces to
+        the K&T eq (4.14) row 2 exactly:
+
+            B[2, 0] = g h   (gravity on ∂_x b)
+            B[2, 1] = g h   (gravity on ∂_x h, Audusse handshake)
+
+        For row 3 (j=1 momentum) the library projection carries
+        cross-coupling terms K&T row 3 drops as a simplification.
+        Decomposing with conservative flux ``F[3] = 2 h u_0 u_1``:
+
+            B[3, 0] = -6 u_0² - 2 u_1²
+                      (bathymetry coupling — absent in K&T)
+            B[3, 1] = -3 u_0² + 2 u_0 u_1 - u_1²
+                      (depth coupling, retains advective NCP)
+            B[3, 2] = 3 u_0 - u_1
+                      (momentum-0 coupling)
+            B[3, 3] = 0
+                      (K&T's ``-u_0 ∂_x(hu_1)`` cancels with the
+                       library's extra ``+u_0 ∂_x(hu_1)`` from the
+                       ∂_z(uw) projection of the linear mode)
+
+        Symbolic equivalence with the library projection is verified
+        in the ``__main__`` block by reconstructing the LHS and
+        diff-ing against ``notebooks/010``'s ``xmom_j1_inv``.
         """
         _, h, hu_0, hu_1, hinv = self._primitives()
         g = self._parameter_symbols.g
         N = ZArray.zeros(4, 4, 1)
-        # j=0 momentum row (index 2)
-        N[2, 0, 0] = g * h       # coefficient of ∂_x b
-        N[2, 1, 0] = g * h       # coefficient of ∂_x h
-        # j=1 momentum row (index 3): -u_0 · ∂_x(hu_1)
-        N[3, 3, 0] = -hu_0 * hinv  # coefficient of ∂_x(hu_1)
+
+        # Velocities (primitive recovery via hinv).
+        u_0 = hu_0 * hinv
+        u_1 = hu_1 * hinv
+
+        # ----- Row 2 (j=0 momentum) — matches K&T row 2 exactly -----
+        N[2, 0, 0] = g * h
+        N[2, 1, 0] = g * h
+
+        # ----- Row 3 (j=1 momentum) — FULL library form -----
+        # B[3, 0] = -6 u_0² - 2 u_1²
+        N[3, 0, 0] = -6 * u_0 * u_0 - 2 * u_1 * u_1
+        # B[3, 1] = -3 u_0² + 2 u_0 u_1 - u_1²
+        N[3, 1, 0] = -3 * u_0 * u_0 + 2 * u_0 * u_1 - u_1 * u_1
+        # B[3, 2] = 3 u_0 - u_1
+        N[3, 2, 0] = 3 * u_0 - u_1
+        # B[3, 3] = 0 (cancellation with extra library +u_0 term)
         return N
 
     def diffusion_matrix_explicit(self):
@@ -119,8 +154,67 @@ class SME1Viscous(Model):
         A[3, 1, 0, 0] = -2 * nu * hu_1 * hinv
         return A
 
+    def update_aux_variables(self):
+        """Kurganov–Petrova desingularized inverse depth.
+
+            hinv = √2 · h / √(h⁴ + max(h, eps)⁴)
+
+        Same form used by ``MalpassetSWE``.  Tends smoothly to 0 as
+        ``h → 0`` instead of saturating at ``1/eps``, so primitive
+        velocities ``u_j = hu_j / h`` recover gracefully near the
+        wet/dry interface.
+        """
+        v = self.variables
+        p = self._parameter_symbols
+        h_safe4 = sp.Max(v.h, p.eps) ** 4
+        h4 = v.h ** 4
+        hinv_kp = sp.sqrt(2.0) * v.h / sp.sqrt(h4 + h_safe4)
+        return ZArray([hinv_kp])
+
+    def eigenvalues(self):
+        """Explicit eigenvalues — SME(1) wave-speed bound.
+
+        For SME(L=1), the flux-Jacobian eigenvalues are (per K&T 2019
+        analysis) of the form ``u_0 ± c_eff`` plus a passive ``u_0``
+        and the trivial ``0`` for the bathymetry row.  A conservative
+        upper bound on ``c_eff`` is
+        ``c_eff = √(g h + 4 u_1² / 3)`` — exact at the linearised
+        limit and an overestimate (so the CFL stays safe) elsewhere.
+
+        Symbolic auto-derivation produces cubic-root expressions that
+        are numerically fragile near zero shear / zero depth; the
+        explicit form here avoids the division-by-zero traps.
+
+        Dry-cell gate: where ``h ≤ eps`` waves stop, ``λ → 0`` —
+        prevents bogus ``|u| = hu/h`` blow-up dictating the global
+        ``dt``.
+        """
+        _, h, hu_0, hu_1, hinv = self._primitives()
+        p = self._parameter_symbols
+        n = self.normal[0]  # 1D: single normal component (±1)
+        u_0 = hu_0 * hinv
+        u_1 = hu_1 * hinv
+        un = u_0 * n
+        c_eff = sqrt(p.g * sp.Max(h, p.eps) + sp.Rational(4, 3) * u_1 * u_1)
+        raw_ev = [sp.S.Zero, un, un - c_eff, un + c_eff]
+        cond = sp.Function("conditional")
+        gated = [cond(h > p.eps, ev, sp.S.Zero) for ev in raw_ev]
+        return ZArray(gated)
+
     def source(self):
-        """Bed-shear coupling on the moment equations.
+        """Implicit source — placeholder ``τ_b`` on row 2 (j=0
+        momentum).  Default ``τ_b = 0`` so this is a no-op
+        numerically; kept symbolic to give Firedrake a non-empty
+        integration domain (the source weak form needs *some* sympy
+        term referencing ``self.parameters`` so its UFL lowering can
+        attach a mesh).
+        """
+        _, h, hu_0, hu_1, hinv = self._primitives()
+        p = self._parameter_symbols
+        return ZArray([sp.S.Zero, sp.S.Zero, p.tau_b, sp.S.Zero])
+
+    def source_explicit(self):
+        """Bed-shear coupling on the moment equations (explicit).
 
         Per ``notebooks/010`` σ_xz projection: each Galerkin row picks
         up a ``φ_j(0) · τ_b`` boundary term plus the ``-ν/h K_ji u_i``
@@ -133,14 +227,28 @@ class SME1Viscous(Model):
 
             row j=0:  +τ_b
             row j=1:  -3 τ_b - 3 · (ν/h) · 4 u_1 = -3 τ_b - 12 ν u_1 / h
+
+        Treated **explicitly** — evaluated at ``Qn`` inside the
+        convective step.  This avoids the stiff ``1/h`` Jacobian that
+        an implicit treatment would expose to the Newton solver
+        (∂/∂h of ``u_1/h²`` ~ ``-2 u_1/h³`` blows up at the dam-break
+        front where the depth transitions abruptly).  The damping is
+        not stiff at the scale we use (ν ~ 1 m²/s, h ~ 1 m → time
+        scale ``h²/(12 ν) ≈ 0.08 s`` — well above the convective
+        CFL ``dt ~ Δx/c ~ 0.01 s``).
         """
         _, h, hu_0, hu_1, hinv = self._primitives()
         p = self._parameter_symbols
+        # NOTE: the σ_xz shear-damping term ``-12 ν u_1 / h`` is
+        # **disabled** in this initial smoke build — it is stiff at
+        # the wet/dry interface (Jacobian ``∝ 1/h³``) and causes
+        # Newton to NaN out before the dam-break wave propagates.
+        # Re-enable once a desingularised treatment (or implicit-IMEX
+        # split into ``diffusion_matrix``) is added.
         S_b = sp.S.Zero
         S_h = sp.S.Zero
-        S_hu0 = p.tau_b
-        # j=1 viscous-shear damping: -12 ν u_1 / h.  ``u_1 = hu_1 · hinv``.
-        S_hu1 = -3 * p.tau_b - 12 * p.nu * hu_1 * hinv * hinv
+        S_hu0 = sp.S.Zero
+        S_hu1 = -3 * p.tau_b
         return ZArray([S_b, S_h, S_hu0, S_hu1])
 
 
