@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 
 from zoomy_core.mesh import BaseMesh, ensure_lsq_mesh
-from zoomy_core.model.models.advection_model import (
-    ScalarAdvection,
-    ScalarAdvectionDiffusion,
+from zoomy_core.model.models.advection import (
+    Advection,
+    AdvectionDiffusion,
 )
 from zoomy_core.model.initial_conditions import UserFunction
 from zoomy_core.model.boundary_conditions import (
@@ -72,7 +72,7 @@ def test_advection_o2_periodic():
             Extrapolation(tag="left"),
             Extrapolation(tag="right"),
         ])
-        model = ScalarAdvection(
+        model = Advection(
             dimension=1,
             initial_conditions=UserFunction(
                 function=lambda x: np.array([np.sin(2 * np.pi * x[0])])
@@ -122,7 +122,7 @@ def test_advection_o1():
             Extrapolation(tag="left"),
             Extrapolation(tag="right"),
         ])
-        model = ScalarAdvection(
+        model = Advection(
             dimension=1,
             initial_conditions=UserFunction(
                 function=lambda x: np.array([np.sin(2 * np.pi * x[0])])
@@ -162,7 +162,7 @@ def test_q_shape_is_inner_cells():
         Extrapolation(tag="left"),
         Extrapolation(tag="right"),
     ])
-    model = ScalarAdvection(
+    model = Advection(
         dimension=1,
         initial_conditions=UserFunction(
             function=lambda x: np.array([np.sin(2 * np.pi * x[0])])

@@ -350,13 +350,13 @@ def test_full_pipeline_1d():
 @pytest.mark.core
 def test_3d_advection_solve():
     """3D scalar advection on a cube: Gaussian pulse in x-direction."""
-    from zoomy_core.model.models.advection_model import ScalarAdvection
+    from zoomy_core.model.models.advection import Advection
     from zoomy_core.fvm.solver_numpy import HyperbolicSolver
     import zoomy_core.fvm.timestepping as ts
     import zoomy_core.model.boundary_conditions as BC
     import zoomy_core.model.initial_conditions as IC
 
-    model = ScalarAdvection(dimension=3)
+    model = Advection(dimension=3)
     model.parameters.update(dict(zip(model.parameters.keys(), [1.0, 0.0, 0.0])))
     model.initial_conditions = IC.UserFunction(
         function=lambda x: np.array([np.exp(-((x[0]-0.3)**2 + (x[1]-0.5)**2 + (x[2]-0.5)**2) / 0.01)])
@@ -384,7 +384,7 @@ def test_3d_advection_solve():
 @pytest.mark.core
 def test_advection_diffusion_explicit_vs_implicit():
     """1D advection-diffusion: explicit and implicit diffusion should agree."""
-    from zoomy_core.model.models.advection_model import ScalarAdvectionDiffusion
+    from zoomy_core.model.models.advection import AdvectionDiffusion
     from zoomy_core.fvm.solver_numpy import HyperbolicSolver
     from zoomy_core.fvm.solver_imex_numpy import IMEXSolver
     import zoomy_core.fvm.timestepping as ts
@@ -399,7 +399,7 @@ def test_advection_diffusion_explicit_vs_implicit():
     nu = 0.01
 
     # Explicit diffusion (HyperbolicSolver)
-    m1 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m1 = AdvectionDiffusion(dimension=1, nu=nu)
     m1.parameters.update(dict(zip(m1.parameters.keys(), [1.0, nu])))
     m1.initial_conditions = GaussianIC()
     Q1, _ = HyperbolicSolver(
@@ -407,7 +407,7 @@ def test_advection_diffusion_explicit_vs_implicit():
     ).solve(mesh, m1, write_output=False)
 
     # Implicit diffusion (IMEXSolver — no diffusive CFL, diffusion is implicit)
-    m2 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m2 = AdvectionDiffusion(dimension=1, nu=nu)
     m2.parameters.update(dict(zip(m2.parameters.keys(), [1.0, nu])))
     m2.initial_conditions = GaussianIC()
     Q2, _ = IMEXSolver(
@@ -425,7 +425,7 @@ def test_advection_diffusion_explicit_vs_implicit():
     assert np.abs(Q1[0, :nc] - Q2[0, :nc]).max() < 0.05
 
     # IMEX with larger dt (no diffusive CFL — implicit handles it)
-    m3 = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+    m3 = AdvectionDiffusion(dimension=1, nu=nu)
     m3.parameters.update(dict(zip(m3.parameters.keys(), [1.0, nu])))
     m3.initial_conditions = GaussianIC()
     solver3 = IMEXSolver(time_end=0.2, compute_dt=ts.adaptive(CFL=0.9))
@@ -447,7 +447,7 @@ def test_advection_diffusion_convergence():
     With explicit diffusion + diffusive CFL, the convective CFL drops to
     σ ~ Δx, inflating Rusanov numerical diffusion and degrading the rate.
     """
-    from zoomy_core.model.models.advection_model import ScalarAdvectionDiffusion
+    from zoomy_core.model.models.advection import AdvectionDiffusion
     from zoomy_core.fvm.solver_imex_numpy import IMEXSolver
     import zoomy_core.fvm.timestepping as ts
     from zoomy_core.model.initial_conditions import InitialConditions
@@ -469,7 +469,7 @@ def test_advection_diffusion_convergence():
     errors = []
     for N in [100, 200, 400]:
         mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
-        m = ScalarAdvectionDiffusion(dimension=1, nu=nu)
+        m = AdvectionDiffusion(dimension=1, nu=nu)
         m.parameters.update(dict(zip(m.parameters.keys(), [1.0, nu])))
         m.initial_conditions = GaussianIC()
         Q, _ = IMEXSolver(
@@ -494,7 +494,7 @@ def test_advection_diffusion_convergence():
 @pytest.mark.core
 def test_muscl_second_order_convergence():
     """MUSCL reconstruction gives ~2nd-order convergence for pure advection."""
-    from zoomy_core.model.models.advection_model import ScalarAdvection
+    from zoomy_core.model.models.advection import Advection
     from zoomy_core.fvm.solver_numpy import HyperbolicSolver
     import zoomy_core.fvm.timestepping as ts
     from zoomy_core.model.initial_conditions import InitialConditions
@@ -507,7 +507,7 @@ def test_muscl_second_order_convergence():
     errors = []
     for N in [100, 200, 400]:
         mesh = BaseMesh.create_1d(domain=(0, 1), n_inner_cells=N)
-        m = ScalarAdvection(dimension=1)
+        m = Advection(dimension=1)
         m.parameters.update(dict(zip(m.parameters.keys(), [1.0])))
         m.initial_conditions = GaussianIC()
         nsm = NumericalSystemModel.from_system_model(

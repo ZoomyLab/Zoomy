@@ -19,7 +19,7 @@ pytest.importorskip("jax")
 import jax.numpy as jnp
 
 from zoomy_core.mesh import BaseMesh, ensure_lsq_mesh
-from zoomy_core.model.models.advection_model import ScalarAdvection, ScalarAdvectionDiffusion
+from zoomy_core.model.models.advection import Advection, AdvectionDiffusion
 from zoomy_core.model.initial_conditions import UserFunction
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
 import zoomy_core.fvm.timestepping as timestepping
@@ -88,7 +88,7 @@ def test_advection_o2_convergence():
             Extrapolation(tag="left"),
             Extrapolation(tag="right"),
         ])
-        model = ScalarAdvection(
+        model = Advection(
             dimension=1,
             initial_conditions=UserFunction(function=_smooth_ic),
             boundary_conditions=bcs,
@@ -137,7 +137,7 @@ def test_advdiff_imex_o2_convergence():
             Extrapolation(tag="left"),
             Extrapolation(tag="right"),
         ])
-        model = ScalarAdvectionDiffusion(
+        model = AdvectionDiffusion(
             dimension=1,
             nu=nu,
             initial_conditions=UserFunction(function=_smooth_ic),
@@ -185,7 +185,7 @@ def test_diffusion_imex_o2_convergence():
             Extrapolation(tag="left"),
             Extrapolation(tag="right"),
         ])
-        model = ScalarAdvectionDiffusion(
+        model = AdvectionDiffusion(
             dimension=1,
             nu=nu,
             initial_conditions=UserFunction(function=_smooth_ic),
