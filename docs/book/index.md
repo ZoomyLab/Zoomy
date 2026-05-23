@@ -20,18 +20,18 @@ Zoomy's main objective is to provide a convenient modeling interface for complex
 Configure simulations, run in the browser, and share via URL. No installation required.
 :::
 
-:::{grid-item-card} Play the SWE Game
-:link: playground/swe-game/index.html
-:link-type: url
-![SWE Game](images/swe-game.png)
-Sketch your own irrigation system, open the gate and fill the gardens — a shallow-water-equation game running entirely in your browser.
-:::
-
 :::{grid-item-card} Run a notebook in your browser
 :link: jupyter-lite/_output/lab/index.html?path=pyodide.ipynb
 :link-type: url
 ![Pyodide notebook](images/pyodide.png)
 Walk the full modeling stack — `Model` → `SystemModel` → `NumericalSystemModel` → C++ codegen → NumPy solve — in a Pyodide-powered JupyterLite notebook.
+:::
+
+:::{grid-item-card} Play the SWE Game
+:link: playground/swe-game/index.html
+:link-type: url
+![SWE Game](images/swe-game.png)
+Sketch your own irrigation system, open the gate and fill the gardens — a shallow-water-equation game running entirely in your browser.
 :::
 
 :::{grid-item-card} Testing and CI Reports

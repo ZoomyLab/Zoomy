@@ -204,6 +204,18 @@ jobs:
           echo "Copied SWE game to /playground/swe-game/ (+ library/zoomy_js)"
           ls docs/book/_build/html/playground/swe-game/ | head
 
+      - name: Build JupyterLite Pyodide deployment
+        run: |
+          # The "Run a notebook in your browser" card on the docs index
+          # points at jupyter-lite/_output/lab/index.html?path=pyodide.ipynb.
+          # Build that JupyterLite tree with the Pyodide kernel and the
+          # standalone tutorial as its only seeded content.
+          pip install --quiet jupyterlite-core jupyterlite-pyodide-kernel jupyter-server
+          jupyter lite build \
+            --contents tutorials/pyodide \
+            --output-dir docs/book/_build/html/jupyter-lite/_output
+          ls docs/book/_build/html/jupyter-lite/_output/lab/ | head
+
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v4
