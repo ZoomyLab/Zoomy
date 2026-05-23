@@ -17,6 +17,10 @@ parts:
           - file: backends/dmplex
           - file: backends/amrex
           - file: backends/openfoam
+  - caption: Authoring
+    chapters:
+      - file: authoring/model
+      - file: authoring/system-model
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
