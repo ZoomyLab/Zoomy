@@ -187,7 +187,6 @@ def run(T_end=20.0):
     solver = ChorinSplitVAMSolver(
         split.SM_pred, split.SM_press, split.SM_corr,
         riemann_solver="ncp",
-        reconstruction_order=1,
         time_order=1,
         pressure_tol=1e-9, pressure_maxit=200,
     )

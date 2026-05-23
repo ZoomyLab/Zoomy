@@ -9,6 +9,7 @@ import pytest
 
 from zoomy_core.mesh import BaseMesh, FVMMesh, LSQMesh, ensure_lsq_mesh
 from zoomy_core.kernel import Kernel
+from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel, NumpyRuntimeSymbolic
 from zoomy_core.model.models.derived_model import DerivedModel
 from zoomy_core.model.models.sme_model import SMEModel, SMEInviscid, INSModel
@@ -509,10 +510,11 @@ def test_muscl_second_order_convergence():
         m = ScalarAdvection(dimension=1)
         m.parameters.update(dict(zip(m.parameters.keys(), [1.0])))
         m.initial_conditions = GaussianIC()
+        nsm = NumericalSystemModel.from_system_model(
+            m, reconstruction=ReconstructionSpec(order=2))
         Q, _ = HyperbolicSolver(
             time_end=0.02, compute_dt=ts.adaptive(CFL=0.5),
-            reconstruction_order=2,
-        ).solve(mesh, m, write_output=False)
+        ).solve(mesh, nsm, write_output=False)
         lsq = ensure_lsq_mesh(mesh, m)
         nc = lsq.n_inner_cells
         xc = lsq.cell_centers[0, :nc]

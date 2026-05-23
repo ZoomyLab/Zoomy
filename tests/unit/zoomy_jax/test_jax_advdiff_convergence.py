@@ -26,6 +26,7 @@ import zoomy_core.fvm.timestepping as timestepping
 
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
+from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -95,14 +96,13 @@ def test_advection_o2_convergence():
         model.parameters.update(dict(zip(model.parameters.keys(), [a])))
 
         mesh = _make_mesh(N)
+        nsm = NumericalSystemModel.from_system_model(
+            model, reconstruction=ReconstructionSpec(order=2))
         solver = HyperbolicSolver(
             time_end=t_end,
-            reconstruction_order=2,
-            limiter="venkatakrishnan",
             compute_dt=timestepping.adaptive(CFL=0.45),
         )
-
-        Q, Qaux = solver.solve(mesh, model, write_output=False)
+        Q, Qaux = solver.solve(mesh, nsm, write_output=False)
 
         exact = lambda x: _exact_advection(x, t_end, a=a)
         mesh_lsq = ensure_lsq_mesh(mesh, model)
@@ -146,14 +146,13 @@ def test_advdiff_imex_o2_convergence():
         model.parameters.update(dict(zip(model.parameters.keys(), [a, nu])))
 
         mesh = _make_mesh(N)
+        nsm = NumericalSystemModel.from_system_model(
+            model, reconstruction=ReconstructionSpec(order=2))
         solver = IMEXSourceSolverJax(
             time_end=t_end,
-            reconstruction_order=2,
-            limiter="venkatakrishnan",
             compute_dt=timestepping.adaptive(CFL=0.45, nu=nu),
         )
-
-        Q, Qaux = solver.solve(mesh, model, write_output=False)
+        Q, Qaux = solver.solve(mesh, nsm, write_output=False)
 
         exact = lambda x, _t=t_end, _a=a, _nu=nu: _exact_advdiff(x, _t, a=_a, nu=_nu)
         mesh_lsq = ensure_lsq_mesh(mesh, model)
@@ -196,14 +195,13 @@ def test_diffusion_imex_o2_convergence():
         model.parameters.update(dict(zip(model.parameters.keys(), [0.0, nu])))
 
         mesh = _make_mesh(N)
+        nsm = NumericalSystemModel.from_system_model(
+            model, reconstruction=ReconstructionSpec(order=2))
         solver = IMEXSourceSolverJax(
             time_end=t_end,
-            reconstruction_order=2,
-            limiter="venkatakrishnan",
             compute_dt=timestepping.adaptive(CFL=0.45, nu=nu),
         )
-
-        Q, Qaux = solver.solve(mesh, model, write_output=False)
+        Q, Qaux = solver.solve(mesh, nsm, write_output=False)
 
         exact = lambda x, _t=t_end, _nu=nu: _exact_advdiff(x, _t, a=0.0, nu=_nu)
         mesh_lsq = ensure_lsq_mesh(mesh, model)

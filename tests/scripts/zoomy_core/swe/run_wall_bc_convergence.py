@@ -61,13 +61,15 @@ def run_bounce_back(reconstruction_order, N, gradient_method="green_gauss"):
         model.dimension,
     )
 
+    from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+    nsm = NumericalSystemModel.from_system_model(
+        model, reconstruction=ReconstructionSpec(order=reconstruction_order))
     solver = FreeSurfaceFlowSolver(
         time_end=t_end,
         compute_dt=ts.adaptive(CFL=0.3),
-        reconstruction_order=reconstruction_order,
         gradient_method=gradient_method,
     )
-    Q, _ = solver.solve(mesh, model, write_output=False)
+    Q, _ = solver.solve(mesh, nsm, write_output=False)
 
     lsq = ensure_lsq_mesh(mesh, model)
     nc = lsq.n_inner_cells
@@ -103,13 +105,15 @@ def run_interior(reconstruction_order, N, gradient_method="green_gauss"):
         BC.Extrapolation(tag="right"),
     ])
 
+    from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+    nsm = NumericalSystemModel.from_system_model(
+        model, reconstruction=ReconstructionSpec(order=reconstruction_order))
     solver = FreeSurfaceFlowSolver(
         time_end=t_end,
         compute_dt=ts.adaptive(CFL=0.3),
-        reconstruction_order=reconstruction_order,
         gradient_method=gradient_method,
     )
-    Q, _ = solver.solve(mesh, model, write_output=False)
+    Q, _ = solver.solve(mesh, nsm, write_output=False)
 
     lsq = ensure_lsq_mesh(mesh, model)
     nc = lsq.n_inner_cells

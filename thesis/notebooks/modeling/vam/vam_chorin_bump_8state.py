@@ -300,7 +300,7 @@ def test_lake_at_rest(SolverCls=ChorinSplitVAMSolver, n_steps=15):
     split = split_simple(sm, [P_0, P_1], sp.Symbol("dt", positive=True))
     mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
     solver = SolverCls(split.SM_pred, split.SM_press, split.SM_corr,
-        reconstruction_order=1, pressure_tol=1e-9, pressure_maxit=200)
+        pressure_tol=1e-9, pressure_maxit=200)
     Q0 = solver.setup_simulation(mesh)
     xc = solver._sim_mesh.cell_centers[0, :solver.nc]
     b_vals = 0.20 * np.exp(-(xc**2) / (2 * 0.20**2))
@@ -349,7 +349,7 @@ def test_dam_break(SolverCls=ChorinSplitVAMSolver, T_end=20.0):
     split = split_simple(sm, [P_0, P_1], sp.Symbol("dt", positive=True))
     mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
     solver = SolverCls(split.SM_pred, split.SM_press, split.SM_corr,
-        reconstruction_order=1, pressure_tol=1e-9, pressure_maxit=200)
+        pressure_tol=1e-9, pressure_maxit=200)
     Q0 = solver.setup_simulation(mesh)
     xc = solver._sim_mesh.cell_centers[0, :solver.nc]
     b_vals = 0.20 * np.exp(-(xc**2) / (2 * 0.20**2))

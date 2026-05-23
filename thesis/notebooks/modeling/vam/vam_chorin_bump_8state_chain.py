@@ -372,7 +372,6 @@ def run(T_end=20.0):
         # against an irreducible residual floor.  JAX legacy succeeds
         # with `tol=1e-6, maxiter=100` (cf. /tmp/vam_legacy_jax.py).
         pressure_solver="gmres",
-        reconstruction_order=1,
         time_order=1,
         pressure_tol=1e-6, pressure_maxit=100,
     )

@@ -26,6 +26,7 @@ from zoomy_core.model.boundary_conditions import (
 )
 import zoomy_core.fvm.timestepping as timestepping
 from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,13 +82,16 @@ def test_advection_o2_periodic():
         model.parameters.a_x = a
 
         mesh = _make_mesh(N)
+        nsm = NumericalSystemModel.from_system_model(
+            model,
+            reconstruction=ReconstructionSpec(
+                order=2, limiter="venkatakrishnan"),
+        )
         solver = HyperbolicSolver(
             time_end=t_end,
-            reconstruction_order=2,
-            limiter="venkatakrishnan",
             compute_dt=timestepping.adaptive(CFL=0.45),
         )
-        Q, Qaux = solver.solve(mesh, model, write_output=False)
+        Q, Qaux = solver.solve(mesh, nsm, write_output=False)
 
         mesh_lsq = ensure_lsq_mesh(mesh, model)
         exact = lambda x: np.sin(2 * np.pi * (x - a * t_end))
@@ -130,7 +134,6 @@ def test_advection_o1():
         mesh = _make_mesh(N)
         solver = HyperbolicSolver(
             time_end=t_end,
-            reconstruction_order=1,
             compute_dt=timestepping.adaptive(CFL=0.45),
         )
         Q, Qaux = solver.solve(mesh, model, write_output=False)
@@ -171,7 +174,6 @@ def test_q_shape_is_inner_cells():
     mesh = _make_mesh(N)
     solver = HyperbolicSolver(
         time_end=0.01,
-        reconstruction_order=1,
         compute_dt=timestepping.adaptive(CFL=0.45),
     )
     Q, Qaux = solver.solve(mesh, model, write_output=False)

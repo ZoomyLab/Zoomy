@@ -1,16 +1,13 @@
-"""HyperbolicSolver.setup_simulation accepts and honours
-NumericalSystemModel.
+"""HyperbolicSolver.setup_simulation consumes only NumericalSystemModel.
 
-Three contracts:
-
-1. Passing a plain Model auto-promotes to an NSM seeded from the
-   solver's current kwargs (so legacy ``solver.reconstruction_order = 2``
-   callers keep working).
-2. Passing an explicit NSM overrides the solver attributes from the
-   NSM's slots.
-3. The NSM's ``resolved_lsq_degree`` drives the mesh stencil, even
-   when the source Model is *not* a StructuredDerivativeModel (i.e.
-   the only signal lives in ``sm.aux_registry``).
+Contract:
+1. A plain Model passed to ``setup_simulation`` is auto-promoted to an
+   NSM with default specs (order=1, default limiter, default eps).
+2. An NSM passed explicitly is honoured slot-for-slot; the solver
+   exposes it as ``self.nsm`` for downstream reads.
+3. The NSM's ``resolved_lsq_degree`` drives the mesh stencil — even
+   when the source Model is *not* a StructuredDerivativeModel (the
+   only signal lives in ``sm.aux_registry``).
 """
 from __future__ import annotations
 
@@ -53,7 +50,7 @@ def _sme():
 
 
 def _solver(**kw):
-    s = HyperbolicSolver(
+    return HyperbolicSolver(
         time_end=0.01,
         settings=Zstruct(output=Zstruct(
             directory="/tmp/_nsm_solver_test",
@@ -62,38 +59,39 @@ def _solver(**kw):
         )),
         **kw,
     )
-    return s
 
 
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
-def test_plain_model_path_preserves_solver_kwargs():
-    s = _solver(reconstruction_order=2, limiter="minmod")
+def test_plain_model_auto_promotes_to_default_nsm():
+    s = _solver()
     mesh = FVMMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=20)
     s.setup_simulation(mesh, _sme(), write_output=False)
-    assert s.reconstruction_order == 2
-    assert s.limiter == "minmod"
     assert isinstance(s.nsm, NumericalSystemModel)
+    # NSM defaults: order=1, default limiter, default eps.
+    assert s.nsm.reconstruction.order == 1
+    assert s.nsm.reconstruction.limiter == "venkatakrishnan"
+    assert s.nsm.regularization.eigenvalue_eps == 1e-8
 
 
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
-def test_explicit_nsm_overrides_solver_kwargs():
-    s = _solver(reconstruction_order=2, limiter="venkatakrishnan")
+def test_explicit_nsm_slots_drive_solver():
+    s = _solver()
     mesh = FVMMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=20)
     nsm = NumericalSystemModel.from_system_model(
         _sme(),
-        reconstruction=ReconstructionSpec(order=1, limiter="minmod"),
+        reconstruction=ReconstructionSpec(order=2, limiter="minmod"),
         regularization=RegularizationSpec(eigenvalue_eps=5e-7),
     )
     s.setup_simulation(mesh, nsm, write_output=False)
-    # NSM's slots override the solver kwargs.
-    assert s.reconstruction_order == 1
-    assert s.limiter == "minmod"
-    assert s.eigenvalue_regularization == 5e-7
+    # No setter on the solver: NSM is the source of truth.
     assert s.nsm is nsm
+    assert s.nsm.reconstruction.order == 2
+    assert s.nsm.reconstruction.limiter == "minmod"
+    assert s.nsm.regularization.eigenvalue_eps == 5e-7
 
 
 # ── LSQ-degree wiring ────────────────────────────────────────────────
@@ -119,7 +117,7 @@ class _DiffusiveAdvection(StructuredDerivativeModel):
 @pytest.mark.unittest
 @pytest.mark.core
 def test_nsm_lsq_degree_drives_mesh_stencil():
-    s = _solver(reconstruction_order=1)
+    s = _solver()
     mesh = FVMMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=20)
     model = _DiffusiveAdvection(
         boundary_conditions=_bcs(),
