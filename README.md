@@ -28,7 +28,7 @@ See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user gu
 ## Installation
 
 - **Try it now in your browser** — interactive GUI at [zoomylab.github.io/Zoomy/gui](https://zoomylab.github.io/Zoomy/gui/).
-- **Try a notebook in your browser** — JupyterLite playground *(coming back soon — deployment is being rebuilt)*.
+- **Try a notebook in your browser** — open the [shallow-water Pyodide tour](https://zoomylab.github.io/Zoomy/jupyter-lite/_output/lab/index.html?path=pyodide.ipynb) in JupyterLite (walks `Model` → `SystemModel` → `NumericalSystemModel` → C++ codegen → solve & plot, all running in the browser).
 - **Pip install the core**:
   ```bash
   pip install zoomy_core
