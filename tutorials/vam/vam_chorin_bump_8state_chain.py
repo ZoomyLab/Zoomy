@@ -85,6 +85,14 @@ from zoomy_core.fvm.solver_chorin_vam_numpy import ChorinSplitVAMSolver
 # %%
 m = VAMModelGalerkin(level=1, dimension=2, quadratic_form="escalante")
 m.parameters.g = 9.81
+# DIAGNOSTIC: legacy/Escalante convention treats pressure as ρ-free
+# (P̃ = P/ρ; bottom-pressure recovery ``p_b/g = h + 2·P̃_1/g`` is then
+# ρ-free too).  Our chain default ρ=1000 leaves a 1/ρ in the elliptic
+# operator, making it ill-conditioned at small dt.  Setting ρ=1 here
+# is a kinematic-pressure rescaling, not a physics change — same
+# system, different unknown variable.  Will be replaced by a proper
+# symbolic P → P/ρ CoV once the elliptic split is validated.
+m.parameters.rho = 1.0
 m.boundary_conditions = BoundaryConditions([
     Extrapolation(tag="left"),
     Extrapolation(tag="right"),
@@ -99,8 +107,8 @@ q_U0, q_U1 = sp.symbols("q_U0 q_U1", real=True)
 q_W0, q_W1 = sp.symbols("q_W0 q_W1", real=True)
 sm.change_state_variables(
     new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
-    transform={U_0: q_U0 / h, U_1: 3 * q_U1 / h,
-               W_0: q_W0 / h, W_1: 3 * q_W1 / h},
+    transform={U_0: q_U0 / h, U_1: q_U1 / h,
+               W_0: q_W0 / h, W_1: q_W1 / h},
 )
 sm.apply(InvertMassMatrix())
 sm.apply(HydrostaticReconstruction())
@@ -312,32 +320,61 @@ sm.aux_initial_conditions = UserFunction(
     function=lambda x: np.zeros(len(sm.aux_state)))
 
 # %% [markdown]
-# ## Solve — 1st and 2nd order
-
-# Same SystemModel, same Audusse-HR Riemann solver, same boundary &
-# initial conditions; the only difference between the two runs is the
-# spatial reconstruction (order=1 piecewise constant vs order=2
-# MUSCL on primitive WB variables) and the time integrator
-# (single Chorin cycle vs SSPRK2-Heun wrap around the full
-# pred → press → corr cycle).  At order=2 the solver auto-wraps
-# ``FreeSurfaceLSQMUSCL`` in :class:`PrimitiveReconstruction` and
-# limits ``η = h+b`` / ``u_k = q_Uk/h`` instead of the conservative
-# state — so a smooth limiter (Venkatakrishnan, the default) stays
-# stable at the wet/dry shock.
+# ## Solve — DG(0), Audusse-HR Riemann route
+#
+# This is the **HR baseline** of the dam-break-over-bump test: the
+# default ``riemann_solver="hr"`` on :class:`ChorinSplitVAMSolver`
+# wraps :class:`NonconservativeRusanov` with Audusse–Bristeau–Klein
+# hydrostatic reconstruction, and the chain's post-HR NCP entry
+# ``B[xmom_j0, b, x] = g·h`` plus the runtime HR face-state clamp
+# together supply lake-at-rest balance and wet/dry positivity.  The
+# companion ``vam_chorin_bump_8state_ncp.py`` runs the same problem
+# on the **NCP-only route** (no HR), which is the second leg of the
+# DG(0) baseline lock-in.
+#
+# Order-2 (MUSCL on primitive WB variables) is **intentionally not
+# exercised here**.  The ``PrimitiveReconstruction`` wrapper has been
+# observed to drain the upstream column from ``0.34 m`` to ``≈ 0.13 m``
+# by ``T = 20`` on this very test — i.e. a wildly wrong steady state
+# despite stable, NaN-free time histories.  See
+# ``project_wb_reconstruction_design`` in the auto-memory and
+# ``feedback_validation_test_first``.  Higher order will be revisited
+# only after DG(0) is locked down on **both** Riemann routes by the
+# validation integration test.
 
 # %%
 split = split_simple(sm, [sm.state[i] for i in P_indices],
                      sp.Symbol("dt", positive=True))
 
 
-def run(reconstruction_order, time_order, T_end=20.0):
-    """One end-to-end Chorin run on the chain-derived 8-state SM."""
-    mesh = BaseMesh.create_1d(domain=(-1.5, 1.5), n_inner_cells=60)
+def run(T_end=20.0):
+    """End-to-end DG(0) Chorin-HR run on the chain-derived 8-state SM."""
+    # Build mesh with lsq_degree=2 so the LSQ stencil at each cell has
+    # enough neighbours (3-4 in 1D) to fit a degree-2 polynomial.  The
+    # default ``lsq_degree=1`` builds 2-point stencils, which is
+    # UNDERDETERMINED for the elliptic block's ``∂_xx`` terms — the
+    # pinv gives a minimum-norm answer that silently zeros the
+    # curvature contribution.  This was the root-cause of the apples-
+    # to-apples mismatch with JAX-legacy (which uses 4-point stencils
+    # for degree-2 fits).
+    from zoomy_core.mesh import LSQMesh
+    mesh = LSQMesh.create_1d(
+        domain=(-1.5, 1.5), n_inner_cells=60, lsq_degree=2)
     solver = ChorinSplitVAMSolver(
         split.SM_pred, split.SM_press, split.SM_corr,
-        reconstruction_order=reconstruction_order,
-        time_order=time_order,
-        pressure_tol=1e-9, pressure_maxit=200,
+        riemann_solver="hr",
+        # Match JAX-legacy infrastructure as closely as possible:
+        # matrix-free GMRES with RELAXED tolerance (1e-6) and modest
+        # maxiter (100).  The chain's default `pressure_tol=1e-9,
+        # maxiter=200` is too tight — for the dam-break test the
+        # elliptic block becomes rank-deficient at dry-cell + shock
+        # interactions, and tight-tolerance GMRES iterates uselessly
+        # against an irreducible residual floor.  JAX legacy succeeds
+        # with `tol=1e-6, maxiter=100` (cf. /tmp/vam_legacy_jax.py).
+        pressure_solver="gmres",
+        reconstruction_order=1,
+        time_order=1,
+        pressure_tol=1e-6, pressure_maxit=100,
     )
     Q0 = solver.setup_simulation(mesh)
     xc = solver._sim_mesh.cell_centers[0, :solver.nc]
@@ -348,13 +385,10 @@ def run(reconstruction_order, time_order, T_end=20.0):
     solver._sim_Q = Q0.copy()
     solver.update_aux_variables()
     dx = float(solver._sim_mesh.cell_volumes[0])
-    # Order-2 with SSPRK2 doubles the work per step and the limiter
-    # is sharper, so halve the CFL for stability.
-    cfl = 0.3 if reconstruction_order == 1 else 0.15
+    cfl = 0.3
     dt = cfl * dx / (np.sqrt(9.81 * 0.34) + 1.0)
     n_steps = int(np.ceil(T_end / dt))
-    label = f"order {reconstruction_order} (time {time_order})"
-    print(f"\n--- {label}: cfl={cfl}, dt={dt:.5f}, n_steps={n_steps} ---")
+    print(f"\n--- DG(0) HR: cfl={cfl}, dt={dt:.5f}, n_steps={n_steps} ---")
     print(f"{'step':>5} {'t':>6} {'hmin':>7} {'hmax':>7} "
           f"{'|q_U0|':>10} {'|q_U1|':>10}")
     log_steps = sorted({1, 5, 20, 100, 500, 1000, 2000,
@@ -372,11 +406,10 @@ def run(reconstruction_order, time_order, T_end=20.0):
     return solver, xc, b_vals
 
 
-result_o1 = run(reconstruction_order=1, time_order=1)
-result_o2 = run(reconstruction_order=2, time_order=2)
+result_hr = run()
 
 # %% [markdown]
-# ## Plot vs experimental data — 1st vs 2nd order
+# ## Plot vs experimental data — DG(0) HR route
 #
 # Digitized free-surface measurements from the Escalante 2024
 # dam-break-over-bump experiment.
@@ -402,30 +435,51 @@ ETA_EXP_Y = np.array([
     0.15540540540540543, 0.13108108108108107, 0.10608108108108108,
     0.0918918918918919, 0.07297297297297298, 0.06554054054054054,
 ])
+# Bottom pressure (m-head): ``p_b/g = h + 2·P_1/g``.  Digitized from
+# ``library/zoomy_tests/zoomy_tests/swashes/plots_paper.py::vam_analytical_p``.
+PB_EXP_X = np.array([
+    -0.6001390820584145, -0.5556328233657858, -0.5041724617524339,
+    -0.4485396383866481, -0.3998609179415855, -0.35396383866481224,
+    -0.30389429763560505, -0.24965229485396384, -0.2051460361613352,
+    -0.15229485396383868, -0.1008344923504868, -0.05354659248956889,
+    -0.0006954102920723737, 0.0521557719054242, 0.09805285118219742,
+    0.15090403337969394, 0.20236439499304582, 0.24826147426981915,
+    0.30111265646731566, 0.3539638386648122, 0.4026425591098748,
+    0.45271210013908203, 0.5013908205841446, 0.5514603616133518,
+])
+PB_EXP_Y = np.array([
+    0.3319327731092437, 0.33053221288515405, 0.32212885154061627,
+    0.30952380952380953, 0.29061624649859946, 0.27450980392156865,
+    0.25, 0.22338935574229693, 0.18417366946778713,
+    0.15756302521008403, 0.12394957983193278, 0.09453781512605042,
+    0.0700280112044818, 0.04201680672268908, 0.04481792717086835,
+    0.03431372549019608, 0.04831932773109244, 0.058823529411764705,
+    0.06022408963585434, 0.06932773109243698, 0.0742296918767507,
+    0.0861344537815126, 0.08473389355742297, 0.07913165266106442,
+])
+G = 9.81
+P_1_state_idx = [str(s) for s in sm.state].index("P_1")
 
 fig, ax = plt.subplots(2, 1, figsize=(8, 7), sharex=True)
-for label, color, res in (
-    ("order 1 (Euler + ConstantRecon)",       "C0", result_o1),
-    ("order 2 (SSPRK2 + MUSCL prim. WB)",      "C3", result_o2),
-):
-    if res is None:
-        continue
-    solver, xc, b_vals = res
+if result_hr is not None:
+    solver, xc, b_vals = result_hr
     Q = solver._sim_Q
     eta = Q[0] + Q[b_state_idx]
+    pb  = Q[0] + 2.0 * Q[P_1_state_idx] / G
     eta_at_0 = eta[len(eta) // 2]
-    ax[0].plot(xc, eta, color=color, lw=1.5,
-               label=f"{label}, η(x=0)={eta_at_0:.4f}")
-    ax[1].plot(xc, Q[1], color=color, lw=1.5, label=f"{label}: q_U0")
+    pb_at_0  = pb[len(pb) // 2]
+    ax[0].plot(xc, eta, color="C0", lw=1.5,
+               label=f"DG(0) HR, η(x=0)={eta_at_0:.4f}")
+    ax[1].plot(xc, pb, color="C0", lw=1.5,
+               label=f"DG(0) HR, p_b/g(x=0)={pb_at_0:.4f}")
+    ax[0].plot(xc, b_vals, "k-", lw=1.0, alpha=0.4, label="bathymetry")
 ax[0].plot(ETA_EXP_X, ETA_EXP_Y, "ko", ms=4, label="experiment")
-if result_o1 is not None:
-    ax[0].plot(result_o1[1], result_o1[2], "k-", lw=1.0, alpha=0.4,
-               label="bathymetry")
+ax[1].plot(PB_EXP_X, PB_EXP_Y, "ko", ms=4, label="experiment")
 ax[0].set_ylabel("free surface η  [m]")
-ax[0].set_title("dam-break over bump — 8-state chain, 1st vs 2nd order")
+ax[0].set_title("dam-break over bump — 8-state chain, DG(0) HR")
 ax[0].legend(fontsize=9); ax[0].grid(True, alpha=0.3)
 ax[1].set_xlabel("x  [m]")
-ax[1].set_ylabel("q_U0  [m²/s]")
+ax[1].set_ylabel(r"bottom pressure  $p_b/g$  [m]")
 ax[1].legend(fontsize=9); ax[1].grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("dam_break_8state_chain.png", dpi=100, bbox_inches="tight")
@@ -437,26 +491,18 @@ print("\nsaved dam_break_8state_chain.png")
 # * **Chain pipeline produces the same 8-state SystemModel** as the
 #   hand-coded reference — the residual-equivalence check above
 #   passes for every row.
-# * **1st-order Chorin** (forward-Euler predictor / closed-form
-#   corrector + piecewise-constant reconstruction) preserves bit-exact
-#   lake-at-rest, propagates the dam-break wave stably, and reaches a
-#   quasi-steady state matching the experimental free-surface
-#   measurements within ≈ 6 % at the dip.
-# * **2nd-order Chorin** (SSPRK2-Heun wrap around the full
-#   pred→press→corr cycle + MUSCL on the WB primitives
-#   ``(η, u_k)``) refines the same configuration with a sharper
-#   shock profile while keeping ``|b − b₀| = 0`` bit-exact and
-#   ``q_U1 = 0`` exactly through the run.
-# * **Smooth limiter at the wet/dry front**: the default
-#   Venkatakrishnan limiter is stable at order 2 because
-#   :class:`PrimitiveReconstruction` interposes the Model-declared
-#   ``reconstruction_variables`` map (``η = h+b``, ``u_k = q_Uk/h``)
-#   between cell state and the base limiter, so any overshoot lands
-#   on the bounded primitive and the conservative face value
-#   ``q_face = h_face · u_face`` is positivity-consistent by
-#   construction.
+# * **DG(0) Chorin-HR** (forward-Euler predictor / closed-form
+#   corrector, piecewise-constant reconstruction, Audusse hydrostatic-
+#   reconstruction Rusanov face flux) preserves bit-exact lake-at-rest,
+#   propagates the dam-break wave stably, and reaches a quasi-steady
+#   state to be compared against the experimental free-surface
+#   measurements by the validation integration test.
 # * **Polymorphism**: the only Model override required is one line
 #   declaring ``h → h + b``; the modal CoV ``U_k → (2k+1) · q_Uk / h``
 #   downstream auto-substitutes through the forward, and the inverse
 #   ``WB → state`` is auto-derived by ``sympy.solve``.  No
 #   ``momentum_indices``, no ``μ_k`` factor, no per-mode bookkeeping.
+# * **Higher-order is deferred** — see ``project_wb_reconstruction_design``
+#   in the auto-memory.  The ``PrimitiveReconstruction`` wrapper drains
+#   the column on this very test; revisit after DG(0) is locked on
+#   both Riemann routes (HR here, NCP in the companion notebook).
