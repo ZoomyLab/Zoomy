@@ -21,6 +21,7 @@ parts:
     chapters:
       - file: authoring/model
       - file: authoring/system-model
+      - file: authoring/numerics
   - caption: Tutorials
     chapters:
       - file: tutorials/swe
