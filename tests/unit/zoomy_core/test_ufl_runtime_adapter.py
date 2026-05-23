@@ -13,12 +13,12 @@ import pytest
 pytest.importorskip("ufl")
 
 from zoomy_core.fvm.riemann_solvers import HLL, HLLC, Rusanov
-from zoomy_core.model.models.shallow_water import ShallowWater2D
+from zoomy_core.model.models.swe import SWE
 from zoomy_core.model.models.system_model import SystemModel
 
 
 def _sm_swe2d():
-    model = ShallowWater2D(manning_n=0.03, nu=0.01)
+    model = SWE(dimension=2, manning_n=0.03, nu=0.01)
     return SystemModel.from_model(model)
 
 
