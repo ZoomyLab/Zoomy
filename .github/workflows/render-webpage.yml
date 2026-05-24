@@ -208,20 +208,14 @@ jobs:
         run: |
           # The "Run a notebook in your browser" card on the docs index
           # points at jupyter-lite/_output/lab/index.html?path=pyodide.ipynb.
-          # Build that JupyterLite tree with the Pyodide kernel.  PyPI may
-          # lag the development branch, so we also build a fresh wheel of
-          # the current zoomy_core submodule and seed it into the
-          # JupyterLite `files/` directory; the notebook's install cell
-          # uses `micropip.install("../files/zoomy_core-*.whl")`.
-          pip install --quiet jupyterlite-core jupyterlite-pyodide-kernel jupyter-server build
-          mkdir -p /tmp/jl-content
-          cp tutorials/pyodide/pyodide.ipynb /tmp/jl-content/
-          pip wheel library/zoomy_core --no-deps -w /tmp/jl-content/
+          # The notebook's install cell does `%pip install -q zoomy-core`,
+          # so it relies on PyPI carrying a version that matches the
+          # APIs the notebook uses (NumericalSystemModel, etc.).
+          pip install --quiet jupyterlite-core jupyterlite-pyodide-kernel jupyter-server
           jupyter lite build \
-            --contents /tmp/jl-content \
+            --contents tutorials/pyodide \
             --output-dir docs/book/_build/html/jupyter-lite/_output
           ls docs/book/_build/html/jupyter-lite/_output/lab/ | head
-          ls docs/book/_build/html/jupyter-lite/_output/files/
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
