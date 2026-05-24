@@ -13,7 +13,8 @@ from zoomy_jax.mesh.mesh import compute_derivatives, convert_mesh_to_jax
 @pytest.mark.unittest
 @pytest.mark.jax
 def test_jax_mesh_derivative_of_quadratic():
-    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80, lsq_degree=2)
+    mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=80)
+    mesh._build_lsq_stencil(2)  # standalone mesh test — no NSM in scope
     jmesh = convert_mesh_to_jax(mesh)
 
     x = np.asarray(mesh.cell_centers[0, :], dtype=float)

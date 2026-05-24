@@ -567,3 +567,188 @@ def test_remove_non_diagonal_h_idempotent(m1d_cantero):
     # S unchanged.
     for i in range(sm.n_equations):
         assert sp.simplify(sm.source[i, 0] - snap_S[i, 0]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Full state-dependent-field propagation: BCs + IMEX twins.
+#
+# A CoV must rewrite *every* state-dependent field, not just the five
+# primary operators.  The tests below exercise the secondary fields
+# that ``change_state_variables`` extends after the primaries:
+# diffusion matrices, the explicit-source twin, and the symbolic BC
+# kernels.
+# ---------------------------------------------------------------------------
+
+
+def test_change_state_diffusion_matrix_mixed_partial():
+    """Diffusion CoV under ``hu → h·u`` produces a mixed partial entry.
+
+    SWE 1D has ``A[1, 1, 0, 0] = h·ν`` (depth-weighted eddy viscosity
+    on the momentum row).  Under the CoV ``hu = h·u`` the diffusive
+    flux
+
+        F_diff[1, 0] = h·ν · ∂_x hu = h·ν · (u·∂_x h + h·∂_x u)
+
+    decomposes into two entries on the new state ``(h, u)``:
+
+        A[1, 0, 0, 0] = h·ν·u   (coefficient of ∂_x h)
+        A[1, 1, 0, 0] = h²·ν    (coefficient of ∂_x u)
+    """
+    from zoomy_core.model.models.swe import SWE
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = SWE(dimension=1, manning_n=0.0, nu=0.01)
+    sm = SystemModel.from_model(m)
+    h, hu = sm.state
+    u = sp.Symbol("u", real=True)
+    sm.change_state_variables(new_state=[h, u], transform={hu: h * u})
+
+    p = sm.parameters
+    A = sm.diffusion_matrix
+    nu = p.nu if hasattr(p, "nu") else sp.Symbol("nu")
+    # Mass / mass row: identically zero.
+    assert sp.simplify(A[0, 0, 0, 0]) == 0
+    assert sp.simplify(A[0, 1, 0, 0]) == 0
+    # Momentum row picks up both the h-coupling and the u-self entries.
+    assert sp.simplify(A[1, 0, 0, 0] - h * nu * u) == 0
+    assert sp.simplify(A[1, 1, 0, 0] - h ** 2 * nu) == 0
+
+
+def test_change_state_boundary_conditions_swept_to_new_state():
+    """BC ``args.variables`` Zstruct and ``definition`` no longer
+    reference the old state Symbol ``hu`` after a CoV to ``(h, u)``.
+    """
+    from zoomy_core.model.models.swe import SWE
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = SWE(dimension=1, manning_n=0.0, nu=0.0)
+    sm = SystemModel.from_model(m)
+    h, hu = sm.state
+    u = sp.Symbol("u", real=True)
+
+    # Pre-CoV: args.variables names are the OLD state names.
+    assert list(sm.boundary_conditions.args.variables.keys()) == ["h", "hu"]
+
+    sm.change_state_variables(new_state=[h, u], transform={hu: h * u})
+
+    # Post-CoV: args.variables names match the NEW state.
+    assert list(sm.boundary_conditions.args.variables.keys()) == ["h", "u"]
+    # The Symbols themselves are the new state Symbols.
+    assert sm.boundary_conditions.args.variables.h is h
+    assert sm.boundary_conditions.args.variables.u is u
+    # The definition free Symbols do not include the OLD state.
+    free = sm.boundary_conditions.definition.free_symbols
+    assert hu not in free, (
+        f"BC definition still references the OLD state Symbol hu; "
+        f"free symbols are {free}"
+    )
+
+
+def test_change_state_aux_boundary_conditions_swept_to_new_state():
+    """``aux_boundary_conditions`` follows the same propagation path
+    as ``boundary_conditions`` — its args.variables Zstruct must be
+    rebuilt to the new state."""
+    from zoomy_core.model.models.swe import SWE
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = SWE(dimension=1, manning_n=0.0, nu=0.0)
+    sm = SystemModel.from_model(m)
+    if sm.aux_boundary_conditions is None:
+        pytest.skip("SWE didn't expose aux_boundary_conditions; nothing to test")
+    h, hu = sm.state
+    u = sp.Symbol("u", real=True)
+    sm.change_state_variables(new_state=[h, u], transform={hu: h * u})
+    assert (list(sm.aux_boundary_conditions.args.variables.keys())
+            == ["h", "u"])
+
+
+def test_change_state_boundary_gradients_swept_to_new_state():
+    """``boundary_gradients`` follows the same propagation path."""
+    from zoomy_core.model.models.swe import SWE
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = SWE(dimension=1, manning_n=0.0, nu=0.0)
+    sm = SystemModel.from_model(m)
+    if sm.boundary_gradients is None:
+        pytest.skip("SWE didn't expose boundary_gradients; nothing to test")
+    h, hu = sm.state
+    u = sp.Symbol("u", real=True)
+    sm.change_state_variables(new_state=[h, u], transform={hu: h * u})
+    assert (list(sm.boundary_gradients.args.variables.keys())
+            == ["h", "u"])
+
+
+def test_change_state_extrapolation_bc_stays_identity_on_slots():
+    """The bug this pins: an extrapolation BC body is ``ZArray(Q)`` — a
+    list of state Symbols treated as **index placeholders** for the
+    boundary face state.  Under a CoV ``{U_0: q_U0/h, …}`` an
+    ``xreplace`` would remap that placeholder into the *inverse*
+    transform of the old symbol (e.g. slot 1 becomes ``q_U0/h``
+    instead of ``q_U0``), so the runtime would divide inflow momentum
+    by the depth at every extrapolation face and NaN ``h``
+    immediately.
+
+    The fix is to rebuild the BC kernel from the source
+    :class:`BoundaryConditions` against the new state Zstruct;
+    extrapolation re-emerges as ``ZArray(new_state)`` (identity on
+    slot symbols).  This test asserts no ``q_*/h`` ratio leaks into
+    the BC definition after a VAM(1, 2, 2) Form A → Form B CoV.
+    """
+    from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = VAMModelGalerkin(level=1, quadratic_form="escalante")
+    sm = SystemModel.from_model(m)
+    h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
+    q_U0, q_U1, q_W0, q_W1 = sp.symbols(
+        "q_U0 q_U1 q_W0 q_W1", real=True)
+    sm.change_state_variables(
+        new_state=[h, q_U0, q_U1, q_W0, q_W1, b, P_0, P_1],
+        transform={U_0: q_U0 / h, U_1: q_U1 / h,
+                   W_0: q_W0 / h, W_1: q_W1 / h},
+    )
+    # Reduce the definition to a single sympy Tuple we can scan
+    # uniformly: ZArray (default extrapolation body) is flattened to a
+    # Tuple, Piecewise is wrapped in a 1-Tuple so `.has(...)` and
+    # `.free_symbols` work the same way for either shape.
+    defn = sm.boundary_conditions.definition
+    if hasattr(defn, "tolist"):
+        defn_scan = sp.Tuple(*[sp.sympify(e) for e in defn.tolist()])
+    else:
+        defn_scan = sp.Tuple(sp.sympify(defn))
+    for q_sym in (q_U0, q_U1, q_W0, q_W1):
+        atom = q_sym / h
+        assert not defn_scan.has(atom), (
+            f"BC definition still references the placeholder image "
+            f"{atom} — the rebuild-from-source path did not run or it "
+            f"fell back to xreplace.\nBody:\n{defn}"
+        )
+
+    # And the positive check: the new state Symbols ARE referenced.
+    free = defn_scan.free_symbols
+    for q_sym in (q_U0, q_U1, q_W0, q_W1):
+        assert q_sym in free, (
+            f"BC definition does not reference the new state Symbol "
+            f"{q_sym}"
+        )
+
+
+def test_change_state_source_explicit_swept_to_new_state():
+    """``source_explicit`` (default zero on most models) must still be
+    re-expanded against the new state symbols, not point at the old
+    ones — even when it is identically zero the substitution must run
+    without raising and yield the correct shape.
+    """
+    from zoomy_core.model.models.swe import SWE
+    from zoomy_core.model.models.system_model import SystemModel
+
+    m = SWE(dimension=1, manning_n=0.0, nu=0.0)
+    sm = SystemModel.from_model(m)
+    h, hu = sm.state
+    u = sp.Symbol("u", real=True)
+    sm.change_state_variables(new_state=[h, u], transform={hu: h * u})
+    assert sm.source_explicit is not None
+    assert sm.source_explicit.shape == (2, 1)
+    # Default is zero; identically zero stays zero.
+    for i in range(2):
+        assert sp.simplify(sm.source_explicit[i, 0]) == 0

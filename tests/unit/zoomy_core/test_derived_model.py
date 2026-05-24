@@ -156,7 +156,7 @@ def test_create_2d_mesh():
 @pytest.mark.unittest
 @pytest.mark.core
 def test_create_2d_lsq_mesh_derivatives():
-    lm = LSQMesh.create_2d((0, 10, 0, 5), nx=10, ny=10, lsq_degree=1)
+    lm = LSQMesh.create_2d((0, 10, 0, 5), nx=10, ny=10)  # default degree=1
     # u = x, check that one derivative component ≈ 1 and the other ≈ 0
     u = lm._cell_centers[0, :lm.n_cells]
     derivs = lm.compute_derivatives(u, degree=1)
@@ -203,7 +203,7 @@ def test_3d_mesh_volumes():
 @pytest.mark.unittest
 @pytest.mark.core
 def test_3d_lsq_derivatives():
-    lm = LSQMesh.create_3d((0, 1, 0, 1, 0, 1), nx=4, ny=4, nz=4, lsq_degree=1)
+    lm = LSQMesh.create_3d((0, 1, 0, 1, 0, 1), nx=4, ny=4, nz=4)  # default degree=1
     # u = x → one derivative ≈ 1, others ≈ 0
     u = lm._cell_centers[0, :lm.n_cells]
     derivs = lm.compute_derivatives(u, degree=1)

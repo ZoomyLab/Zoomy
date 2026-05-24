@@ -99,14 +99,6 @@ def test_default_regularization_eigenvalue_eps_nonzero():
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
-def test_explicit_lsq_degree_wins():
-    nsm = NumericalSystemModel.from_system_model(SMEModel(level=0), lsq_degree=3)
-    assert nsm.resolved_lsq_degree() == 3
-
-
-@pytest.mark.small
-@pytest.mark.unittest
-@pytest.mark.core
 def test_default_lsq_degree_for_zero_order_model_is_one():
     nsm = NumericalSystemModel.from_system_model(SMEModel(level=0))
     assert nsm.resolved_lsq_degree() == 1
@@ -122,6 +114,21 @@ def test_lsq_degree_lifts_with_declared_second_order_derivative():
     fallback."""
     m = _SecondOrderHModel()
     nsm = NumericalSystemModel.from_system_model(m)
+    assert nsm.resolved_lsq_degree() >= 2
+
+
+@pytest.mark.small
+@pytest.mark.unittest
+@pytest.mark.core
+def test_additional_systems_lifts_lsq_degree():
+    """Composite-solver case: a degree-1 predictor SystemModel +
+    a degree-2 pressure sub-system => resolved degree 2.  This is
+    the ChorinSplitVAMSolver path that was silently broken before
+    additional_systems landed."""
+    pred = SystemModel.from_model(SMEModel(level=0))  # only first derivs
+    press = _SecondOrderHModel()  # forces degree 2 via aux_registry
+    nsm = NumericalSystemModel.from_system_model(
+        pred, additional_systems=[press])
     assert nsm.resolved_lsq_degree() >= 2
 
 

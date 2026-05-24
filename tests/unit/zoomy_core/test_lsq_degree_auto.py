@@ -1,9 +1,11 @@
-"""Auto-LSQ-degree contract: ensure_lsq_mesh reads model.derivative_specs.
+"""Auto-LSQ-degree contract: ``ensure_lsq_mesh`` reads everything from
+the model's NumericalSystemModel.  There is no longer a user-facing
+``lsq_degree`` knob.
 
 When a model declares spatial derivatives via ``requested_derivatives``,
-``ensure_lsq_mesh`` must build the LSQ stencil with a polynomial degree
-high enough to evaluate them.  Without a model (or with an empty spec
-list) it falls back to ``lsq_degree=1``.
+``ensure_lsq_mesh`` builds the LSQ stencil with a polynomial degree
+high enough to evaluate them.  When no derivative info is available
+the stencil falls back to degree 1.  Passing no model raises.
 """
 from __future__ import annotations
 
@@ -57,10 +59,10 @@ def _max_total_degree(multi_index):
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
-def test_no_model_defaults_to_degree_one():
+def test_no_model_raises():
     mesh = FVMMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=20)
-    lsq = ensure_lsq_mesh(mesh)
-    assert _max_total_degree(lsq.lsq_monomial_multi_index) == 1
+    with pytest.raises(TypeError, match="requires a model"):
+        ensure_lsq_mesh(mesh, None)
 
 
 @pytest.mark.small
@@ -88,8 +90,14 @@ def test_second_order_model_lifts_degree_to_two():
 @pytest.mark.small
 @pytest.mark.unittest
 @pytest.mark.core
-def test_explicit_lsq_degree_kwarg_overrides_model():
-    m = _FirstOrderHModel()
-    mesh = FVMMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=20)
-    lsq = ensure_lsq_mesh(mesh, m, lsq_degree=2)
-    assert _max_total_degree(lsq.lsq_monomial_multi_index) == 2
+def test_lsq_stencil_rebuilds_when_existing_degree_too_low():
+    """An already-built LSQMesh with degree 1 must be rebuilt to
+    degree 2 when ensure_lsq_mesh is called with a model that
+    requests d^2/dx^2."""
+    from zoomy_core.mesh.lsq_mesh import LSQMesh
+    lsq = LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=20)
+    assert _max_total_degree(lsq.lsq_monomial_multi_index) == 1
+    m = _SecondOrderHModel()
+    out = ensure_lsq_mesh(lsq, m)
+    assert out is lsq  # rebuild is in-place
+    assert _max_total_degree(out.lsq_monomial_multi_index) == 2
