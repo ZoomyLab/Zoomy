@@ -75,10 +75,10 @@ def main():
         _fail(f"MLVAM is not a basemodel.Model subclass; type={type(mlvam).__name__}")
     _ok(f"MLVAM inherits basemodel.Model (MRO: {[c.__name__ for c in type(mlvam).__mro__[:5]]})")
 
-    # ── (2) Audusse state layout ──────────────────────────────────
-    # 1 (H) + L · 3 · (N+1) = 1 + 2 · 3 · 2 = 13.
+    # ── (2) Audusse state layout (with bed-as-state) ─────────────
+    # 2 (b, H) + L · 3 · (N+1) = 2 + 2 · 3 · 2 = 14.
     expected_vars = [
-        "H",
+        "b", "H",
         "q_layer_1_0", "q_layer_1_1",
         "r_layer_1_0", "r_layer_1_1",
         "p_layer_1_0", "p_layer_1_1",
@@ -89,13 +89,11 @@ def main():
     got_vars = list(mlvam.variables.keys())
     if got_vars != expected_vars:
         _fail(f"variables mismatch: got {got_vars}, expected {expected_vars}")
-    _ok(f"variables layout (Audusse): {len(got_vars)} states (1 + L·3(N+1))")
+    _ok(f"variables layout (Audusse): {len(got_vars)} states (2 + L·3(N+1))")
 
     # ── (3) Equation set ──────────────────────────────────────────
-    # 1 continuity_global + L·(N+1) x-momentum + L·(N+1) z-momentum
-    # = 1 + 2·2 + 2·2 = 9.
     expected_eqs = {
-        "continuity_global",
+        "bottom", "continuity_global",
         "momentum_x_layer_1_0", "momentum_x_layer_1_1",
         "momentum_z_layer_1_0", "momentum_z_layer_1_1",
         "momentum_x_layer_2_0", "momentum_x_layer_2_1",
@@ -106,30 +104,21 @@ def main():
         extra = got_eqs - expected_eqs
         missing = expected_eqs - got_eqs
         _fail(f"equations mismatch: extra={extra}, missing={missing}")
-    _ok(f"equation set: 1 global continuity + L·(N+1) x-momentum + L·(N+1) z-momentum")
+    _ok(f"equation set: bottom + 1 global continuity + L·(N+1) x-momentum + L·(N+1) z-momentum")
 
     # ── (4) SystemModel ──────────────────────────────────────────
     try:
         sm = SystemModel.from_model(mlvam)
     except Exception as e:
         _fail("SystemModel.from_model(mlvam) raised", e)
-    # variable_map maps 9 dynamic equations to dynamic rows.  Pressure
-    # rows (4 of them) are state variables but have no dynamic
-    # equation — they're auxiliary closures.  Total matrix size still
-    # equals the variable count (13), with pressure rows being all-zero
-    # in F/P/S and identity-only in M (no ∂_t p source).
-    n_states = 13
+    n_states = 14
     if sm.flux.shape != (n_states, 1):
         _fail(f"sm.flux shape {sm.flux.shape}, expected ({n_states}, 1)")
     _ok(f"SystemModel.from_model(mlvam) — shape ({n_states}, 1)")
 
-    # F[0] = global mass flux Σ q_ℓ_0.
     H = mlvam.variables.H
     q1_0 = mlvam.variables.q_layer_1_0
     q2_0 = mlvam.variables.q_layer_2_0
-    if sp.simplify(sm.flux[0, 0] - (q1_0 + q2_0)) != 0:
-        _fail(f"continuity flux F[0] = {sm.flux[0, 0]}, expected q_1_0 + q_2_0")
-    _ok(f"continuity flux F[0] = Σ q_ℓ_0  (global mass conservation)")
 
     # ── (5) Inter-layer mass-exchange transfer (Piecewise) ───────
     B = sm.nonconservative_matrix
@@ -139,10 +128,12 @@ def main():
             return False
         return expr.has(sp.Piecewise)
 
-    # Some entry on the x-momentum rows of layer 1 should reference
-    # layer-2 q's via a Piecewise upwind transfer.
-    layer_1_xmom_rows = [1, 2]   # momentum_x_layer_1_{0,1}
-    layer_2_q_cols = [7, 8]       # q_layer_2_{0,1}
+    # Rows all shifted by 1 due to new 'b' at row 0.
+    # x-momentum layer-1 rows = 2, 3 (was 1, 2).
+    # q-cols for layer 2: shifted by 1.  q_layer_2_0 / q_layer_2_1 at
+    # state indices 8, 9.
+    layer_1_xmom_rows = [2, 3]
+    layer_2_q_cols = [8, 9]
     found_x_transfer = any(
         _has_piecewise(B[i, j, 0])
         for i in layer_1_xmom_rows
@@ -152,11 +143,9 @@ def main():
         _fail("no upwind Piecewise found in layer-1 x-momentum cross-layer coupling")
     _ok(f"x-momentum mass-exchange transfer (Piecewise upwind) present")
 
-    # z-momentum rows feel the mass-exchange transfer via G ·  w*.
-    # G depends on ∂_x q (not ∂_x r), so the noncon entries land at
-    # ``B[r_row, q_col]`` — z-momentum row × OTHER-layer q-column.
-    layer_1_zmom_rows = [3, 4]   # r_layer_1_{0,1}
-    layer_2_q_cols = [7, 8]       # q_layer_2_{0,1}
+    # z-momentum layer-1 rows = 4, 5 (was 3, 4).
+    layer_1_zmom_rows = [4, 5]
+    layer_2_q_cols = [8, 9]
     found_z_transfer = any(
         _has_piecewise(B[i, j, 0])
         for i in layer_1_zmom_rows

@@ -69,7 +69,9 @@ def main():
     S = vam.source()
     B = vam.nonconservative_matrix()
     n_eq = vam.n_variables
-    expected_n_eq = 1 + 3 * (vam.N + 1)  # [h, q_0..q_N, r_0..r_N, p_0..p_N]
+    # State now includes bathymetry b at row 0 (with ∂_t b = 0):
+    # [b, h, q_0..q_N, r_0..r_N, p_0..p_N]
+    expected_n_eq = 2 + 3 * (vam.N + 1)
     if n_eq != expected_n_eq:
         _fail(f"vam.n_variables = {n_eq}, expected {expected_n_eq}")
     if F.shape != (n_eq, vam.dimension):
