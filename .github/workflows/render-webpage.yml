@@ -219,7 +219,7 @@ jobs:
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       # CHANGED: Use the official Pages artifact uploader
       - name: Upload GitHub Pages artifact
