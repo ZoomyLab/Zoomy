@@ -37,11 +37,6 @@ on:
     # Weekly large/benchmark run (Sunday 03:00 UTC)
     - cron: "0 3 * * 0"
 
-env:
-  # Opt JS actions onto Node 24 ahead of the 2026-06-16 default switch
-  # (clears the Node 20 deprecation warnings; no action-version bump).
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   meta:
     runs-on: ubuntu-latest
@@ -70,11 +65,11 @@ jobs:
       firedrake: ${{ github.event_name == 'pull_request' && steps.filter.outputs.firedrake || steps.defaults.outputs.firedrake }}
       infra: ${{ github.event_name == 'pull_request' && steps.filter.outputs.infra || steps.defaults.outputs.infra }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name == 'pull_request'
         with:
@@ -149,7 +144,7 @@ jobs:
        (needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.changes.outputs.git_ref }}
           submodules: recursive
@@ -158,7 +153,7 @@ jobs:
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -182,7 +177,7 @@ jobs:
 
       - name: Upload core report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-core
           path: artifacts/test-reports/core/**
@@ -198,7 +193,7 @@ jobs:
        (needs.changes.outputs.jax == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.changes.outputs.git_ref }}
           submodules: recursive
@@ -207,7 +202,7 @@ jobs:
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -231,7 +226,7 @@ jobs:
 
       - name: Upload jax report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-jax
           path: artifacts/test-reports/jax/**
@@ -247,7 +242,7 @@ jobs:
        (needs.changes.outputs.amrex == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.changes.outputs.git_ref }}
           submodules: recursive
@@ -256,7 +251,7 @@ jobs:
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -280,7 +275,7 @@ jobs:
 
       - name: Upload amrex report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-amrex
           path: artifacts/test-reports/amrex/**
@@ -298,7 +293,7 @@ jobs:
         needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.changes.outputs.git_ref }}
           submodules: recursive
@@ -307,7 +302,7 @@ jobs:
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -337,7 +332,7 @@ jobs:
 
       - name: Upload DMPlex report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-dmplex
           path: artifacts/test-reports/dmplex/**
@@ -345,7 +340,7 @@ jobs:
 
       - name: Upload Firedrake report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-firedrake
           path: artifacts/test-reports/firedrake/**
@@ -361,7 +356,7 @@ jobs:
        (needs.changes.outputs.fenicsx == 'true' || needs.changes.outputs.infra == 'true'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.changes.outputs.git_ref }}
           submodules: recursive
@@ -370,7 +365,7 @@ jobs:
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -394,7 +389,7 @@ jobs:
 
       - name: Upload FEniCSx report artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-fenicsx
           path: artifacts/test-reports/fenicsx/**
@@ -407,14 +402,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
       - name: Set lowercase owner
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -437,7 +432,7 @@ jobs:
               --output-dir artifacts/test-reports/large-core'
       - name: Upload large core report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-core
           path: artifacts/test-reports/large-core/**
@@ -450,14 +445,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
       - name: Set lowercase owner
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -480,7 +475,7 @@ jobs:
               --output-dir artifacts/test-reports/large-jax'
       - name: Upload large jax report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-jax
           path: artifacts/test-reports/large-jax/**
@@ -493,14 +488,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
       - name: Set lowercase owner
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -523,7 +518,7 @@ jobs:
               --output-dir artifacts/test-reports/large-amrex'
       - name: Upload large amrex report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-amrex
           path: artifacts/test-reports/large-amrex/**
@@ -536,14 +531,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
       - name: Set lowercase owner
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -574,14 +569,14 @@ jobs:
                   --output-dir artifacts/test-reports/large-firedrake )'
       - name: Upload large DMPlex report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-dmplex
           path: artifacts/test-reports/large-dmplex/**
           if-no-files-found: ignore
       - name: Upload large Firedrake report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-firedrake
           path: artifacts/test-reports/large-firedrake/**
@@ -594,14 +589,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
       - name: Set lowercase owner
         id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -624,7 +619,7 @@ jobs:
               --output-dir artifacts/test-reports/large-fenicsx'
       - name: Upload large FEniCSx report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-large-fenicsx
           path: artifacts/test-reports/large-fenicsx/**
@@ -644,37 +639,37 @@ jobs:
       - name: Init bundle directory
         run: mkdir -p artifacts/test-reports/large
       - name: Download large core report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-core
           path: artifacts/test-reports/large/core
       - name: Download large jax report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-jax
           path: artifacts/test-reports/large/jax
       - name: Download large amrex report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-amrex
           path: artifacts/test-reports/large/amrex
       - name: Download large DMPlex report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-dmplex
           path: artifacts/test-reports/large/dmplex
       - name: Download large Firedrake report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-firedrake
           path: artifacts/test-reports/large/firedrake
       - name: Download large FEniCSx report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-large-fenicsx
@@ -690,7 +685,7 @@ jobs:
           fi
       - name: Upload large-suite bundle
         if: steps.check.outputs.has_reports == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-large-bundle
           path: artifacts/test-reports/large
@@ -709,37 +704,37 @@ jobs:
       - name: Init bundle directory
         run: mkdir -p artifacts/test-reports/small
       - name: Download core report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-core
           path: artifacts/test-reports/small/core
       - name: Download jax report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-jax
           path: artifacts/test-reports/small/jax
       - name: Download amrex report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-amrex
           path: artifacts/test-reports/small/amrex
       - name: Download DMPlex report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-dmplex
           path: artifacts/test-reports/small/dmplex
       - name: Download Firedrake report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-firedrake
           path: artifacts/test-reports/small/firedrake
       - name: Download FEniCSx report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: test-report-fenicsx
@@ -755,7 +750,7 @@ jobs:
           fi
       - name: Upload small-suite bundle
         if: steps.check.outputs.has_reports == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-small-bundle
           path: artifacts/test-reports/small

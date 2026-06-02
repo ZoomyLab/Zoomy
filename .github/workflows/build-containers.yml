@@ -26,18 +26,13 @@ concurrency:
   group: container-build-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # Opt JS actions onto Node 24 ahead of the 2026-06-16 default switch
-  # (clears the Node 20 deprecation warnings; no action-version bump).
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   load-dockers:
     runs-on: ubuntu-latest
     outputs:
       list: ${{ steps.load.outputs.list }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
       - id: load
@@ -56,7 +51,7 @@ jobs:
       tier1: ${{ steps.detect.outputs.tier1 }}
       tier2: ${{ steps.detect.outputs.tier2 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
           submodules: recursive
@@ -177,7 +172,7 @@ jobs:
         container: ${{ fromJson(needs.detect-containers.outputs.tier1) }}
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -186,7 +181,7 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -279,7 +274,7 @@ jobs:
         container: ${{ fromJson(needs.detect-containers.outputs.tier2) }}
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -288,7 +283,7 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

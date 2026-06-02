@@ -19,16 +19,11 @@ on:
       - "library/zoomy_gui/**"
       - ".github/workflows/gui-grep-gate.yml"
 
-env:
-  # Opt JS actions onto Node 24 ahead of the 2026-06-16 default switch
-  # (clears the Node 20 deprecation warnings; no action-version bump).
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   grep-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
