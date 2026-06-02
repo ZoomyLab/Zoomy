@@ -76,7 +76,9 @@ body.sidebar-open .backdrop{opacity:1;pointer-events:auto}
   display:grid;
   grid-template-columns:var(--sidebar-w) 1fr;
   gap:12px;
-  max-width:1100px;
+  /* No max-width cap: the layout fills the full viewport width so the game
+     area can grow as large as the screen allows (fullscreen, wide monitors,
+     sidebar open/closed). fitGameArea() maximises the board inside it. */
   margin:0 auto;
   padding:10px 12px 0;
   flex:1;min-height:0;width:100%;
@@ -361,6 +363,23 @@ body.sidebar-closed .sidepanel{opacity:0;pointer-events:none}
   font-family:inherit;font-size:.9em;
 }
 .settings-panel .hint{font-size:.7em;opacity:.6;margin-top:10px;line-height:1.4}
+.board-scale-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.board-scale-row #board-scale-val{
+  flex:1;text-align:center;color:var(--ink);font-weight:700;font-size:1em;
+}
+.board-scale-btn{
+  width:32px;height:32px;flex:0 0 auto;
+  border:1px solid var(--panel-edge);border-radius:6px;
+  background:#0a1d2a;color:var(--ink);
+  font-size:1.2em;font-weight:700;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,opacity .15s;
+}
+.board-scale-btn:hover:not(:disabled){background:var(--panel-edge)}
+.board-scale-btn:active:not(:disabled){transform:translateY(1px)}
+.board-scale-btn:disabled{opacity:.35;cursor:not-allowed}
 
 /* Footer */
 .footer{
@@ -469,7 +488,7 @@ body.show-qr .qr-banner{display:flex}
 
   <main class="main-area">
     <div class="hdr">
-      <h1 data-i18n="title">Gesucht: Ingenieur für antike Bewässerungssysteme</h1>
+      <h1 data-i18n="title">Gesucht: Strategie für antike Bewässerungssysteme</h1>
       <p data-i18n="subtitle">Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!</p>
     </div>
 
@@ -530,16 +549,37 @@ body.show-qr .qr-banner{display:flex}
         <div class="settings-panel" id="settings-panel" hidden>
           <label>
             <span data-i18n="resolution">Auflösung</span>
+            <!-- Option labels are filled in by updateResolutionLabels(): the
+                 value is the base (vertical) cell count; the shown width
+                 follows the chosen aspect ratio. -->
             <select id="setting-resolution">
-              <option value="200" selected data-i18n="res200">200 × 200 (Standard)</option>
-              <option value="300" data-i18n="res300">300 × 300 (hoch)</option>
-              <option value="400" data-i18n="res400">400 × 400 (sehr hoch)</option>
-              <option value="500" data-i18n="res500">500 × 500 (extrem)</option>
-              <option value="600" data-i18n="res600">600 × 600</option>
-              <option value="800" data-i18n="res800">800 × 800</option>
-              <option value="1000" data-i18n="res1000">1000 × 1000 (nur GPU)</option>
-              <option value="1200" data-i18n="res1200">1200 × 1200 (nur GPU)</option>
+              <option value="200" selected>200 × 200</option>
+              <option value="300">300 × 300</option>
+              <option value="400">400 × 400</option>
+              <option value="500">500 × 500</option>
+              <option value="600">600 × 600</option>
+              <option value="800">800 × 800</option>
+              <option value="1000">1000 × 1000</option>
+              <option value="1200">1200 × 1200</option>
             </select>
+          </label>
+          <label style="margin-top:10px">
+            <span data-i18n="aspectRatio">Seitenverhältnis</span>
+            <select id="setting-aspect">
+              <option value="1:1" selected>1:1</option>
+              <option value="4:3">4:3</option>
+              <option value="3:2">3:2</option>
+              <option value="16:9">16:9</option>
+            </select>
+          </label>
+          <label style="margin-top:10px">
+            <span data-i18n="boardSize">Spielfeldgröße</span>
+            <div class="board-scale-row">
+              <button type="button" id="board-scale-dec" class="board-scale-btn" aria-label="−">−</button>
+              <span id="board-scale-val">100%</span>
+              <button type="button" id="board-scale-inc" class="board-scale-btn" aria-label="+">+</button>
+            </div>
+            <div class="hint" style="margin-top:2px" data-i18n="boardSizeHint">100% = automatisch maximale Größe für die verfügbare Fläche.</div>
           </label>
           <label style="margin-top:10px">
             <span data-i18n="penWidth">Stiftstärke</span>
@@ -595,7 +635,7 @@ body.show-qr .qr-banner{display:flex}
 // ═══════════════════════════════════════════════════════════════════════
 const I18N = {
   de: {
-    title: "Gesucht: Ingenieur für antike Bewässerungssysteme",
+    title: "Gesucht: Strategie für antike Bewässerungssysteme",
     subtitle: "Male dein Bewässerungssystem und öffne die Schleuse. <b>Ziel</b>: Fülle die Gärten — so schnell wie möglich!",
     score: "Punkte", time: "Zeit", level: "Level", highscore: "Highscore",
     playAtHome: "Zuhause spielen",
@@ -604,6 +644,9 @@ const I18N = {
     qcurveHint: "Punkte ziehen · Doppelklick auf leere Stelle: Punkt hinzufügen · Doppelklick auf Punkt: löschen",
     btnStart: "Schleuse öffnen", btnRestart: "Neustart", btnClear: "Skizze löschen",
     settingsTitle: "Einstellungen", resolution: "Auflösung",
+    aspectRatio: "Seitenverhältnis",
+    boardSize: "Spielfeldgröße",
+    boardSizeHint: "100% = automatisch maximale Größe für die verfügbare Fläche.",
     penWidth: "Stiftstärke", cells: "Zellen",
     field: "Feld", fieldH: "Wassertiefe h", fieldV: "Geschwindigkeit |u|",
     colorScheme: "Farbschema",
@@ -614,13 +657,11 @@ const I18N = {
     loading: "⏳ Initialisiere…", loadingRes: "⏳ Auflösung",
     anon: "Anonym", footerBy: "von", menuAria: "Seitenleiste umschalten",
     confirmResetHs: "Highscore-Liste wirklich löschen?",
-    res200: "200 × 200 (Standard)", res300: "300 × 300 (hoch)",
-    res400: "400 × 400 (sehr hoch)", res500: "500 × 500 (extrem)",
-    res600: "600 × 600", res800: "800 × 800",
-    res1000: "1000 × 1000 (nur GPU)", res1200: "1200 × 1200 (nur GPU)",
+    resSuffix: { 200: " (Standard)", 300: " (hoch)", 400: " (sehr hoch)",
+                 500: " (extrem)", 1000: " (nur GPU)", 1200: " (nur GPU)" },
   },
   en: {
-    title: "Wanted: Engineer for ancient irrigation systems",
+    title: "Wanted: Strategy for ancient irrigation systems",
     subtitle: "Draw your irrigation system and open the gate. <b>Goal</b>: Fill the gardens — as fast as you can!",
     score: "Points", time: "Time", level: "Level", highscore: "Highscore",
     playAtHome: "Play at home",
@@ -629,6 +670,9 @@ const I18N = {
     qcurveHint: "Drag points · Double-click empty space: add point · Double-click point: delete",
     btnStart: "Open the gate", btnRestart: "Restart", btnClear: "Clear sketch",
     settingsTitle: "Settings", resolution: "Resolution",
+    aspectRatio: "Aspect ratio",
+    boardSize: "Board size",
+    boardSizeHint: "100% = automatically the largest size for the available space.",
     penWidth: "Pen width", cells: "cells",
     field: "Field", fieldH: "Water depth h", fieldV: "Velocity |u|",
     colorScheme: "Colour scheme",
@@ -639,10 +683,8 @@ const I18N = {
     loading: "⏳ Initializing…", loadingRes: "⏳ Resolution",
     anon: "Anonymous", footerBy: "by", menuAria: "Toggle sidebar",
     confirmResetHs: "Really clear the highscore list?",
-    res200: "200 × 200 (default)", res300: "300 × 300 (high)",
-    res400: "400 × 400 (very high)", res500: "500 × 500 (extreme)",
-    res600: "600 × 600", res800: "800 × 800",
-    res1000: "1000 × 1000 (GPU only)", res1200: "1200 × 1200 (GPU only)",
+    resSuffix: { 200: " (default)", 300: " (high)", 400: " (very high)",
+                 500: " (extreme)", 1000: " (GPU only)", 1200: " (GPU only)" },
   },
 };
 let lang = (function() {
@@ -665,6 +707,7 @@ function applyLang() {
     });
   });
   // Dynamic, JS-built strings
+  if (typeof updateResolutionLabels === "function") updateResolutionLabels();
   if (typeof setState === "function" && typeof state !== "undefined") setState(state);
   if (typeof renderHighscores === "function") renderHighscores();
   const lb = document.getElementById("btn-lang");
@@ -771,10 +814,14 @@ const CLAY_HEX = "#8b5a2b";
 // Per-level colour-scale database: shipped defaults (m and m/s), overwritten
 // by the maximum depth / speed observed at the end of each completed run so
 // the colormap auto-tunes to what the level actually produces.
+// Per-level colour-scale bounds. The map is a contrast stretch
+// [lo, hi] → [0, 254]; lo/hi are learned over runs (EMA) from the
+// observed wet-cell min/max, so depth (which sits in a narrow band well
+// above zero) uses the full LUT instead of a thin washed-out slice.
 const LEVEL_SCALE_DEFAULTS = {
-  1: { hMax: 0.25, vMax: 1.5 },
-  2: { hMax: 0.30, vMax: 1.8 },
-  3: { hMax: 0.32, vMax: 1.8 },
+  1: { hMin: 0, hMax: 0.25, vMin: 0, vMax: 1.5 },
+  2: { hMin: 0, hMax: 0.30, vMin: 0, vMax: 1.8 },
+  3: { hMin: 0, hMax: 0.32, vMin: 0, vMax: 1.8 },
 };
 let levelScales = (function() {
   let db = null;
@@ -782,21 +829,34 @@ let levelScales = (function() {
   if (!db || typeof db !== "object") db = {};
   for (const lvl of [1, 2, 3]) {
     if (!db[lvl] || typeof db[lvl] !== "object") db[lvl] = {};
-    if (!(db[lvl].hMax > 0)) db[lvl].hMax = LEVEL_SCALE_DEFAULTS[lvl].hMax;
-    if (!(db[lvl].vMax > 0)) db[lvl].vMax = LEVEL_SCALE_DEFAULTS[lvl].vMax;
+    const d = LEVEL_SCALE_DEFAULTS[lvl];
+    if (!(db[lvl].hMax > 0)) db[lvl].hMax = d.hMax;
+    if (!(db[lvl].vMax > 0)) db[lvl].vMax = d.vMax;
+    if (!Number.isFinite(db[lvl].hMin)) db[lvl].hMin = d.hMin;
+    if (!Number.isFinite(db[lvl].vMin)) db[lvl].vMin = d.vMin;
   }
   return db;
 })();
 function saveLevelScales() {
   try { localStorage.setItem("zoomy-swe-level-scales", JSON.stringify(levelScales)); } catch (_) {}
 }
-// Blend the observed maxima from a finished run into the level's stored scale.
-function updateLevelScales(maxH, maxV) {
+// Blend the observed wet-cell min/max from a finished run into the level's
+// stored bounds. Mins only move when there was actual flow (maxH/maxV gate).
+function updateLevelScales(maxH, maxV, minH, minV) {
   const s = levelScales[currentLevel];
-  if (maxH > 0.01) s.hMax = 0.55 * s.hMax + 0.45 * maxH;
-  if (maxV > 0.05) s.vMax = 0.55 * s.vMax + 0.45 * maxV;
+  if (maxH > 0.01) {
+    s.hMax = 0.55 * s.hMax + 0.45 * maxH;
+    if (Number.isFinite(minH)) s.hMin = 0.55 * s.hMin + 0.45 * minH;
+  }
+  if (maxV > 0.05) {
+    s.vMax = 0.55 * s.vMax + 0.45 * maxV;
+    if (Number.isFinite(minV)) s.vMin = 0.55 * s.vMin + 0.45 * minV;
+  }
+  // Keep a sane gap so (hi - lo) never collapses.
+  if (s.hMax - s.hMin < 0.02) s.hMin = s.hMax - 0.02;
+  if (s.vMax - s.vMin < 0.05) s.vMin = s.vMax - 0.05;
   saveLevelScales();
-  engineSetScales(s.hMax, s.vMax);
+  engineSetScales(s.hMax, s.vMax, s.hMin, s.vMin);
 }
 function drawLevelObstacles() {
   lvlCtx.clearRect(0, 0, W, H);
@@ -819,19 +879,19 @@ function rasterizeLevelObstacles(w, h) {
   const out = new Uint8Array(w * h);
   const obs = LEVELS[currentLevel].obstacles;
   if (!obs.length) return out;
-  const nx = w - 2 * NG_CONST;
+  const nx = w - 2 * NG_CONST, ny = h - 2 * NG_CONST;
   for (const o of obs) {
     if (o.type === "rect") {
-      const x0 = Math.round(NG_CONST + o.x*nx), y0 = Math.round(NG_CONST + o.y*nx);
-      const x1 = Math.round(NG_CONST + (o.x+o.w)*nx), y1 = Math.round(NG_CONST + (o.y+o.h)*nx);
+      const x0 = Math.round(NG_CONST + o.x*nx), y0 = Math.round(NG_CONST + o.y*ny);
+      const x1 = Math.round(NG_CONST + (o.x+o.w)*nx), y1 = Math.round(NG_CONST + (o.y+o.h)*ny);
       for (let y = Math.max(0,y0); y < Math.min(h,y1); y++)
         for (let x = Math.max(0,x0); x < Math.min(w,x1); x++) out[y*w + x] = 255;
     } else if (o.type === "tri") {
       // Three vertices in domain fractions → canvas px; fill via the
       // same-side (sign-of-cross-product) point-in-triangle test.
-      const A = [NG_CONST + o.pts[0][0]*nx, NG_CONST + o.pts[0][1]*nx];
-      const B = [NG_CONST + o.pts[1][0]*nx, NG_CONST + o.pts[1][1]*nx];
-      const C = [NG_CONST + o.pts[2][0]*nx, NG_CONST + o.pts[2][1]*nx];
+      const A = [NG_CONST + o.pts[0][0]*nx, NG_CONST + o.pts[0][1]*ny];
+      const B = [NG_CONST + o.pts[1][0]*nx, NG_CONST + o.pts[1][1]*ny];
+      const C = [NG_CONST + o.pts[2][0]*nx, NG_CONST + o.pts[2][1]*ny];
       const minx = Math.max(0, Math.floor(Math.min(A[0],B[0],C[0])));
       const maxx = Math.min(w, Math.ceil(Math.max(A[0],B[0],C[0])));
       const miny = Math.max(0, Math.floor(Math.min(A[1],B[1],C[1])));
@@ -845,7 +905,7 @@ function rasterizeLevelObstacles(w, h) {
         if (!(hasNeg && hasPos)) out[y*w + x] = 255;
       }
     } else {
-      const cx = NG_CONST + o.cx*nx, cy = NG_CONST + o.cy*nx, r = o.r*nx, r2 = r*r;
+      const cx = NG_CONST + o.cx*nx, cy = NG_CONST + o.cy*ny, r = o.r*nx, r2 = r*r;
       for (let y = Math.max(0,Math.floor(cy-r)); y < Math.min(h,Math.ceil(cy+r)); y++)
         for (let x = Math.max(0,Math.floor(cx-r)); x < Math.min(w,Math.ceil(cx+r)); x++) {
           const dx = x-cx, dy = y-cy;
@@ -1149,7 +1209,7 @@ const FACE_NEUTRAL = "images/neutral.png";
 const FACE_SAD = "images/sad.png";
 function faceFor(v) { return v >= 80 ? FACE_HAPPY : v >= 33 ? FACE_NEUTRAL : FACE_SAD; }
 
-function updateUI(time, of, fin, maxH, maxV) {
+function updateUI(time, of, fin, maxH, maxV, minH, minV) {
   document.getElementById("timer").textContent = Math.max(0, 60-time).toFixed(1);
   // Garden is "full" at FILL_THRESHOLD m³ of accumulated outflow (per unit
   // z-depth). 0.2 ≈ what the old dimensionless threshold of 3.0 corresponded
@@ -1185,7 +1245,7 @@ function updateUI(time, of, fin, maxH, maxV) {
     renderHighscores();
     // Refine this level's colour-scale database from what the run produced.
     if (typeof maxH === "number" || typeof maxV === "number") {
-      updateLevelScales(maxH || 0, maxV || 0);
+      updateLevelScales(maxH || 0, maxV || 0, minH, minV);
     }
     setState(STATE.FINISHED);
   }
@@ -1355,23 +1415,25 @@ uniform sampler2D uBmask;
 uniform sampler2D uLUT;
 uniform int uMode;
 uniform int uNG;
-uniform int uN;          // = NX + 2  (solver grid incl. ghosts)
-uniform float uHScale, uVScale, uWet;
+uniform int uN;          // = NX + 2  (solver grid width incl. ghosts)
+uniform int uNY;         // = NY + 2  (solver grid height incl. ghosts)
+uniform float uHScale, uVScale, uHMin, uVMin, uWet;
 out vec4 oColor;
 
 vec3 readA(int i, int j) { return texelFetch(uA, ivec2(i, j), 0).xyz; }
 int readBT(int i, int j) { return int(texelFetch(uBmask, ivec2(i, j), 0).r * 255.0 + 0.5); }
 
+// Contrast stretch: (field - lo) * scale, where scale = 254/(hi - lo).
 float quantize(vec3 q) {
   float val;
   if (uMode == 1) {
     if (q.x <= uWet) val = 0.0;
     else {
       float u_ = q.y/q.x, v_ = q.z/q.x;
-      val = sqrt(u_*u_ + v_*v_) * uVScale;
+      val = (sqrt(u_*u_ + v_*v_) - uVMin) * uVScale;
     }
   } else {
-    val = q.x * uHScale;
+    val = (q.x - uHMin) * uHScale;
   }
   return clamp(val, 0.0, 254.0);
 }
@@ -1382,16 +1444,17 @@ void main() {
   // BOTTOM, but the CPU renderer puts solver j=0 (south) at the canvas TOP,
   // and the gardens are positioned that way.  Flip y so this shader matches.
   int ci = pix.x - uNG + 1;
-  int cj = (uN + uNG - 2) - pix.y;
+  int cj = (uNY + uNG - 2) - pix.y;
   int NXp1 = uN - 1;
+  int NYp1 = uNY - 1;
 
   // Outside the interior strip → wall colour, but extend visible openings outward.
-  if (ci < 1 || ci >= NXp1 || cj < 1 || cj >= NXp1) {
+  if (ci < 1 || ci >= NXp1 || cj < 1 || cj >= NYp1) {
     int bt = -1, sI = -1, sJ = -1;
-    if (ci < 1 && cj >= 1 && cj < NXp1)       { bt = readBT(0, cj);          sI = 1;       sJ = cj; }
-    else if (ci >= NXp1 && cj >= 1 && cj < NXp1) { bt = readBT(uN-1, cj);     sI = uN-2;    sJ = cj; }
+    if (ci < 1 && cj >= 1 && cj < NYp1)       { bt = readBT(0, cj);          sI = 1;       sJ = cj; }
+    else if (ci >= NXp1 && cj >= 1 && cj < NYp1) { bt = readBT(uN-1, cj);     sI = uN-2;    sJ = cj; }
     else if (cj < 1 && ci >= 1 && ci < NXp1)  { bt = readBT(ci, 0);           sI = ci;      sJ = 1; }
-    else if (cj >= NXp1 && ci >= 1 && ci < NXp1) { bt = readBT(ci, uN-1);    sI = ci;      sJ = uN-2; }
+    else if (cj >= NYp1 && ci >= 1 && ci < NXp1) { bt = readBT(ci, uNY-1);   sI = ci;      sJ = uNY-2; }
     if (bt == 5 || bt == 6 || bt == 7 || bt == 8) {
       float v = quantize(readA(sI, sJ));
       oColor = texture(uLUT, vec2((v + 1.0) / 256.0, 0.5));
@@ -1428,10 +1491,14 @@ class WebGLSim {
     this.outflow = [0,0,0,0,0];
     this.mode = "h";
     this.qCurveData = [[0, 1], [60, 1]];
+    this.scaleHMin = 0;      // colour-scale floor depth (m) — contrast stretch
     this.scaleHMax = 0.25;   // colour-scale saturation depth (m)
+    this.scaleVMin = 0;      // colour-scale floor speed (m/s)
     this.scaleVMax = 1.5;    // colour-scale saturation speed (m/s)
-    this.lastMaxH = 0;       // observed max depth on the last finished run
+    this.lastMaxH = 0;       // observed wet max depth on the last finished run
     this.lastMaxV = 0;
+    this.lastMinH = 0;       // observed wet min depth / speed
+    this.lastMinV = 0;
     this.lutTex = null;
     this.lastRasterBuf = null;   // saved for "drawing persists across runs"
     this._lastAccumTime = 0;
@@ -1469,15 +1536,22 @@ class WebGLSim {
     if (!(name in prog._locs)) prog._locs[name] = this.gl.getUniformLocation(prog, name);
     return prog._locs[name];
   }
-  configure(nx) {
-    this.nx = nx; this.N = nx + 2; this.dx = 20.0 / this.N;
-    this.IW = nx + 2 * this.NG;
-    this.canvas.width = this.IW; this.canvas.height = this.IW;
-    const r = (a, b) => [Math.round(a*nx), Math.round(b*nx)];
-    this.O_IN  = [r(0.5833, 0.7500)];
-    this.O_OUT = [r(0.3333, 0.5000), r(0.7500, 0.9167)];
-    this.O_TOP = [r(0.2500, 0.4167), r(0.6667, 0.7500)];
-    this.O_BOT = [r(0.5000, 0.6667)];
+  configure(nx, ny) {
+    ny = ny || nx;
+    // N  = nx + 2 is the x-stride / texture width; NM = ny + 2 the height.
+    // Cells stay square (dx = dy), so the physical domain is nx·dx × ny·dx.
+    this.nx = nx; this.ny = ny;
+    this.N = nx + 2; this.NM = ny + 2; this.dx = 20.0 / this.N;
+    this.IW = nx + 2 * this.NG; this.IH = ny + 2 * this.NG;
+    this.canvas.width = this.IW; this.canvas.height = this.IH;
+    // IN/OUT sit on the vertical edges → fractions of ny; TOP/BOT on the
+    // horizontal edges → fractions of nx.
+    const rx = (a, b) => [Math.round(a*nx), Math.round(b*nx)];
+    const ry = (a, b) => [Math.round(a*ny), Math.round(b*ny)];
+    this.O_IN  = [ry(0.5833, 0.7500)];
+    this.O_OUT = [ry(0.3333, 0.5000), ry(0.7500, 0.9167)];
+    this.O_TOP = [rx(0.2500, 0.4167), rx(0.6667, 0.7500)];
+    this.O_BOT = [rx(0.5000, 0.6667)];
     this.dt = 0.4 * this.dx / 3.0;   // fixed sMax estimate (constant-dt GPU)
     // Model parameter vector — the generated kernels read uP[]; the
     // Q(t) editor curve is sampled into the timeline block.
@@ -1495,12 +1569,12 @@ class WebGLSim {
     }
   }
   _createTextures() {
-    const gl = this.gl; const N = this.N;
+    const gl = this.gl; const N = this.N, NM = this.NM;
     this.tex = {}; this.fbo = {};
     for (const k of ["A", "B", "C"]) {
       const t = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, t);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, N, N, 0, gl.RGBA, gl.FLOAT, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, N, NM, 0, gl.RGBA, gl.FLOAT, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1516,7 +1590,7 @@ class WebGLSim {
     }
     this.tex.bmask = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.tex.bmask);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, N, 0, gl.RED, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, NM, 0, gl.RED, gl.UNSIGNED_BYTE, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1531,15 +1605,15 @@ class WebGLSim {
     this.tex = null; this.fbo = null;
   }
   _uploadBoundaryMask(userMask) {
-    const gl = this.gl; const N = this.N;
-    const data = new Uint8Array(N * N);
+    const gl = this.gl; const N = this.N, NM = this.NM;
+    const data = new Uint8Array(N * NM);
     const inAny = (idx, rs) => { for (const [a,b] of rs) if (idx >= a && idx < b) return true; return false; };
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    for (let j = 0; j < NM; j++) for (let i = 0; i < N; i++) {
       let bt = 0;
-      if (i === 0)       bt = inAny(j, this.O_IN)  ? 5 : 1;
+      if (i === 0)        bt = inAny(j, this.O_IN)  ? 5 : 1;
       else if (i === N-1) bt = inAny(j, this.O_OUT) ? 6 : 2;
       else if (j === 0)   bt = inAny(i, this.O_BOT) ? 8 : 3;
-      else if (j === N-1) bt = inAny(i, this.O_TOP) ? 7 : 4;
+      else if (j === NM-1) bt = inAny(i, this.O_TOP) ? 7 : 4;
       else if (userMask && userMask[j*N + i]) bt = 9;
       data[j*N + i] = bt;
     }
@@ -1548,15 +1622,15 @@ class WebGLSim {
     // or every row of the boundary mask gets a 2–3-byte shift, producing
     // a progressively-skewed wall pattern over the grid.
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, N, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, N, NM, 0, gl.RED, gl.UNSIGNED_BYTE, data);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
   _fillInitialState() {
-    const gl = this.gl; const N = this.N;
-    const data = new Float32Array(N * N * 4);
-    for (let k = 0; k < N*N; k++) data[k*4] = 0.01;
+    const gl = this.gl; const N = this.N, NM = this.NM;
+    const data = new Float32Array(N * NM * 4);
+    for (let k = 0; k < N*NM; k++) data[k*4] = 0.01;
     gl.bindTexture(gl.TEXTURE_2D, this.tex.A);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, N, gl.RGBA, gl.FLOAT, data);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, NM, gl.RGBA, gl.FLOAT, data);
   }
   setMode(m) { this.mode = m; }
   setQCurve(c) {
@@ -1590,9 +1664,11 @@ class WebGLSim {
     }
     return last[1];
   }
-  setScales(hMax, vMax) {
+  setScales(hMax, vMax, hMin, vMin) {
     if (hMax > 0) this.scaleHMax = hMax;
     if (vMax > 0) this.scaleVMax = vMax;
+    if (Number.isFinite(hMin)) this.scaleHMin = hMin;
+    if (Number.isFinite(vMin)) this.scaleVMin = vMin;
   }
   setLUT(bytes) {
     const gl = this.gl;
@@ -1610,9 +1686,9 @@ class WebGLSim {
   // by start() and by the main thread to refresh walls after clear/level
   // switch, so the IDLE render never shows a stale drawing as clay.
   setWalls(userRasterUint8) {
-    const N = this.N, IW = this.IW, NG = this.NG;
-    const mask = new Uint8Array(N * N);
-    for (let j = 0; j < this.nx; j++) for (let i = 0; i < this.nx; i++) {
+    const N = this.N, NM = this.NM, IW = this.IW, NG = this.NG;
+    const mask = new Uint8Array(N * NM);
+    for (let j = 0; j < this.ny; j++) for (let i = 0; i < this.nx; i++) {
       mask[(j+1)*N + (i+1)] = userRasterUint8[(j+NG)*IW + (i+NG)] > 0 ? 1 : 0;
     }
     this.lastRasterBuf = userRasterUint8;
@@ -1628,10 +1704,10 @@ class WebGLSim {
     this._fillInitialState();
   }
   _step() {
-    const gl = this.gl; const N = this.N;
+    const gl = this.gl; const N = this.N, NM = this.NM;
     gl.useProgram(this.simProg);
     gl.bindVertexArray(this.vao);
-    gl.viewport(0, 0, N, N);
+    gl.viewport(0, 0, N, NM);
     const loc = (n) => this._uloc(this.simProg, n);
     gl.uniform1i(loc("uA"), 0); gl.uniform1i(loc("uB"), 1); gl.uniform1i(loc("uBmask"), 2);
     gl.uniform1f(loc("uDt"), this.dt); gl.uniform1f(loc("uDx"), this.dx);
@@ -1677,46 +1753,51 @@ class WebGLSim {
     this._accumulateOutflow();
     if (justFinished) this._measureMaxField();
   }
-  // Full-state readback once, at game end, to find observed max depth/speed.
+  // Full-state readback once, at game end, to find observed wet-cell
+  // min/max depth & speed (drives the contrast-stretch colour bounds).
   _measureMaxField() {
-    const gl = this.gl, N = this.N;
+    const gl = this.gl, N = this.N, NM = this.NM;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.A);
-    const buf = new Float32Array(N * N * 4);
-    gl.readPixels(0, 0, N, N, gl.RGBA, gl.FLOAT, buf);
+    const buf = new Float32Array(N * NM * 4);
+    gl.readPixels(0, 0, N, NM, gl.RGBA, gl.FLOAT, buf);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    let mh = 0, mv = 0;
-    for (let k = 0; k < N * N; k++) {
+    let mh = 0, mv = 0, nh = Infinity, nv = Infinity;
+    for (let k = 0; k < N * NM; k++) {
       const h = buf[k*4];
-      if (h > mh) mh = h;
-      if (h > 1e-6) {
+      if (h > 1e-6) {                       // wet cells only
+        if (h > mh) mh = h;
+        if (h < nh) nh = h;
         const u = buf[k*4+1] / h, v = buf[k*4+2] / h;
         const vm = Math.sqrt(u*u + v*v);
         if (vm > mv) mv = vm;
+        if (vm < nv) nv = vm;
       }
     }
     this.lastMaxH = mh;
     this.lastMaxV = mv;
+    this.lastMinH = Number.isFinite(nh) ? nh : 0;
+    this.lastMinV = Number.isFinite(nv) ? nv : 0;
   }
   _accumulateOutflow() {
-    const gl = this.gl; const N = this.N;
+    const gl = this.gl; const N = this.N, NM = this.NM;
     const dtAcc = this.gameTime - this._lastAccumTime;
     this._lastAccumTime = this.gameTime;
     if (dtAcc <= 0) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.A);
-    const buf = new Float32Array(N * 4);
+    const buf = new Float32Array(Math.max(N, NM) * 4);
     const dx = this.dx;   // m/cell — makes the integral resolution-independent
-    // O_BOT: row j=1
+    // O_BOT: row j=1 (spans the x-axis, N cells)
     gl.readPixels(0, 1, N, 1, gl.RGBA, gl.FLOAT, buf);
     { const [a, b] = this.O_BOT[0]; let s = 0; for (let i = a; i < b; i++) s += -buf[i*4 + 2]; this.outflow[0] += s * dx * dtAcc; }
-    // O_OUT: col i=N-2
-    gl.readPixels(N-2, 0, 1, N, gl.RGBA, gl.FLOAT, buf);
+    // O_OUT: col i=N-2 (spans the y-axis, NM cells)
+    gl.readPixels(N-2, 0, 1, NM, gl.RGBA, gl.FLOAT, buf);
     for (let oi = 0; oi < this.O_OUT.length; oi++) {
       const [a, b] = this.O_OUT[oi]; let s = 0;
       for (let j = a; j < b; j++) s += buf[j*4 + 1];
       this.outflow[1 + oi] += s * dx * dtAcc;
     }
-    // O_TOP: row j=N-2
-    gl.readPixels(0, N-2, N, 1, gl.RGBA, gl.FLOAT, buf);
+    // O_TOP: row j=NM-2 (spans the x-axis, N cells)
+    gl.readPixels(0, NM-2, N, 1, gl.RGBA, gl.FLOAT, buf);
     for (let oi = 0; oi < this.O_TOP.length; oi++) {
       const [a, b] = this.O_TOP[oi]; let s = 0;
       for (let i = a; i < b; i++) s += buf[i*4 + 2];
@@ -1727,11 +1808,12 @@ class WebGLSim {
   render() {
     const gl = this.gl;
     if (!this.lutTex) return;
-    // Colour scale saturates at the per-level reference depth/speed.
-    const hScale = 254 / Math.max(0.05, this.scaleHMax);
-    const vScale = 254 / Math.max(0.10, this.scaleVMax);
+    // Contrast stretch [lo, hi] → [0, 254] using the per-level bounds.
+    const hLo = this.scaleHMin, vLo = this.scaleVMin;
+    const hScale = 254 / Math.max(0.05, this.scaleHMax - hLo);
+    const vScale = 254 / Math.max(0.10, this.scaleVMax - vLo);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.IW, this.IW);
+    gl.viewport(0, 0, this.IW, this.IH);
     gl.useProgram(this.renderProg);
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex.A);
@@ -1741,7 +1823,9 @@ class WebGLSim {
     gl.uniform1i(loc("uA"), 0); gl.uniform1i(loc("uBmask"), 1); gl.uniform1i(loc("uLUT"), 2);
     gl.uniform1i(loc("uMode"), this.mode === "vmag" ? 1 : 0);
     gl.uniform1i(loc("uNG"), this.NG); gl.uniform1i(loc("uN"), this.N);
+    gl.uniform1i(loc("uNY"), this.NM);
     gl.uniform1f(loc("uHScale"), hScale); gl.uniform1f(loc("uVScale"), vScale);
+    gl.uniform1f(loc("uHMin"), hLo); gl.uniform1f(loc("uVMin"), vLo);
     gl.uniform1f(loc("uWet"), 1e-6);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
@@ -1756,26 +1840,28 @@ let gpuSim = null;
 const currentEngine = useGPU ? "gpu" : "cpu";
 
 // === Engine routing helpers — both engines share this interface ===
-function engineConfigure(nx) {
+function engineConfigure(nx, ny) {
+  ny = ny || nx;
   if (currentEngine === "gpu") {
     if (!gpuSim) gpuSim = new WebGLSim(flowC);
-    gpuSim.configure(nx);
+    gpuSim.configure(nx, ny);
     if (typeof activeLUT !== "undefined") gpuSim.setLUT(activeLUT);
     gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     if (typeof qCurve !== "undefined") gpuSim.setQCurve(qCurve);
     if (typeof levelScales !== "undefined")
-      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax);
-    // Sync visible canvas resolution; the WebGL canvas draws at IW × IW.
-    W = gpuSim.IW; H = gpuSim.IW;
+      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax, levelScales[currentLevel].hMin, levelScales[currentLevel].vMin);
+    // Sync visible canvas resolution; the WebGL canvas draws at IW × IH.
+    W = gpuSim.IW; H = gpuSim.IH;
     drawC.width = lvlC.width = W;
     drawC.height = lvlC.height = H;
     setupDrawCtx();
     drawLevelObstacles();
+    fitGameArea();
     document.getElementById("loading").style.display = "none";
     gpuSim.render();
     requestAnimationFrame(gpuTickLoop);
   } else {
-    createWorker(nx);
+    createWorker(nx, ny);
   }
 }
 
@@ -1819,28 +1905,30 @@ function engineSetLUT(lut) {
   if (gpuSim) gpuSim.setLUT(lut);
   // CPU LUT lives in main thread already (activeLUT) — no upload needed.
 }
-function engineSetScales(hMax, vMax) {
-  if (gpuSim) gpuSim.setScales(hMax, vMax);
-  if (worker) worker.postMessage({type: "setscales", hMax: hMax, vMax: vMax});
+function engineSetScales(hMax, vMax, hMin, vMin) {
+  if (gpuSim) gpuSim.setScales(hMax, vMax, hMin, vMin);
+  if (worker) worker.postMessage({type: "setscales", hMax: hMax, vMax: vMax, hMin: hMin, vMin: vMin});
 }
-function engineApplyResolution(nx) {
+function engineApplyResolution(nx, ny) {
+  ny = ny || nx;
   if (currentEngine === "gpu") {
-    gpuSim.configure(nx);
+    gpuSim.configure(nx, ny);
     gpuSim.setLUT(activeLUT);
     gpuSim.setMode(typeof currentField !== "undefined" ? currentField : "h");
     gpuSim.setQCurve(qCurve);
     if (typeof levelScales !== "undefined")
-      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax);
-    W = gpuSim.IW; H = gpuSim.IW;
+      gpuSim.setScales(levelScales[currentLevel].hMax, levelScales[currentLevel].vMax, levelScales[currentLevel].hMin, levelScales[currentLevel].vMin);
+    W = gpuSim.IW; H = gpuSim.IH;
     drawC.width = lvlC.width = W;
     drawC.height = lvlC.height = H;
     setupDrawCtx();
     drawLevelObstacles();
+    fitGameArea();
     gpuSim.render();
     document.getElementById("loading").style.display = "none";
   } else {
     if (worker) worker.terminate();
-    createWorker(nx);
+    createWorker(nx, ny);
   }
 }
 
@@ -1851,7 +1939,7 @@ function gpuTickLoop() {
   const t1 = performance.now();
   gpuSim.render();
   const t2 = performance.now();
-  updateUI(gpuSim.gameTime, gpuSim.outflow, gpuSim.finished, gpuSim.lastMaxH, gpuSim.lastMaxV);
+  updateUI(gpuSim.gameTime, gpuSim.outflow, gpuSim.finished, gpuSim.lastMaxH, gpuSim.lastMaxV, gpuSim.lastMinH, gpuSim.lastMinV);
   qIndicatorTime = gpuSim.gameTime;
   drawQCurve();
   if (window.__prof) {
@@ -1895,7 +1983,8 @@ function resetUI() {
   }
 }
 
-function createWorker(nx) {
+function createWorker(nx, ny) {
+  ny = ny || nx;
   // Module worker: the CPU numerics core is now the generic
   // HyperbolicSolver2D (library/zoomy_js) driven by the codegen'd SWE
   // kernels. See apps/swe-game/worker.js.
@@ -1908,6 +1997,7 @@ function createWorker(nx) {
       flowC.height = drawC.height = lvlC.height = H;
       setupDrawCtx();
       drawLevelObstacles();
+      fitGameArea();
       imgData = fCtx.createImageData(W, H);
       document.getElementById("loading").style.display = "none";
       // Re-apply current colour scheme (worker resets MODE on setup)
@@ -1918,13 +2008,13 @@ function createWorker(nx) {
       if (typeof sendQCurveToWorker === "function") sendQCurveToWorker();
       if (typeof levelScales !== "undefined") {
         const s = levelScales[currentLevel];
-        worker.postMessage({type: "setscales", hMax: s.hMax, vMax: s.vMax});
+        worker.postMessage({type: "setscales", hMax: s.hMax, vMax: s.vMax, hMin: s.hMin, vMin: s.vMin});
       }
     }
     else if (m.type === "frame") {
       if (m.iw !== W || m.ih !== H) return;  // stale frame from prior NX
       renderFrame(new Uint8Array(m.image));
-      updateUI(m.time, m.of, m.fin, m.maxH, m.maxV);
+      updateUI(m.time, m.of, m.fin, m.maxH, m.maxV, m.minH, m.minV);
       // Update the indicator line on the q-curve canvas
       qIndicatorTime = m.time;
       drawQCurve();
@@ -1940,10 +2030,11 @@ function createWorker(nx) {
       }
     }
   };
-  worker.postMessage({type: "config", nx: nx});
+  worker.postMessage({type: "config", nx: nx, ny: ny});
 }
 
-function applyResolution(nx) {
+function applyResolution(nx, ny) {
+  ny = ny || nx;
   active = false;
   scoreSaved = false;
   setState(STATE.IDLE);
@@ -1951,8 +2042,8 @@ function applyResolution(nx) {
   dCtx.clearRect(0, 0, W, H);
   const ld = document.getElementById("loading");
   ld.style.display = "flex";
-  ld.textContent = t("loadingRes") + " " + nx + " × " + nx + "…";
-  engineApplyResolution(nx);
+  ld.textContent = t("loadingRes") + " " + nx + " × " + ny + "…";
+  engineApplyResolution(nx, ny);
 }
 
 function startSim() {
@@ -1999,8 +2090,64 @@ document.addEventListener("click", function(e) {
   if (e.target === btnSettings || btnSettings.contains(e.target)) return;
   settingsPanel.hidden = true;
 });
-document.getElementById("setting-resolution").onchange = function() {
-  applyResolution(parseInt(this.value, 10));
+// === Resolution × aspect ratio ===
+// The resolution <select> value is the base (vertical) cell count NY; the
+// aspect <select> widens the grid horizontally so NX = round(NY · w/h).
+// A non-square choice gives a wider board with more room to the right.
+const ASPECT_KEY = "zoomy-swe-aspect";
+const selRes    = document.getElementById("setting-resolution");
+const selAspect = document.getElementById("setting-aspect");
+
+function parseAspect(s) {
+  const m = String(s || "1:1").split(":");
+  const w = parseFloat(m[0]) || 1, h = parseFloat(m[1]) || 1;
+  return w / h;
+}
+function dimsFor(base, aspectStr) {
+  const ny = base;
+  const nx = Math.max(1, Math.round(base * parseAspect(aspectStr)));
+  return { nx, ny };
+}
+function currentDims() {
+  return dimsFor(parseInt(selRes.value, 10), selAspect.value);
+}
+// Rewrite every resolution option's label to "<nx> × <ny><suffix>" for the
+// currently selected aspect ratio, so the menu reflects the real grid.
+function updateResolutionLabels() {
+  const suffixes = (I18N[lang] && I18N[lang].resSuffix) || I18N.de.resSuffix || {};
+  for (const opt of selRes.options) {
+    const base = parseInt(opt.value, 10);
+    const { nx, ny } = dimsFor(base, selAspect.value);
+    opt.textContent = nx + " × " + ny + (suffixes[base] || "");
+  }
+}
+
+// Restore the saved aspect choice (resolution keeps its default).
+(function initAspect() {
+  const saved = localStorage.getItem(ASPECT_KEY);
+  if (saved && [...selAspect.options].some(o => o.value === saved)) {
+    selAspect.value = saved;
+  }
+  updateResolutionLabels();
+})();
+
+function applyCurrentDims() {
+  const { nx, ny } = currentDims();
+  applyResolution(nx, ny);
+}
+selRes.onchange = applyCurrentDims;
+selAspect.onchange = function() {
+  localStorage.setItem(ASPECT_KEY, selAspect.value);
+  updateResolutionLabels();
+  applyCurrentDims();
+};
+
+// Manual board-size +/- override (100% = auto-maximised fit).
+document.getElementById("board-scale-dec").onclick = function() {
+  setBoardScale(boardScale - BOARD_SCALE_STEP);
+};
+document.getElementById("board-scale-inc").onclick = function() {
+  setBoardScale(boardScale + BOARD_SCALE_STEP);
 };
 
 // Field (what scalar is shown) and colour scheme are now independent.
@@ -2059,7 +2206,7 @@ function setLevel(level) {
   updateLevelButtons();
   dCtx.clearRect(0, 0, W, H);   // drop the old sketch — fresh start per level
   // Apply this level's stored colour scale.
-  engineSetScales(levelScales[level].hMax, levelScales[level].vMax);
+  engineSetScales(levelScales[level].hMax, levelScales[level].vMax, levelScales[level].hMin, levelScales[level].vMin);
   resetSim();          // re-init the field so the new obstacles take effect
 }
 document.querySelectorAll("#level-select .level-btns button").forEach(function(b) {
@@ -2108,17 +2255,57 @@ if (btnEngineToggle) {
 const MOBILE_BREAK = 768;
 function isMobile() { return window.innerWidth <= MOBILE_BREAK; }
 
-// Auto-maximise the (square) game area to whatever space .game-area-wrap
-// has — works the same on full screen, a half-width window, or mobile,
-// because .game-area-wrap is a flex:1 child that already absorbs all the
-// leftover height. No manual resize handle, no persisted size.
+// Auto-maximise the game area to whatever space .game-area-wrap has —
+// works the same on full screen, a half-width window, or mobile, because
+// .game-area-wrap is a flex:1 child that already absorbs all the leftover
+// space. The aspect ratio follows the simulation grid (canvas W × H): a
+// non-square grid (e.g. 3:2) yields a wider board with more room to the
+// right. The gutter that holds the gardens is kept constant in px, so the
+// canvas itself carries the aspect ratio. No manual resize, no persisted size.
+// Manual board-size override: 100% = the largest board that fits the
+// available space; the +/- buttons in Settings scale it down (or slightly
+// up) from there. Persisted across sessions.
+const BOARD_SCALE_KEY = "zoomy-swe-board-scale";
+const BOARD_SCALE_MIN = 0.5, BOARD_SCALE_MAX = 1.3, BOARD_SCALE_STEP = 0.1;
+let boardScale = (function() {
+  const v = parseFloat(localStorage.getItem(BOARD_SCALE_KEY));
+  return (Number.isFinite(v) && v >= BOARD_SCALE_MIN && v <= BOARD_SCALE_MAX) ? v : 1.0;
+})();
+
 function fitGameArea() {
   const wrap = document.querySelector('.game-area-wrap');
   const area = document.getElementById('game-area');
   if (!wrap || !area) return;
-  const size = Math.max(180, Math.min(wrap.clientWidth, wrap.clientHeight));
-  area.style.width  = size + "px";
-  area.style.height = size + "px";
+  // Aspect of the canvas (incl. ghost border) — falls back to square.
+  const aspect = (W > 0 && H > 0) ? (W / H) : 1;
+  // Reserve the fixed gutter on each side so the *board* (canvas) keeps the
+  // grid aspect while the gardens still hang into a constant-width gutter.
+  const gutter = parseFloat(getComputedStyle(area).getPropertyValue('--gutter')) || 0;
+  const availW = Math.max(40, wrap.clientWidth  - 2 * gutter);
+  const availH = Math.max(40, wrap.clientHeight - 2 * gutter);
+  // Largest board (boardW × boardW/aspect) that fits the available box,
+  // then the user's manual scale on top.
+  let boardW = Math.min(availW, availH * aspect) * boardScale;
+  let boardH = boardW / aspect;
+  const w = Math.max(120, boardW) + 2 * gutter;
+  const h = Math.max(120 / aspect, boardH) + 2 * gutter;
+  area.style.width  = w + "px";
+  area.style.height = h + "px";
+}
+// Update the on-screen percentage + button disabled state, and refit.
+function updateBoardScaleUI() {
+  const lbl = document.getElementById("board-scale-val");
+  if (lbl) lbl.textContent = Math.round(boardScale * 100) + "%";
+  const dec = document.getElementById("board-scale-dec");
+  const inc = document.getElementById("board-scale-inc");
+  if (dec) dec.disabled = boardScale <= BOARD_SCALE_MIN + 1e-9;
+  if (inc) inc.disabled = boardScale >= BOARD_SCALE_MAX - 1e-9;
+}
+function setBoardScale(v) {
+  boardScale = Math.min(BOARD_SCALE_MAX, Math.max(BOARD_SCALE_MIN, Math.round(v * 100) / 100));
+  localStorage.setItem(BOARD_SCALE_KEY, String(boardScale));
+  updateBoardScaleUI();
+  fitGameArea();
 }
 const fitBoard = fitGameArea;  // back-compat alias
 
@@ -2206,7 +2393,8 @@ drawQR();
 
 setState(STATE.IDLE);
 applyLang();
-engineConfigure(200);
+updateBoardScaleUI();
+{ const d0 = currentDims(); engineConfigure(d0.nx, d0.ny); }
 
 // Test/profile hook (only enabled via ?profile=1). Lets an external driver
 // (Playwright/Puppeteer) start runs and read state without touching internals.

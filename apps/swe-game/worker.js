@@ -18,7 +18,10 @@ const END_TIME = 60.0;
 const BUDGET = 0.08;          // wall-clock budget per frame (s)
 const NG = 5;                 // raster ghost border (visual only)
 
-// Openings as fractions of NX so they scale with resolution.
+// Openings as fractions of the edge they sit on, so they scale with
+// resolution AND with a non-square aspect ratio. IN/OUT live on the
+// vertical (left/right) edges → scaled by NY; TOP/BOT live on the
+// horizontal (top/bottom) edges → scaled by NX.
 const OPF = {
   IN:  [[0.5833, 0.7500]],
   OUT: [[0.3333, 0.5000], [0.7500, 0.9167]],
@@ -27,7 +30,9 @@ const OPF = {
 };
 
 // ── Worker state ────────────────────────────────────────────────────
-let NX, IW, IH, N, NN, DX;
+// N  = NX + 2  is the x-stride (cells incl. ghosts in a row);
+// NM = NY + 2  is the number of rows. Cells are square (DX = DY).
+let NX, NY, IW, IH, N, NM, NN, DX;
 let O_IN, O_OUT, O_TOP, O_BOT;
 let W_IN, W_OUT, W_TOP, W_BOT;
 let solver, swe;
@@ -35,7 +40,10 @@ let raster;
 let gameTime = 0, running = false, finished = false;
 let outflow = [0, 0, 0, 0, 0];
 let MODE = "h";                       // "h" or "vmag"
-let SCALE_HMAX = 0.25, SCALE_VMAX = 1.5;
+// Colour scale is a contrast stretch [lo, hi] → [0, 254]; bounds learned
+// per level on the main thread and pushed via "setscales".
+let SCALE_HMIN = 0, SCALE_HMAX = 0.25;
+let SCALE_VMIN = 0, SCALE_VMAX = 1.5;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function wallSegs(op, nx) {
@@ -53,17 +61,17 @@ function inSeg(x, segs) {
 }
 
 // ── Setup / lifecycle ───────────────────────────────────────────────
-function setup(nx) {
-  NX = nx;
-  IW = NX + 2 * NG; IH = IW;
-  N = NX + 2; NN = N * N;
+function setup(nx, ny) {
+  NX = nx; NY = (ny || nx);
+  IW = NX + 2 * NG; IH = NY + 2 * NG;
+  N = NX + 2; NM = NY + 2; NN = N * NM;
   DX = 20.0 / N;
-  O_IN  = scaleFrac(OPF.IN,  NX);
-  O_OUT = scaleFrac(OPF.OUT, NX);
+  O_IN  = scaleFrac(OPF.IN,  NY);
+  O_OUT = scaleFrac(OPF.OUT, NY);
   O_TOP = scaleFrac(OPF.TOP, NX);
   O_BOT = scaleFrac(OPF.BOT, NX);
-  W_IN  = wallSegs(O_IN,  NX);
-  W_OUT = wallSegs(O_OUT, NX);
+  W_IN  = wallSegs(O_IN,  NY);
+  W_OUT = wallSegs(O_OUT, NY);
   W_TOP = wallSegs(O_TOP, NX);
   W_BOT = wallSegs(O_BOT, NX);
 
@@ -73,7 +81,7 @@ function setup(nx) {
   // everything else (and the internal sketch mask) is a reflective
   // wall. The generated boundaryConditions kernel computes the state.
   solver = new HyperbolicSolver2D({
-    nx: NX, ny: NX, dx: DX,
+    nx: NX, ny: NY, dx: DX,
     model: swe.model,
     bc: {
       wall: BC.wall,
@@ -104,7 +112,7 @@ function init() {
 
 /** Stamp the visual raster's clay pixels into the solver's wall mask. */
 function stampWalls() {
-  for (let j = 0; j < NX; j++)
+  for (let j = 0; j < NY; j++)
     for (let i = 0; i < NX; i++)
       solver.wall[(j + 1) * N + (i + 1)] =
         raster[(j + NG) * IW + (i + NG)] > 0 ? 1 : 0;
@@ -118,11 +126,11 @@ function startSim(rasterBuf) {
 
 // ── Rendering ───────────────────────────────────────────────────────
 function render() {
-  const hScale = 254 / Math.max(0.05, SCALE_HMAX);
-  const vScale = 254 / Math.max(0.10, SCALE_VMAX);
+  const hScale = 254 / Math.max(0.05, SCALE_HMAX - SCALE_HMIN);
+  const vScale = 254 / Math.max(0.10, SCALE_VMAX - SCALE_VMIN);
   const img = new Uint8Array(IW * IH);
   const h = solver.Q[0], hu = solver.Q[1], hv = solver.Q[2];
-  for (let j = 0; j < NX; j++) {
+  for (let j = 0; j < NY; j++) {
     for (let i = 0; i < NX; i++) {
       const k = (j + 1) * N + (i + 1);
       const rj = j + NG, ri = i + NG;
@@ -133,10 +141,10 @@ function render() {
         if (hk <= WET) { v = 0; }
         else {
           const u_ = hu[k] / hk, w_ = hv[k] / hk;
-          v = Math.min(254, Math.sqrt(u_ * u_ + w_ * w_) * vScale);
+          v = Math.min(254, Math.max(0, (Math.sqrt(u_ * u_ + w_ * w_) - SCALE_VMIN) * vScale));
         }
       } else {
-        v = Math.min(hk * hScale, 254);
+        v = Math.min(254, Math.max(0, (hk - SCALE_HMIN) * hScale));
       }
       img[rj * IW + ri] = (v | 0) + 1;
     }
@@ -192,35 +200,40 @@ function tick() {
     for (let oi = 0; oi < O_TOP.length; oi++) {
       const [a, b] = O_TOP[oi];
       let s = 0;
-      for (let i = a; i < b; i++) s += hv[(N - 2) * N + i];
+      for (let i = a; i < b; i++) s += hv[(NM - 2) * N + i];
       outflow[oi === 1 ? 3 : 4] += s * DX * dtacc;
     }
     stampWalls();
   }
   const img = render();
-  // On the final frame, report the interior max depth / speed so the
-  // main thread can refine its per-level colour-scale database.
-  let maxH = 0, maxV = 0;
+  // On the final frame, report the interior wet-cell min/max depth & speed
+  // so the main thread can refine its per-level contrast-stretch bounds.
+  let maxH = 0, maxV = 0, minH = 0, minV = 0;
   if (finished) {
     const h = solver.Q[0], hu = solver.Q[1], hv = solver.Q[2];
-    for (let j = 1; j < N - 1; j++)
+    let nh = Infinity, nv = Infinity;
+    for (let j = 1; j < NM - 1; j++)
       for (let i = 1; i < N - 1; i++) {
         const k = j * N + i;
         if (solver.wall[k]) continue;
         const hk = h[k];
-        if (hk > maxH) maxH = hk;
-        if (hk > WET) {
+        if (hk > WET) {                       // wet cells only
+          if (hk > maxH) maxH = hk;
+          if (hk < nh) nh = hk;
           const u = hu[k] / hk, vv = hv[k] / hk;
           const vm = Math.sqrt(u * u + vv * vv);
           if (vm > maxV) maxV = vm;
+          if (vm < nv) nv = vm;
         }
       }
+    minH = Number.isFinite(nh) ? nh : 0;
+    minV = Number.isFinite(nv) ? nv : 0;
   }
   self.postMessage(
     {
       type: "frame", image: img.buffer,
       time: gameTime, of: outflow.slice(), fin: finished, ns,
-      iw: IW, ih: IH, maxH, maxV,
+      iw: IW, ih: IH, maxH, maxV, minH, minV,
     },
     [img.buffer]
   );
@@ -230,9 +243,9 @@ function tick() {
 self.onmessage = function (e) {
   const m = e.data;
   if (m.type === "config") {
-    setup(m.nx);
+    setup(m.nx, m.ny);
     tick();
-    self.postMessage({ type: "ready", iw: IW, ih: IH, nx: NX });
+    self.postMessage({ type: "ready", iw: IW, ih: IH, nx: NX, ny: NY });
     return;
   }
   if (NX === undefined) return;          // not configured yet
@@ -271,6 +284,8 @@ self.onmessage = function (e) {
   } else if (m.type === "setscales") {
     if (m.hMax > 0) SCALE_HMAX = m.hMax;
     if (m.vMax > 0) SCALE_VMAX = m.vMax;
+    if (Number.isFinite(m.hMin)) SCALE_HMIN = m.hMin;
+    if (Number.isFinite(m.vMin)) SCALE_VMIN = m.vMin;
   } else if (m.type === "setqcurve") {
     if (Array.isArray(m.curve) && m.curve.length >= 1) {
       swe.setQCurve(m.curve.map((p) => [p.t, p.q]));
