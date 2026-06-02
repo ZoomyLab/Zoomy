@@ -26,6 +26,11 @@ concurrency:
   group: container-build-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Opt JS actions onto Node 24 ahead of the 2026-06-16 default switch
+  # (clears the Node 20 deprecation warnings; no action-version bump).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   load-dockers:
     runs-on: ubuntu-latest

@@ -37,6 +37,11 @@ on:
     # Weekly large/benchmark run (Sunday 03:00 UTC)
     - cron: "0 3 * * 0"
 
+env:
+  # Opt JS actions onto Node 24 ahead of the 2026-06-16 default switch
+  # (clears the Node 20 deprecation warnings; no action-version bump).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   meta:
     runs-on: ubuntu-latest
