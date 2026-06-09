@@ -19,10 +19,10 @@ import sympy as sp
 from sympy import Derivative
 
 from zoomy_core.model.models.ins_generator import Expression
-from zoomy_core.model.models.tag_catalog import (
+from zoomy_core.model.derivation.tag_catalog import (
     canonical_solver_tag, register_alias, CANONICAL_SOLVER_TAGS,
 )
-from zoomy_core.model.models.tag_extraction import collect_solver_tag
+from zoomy_core.model.derivation.tag_extraction import collect_solver_tag
 
 
 # ──────────────────────────────────────────────────────────────────────────────

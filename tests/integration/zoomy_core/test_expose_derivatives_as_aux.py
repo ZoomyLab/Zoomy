@@ -14,7 +14,7 @@ import sympy as sp
 import pytest
 
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 
 

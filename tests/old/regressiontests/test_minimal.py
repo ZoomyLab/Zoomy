@@ -20,7 +20,7 @@ import zoomy_core.fvm.timestepping as timestepping
 import zoomy_core.fvm.flux as flux
 import zoomy_core.fvm.nonconservative_flux as nc_flux
 from zoomy_core.model.boundary_conditions import BoundaryCondition
-from zoomy_core.model.models.basisfunctions import Basisfunction, Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Basisfunction, Legendre_shifted
 from zoomy_core.model.models.basismatrices import Basismatrices
 
 from zoomy_core.model.model import *

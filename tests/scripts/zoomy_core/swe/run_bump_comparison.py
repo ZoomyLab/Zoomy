@@ -24,7 +24,7 @@ import sympy as sp
 from zoomy_core.model.models.ins_generator import StateSpace, Newtonian, Inviscid
 from zoomy_core.model.models.model_derivation import derive_shallow_moments
 from zoomy_core.model.models.projected_model import ProjectedModel, clear_matrix_cache
-from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.models.vam_derivation import derive_vam_moments
 from zoomy_core.model.models.vam_projected_model import VAMProjectedHyperbolic
 from zoomy_core.misc.misc import ZArray

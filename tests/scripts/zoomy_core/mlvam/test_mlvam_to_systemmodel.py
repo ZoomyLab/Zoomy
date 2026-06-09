@@ -44,13 +44,13 @@ def main():
     # ── (0) imports ───────────────────────────────────────────────
     try:
         import sympy as sp
-        from zoomy_core.model.models.mlvam import MLVAM
-        from zoomy_core.model.models.system_model import SystemModel
+        from zoomy_core.model.models.legacy.mlvam import MLVAM
+        from zoomy_core.systemmodel.system_model import SystemModel
         from zoomy_core.model.boundary_conditions import (
             BoundaryConditions, Extrapolation,
         )
     except Exception as e:
-        _fail("import zoomy_core.model.models.mlvam + system_model", e)
+        _fail("import zoomy_core.model.models.legacy.mlvam + system_model", e)
     _ok("imports")
 
     bcs = BoundaryConditions([

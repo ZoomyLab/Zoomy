@@ -24,7 +24,7 @@ from zoomy_core.model.models.pde_generator import (
     PiecewiseIntegrator,
     LayeredAnsatz,
 )
-from zoomy_core.model.models.basisfunctions import Legendre_shifted, Monomials
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, Monomials
 
 
 # ---------------------------------------------------------------------------

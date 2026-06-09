@@ -47,7 +47,7 @@ def _run(config_key, basis_name, bc_mode, tau, level):
     from zoomy_core.model.models.ins_generator import StateSpace, Newtonian
     from zoomy_core.model.models.model_derivation import derive_shallow_moments
     from zoomy_core.model.models.projected_model import ProjectedModel, clear_matrix_cache
-    from zoomy_core.model.models.basisfunctions import (
+    from zoomy_core.model.derivation.basisfunctions import (
         Legendre_shifted, SplineBasis, Chebyshevu_shifted, GalerkinBasis,
     )
     from zoomy_core.model.numerical_model import NumericalModel

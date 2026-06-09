@@ -32,7 +32,7 @@ from IPython.display import display, Math, Markdown
 import zoomy_core.misc.misc as misc
 
 from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
-from zoomy_core.model.models.basisfunctions import Legendre_shifted, SplineBasis
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, SplineBasis
 from zoomy_core.misc.misc import ZArray
 
 sp.init_printing()

@@ -506,7 +506,7 @@ class TestMatrixCaching:
         from zoomy_core.model.models.projected_model import (
             ProjectedModel, clear_matrix_cache, _basis_matrix_cache,
         )
-        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+        from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 
         clear_matrix_cache()
         state = StateSpace(dimension=2)
@@ -529,7 +529,7 @@ class TestMatrixCaching:
         from zoomy_core.model.models.projected_model import (
             ProjectedModel, clear_matrix_cache, _basis_matrix_cache,
         )
-        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+        from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 
         clear_matrix_cache()
         state = StateSpace(dimension=2)
@@ -549,7 +549,7 @@ class TestMatrixCaching:
         from zoomy_core.model.models.model_derivation import derive_shallow_moments
         from zoomy_core.model.models.zeta_projection import project_to_zeta
         from zoomy_core.model.models.projected_model import ProjectedModel
-        from zoomy_core.model.models.basisfunctions import Legendre_shifted
+        from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 
         state = StateSpace(dimension=2)
         pre = derive_shallow_moments(state)

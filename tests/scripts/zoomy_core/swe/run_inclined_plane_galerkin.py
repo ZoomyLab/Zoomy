@@ -21,7 +21,7 @@ def run_single(args):
     basis_parent, level = args
 
     from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
-    from zoomy_core.model.models.basisfunctions import GalerkinBasis, Legendre_shifted
+    from zoomy_core.model.derivation.basisfunctions import GalerkinBasis, Legendre_shifted
     from zoomy_core.model.numerical_model import NumericalModel
     from zoomy_core.fvm.generated_model_solver import GeneratedModelSolver
     from zoomy_core.misc.misc import ZArray, Zstruct

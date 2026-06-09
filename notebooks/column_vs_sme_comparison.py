@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 from IPython.display import display, Markdown
 
 from zoomy_core.model.models.sme_model import SMEInviscid, SMEModel
-from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.initial_conditions import UserFunction
 import zoomy_core.model.boundary_conditions as BC
 

@@ -26,7 +26,7 @@ from zoomy_core.model.boundary_conditions import (
     BoundaryConditions, Extrapolation,
 )
 from zoomy_core.model.initial_conditions import UserFunction
-from zoomy_core.model.models.system_model import (
+from zoomy_core.systemmodel.system_model import (
     SystemModel, InvertMassMatrix, HydrostaticReconstruction,
 )
 from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin

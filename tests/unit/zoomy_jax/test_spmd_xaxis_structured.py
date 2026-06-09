@@ -35,7 +35,7 @@ from jax.experimental.shard_map import shard_map
 
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models.advection import Advection
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver

@@ -60,7 +60,7 @@ def sm_form_B(m1d):
     Returned per-function (scope="function") because
     ``change_state_variables`` mutates in place.
     """
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d)
     h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
@@ -88,7 +88,7 @@ def test_change_state_swe_to_conservative_diagonal_mass():
     conservative state ``(h, q_U = h*U)`` must produce identity mass
     matrix and flux/source updated consistently.
     """
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     t = sp.Symbol("t", real=True)
     x = sp.Symbol("x", real=True)
@@ -257,7 +257,7 @@ def test_change_state_122_source_zmom_j0_matches_escalante(sm_form_B):
 def test_change_state_round_trip_preserves_operators(m1d):
     """Apply Form A → Form B → Form A; flux / NCP / source / mass
     matrix must equal the originals on every row and column."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d)
     h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
@@ -317,7 +317,7 @@ def test_change_state_round_trip_preserves_operators(m1d):
 
 def test_change_state_history_recorded(m1d):
     """``change_state_variables`` appends a history entry."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d)
     n_history_before = len(sm.history)
@@ -353,7 +353,7 @@ def _sm_cantero_conservative(m):
     """Conservative-state SystemModel with the walkthrough's modal
     rescaling ``q_U1 = h U_1 / 3``, ``q_W1 = h W_1 / 3``.  Returns
     ``(sm, syms)``."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m)
     h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
@@ -424,7 +424,7 @@ def test_remove_non_diagonal_h_122_primitive(m1d_cantero):
     (``M[xmom_j1, U_1] = h/3``).  ``remove_non_diagonal_h`` clears the
     ``h``-column but **leaves the diagonal alone** — that is the input
     to ``InvertMassMatrix``, not this op's job."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d_cantero)
     h, U_0, U_1, W_0, W_1, b, P_0, P_1 = sm.state
@@ -457,7 +457,7 @@ def test_remove_non_diagonal_h_residual_equivalence(m1d_cantero):
     """The substitution is exact modulo the mass equation: for every
     affected row, the change in (M ∂_t Q + ∂_x F + ∂_x P + B ∂_x Q − S)
     equals ``M_old[i, h] · (mass-residual)``."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d_cantero)
     n_eq, n_st, n_dim = sm.n_equations, sm.n_state, sm.n_dim
@@ -529,7 +529,7 @@ def test_remove_non_diagonal_h_residual_equivalence(m1d_cantero):
 
 def test_remove_non_diagonal_h_history(m1d_cantero):
     """``remove_non_diagonal_h`` appends a history entry."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d_cantero)
     n_history_before = len(sm.history)
@@ -540,7 +540,7 @@ def test_remove_non_diagonal_h_history(m1d_cantero):
 
 def test_remove_non_diagonal_h_idempotent(m1d_cantero):
     """Applying twice is a no-op the second time (h-column is already 0)."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     sm = SystemModel.from_model(m1d_cantero)
     sm.remove_non_diagonal_h()
@@ -595,7 +595,7 @@ def test_change_state_diffusion_matrix_mixed_partial():
         A[1, 1, 0, 0] = h²·ν    (coefficient of ∂_x u)
     """
     from zoomy_core.model.models.swe import SWE
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = SWE(dimension=1, manning_n=0.0, nu=0.01)
     sm = SystemModel.from_model(m)
@@ -619,7 +619,7 @@ def test_change_state_boundary_conditions_swept_to_new_state():
     reference the old state Symbol ``hu`` after a CoV to ``(h, u)``.
     """
     from zoomy_core.model.models.swe import SWE
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = SWE(dimension=1, manning_n=0.0, nu=0.0)
     sm = SystemModel.from_model(m)
@@ -649,7 +649,7 @@ def test_change_state_aux_boundary_conditions_swept_to_new_state():
     as ``boundary_conditions`` — its args.variables Zstruct must be
     rebuilt to the new state."""
     from zoomy_core.model.models.swe import SWE
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = SWE(dimension=1, manning_n=0.0, nu=0.0)
     sm = SystemModel.from_model(m)
@@ -665,7 +665,7 @@ def test_change_state_aux_boundary_conditions_swept_to_new_state():
 def test_change_state_boundary_gradients_swept_to_new_state():
     """``boundary_gradients`` follows the same propagation path."""
     from zoomy_core.model.models.swe import SWE
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = SWE(dimension=1, manning_n=0.0, nu=0.0)
     sm = SystemModel.from_model(m)
@@ -695,7 +695,7 @@ def test_change_state_extrapolation_bc_stays_identity_on_slots():
     the BC definition after a VAM(1, 2, 2) Form A → Form B CoV.
     """
     from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = VAMModelGalerkin(level=1, quadratic_form="escalante")
     sm = SystemModel.from_model(m)
@@ -740,7 +740,7 @@ def test_change_state_source_explicit_swept_to_new_state():
     without raising and yield the correct shape.
     """
     from zoomy_core.model.models.swe import SWE
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = SWE(dimension=1, manning_n=0.0, nu=0.0)
     sm = SystemModel.from_model(m)

@@ -16,7 +16,7 @@
 #
 # Two new packages, one unified entry point for analysis (`PDESystem`).
 #
-# ## 2.1 `zoomy_core.derivation` — model build blocks
+# ## 2.1 `zoomy_core.model.derivation` — model build blocks
 #
 # | Module | Responsibility |
 # |---|---|
@@ -30,7 +30,7 @@
 # Models compose these:
 #
 # ```python
-# from zoomy_core.derivation import (
+# from zoomy_core.model.derivation import (
 #     HydrostaticFlow, PolynomialAnsatz, GalerkinProjection,
 # )
 # flow   = HydrostaticFlow.with_defaults()

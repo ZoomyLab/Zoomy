@@ -66,7 +66,7 @@ from zoomy_core.model.models.ins_generator import (
     Inviscid, Multiply, Newtonian, ProductRule, Recombine, SimplifyIntegrals,
     StateSpace, ZetaTransform,
 )
-from zoomy_core.model.models.basisfunctions import LayeredBasis, Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import LayeredBasis, Legendre_shifted
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
 
 print("zoomy_core:", zoomy_core.__file__)

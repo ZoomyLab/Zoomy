@@ -32,7 +32,7 @@ from zoomy_core.model.basemodel import (
 )
 from zoomy_core.model.basemodel import Model
 import zoomy_core.model.initial_conditions as IC
-from zoomy_core.model.models.basisfunctions import *
+from zoomy_core.model.derivation.basisfunctions import *
 from zoomy_core.model.models.basismatrices import *
 
 class VAMHyperbolic(Model):

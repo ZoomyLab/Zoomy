@@ -27,12 +27,12 @@ from zoomy_core.model.models.ins_generator import (
     SimplifyIntegrals,
     StateSpace,
 )
-from zoomy_core.model.models.basisfunctions import (
+from zoomy_core.model.derivation.basisfunctions import (
     LayeredBasis,
     Legendre_shifted,
 )
 from zoomy_core.model.models.sme_model import hydrostatic_scaling
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 
 
 # ---------------------------------------------------------------------------

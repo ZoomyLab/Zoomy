@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import sympy as sp
 from IPython.display import display, Math, Markdown
 from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
-from zoomy_core.model.models.basisfunctions import Legendre_shifted, Chebyshevu_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, Chebyshevu_shifted
 
 import os
 os.makedirs("outputs/dambreak_comparison", exist_ok=True)

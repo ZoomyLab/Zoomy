@@ -22,7 +22,7 @@ from zoomy_core.model.boundary_conditions import (
     BoundaryConditions, Extrapolation,
 )
 from zoomy_core.model.models.sme_model import SMEModel
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.numerics import NumericalSystemModel
 
 

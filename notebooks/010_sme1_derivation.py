@@ -54,7 +54,7 @@
 # %%
 import sympy as sp
 
-from zoomy_core.derivation import (
+from zoomy_core.model.derivation import (
     HydrostaticFlow,
     PolynomialAnsatz,
     GalerkinProjection,

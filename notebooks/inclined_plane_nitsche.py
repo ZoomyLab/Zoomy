@@ -24,7 +24,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import zoomy_core.misc.misc as misc
-from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 
 DATA_DIR = os.path.join(misc.get_main_directory(), "outputs/inclined_plane_sweep")
 

@@ -254,7 +254,7 @@ display(HTML("\n".join(lines)))
 
 # %%
 from zoomy_core.model.models.projected_model import ProjectedModel, clear_matrix_cache
-from zoomy_core.model.models.basisfunctions import (
+from zoomy_core.model.derivation.basisfunctions import (
     Legendre_shifted, SplineBasis, Chebyshevu_shifted, GalerkinBasis,
 )
 

@@ -47,14 +47,14 @@ def main():
     # ── (0) imports ───────────────────────────────────────────────
     try:
         import sympy as sp
-        from zoomy_core.model.models.mlsme import MLSME
-        from zoomy_core.model.models.system_model import SystemModel
+        from zoomy_core.model.models.legacy.mlsme import MLSME
+        from zoomy_core.systemmodel.system_model import SystemModel
         from zoomy_core.model.boundary_conditions import (
             BoundaryConditions,
             Extrapolation,
         )
     except Exception as e:
-        _fail("import zoomy_core.model.models.mlsme + system_model", e)
+        _fail("import zoomy_core.model.models.legacy.mlsme + system_model", e)
     _ok("imports")
 
     boundary_conditions = BoundaryConditions([

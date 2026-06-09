@@ -27,13 +27,13 @@ from sympy import Symbol, Rational, sqrt, pi, integrate, diff, Poly
 from sympy.abc import z
 from sympy.functions.special.polynomials import chebyshevu
 
-from zoomy_core.model.models.basisfunctions import (
+from zoomy_core.model.derivation.basisfunctions import (
     Basisfunction, Legendre_shifted, Chebyshevu_shifted,
 )
 from zoomy_core.model.models.ins_generator import StateSpace, Newtonian
 from zoomy_core.model.models.model_derivation import derive_shallow_moments
 from zoomy_core.model.models.projected_model import ProjectedModel, clear_matrix_cache
-from zoomy_core.model.models.symbolic_integrator import SymbolicIntegrator
+from zoomy_core.model.derivation.symbolic_integrator import SymbolicIntegrator
 from zoomy_core.misc.misc import ZArray
 
 

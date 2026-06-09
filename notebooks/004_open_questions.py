@@ -305,7 +305,7 @@ print(f"char poly degree in λ: {sp.Poly(char_red, lam).total_degree()}")
 # %% [markdown]
 # ## 4.10 Update: joint-constraint elimination resolves SME L=2
 #
-# `zoomy_core.derivation.eliminate_constraints` solves all algebraic
+# `zoomy_core.model.derivation.eliminate_constraints` solves all algebraic
 # constraints jointly via `sp.solve` (instead of substituting them
 # one-by-one or treating constrained fields as inputs).  Result:
 #
@@ -332,7 +332,7 @@ print(f"char poly degree in λ: {sp.Poly(char_red, lam).total_degree()}")
 # (predictor mode), because the σ-coord trace terms no longer have
 # matching constraint contributions to cancel them.
 #
-# **Physical-z derivation is in progress** (`zoomy_core.derivation.physical_z`
+# **Physical-z derivation is in progress** (`zoomy_core.model.derivation.physical_z`
 # skeleton committed) but not yet operational — z-derivatives on the
 # polynomial ansatz need careful handling through the affine
 # z = ξh+b substitution.  Once complete, VAM eq (12) reproduction

@@ -79,7 +79,7 @@ display(Math(sp.latex(mass_eq.expr) + " = 0"))
 # The integral $\int u\,dz$ becomes $H \cdot \alpha_0$ (since $c = [1,0,0]$).
 
 # %%
-from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 
 alpha = [Symbol(f"alpha_{k}") for k in range(3)]
 

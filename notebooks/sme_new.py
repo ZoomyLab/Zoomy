@@ -38,7 +38,7 @@
 import sympy as sp
 
 from zoomy_core.model.models.sme import SME
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.model.boundary_conditions import (
     BoundaryConditions, Extrapolation,
 )

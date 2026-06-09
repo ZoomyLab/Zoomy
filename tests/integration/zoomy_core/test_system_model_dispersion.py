@@ -16,7 +16,7 @@ def vam_122_systemmodel():
     """``SystemModel.from_model(VAMModelGalerkin(level=1))`` linearised
     around the rest state."""
     from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
 
     m = VAMModelGalerkin(level=1)
     sm = SystemModel.from_model(m)

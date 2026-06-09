@@ -39,7 +39,7 @@ import jax.numpy as jnp  # noqa: E402
 
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.misc.misc import Zstruct, ZArray
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.model.initial_conditions import InitialConditions
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.aux_boundary_conditions as AuxBC

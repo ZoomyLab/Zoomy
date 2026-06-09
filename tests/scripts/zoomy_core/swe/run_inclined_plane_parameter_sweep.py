@@ -27,7 +27,7 @@ def run_single(args):
     method, level, extra_params = args
 
     from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
-    from zoomy_core.model.models.basisfunctions import Legendre_shifted, GalerkinBasis, Basisfunction
+    from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, GalerkinBasis, Basisfunction
     from zoomy_core.model.numerical_model import NumericalModel
     from zoomy_core.fvm.generated_model_solver import _GeneratedModelFluxMixin
     from zoomy_core.fvm.solver_imex_numpy import IMEXSourceSolver

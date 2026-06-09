@@ -206,7 +206,7 @@ print(zeta.latex_system())
 
 # %%
 from zoomy_core.model.models.projected_model import ProjectedModel
-from zoomy_core.model.models.basisfunctions import (
+from zoomy_core.model.derivation.basisfunctions import (
     Legendre_shifted, Chebyshevu_shifted, SplineBasis, GalerkinBasis,
 )
 
@@ -357,7 +357,7 @@ display(cheb.mass_matrix_inverse())
 
 # %%
 cheb_basis = Chebyshevu_shifted(level=2)
-from zoomy_core.model.models.symbolic_integrator import SymbolicIntegrator
+from zoomy_core.model.derivation.symbolic_integrator import SymbolicIntegrator
 
 si = SymbolicIntegrator(cheb_basis)
 mats = si.compute_all_matrices(2)

@@ -14,7 +14,7 @@ pytest.importorskip("ufl")
 
 from zoomy_core.fvm.riemann_solvers import HLL, HLLC, Rusanov
 from zoomy_core.model.models.swe import SWE
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel.system_model import SystemModel
 
 
 def _sm_swe2d():

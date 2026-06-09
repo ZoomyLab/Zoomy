@@ -127,7 +127,7 @@ print(f"integral (3z+1)*delta(z-1/2) = {result}  (expect 5/2)")
 
 # %%
 from zoomy_core.model.models.pde_generator import LayeredAnsatz
-from zoomy_core.model.models.basisfunctions import Legendre_shifted, Monomials
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, Monomials
 
 la = LayeredAnsatz(n_layers=2, basis=Monomials(level=0), dimension=1)
 zeta = la.zeta

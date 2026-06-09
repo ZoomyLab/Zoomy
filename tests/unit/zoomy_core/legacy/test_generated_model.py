@@ -11,7 +11,7 @@ from sympy import S, Symbol, Rational, simplify, expand, Matrix
 
 from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
 from zoomy_core.model.models.shallow_moments_topo import ShallowMomentsTopo
-from zoomy_core.model.models.basisfunctions import Legendre_shifted
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.misc.misc import ZArray
 
 

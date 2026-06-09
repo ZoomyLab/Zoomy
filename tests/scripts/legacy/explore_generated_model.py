@@ -20,7 +20,7 @@
 
 # %%
 from zoomy_core.model.models.generated_shallow_model import GeneratedShallowModel
-from zoomy_core.model.models.basisfunctions import Legendre_shifted, Monomials, Chebyshevu
+from zoomy_core.model.derivation.basisfunctions import Legendre_shifted, Monomials, Chebyshevu
 import sympy as sp
 sp.init_printing()
 

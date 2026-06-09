@@ -23,14 +23,14 @@ import sympy as sp
 @pytest.fixture(scope="module")
 def sm_122():
     from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
     return SystemModel.from_model(VAMModelGalerkin(level=1))
 
 
 @pytest.fixture(scope="module")
 def sm_233():
     from zoomy_core.model.models.vam_galerkin import VAMModelGalerkin
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
     return SystemModel.from_model(VAMModelGalerkin(level=2))
 
 
@@ -89,7 +89,7 @@ def test_split_for_pressure_122_returns_three_subsystems(sm_122):
     """``split_for_pressure`` returns three rectangular SystemModels
     sharing the 8-state Q (``b`` is in the state vector with
     ``∂_t b = 0`` as the ``bathymetry`` row)."""
-    from zoomy_core.model.models.system_model import SystemModel
+    from zoomy_core.systemmodel.system_model import SystemModel
     from zoomy_core.model.splitter import (
         split_for_pressure, SplitForPressureResult,
     )
