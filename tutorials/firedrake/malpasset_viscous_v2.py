@@ -381,6 +381,15 @@ class MalpassetSWE(Model):
         # scans those operator matrices, so the conditional is safe
         # here and lowers cleanly through the UFL ``_ufl_conditional``
         # / numpy ``np.where`` shims at lambdify time.
+        # MALPASSET_EV_GATE=0 disables the gate: with the KP-
+        # desingularized ``hinv`` (u = hu·hinv → 0 smoothly as h → 0),
+        # dry-cell wavespeeds stay bounded at √(g·eps) without it, and
+        # the gate UNDERSIZES the Rusanov face dissipation at wet/dry
+        # faces — breaking the Xing-Zhang cell-mean-positivity convex
+        # decomposition (observed: negative cell means down to −0.4 m
+        # at the DG1 flood front despite the Zhang-Shu PP limiter).
+        if os.environ.get("MALPASSET_EV_GATE", "1") == "0":
+            return ZArray(raw_ev)
         cond = sp.Function("conditional")
         gated = [cond(h > p.eps, e, sp.S.Zero) for e in raw_ev]
         return ZArray(gated)
