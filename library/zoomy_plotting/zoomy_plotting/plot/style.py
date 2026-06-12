@@ -20,6 +20,44 @@ from dataclasses import dataclass, fields as _fields
 from typing import Optional
 
 
+# ── the Zoomy color/marker scheme (canonical home) ──────────────────────────
+
+#: Okabe–Ito (colorblind-safe) discrete rotation
+CYCLE = [
+    "#0072B2", "#D55E00", "#009E73", "#CC79A7",
+    "#E69F00", "#56B4E9", "#F0E442", "#000000",
+]
+
+#: semantic roles used across the coupling/reduced-model figures
+COLORS = {
+    "water":     "#56B4E9",
+    "reduced":   "#0072B2",
+    "resolved":  "#D55E00",
+    "interface": "#C8102E",
+    "reference": "#666666",
+    "station":   "#009E73",
+}
+
+#: marker rotation, paired index-wise with CYCLE
+MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*"]
+
+#: marker thinning for dense lines — pass markevery=MARKEVERY
+MARKEVERY = 0.15
+
+CMAP_CONTINUOUS = "viridis"
+CMAP_DIVERGING = "RdBu_r"
+#: grayscale base layer for topography-under-field overlays
+CMAP_TOPO = "Greys"
+
+#: output-medium profiles: "print" = fonts for FINAL PRINT dimensions
+#: (publication norm 9pt at true figsize); "screen" = gifs/slides on large
+#: canvases need proportionally larger fonts.
+PROFILES = {
+    "print":  {"scale": 1.0, "lw": 1.4, "ms": 4},
+    "screen": {"scale": 1.6, "lw": 2.0, "ms": 6},
+}
+
+
 @dataclass
 class PlotConfig:
     """All styling knobs for :class:`MatplotlibPlotter`.
@@ -57,7 +95,8 @@ class PlotConfig:
 
     # --- Figure-wide rcParams pushed by apply_style() ---
     font_family: str = "serif"
-    font_size: float = 11.0
+    font_size: float = 9.0
+    profile: str = "print"
     axes_grid_1d: bool = True
     axes_grid_2d3d: bool = False
     grid_alpha: float = 0.3
@@ -70,14 +109,87 @@ CONFIG = PlotConfig()
 
 
 def _as_rcparams(cfg: PlotConfig) -> dict:
-    """Project a :class:`PlotConfig` onto matplotlib rcParams."""
+    """Project a :class:`PlotConfig` onto matplotlib rcParams (the full
+    Zoomy publication scheme: Okabe–Ito + marker rotation, serif/STIX,
+    inward ticks, profile-scaled sizes)."""
+    import matplotlib as mpl
+    prof = PROFILES.get(cfg.profile, PROFILES["print"])
+    s = prof["scale"]
+    base = cfg.font_size
     return {
         "image.cmap": cfg.cmap,
         "font.family": cfg.font_family,
-        "font.size": cfg.font_size,
+        "mathtext.fontset": "stix",
+        "font.size": round(base * s, 1),
+        "axes.titlesize": round(base * s, 1),
+        "axes.labelsize": round(base * s, 1),
+        "xtick.labelsize": round((base - 1) * s, 1),
+        "ytick.labelsize": round((base - 1) * s, 1),
+        "legend.fontsize": round((base - 1) * s, 1),
+        "lines.linewidth": prof["lw"],
+        "lines.markersize": prof["ms"],
+        "axes.linewidth": 0.8,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "axes.prop_cycle": (mpl.cycler(color=CYCLE)
+                            + mpl.cycler(marker=MARKERS)),
+        "legend.frameon": False,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
         "figure.figsize": cfg.figure_figsize,
         "figure.dpi": cfg.figure_dpi,
     }
+
+
+def use(profile="print"):
+    """Apply the Zoomy publication style GLOBALLY (non-scoped variant of
+    :func:`apply_style`)."""
+    import matplotlib as mpl
+    CONFIG.profile = profile
+    mpl.rcParams.update(_as_rcparams(CONFIG))
+
+
+def line(role_or_color, ls="-", lw=None, marker=None):
+    """Proxy legend handle (e.g. for marker-line meanings)."""
+    import matplotlib as mpl
+    from matplotlib.lines import Line2D
+    color = COLORS.get(role_or_color, role_or_color)
+    return Line2D([], [], color=color, ls=ls,
+                  lw=lw or mpl.rcParams["lines.linewidth"], marker=marker)
+
+
+def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
+    """ONE legend row underneath the whole figure (publication convention:
+    thin light frame separating it from the caption).  Collects entries
+    from all axes (de-duplicated, in-axes legends removed) plus ``extra``
+    [(label, handle), ...] proxies."""
+    handles, labels = [], []
+    for ax in fig.axes:
+        h, l = ax.get_legend_handles_labels()
+        for hi, li in zip(h, l):
+            if li and li not in labels:
+                handles.append(hi)
+                labels.append(li)
+        leg = ax.get_legend()
+        if leg is not None:
+            leg.remove()
+    for label, handle in (extra or []):
+        if label not in labels:
+            handles.append(handle)
+            labels.append(label)
+    if not handles:
+        return None
+    ncol = ncol or min(len(handles), 5)
+    fig.subplots_adjust(bottom=reserve + 0.06)
+    leg = fig.legend(handles, labels, loc="lower center",
+                     bbox_to_anchor=(0.5, 0.0), ncol=ncol,
+                     frameon=True, fancybox=True, borderpad=0.6)
+    leg.get_frame().set_edgecolor("#BBBBBB")
+    leg.get_frame().set_linewidth(0.8)
+    leg.get_frame().set_alpha(0.95)
+    return leg
 
 
 @contextmanager
