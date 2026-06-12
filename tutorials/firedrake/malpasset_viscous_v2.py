@@ -134,17 +134,25 @@ def _meshio_mesh():
 class MalpassetSWE(Model):
     """SWE with `[b, h, hu, hv]` state and `[hinv]` aux.
 
-    - ``flux``: convective only (``hu⊗u``).  The hydrostatic pressure
-      ``½ g h² I`` is moved into ``nonconservative_matrix`` so the
-      well-balancing handshake with the bathymetry slope is preserved
-      (Audusse-style).
-    - ``nonconservative_matrix``: ``g h ∂_d b`` and ``g h ∂_d h`` on the
-      momentum rows.
+    Post-restructure compat: the old basemodel kept the parameter
+    SYMBOLS in ``_parameter_symbols``; the new one stores them directly
+    in ``parameters`` (see zoomy_firedrake.firedrake_compat.SWE).
+
+    - ``flux``: convective only (``hu⊗u``).
+    - ``hydrostatic_pressure``: ``½ g h²`` on the momentum diagonal —
+      the separate operator the Riemann solvers add to the physical
+      flux and use for the Audusse well-balancing corrections.
+    - ``nonconservative_matrix``: ``g h ∂_d b`` on the momentum rows
+      (bed column only).
     - ``source``: Manning bed friction with floored ``h^{-1/3}``.
     - ``diffusion_matrix``: ``A[hu_i, hu_i, d, d] = ν · h``.
     - ``eigenvalues``: switched off where ``h ≤ eps`` (dry cells get
       zero wave speed).
     """
+
+    @property
+    def _parameter_symbols(self):
+        return self.parameters
 
     def __init__(self, *, g=9.81, n=MANNING_N, nu=NU, eps=EPS_WD, **kw):
         super().__init__(
@@ -181,16 +189,36 @@ class MalpassetSWE(Model):
         F[3, 1] = hv * hv * hinv
         return ZArray(F)
 
+    def hydrostatic_pressure(self):
+        # ½ g h² on the momentum diagonal, as a SEPARATE operator (not
+        # folded into ``flux`` or the NCP).  This is the encoding
+        # ``PositiveNonconservativeHLL`` is built around: the HLL fan
+        # sees the pressure jump via ``_physical_flux_n = F·n + P·n``,
+        # and the Audusse well-balancing corrections at hydrostatically
+        # reconstructed faces are exactly ``(P_raw − P_star)·n``.
+        # (Same convention as the validated SME/BBSM13 SystemModels:
+        # ``P[mom, d] = g h²/2``, NCP carries only the bed column.)
+        _, h, _, _, _ = self._primitives()
+        g = self._parameter_symbols.g
+        P = ZArray.zeros(4, 2)
+        P[2, 0] = g * h ** 2 / 2
+        P[3, 1] = g * h ** 2 / 2
+        return P
+
     def nonconservative_matrix(self):
+        # Bed-slope coupling ONLY (``g h ∂_d b``).  The pressure term
+        # must NOT be encoded here as ``g h ∂_d h``: the NCP
+        # path-integral in ``PositiveNonconservativeHLL`` is evaluated
+        # over hydrostatically reconstructed face states (where
+        # ``Δb* = 0`` and ``Δh*`` is shoreline-clipped), so a
+        # pressure-in-NCP encoding loses the bathymetry reaction force
+        # at clipped wet/dry faces — observed as the flood wave taking
+        # paths the valley topography should forbid.
         _, h, _, _, _ = self._primitives()
         g = self._parameter_symbols.g
         N = ZArray.zeros(4, 4, 2)
-        # Momentum_x: depends on ∂_x b and ∂_x h
         N[2, 0, 0] = g * h
-        N[2, 1, 0] = g * h
-        # Momentum_y: depends on ∂_y b and ∂_y h
         N[3, 0, 1] = g * h
-        N[3, 1, 1] = g * h
         return N
 
     def source(self):
@@ -489,7 +517,8 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
     s = Settings(
         name=f"malpasset-{out_tag}",
         output=Zstruct(directory=f"outputs/firedrake_viscous_v2_{out_tag}",
-                       snapshots=10, filename="dg", clean_directory=True),
+                       snapshots=int(os.environ.get("MALPASSET_SNAPSHOTS", "10")),
+                       filename="dg", clean_directory=True),
     )
     # ``PositiveHLL`` — HLL with Audusse-Bristeau-Klein hydrostatic
     # reconstruction.  Required for the Malpasset dam-break: the bare
@@ -498,6 +527,45 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
     # front reached a dry cell (around t ≈ 8.78 s).  ``PositiveHLL``
     # enforces ``h_face ≥ 0`` at every interior facet and is
     # well-balanced for the lake-at-rest steady state.
+    # Solver-option presets for the perf study (MALPASSET_SNES_PRESET):
+    #   default  — class defaults (newtonls + fresh GAMG each solve)
+    #   pcreuse  — keep the GAMG hierarchy/preconditioner across solves
+    #   lagjac   — pcreuse + lag the Jacobian (rebuild every 5th solve)
+    #   ksponly  — single linearised solve per stage (no Newton loop)
+    _PRESETS = {
+        "default": None,
+        "pcreuse": {
+            "snes_type": "newtonls", "snes_linesearch_type": "basic",
+            "snes_max_it": 15, "snes_rtol": 1e-6, "snes_atol": 1e-8,
+            "snes_stol": 1e-10, "ksp_type": "gmres", "ksp_rtol": 1e-6,
+            "pc_type": "gamg", "pc_gamg_reuse_interpolation": True,
+            "snes_lag_preconditioner": 10,
+            "snes_lag_preconditioner_persists": True,
+        },
+        "lagjac": {
+            "snes_type": "newtonls", "snes_linesearch_type": "basic",
+            "snes_max_it": 15, "snes_rtol": 1e-6, "snes_atol": 1e-8,
+            "snes_stol": 1e-10, "ksp_type": "gmres", "ksp_rtol": 1e-6,
+            "pc_type": "gamg", "pc_gamg_reuse_interpolation": True,
+            "snes_lag_preconditioner": 10,
+            "snes_lag_preconditioner_persists": True,
+            "snes_lag_jacobian": 5, "snes_lag_jacobian_persists": True,
+        },
+        "ksponly": {
+            "snes_type": "ksponly",
+            "ksp_type": "gmres", "ksp_rtol": 1e-6,
+            "pc_type": "gamg", "pc_gamg_reuse_interpolation": True,
+        },
+        # combined: single linearised solve + persistent lagged PC
+        "fast": {
+            "snes_type": "ksponly",
+            "ksp_type": "gmres", "ksp_rtol": 1e-6,
+            "pc_type": "gamg", "pc_gamg_reuse_interpolation": True,
+            "snes_lag_preconditioner": 10,
+            "snes_lag_preconditioner_persists": True,
+        },
+    }
+    preset = os.environ.get("MALPASSET_SNES_PRESET", "default")
     solver = MalpassetSolver(
         settings=s,
         time_end=time_end,
@@ -505,7 +573,9 @@ def run(dg_degree=0, limiter="none", time_end=TIME_END, tag=""):
         dg_degree=dg_degree,
         limiter=limiter,
         riemann_solver_cls=PositiveNonconservativeHLL,
+        nonlinear_solver_parameters=_PRESETS[preset],
     )
+    print(f"[malpasset] snes preset = {preset}")
     # Setup pre-time-loop so we can sample initial mass before stepping.
     solver.setup_simulation(INPUT_MESH, model)
     V0 = _total_water_volume(solver)
@@ -556,16 +626,22 @@ if __name__ == "__main__":
     # back to the full TIME_END run.
     one_step = bool(int(os.environ.get("MALPASSET_ONE_STEP", "1")))
     t_end = 0.05 if one_step else TIME_END
+    # Which variants to run: comma list out of {dg0, dg1_nolim, dg1_vert}.
+    variants = os.environ.get(
+        "MALPASSET_VARIANTS", "dg0,dg1_nolim,dg1_vert").split(",")
     print(f"[malpasset] ν={NU}  time_end={t_end}  CFL={CFL}  BC=wall"
-          f"  one_step={one_step}")
-    solver_dg0 = run(dg_degree=0, limiter="none", time_end=t_end,
-                     tag="dg0_tpfa_wall")
+          f"  one_step={one_step}  variants={variants}")
+    if "dg0" in variants:
+        solver_dg0 = run(dg_degree=0, limiter="none", time_end=t_end,
+                         tag="dg0_tpfa_wall")
     # DG(1) probe — also run with limiter="none" to discriminate
     # whether the residual b-flicker + mass-injection come from the
     # limiter (excluded for b but still active on h) or from somewhere
     # else (MPI halo, source Newton, etc.).  If ΔV/V0 → 0 here, the
     # h-limiter is the culprit.
-    solver_dg1_nolim = run(dg_degree=1, limiter="none", time_end=t_end,
-                           tag="dg1_ipdg_nolim_wall")
-    solver_dg1 = run(dg_degree=1, limiter="vertex", time_end=t_end,
-                     tag="dg1_ipdg_vert_wall")
+    if "dg1_nolim" in variants:
+        solver_dg1_nolim = run(dg_degree=1, limiter="none", time_end=t_end,
+                               tag="dg1_ipdg_nolim_wall")
+    if "dg1_vert" in variants:
+        solver_dg1 = run(dg_degree=1, limiter="vertex", time_end=t_end,
+                         tag="dg1_ipdg_vert_wall")
