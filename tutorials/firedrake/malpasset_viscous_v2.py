@@ -175,6 +175,26 @@ class MalpassetSWE(Model):
         a = self.aux_variables
         return v.b, v.h, v.hu, v.hv, a.hinv
 
+    # -- Well-balanced reconstruction (model owns it) --------------------
+    def reconstruction_variables(self):
+        """Primitive well-balanced reconstruction map ``state → primitive``.
+
+        Limit the FREE SURFACE ``eta = b + h`` instead of the conservative
+        depth ``h``, so a slope/oscillation limiter is inert at lake-at-rest
+        (``eta`` constant) and does not corrupt the flat surface — the
+        wet/dry "water creeping up the walls" defect.  Every other field
+        reconstructs as identity.  The inverse ``h = eta - b`` is
+        auto-derived by :meth:`state_from_reconstruction`.
+
+        Pure sympy, resolved by FIELD NAME (``self.variables.h`` /
+        ``.b``) — no index assumptions, so it codegens to every backend
+        (UFL / numpy / jax / OpenFOAM) and is independent of where ``h``
+        and ``b`` sit in the state vector.
+        """
+        v = self.variables
+        eta = v.b + v.h
+        return ZArray([eta if s == v.h else s for s in v.get_list()])
+
     # -- Operators -------------------------------------------------------
     def flux(self):
         _, h, hu, hv, hinv = self._primitives()
