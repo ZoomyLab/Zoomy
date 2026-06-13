@@ -84,7 +84,8 @@ from mpi4py import MPI
 from zoomy_core.fvm.solver_numpy import Settings
 from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL
 from zoomy_core.misc.misc import Zstruct, ZArray
-from zoomy_core.model.basemodel import Model
+from zoomy_core.model.basemodel import Model  # noqa: F401 (compat re-export)
+from zoomy_core.model.models import MalpassetSWE as _CanonicalMalpassetSWE
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.misc.misc as misc
 
@@ -131,313 +132,31 @@ def _meshio_mesh():
 # but in the new ``Model → SystemModel`` convention.
 
 # %%
-class MalpassetSWE(Model):
-    """SWE with `[b, h, hu, hv]` state and `[hinv]` aux.
+class MalpassetSWE(_CanonicalMalpassetSWE):
+    """Tutorial compat shim over the canonical
+    :class:`zoomy_core.model.models.MalpassetSWE`.
 
-    Post-restructure compat: the old basemodel kept the parameter
-    SYMBOLS in ``_parameter_symbols``; the new one stores them directly
-    in ``parameters`` (see zoomy_firedrake.firedrake_compat.SWE).
-
-    - ``flux``: convective only (``hu⊗u``).
-    - ``hydrostatic_pressure``: ``½ g h²`` on the momentum diagonal —
-      the separate operator the Riemann solvers add to the physical
-      flux and use for the Audusse well-balancing corrections.
-    - ``nonconservative_matrix``: ``g h ∂_d b`` on the momentum rows
-      (bed column only).
-    - ``source``: Manning bed friction with floored ``h^{-1/3}``.
-    - ``diffusion_matrix``: ``A[hu_i, hu_i, d, d] = ν · h``.
-    - ``eigenvalues``: switched off where ``h ≤ eps`` (dry cells get
-      zero wave speed).
+    The model PHYSICS (flux, hydrostatic pressure, bed-slope NCP, Manning
+    source, eddy viscosity, wet/dry aux + capping + eigenvalues, the
+    free-surface ``reconstruction_variables``) now lives ONCE in the
+    canonical ``zoomy_core/model/models`` package — there are no hand-rolled
+    model operators in tutorial / thesis scripts any more.  This subclass
+    adds NOTHING physical: it only forwards the tutorial's
+    environment-driven numeric defaults (``MALPASSET_MANNING`` /
+    ``MALPASSET_NU`` / ``MALPASSET_EPS_WD`` / ``MALPASSET_H_FRICTION`` /
+    ``MALPASSET_EV_GATE``) so existing ``from malpasset_viscous_v2 import
+    MalpassetSWE`` consumers keep byte-for-byte behaviour.  New code should
+    import the model directly: ``from zoomy_core.model.models import
+    MalpassetSWE``.
     """
 
-    @property
-    def _parameter_symbols(self):
-        return self.parameters
-
-    def __init__(self, *, g=9.81, n=MANNING_N, nu=NU, eps=EPS_WD, **kw):
-        super().__init__(
-            dimension=2,
-            variables=["b", "h", "hu", "hv"],
-            aux_variables=["hinv"],
-            parameters={
-                "g":  (float(g),  "positive"),
-                "n":  (float(n),  "non-negative"),
-                "nu": (float(nu), "non-negative"),
-                "eps": (float(eps), "positive"),
-            },
-            eigenvalue_mode="symbolic",
-            **kw,
-        )
-
-    # -- Convenience -----------------------------------------------------
-    def _primitives(self):
-        v = self.variables
-        a = self.aux_variables
-        return v.b, v.h, v.hu, v.hv, a.hinv
-
-    # -- Well-balanced reconstruction (model owns it) --------------------
-    def reconstruction_variables(self):
-        """Primitive well-balanced reconstruction map ``state → primitive``.
-
-        Limit the FREE SURFACE ``eta = b + h`` instead of the conservative
-        depth ``h``, so a slope/oscillation limiter is inert at lake-at-rest
-        (``eta`` constant) and does not corrupt the flat surface — the
-        wet/dry "water creeping up the walls" defect.  Every other field
-        reconstructs as identity.  The inverse ``h = eta - b`` is
-        auto-derived by :meth:`state_from_reconstruction`.
-
-        Pure sympy, resolved by FIELD NAME (``self.variables.h`` /
-        ``.b``) — no index assumptions, so it codegens to every backend
-        (UFL / numpy / jax / OpenFOAM) and is independent of where ``h``
-        and ``b`` sit in the state vector.
-        """
-        v = self.variables
-        eta = v.b + v.h
-        return ZArray([eta if s == v.h else s for s in v.get_list()])
-
-    # -- Operators -------------------------------------------------------
-    def flux(self):
-        _, h, hu, hv, hinv = self._primitives()
-        F = Matrix.zeros(4, 2)
-        # mass equation
-        F[1, 0] = hu
-        F[1, 1] = hv
-        # momentum: pure convective (no pressure here — see NCP)
-        F[2, 0] = hu * hu * hinv
-        F[2, 1] = hu * hv * hinv
-        F[3, 0] = hu * hv * hinv
-        F[3, 1] = hv * hv * hinv
-        return ZArray(F)
-
-    def hydrostatic_pressure(self):
-        # ½ g h² on the momentum diagonal, as a SEPARATE operator (not
-        # folded into ``flux`` or the NCP).  This is the encoding
-        # ``PositiveNonconservativeHLL`` is built around: the HLL fan
-        # sees the pressure jump via ``_physical_flux_n = F·n + P·n``,
-        # and the Audusse well-balancing corrections at hydrostatically
-        # reconstructed faces are exactly ``(P_raw − P_star)·n``.
-        # (Same convention as the validated SME/BBSM13 SystemModels:
-        # ``P[mom, d] = g h²/2``, NCP carries only the bed column.)
-        _, h, _, _, _ = self._primitives()
-        g = self._parameter_symbols.g
-        P = ZArray.zeros(4, 2)
-        P[2, 0] = g * h ** 2 / 2
-        P[3, 1] = g * h ** 2 / 2
-        return P
-
-    def nonconservative_matrix(self):
-        # Bed-slope coupling ONLY (``g h ∂_d b``).  The pressure term
-        # must NOT be encoded here as ``g h ∂_d h``: the NCP
-        # path-integral in ``PositiveNonconservativeHLL`` is evaluated
-        # over hydrostatically reconstructed face states (where
-        # ``Δb* = 0`` and ``Δh*`` is shoreline-clipped), so a
-        # pressure-in-NCP encoding loses the bathymetry reaction force
-        # at clipped wet/dry faces — observed as the flood wave taking
-        # paths the valley topography should forbid.
-        _, h, _, _, _ = self._primitives()
-        g = self._parameter_symbols.g
-        N = ZArray.zeros(4, 4, 2)
-        N[2, 0, 0] = g * h
-        N[3, 0, 1] = g * h
-        return N
-
-    def source(self):
-        _, h, hu, hv, hinv = self._primitives()
-        p = self._parameter_symbols
-        # Velocity (matches the legacy malpasset_viscous.py form):
-        u = hu * hinv
-        w = hv * hinv
-        u_mag = sqrt(u * u + w * w + 1e-12)
-        # Manning friction with bounded ``h^(-1/3)``: floor the depth at
-        # ``H_FRICTION_FLOOR`` so friction stays finite at the wet/dry
-        # interface.  Wet/dry "deactivation" happens naturally —
-        # ``hu = hv = 0`` ⇒ ``u_mag = 0`` ⇒ friction = 0 — and at very
-        # low depths ``hinv`` (from ``update_aux_variables``) is also
-        # already floored.  We deliberately avoid ``Piecewise`` /
-        # ``conditional`` here because the SystemModel auto-derives the
-        # source Jacobian via ``sp.diff`` and conditionals are not
-        # differentiable in SymPy.
-        h_safe = sp.Max(h, sp.Float(H_FRICTION_FLOOR))
-        friction_div = h_safe ** (-sp.Rational(1, 3))
-        factor = -p.n ** 2 * p.g * friction_div * u_mag
-        # Manning's source on the momentum equation is
-        # ``-g n² u |u| / h^(1/3)`` (velocity form).  Multiplying by
-        # ``u`` (NOT ``hu``) is critical: the conservative form is
-        # ``-g n² hu |u| / h^(4/3)``, so writing ``factor * hu`` here
-        # would yield an extra factor of ``h`` and under-damp the wave
-        # in shallow downstream cells.
-        S_b = sp.S.Zero
-        S_h = sp.S.Zero
-        S_hu = factor * u
-        S_hv = factor * w
-        return ZArray([S_b, S_h, S_hu, S_hv])
-
-    def diffusion_matrix_explicit(self):
-        """Depth-averaged eddy viscosity on momentum rows — **explicit
-        treatment** (folded into the convective step at ``Qn``).
-
-        Diffuses **velocity** ``u = hu/h`` (matching the standard
-        depth-averaged SWE viscous term and the legacy
-        ``malpasset_viscous.py`` TPFA flux), NOT momentum ``hu``::
-
-            ∇·(ν h ∇u) = ν ∇·(∇(hu) − u ∇h) = ν ∇²(hu) − ν ∇·(u ∇h)
-
-        So the A-tensor carries both a diagonal term on ``hu`` AND a
-        cross-state term on ``h``::
-
-            F_diff[hu, d] = ν · ∂_d(hu) − ν · u · ∂_d(h)
-                          = A[hu, hu, d, d] · ∂_d(hu) + A[hu, h, d, d] · ∂_d(h)
-
-        Writing only ``A[hu, hu, d, d] = ν h`` (the operator-form
-        analogue of "diffuse momentum") gives ``∇·(ν h ∇(hu))``, which
-        scales like ``h²`` in the reservoir and like ``h`` in the
-        shallow front — too strong in deep water, too weak at the wave
-        toe, and the front propagates too far.
-
-        Why explicit: for ν=1 and h_cell≈50–200 m the parabolic CFL
-        ``dt ≤ h²/(2ν)`` is ≈1250–20000 s — ~30 000× looser than the
-        hyperbolic CFL (~0.04 s) — so explicit treatment never
-        constrains the step.  Putting diffusion in the explicit slot
-        leaves the implicit source-step Jacobian block-diagonal
-        (mass + Manning friction) → cell-local block-Jacobi PC
-        becomes exact and Newton converges in 1 iter.
-        """
-        _, h, hu, hv, hinv = self._primitives()
-        nu = self._parameter_symbols.nu
-        u = hu * hinv
-        w = hv * hinv
-        A = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        for d in (0, 1):
-            # ν · ∂_d(hu) term  →  diagonal in momentum row
-            A[2, 2, d, d] = nu
-            A[3, 3, d, d] = nu
-            # − ν · u · ∂_d(h) cross-term  →  couples h-gradient
-            # into the momentum flux (chain rule on hu/h).  Vanishes
-            # at lake-at-rest (u = w = 0) so well-balancing is intact.
-            A[2, 1, d, d] = -nu * u
-            A[3, 1, d, d] = -nu * w
-        return ZArray(A)
-
-    # ---- State hygiene exposed via the SystemModel slot --------------
-    #
-    # ``Model.update_variables`` is the symbolic per-cell state-remap
-    # the SystemModel carries (slot ``sm.update_variables``).  Every
-    # backend calls it once per step on the post-convective state to
-    # apply state-level constraints.  For the dam-break we cap
-    # ``|hu_i| ≤ h · u_max`` (component-wise) so leftover momentum in
-    # nearly-dry cells doesn't blow up ``|u| = hu/h`` — h itself is
-    # **never** modified.  Setting ``max_hu = max(h, 0)·u_max`` makes
-    # the cap zero out hu in dry cells (h ≤ 0) for free, without an
-    # explicit h-threshold or wet/dry mask.
-
-    def update_variables(self):
-        v = self.variables
-        h, hu, hv = v.h, v.hu, v.hv
-        u_max = sp.Float(30.0)
-        h_dry = sp.Float(EPS_WD)
-        # Wet-mask cap matches the legacy ``malpasset_viscous.update_Q``
-        # semantics: in cells with ``h ≤ h_dry`` (= 1e-2 m by default),
-        # ``hu`` is clamped to **zero** — not just velocity-capped.
-        # Otherwise a nearly-dry "bleeding-edge" cell can keep carrying
-        # ``|u| = u_max = 30 m/s`` of momentum, which pushes the wave
-        # front farther than the depth-averaged physics supports
-        # (observed: wave climbing topography it shouldn't reach).
-        # Using ``max(h − h_dry, 0)·u_max`` as the cap collapses
-        # smoothly to zero at ``h = h_dry`` while staying ``Max``/``Min``-
-        # only (no Heaviside / sign — those don't lower through UFL).
-        h_wet = sp.Max(h - h_dry, sp.S.Zero)
-        max_hu = h_wet * u_max
-
-        def cap(c):
-            # Symmetric clamp to ``[-max_hu, max_hu]`` using only ``Min``
-            # / ``Max`` (which lambdify cleanly through every backend's
-            # module dict).
-            return sp.Max(-max_hu, sp.Min(c, max_hu))
-
-        return ZArray([v.b, h, cap(hu), cap(hv)])
-
-    def update_variables_jacobian_wrt_variables(self):
-        # ``sp.derive_by_array(update_variables, [b, h, hu, hv])`` would
-        # produce ``Piecewise`` / ``sign`` derivatives that the numpy
-        # / UFL printers cannot serialise.  This Jacobian is only used
-        # for IMEX implicit-update Newton (which the Firedrake backend
-        # does not run on ``update_variables``), so returning the
-        # explicit zero suppresses the auto-derivation cleanly without
-        # disabling the Model's other auto-derived operators.
-        n = self.n_variables
-        return ZArray.zeros(n, n)
-
-    def eigenvalues(self):
-        _, h, hu, hv, hinv = self._primitives()
-        p = self._parameter_symbols
-        n = self.normal
-        # Build velocity from the conservative momentum.  ``hinv`` (an
-        # aux variable computed by ``update_aux_variables`` as
-        # ``1/max(h, eps)``) is the bounded divisor used everywhere
-        # else; we use it here too for consistency.  This is NOT a
-        # state-level safeguard on h — h itself is never modified —
-        # just a regularization of the velocity expression.
-        u = hu * hinv
-        w = hv * hinv
-        un = u * n.n0 + w * n.n1
-        c = sqrt(p.g * sp.Max(h, p.eps))
-        raw_ev = [sp.S.Zero, un, un - c, un + c]
-
-        # Wet/dry wave-speed gate.  Cells with ``h ≤ eps`` carry only
-        # numerical-noise momentum (leftover ``hu`` from a passing wave
-        # that's no longer in the cell); ``|u| = hu/h`` then blows up
-        # to physically meaningless values (we measured |u| > 1e7
-        # m/s in dry cells right after iteration 2 of the Malpasset
-        # run).  Letting those bogus wavespeeds set the global CFL
-        # collapses ``dt → 0``.  Gating ``λ → 0`` in dry cells is
-        # the standard remedy: dry cells propagate no waves and must
-        # not constrain the global time step.
-        #
-        # ``conditional`` (an opaque ``sp.Function``) is non-
-        # differentiable, but eigenvalues are not differentiated by
-        # ``SystemModel._compute_source_jacobian`` / ``_compute_
-        # quasilinear_matrix`` (only ``source``, ``flux`` and
-        # ``hydrostatic_pressure`` are) and ``expose_aux_atoms`` only
-        # scans those operator matrices, so the conditional is safe
-        # here and lowers cleanly through the UFL ``_ufl_conditional``
-        # / numpy ``np.where`` shims at lambdify time.
-        # MALPASSET_EV_GATE=0 disables the gate: with the KP-
-        # desingularized ``hinv`` (u = hu·hinv → 0 smoothly as h → 0),
-        # dry-cell wavespeeds stay bounded at √(g·eps) without it, and
-        # the gate UNDERSIZES the Rusanov face dissipation at wet/dry
-        # faces — breaking the Xing-Zhang cell-mean-positivity convex
-        # decomposition (observed: negative cell means down to −0.4 m
-        # at the DG1 flood front despite the Zhang-Shu PP limiter).
-        if os.environ.get("MALPASSET_EV_GATE", "1") == "0":
-            return ZArray(raw_ev)
-        cond = sp.Function("conditional")
-        gated = [cond(h > p.eps, e, sp.S.Zero) for e in raw_ev]
-        return ZArray(gated)
-
-    def update_aux_variables(self):
-        """Kurganov–Petrova desingularized inverse depth.
-
-        Returns ``hinv = √2 · h / √(h⁴ + max(h, eps)⁴)`` instead of the
-        naïve ``1 / max(h, eps)``.  The two agree exactly for ``h ≥ eps``
-        (both give ``1/h``), but below the threshold the KP form
-        smoothly tends to **zero** as ``h → 0`` rather than saturating
-        at ``1/eps``.  Consequence: in any sub-cell quad point with
-        ``h < eps`` (a routine occurrence at DG(1) wet/dry interfaces
-        where ``h`` is a polynomial and can dip below its cell
-        average), the derived velocity ``u = hu · hinv`` decays
-        smoothly to zero instead of jumping up to ``hu / eps``.  This
-        is the standard Kurganov–Petrova (2007) regularization for
-        wet/dry SWE and is the missing piece that lets DG(1) avoid
-        dt-collapse at the shoreline.
-        """
-        v = self.variables
-        p = self._parameter_symbols
-        h = v.h
-        eps = p.eps
-        h_floor = sp.Max(h, eps)
-        denom = sqrt(h ** 4 + h_floor ** 4)
-        hinv_kp = sqrt(2) * h / denom
-        return ZArray([hinv_kp])
+    def __init__(self, *, g=9.81, n=MANNING_N, nu=NU, eps=EPS_WD,
+                 h_friction_floor=H_FRICTION_FLOOR,
+                 ev_gate=(os.environ.get("MALPASSET_EV_GATE", "1") != "0"),
+                 **kw):
+        super().__init__(g=g, n=n, nu=nu, eps=eps,
+                         h_friction_floor=h_friction_floor,
+                         ev_gate=ev_gate, **kw)
 
 
 # %% [markdown]
