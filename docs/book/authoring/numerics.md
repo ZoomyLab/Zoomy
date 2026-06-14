@@ -320,7 +320,7 @@ From `thesis/notebooks/modeling/swe/simple_swe_v2.py`
 (`SWEModelV2` and `make_model()`):
 
 ```python
-from zoomy_core.model.models.system_model import SystemModel
+from zoomy_core.systemmodel import SystemModel
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 from simple_swe_v2 import make_model
 

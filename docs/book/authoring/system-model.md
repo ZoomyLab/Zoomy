@@ -18,7 +18,7 @@ the consuming runtime.
 
 ## Operator slots
 
-`from zoomy_core.model.models.system_model import SystemModel`
+`from zoomy_core.systemmodel import SystemModel`
 
 | Field                          | Shape                              | Meaning                              |
 | ------------------------------ | ---------------------------------- | ------------------------------------ |
@@ -62,7 +62,7 @@ declaration; `aux_state` starts from the source `Model` and grows here. After
 Every non-zero piece of the derivation is routed to an operator slot by a
 **solver tag** the model author writes on each `Expression`. There is no
 auto-tagger; untagged sub-expressions silently return zero. Canonical tags
-(`library/zoomy_core/zoomy_core/model/models/tag_catalog.py`) and the fixed
+(`library/zoomy_core/zoomy_core/model/derivation/tag_catalog.py`) and the fixed
 `SOLVER_TAG_TO_SLOT` routing:
 
 | Tag                       | SystemModel slot               |
@@ -98,7 +98,7 @@ matrices outside the DAE path.
 `SystemModel.apply(operation, *, name=None, description=None)` is the same
 mechanism as `Model.apply` — see [`model.md`](model.md). Operations that act
 on a *frozen* `SystemModel` live in
-`library/zoomy_core/zoomy_core/model/models/system_model.py`:
+`library/zoomy_core/zoomy_core/systemmodel/system_model.py`:
 
 - **`InvertMassMatrix`** — divides each evolution row by its diagonal `M_ii`;
   precondition checked via `assert_diagonal_mass_matrix()`. Post: `M = I` on
@@ -114,14 +114,14 @@ on a *frozen* `SystemModel` live in
 ## Kinematic boundary conditions
 
 `KinematicBC(state, interface, *, at=None, mass_flux=None, name=None, description=None)`
-from `library/zoomy_core/zoomy_core/model/models/ins_generator.py` is the
+from `library/zoomy_core/zoomy_core/model/operations.py` is the
 single entry point for moving-interface kinematic BCs (applied during the
 upstream `Model` / `System` derivation). `at` defaults to `interface`; set it
 for σ-transformed systems and per-layer ML σ values. `mass_flux=None` is
 impermeable; a sympy expression adds `mass_flux / ρ` to the RHS.
 
 ```python
-from zoomy_core.model.models.ins_generator import KinematicBC
+from zoomy_core.model.operations import KinematicBC
 
 sys.apply(KinematicBC(state, state.b,   at=sp.S.Zero))     # post-σ bottom
 sys.apply(KinematicBC(state, state.eta, at=sp.S.One))      # post-σ surface
