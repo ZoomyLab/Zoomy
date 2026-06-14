@@ -6,6 +6,32 @@ rulebook; the live coordination state lives in `ORGANIZATION.md` (same dir).
 
     ZOOMY = /Users/adam-obbpb5az1dhsjzf/git/Zoomy   (paths below are relative to it)
 
+## 0. Layout — repos & where work goes
+
+Zoomy is a **submodule superrepo** at `ZOOMY` (root branch `develop`):
+
+- `library/zoomy_*` — the **solver core + backends** (`zoomy_core`, `zoomy_jax`,
+  `zoomy_foam`, `zoomy_firedrake`, `zoomy_fenicsx`, `zoomy_amrex`,
+  `zoomy_dmplex`, `zoomy_gui`). Each is its **own git repo** — a submodule on
+  `main`.
+- `thesis/` — an **independent git repo** (not a submodule), on `main`. This is
+  expected and fine. `meshes/`, `data/` are likewise their own repos.
+
+**Two repos to watch.** Because `thesis/` is a separate repo, `git status` /
+`diff` / `commit` at the superrepo do **not** see thesis changes, and vice
+versa. Always run git in the right place and know which repo each command hits:
+`git -C $ZOOMY/thesis …` for thesis, `git -C $ZOOMY/library/<sub> …` for a
+backend, the superrepo root for submodule pointers.
+
+**What goes where:**
+
+- In the **Zoomy library** we work on the **solver core only** — framework,
+  models, numerics kernels. **No test cases live in the library.**
+- **Every test case / experiment goes in `thesis/notebooks/<category>/`**, under
+  a proper category, with a documenting notebook (jupytext, reproducible).
+- **`thesis/cases/` is opt-in:** put a case there **only when the user
+  explicitly says so**. Otherwise it stays in `thesis/notebooks/`.
+
 ## 1. Startup (the `/steward` skill runs this)
 
 1. Read this file fully; adopt it.
