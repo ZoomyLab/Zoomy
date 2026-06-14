@@ -9,6 +9,30 @@ file (C++, GLSL, JS, OpenFOAM, AMReX, UFL). The Riemann-solver registry is
 built on the same machinery — every numerical flux is a `SystemModel`-aware
 symbolic object the printer compiles like any other operator.
 
+## 0. NumericalSystemModel — the bundle a solver consumes
+
+A solver does not consume a `SystemModel` directly. `NumericalSystemModel`
+(`zoomy_core/numerics/numerical_system_model.py`) is its **numerical sibling**:
+a read-only wrapper around the frozen `SystemModel` plus everything a solver
+needs that is *not* symbolic-PDE-shaped. Build it by **selecting existing
+specs** — never by editing a solver:
+
+```python
+from zoomy_core.numerics.numerical_system_model import NumericalSystemModel
+nsm = NumericalSystemModel.from_system_model(
+    sm,
+    riemann=NonconservativeRusanov,                              # a Numerics class (§4)
+    reconstruction=ReconstructionSpec(order=2, limiter="venkatakrishnan"),
+    diffusion=DiffusionSpec(...),
+    regularization=RegularizationSpec(eigenvalue_eps=1e-8),
+)
+```
+
+It carries the Riemann choice, reconstruction/limiter, diffusion and
+regularization specs, and any sub-system splits. So the full pipeline is
+**`Model → SystemModel → NumericalSystemModel → Solver`**; the printers below are
+the code-generation the runtime/solver uses to execute it.
+
 ## 1. Printers
 
 ### 1a. Inventory

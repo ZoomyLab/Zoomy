@@ -10,6 +10,47 @@ consume is the `SystemModel`; see [system-model.md](system-model.md).
 `Model` and `SystemModel` are independent siblings, not inherited:
 `SystemModel.from_model(m)` extracts the operators once and freezes them.
 
+## The pipeline
+
+```
+Model ──SystemModel.from_model(m)──▶ SystemModel ──NumericalSystemModel
+ (symbolic derivation graph)         (frozen F,P,B,S,M)   .from_system_model(sm,…)──▶
+NumericalSystemModel ──▶ Solver   (fvm/, param.Parameterized; numpy is the
+ (frozen sm + numerics specs)            reference, backends port from it)
+```
+
+Code printers (`transformation/to_c.py`, `to_amrex.py`, `to_ufl.py`, …) and
+analysis (dispersion, hyperbolicity) both hang off `SystemModel`. The
+NumericalSystemModel stage is in [numerics.md](numerics.md); the solver in
+[`../backends/numpy.md`](../backends/numpy.md).
+
+## Build from the existing blocks — reuse, don't reinvent
+
+**You build only from the framework's blocks. You never hand-roll a solver, a
+time loop, or a parameter — and you never patch a model with a flag, an
+`if`-branch, or a private attribute.** Before adding *any* new structure, state
+to the user in writing: (a) **where it fits** — which existing block absorbs it
+— and (b) **what is genuinely new**. Then:
+
+- **A new model = subclass the closest existing one and compose closures.**
+  e.g. `MalpassetSWE(SWE)` (adds Manning + eddy viscosity), `KESME(SME)`,
+  `ElderSME(SME)`. Add physics with a `Closure` in the `closures=` list
+  (`model/models/closures.py`), **not** by editing the parent.
+- **A new scheme = a `Numerics`/`Closure` subclass, or a different spec on the
+  NumericalSystemModel** — beside its siblings, not a fork.
+- **Configure via `param` knobs and derivation-time tags**, not runtime
+  branches: a plain attribute that bypasses `param` disappears from the GUI/CLI;
+  an untagged term returns zero.
+- **Fix root causes.** Hooks, adapters, aliases (`Old=New`), `from_X` factories,
+  translation maps, and `hasattr`/`getattr(…, None)` "graceful no-op" fallbacks
+  are the smell of dodging the real change. **Break, don't skip** — let missing
+  wiring fail loudly. (Full self-check: `~/.claude/agents/zoomy.md` → *solve root
+  causes, not workarounds*.)
+- **Find the existing thing first:** `model/models/` for a model, the Riemann /
+  reconstruction lists for numerics, `analysis/__init__.py` for analysis, a close
+  `tutorials/` example, then `git log -- <area>` (many primitives were
+  refactored; the old form may be in history).
+
 ## Class skeleton
 
 ```python
@@ -80,19 +121,18 @@ m.aux_variables.b_x
 
 ## Derivation via `apply()`
 
-`DerivedModel.apply(operation)` mutates `self._system` in place and records
-the operation for `.describe()`. The operations catalogue lives in
-`library/zoomy_core/zoomy_core/model/models/ins_generator.py`.
+`model.apply(operation)` records the operation for `.describe()` and transforms
+the equations. The operation catalogue lives in
+`library/zoomy_core/zoomy_core/model/operations.py` and `…/model/derivation/`.
 
-Relations / Materials / Assumptions substitute symbols across all
-equations:
-
-- `Newtonian(state, nu=...)` — `τ_ij = μ (∂_i u_j + ∂_j u_i)`.
-- `Inviscid(state)` — every `τ_ij → 0`.
-- `HydrostaticPressure(state)` — vertical momentum to `∂_z p + ρ g = 0`.
-- `StressFreeSurface(state)` — drops surface tractions at `z = η`.
-- `KinematicBC(state, interface, at, mass_flux=None)` —
-  `w|_at = ∂_t interface + u · ∇ interface (+ mass_flux/ρ)`.
+Physics closures are composed as a **list of `Closure` ops**
+(`model/models/closures.py`), applied via
+`apply_stress_closures(model, closures=[Newtonian(), NavierSlip(), …])` —
+available closures include `Newtonian`, `NavierSlip`, `StressFree`,
+`ManningFriction`, `ElderViscosity`, `KEpsilonViscosity`, `RoughWall`,
+`Bingham`. **Add physics by adding a closure to the list, never by editing the
+model.** Moving-interface kinematic BCs enter the upstream derivation via
+`KinematicBC(...)`.
 
 Operations transform each equation:
 
@@ -130,36 +170,30 @@ print(m.describe(derivation="markdown"))  # parent / operations / self
 
 The rendered diagram lives on the [SystemModel page](system-model.md).
 
-## Running example — SME with σ-coordinates
+## Running example — author by inheritance + closures
 
-Full derivation:
-`thesis/notebooks/modeling/transparent_derivations/kowalski_sigma_transform.py`.
-Skeleton:
+Models live as **declarative classes** in `model/models/` (`sme.py:SME`,
+`swe.py:SWE`, `vam.py:VAM`, `ml_swe.py`, `ml_sme.py`, …). A new model
+**subclasses the closest one and supplies a different closure list / overrides
+`derive_model()`** — it never re-derives from scratch and never patches the
+parent with a flag:
 
 ```python
-from zoomy_core.model.models.ins_generator import (
-    StateSpace, FullINS, SigmaTransform, KinematicBC,
-    Integrate, Multiply, Expression,
-)
+from zoomy_core.model.models.swe import SWE
+from zoomy_core.model.models.closures import ManningFriction, ElderViscosity
 
-state = StateSpace(dimension=2)
-sys = FullINS(state)
-
-sys.momentum.z.apply({state.tau.zx: 0, state.tau.zz: 0, state.w: 0})
-sys.momentum.z.apply(
-    Integrate(state.z, state.z, state.eta, method="analytical"))
-sys.momentum.z.apply({state.p.subs(state.z, state.eta): 0}).simplify()
-sys.momentum.x.apply(sys.momentum.z.solve_for(state.p)).simplify()
-
-sys.apply(SigmaTransform(state))
-sys.apply(KinematicBC(state, interface=state.b,   at=0))
-sys.apply(KinematicBC(state, interface=state.eta, at=1))
+class MalpassetSWE(SWE):
+    # bed friction + eddy viscosity added by COMPOSING closures — no flags on SWE
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, closures=[ManningFriction(), ElderViscosity()], **kwargs)
 ```
 
-Galerkin projection then multiplies each leaf by a test family
-(`Multiply(phi_k, outer=True)`), applies `Integrate(zeta, 0, 1, method="analytical")`,
-solver-tags every term, and wraps the result in a `Model` subclass
-consumed by `SystemModel.from_model(model)`.
+`derive_model()` (overridden per model) builds the equations from the blueprints
+in `model/models/equations.py` (`Mass`, `Momentum`), applies the operations
+(`operations.py` / `derivation/`: `ProductRule`, `Integrate`, `EvaluateIntegrals`,
+`AffineProjection`, `SigmaTransform`, …), applies the closures, and closes with
+`InvertMassMatrix` + tagging. **`SME.derive_model`** (`model/models/sme.py`) is
+the canonical worked example; `SystemModel.from_model(model)` then freezes it.
 
 ## Authoring checklist
 

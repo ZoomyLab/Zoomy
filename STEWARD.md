@@ -133,3 +133,13 @@ End-state: importable from zoomy_core. Test: pytest .../test_flux_jacobian.py.
 → next: extend to the well-balanced source term
 ⚠ HAND-CRAFTED: jacobian path covers dimension=1 only; 2-D is a stub
 ```
+
+## 8. Working in Zoomy solver/library code
+
+The framework architecture — the **Model → SystemModel → NumericalSystemModel →
+Solver** pipeline, how models are authored, and the **reuse-don't-reinvent**
+rules — lives in the docs, not here. Read before touching `library/`:
+`docs/book/authoring/model.md` (then `system-model.md`, `numerics.md`). Build
+only from the existing blocks; subclass + compose closures; **never** add flags /
+`if`-branches / private attributes / hand-rolled solvers. The full
+root-cause-not-workaround checklist is in `~/.claude/agents/zoomy.md`.
