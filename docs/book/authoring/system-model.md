@@ -30,7 +30,7 @@ the consuming runtime.
 | `diffusion_matrix[_explicit]`  | `(n_eq, n_state, n_dim, n_dim)`    | $A$ in $\nabla\!\cdot(A\!:\!\nabla Q)$ |
 | `quasilinear_matrix` *(derived)* | `(n_eq, n_state, n_dim)`         | $\partial F/\partial Q + \partial P/\partial Q + B$ |
 | `source_jacobian` *(derived)*  | `(n_eq, n_state)`                  | $\partial S/\partial Q$              |
-| `eigenvalues` *(derived)*      | `(n_eq, 1)` or `None`              | spectrum of $\sum_d n_d A^{(d)}_{ql}$; `None` ≡ skipped |
+| `eigenvalues` *(derived)*      | `(n_eq, 1)` or `None`              | spectrum of $\sum_d n_d A^{(d)}_{ql}$; `None` ⇒ runtime numerical wavespeed |
 
 `time`, `space` are sympy Symbols; `state`, `aux_state` are lists; `parameters`,
 `parameter_values` are `Zstruct` (dot-access). `equation_to_state_index` records
@@ -43,7 +43,7 @@ for splitter sub-systems. Derived operators auto-recompute on every mutation.
 result. Boundary kernels (`_boundary_conditions`, `_aux_boundary_conditions`,
 `_boundary_gradients`) and initial-condition callbacks ride along verbatim.
 `__post_init__` computes `quasilinear_matrix` and `source_jacobian`;
-`eigenvalues` is carried over (`None` ≡ numerical-wavespeed mode).
+`eigenvalues` is carried over (`None` ⇒ runtime numerical wavespeed).
 
 `from_model` then calls `expose_aux_atoms()`, which scans every operator entry
 and replaces every undeclared `Function` or `Derivative` atom by an aux
@@ -61,7 +61,10 @@ declaration; `aux_state` starts from the source `Model` and grows here. After
 
 Every non-zero piece of the derivation is routed to an operator slot by a
 **solver tag** the model author writes on each `Expression`. There is no
-auto-tagger; untagged sub-expressions silently return zero. Canonical tags
+*solver-tag* auto-router — the derivation-time `AutoTag` op
+([model.md](model.md)) assigns *physics categories*, but the final
+`Expression → slot` routing is explicit, and untagged sub-expressions silently
+return zero. Canonical tags
 (`library/zoomy_core/zoomy_core/model/derivation/tag_catalog.py`) and the fixed
 `SOLVER_TAG_TO_SLOT` routing:
 
@@ -185,6 +188,64 @@ flowchart LR
     click S4 "root — w|_{at=0} = ∂_t b(t, x) + u|·∂_x b(t, x)"
     click S5 "root — w|_{at=1} = ∂_t b(t, x) + h(t, x) + u|·∂_x b(t, x) + h(t, x)"
 ```
+
+(The trailing `+ h(t, x)` terms inside each derivative are the surface height:
+read the surface condition as `w|_{surface} = ∂_t(b+h) + u·∂_x(b+h)`.)
+
+## Standalone use — analysis without a solver
+
+A `SystemModel` is useful on its own: it is the natural input to **linear
+stability and dispersion analysis**, because it already carries `M`, the
+quasilinear matrix, and the source Jacobian symbolically. The tools in
+`zoomy_core/analysis/` take a `SystemModel` directly — no mesh, no runtime:
+
+```python
+from zoomy_core.systemmodel import SystemModel
+from zoomy_core.analysis import (
+    linearise, symbolic_eigenvalues_at,
+    extract_quasilinear_pencil, sample_hyperbolicity,
+)
+
+sm   = SystemModel.from_model(MyModel())
+evs  = symbolic_eigenvalues_at(sm, {h: h0, q: q0}, axis=0)   # symbolic λ(state)
+
+sm_lin           = linearise(sm, {h: 1.0, q: 0.0})           # Q = Q0 + ε δQ
+M_t, M_xa, _     = extract_quasilinear_pencil(sm_lin)        # pencil (M_x − λ M_t)
+report           = sample_hyperbolicity(M_xa[0], M_t, {h0: (0.1, 5.0)}, n_samples=2000)
+print(report.summary())
+```
+
+- `linearise(sm, base_state)` (`analysis/linearisation.py`) inserts
+  `Q = Q₀ + ε δQ` and returns a new `SystemModel` in the perturbation fields.
+- `plane_wave_dispersion(linear_sm, k=…, omega=…, axis=…)` (`analysis/plane_wave.py`)
+  solves `det M(ω,k) = 0` for the dispersion relation.
+- `extract_quasilinear_pencil` / `generalised_eigenvalues` /
+  `sample_generalised_eigenvalues` (`analysis/pencil.py`) give the symbolic and
+  numerical spectrum of the pencil `det(M_x − λ M_t) = 0`.
+- `is_hyperbolic_at` / `sample_hyperbolicity` (`analysis/hyperbolicity.py`) sweep
+  a parameter box and return a `HyperbolicityReport` — the standard check before
+  trusting a derived model in a hyperbolic solver.
+
+## Splitting a SystemModel — the VAM pressure projection
+
+A rectangular `SystemModel` (more equations than evolved state, with
+`equation_to_state_index` recording the row→slot map) can be **split** into
+sub-systems that different discretisations consume. This is how the
+non-hydrostatic VAM chain is solved: `model/splitter.py` separates the monolithic
+system into a *predictor*, an *elliptic pressure block*, and a *corrector*.
+
+```python
+from zoomy_core.model.splitter import split_for_pressure
+result = split_for_pressure(sm, pressure_vars=["P_0", "P_1"], dt=dt)
+sm_pred, sm_press, sm_corr = result.predictor, result.pressure, result.corrector
+```
+
+The structural variant `split_for_pressure_structural(sm, pressure_vars, dt)`
+detects each **constraint row** as an identically-zero `mass_matrix` row → the
+elliptic block; evolution rows carrying pressure terms get the corrector update
+`Q[s] ← Q[s] − dt·(pressure part)/M[row,s]`. Each sub-system is itself a
+`SystemModel`, so the same printers and the `ChorinSplitVAMSolver`
+([numpy.md](../backends/numpy.md)) consume them unchanged.
 
 ## Authoring checklist
 

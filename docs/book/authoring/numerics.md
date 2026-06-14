@@ -33,19 +33,49 @@ regularization specs, and any sub-system splits. So the full pipeline is
 **`Model → SystemModel → NumericalSystemModel → Solver`**; the printers below are
 the code-generation the runtime/solver uses to execute it.
 
+Defaults are filled in for you: `riemann` → `NonconservativeRusanov`, diffusion
+auto-enabled iff `diffusion_matrix` is structurally non-zero, and the
+least-squares gradient degree is **always derived** from the `aux_registry`
+derivative orders (`resolved_lsq_degree()`) — never a knob. The NSM is read-only
+over the `SystemModel`; it never mutates the symbolic operators.
+
+### Worked example — the `hinv` aux field
+
+`hinv = 1/h` shows how an aux field threads the whole pipeline. In
+`MalpassetSWE` (`model/models/malpasset.py`) it is:
+
+1. **declared** as aux state — `aux_variables=["hinv"]`;
+2. **used** symbolically in the operators as the desingularised reciprocal —
+   `u = hu·hinv` inside `flux`, `source`, `diffusion_matrix_explicit`,
+   `eigenvalues`;
+3. **computed** by the registered `update_aux_variables()` method, a
+   Kurganov–Petrova desingularisation
+   `hinv = √2·h / √(h⁴ + max(h, ε)⁴)` returned as a `ZArray`;
+4. **lowered** like `update_variables`: `from_system_model` registers it as a
+   runtime callable the solver applies to `Qaux` each step.
+
+So `hinv` is a *runtime-evaluated aux formula* — distinct from the gradient/topography
+aux that `expose_aux_atoms` discovers automatically. At wet/dry faces the Riemann
+solver additionally overwrites the `hinv` slot through its `FieldHandle` (§3).
+
 ## 1. Printers
 
 ### 1a. Inventory
 
-All printer modules live under
+Each backend is **one printer subclass**. They differ only in language-specific
+syntax — array type, math namespace, kernel decoration — never in the operators
+they emit, so a model verified on one backend is the same symbolic system on
+every other. The full set lives under
 `library/zoomy_core/zoomy_core/transformation/`:
 `to_numpy.py` (`NumpyRuntimeModel`, lambdified NumPy runtime — the
 reference execution path); `to_c.py` (`CppModel`, `CppNumerics`;
 templated C++ header `template <typename T>`); `to_glsl.py`
 (`GenericGlslBase`; WebGL2 GLSL ES 3.00 shaders with `out` array
 parameters); `to_js.py` (`GenericJsBase`; allocation-free JavaScript
-kernels for the browser solver); `to_openfoam.py` (`FoamModel`;
-OpenFOAM solver kernels with `Foam::scalar` / `Foam::List`);
+kernels for the browser solver); `to_openfoam.py`
+(`FoamSystemModelPrinter` / `FoamNumericsPrinter` / `FoamUpdateAuxPrinter`;
+OpenFOAM solver headers with `Foam::scalar` / `Foam::List` — see
+[`../backends/openfoam.md`](../backends/openfoam.md));
 `to_amrex.py` (`AmrexModel`, `AmrexNumerics`; AMReX C++ using
 `amrex::SmallMatrix` and GPU macros); `to_ufl.py` (`UFLRuntimeModel`;
 Unified Form Language for Firedrake / FEniCSx).
@@ -241,10 +271,6 @@ Symbols on the L / R / cell-centre side of a face. Riemann code reads
 `h.access(qL, auxL)` and stays agnostic to whether bathymetry lives in
 the state (legacy SWE) or `Qaux` (chain-DAE).
 
-**`AffineProjection`** — FEM-style affine reference-element step
-($z \in [b, b+h] \to \zeta \in [0, 1]$). Canonical name contract for
-the FEM mapping operation; coord-flavoured aliases are not used.
-
 **Regularization** — `(h + ε)^(-n)` rewrite for inverse h-powers near
 wet/dry interfaces; declared at construction via the `regularization=`
 keyword on the subclass (e.g. `HyperbolicSME(regularization=...)`).
@@ -314,10 +340,44 @@ Riemann flux), call `register_symbolic_function(name, method_ref, sig)`
 directly on the model so the printer resolves the symbolic
 `Function(name)(...)` atom against a registered kernel.
 
+## 5. User-supplied functions
+
+Three places let the author hand the runtime something the symbolic layer
+cannot, or should not, produce in closed form.
+
+**Numerical eigenvalues.** A symbolic characteristic polynomial is expensive or
+impossible for large/strongly-coupled systems. Set `eigenvalue_mode = "numerical"`
+on the `Model` and you supply **nothing else**: `eigenvalues()` returns a zero
+placeholder, and the solver builds the normal-projected quasilinear matrix
+`A_n = Σ_d n_d · quasilinear_matrix[:,:,d]`, adds the `eigenvalue_eps`
+regularisation diagonal, and takes `np.real(np.linalg.eigvals(A_n))` per face at
+runtime. Use it whenever the symbolic spectrum is unwieldy; keep `"symbolic"`
+(the default) when it closes cleanly, because it is far cheaper per step.
+
+**Conditional expressions.** Author branchy physics with
+`sp.Function("conditional")(cond, true, false)` (or a `Piecewise`). **No
+registration is needed** — every printer maps `conditional` to its native form
+(`np.where`, `ufl.conditional`, GLSL/JS/C ternary). Wet/dry clamps
+(`clamp_positive`, `clamp_momentum`) and `safe_denominator` are provided the same
+way. Prefer `conditional`/`Piecewise` over a Python `if` in operator code — the `if`
+would bake one branch into the printed kernel.
+
+**Custom derivatives / symbolic callables.** When an operator expression needs a
+helper the framework has no slot for, register it with
+`register_symbolic_function(name, method_ref, sig_struct)` on the originating
+object (`Model`, `Kernel`, or `Numerics` — all mix in `SymbolicRegistrar`). This
+stores `Function(name, definition, args=sig)` and installs a proxy that emits the
+symbolic call `name(...)`; the printer then resolves that atom against the
+backend implementation in its `module`/`c_functions` map at lambdify time. The
+standard operator slots (`flux`, `source`, `update_aux_variables`, …) are
+registered through exactly this mechanism — a custom function is not a special
+case, just one more entry.
+
 ## Running example — SWE end-to-end
 
-From `thesis/notebooks/modeling/swe/simple_swe_v2.py`
-(`SWEModelV2` and `make_model()`):
+From `thesis/notebooks/legacy/modeling/swe/simple_swe_v2.py`
+(`SWEModelV2` and `make_model()`; add its directory to `PYTHONPATH`, or
+substitute any `Model` subclass):
 
 ```python
 from zoomy_core.systemmodel import SystemModel
