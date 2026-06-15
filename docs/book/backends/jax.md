@@ -47,6 +47,38 @@ are the same — `zoomy_jax` lowers them through its own printer instead of
   step, with `io_callback` for logging and snapshots — the whole march compiles
   into one XLA program. (It uses `while_loop`, not `lax.scan`.)
 
+## Multi-device (SPMD)
+
+The same `HyperbolicSolver` scales across devices (multi-GPU/TPU or multi-host)
+with **no MPI** — just `jax.shard_map` + `jax.lax.ppermute` halo exchange. The
+domain is partitioned along the cell axis
+(`zoomy_jax/mesh/partition_jax.py`: `partition_1d_contiguous`,
+`partition_xaxis_structured`); each device owns a contiguous strip plus halo
+cells, and the flux / reconstruction operators compose with `shard_map`
+**unchanged** — you refill the halo (one `ppermute`) before each stage and call
+the ordinary flux operator. The sharded march is **bit-identical** to a
+replicated single-device run, so a model verified on one device is correct on
+many.
+
+```python
+spmd_mesh = Mesh(np.array(jax.devices()), axis_names=("cells",))
+
+@partial(shard_map, mesh=spmd_mesh,
+         in_specs=(P(None, "cells"), P(None, "cells")),
+         out_specs=P(None, "cells"), check_rep=False)
+def run(Q_pad, Qaux_pad):
+    Q_pad = halo_exchange(Q_pad)            # ppermute along "cells"
+    dQ    = flux_op(dt, t, Q_pad, Qaux_pad, parameters, jnp.zeros_like(Q_pad))
+    return Q_pad + dt * dQ
+```
+
+Bit-identity is regression-guarded in `tests/unit/zoomy_jax/test_spmd_sme0.py`
+(SME(0), 4 devices, orders 1–2, live parameter passing through the shard_map
+call); the full recipe + halo-exchange helpers live in
+[`zoomy_jax/README.md`](https://github.com/ZoomyLab/zoomy-jax) and
+`fvm/halo_exchange_jax.py`. Simulate N devices on one CPU with
+`XLA_FLAGS="--xla_force_host_platform_device_count=N"`.
+
 ## Solver variants
 
 | Class | File | What it adds |
