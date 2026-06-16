@@ -151,13 +151,60 @@ def use(profile="print"):
     mpl.rcParams.update(_as_rcparams(CONFIG))
 
 
+def resolve_color(role_or_color):
+    """Single point of role -> color resolution.
+
+    Maps a semantic role name (a key of :data:`COLORS`, e.g. ``"water"``)
+    to its hex value; passes any other spec (hex string, named color,
+    ``None``) straight through. Both :func:`line` and the
+    :mod:`zoomy_plotting.plot.panels` building blocks route through here so
+    the ``COLORS`` lookup lives in exactly one place.
+    """
+    return COLORS.get(role_or_color, role_or_color)
+
+
 def line(role_or_color, ls="-", lw=None, marker=None):
     """Proxy legend handle (e.g. for marker-line meanings)."""
     import matplotlib as mpl
     from matplotlib.lines import Line2D
-    color = COLORS.get(role_or_color, role_or_color)
+    color = resolve_color(role_or_color)
     return Line2D([], [], color=color, ls=ls,
                   lw=lw or mpl.rcParams["lines.linewidth"], marker=marker)
+
+
+def _collect_handles_labels(axes, extra=None, remove_in_axes=True):
+    """Gather (handles, labels) across ``axes``, de-duplicated by label.
+
+    Shared mechanics for :func:`figure_legend` and
+    :func:`zoomy_plotting.plot.panels.row_legend`: pull each axis's legend
+    entries, drop blank labels and duplicates, optionally remove any
+    in-axes legends (so the collected one is the only legend drawn), then
+    append ``extra`` ``[(label, handle), ...]`` proxies.
+    """
+    handles, labels = [], []
+    for ax in axes:
+        h, l = ax.get_legend_handles_labels()
+        for hi, li in zip(h, l):
+            if li and li not in labels:
+                handles.append(hi)
+                labels.append(li)
+        if remove_in_axes:
+            leg = ax.get_legend()
+            if leg is not None:
+                leg.remove()
+    for label, handle in (extra or []):
+        if label not in labels:
+            handles.append(handle)
+            labels.append(label)
+    return handles, labels
+
+
+def _frame_legend(leg):
+    """Apply the publication thin-gray legend frame (shared mechanics)."""
+    leg.get_frame().set_edgecolor("#BBBBBB")
+    leg.get_frame().set_linewidth(0.8)
+    leg.get_frame().set_alpha(0.95)
+    return leg
 
 
 def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
@@ -165,20 +212,7 @@ def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
     thin light frame separating it from the caption).  Collects entries
     from all axes (de-duplicated, in-axes legends removed) plus ``extra``
     [(label, handle), ...] proxies."""
-    handles, labels = [], []
-    for ax in fig.axes:
-        h, l = ax.get_legend_handles_labels()
-        for hi, li in zip(h, l):
-            if li and li not in labels:
-                handles.append(hi)
-                labels.append(li)
-        leg = ax.get_legend()
-        if leg is not None:
-            leg.remove()
-    for label, handle in (extra or []):
-        if label not in labels:
-            handles.append(handle)
-            labels.append(label)
+    handles, labels = _collect_handles_labels(fig.axes, extra)
     if not handles:
         return None
     ncol = ncol or min(len(handles), 5)
@@ -186,10 +220,7 @@ def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
     leg = fig.legend(handles, labels, loc="lower center",
                      bbox_to_anchor=(0.5, 0.0), ncol=ncol,
                      frameon=True, fancybox=True, borderpad=0.6)
-    leg.get_frame().set_edgecolor("#BBBBBB")
-    leg.get_frame().set_linewidth(0.8)
-    leg.get_frame().set_alpha(0.95)
-    return leg
+    return _frame_legend(leg)
 
 
 @contextmanager

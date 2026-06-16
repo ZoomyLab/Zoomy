@@ -1,12 +1,14 @@
-from .style import (CONFIG, PlotConfig, apply_style, use, line,
+from .style import (CONFIG, PlotConfig, apply_style, use, line, resolve_color,
                     figure_legend, CYCLE, COLORS, MARKERS, MARKEVERY,
                     CMAP_CONTINUOUS, CMAP_DIVERGING, CMAP_TOPO, PROFILES)
+from .panels import line_plot, profile_plot, row_legend
 from .matplotlib import MatplotlibPlotter
 from .base import BasePlotter
 from .video import animate, render_frame
 
 __all__ = [
-    "CONFIG", "PlotConfig", "apply_style", "use", "line", "figure_legend",
+    "CONFIG", "PlotConfig", "apply_style", "use", "line", "resolve_color",
+    "figure_legend", "line_plot", "profile_plot", "row_legend",
     "CYCLE", "COLORS", "MARKERS", "MARKEVERY",
     "CMAP_CONTINUOUS", "CMAP_DIVERGING", "CMAP_TOPO", "PROFILES",
     "BasePlotter", "MatplotlibPlotter",
