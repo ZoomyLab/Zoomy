@@ -25,6 +25,20 @@ your row when you no longer need the path**. `unclaimed` = free to adopt.
 Add a finer row when a sub-path needs its own steward, e.g.
 `| thesis-applications | thesis/chapters/40_applications | main | … |`.
 
+## Tasks
+
+The backlog. **Detail lives in [`tasks/`](tasks/)** (one file per task: what ·
+where · how · why · learned); this index only maps each open task to the
+responsible agent(s) (by folder ownership) and links to its file. When you take
+new ownership, claim any task in your path here (STEWARD §1.5). Finishing a task
+= delete its `tasks/` file **and** its row below, in the same commit.
+
+| task | description                                  | responsible        | detail |
+|------|----------------------------------------------|--------------------|--------|
+| 0001 | remove stray root `memory.md`                | root               | [tasks/0001-remove-stray-memory-md.md](tasks/0001-remove-stray-memory-md.md) |
+| 0002 | reconcile dirty submodules + untracked tutorials | core, jax, firedrake, amrex, dmplex, root | [tasks/0002-reconcile-dirty-submodules-and-tutorials.md](tasks/0002-reconcile-dirty-submodules-and-tutorials.md) |
+| 0004 | document CLI/GUI card contract in the docs (optional) | root | [tasks/0004-document-cli-gui-card-contract.md](tasks/0004-document-cli-gui-card-contract.md) |
+
 ## Requests
 
 Append-only. One block per request; a named commit closes it.

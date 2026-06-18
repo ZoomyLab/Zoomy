@@ -1,11 +1,15 @@
 # Tasks
 
-Small, self-contained follow-up tasks for Zoomy stewards. One file per task.
-Each task states **what · where · how · why · learned**. Delete a file when the
-task is done (a commit is the done-signal, same as `ORGANIZATION.md` requests).
+The Zoomy backlog. **One markdown file per task** — this folder holds the full
+detail; `ORGANIZATION.md` holds only the slim index (task · responsible
+agent(s) · link). The two are kept in sync (see [STEWARD.md](../STEWARD.md) §4).
 
-These are open items left after the **framework-documentation** thread
-(2026-06-18): `docs/book/authoring/{model,system-model,numerics}.md` and
-`docs/book/backends/{numpy,jax,openfoam}.md` were rewritten and are already
-committed + pushed on `develop`. The items below are loose ends that were
-flagged but not owned by that thread.
+Each task file states **what · where · how (if clear) · why · learned**.
+
+**Lifecycle:**
+- *Add:* write `tasks/<nnnn>-<slug>.md` **and** add a row to the `ORGANIZATION.md`
+  Tasks index.
+- *Claim:* owning a folder makes you responsible for tasks in it. On taking new
+  ownership, re-scan the index and add yourself (STEWARD §1.5).
+- *Finish:* delete the `tasks/` file **and** its index row in the same commit
+  that completes the work (a named commit is the done-signal).

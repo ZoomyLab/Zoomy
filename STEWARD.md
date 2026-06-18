@@ -43,9 +43,11 @@ backend, the superrepo root for submodule pointers.
 4. **Clean or stop:** `git -C <repo> status` must be clean and on the default
    branch (`main`; `develop` for the superrepo root). If dirty, on the wrong
    branch, or behind `origin` → report and stop; do not edit.
-5. Set `status=active`, `last seen=now` in your row. Scan `## Requests` for items
-   addressed to you. Report a slim status (owned path · branch ok · open
-   requests), then idle-watch (§5).
+5. Set `status=active`, `last seen=now` in your row. Scan the **Tasks** index
+   for any task whose path is in your folder and **claim it** (add yourself as a
+   responsible agent); scan `## Requests` for items addressed to you. Report a
+   slim status (owned path · branch ok · open tasks/requests), then idle-watch
+   (§5).
 
 ## 2. Ownership — one folder, most-specific wins
 
@@ -69,24 +71,45 @@ backend, the superrepo root for submodule pointers.
   pointer bump** (recording the new submodule SHA) is the `root` steward's job —
   request it via `ORGANIZATION.md`.
 
-## 4. Cross-agent work — only through `ORGANIZATION.md`
+## 4. Coordination — `tasks/` (detail) + `ORGANIZATION.md` (index)
 
-You never edit another steward's folder. To get a change there:
+Two things at `ZOOMY` root drive coordination; keep them in sync.
 
-- **Default:** append a request to `## Requests` with three fields —
-  **Problem · Desired end-state (UI/behaviour) · How to test**. The owner
-  replies in-thread ("taking it"), commits with an agreed message, and posts
-  `done — <repo>@<hash>`. You pull, run the test, then close it (`→ resolved`)
-  or re-request.
-- **A named commit is the done-signal** — no other handshake.
-- **Fallback** (owner not running): end your turn with one copy-pasteable block
-  for the user to hand over (same three fields).
+**The backlog lives in `tasks/`.** One markdown file per task, each stating
+*what · where · how (if clear) · why · learned*. The task file is the full
+detail — the place new work is written down. **When a task is done, delete its
+file** (a named commit is the done-signal). `tasks/README.md` explains the
+folder.
+
+**`ORGANIZATION.md` stays slim — it only indexes.** It holds the **Ownership**
+table plus a **Tasks** index that lists *every* open task with the agent(s)
+responsible and a **link** to its `tasks/` file. **Never duplicate task detail
+here** — only the link + the owner mapping. Responsibility follows folder
+ownership, so a task spanning two folders lists both owners.
+
+- **Adding a task:** write `tasks/<nnnn>-<slug>.md` *and* add one row to the
+  Tasks index (task · owner(s) · link).
+- **Claiming tasks:** ownership of a folder makes you responsible for tasks in
+  it. Whenever you take new ownership, re-scan the Tasks index and add yourself
+  to any task in your path (§1.5).
+- **Finishing a task:** delete the `tasks/` file and its index row in the same
+  commit that completes the work.
+
+**Cross-agent change** (you need work in *another* steward's folder): you never
+edit it yourself. Append a request to `## Requests` with three fields —
+**Problem · Desired end-state (UI/behaviour) · How to test**. The owner replies
+in-thread ("taking it"), commits with an agreed message, and posts
+`done — <repo>@<hash>`; a **named commit is the done-signal**. You pull, run the
+test, then close it (`→ resolved`) or re-request. If the request implies lasting
+work, also add it to the Tasks index. **Fallback** (owner not running): end your
+turn with one copy-pasteable block for the user to hand over (same three fields).
 
 ## 5. Cadence — when to re-check `ORGANIZATION.md`
 
 - **Executing a task** → do **not** poll; check only when it ends.
-- After every task: commit → read `ORGANIZATION.md` → act on requests to you →
-  prune your stale rows / resolved requests.
+- After every task: commit → delete the finished task's `tasks/` file **and** its
+  `ORGANIZATION.md` index row → read `ORGANIZATION.md` → act on requests/tasks to
+  you → prune your stale rows / resolved requests.
 - **Just did a cross-agent job, or waiting on a reply** → check every ~5 min for
   ~2 cycles (catch the quick back-and-forth), then relax.
 - **Idle, nothing pending** → check in ~every 30 min; stay silent if there's
@@ -106,6 +129,11 @@ You never edit another steward's folder. To get a change there:
 **Ownership row** (in `ORGANIZATION.md`):
 ```
 | jax | library/zoomy_jax | main | active | 2026-06-13 19:40 |
+```
+
+**Tasks-index row** (in `ORGANIZATION.md` — link only, detail in `tasks/`):
+```
+| 0007 | flux Jacobian for JAX FVM | jax, core | [tasks/0007-flux-jacobian.md](tasks/0007-flux-jacobian.md) |
 ```
 
 **Request thread** (commit = done):
@@ -143,5 +171,6 @@ Solver** pipeline, how models are authored, and the **reuse-don't-reinvent**
 rules — lives in the docs, not here. Read before touching `library/`:
 `docs/book/authoring/model.md` (then `system-model.md`, `numerics.md`). Build
 only from the existing blocks; subclass + compose closures; **never** add flags /
-`if`-branches / private attributes / hand-rolled solvers. The full
-root-cause-not-workaround checklist is in `~/.claude/agents/zoomy.md`.
+`if`-branches / private attributes / hand-rolled solvers. The reuse-don't-reinvent
+and root-cause-not-workaround rules live in `docs/book/authoring/model.md` and the
+slim `zoomy` agent (`~/.claude/agents/zoomy.md`).
