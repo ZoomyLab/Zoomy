@@ -38,6 +38,9 @@ new ownership, claim any task in your path here (STEWARD §1.5). Finishing a tas
 | 0001 | remove stray root `memory.md`                | root               | [tasks/0001-remove-stray-memory-md.md](tasks/0001-remove-stray-memory-md.md) |
 | 0002 | reconcile dirty submodules + untracked tutorials | core, jax, firedrake, amrex, dmplex, root | [tasks/0002-reconcile-dirty-submodules-and-tutorials.md](tasks/0002-reconcile-dirty-submodules-and-tutorials.md) |
 | 0004 | document CLI/GUI card contract in the docs (optional) | root | [tasks/0004-document-cli-gui-card-contract.md](tasks/0004-document-cli-gui-card-contract.md) |
+| 0009 | VAM Chorin-split predictor drops the non-x conservative flux (dim≥3 mass leak / over-fill) | core | [tasks/0009-vam-split-predictor-nd-flux-misclassification.md](tasks/0009-vam-split-predictor-nd-flux-misclassification.md) |
+| 0010 | re-assess JAX VAM pressure-BC change (`56eff9a`) after the split fix | jax | [tasks/0010-assess-vam-pressure-bc-jax-after-split-fix.md](tasks/0010-assess-vam-pressure-bc-jax-after-split-fix.md) |
+| 0011 | re-run VAM steffler bend + point-data BC interpolation for plots (blocked on 0009) | core, jax | [tasks/0011-rerun-vam-steffler-secondary-circulation-and-pointdata-bc.md](tasks/0011-rerun-vam-steffler-secondary-circulation-and-pointdata-bc.md) |
 
 ## Requests
 
