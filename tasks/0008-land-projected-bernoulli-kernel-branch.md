@@ -19,6 +19,15 @@ owns the C-strong/derivative thread before merging.
 'projected_bernoulli'`; without the kernel on the default line + the submodule
 pointer bumped, a fresh checkout of the thesis + zoomy_core won't have it.
 
+**Cross-repo note (zoomy_jax):** the SAME branch name `cstrong-opaque-derivative`
+exists in `library/zoomy_jax` and carries the jax C-strong scaffolding
+(`60e3150` compute_derivative placeholder) — also NOT on jax `main`. The jax
+solver unification (`9f2a62a` IMEX, `8da621a` Chorin, the `solver_jax` coupling
+hooks) IS on jax local `main` but jax `main` is *ahead 4 of origin/main*
+(unpushed). So landing the C-strong thread is a coordinated **core+jax** step, and
+"push main to origin" is a separate owner action in both repos. (The WB kernel
+itself is core-only; no jax part.)
+
 **Learned:** I staged only the WB files into my commits; the branch's working tree
 had heavy unrelated dirty state that I deliberately left unstaged. The WB pieces
 are self-contained (`fvm/bernoulli_wb.py`, `fvm/solver_numpy.py` hook,
