@@ -39,20 +39,14 @@ _site
 # outputs
 *.h5
 *.pkl
-firedrake/swe
-firedrake/swe.pvd
-firedrake/solution
-firedrake/solution.pvd
+*.pwd
+*.log
 conda-env
-swe.pvd
 swe/swe_0.vtu
 precice-profiling
-precice-Fluid2-convergence.log
-precice-Fluid2-iterations.log
 exp_4
 export2
-images_ijrewhs
-library/model/models/\
+library/model/models/.cache
 .cache
 
 /meshes/**/*
@@ -63,31 +57,12 @@ library/model/models/\
 of_coupling/of-original/dynamicCode
 of_coupling/of-original/export1
 tests/vtk.js/webview/paraview-lite
-logs/log.log
 
 *.F90
 *.ex
 tmp_build_dir
-data/evel_artificial.raw
-data/evel_artificial.tif
-data/release_artificial.raw
-data/release_artificial.tif
-data/ca_debrisflow.raw
-data/ca_debrisflow.tif
-data/ca_elev.raw
-data/ca_elev.tif
-data/ca_debrisflow.raw
-data/ca_debrisflow.tif
-data/ca_elev.raw
-data/ca_elev.tif
-data/ca_debrisflow.raw
-data/ca_debrisflow.tif
-data/ca_elev.raw
-data/ca_elev.tif
-data/ca_debrisflow.raw
-data/ca_debrisflow.tif
-data/ca_elev.raw
-data/ca_elev.tif
+data/*.raw
+data/*.tif
 
 
 0.*
@@ -147,11 +122,7 @@ _build
 /.zoomy
 /artifacts/basilisk_benchmarks
 /library/zoomy_cli/.zoomy
-/PROGRESS.md
 
 # Description exports (generated)
-notebooks/derivation_mermaid.md
-notebooks/model.md
-notebooks/model_description.md
-notebooks/sme_derivation.md
+notebooks/*.md
 thesis
