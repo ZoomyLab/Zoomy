@@ -20,7 +20,7 @@ your row when you no longer need the path**. `unclaimed` = free to adopt.
 | amrex      | `library/zoomy_amrex`                                | main    | unclaimed | —         |
 | dmplex     | `library/zoomy_dmplex`                               | main    | unclaimed | —         |
 | gui        | `library/zoomy_gui`                                  | main    | unclaimed | —         |
-| thesis     | `thesis` (except more-specific sub-paths below)      | main    | unclaimed | —         |
+| thesis     | `thesis` (except more-specific sub-paths below)      | main    | active    | 2026-06-19 |
 
 Add a finer row when a sub-path needs its own steward, e.g.
 `| thesis-applications | thesis/chapters/40_applications | main | … |`.
