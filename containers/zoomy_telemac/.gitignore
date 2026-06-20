@@ -4,4 +4,3 @@
 output/
 __pycache__/
 *.pyc
-bench_malpasset_results.csv
