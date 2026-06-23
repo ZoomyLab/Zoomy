@@ -1,6 +1,8 @@
 [![Meshes](https://github.com/ZoomyLab/meshes/actions/workflows/build-meshes.yml/badge.svg)](https://github.com/ZoomyLab/meshes/actions/workflows/build-meshes.yml)
 [![Containers](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml/badge.svg)](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml)
 
+![](https://gitlab.git.nrw/rwth-mbd/containers/-/raw/main/rwth_mbd_de_rgb.png)
+
 # Zoomy
 
 Flexible modeling and simulation software for free-surface flows.
