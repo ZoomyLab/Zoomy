@@ -20,6 +20,7 @@ class NumpyAdapter(SolverAdapter):
         from zoomy_core.mesh.fvm_mesh import FVMMesh
         from zoomy_core.fvm.solver_numpy import HyperbolicSolver, FreeSurfaceFlowSolver
         from zoomy_core.fvm.solver_imex_numpy import IMEXSolver, FSFIMEXSolver
+        from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
         from zoomy_core.misc.misc import Settings
         import zoomy_core.fvm.timestepping as timestepping
 
@@ -55,15 +56,27 @@ class NumpyAdapter(SolverAdapter):
         else:
             SolverClass = FSFIMEXSolver if has_free_surface else IMEXSolver
 
+        # Reconstruction order / limiter live on the NumericalSystemModel now
+        # (the solver constructors no longer take them — see
+        # HyperbolicSolver docstring). Build the NSM here so the case's
+        # ``reconstruction_order`` / ``limiter`` settings take effect; the raw
+        # Model is auto-promoted via SystemModel.from_model, carrying its
+        # baked initial/boundary conditions onto ``nsm.sm``.
+        nsm = NumericalSystemModel.from_system_model(
+            model,
+            reconstruction=ReconstructionSpec(
+                order=settings.get("reconstruction_order", 1),
+                limiter=settings.get("limiter", "venkatakrishnan"),
+            ),
+        )
+
         solver = SolverClass(
             settings=solver_settings,
             time_end=settings.get("time_end", 0.1),
             compute_dt=timestepping.adaptive(CFL=settings.get("cfl", 0.45)),
             min_dt=settings.get("min_dt", 1e-6),
-            reconstruction_order=settings.get("reconstruction_order", 1),
-            limiter=settings.get("limiter", "venkatakrishnan"),
         )
 
         # 6. Run
-        Q, Qaux = solver.solve(mesh, model, write_output=True)
+        Q, Qaux = solver.solve(mesh, nsm, write_output=True)
         on_progress(-1, settings.get("time_end", 0.1), 0.0)
