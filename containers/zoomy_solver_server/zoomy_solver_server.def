@@ -1,0 +1,44 @@
+Bootstrap: docker
+From: python:3.11-slim-bookworm
+
+# Apptainer mirror of ./Dockerfile — the lightweight NumPy solver server.
+# Build from the Zoomy repo root so the %files sources resolve:
+#   apptainer build --fakeroot \
+#     containers/zoomy_solver_server/zoomy_solver_server.sif \
+#     containers/zoomy_solver_server/zoomy_solver_server.def
+# Run (serves the FastAPI on :8080, GUI connects to it):
+#   apptainer run containers/zoomy_solver_server/zoomy_solver_server.sif
+#   # or a different backend/port: APPTAINERENV_ZOOMY_ADAPTER=numpy ... run ... 8080
+
+%labels
+    Author ZoomyLab
+    Description Zoomy solver server (NumPy adapter) — FastAPI on :8080
+
+%files
+    library/zoomy_core   /opt/src/zoomy_core
+    library/zoomy_server /opt/src/zoomy_server
+
+%post
+    export DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+    python -m pip install --upgrade pip
+    # h5py + meshio are OPTIONAL deps of zoomy_core (not pulled by it), but the
+    # solver needs them: HDF5 mesh/result I/O (h5py) and .msh loading (meshio).
+    # Without h5py, BaseMesh.write_to_hdf5 raises "requires h5py".
+    python -m pip install --no-cache-dir h5py meshio /opt/src/zoomy_core /opt/src/zoomy_server
+    rm -rf /opt/src
+
+%environment
+    export ZOOMY_ADAPTER=numpy
+    export ZOOMY_PORT=8080
+
+%runscript
+    # $1 = adapter (default numpy), $2 = port (default 8080) — lets one image
+    # serve any pure-Python-installable adapter without a rebuild.
+    exec zoomy-server --adapter "${1:-$ZOOMY_ADAPTER}" --port "${2:-$ZOOMY_PORT}"
+
+%startscript
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
+
+%test
+    python -c "import zoomy_core, zoomy_server, h5py, meshio; print('zoomy_core + zoomy_server + h5py + meshio import OK')"
+    zoomy-server --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
