@@ -1,0 +1,43 @@
+Bootstrap: docker
+From: ghcr.io/zoomylab/zoomy_jax_dev:latest
+
+# JAX + Zoomy solver server. Mirrors ../zoomy_solver_server/Dockerfile.jax — the
+# jax_dev base ships the conda `zoomy` env (jax stack) at /opt/conda/envs/zoomy;
+# we add zoomy_core + zoomy_jax + zoomy_server on top and bake the server. JAX
+# falls back to CPU when no GPU is present, so the SWE case runs here too; with a
+# GPU (apptainer run --nv) it uses the device.
+#   apptainer build --fakeroot containers/zoomy_jax/zoomy_jax.sif containers/zoomy_jax/zoomy_jax.def
+#   apptainer run [--nv] containers/zoomy_jax/zoomy_jax.sif [port]
+#
+# NOTE: %files dest is /opt/src, NOT /tmp (Apptainer bind-mounts host /tmp in %post).
+
+%labels
+    Author ZoomyLab
+    Description JAX + Zoomy solver server (--adapter jax) on :8080
+
+%files
+    library/zoomy_core   /opt/src/zoomy_core
+    library/zoomy_jax    /opt/src/zoomy_jax
+    library/zoomy_server /opt/src/zoomy_server
+
+%environment
+    export PATH=/opt/conda/envs/zoomy/bin:$PATH
+    export CONDA_PREFIX=/opt/conda/envs/zoomy
+
+%post
+    set -e
+    export PATH=/opt/conda/envs/zoomy/bin:$PATH
+    /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
+        h5py meshio \
+        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server
+    rm -rf /opt/src
+
+%runscript
+    exec zoomy-server --adapter jax --port "${1:-8080}"
+
+%startscript
+    exec zoomy-server --adapter jax --port 8080
+
+%test
+    /opt/conda/envs/zoomy/bin/python -c "import zoomy_core, zoomy_jax, zoomy_server, h5py, meshio; print('imports OK')"
+    zoomy-server --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
