@@ -92,7 +92,13 @@ class SolverAdapter:
 
     @staticmethod
     def resolve_numerics(case_dir, model):
-        """Import numerics.py and return the Numerics instance."""
+        """Import numerics.py and return the Numerics instance; if the case has
+        no numerics.py, fall back to the default Riemann solver so ONE shared
+        case runs on every backend (numpy/jax don't ship a numerics.py)."""
+        import os
+        from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
+        if not os.path.exists(os.path.join(case_dir, "numerics.py")):
+            return NonconservativeRusanov(model)
         mod = SolverAdapter.import_from_case(case_dir, "numerics")
         # Find a Numerics subclass or a factory function
         from zoomy_core.model.basefunction import SymbolicRegistrar
