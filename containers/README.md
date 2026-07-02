@@ -51,10 +51,10 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 |---------|:---:|---|
 | numpy | ✅ | ✅ 1D + 2D |
 | jax | ✅ | ✅ (CPU/GPU) |
-| amrex | ✅ | needs `zoomy_amrex.run_case` (REQ-89) |
-| dmplex | ✅ | codegen+build+mesh OK; needs IC-from-model in C++ (REQ-96) |
+| amrex | ✅ | ✅ 1D (REQ-89 run_case; adapter derives the structured spec from mesh.h5) |
+| dmplex | ✅ | ✅ 2D (REQ-96 model-IC via symbolic IC.RP; .vtu.series -> simulation.h5) |
 | firedrake | ✅ | ✅ 2D (REQ-95 fixed: source-integral domain pin + vtk-VTU fallback) |
-| foam | (REQ-93) | needs `zoomy_foam.run_case` (REQ-93) |
+| foam | (REQ-93) | steward building `zoomy_foam.run_case` (WIP) |
 
 Build any image: `apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def`
 (from the repo root, so the `%files` sources resolve).

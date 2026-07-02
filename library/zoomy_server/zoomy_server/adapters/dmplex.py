@@ -112,15 +112,45 @@ class DmplexAdapter(SolverAdapter):
                     f"--- solver output tail ---\n{tail}"
                 )
 
-            # Copy output files to output_dir
+            # Copy any stray top-level outputs (older solver builds wrote here)
             for f in os.listdir(build_dir):
                 if f.endswith((".vtu", ".pvd", ".h5", ".vtk")):
                     shutil.copy2(os.path.join(build_dir, f), output_dir)
+
+            # The solver writes simulation-NNN.vtu + simulation.vtu.series into
+            # io.directory (= output_dir). Convert to the shared zoomy HDF5 so
+            # the server serves the same simulation.h5 as every other backend.
+            self._convert_vtu_series(output_dir)
 
             on_progress(-1, time_end, 0.0)
 
         finally:
             shutil.rmtree(build_dir, ignore_errors=True)
+
+    @staticmethod
+    def _convert_vtu_series(output_dir):
+        """simulation.vtu.series (ParaView .series JSON) -> simulation.h5 via
+        zoomy_prepost. Synthesizes a .pvd so the converter gets real times."""
+        series = os.path.join(output_dir, "simulation.vtu.series")
+        if os.path.exists(os.path.join(output_dir, "simulation.h5")):
+            return
+        if not os.path.exists(series):
+            logger.warning("dmplex: no simulation.vtu.series in %s — nothing to convert", output_dir)
+            return
+        try:
+            from zoomy_prepost import vtk_to_hdf5
+            with open(series) as f:
+                entries = json.load(f).get("files", [])
+            pvd = os.path.join(output_dir, "simulation.pvd")
+            with open(pvd, "w") as f:
+                f.write('<?xml version="1.0"?>\n<VTKFile type="Collection"><Collection>\n')
+                for e in entries:
+                    f.write(f'<DataSet timestep="{e["time"]}" file="{e["name"]}"/>\n')
+                f.write("</Collection></VTKFile>\n")
+            vtk_to_hdf5(pvd, os.path.join(output_dir, "simulation.h5"))
+            logger.info("dmplex: converted %d snapshots -> simulation.h5", len(entries))
+        except Exception as e:
+            logger.error("dmplex: VTU->HDF5 conversion failed: %s", e)
 
     def _find_solver_source(self):
         candidates = [
@@ -134,11 +164,16 @@ class DmplexAdapter(SolverAdapter):
         raise FileNotFoundError("Cannot find zoomy_dmplex source directory")
 
     def _write_dmplex_settings(self, build_dir, settings, mesh_file, output_dir):
+        # Keys must match what the C++ Settings.hpp actually READS:
+        # io.directory (not output_directory), io.filename, io.snapshots
+        # (not write_interval). Wrong keys silently fall back to the defaults
+        # ("output"/"sol"/10) and the results never land in output_dir.
         dmplex_settings = {
             "io": {
                 "mesh_path": mesh_file,
-                "output_directory": output_dir,
-                "write_interval": settings.get("output_snapshots", 10),
+                "directory": output_dir,
+                "filename": "simulation",
+                "snapshots": settings.get("output_snapshots", 10),
             },
             "solver": {
                 "t_end": settings.get("time_end", 1.0),
