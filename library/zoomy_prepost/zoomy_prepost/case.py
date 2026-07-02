@@ -117,7 +117,7 @@ import re as _re
 # bare "## Solver" only appears in legacy files and maps to the old solver
 # section for backward-compatible parsing).
 _HEADING_RE = _re.compile(
-    r"^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics)\b",
+    r"^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics|run)\b",
     _re.IGNORECASE | _re.MULTILINE,
 )
 
@@ -182,6 +182,13 @@ def compose(spec) -> str:
     cells.append(code(f"settings = {json.dumps(settings, indent=2)}",
                       {"role": "settings", "settings": settings}))
 
+    # Run: the case is FULLY RUNNABLE end-to-end — `python case.py` (or
+    # Run-All in Jupyter) solves in-process wherever zoomy_core is importable
+    # (JupyterLite, a backend container's JupyterLab, any local env).
+    run = spec.get("run", {}) or {}
+    cells.append(md("## Run", {"role": "heading", "section": "run"}))
+    cells.append(code(run.get("code") or _run_code(), {"role": "run"}))
+
     viz = spec.get("visualization", {}) or {}
     if viz.get("code"):
         cells.append(md("## Visualization", {"role": "heading", "section": "visualization"}))
@@ -189,6 +196,42 @@ def compose(spec) -> str:
 
     nb.cells = cells
     return jupytext.writes(nb, fmt=_FMT)
+
+
+def _run_code():
+    """The generated in-process runner: resolves the effective settings
+    (general keys + the numpy branch) and solves with the numpy solver.
+    Uses only `model`, `mesh`, `settings` from the sections above."""
+    return '''\
+# Runs IN-PROCESS with the numpy solver (no server needed) — works in
+# JupyterLite, a backend container's JupyterLab, or any env with zoomy_core.
+# For other backends, submit this file via the Zoomy GUI / zoomy-server.
+import os
+
+from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
+import zoomy_core.fvm.timestepping as ts
+from zoomy_core.misc.misc import Zstruct
+
+# effective settings = general keys + this backend's branch
+_eff = {k: v for k, v in settings.items() if not isinstance(v, dict)}
+_eff.update(settings.get("numpy", {}))
+
+nsm = NumericalSystemModel.from_system_model(
+    model,
+    reconstruction=ReconstructionSpec(
+        order=_eff.get("reconstruction_order", 1),
+        limiter=_eff.get("limiter", "venkatakrishnan")))
+solver = FreeSurfaceFlowSolver(
+    time_end=_eff.get("time_end", 0.1),
+    compute_dt=ts.adaptive(CFL=_eff.get("cfl", 0.45)),
+    settings=Zstruct(output=Zstruct(
+        directory=os.getcwd(), filename="simulation",
+        snapshots=_eff.get("output_snapshots", 10), clean_directory=False)))
+
+mesh.write_to_hdf5("simulation.h5")   # mesh first; the solver appends /fields
+Q, Qaux = solver.solve(mesh, nsm, write_output=True)
+print("done -> simulation.h5")'''
 
 
 def parse(py: str) -> dict:
@@ -267,6 +310,8 @@ def parse(py: str) -> dict:
         spec["visualization"] = {"code": joined("visualization")}
     if "numerics" in sources:
         spec["numerics"] = {"code": joined("numerics")}
+    if "run" in sources:
+        spec["run"] = {"code": joined("run")}   # kept for re-export fidelity
     return spec
 
 
@@ -301,6 +346,9 @@ def to_folder(py: str, dest_dir: str) -> str:
     viz — adapters ignore it). Heading-based via parse(). Returns dest_dir."""
     spec = parse(py)
     os.makedirs(dest_dir, exist_ok=True)
+    # NOTE: the "run" section is deliberately NOT materialized — the server
+    # adapters invoke the solver themselves; the runner only lives in the
+    # single-file/notebook form.
     files = {
         "model.py": (spec.get("model") or {}).get("code"),
         "mesh.py": (spec.get("mesh") or {}).get("code"),

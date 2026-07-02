@@ -396,12 +396,53 @@ export class ZoomyCLI {
             { type: "code",
               meta: { role: "settings", settings: settingsOut },
               source: "settings = " + JSON.stringify(settingsOut, null, 2) },
+            /* Run: the exported file is FULLY runnable — `python case.py` or
+               Run-All in Jupyter solves in-process wherever zoomy_core exists
+               (JupyterLite, container JupyterLab, local env). */
+            H("run", "Run"),
+            { type: "code", meta: { role: "run" },
+              source: (spec.run && spec.run.code) || this._runCode() },
         ];
         if (viz.code) {
             cells.push(H("visualization", "Visualization"));
             cells.push({ type: "code", meta: { role: "visualization" }, source: trim(viz.code) });
         }
         return cells;
+    }
+
+    /** Generated in-process runner (mirrors zoomy_prepost.case._run_code). */
+    _runCode() {
+        return [
+            "# Runs IN-PROCESS with the numpy solver (no server needed) — works in",
+            "# JupyterLite, a backend container's JupyterLab, or any env with zoomy_core.",
+            "# For other backends, submit this file via the Zoomy GUI / zoomy-server.",
+            "import os",
+            "",
+            "from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec",
+            "from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver",
+            "import zoomy_core.fvm.timestepping as ts",
+            "from zoomy_core.misc.misc import Zstruct",
+            "",
+            "# effective settings = general keys + this backend's branch",
+            "_eff = {k: v for k, v in settings.items() if not isinstance(v, dict)}",
+            "_eff.update(settings.get(\"numpy\", {}))",
+            "",
+            "nsm = NumericalSystemModel.from_system_model(",
+            "    model,",
+            "    reconstruction=ReconstructionSpec(",
+            "        order=_eff.get(\"reconstruction_order\", 1),",
+            "        limiter=_eff.get(\"limiter\", \"venkatakrishnan\")))",
+            "solver = FreeSurfaceFlowSolver(",
+            "    time_end=_eff.get(\"time_end\", 0.1),",
+            "    compute_dt=ts.adaptive(CFL=_eff.get(\"cfl\", 0.45)),",
+            "    settings=Zstruct(output=Zstruct(",
+            "        directory=os.getcwd(), filename=\"simulation\",",
+            "        snapshots=_eff.get(\"output_snapshots\", 10), clean_directory=False)))",
+            "",
+            "mesh.write_to_hdf5(\"simulation.h5\")   # mesh first; the solver appends /fields",
+            "Q, Qaux = solver.solve(mesh, nsm, write_output=True)",
+            "print(\"done -> simulation.h5\")",
+        ].join("\n");
     }
 
     /** Resolved card data -> canonical case .py (jupytext percent + zoomy meta). */
@@ -460,7 +501,7 @@ export class ZoomyCLI {
 
         const sectionOf = (mdSource) => {
             /* "solver settings" must match before bare "solver" (legacy). */
-            const m = mdSource.match(/^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics)\b/im);
+            const m = mdSource.match(/^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics|run)\b/im);
             if (!m) return null;
             const s = m[1].toLowerCase().replace(/\s+/g, " ");
             if (s.startsWith("visuali")) return "visualization";
@@ -523,6 +564,7 @@ export class ZoomyCLI {
         if (tag) spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
         if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
         if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
+        if (sources.run !== undefined) spec.run = { code: sources.run };   // re-export fidelity
         return spec;
     }
 
