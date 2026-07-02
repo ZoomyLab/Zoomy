@@ -59,31 +59,56 @@ _VTK_TO_MESHIO = {3: "line", 5: "triangle", 9: "quad", 10: "tetra", 12: "hexahed
 
 def _read(path):
     """Read one VTK frame as a meshio.Mesh. meshio first; on failure (e.g.
-    firedrake's VTU version 2.2, which meshio rejects) fall back to pyvista/vtk."""
+    firedrake's VTU version 2.2, which meshio rejects) fall back to the vtk
+    library directly (always present where firedrake writes VTU)."""
     import meshio
     try:
         return meshio.read(path)
     except (Exception, SystemExit):
         # meshio raises SystemExit (not Exception) on an unsupported version.
-        return _read_via_pyvista(path)
+        return _read_via_vtk(path)
 
 
-def _read_via_pyvista(path):
+def _read_via_vtk(path):
+    """Read a .vtu via the ``vtk`` library directly and return a meshio.Mesh.
+    Handles the appended/binary VTU 2.2 that firedrake writes and meshio rejects.
+    vtk ships with firedrake (its VTK output dep), so this needs no extra install."""
     import numpy as np
     import meshio
-    import pyvista as pv
+    import vtk
+    from vtk.util.numpy_support import vtk_to_numpy
 
-    pm = pv.read(path)
-    cells = [
-        (_VTK_TO_MESHIO[t], np.asarray(conn))
-        for t, conn in pm.cells_dict.items()
-        if t in _VTK_TO_MESHIO
-    ]
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(str(path))
+    reader.Update()
+    grid = reader.GetOutput()
+
+    points = np.asarray(vtk_to_numpy(grid.GetPoints().GetData()))
+    ca = grid.GetCells()
+    conn = vtk_to_numpy(ca.GetConnectivityArray())
+    offsets = vtk_to_numpy(ca.GetOffsetsArray())      # (n_cells+1,)
+    ctypes = vtk_to_numpy(grid.GetCellTypesArray())   # (n_cells,)
+
+    cells = []
+    for t in np.unique(ctypes):
+        ti = int(t)
+        if ti not in _VTK_TO_MESHIO:
+            continue
+        idx = np.where(ctypes == t)[0]
+        k = int(offsets[idx[0] + 1] - offsets[idx[0]])
+        block = np.stack([conn[offsets[i]:offsets[i] + k] for i in idx])
+        cells.append((_VTK_TO_MESHIO[ti], block))
     if not cells:
-        raise ValueError(f"no supported VTK cell types in {list(pm.cells_dict)} ({path})")
-    cell_data = {n: [np.asarray(pm.cell_data[n])] for n in pm.cell_data.keys()}
-    point_data = {n: np.asarray(pm.point_data[n]) for n in pm.point_data.keys()}
-    return meshio.Mesh(np.asarray(pm.points), cells, cell_data=cell_data, point_data=point_data)
+        raise ValueError(f"no supported VTK cell types in {np.unique(ctypes)} ({path})")
+
+    pd = grid.GetPointData()
+    point_data = {pd.GetArrayName(i): np.asarray(vtk_to_numpy(pd.GetArray(i)))
+                  for i in range(pd.GetNumberOfArrays())}
+    cdg = grid.GetCellData()
+    cell_data = {cdg.GetArrayName(i): [np.asarray(vtk_to_numpy(cdg.GetArray(i)))]
+                 for i in range(cdg.GetNumberOfArrays())}
+
+    return meshio.Mesh(points, cells, cell_data=cell_data, point_data=point_data)
 
 
 def _pick_block(mesh):
