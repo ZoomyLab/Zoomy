@@ -449,6 +449,114 @@ export class ZoomyCLI {
         return spec;
     }
 
+    // ----- open a case in Jupyter (Lite in-browser, or a backend's JupyterLab) --
+
+    /**
+     * Open the composed case as a notebook in Jupyter. Routing mirrors Run:
+     *  - a backend with a reachable JupyterLab (container `jupyter` mode on
+     *    :8888) -> stage the notebook via the Jupyter REST contents API and
+     *    open that lab (the backend's REAL kernel: zoomy_jax, firedrake, ...);
+     *  - otherwise -> stage into the deployed JupyterLite's IndexedDB store
+     *    and open Lite (in-browser pyodide kernel; no server at all).
+     *
+     * @param {object} spec       Resolved card spec (same as composeCase).
+     * @param {object} [options]
+     * @param {string} [options.jupyterUrl] Backend JupyterLab base (e.g.
+     *          "http://localhost:8888"); tried first when given.
+     * @param {string} [options.liteUrl]    JupyterLite deployment base
+     *          (default: "../jupyter-lite/_output/" next to the GUI).
+     * @param {string} [options.filename]   Notebook name (default zoomy_case.ipynb).
+     * @returns {Promise<{mode: "server"|"lite", url: string}>}
+     */
+    async openInJupyter(spec, options) {
+        options = options || {};
+        const filename = options.filename || "zoomy_case.ipynb";
+        const nb = JSON.parse(this.exportCase(spec, "ipynb"));
+
+        if (options.jupyterUrl) {
+            try {
+                const url = await this._stageNotebookInServer(nb, options.jupyterUrl, filename);
+                window.open(url, "_blank");
+                return { mode: "server", url };
+            } catch (e) {
+                /* fall through to Lite — backend jupyter not reachable */
+            }
+        }
+        const liteBase = new URL(options.liteUrl || "../jupyter-lite/_output/", window.location.href).href;
+        await this._stageNotebookInLite(nb, liteBase, filename);
+        const url = liteBase + "lab/index.html?path=" + encodeURIComponent(filename);
+        window.open(url, "_blank");
+        return { mode: "lite", url };
+    }
+
+    /** PUT the notebook via the Jupyter Server REST contents API. Needs the
+     *  server to allow the GUI origin (zoomy-jupyter sets CORS + token-less
+     *  localhost by default). Returns the lab URL for the file. */
+    async _stageNotebookInServer(nb, jupyterUrl, filename) {
+        const base = jupyterUrl.replace(/\/+$/, "");
+        const resp = await fetch(base + "/api/contents/" + encodeURIComponent(filename), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "notebook", format: "json", content: nb }),
+        });
+        if (!resp.ok) throw new Error("contents PUT failed: HTTP " + resp.status);
+        return base + "/lab/tree/" + encodeURIComponent(filename);
+    }
+
+    /** Write the notebook into JupyterLite's IndexedDB contents store
+     *  ("JupyterLite Storage - <baseUrl option>", localforage layout, store
+     *  "files", keyed by path). Writes every existing JupyterLite DB plus
+     *  both candidate names (raw "./" option and the resolved URL) so it
+     *  works whether or not Lite has booted before. Same-origin only. */
+    async _stageNotebookInLite(nb, liteBase, filename) {
+        const now = new Date().toISOString();
+        const model = {
+            name: filename, path: filename, type: "notebook",
+            format: "json", mimetype: "application/json",
+            content: nb, size: JSON.stringify(nb).length,
+            created: now, last_modified: now, writable: true,
+        };
+        /* candidate DB names: the plugin uses `JupyterLite Storage - ${baseUrl
+           page-config option}`; the built jupyter-lite.json carries "./" but
+           boot may resolve it — cover both, plus any existing Lite DBs. */
+        const names = new Set(["JupyterLite Storage - ./", "JupyterLite Storage - " + liteBase]);
+        try {
+            const cfg = await (await fetch(liteBase + "jupyter-lite.json")).json();
+            const raw = cfg && cfg["jupyter-config-data"] && cfg["jupyter-config-data"].baseUrl;
+            if (raw) {
+                names.add("JupyterLite Storage - " + raw);
+                names.add("JupyterLite Storage - " + new URL(raw, liteBase).href);
+            }
+        } catch (e) { /* config fetch is best-effort */ }
+        try {
+            const dbs = (await indexedDB.databases()) || [];
+            for (const d of dbs) if (d.name && d.name.startsWith("JupyterLite Storage")) names.add(d.name);
+        } catch (e) { /* indexedDB.databases() not supported -> candidates only */ }
+
+        const put = (dbName) => new Promise((resolve, reject) => {
+            const open = indexedDB.open(dbName);
+            open.onupgradeneeded = () => {
+                /* fresh DB (Lite not booted yet): create the localforage-style
+                   "files" store; Lite adds its other stores on first boot. */
+                const db = open.result;
+                if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
+            };
+            open.onerror = () => reject(open.error);
+            open.onsuccess = () => {
+                const db = open.result;
+                if (!db.objectStoreNames.contains("files")) { db.close(); resolve(false); return; }
+                const tx = db.transaction("files", "readwrite");
+                tx.objectStore("files").put(model, filename);
+                tx.oncomplete = () => { db.close(); resolve(true); };
+                tx.onerror = () => { db.close(); reject(tx.error); };
+            };
+        });
+        const results = await Promise.allSettled([...names].map(put));
+        if (!results.some((r) => r.status === "fulfilled" && r.value)) {
+            throw new Error("could not stage the notebook in any JupyterLite store");
+        }
+    }
+
     /** Cancel a remote job (tag) or interrupt Pyodide. */
     async cancel(options) {
         options = options || {};

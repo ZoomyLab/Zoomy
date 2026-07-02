@@ -16,6 +16,8 @@ def main():
     ap.add_argument("--ip", default="0.0.0.0")
     ap.add_argument("--dir", default=os.environ.get("ZOOMY_ROOT", os.getcwd()),
                     help="root directory served by Jupyter (default: $ZOOMY_ROOT or cwd)")
+    ap.add_argument("--token", default=os.environ.get("ZOOMY_JUPYTER_TOKEN", ""),
+                    help="auth token (default: none — local research use; set to re-enable auth)")
     args, extra = ap.parse_known_args()
     # Fall back to the cwd if the requested root (e.g. an unbound $ZOOMY_ROOT=
     # /workspace) doesn't exist, so `run img jupyter` works with or without a
@@ -28,6 +30,15 @@ def main():
         "--no-browser",
         f"--ServerApp.root_dir={root}",
         "--ServerApp.allow_root=True",   # harmless under apptainer (non-root); needed for Docker root
+        # Let the (same-machine) GUI stage notebooks via the REST contents API
+        # ("Open in Jupyter"): allow cross-origin calls and default to no token
+        # on localhost — research use on the user's own machine; pass --token
+        # (or ZOOMY_JUPYTER_TOKEN) to re-enable auth.
+        "--ServerApp.allow_origin=*",
+        f"--IdentityProvider.token={args.token}",
+        # XSRF cookies can't flow on the cross-origin REST calls the GUI makes
+        # (PUT /api/contents), so the check would 403 every staging request.
+        "--ServerApp.disable_check_xsrf=True",
         *extra,
     ])
 
