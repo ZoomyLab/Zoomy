@@ -53,7 +53,7 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 | jax | ✅ | ✅ (CPU/GPU) |
 | amrex | ✅ | needs `zoomy_amrex.run_case` (REQ-89) |
 | dmplex | ✅ | codegen+build+mesh OK; needs IC-from-model in C++ (REQ-96) |
-| firedrake | ✅ | adapter+mesh+`.pvd`→h5 OK; needs zero-source weak-form guard (REQ-95) |
+| firedrake | ✅ | ✅ 2D (REQ-95 fixed: source-integral domain pin + vtk-VTU fallback) |
 | foam | (REQ-93) | needs `zoomy_foam.run_case` (REQ-93) |
 
 Build any image: `apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def`
