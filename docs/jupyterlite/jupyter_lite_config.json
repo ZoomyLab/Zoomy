@@ -1,0 +1,10 @@
+{
+  "PyodideLockAddon": {
+    "enabled": true,
+    "specs": ["zoomy-core"],
+    "prefetch_extra": ["zoomy-core", "h5py"],
+    "pyodide_lock_uv_options": {
+      "extra_uv_args": ["--override", "overrides.txt"]
+    }
+  }
+}
