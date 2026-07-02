@@ -38,12 +38,34 @@ class SolverAdapter:
 
     # ── Shared helpers ───────────────────────────────────────────────
 
-    @staticmethod
-    def load_settings(case_dir):
-        """Load settings.json from the case folder."""
+    #: per-backend settings branches recognized in settings.json
+    BACKEND_TAGS = ("numpy", "jax", "amrex", "dmplex", "firedrake", "foam")
+
+    def load_settings(self, case_dir):
+        """Load settings.json and resolve the TWO-LEVEL settings shape.
+
+        ``settings`` = general keys valid for every backend (time_end, cfl,
+        output_snapshots, mesh, ...) + optional per-backend branches::
+
+            {"time_end": 0.6, "cfl": 0.45, "backend": "jax",
+             "numpy": {"reconstruction_order": 1, "limiter": "minmod"},
+             "jax":   {"reconstruction_order": 2}}
+
+        The RECEIVING adapter merges its own branch over the general keys and
+        drops the other backends' branches — so one case file carries valid,
+        possibly different, solver-specific options (limiters, schemes, ...)
+        for several backends at once. ``backend`` is informational (which
+        backend the case was composed for); submission target decides.
+        """
         path = os.path.join(case_dir, "settings.json")
         with open(path) as f:
-            return json.load(f)
+            raw = json.load(f)
+        eff = {k: v for k, v in raw.items() if k not in self.BACKEND_TAGS}
+        tag = getattr(self, "tag", None)
+        branch = raw.get(tag)
+        if isinstance(branch, dict):
+            eff.update(branch)
+        return eff
 
     @staticmethod
     def run_mesh_script(case_dir):

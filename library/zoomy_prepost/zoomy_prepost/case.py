@@ -20,9 +20,23 @@ adapters unchanged.
       "model":    {"class_path": "pkg.mod.Class", "init": {...}},
       "mesh":     {"spec": {"type": "create_1d"|"create_2d", ...}}  # or {"code": "..."}
                   # optionally {"file": "mesh.msh"} for an uploaded mesh
-      "settings": {"time_end": ..., "cfl": ..., ...},
-      "solver":   {"tag": "numpy"|"jax"|..., "params": {...}},
+      "settings": {...},          # see the TWO-LEVEL shape below
+      "solver":   {"tag": "numpy"|"jax"|...},   # -> settings["backend"]
+      "visualization": {"code": "..."},          # optional
     }
+
+Settings are TWO-LEVEL: general keys valid for every backend at the top
+(time_end, cfl, output_snapshots, mesh, ...) plus optional per-backend
+branches with solver-specific options (limiters, schemes, ...)::
+
+    settings = {"time_end": 0.6, "cfl": 0.45, "backend": "jax",
+                "numpy": {"reconstruction_order": 1, "limiter": "minmod"},
+                "jax":   {"reconstruction_order": 2}}
+
+One case file can carry branches for several backends; the RECEIVING
+zoomy-server adapter merges its own branch over the general keys and drops
+the rest (SolverAdapter.load_settings). "backend" marks which backend the
+case was composed for — informational; the submission target decides.
 """
 from __future__ import annotations
 
@@ -98,8 +112,12 @@ _SECTIONS = ("model", "mesh", "settings", "solver", "visualization", "numerics")
 
 import re as _re
 
+# NOTE alternation order: "solver settings" must match BEFORE "solver" —
+# "## Solver settings" is the SETTINGS section (option A: one merged section;
+# bare "## Solver" only appears in legacy files and maps to the old solver
+# section for backward-compatible parsing).
 _HEADING_RE = _re.compile(
-    r"^\s*#{1,3}\s*(model|mesh|settings|solver|visuali[sz]ation|numerics)\b",
+    r"^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics)\b",
     _re.IGNORECASE | _re.MULTILINE,
 )
 
@@ -109,8 +127,12 @@ def _section_of_markdown(source: str):
     m = _HEADING_RE.search(source or "")
     if not m:
         return None
-    s = m.group(1).lower()
-    return "visualization" if s.startswith("visuali") else s
+    s = " ".join(m.group(1).lower().split())
+    if s.startswith("visuali"):
+        return "visualization"
+    if s == "solver settings":
+        return "settings"
+    return s
 
 
 def compose(spec) -> str:
@@ -150,18 +172,15 @@ def compose(spec) -> str:
     zmesh.update({k: mesh[k] for k in ("spec", "file") if k in mesh})
     cells.append(code(_mesh_code(mesh), zmesh))
 
+    # Option A: ONE merged "Solver settings" section — the settings ARE the
+    # solver settings; the backend tag is just an informational entry in it.
     settings = _settings_dict(spec)
-    cells.append(md("## Settings", {"role": "heading", "section": "settings"}))
+    solver = spec.get("solver", {}) or {}
+    if solver.get("tag"):
+        settings.setdefault("backend", solver["tag"])
+    cells.append(md("## Solver settings", {"role": "heading", "section": "settings"}))
     cells.append(code(f"settings = {json.dumps(settings, indent=2)}",
                       {"role": "settings", "settings": settings}))
-
-    solver = spec.get("solver", {}) or {}
-    tag = solver.get("tag", "numpy")
-    cells.append(md("## Solver", {"role": "heading", "section": "solver"}))
-    cells.append(code(
-        f"# solver backend: {tag!r} (applied by the zoomy-server adapter on submit)\n"
-        f"solver_tag = {tag!r}",
-        {"role": "solver", "tag": tag, "params": solver.get("params", {})}))
 
     viz = spec.get("visualization", {}) or {}
     if viz.get("code"):
@@ -235,10 +254,15 @@ def parse(py: str) -> dict:
         if settings is None:
             settings = _settings_from_code(joined("settings"))
         spec["settings"] = settings or {}
-    if "solver" in sources or "solver" in hints:
+    # backend tag (option A): settings["backend"]; legacy fallback = a bare
+    # "## Solver" section / solver_tag line / solver metadata from old files.
+    tag = (spec.get("settings") or {}).get("backend")
+    if not tag and ("solver" in sources or "solver" in hints):
         h = hints.get("solver", {})
-        tag = h.get("tag") or _tag_from_code(joined("solver")) or "numpy"
-        spec["solver"] = {"tag": tag, "params": h.get("params", {})}
+        tag = h.get("tag") or _tag_from_code(joined("solver"))
+    if tag:
+        spec["solver"] = {"tag": tag,
+                          "params": hints.get("solver", {}).get("params", {})}
     if "visualization" in sources:
         spec["visualization"] = {"code": joined("visualization")}
     if "numerics" in sources:
@@ -343,7 +367,7 @@ def from_folder(case_dir: str) -> str:
 
     sp = os.path.join(case_dir, "settings.json")
     settings = json.load(open(sp)) if os.path.exists(sp) else {}
-    cells.append(heading("settings", "Settings"))
+    cells.append(heading("settings", "Solver settings"))
     c = nbformat.v4.new_code_cell(f"settings = {json.dumps(settings, indent=2)}")
     c.metadata = {"zoomy": {"role": "settings", "settings": settings}}
     cells.append(c)
