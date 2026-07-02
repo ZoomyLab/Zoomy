@@ -217,17 +217,33 @@ jobs:
           #  - contentsStorageName "zoomy-jupyterlite": a FIXED IndexedDB name
           #    so the GUI's "Open in Jupyter" stages notebooks deterministically.
           # cd matters: uv resolves the relative --override in the build cwd.
-          pip install --quiet "jupyterlite-core==0.8.*" \
+          #
+          # PYTHON PIN: jupyterlite-core 0.8 SILENTLY drops all federated
+          # extensions (=> no pyodide kernel, "No Kernel" only) when built on
+          # Python 3.14 — verified: identical packages, 3.12 build carries
+          # @jupyterlite/pyodide-kernel-extension, 3.14 build yields
+          # federated_extensions: []. Build in a venv on the runner's system
+          # python3 (3.12 on ubuntu-24.04), independent of any setup-python.
+          /usr/bin/python3 -m venv .litevenv
+          .litevenv/bin/pip install --quiet "jupyterlite-core==0.8.*" \
             "jupyterlite-pyodide-kernel[lock]==0.8.*" jupyter-server
           cd docs/jupyterlite
-          jupyter lite build \
+          ../../.litevenv/bin/jupyter lite build \
             --contents ../../tutorials/pyodide \
             --output-dir ../book/_build/html/jupyter-lite/_output
           cd ../..
           ls docs/book/_build/html/jupyter-lite/_output/lab/ | head
-          # sanity: the lock + pinned storage name made it into the build
+          # HARD gates — fail the deploy rather than ship a kernel-less Lite:
+          # kernel extension registered + lock assets + pinned storage name.
+          python3 - <<'EOF'
+          import json
+          cfg = json.load(open('docs/book/_build/html/jupyter-lite/_output/jupyter-lite.json'))['jupyter-config-data']
+          names = [e['name'] for e in cfg.get('federated_extensions', [])]
+          assert '@jupyterlite/pyodide-kernel-extension' in names, f"pyodide kernel extension MISSING: {names}"
+          assert cfg.get('contentsStorageName') == 'zoomy-jupyterlite', cfg.get('contentsStorageName')
+          print('lite build OK — federated_extensions:', names)
+          EOF
           ls docs/book/_build/html/jupyter-lite/_output/static/pyodide-lock/ | head
-          grep -o '"contentsStorageName": "[^"]*"' docs/book/_build/html/jupyter-lite/_output/jupyter-lite.json
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
