@@ -373,6 +373,10 @@ export class ZoomyCLI {
         const settings = spec.settings || {}, solver = spec.solver || {};
         const viz = spec.visualization || {};
         const trim = (s) => String(s || "").replace(/\s+$/, "");
+        /* Option A: one merged "Solver settings" section — the backend tag is
+           just an informational "backend" entry inside the settings. */
+        const settingsOut = Object.assign({}, settings);
+        if (solver.tag && settingsOut.backend === undefined) settingsOut.backend = solver.tag;
         let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");
         if (meta.gui_url) head += "\n\n[← Back to the Zoomy GUI](" + meta.gui_url + ")";
         const H = (section, title) => ({ type: "markdown", meta: { role: "heading", section }, source: "## " + title });
@@ -388,14 +392,10 @@ export class ZoomyCLI {
             { type: "code",
               meta: { role: "mesh", spec: mesh.spec || null },
               source: trim(mesh.code) },
-            H("settings", "Settings"),
+            H("settings", "Solver settings"),
             { type: "code",
-              meta: { role: "settings", settings },
-              source: "settings = " + JSON.stringify(settings, null, 2) },
-            H("solver", "Solver"),
-            { type: "code",
-              meta: { role: "solver", tag: solver.tag || "numpy", params: solver.params || {} },
-              source: "solver_tag = " + JSON.stringify(solver.tag || "numpy") },
+              meta: { role: "settings", settings: settingsOut },
+              source: "settings = " + JSON.stringify(settingsOut, null, 2) },
         ];
         if (viz.code) {
             cells.push(H("visualization", "Visualization"));
@@ -459,10 +459,13 @@ export class ZoomyCLI {
         if (cur) cells.push(cur);
 
         const sectionOf = (mdSource) => {
-            const m = mdSource.match(/^\s*#{1,3}\s*(model|mesh|settings|solver|visuali[sz]ation|numerics)\b/im);
+            /* "solver settings" must match before bare "solver" (legacy). */
+            const m = mdSource.match(/^\s*#{1,3}\s*(model|mesh|solver\s+settings|settings|solver|visuali[sz]ation|numerics)\b/im);
             if (!m) return null;
-            const s = m[1].toLowerCase();
-            return s.startsWith("visuali") ? "visualization" : s;
+            const s = m[1].toLowerCase().replace(/\s+/g, " ");
+            if (s.startsWith("visuali")) return "visualization";
+            if (s === "solver settings") return "settings";
+            return s;
         };
 
         const sources = {}, hints = {}, spec = {};
@@ -507,14 +510,17 @@ export class ZoomyCLI {
             }
             spec.settings = s || {};
         }
-        if (sources.solver !== undefined || (hints.solver && hints.solver.tag)) {
-            let tag = hints.solver && hints.solver.tag;
+        /* backend tag (option A): settings.backend; legacy fallback = a bare
+           "## Solver" section / solver_tag line / solver metadata. */
+        let tag = spec.settings && spec.settings.backend;
+        if (!tag && (sources.solver !== undefined || (hints.solver && hints.solver.tag))) {
+            tag = hints.solver && hints.solver.tag;
             if (!tag) {
                 const m = (sources.solver || "").match(/solver_tag\s*=\s*["']([\w-]+)["']/);
-                tag = m ? m[1] : "numpy";
+                tag = m ? m[1] : null;
             }
-            spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
         }
+        if (tag) spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
         if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
         if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
         return spec;

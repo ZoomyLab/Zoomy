@@ -58,8 +58,11 @@ def test_headings_structure_and_viz():
     spec = dict(SPEC)
     spec["visualization"] = {"code": "import matplotlib.pyplot as plt\nplt.plot([1, 2])"}
     py = compose(spec)
-    for h in ("## Model", "## Mesh", "## Settings", "## Solver", "## Visualization"):
+    # option A: one merged "Solver settings" section (no separate "## Solver")
+    for h in ("## Model", "## Mesh", "## Solver settings", "## Visualization"):
         assert h in py, h
+    assert "solver_tag" not in py
+    assert '"backend": "jax"' in py
     s2 = parse(py)
     assert s2["visualization"]["code"].startswith("import matplotlib")
     # without viz -> no heading, no section
