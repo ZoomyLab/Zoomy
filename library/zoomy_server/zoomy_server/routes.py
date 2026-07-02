@@ -69,6 +69,16 @@ def get_job(job_id: str):
 
 @router.get("/jobs/{job_id}/results/hdf5")
 def download_hdf5(job_id: str):
+    # Gate on job completion: simulation.h5 is created (mesh-only) at solve
+    # start and fields are appended during the run, so serving it while the
+    # job is still running would return an incomplete file (no /fields).
+    status = jobs.get_status(job_id)
+    if not status:
+        raise HTTPException(404, "Job not found")
+    if status["status"] == "failed":
+        raise HTTPException(500, f"Job failed: {str(status.get('error', ''))[:1000]}")
+    if status["status"] != "complete":
+        raise HTTPException(425, "Job still running")  # 425 Too Early
     path = jobs.get_hdf5_path(job_id)
     if not path:
         raise HTTPException(404, "HDF5 not available")
