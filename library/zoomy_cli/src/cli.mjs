@@ -362,29 +362,46 @@ export class ZoomyCLI {
     // carries the fully-specified model INCLUDING its IC + BC (else the PDE is
     // not well-posed and cannot run).
 
-    /** Ordered case cells from resolved card data (shared by .py and .ipynb). */
+    /** Ordered case cells from resolved card data (shared by .py and .ipynb).
+     *  v2: markdown HEADINGS (## Model, ## Mesh, ...) are the primary
+     *  structure — they survive jupytext and hand editing; the zoomy metadata
+     *  stays as a machine hint. ## Visualization is emitted only when the
+     *  spec carries viz code (optional, keeps the figure reproducible). */
     _caseCells(spec) {
         spec = spec || {};
         const meta = spec.meta || {}, model = spec.model || {}, mesh = spec.mesh || {};
         const settings = spec.settings || {}, solver = spec.solver || {};
+        const viz = spec.visualization || {};
         const trim = (s) => String(s || "").replace(/\s+$/, "");
-        return [
+        let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");
+        if (meta.gui_url) head += "\n\n[← Back to the Zoomy GUI](" + meta.gui_url + ")";
+        const H = (section, title) => ({ type: "markdown", meta: { role: "heading", section }, source: "## " + title });
+        const cells = [
             { type: "markdown",
               meta: { role: "meta", title: meta.title || null, description: meta.description || null },
-              source: "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "") },
+              source: head },
+            H("model", "Model"),
             { type: "code",
               meta: { role: "model", class_path: model.class_path || null, init: model.init || {} },
               source: trim(model.code) },
+            H("mesh", "Mesh"),
             { type: "code",
               meta: { role: "mesh", spec: mesh.spec || null },
               source: trim(mesh.code) },
+            H("settings", "Settings"),
             { type: "code",
               meta: { role: "settings", settings },
               source: "settings = " + JSON.stringify(settings, null, 2) },
+            H("solver", "Solver"),
             { type: "code",
               meta: { role: "solver", tag: solver.tag || "numpy", params: solver.params || {} },
               source: "solver_tag = " + JSON.stringify(solver.tag || "numpy") },
         ];
+        if (viz.code) {
+            cells.push(H("visualization", "Visualization"));
+            cells.push({ type: "code", meta: { role: "visualization" }, source: trim(viz.code) });
+        }
+        return cells;
     }
 
     /** Resolved card data -> canonical case .py (jupytext percent + zoomy meta). */
@@ -419,33 +436,87 @@ export class ZoomyCLI {
         return this.composeCase(spec);
     }
 
-    /** Canonical case .py -> spec (for importing a downloaded case back to cards). */
+    /** Canonical case .py -> spec (importing a case back to cards).
+     *  v2, HEADINGS FIRST: markdown cells whose heading opens a known section
+     *  (## Model / Mesh / Settings / Solver / Visualization) claim the code
+     *  cells that follow — robust to hand editing; zoomy metadata is the
+     *  fallback/hint (class_path, init, settings, tag). */
     parseCase(pyText) {
-        const spec = {};
+        // split the percent .py into cells
         const cells = [];
         let cur = null;
         for (const line of String(pyText || "").split("\n")) {
-            const m = line.match(/^# %%(?: \[markdown\])? zoomy=(.*)$/);
+            const m = line.match(/^# %%( \[markdown\])?(?: zoomy=(.*))?\s*$/);
             if (m) {
                 if (cur) cells.push(cur);
                 let meta = {};
-                try { meta = JSON.parse(m[1]); } catch (e) { meta = {}; }
-                cur = { meta, source: [] };
+                try { meta = m[2] ? JSON.parse(m[2]) : {}; } catch (e) { meta = {}; }
+                cur = { markdown: !!m[1], meta, source: [] };
             } else if (cur) {
                 cur.source.push(line);
             }
         }
         if (cur) cells.push(cur);
+
+        const sectionOf = (mdSource) => {
+            const m = mdSource.match(/^\s*#{1,3}\s*(model|mesh|settings|solver|visuali[sz]ation|numerics)\b/im);
+            if (!m) return null;
+            const s = m[1].toLowerCase();
+            return s.startsWith("visuali") ? "visualization" : s;
+        };
+
+        const sources = {}, hints = {}, spec = {};
+        let current = null;
         for (const c of cells) {
             const src = c.source.join("\n").replace(/^\n+|\n+$/g, "");
-            switch (c.meta.role) {
-                case "model": spec.model = { code: src, class_path: c.meta.class_path, init: c.meta.init || {} }; break;
-                case "mesh": spec.mesh = { code: src, spec: c.meta.spec }; break;
-                case "settings": spec.settings = c.meta.settings || {}; break;
-                case "solver": spec.solver = { tag: c.meta.tag || "numpy", params: c.meta.params || {} }; break;
-                case "meta": spec.meta = { title: c.meta.title, description: c.meta.description }; break;
+            if (c.markdown) {
+                const md = src.replace(/^# ?/gm, "");   // strip the comment prefix
+                const sec = sectionOf(md);
+                if (sec) { current = sec; continue; }
+                if (c.meta.role === "meta") {
+                    spec.meta = { title: c.meta.title, description: c.meta.description };
+                } else if (!spec.meta && current === null) {
+                    const first = (md.trim().split("\n")[0] || "");
+                    if (first.startsWith("#")) spec.meta = { title: first.replace(/^#+\s*/, "") };
+                }
+                continue;
+            }
+            const sec = current || ({ model: "model", mesh: "mesh", settings: "settings",
+                                      solver: "solver", visualization: "visualization",
+                                      numerics: "numerics" })[c.meta.role];
+            if (!sec) continue;
+            sources[sec] = sources[sec] ? sources[sec] + "\n\n" + src : src;
+            if (c.meta && Object.keys(c.meta).length) {
+                hints[sec] = Object.assign(hints[sec] || {}, c.meta);
             }
         }
+
+        if (sources.model !== undefined) {
+            const h = hints.model || {};
+            spec.model = { code: sources.model, class_path: h.class_path, init: h.init || {} };
+        }
+        if (sources.mesh !== undefined) {
+            const h = hints.mesh || {};
+            spec.mesh = { code: sources.mesh, spec: h.spec };
+        }
+        if (sources.settings !== undefined || (hints.settings && hints.settings.settings)) {
+            let s = hints.settings && hints.settings.settings;
+            if (!s) {
+                const m = (sources.settings || "").match(/settings\s*=\s*(\{[\s\S]*\})/);
+                if (m) { try { s = JSON.parse(m[1]); } catch (e) { s = null; } }
+            }
+            spec.settings = s || {};
+        }
+        if (sources.solver !== undefined || (hints.solver && hints.solver.tag)) {
+            let tag = hints.solver && hints.solver.tag;
+            if (!tag) {
+                const m = (sources.solver || "").match(/solver_tag\s*=\s*["']([\w-]+)["']/);
+                tag = m ? m[1] : "numpy";
+            }
+            spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
+        }
+        if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
+        if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
         return spec;
     }
 

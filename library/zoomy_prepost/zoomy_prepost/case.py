@@ -88,100 +88,207 @@ def _settings_dict(spec):
 
 
 # --------------------------------------------------------------------------- #
-# compose / parse
+# compose / parse — MARKDOWN HEADINGS are the primary structure
 # --------------------------------------------------------------------------- #
+# Sections are delimited by markdown-heading cells (## Model, ## Mesh,
+# ## Settings, ## Solver, ## Visualization) which survive jupytext AND human
+# editing in Jupyter; the ``zoomy`` cell metadata is kept as a machine hint
+# and parse-fallback for hand-built files without headings.
+_SECTIONS = ("model", "mesh", "settings", "solver", "visualization", "numerics")
+
+import re as _re
+
+_HEADING_RE = _re.compile(
+    r"^\s*#{1,3}\s*(model|mesh|settings|solver|visuali[sz]ation|numerics)\b",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+
+
+def _section_of_markdown(source: str):
+    """The section a markdown cell opens (via its heading), or None."""
+    m = _HEADING_RE.search(source or "")
+    if not m:
+        return None
+    s = m.group(1).lower()
+    return "visualization" if s.startswith("visuali") else s
+
+
 def compose(spec) -> str:
-    """spec dict -> canonical jupytext percent ``.py`` string."""
+    """spec dict -> canonical jupytext percent ``.py`` string (heading-based)."""
     import jupytext
     import nbformat
 
     nb = nbformat.v4.new_notebook()
     cells = []
 
+    def md(text, zoomy):
+        c = nbformat.v4.new_markdown_cell(text)
+        c.metadata = {"zoomy": zoomy}
+        return c
+
+    def code(source, zoomy):
+        c = nbformat.v4.new_code_cell(source)
+        c.metadata = {"zoomy": zoomy}
+        return c
+
     meta = spec.get("meta", {}) or {}
-    md = f"# {meta.get('title', 'Zoomy case')}\n\n{meta.get('description', '')}".rstrip()
-    mc = nbformat.v4.new_markdown_cell(md)
-    mc.metadata = {"zoomy": {"role": "meta", **meta}}
-    cells.append(mc)
+    title = meta.get("title", "Zoomy case")
+    head = f"# {title}\n\n{meta.get('description', '')}".rstrip()
+    if meta.get("gui_url"):
+        head += f"\n\n[← Back to the Zoomy GUI]({meta['gui_url']})"
+    cells.append(md(head, {"role": "meta", **{k: v for k, v in meta.items()}}))
 
     model = spec["model"]
-    c = nbformat.v4.new_code_cell(_model_code(model))
-    c.metadata = {"zoomy": {"role": "model", "class_path": model["class_path"],
-                            "init": model.get("init", {})}}
-    cells.append(c)
+    cells.append(md("## Model", {"role": "heading", "section": "model"}))
+    cells.append(code(model.get("code") or _model_code(model),
+                      {"role": "model", "class_path": model.get("class_path"),
+                       "init": model.get("init", {})}))
 
     mesh = spec.get("mesh", {}) or {}
-    c = nbformat.v4.new_code_cell(_mesh_code(mesh))
+    cells.append(md("## Mesh", {"role": "heading", "section": "mesh"}))
     zmesh = {"role": "mesh"}
     zmesh.update({k: mesh[k] for k in ("spec", "file") if k in mesh})
-    c.metadata = {"zoomy": zmesh}
-    cells.append(c)
+    cells.append(code(_mesh_code(mesh), zmesh))
 
     settings = _settings_dict(spec)
-    c = nbformat.v4.new_code_cell(f"settings = {json.dumps(settings, indent=2)}")
-    c.metadata = {"zoomy": {"role": "settings", "settings": settings}}
-    cells.append(c)
+    cells.append(md("## Settings", {"role": "heading", "section": "settings"}))
+    cells.append(code(f"settings = {json.dumps(settings, indent=2)}",
+                      {"role": "settings", "settings": settings}))
 
     solver = spec.get("solver", {}) or {}
     tag = solver.get("tag", "numpy")
-    c = nbformat.v4.new_code_cell(
+    cells.append(md("## Solver", {"role": "heading", "section": "solver"}))
+    cells.append(code(
         f"# solver backend: {tag!r} (applied by the zoomy-server adapter on submit)\n"
-        f"solver_tag = {tag!r}"
-    )
-    c.metadata = {"zoomy": {"role": "solver", "tag": tag, "params": solver.get("params", {})}}
-    cells.append(c)
+        f"solver_tag = {tag!r}",
+        {"role": "solver", "tag": tag, "params": solver.get("params", {})}))
+
+    viz = spec.get("visualization", {}) or {}
+    if viz.get("code"):
+        cells.append(md("## Visualization", {"role": "heading", "section": "visualization"}))
+        cells.append(code(viz["code"], {"role": "visualization"}))
 
     nb.cells = cells
     return jupytext.writes(nb, fmt=_FMT)
 
 
 def parse(py: str) -> dict:
-    """canonical percent ``.py`` -> spec dict (reads the ``zoomy`` cell metadata)."""
+    """canonical percent ``.py`` -> spec dict.
+
+    HEADINGS FIRST: markdown cells opening a known section (## Model, ## Mesh,
+    ## Settings, ## Solver, ## Visualization) claim the code cells that follow
+    until the next heading — robust to hand editing in Jupyter. The ``zoomy``
+    cell metadata is used as fallback/extra hints (class_path, init, settings
+    dict, solver tag) when present.
+    """
     import jupytext
 
     nb = jupytext.reads(py, fmt=_FMT)
-    spec = {}
+    sources = {}   # section -> [code sources]
+    hints = {}     # section -> metadata dict
+    meta = {}
+    current = None
     for cell in nb.cells:
-        z = cell.metadata.get("zoomy")
-        if not z:
+        z = cell.metadata.get("zoomy") or {}
+        if cell.cell_type == "markdown":
+            sec = _section_of_markdown(cell.source)
+            if sec:
+                current = sec
+            elif z.get("role") == "meta" or current is None:
+                # leading title cell (or explicit meta metadata)
+                if z.get("role") == "meta":
+                    meta = {k: v for k, v in z.items() if k != "role"}
+                elif not meta:
+                    first = (cell.source or "").lstrip().splitlines() or [""]
+                    if first[0].startswith("#"):
+                        meta = {"title": first[0].lstrip("# ").strip()}
             continue
-        role = z.get("role")
-        if role == "meta":
-            spec["meta"] = {k: v for k, v in z.items() if k != "role"}
-        elif role == "model":
-            spec["model"] = {"class_path": z.get("class_path"), "init": z.get("init", {})}
-        elif role == "mesh":
-            m = {k: z[k] for k in ("spec", "file") if k in z}
-            m["code"] = cell.source
-            spec["mesh"] = m
-        elif role == "settings":
-            spec["settings"] = z.get("settings", {})
-        elif role == "solver":
-            spec["solver"] = {"tag": z.get("tag", "numpy"), "params": z.get("params", {})}
+        if cell.cell_type != "code":
+            continue
+        sec = current or ({"model": "model", "mesh": "mesh", "settings": "settings",
+                           "solver": "solver", "visualization": "visualization",
+                           "numerics": "numerics"}.get(z.get("role")))
+        if not sec:
+            continue
+        sources.setdefault(sec, []).append(cell.source)
+        if z:
+            hints.setdefault(sec, {}).update({k: v for k, v in z.items() if k != "role"})
+
+    def joined(sec):
+        return "\n\n".join(s.rstrip() for s in sources.get(sec, [])).strip()
+
+    spec = {}
+    if meta:
+        spec["meta"] = meta
+    if "model" in sources:
+        h = hints.get("model", {})
+        spec["model"] = {"code": joined("model"),
+                         "class_path": h.get("class_path"), "init": h.get("init", {})}
+    if "mesh" in sources:
+        h = hints.get("mesh", {})
+        m = {"code": joined("mesh")}
+        m.update({k: h[k] for k in ("spec", "file") if k in h})
+        spec["mesh"] = m
+    if "settings" in sources or "settings" in hints:
+        h = hints.get("settings", {})
+        settings = h.get("settings")
+        if settings is None:
+            settings = _settings_from_code(joined("settings"))
+        spec["settings"] = settings or {}
+    if "solver" in sources or "solver" in hints:
+        h = hints.get("solver", {})
+        tag = h.get("tag") or _tag_from_code(joined("solver")) or "numpy"
+        spec["solver"] = {"tag": tag, "params": h.get("params", {})}
+    if "visualization" in sources:
+        spec["visualization"] = {"code": joined("visualization")}
+    if "numerics" in sources:
+        spec["numerics"] = {"code": joined("numerics")}
     return spec
+
+
+def _settings_from_code(source: str):
+    """Recover the settings dict from a ``settings = {...}`` code cell."""
+    m = _re.search(r"settings\s*=\s*(\{.*\})", source or "", _re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(1))
+    except Exception:
+        try:
+            import ast
+            return ast.literal_eval(m.group(1))
+        except Exception:
+            return None
+
+
+def _tag_from_code(source: str):
+    """Recover the backend tag from a ``solver_tag = "..."`` line."""
+    m = _re.search(r"solver_tag\s*=\s*['\"]([\w-]+)['\"]", source or "")
+    return m.group(1) if m else None
 
 
 # --------------------------------------------------------------------------- #
 # materialize the adapter case folder
 # --------------------------------------------------------------------------- #
 def to_folder(py: str, dest_dir: str) -> str:
-    """canonical percent ``.py`` -> {model.py, mesh.py, settings.json} in dest_dir
-    (the folder format the zoomy-server adapters consume). Returns dest_dir."""
-    import jupytext
-
-    nb = jupytext.reads(py, fmt=_FMT)
+    """canonical percent ``.py`` -> {model.py, mesh.py, settings.json
+    [, numerics.py, visualize.py]} in dest_dir (the folder format the
+    zoomy-server adapters consume; visualize.py is the optional reproducible
+    viz — adapters ignore it). Heading-based via parse(). Returns dest_dir."""
+    spec = parse(py)
     os.makedirs(dest_dir, exist_ok=True)
-    settings = {}
-    for cell in nb.cells:
-        z = cell.metadata.get("zoomy") or {}
-        role = z.get("role")
-        if role in ("model", "mesh", "numerics"):
-            with open(os.path.join(dest_dir, f"{role}.py"), "w") as f:
-                f.write(cell.source.rstrip() + "\n")
-        elif role == "settings":
-            settings = z.get("settings", {})
+    files = {
+        "model.py": (spec.get("model") or {}).get("code"),
+        "mesh.py": (spec.get("mesh") or {}).get("code"),
+        "numerics.py": (spec.get("numerics") or {}).get("code"),
+        "visualize.py": (spec.get("visualization") or {}).get("code"),
+    }
+    for name, src in files.items():
+        if src:
+            with open(os.path.join(dest_dir, name), "w") as f:
+                f.write(src.rstrip() + "\n")
     with open(os.path.join(dest_dir, "settings.json"), "w") as f:
-        json.dump(settings, f, indent=2)
+        json.dump(spec.get("settings", {}), f, indent=2)
     return dest_dir
 
 
@@ -203,25 +310,55 @@ def from_notebook(ipynb: str) -> str:
 
 
 def from_folder(case_dir: str) -> str:
-    """An existing adapter case folder (model.py, mesh.py, settings.json) ->
-    canonical percent ``.py``. Lets any runnable case be exported as a single
-    file / notebook and re-ingested unchanged."""
+    """An existing adapter case folder (model.py, mesh.py, settings.json
+    [, numerics.py, visualize.py]) -> canonical heading-based percent ``.py``.
+    Lets any runnable case be exported as a single file / notebook and
+    re-ingested unchanged (to_folder(from_folder(d)) round-trips)."""
     import jupytext
     import nbformat
 
     nb = nbformat.v4.new_notebook()
     cells = []
-    for role, fname in (("model", "model.py"), ("mesh", "mesh.py"), ("numerics", "numerics.py")):
+
+    def heading(section, title):
+        c = nbformat.v4.new_markdown_cell(f"## {title}")
+        c.metadata = {"zoomy": {"role": "heading", "section": section}}
+        return c
+
+    title = nbformat.v4.new_markdown_cell(f"# {os.path.basename(os.path.abspath(case_dir))}")
+    title.metadata = {"zoomy": {"role": "meta", "title": os.path.basename(os.path.abspath(case_dir))}}
+    cells.append(title)
+
+    for section, fname, htitle in (
+        ("model", "model.py", "Model"),
+        ("mesh", "mesh.py", "Mesh"),
+    ):
         path = os.path.join(case_dir, fname)
         if os.path.exists(path):
+            cells.append(heading(section, htitle))
             with open(path) as f:
                 c = nbformat.v4.new_code_cell(f.read().rstrip())
-            c.metadata = {"zoomy": {"role": role}}
+            c.metadata = {"zoomy": {"role": section}}
             cells.append(c)
+
     sp = os.path.join(case_dir, "settings.json")
     settings = json.load(open(sp)) if os.path.exists(sp) else {}
+    cells.append(heading("settings", "Settings"))
     c = nbformat.v4.new_code_cell(f"settings = {json.dumps(settings, indent=2)}")
     c.metadata = {"zoomy": {"role": "settings", "settings": settings}}
     cells.append(c)
+
+    for section, fname, htitle in (
+        ("numerics", "numerics.py", "Numerics"),
+        ("visualization", "visualize.py", "Visualization"),
+    ):
+        path = os.path.join(case_dir, fname)
+        if os.path.exists(path):
+            cells.append(heading(section, htitle))
+            with open(path) as f:
+                c = nbformat.v4.new_code_cell(f.read().rstrip())
+            c.metadata = {"zoomy": {"role": section}}
+            cells.append(c)
+
     nb.cells = cells
     return jupytext.writes(nb, fmt=_FMT)
