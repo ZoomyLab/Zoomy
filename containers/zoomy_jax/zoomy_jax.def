@@ -1,0 +1,58 @@
+Bootstrap: docker
+From: ghcr.io/zoomylab/zoomy_jax_dev:latest
+
+# Triple-purpose JAX image (jax_dev conda `zoomy` env + zoomy_core/jax/server):
+#   1. Solver API : apptainer run [--nv] zoomy_jax.sif [port]        (FastAPI :8080)
+#   2. Jupyter    : apptainer run [--nv] zoomy_jax.sif jupyter [port]     (Lab :8888)
+#   3. Dev/shell  : apptainer run [--nv] zoomy_jax.sif shell
+# JAX falls back to CPU without a GPU; use --nv for the device.
+#   apptainer build --fakeroot containers/zoomy_jax/zoomy_jax.sif containers/zoomy_jax/zoomy_jax.def
+#
+# NOTE: %files dest is /opt/src, NOT /tmp (Apptainer bind-mounts host /tmp in %post).
+
+%labels
+    Author ZoomyLab
+    Description JAX + Zoomy — API :8080 + Jupyter :8888 + dev shell
+
+%files
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_jax     /opt/src/zoomy_jax
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
+
+%environment
+    export PATH=/opt/conda/envs/zoomy/bin:$PATH
+    export CONDA_PREFIX=/opt/conda/envs/zoomy
+    export ZOOMY_ADAPTER=jax
+    export ZOOMY_PORT=8080
+    export ZOOMY_ROOT=/workspace
+
+%post
+    set -e
+    export PATH=/opt/conda/envs/zoomy/bin:$PATH
+    /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
+        h5py meshio jupyterlab jupyter-server ipykernel \
+        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost
+    rm -rf /opt/src
+    mkdir -p /workspace
+
+%runscript
+    # Triple-purpose dispatch ($ZOOMY_ADAPTER=jax baked):
+    #   run img | run img <port> | run img server [adapter] [port]
+    #   run img jupyter [port] | run img shell
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
+
+%startscript
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
+
+%test
+    /opt/conda/envs/zoomy/bin/python -c "import zoomy_core, zoomy_jax, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
+    /opt/conda/envs/zoomy/bin/python -c "import jupyterlab" && echo "jupyterlab OK"

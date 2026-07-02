@@ -52,9 +52,18 @@ CMAP_TOPO = "Greys"
 #: output-medium profiles: "print" = fonts for FINAL PRINT dimensions
 #: (publication norm 9pt at true figsize); "screen" = gifs/slides on large
 #: canvases need proportionally larger fonts.
+#:
+#: The two SELECTABLE TEMPLATES a case opts into (REQ-98):
+#:   * ``thesis``       — final-print sizes (identical to ``print``).
+#:   * ``presentation`` — projector/slide sizes: ~DOUBLES the fonts and, via
+#:     ``min_pt``, CLAMPS every text element (ticks, colorbar, legend, axis
+#:     titles) so nothing renders below 14 pt at 1080p slide scale.
+#: ``print``/``screen`` are kept as the original aliases.
 PROFILES = {
-    "print":  {"scale": 1.0, "lw": 1.4, "ms": 4},
-    "screen": {"scale": 1.6, "lw": 2.0, "ms": 6},
+    "print":        {"scale": 1.0, "lw": 1.4, "ms": 4},
+    "screen":       {"scale": 1.6, "lw": 2.0, "ms": 6},
+    "thesis":       {"scale": 1.0, "lw": 1.4, "ms": 4},
+    "presentation": {"scale": 2.0, "lw": 2.6, "ms": 8, "min_pt": 14.0},
 }
 
 
@@ -116,16 +125,24 @@ def _as_rcparams(cfg: PlotConfig) -> dict:
     prof = PROFILES.get(cfg.profile, PROFILES["print"])
     s = prof["scale"]
     base = cfg.font_size
+    # ``min_pt`` (presentation) is a HARD floor: every text element is
+    # clamped up to it so nothing is illegible on a projector regardless of
+    # the base ``font_size`` the case set.
+    floor = prof.get("min_pt", 0.0)
+
+    def _sz(pt):
+        return round(max(pt * s, floor), 1)
+
     return {
         "image.cmap": cfg.cmap,
         "font.family": cfg.font_family,
         "mathtext.fontset": "stix",
-        "font.size": round(base * s, 1),
-        "axes.titlesize": round(base * s, 1),
-        "axes.labelsize": round(base * s, 1),
-        "xtick.labelsize": round((base - 1) * s, 1),
-        "ytick.labelsize": round((base - 1) * s, 1),
-        "legend.fontsize": round((base - 1) * s, 1),
+        "font.size": _sz(base),
+        "axes.titlesize": _sz(base),
+        "axes.labelsize": _sz(base),
+        "xtick.labelsize": _sz(base - 1),
+        "ytick.labelsize": _sz(base - 1),
+        "legend.fontsize": _sz(base - 1),
         "lines.linewidth": prof["lw"],
         "lines.markersize": prof["ms"],
         "axes.linewidth": 0.8,

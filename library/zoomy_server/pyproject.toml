@@ -24,6 +24,7 @@ jax = ["zoomy-jax"]
 
 [project.scripts]
 zoomy-server = "zoomy_server.cli:main"
+zoomy-jupyter = "zoomy_server.jupyter:main"
 
 [project.urls]
 Homepage = "https://github.com/mbd-rwth/Zoomy"

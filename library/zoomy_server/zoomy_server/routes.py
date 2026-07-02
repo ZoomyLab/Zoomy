@@ -1,5 +1,7 @@
 """FastAPI routes for Zoomy Solver Server."""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -28,6 +30,16 @@ class JobRequest(BaseModel):
     case_dir: str
 
 
+class CaseRequest(BaseModel):
+    """A self-contained case submitted by a client (e.g. the browser GUI): the
+    canonical composed ``.py`` (``zoomy_prepost.case`` format) plus an optional
+    uploaded mesh (base64). The server materializes it into a case folder and
+    runs it with the configured adapter — no pre-existing server-side folder."""
+    case_py: str
+    mesh_b64: Optional[str] = None
+    mesh_name: Optional[str] = None
+
+
 @router.get("/health")
 def health():
     return {"status": "ok", "tag": _adapter.tag if _adapter else "unknown"}
@@ -54,6 +66,32 @@ def create_job(req: JobRequest):
     return {"job_id": job_id}
 
 
+@router.post("/cases")
+def create_case_job(req: CaseRequest):
+    """Ingest a self-contained composed case, materialize the adapter case
+    folder (model.py, mesh.py, settings.json [+ uploaded mesh]) and run it.
+    This is the endpoint the browser GUI uses — it uploads the composed .py
+    rather than naming a server-side path."""
+    if not _adapter:
+        raise HTTPException(503, "No adapter configured")
+    import base64
+    import os
+    import tempfile
+    from zoomy_prepost import to_folder
+
+    case_dir = tempfile.mkdtemp(prefix="zoomy_case_")
+    try:
+        to_folder(req.case_py, case_dir)
+        if req.mesh_b64 and req.mesh_name:
+            dest = os.path.join(case_dir, os.path.basename(req.mesh_name))
+            with open(dest, "wb") as f:
+                f.write(base64.b64decode(req.mesh_b64))
+    except Exception as e:
+        raise HTTPException(400, f"Invalid case: {e}")
+    job_id = jobs.submit(_adapter, case_dir)
+    return {"job_id": job_id}
+
+
 @router.get("/jobs")
 def list_all_jobs():
     return jobs.list_jobs()
@@ -69,6 +107,16 @@ def get_job(job_id: str):
 
 @router.get("/jobs/{job_id}/results/hdf5")
 def download_hdf5(job_id: str):
+    # Gate on job completion: simulation.h5 is created (mesh-only) at solve
+    # start and fields are appended during the run, so serving it while the
+    # job is still running would return an incomplete file (no /fields).
+    status = jobs.get_status(job_id)
+    if not status:
+        raise HTTPException(404, "Job not found")
+    if status["status"] == "failed":
+        raise HTTPException(500, f"Job failed: {str(status.get('error', ''))[:1000]}")
+    if status["status"] != "complete":
+        raise HTTPException(425, "Job still running")  # 425 Too Early
     path = jobs.get_hdf5_path(job_id)
     if not path:
         raise HTTPException(404, "HDF5 not available")

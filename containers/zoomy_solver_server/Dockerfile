@@ -9,6 +9,7 @@ COPY library/zoomy_server /tmp/src/zoomy_server
 
 RUN python -m pip install --upgrade pip && \
     python -m pip install --no-cache-dir \
+      h5py meshio \
       /tmp/src/zoomy_core \
       /tmp/src/zoomy_server \
     && rm -rf /tmp/src

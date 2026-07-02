@@ -1,65 +1,81 @@
 Bootstrap: docker
 From: ubuntu:24.04
 
+# AMReX + Zoomy solver server. Mirrors ./Dockerfile — bakes zoomy-server so the
+# image serves the amrex backend natively over the FastAPI (the GUI connects to
+# it on :8080). Build from the Zoomy repo root (so the %files sources resolve):
+#   apptainer build --fakeroot \
+#     containers/zoomy_amrex/zoomy_amrex.sif containers/zoomy_amrex/zoomy_amrex.def
+#   apptainer run containers/zoomy_amrex/zoomy_amrex.sif [port]   # default 8080
+#
+# NOTE: %files dest is /opt/src, NOT /tmp — Apptainer bind-mounts the host /tmp
+# during %post, which would mask anything copied under /tmp.
+
 %labels
     Author ZoomyLab
-    Description AMReX development container with host-MPI bind support
+    Description AMReX + Zoomy solver server (--adapter amrex) on :8080
+
+%files
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_amrex   /opt/src/zoomy_amrex
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
 
 %environment
     export AMREX_HOME=/opt/amrex
     export ZOOMY_AMREX_HOME=/opt/amrex
+    export ZOOMY_ROOT=/workspace
+    export ZOOMY_ADAPTER=amrex
+    export ZOOMY_PORT=8080
     export LC_ALL=C
     export PATH="/usr/local/bin:$PATH"
 
 %post
+    set -e
     export DEBIAN_FRONTEND=noninteractive
-
     apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        gfortran \
-        git \
-        ca-certificates \
-        python3 \
-        python3-pip \
-        python3-dev \
-        python3-venv \
-        pkg-config \
-        libopenmpi-dev \
-        openmpi-bin \
-        libhdf5-openmpi-dev \
-        wget \
+        build-essential gfortran git ca-certificates \
+        python3 python3-pip python3-dev python3-venv pkg-config \
+        libopenmpi-dev openmpi-bin libhdf5-openmpi-dev wget \
     && rm -rf /var/lib/apt/lists/*
 
+    # h5py/meshio = HDF5 mesh/result IO; fastapi/uvicorn = the server.
     python3 -m pip install --no-cache-dir --break-system-packages \
-        numpy scipy sympy attrs meshio pytest rasterio h5py
+        numpy scipy sympy attrs meshio pytest rasterio h5py \
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
 
-    # --- Build AMReX from source ---
+    # AMReX from source (headers + source kept, object files pruned). zoomy_amrex
+    # code-gens + compiles per model at RUNTIME, so no compile at install time.
     git clone --depth 1 --branch 25.02 \
         https://github.com/AMReX-Codes/amrex.git /opt/amrex
-
-    # Clean build artifacts to reduce image size, keep source + headers
     find /opt/amrex -name "*.o" -delete 2>/dev/null || true
+    mkdir -p /workspace
+
+    # Zoomy core + amrex backend + the FastAPI server (LAST, so a failure here
+    # aborts the build under `set -e`).
+    export AMREX_HOME=/opt/amrex ZOOMY_AMREX_HOME=/opt/amrex
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server /opt/src/zoomy_prepost
+    rm -rf /opt/src
 
 %runscript
-    echo "zoomy_amrex container (AMReX at /opt/amrex)"
-    exec /bin/bash "$@"
+    # Triple-purpose dispatch ($ZOOMY_ADAPTER=amrex baked):
+    #   run img | run img <port> | run img server [adapter] [port]
+    #   run img jupyter [port] | run img shell
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
+
+%startscript
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
 
 %test
-    echo "=== AMReX Container Verification ==="
-    echo "1. Checking Python version..."
-    python3 --version
-    python3 -c "import sys; assert sys.version_info >= (3, 11), f'Need Python 3.11+, got {sys.version}'"
-
-    echo "2. Checking compilers..."
-    gcc --version | head -1
-    gfortran --version | head -1
-    mpicxx --version | head -1
-
-    echo "3. Checking AMReX installation..."
-    test -d /opt/amrex/Src/Base && echo "AMReX source: OK" || exit 1
-    test -f /opt/amrex/Tools/GNUMake/Make.defs && echo "AMReX Make.defs: OK" || exit 1
-
-    echo "4. Checking Python deps..."
-    python3 -c "import numpy; import sympy; import attrs; print('Python deps: OK')"
-
-    echo "=== All checks passed ==="
+    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
+    test -d /opt/amrex/Src/Base && echo "AMReX source OK"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"

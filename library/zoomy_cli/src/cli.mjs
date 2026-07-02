@@ -323,8 +323,15 @@ export class ZoomyCLI {
         options = options || {};
         const http = options.tag ? this.httpFor(options.tag) : null;
 
-        if (http && http.isConnected() && options.case) {
-            const res = await http.submitCase(options.case, {
+        if (http && http.isConnected() && (options.casePy || options.case)) {
+            // Prefer the composed canonical case .py (POST /cases); fall back to
+            // a raw case object (legacy /jobs) if only that was given.
+            const payload = options.casePy
+                ? { case_py: options.casePy,
+                    mesh_b64: options.meshB64 || null,
+                    mesh_name: options.meshName || null }
+                : options.case;
+            const res = await http.submitCase(payload, {
                 onStatus: options.onStatus,
                 signal: options.signal,
             });
@@ -344,6 +351,102 @@ export class ZoomyCLI {
         }
         const result = await this.pyodide.runCode(options.code);
         return { mode: "pyodide", result };
+    }
+
+    // ----- case interchange (the real work; the GUI is a thin frontend) ------
+    //
+    // A case is a single jupytext "percent" .py where each section is a cell
+    // tagged `# %% zoomy={...}` — runnable, a notebook (.py<->.ipynb), and
+    // losslessly mapped to/from the GUI cards. Mirrors zoomy_prepost.case so the
+    // server (to_folder) and the browser agree on one format. The MODEL cell
+    // carries the fully-specified model INCLUDING its IC + BC (else the PDE is
+    // not well-posed and cannot run).
+
+    /** Ordered case cells from resolved card data (shared by .py and .ipynb). */
+    _caseCells(spec) {
+        spec = spec || {};
+        const meta = spec.meta || {}, model = spec.model || {}, mesh = spec.mesh || {};
+        const settings = spec.settings || {}, solver = spec.solver || {};
+        const trim = (s) => String(s || "").replace(/\s+$/, "");
+        return [
+            { type: "markdown",
+              meta: { role: "meta", title: meta.title || null, description: meta.description || null },
+              source: "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "") },
+            { type: "code",
+              meta: { role: "model", class_path: model.class_path || null, init: model.init || {} },
+              source: trim(model.code) },
+            { type: "code",
+              meta: { role: "mesh", spec: mesh.spec || null },
+              source: trim(mesh.code) },
+            { type: "code",
+              meta: { role: "settings", settings },
+              source: "settings = " + JSON.stringify(settings, null, 2) },
+            { type: "code",
+              meta: { role: "solver", tag: solver.tag || "numpy", params: solver.params || {} },
+              source: "solver_tag = " + JSON.stringify(solver.tag || "numpy") },
+        ];
+    }
+
+    /** Resolved card data -> canonical case .py (jupytext percent + zoomy meta). */
+    composeCase(spec) {
+        return this._caseCells(spec).map((c) => {
+            const marker = "# %%" + (c.type === "markdown" ? " [markdown]" : "") +
+                           " zoomy=" + JSON.stringify(c.meta);
+            const src = c.type === "markdown"
+                ? c.source.split("\n").map((l) => "# " + l).join("\n")
+                : c.source;
+            return marker + "\n" + src + "\n";
+        }).join("\n");
+    }
+
+    /** spec -> a downloadable artifact string; fmt "py" (default) or "ipynb". */
+    exportCase(spec, fmt) {
+        if (fmt === "ipynb") {
+            const cells = this._caseCells(spec).map((c) => {
+                const lines = c.source.split("\n");
+                const source = lines.map((l, i) => (i < lines.length - 1 ? l + "\n" : l));
+                const cell = { cell_type: c.type, metadata: { zoomy: c.meta }, source };
+                if (c.type === "code") { cell.outputs = []; cell.execution_count = null; }
+                return cell;
+            });
+            return JSON.stringify({
+                cells,
+                metadata: { kernelspec: { name: "python3", display_name: "Python 3" },
+                            language_info: { name: "python" } },
+                nbformat: 4, nbformat_minor: 5,
+            }, null, 1);
+        }
+        return this.composeCase(spec);
+    }
+
+    /** Canonical case .py -> spec (for importing a downloaded case back to cards). */
+    parseCase(pyText) {
+        const spec = {};
+        const cells = [];
+        let cur = null;
+        for (const line of String(pyText || "").split("\n")) {
+            const m = line.match(/^# %%(?: \[markdown\])? zoomy=(.*)$/);
+            if (m) {
+                if (cur) cells.push(cur);
+                let meta = {};
+                try { meta = JSON.parse(m[1]); } catch (e) { meta = {}; }
+                cur = { meta, source: [] };
+            } else if (cur) {
+                cur.source.push(line);
+            }
+        }
+        if (cur) cells.push(cur);
+        for (const c of cells) {
+            const src = c.source.join("\n").replace(/^\n+|\n+$/g, "");
+            switch (c.meta.role) {
+                case "model": spec.model = { code: src, class_path: c.meta.class_path, init: c.meta.init || {} }; break;
+                case "mesh": spec.mesh = { code: src, spec: c.meta.spec }; break;
+                case "settings": spec.settings = c.meta.settings || {}; break;
+                case "solver": spec.solver = { tag: c.meta.tag || "numpy", params: c.meta.params || {} }; break;
+                case "meta": spec.meta = { title: c.meta.title, description: c.meta.description }; break;
+            }
+        }
+        return spec;
     }
 
     /** Cancel a remote job (tag) or interrupt Pyodide. */

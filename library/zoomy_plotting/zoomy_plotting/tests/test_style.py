@@ -133,3 +133,37 @@ def test_reset_config_restores_defaults():
     CONFIG.cmap = "inferno"
     reset_config()
     assert CONFIG.cmap == PlotConfig().cmap
+
+
+# ── REQ-98: selectable thesis / presentation templates ──────────────────────
+
+_FONT_RC = ("font.size", "axes.titlesize", "axes.labelsize",
+            "xtick.labelsize", "ytick.labelsize", "legend.fontsize")
+
+
+def test_presentation_profile_clamps_all_fonts_to_floor():
+    """Every text element is >= 14 pt under the ``presentation`` template,
+    even the ticks/legend that ``print`` shrinks below the base size."""
+    from zoomy_plotting.plot.style import _as_rcparams, PROFILES
+    try:
+        CONFIG.profile = "presentation"
+        rc = _as_rcparams(CONFIG)
+        floor = PROFILES["presentation"]["min_pt"]
+        for key in _FONT_RC:
+            assert rc[key] >= floor, f"{key}={rc[key]} below {floor}pt floor"
+    finally:
+        reset_config()
+
+
+def test_thesis_profile_matches_print():
+    """``thesis`` is the final-print template — identical font sizes to the
+    original ``print`` profile (non-breaking rename-by-alias)."""
+    from zoomy_plotting.plot.style import _as_rcparams
+    try:
+        CONFIG.profile = "thesis"
+        rc_thesis = {k: _as_rcparams(CONFIG)[k] for k in _FONT_RC}
+        CONFIG.profile = "print"
+        rc_print = {k: _as_rcparams(CONFIG)[k] for k in _FONT_RC}
+        assert rc_thesis == rc_print
+    finally:
+        reset_config()

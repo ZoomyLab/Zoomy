@@ -1,0 +1,62 @@
+Bootstrap: docker
+From: python:3.11-slim-bookworm
+
+# Triple-purpose NumPy solver-server image:
+#   1. Solver API   : apptainer run zoomy_solver_server.sif [port]      (FastAPI :8080)
+#   2. Jupyter      : apptainer run zoomy_solver_server.sif jupyter [port]   (Lab :8888)
+#   3. Dev/shell    : apptainer run zoomy_solver_server.sif shell
+# Apptainer shares host networking, so :8080/:8888 are reachable at localhost.
+# Build from the Zoomy repo root so the %files sources resolve:
+#   apptainer build --fakeroot \
+#     containers/zoomy_solver_server/zoomy_solver_server.sif \
+#     containers/zoomy_solver_server/zoomy_solver_server.def
+
+%labels
+    Author ZoomyLab
+    Description Zoomy solver server (NumPy) — API :8080 + Jupyter :8888 + dev shell
+
+%files
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
+
+%post
+    export DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+    python -m pip install --upgrade pip
+    # h5py/meshio: HDF5 mesh/result IO + .msh loading (optional deps of zoomy_core).
+    # jupyterlab/jupyter-server/ipykernel: the "spawn a Jupyter kernel" mode.
+    python -m pip install --no-cache-dir \
+        h5py meshio jupyterlab jupyter-server ipykernel \
+        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost
+    rm -rf /opt/src
+    mkdir -p /workspace     # dev-container / Jupyter bind target ($ZOOMY_ROOT)
+
+%environment
+    export ZOOMY_ADAPTER=numpy
+    export ZOOMY_PORT=8080
+    export ZOOMY_ROOT=/workspace
+
+%runscript
+    # Triple-purpose dispatch (shared by every backend image; the baked
+    # $ZOOMY_ADAPTER differs per image):
+    #   run img                       -> API on $ZOOMY_PORT
+    #   run img <port>                -> API on <port>              (back-compat)
+    #   run img server [adapter] [port]
+    #   run img jupyter [port]        -> Jupyter Lab (default 8888)
+    #   run img shell                 -> interactive bash (dev container)
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
+
+%startscript
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
+
+%test
+    python -c "import zoomy_core, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
+    python -c "import jupyterlab" && echo "jupyterlab OK"

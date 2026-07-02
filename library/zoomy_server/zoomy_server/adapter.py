@@ -77,22 +77,36 @@ class SolverAdapter:
 
     @staticmethod
     def resolve_model(case_dir):
-        """Import model.py and return the Model instance."""
+        """Import model.py and return the Model instance.
+
+        Prefers an explicit module-level ``model`` instance (the composed case
+        format does ``model = SME(level=2)``, and any case that instantiates its
+        model with arguments/IC/BC) over scanning for a Model subclass — otherwise
+        a bare ``SME()`` constructed from the imported class would drop those args.
+        Falls back to the first Model subclass (subclass-style cases that bake
+        their IC/BC and are meant to be constructed with no arguments).
+        """
         mod = SolverAdapter.import_from_case(case_dir, "model")
-        # Find the Model subclass in the module
         from zoomy_core.model.basemodel import Model
+        if isinstance(getattr(mod, "model", None), Model):
+            return mod.model
         for attr_name in dir(mod):
             obj = getattr(mod, attr_name)
             if isinstance(obj, type) and issubclass(obj, Model) and obj is not Model:
                 return obj()
-        # If no class found, look for a module-level 'model' variable
-        if hasattr(mod, 'model'):
+        if hasattr(mod, "model"):
             return mod.model
         raise RuntimeError(f"No Model subclass found in {case_dir}/model.py")
 
     @staticmethod
     def resolve_numerics(case_dir, model):
-        """Import numerics.py and return the Numerics instance."""
+        """Import numerics.py and return the Numerics instance; if the case has
+        no numerics.py, fall back to the default Riemann solver so ONE shared
+        case runs on every backend (numpy/jax don't ship a numerics.py)."""
+        import os
+        from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
+        if not os.path.exists(os.path.join(case_dir, "numerics.py")):
+            return NonconservativeRusanov(model)
         mod = SolverAdapter.import_from_case(case_dir, "numerics")
         # Find a Numerics subclass or a factory function
         from zoomy_core.model.basefunction import SymbolicRegistrar

@@ -1,0 +1,217 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+    Author ZoomyLab
+    Description TELEMAC-MASCARET v9.1.1 (CPU + OpenMPI + METIS) — hydrodynamics reference solver for Zoomy benchmarking
+    TELEMAC_Version v9.1.1
+    Build CMake / build_telemac.py, Release
+    Parallel OpenMPI + METIS domain decomposition (PARTEL). No GPU backend.
+    Modules all (telemac2d/3d, tomawac, artemis, gaia, …) + partel/gretel
+
+%help
+    TELEMAC-MASCARET v9.1.1 built from gitlab.pam-retd.fr with the GNU/OpenMPI
+    toolchain and the system METIS for parallel mesh partitioning (PARTEL).
+
+    SCALING: TELEMAC is CPU + MPI only. There is NO production GPU backend —
+    only research OpenACC/OpenMP ports of the TOMAWAC wave module exist, never
+    TELEMAC-2D. Parallelism is pure MPI domain decomposition: partition with
+    PARTEL+METIS, solve with mpiexec, recombine with GRETEL. Scale with
+    `--ncsize N`. This box has 96 physical cores, so N up to ~96 is meaningful.
+
+    I/O: SELAFIN (.slf) only. MED/HDF5/MUMPS/AED2/GOTM are intentionally NOT
+    built (the Malpasset verification case and most SWE benchmarks are SELAFIN).
+    To add MED output or the MUMPS direct solver, build with more --deps.
+
+    Build:
+        apptainer build --fakeroot zoomy_telemac.sif zoomy_telemac.def
+
+    Run the bundled Malpasset verification case in parallel (the SIF is
+    read-only, so copy the case to a writable workdir first):
+        WORK=$(mktemp -d)
+        apptainer exec zoomy_telemac.sif bash -c \
+          'cp -r $HOMETEL/examples/telemac2d/malpasset/* '"$WORK"
+        cd $WORK && apptainer exec <path>/zoomy_telemac.sif \
+          telemac2d.py t2d_malpasset-char.cas --ncsize=8
+
+    The helper scripts in this folder (run_malpasset.sh, bench_malpasset.sh)
+    wrap the copy-to-writable-workdir + ncsize boilerplate.
+
+%environment
+    export LC_ALL=C
+    # --- TELEMAC v9 runtime: must mirror the build environment (see cfg.py) ---
+    export HOMETEL=/opt/telemac/telemac-mascaret
+    export BUILD_DIR=$HOMETEL/builds/zoomy
+    export SYSTELCFG=$BUILD_DIR/systel.cfg
+    export FC=gfortran
+    export BUILD_TYPE=release
+    export PYTHONUNBUFFERED=1
+    export PATH=$HOMETEL/scripts/python3:$PATH
+    export PYTHONPATH=$HOMETEL/scripts/python3:$PYTHONPATH
+    export LD_LIBRARY_PATH=$BUILD_DIR/lib:$LD_LIBRARY_PATH
+    # OpenMPI inside a container: allow >slots oversubscription if the user asks
+    # for more ranks than the visible cores (single-node, no fabric).
+    export OMPI_MCA_rmaps_base_oversubscribe=1
+
+%post
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+
+    echo "##### STEP 1/7: base toolchain (gfortran, OpenMPI, METIS, CMake, Python)"
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        git-lfs \
+        build-essential \
+        gfortran \
+        libopenmpi-dev \
+        openmpi-bin \
+        libmetis-dev \
+        metis \
+        cmake \
+        pkg-config \
+        python3 \
+        python3-dev \
+        python3-numpy \
+        python3-matplotlib \
+        python3-scipy \
+        less \
+        vim
+    git lfs install --system
+
+    echo "##### STEP 2/7: fetch TELEMAC v9.1.1 source (shallow, LFS pointers only)"
+    # Sources are text; the heavy SELAFIN/MED meshes are LFS objects we do NOT
+    # need to compile. Skip the LFS smudge for a fast, lean source checkout.
+    mkdir -p /opt/telemac
+    GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch v9.1.1 \
+        https://gitlab.pam-retd.fr/otm/telemac-mascaret.git \
+        /opt/telemac/telemac-mascaret
+
+    export HOMETEL=/opt/telemac/telemac-mascaret
+    export BUILD_DIR=$HOMETEL/builds/zoomy
+    export FC=gfortran
+    export BUILD_TYPE=release
+    export PATH=$HOMETEL/scripts/python3:$PATH
+    export PYTHONPATH=$HOMETEL/scripts/python3:${PYTHONPATH:-}
+
+    echo "##### STEP 3/7: materialize the Malpasset example meshes (LFS, for the smoke test)"
+    # Only the Malpasset SELAFIN/MED binaries — keep the image lean. Non-fatal:
+    # if the LFS endpoint is unreachable the build still succeeds (the user can
+    # bind data/malpasset/*.slf at run time instead).
+    ( cd "$HOMETEL" && git lfs pull --include "examples/telemac2d/malpasset/**" ) \
+        || echo "WARN: malpasset LFS pull failed; bind a host .slf at run time."
+
+    echo "##### STEP 4/7: configure + build TELEMAC (CMake, default 'all', Release)"
+    # Drive CMake directly (BUILDING.md §3) rather than build_telemac.py: the
+    # helper forces BUILD_TELAPY=ON for an 'all' build (the fragile f2py wrapper
+    # we don't need). Here we build the default 'all' target with TELAPY OFF.
+    # 'all' is REQUIRED: it links the partel/gretel/telemac2d executables AND runs
+    # the `build_commands ALL` target that emits build_commands.json — a module
+    # subset would skip both, breaking partitioning + user-fortran JIT linking.
+    # USE_MPI=ON pulls METIS (Ubuntu multiarch libmetis-dev, auto-found by CMake);
+    # MED/MUMPS/AED2/GOTM OFF -> SELAFIN-only. Modern gfortran flags come from
+    # TELEMAC's CMake toolchain.
+    cmake -S "$HOMETEL" -B "$BUILD_DIR" -G "Unix Makefiles" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DUSE_MPI=ON -DUSE_MED=OFF -DUSE_MUMPS=OFF -DUSE_AED2=OFF -DUSE_GOTM=OFF \
+        -DBUILD_TELAPY=OFF -DBUILD_HERMES_WRAPPER=OFF
+    cmake --build "$BUILD_DIR" --parallel "$(nproc)"
+    test -f "$BUILD_DIR/systel.cfg"
+    test -f "$BUILD_DIR/build_commands.json" || { echo "FATAL: build_commands.json not generated"; exit 1; }
+    test -x "$BUILD_DIR/bin/telemac2d" && test -x "$BUILD_DIR/bin/partel" && test -x "$BUILD_DIR/bin/gretel"
+
+    echo "##### STEP 5/7: fix build_commands.json user-fortran link (TELEMAC v9.1.1 bug)"
+    # TELEMAC's generate_build_commands.py mis-parses Ubuntu 24.04's OpenMPI link
+    # line (libs live in .../openmpi/lib/fortran/gfortran): it truncates the -L,
+    # drops every -l, and leaves output_file empty — so the per-run user-fortran
+    # JIT link fails ("Could not link your library"). Rewrite each module's link
+    # to use the mpif90 wrapper (self-resolves MPI) against the built TELEMAC libs.
+    # The user lib is LD_PRELOAD'd over bin/<code>, so this is all that is needed.
+    python3 - "$BUILD_DIR" <<'PY'
+import json, glob, os, sys
+bd = sys.argv[1]
+p = os.path.join(bd, "build_commands.json")
+d = json.load(open(p))
+libs = sorted(os.path.basename(f)[3:-3] for f in glob.glob(os.path.join(bd, "lib", "lib*.so")))
+# Link only the TELEMAC *module* libs. Exclude the f2py api lib and the
+# standalone-exe libs (partel/gretel) — those carry a MAIN__ that would clash
+# when libuser_fortran.so is LD_PRELOAD'd over bin/<code>.
+skip = ("api", "user_fortran", "partel", "gretel")
+lflags = " ".join("-l" + l for l in libs if l not in skip)
+def mklink(out, extra):
+    # NB: single-brace f-strings only — apptainer reads double-braces as templating.
+    return (f"-fPIC -fconvert=big-endian -O3 -o {out} <objs> {extra}"
+            f"-L[build]/lib -Wl,-rpath,[build]/lib {lflags}")
+for mod, v in d.items():
+    if "library" in v:
+        v["library"]["link"] = "mpif90 -shared " + mklink("libuser_fortran.so", "")
+        v["library"]["output_file"] = "libuser_fortran.so"
+    if "executable" in v:
+        v["executable"]["link"] = "mpif90 " + mklink(f"out_{mod}", "<user_library> ")
+        v["executable"]["output_file"] = f"out_{mod}"
+json.dump(d, open(p, "w"), indent=1)
+print("patched build_commands.json for:", ", ".join(sorted(d)))
+PY
+
+    echo "##### STEP 6/7: verify the run-time module interfaces are present"
+    # The per-run user-fortran COMPILE needs the TELEMAC .mod files via the
+    # compile template's -I[build]/modules. The 'all' build populates
+    # $BUILD_DIR/modules — these MUST survive into the (read-only) image.
+    test -n "$(ls -A "$BUILD_DIR/modules" 2>/dev/null)" \
+        || { echo "FATAL: $BUILD_DIR/modules is empty (user-fortran compile would fail)"; exit 1; }
+
+    echo "##### STEP 7/7: slim image (drop build *.o only; KEEP *.mod + modules/)"
+    # Object files are dead weight post-link; .mod / modules/ are needed at run
+    # time for user-fortran compilation, so they are deliberately preserved.
+    find "$BUILD_DIR" -type f -name '*.o' -delete 2>/dev/null || true
+    rm -rf /root/.cache /opt/telemac/telemac-mascaret/.git/lfs/incomplete 2>/dev/null || true
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+    echo "##### POST COMPLETE"
+
+%runscript
+    echo "zoomy_telemac — TELEMAC-MASCARET v9.1.1 (CPU/OpenMPI/METIS)"
+    echo "  telemac2d.py <case>.cas --ncsize=N   (run a case)"
+    echo "  examples at \$HOMETEL/examples/telemac2d"
+    exec /bin/bash "$@"
+
+%test
+    #!/bin/bash
+    set -e
+    echo "=== zoomy_telemac verification ==="
+
+    echo "1. Toolchain..."
+    gfortran --version | head -1
+    mpif90 --version | head -1 || mpif90.openmpi --version | head -1
+    command -v gpmetis >/dev/null && echo "   gpmetis: OK" || { echo "FAIL: METIS gpmetis missing"; exit 1; }
+
+    echo "2. Python + numpy..."
+    python3 --version
+    python3 -c "import numpy; print('   numpy', numpy.__version__)"
+
+    echo "3. TELEMAC build artifacts..."
+    test -f "$BUILD_DIR/systel.cfg" || { echo "FAIL: systel.cfg missing ($BUILD_DIR)"; exit 1; }
+    echo "   systel.cfg: OK"
+    for exe in telemac2d partel gretel; do
+        test -x "$BUILD_DIR/bin/$exe" && echo "   bin/$exe: OK" || { echo "FAIL: bin/$exe missing"; exit 1; }
+    done
+    test -n "$(ls -A "$BUILD_DIR/modules" 2>/dev/null)" && echo "   modules/ (.mod for user-fortran): OK" \
+        || { echo "FAIL: modules/ empty"; exit 1; }
+
+    echo "4. build_commands.json patched (non-empty output_file + mpif90 link)..."
+    python3 - "$BUILD_DIR/build_commands.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+lib = d["telemac2d"]["library"]
+assert lib["output_file"] == "libuser_fortran.so", f"bad output_file: {lib['output_file']!r}"
+assert lib["link"].startswith("mpif90") and "-ltelemac2d" in lib["link"], "link not patched"
+print("   telemac2d user-fortran link: OK")
+PY
+
+    echo "5. Parallel pipeline drivers + config resolution (telemac2d.py --help)..."
+    for drv in telemac2d.py partel.py gretel.py; do
+        command -v "$drv" >/dev/null && echo "   $drv: OK" || { echo "FAIL: $drv not on PATH"; exit 1; }
+    done
+    telemac2d.py --help >/dev/null 2>&1 && echo "   telemac2d.py --help: OK" \
+        || { echo "FAIL: telemac2d.py could not resolve the build config"; exit 1; }
+
+    echo "=== All checks passed ==="

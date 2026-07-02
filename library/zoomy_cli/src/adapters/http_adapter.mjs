@@ -79,7 +79,10 @@ export class HttpAdapter {
      */
     async submitCase(caseData, options) {
         options = options || {};
-        const resp = await fetch(this.url + "/api/v1/jobs", {
+        // A composed case (has case_py) is uploaded to /cases, where the server
+        // materializes the case folder; a legacy raw case object goes to /jobs.
+        const endpoint = caseData && caseData.case_py ? "/api/v1/cases" : "/api/v1/jobs";
+        const resp = await fetch(this.url + endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(caseData),

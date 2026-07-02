@@ -98,12 +98,19 @@ class DmplexAdapter(SolverAdapter):
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             )
             time_end = settings.get("time_end", 1.0)
+            out_lines = []
             for line in proc.stdout:
-                self._parse_progress(line.strip(), on_progress)
-                logger.debug(line.strip())
+                s = line.strip()
+                out_lines.append(s)
+                self._parse_progress(s, on_progress)
+                logger.debug(s)
             proc.wait()
             if proc.returncode != 0:
-                raise RuntimeError(f"Solver exited with code {proc.returncode}")
+                tail = "\n".join(out_lines[-30:])
+                raise RuntimeError(
+                    f"Solver exited with code {proc.returncode}\n"
+                    f"--- solver output tail ---\n{tail}"
+                )
 
             # Copy output files to output_dir
             for f in os.listdir(build_dir):
