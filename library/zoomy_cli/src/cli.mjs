@@ -472,72 +472,124 @@ export class ZoomyCLI {
         options = options || {};
         const filename = options.filename || "zoomy_case.ipynb";
         const nb = JSON.parse(this.exportCase(spec, "ipynb"));
+        /* Stage the FULL project alongside the notebook — the case folder the
+           server would materialize, plus a README that links back to the GUI —
+           so the Jupyter file browser shows the whole case, not a lone .ipynb. */
+        const files = this._caseProjectFiles(spec);
 
         if (options.jupyterUrl) {
             try {
-                const url = await this._stageNotebookInServer(nb, options.jupyterUrl, filename);
+                const url = await this._stageInServer(nb, files, options.jupyterUrl, filename);
                 window.open(url, "_blank");
                 return { mode: "server", url };
             } catch (e) {
                 /* fall through to Lite — backend jupyter not reachable */
             }
         }
+        /* JupyterLite's only kernel is `python` (Pyodide); any other kernelspec
+           name makes Lab prompt instead of auto-attaching. */
+        nb.metadata = nb.metadata || {};
+        nb.metadata.kernelspec = { name: "python", display_name: "Python (Pyodide)", language: "python" };
         const liteBase = new URL(options.liteUrl || "../jupyter-lite/_output/", window.location.href).href;
-        await this._stageNotebookInLite(nb, liteBase, filename);
+        await this._stageInLite(nb, files, liteBase, filename);
         const url = liteBase + "lab/index.html?path=" + encodeURIComponent(filename);
         window.open(url, "_blank");
         return { mode: "lite", url };
     }
 
-    /** PUT the notebook via the Jupyter Server REST contents API. Needs the
-     *  server to allow the GUI origin (zoomy-jupyter sets CORS + token-less
-     *  localhost by default). Returns the lab URL for the file. */
-    async _stageNotebookInServer(nb, jupyterUrl, filename) {
+    /** The case-folder view of the spec: the same files the server materializes
+     *  (model.py / mesh.py / settings.json) + a README linking back to the GUI. */
+    _caseProjectFiles(spec) {
+        const cells = this._caseCells(spec);
+        const by = {};
+        for (const c of cells) by[c.meta.role] = c;
+        const guiUrl = (typeof window !== "undefined" && window.location) ? window.location.href.split("#")[0] : "";
+        const title = (spec.meta && spec.meta.title) || "Zoomy case";
+        const files = {};
+        if (by.model && by.model.source) files["model.py"] = by.model.source + "\n";
+        if (by.mesh && by.mesh.source) files["mesh.py"] = by.mesh.source + "\n";
+        files["settings.json"] = JSON.stringify((spec.settings || {}), null, 2) + "\n";
+        files["README.md"] =
+            "# " + title + "\n\n" +
+            "Composed by the Zoomy GUI — the case folder next to `zoomy_case.ipynb`:\n" +
+            "`model.py` (model incl. IC + BC), `mesh.py`, `settings.json`.\n\n" +
+            (guiUrl ? "[← Back to the Zoomy GUI](" + guiUrl + ")\n" : "");
+        return files;
+    }
+
+    /** PUT the notebook + project files via the Jupyter Server REST contents
+     *  API. Needs the server to allow the GUI origin (zoomy-jupyter sets CORS
+     *  + token-less localhost by default). Returns the lab URL for the file. */
+    async _stageInServer(nb, files, jupyterUrl, filename) {
         const base = jupyterUrl.replace(/\/+$/, "");
-        const resp = await fetch(base + "/api/contents/" + encodeURIComponent(filename), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "notebook", format: "json", content: nb }),
-        });
-        if (!resp.ok) throw new Error("contents PUT failed: HTTP " + resp.status);
+        const put = async (path, body) => {
+            const resp = await fetch(base + "/api/contents/" + encodeURIComponent(path), {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            if (!resp.ok) throw new Error("contents PUT " + path + " failed: HTTP " + resp.status);
+        };
+        await put(filename, { type: "notebook", format: "json", content: nb });
+        for (const [name, text] of Object.entries(files || {})) {
+            await put(name, { type: "file", format: "text", content: text });
+        }
         return base + "/lab/tree/" + encodeURIComponent(filename);
     }
 
-    /** Write the notebook into JupyterLite's IndexedDB contents store
-     *  ("JupyterLite Storage - <baseUrl option>", localforage layout, store
-     *  "files", keyed by path). Writes every existing JupyterLite DB plus
-     *  both candidate names (raw "./" option and the resolved URL) so it
-     *  works whether or not Lite has booted before. Same-origin only. */
-    async _stageNotebookInLite(nb, liteBase, filename) {
+    /** Candidate IndexedDB names for the Lite contents store. Ground truth
+     *  (probed against a real Lite 0.8 boot): the drive uses
+     *  `contentsStorageName` VERBATIM when set (our build pins
+     *  "zoomy-jupyterlite"), else `JupyterLite Storage - ${resolved absolute
+     *  PATHNAME of the deployment, with trailing slash}` (never the raw "./",
+     *  never the full origin URL). Existing JupyterLite DBs are included too. */
+    async _liteDbNames(liteBase) {
+        const names = new Set();
+        try {
+            const cfg = await (await fetch(liteBase + "jupyter-lite.json")).json();
+            const jcd = (cfg && cfg["jupyter-config-data"]) || {};
+            if (jcd.contentsStorageName) {
+                names.add(jcd.contentsStorageName);
+                names.add("JupyterLite Storage - " + jcd.contentsStorageName);
+            }
+        } catch (e) { /* config fetch is best-effort */ }
+        names.add("JupyterLite Storage - " + new URL("./", liteBase).pathname);
+        try {
+            const dbs = (await indexedDB.databases()) || [];
+            for (const d of dbs) {
+                if (d.name && (d.name.startsWith("JupyterLite Storage") || d.name === "zoomy-jupyterlite")) names.add(d.name);
+            }
+        } catch (e) { /* indexedDB.databases() unsupported -> candidates only */ }
+        return [...names];
+    }
+
+    /** Write the notebook + project files into JupyterLite's IndexedDB
+     *  contents store (localforage layout: store "files", key = path, value =
+     *  a full Jupyter contents model). Static build contents merge with these
+     *  at listing time, so the file browser shows both. Same-origin only. */
+    async _stageInLite(nb, files, liteBase, filename) {
         const now = new Date().toISOString();
-        const model = {
+        const models = [];
+        models.push([filename, {
             name: filename, path: filename, type: "notebook",
             format: "json", mimetype: "application/json",
             content: nb, size: JSON.stringify(nb).length,
             created: now, last_modified: now, writable: true,
-        };
-        /* candidate DB names: the plugin uses `JupyterLite Storage - ${baseUrl
-           page-config option}`; the built jupyter-lite.json carries "./" but
-           boot may resolve it — cover both, plus any existing Lite DBs. */
-        const names = new Set(["JupyterLite Storage - ./", "JupyterLite Storage - " + liteBase]);
-        try {
-            const cfg = await (await fetch(liteBase + "jupyter-lite.json")).json();
-            const raw = cfg && cfg["jupyter-config-data"] && cfg["jupyter-config-data"].baseUrl;
-            if (raw) {
-                names.add("JupyterLite Storage - " + raw);
-                names.add("JupyterLite Storage - " + new URL(raw, liteBase).href);
-            }
-        } catch (e) { /* config fetch is best-effort */ }
-        try {
-            const dbs = (await indexedDB.databases()) || [];
-            for (const d of dbs) if (d.name && d.name.startsWith("JupyterLite Storage")) names.add(d.name);
-        } catch (e) { /* indexedDB.databases() not supported -> candidates only */ }
-
+        }]);
+        for (const [name, text] of Object.entries(files || {})) {
+            models.push([name, {
+                name, path: name, type: "file",
+                format: "text",
+                mimetype: name.endsWith(".json") ? "application/json" : "text/plain",
+                content: text, size: text.length,
+                created: now, last_modified: now, writable: true,
+            }]);
+        }
         const put = (dbName) => new Promise((resolve, reject) => {
             const open = indexedDB.open(dbName);
             open.onupgradeneeded = () => {
                 /* fresh DB (Lite not booted yet): create the localforage-style
-                   "files" store; Lite adds its other stores on first boot. */
+                   "files" store; Lite upgrade-adds its other stores on boot. */
                 const db = open.result;
                 if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
             };
@@ -546,15 +598,59 @@ export class ZoomyCLI {
                 const db = open.result;
                 if (!db.objectStoreNames.contains("files")) { db.close(); resolve(false); return; }
                 const tx = db.transaction("files", "readwrite");
-                tx.objectStore("files").put(model, filename);
+                for (const [key, model] of models) tx.objectStore("files").put(model, key);
                 tx.oncomplete = () => { db.close(); resolve(true); };
                 tx.onerror = () => { db.close(); reject(tx.error); };
             };
         });
-        const results = await Promise.allSettled([...names].map(put));
+        const names = await this._liteDbNames(liteBase);
+        const results = await Promise.allSettled(names.map(put));
         if (!results.some((r) => r.status === "fulfilled" && r.value)) {
-            throw new Error("could not stage the notebook in any JupyterLite store");
+            throw new Error("could not stage the case in any JupyterLite store");
         }
+    }
+
+    /** Read a staged case back from JupyterLite's store (the shared browser
+     *  filesystem): returns the parsed spec from zoomy_case.ipynb, or null.
+     *  This is the GUI's "import back what I edited in Jupyter" hook. */
+    async readCaseFromLite(options) {
+        options = options || {};
+        const filename = options.filename || "zoomy_case.ipynb";
+        const liteBase = new URL(options.liteUrl || "../jupyter-lite/_output/", window.location.href).href;
+        const names = await this._liteDbNames(liteBase);
+        for (const dbName of names) {
+            const model = await new Promise((resolve) => {
+                const open = indexedDB.open(dbName);
+                open.onupgradeneeded = () => { /* don't create stores on read */ };
+                open.onerror = () => resolve(null);
+                open.onsuccess = () => {
+                    const db = open.result;
+                    if (!db.objectStoreNames.contains("files")) { db.close(); resolve(null); return; }
+                    const req = db.transaction("files", "readonly").objectStore("files").get(filename);
+                    req.onsuccess = () => { db.close(); resolve(req.result || null); };
+                    req.onerror = () => { db.close(); resolve(null); };
+                };
+            });
+            if (model && model.content) {
+                const py = this._notebookToPercentPy(model.content);
+                return this.parseCase(py);
+            }
+        }
+        return null;
+    }
+
+    /** Minimal .ipynb -> percent-py (cells with zoomy metadata) so parseCase
+     *  can consume a notebook read back from a Jupyter store. */
+    _notebookToPercentPy(nb) {
+        const parts = [];
+        for (const cell of (nb.cells || [])) {
+            const z = cell.metadata && cell.metadata.zoomy;
+            if (!z) continue;
+            const src = Array.isArray(cell.source) ? cell.source.join("") : String(cell.source || "");
+            const marker = "# %%" + (cell.cell_type === "markdown" ? " [markdown]" : "") + " zoomy=" + JSON.stringify(z);
+            parts.push(marker + "\n" + src + "\n");
+        }
+        return parts.join("\n");
     }
 
     /** Cancel a remote job (tag) or interrupt Pyodide. */

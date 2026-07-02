@@ -208,14 +208,26 @@ jobs:
         run: |
           # The "Run a notebook in your browser" card on the docs index
           # points at jupyter-lite/_output/lab/index.html?path=pyodide.ipynb.
-          # The notebook's install cell does `%pip install -q zoomy-core`,
-          # so it relies on PyPI carrying a version that matches the
-          # APIs the notebook uses (NumericalSystemModel, etc.).
-          pip install --quiet jupyterlite-core jupyterlite-pyodide-kernel jupyter-server
+          # The lite dir docs/jupyterlite configures:
+          #  - PyodideLockAddon (the [lock] extra, uv-based): locks zoomy-core
+          #    + deps into the kernel so `import zoomy_core` works AT STARTUP
+          #    (no %pip / micropip cell; param+loguru wheels bundled, numpy/
+          #    sympy/scipy from the pyodide CDN; overrides.txt relaxes sympy's
+          #    stale mpmath<1.4 pin against pyodide's mpmath).
+          #  - contentsStorageName "zoomy-jupyterlite": a FIXED IndexedDB name
+          #    so the GUI's "Open in Jupyter" stages notebooks deterministically.
+          # cd matters: uv resolves the relative --override in the build cwd.
+          pip install --quiet "jupyterlite-core==0.8.*" \
+            "jupyterlite-pyodide-kernel[lock]==0.8.*" jupyter-server
+          cd docs/jupyterlite
           jupyter lite build \
-            --contents tutorials/pyodide \
-            --output-dir docs/book/_build/html/jupyter-lite/_output
+            --contents ../../tutorials/pyodide \
+            --output-dir ../book/_build/html/jupyter-lite/_output
+          cd ../..
           ls docs/book/_build/html/jupyter-lite/_output/lab/ | head
+          # sanity: the lock + pinned storage name made it into the build
+          ls docs/book/_build/html/jupyter-lite/_output/static/pyodide-lock/ | head
+          grep -o '"contentsStorageName": "[^"]*"' docs/book/_build/html/jupyter-lite/_output/jupyter-lite.json
 
       # CHANGED: Replaced upload-artifact with configure-pages
       - name: Setup GitHub Pages
