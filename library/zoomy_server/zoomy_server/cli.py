@@ -14,6 +14,8 @@ def main():
         "jax": "zoomy_server.adapters.jax.JaxAdapter",
         "amrex": "zoomy_server.adapters.amrex.AmrexAdapter",
         "dmplex": "zoomy_server.adapters.dmplex.DmplexAdapter",
+        "firedrake": "zoomy_server.adapters.firedrake.FiredrakeAdapter",
+        "foam": "zoomy_server.adapters.foam.FoamAdapter",
         "mesh": "zoomy_server.adapters.mesh.MeshAdapter",
     }
 

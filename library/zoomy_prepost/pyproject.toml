@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zoomy-prepost"
+version = "0.1.0"
+description = "Shared pre/postprocessing conversions for Zoomy (VTK/.pvd -> HDF5, mesh conversion)."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "h5py",
+    "meshio",
+]
+
+[project.scripts]
+zoomy-convert = "zoomy_prepost.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["zoomy_prepost*"]
