@@ -65,11 +65,11 @@ def test_headings_structure_and_viz():
     assert '"backend": "jax"' in py
     s2 = parse(py)
     assert s2["visualization"]["code"].startswith("import matplotlib")
-    # without viz -> no heading, no section
+    # viz is ALWAYS attached: no card selected -> the generated default plot
     py0 = compose(SPEC)
-    assert "## Visualization" not in py0
-    assert "visualization" not in parse(py0)
-    print("OK headings + optional visualization")
+    assert "## Visualization" in py0
+    assert "MatplotlibPlotter" in parse(py0)["visualization"]["code"]
+    print("OK headings + always-attached visualization (default fallback)")
 
 
 def test_parse_headings_only_no_metadata():

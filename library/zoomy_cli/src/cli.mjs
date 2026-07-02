@@ -403,11 +403,49 @@ export class ZoomyCLI {
             { type: "code", meta: { role: "run" },
               source: (spec.run && spec.run.code) || this._runCode() },
         ];
-        if (viz.code) {
-            cells.push(H("visualization", "Visualization"));
-            cells.push({ type: "code", meta: { role: "visualization" }, source: trim(viz.code) });
-        }
+        /* Visualization is ALWAYS attached: the selected viz card's code
+           (with the notebook prelude) when provided, else the generated
+           default plot — case AND figure reproduce. */
+        cells.push(H("visualization", "Visualization"));
+        cells.push({ type: "code", meta: { role: "visualization" },
+                     source: trim(viz.code) || this._vizCode() });
         return cells;
+    }
+
+    /** Notebook prelude for viz-card code: provides the globals the GUI
+     *  worker injects (store/time_step/field_name/display), reading the
+     *  simulation.h5 the Run section produced. */
+    vizPrelude() {
+        return [
+            "import matplotlib",
+            "import matplotlib.pyplot as plt",
+            "import zoomy_plotting as zp",
+            "",
+            "store = zp.read_hdf5(\"simulation.h5\")",
+            "time_step = store.n_snapshots - 1        # last snapshot",
+            "field_name = None                        # None -> first field",
+            "try:",
+            "    display                              # provided by Jupyter",
+            "except NameError:",
+            "    display = lambda *a: None            # plain-script fallback",
+            "",
+        ].join("\n");
+    }
+
+    /** Generated default visualization (mirrors zoomy_prepost.case._viz_code). */
+    _vizCode() {
+        return this.vizPrelude() + [
+            "field = next(iter(store.field.keys()))",
+            "with zp.apply_style():",
+            "    fig, ax = plt.subplots()",
+            "    zp.MatplotlibPlotter(store).plot(ax, time_step=time_step, field=field,",
+            "                                     **({} if store.dim == 1 else {\"cmap\": \"viridis\", \"colorbar\": True}))",
+            "    if store.times is not None and len(store.times):",
+            "        ax.set_title(f\"{field} — t = {float(store.times[time_step]):.3f}\")",
+            "fig.savefig(\"simulation.png\", dpi=150, bbox_inches=\"tight\")",
+            "display(fig)",
+            "print(\"figure -> simulation.png\")",
+        ].join("\n");
     }
 
     /** Generated in-process runner (mirrors zoomy_prepost.case._run_code). */

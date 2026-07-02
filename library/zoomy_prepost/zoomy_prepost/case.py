@@ -189,13 +189,50 @@ def compose(spec) -> str:
     cells.append(md("## Run", {"role": "heading", "section": "run"}))
     cells.append(code(run.get("code") or _run_code(), {"role": "run"}))
 
+    # Visualization: ALWAYS attached — the selected viz card's code when
+    # provided, else the generated default plot; either way the notebook
+    # reproduces case AND figure.
     viz = spec.get("visualization", {}) or {}
-    if viz.get("code"):
-        cells.append(md("## Visualization", {"role": "heading", "section": "visualization"}))
-        cells.append(code(viz["code"], {"role": "visualization"}))
+    cells.append(md("## Visualization", {"role": "heading", "section": "visualization"}))
+    cells.append(code(viz.get("code") or _viz_code(), {"role": "visualization"}))
 
     nb.cells = cells
     return jupytext.writes(nb, fmt=_FMT)
+
+
+#: Adapter prelude for notebook context — provides the globals the GUI worker
+#: injects into viz-card code (store/time_step/field_name/display), reading
+#: the simulation.h5 the Run section produced.
+VIZ_PRELUDE = '''\
+import matplotlib
+import matplotlib.pyplot as plt
+import zoomy_plotting as zp
+
+store = zp.read_hdf5("simulation.h5")
+time_step = store.n_snapshots - 1        # last snapshot
+field_name = None                        # None -> first field
+try:
+    display                              # provided by Jupyter
+except NameError:
+    display = lambda *a: None            # plain-script fallback (see savefig)
+'''
+
+
+def _viz_code():
+    """Generated default visualization: last snapshot of the first field via
+    zoomy_plotting (works in JupyterLite — zoomy-plotting is in the kernel
+    lockfile — and any env with `pip install zoomy-plotting`)."""
+    return VIZ_PRELUDE + '''
+field = next(iter(store.field.keys()))
+with zp.apply_style():
+    fig, ax = plt.subplots()
+    zp.MatplotlibPlotter(store).plot(ax, time_step=time_step, field=field,
+                                     **({} if store.dim == 1 else {"cmap": "viridis", "colorbar": True}))
+    if store.times is not None and len(store.times):
+        ax.set_title(f"{field} — t = {float(store.times[time_step]):.3f}")
+fig.savefig("simulation.png", dpi=150, bbox_inches="tight")
+display(fig)
+print("figure -> simulation.png")'''
 
 
 def _run_code():
