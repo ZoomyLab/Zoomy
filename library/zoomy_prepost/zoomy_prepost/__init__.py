@@ -5,5 +5,6 @@ writers. Today: VTK / ParaView ``.pvd`` -> zoomy HDF5 (readable by
 ``zoomy_plotting`` / the GUI). Mesh conversion helpers can grow here too.
 """
 from .vtk import vtk_to_hdf5
+from .mesh import mesh_to_gmsh
 
-__all__ = ["vtk_to_hdf5"]
+__all__ = ["vtk_to_hdf5", "mesh_to_gmsh"]
