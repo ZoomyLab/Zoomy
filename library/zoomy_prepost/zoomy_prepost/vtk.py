@@ -53,6 +53,39 @@ def _frames(source):
     return [(0.0, source)]  # a single .vtu / .vtk
 
 
+# VTK cell-type ints (for the pyvista fallback) -> meshio names
+_VTK_TO_MESHIO = {3: "line", 5: "triangle", 9: "quad", 10: "tetra", 12: "hexahedron", 13: "wedge"}
+
+
+def _read(path):
+    """Read one VTK frame as a meshio.Mesh. meshio first; on failure (e.g.
+    firedrake's VTU version 2.2, which meshio rejects) fall back to pyvista/vtk."""
+    import meshio
+    try:
+        return meshio.read(path)
+    except (Exception, SystemExit):
+        # meshio raises SystemExit (not Exception) on an unsupported version.
+        return _read_via_pyvista(path)
+
+
+def _read_via_pyvista(path):
+    import numpy as np
+    import meshio
+    import pyvista as pv
+
+    pm = pv.read(path)
+    cells = [
+        (_VTK_TO_MESHIO[t], np.asarray(conn))
+        for t, conn in pm.cells_dict.items()
+        if t in _VTK_TO_MESHIO
+    ]
+    if not cells:
+        raise ValueError(f"no supported VTK cell types in {list(pm.cells_dict)} ({path})")
+    cell_data = {n: [np.asarray(pm.cell_data[n])] for n in pm.cell_data.keys()}
+    point_data = {n: np.asarray(pm.point_data[n]) for n in pm.point_data.keys()}
+    return meshio.Mesh(np.asarray(pm.points), cells, cell_data=cell_data, point_data=point_data)
+
+
 def _pick_block(mesh):
     """Return (block_index, CellBlock) for the top-dimensional supported block."""
     best = None
@@ -120,7 +153,7 @@ def vtk_to_hdf5(source, out_path):
     if not frames:
         raise ValueError(f"no frames in {source!r}")
 
-    mesh0 = meshio.read(frames[0][1])
+    mesh0 = _read(frames[0][1])
     bi, cb = _pick_block(mesh0)
     ztype = _MESHIO_TO_ZOOMY[cb.type]
     dim = _ZOOMY_DIM[ztype]
@@ -140,7 +173,7 @@ def vtk_to_hdf5(source, out_path):
 
         fields = f.create_group("fields")
         for i, (t, path) in enumerate(frames):
-            mesh = mesh0 if i == 0 else meshio.read(path)
+            mesh = mesh0 if i == 0 else _read(path)
             Q, _names = _extract_Q(mesh, bi, cell_idx, n_cells)
             it = fields.create_group(f"iteration_{i}")
             it.create_dataset("time", data=float(t), dtype=float)
