@@ -77,16 +77,24 @@ class SolverAdapter:
 
     @staticmethod
     def resolve_model(case_dir):
-        """Import model.py and return the Model instance."""
+        """Import model.py and return the Model instance.
+
+        Prefers an explicit module-level ``model`` instance (the composed case
+        format does ``model = SME(level=2)``, and any case that instantiates its
+        model with arguments/IC/BC) over scanning for a Model subclass — otherwise
+        a bare ``SME()`` constructed from the imported class would drop those args.
+        Falls back to the first Model subclass (subclass-style cases that bake
+        their IC/BC and are meant to be constructed with no arguments).
+        """
         mod = SolverAdapter.import_from_case(case_dir, "model")
-        # Find the Model subclass in the module
         from zoomy_core.model.basemodel import Model
+        if isinstance(getattr(mod, "model", None), Model):
+            return mod.model
         for attr_name in dir(mod):
             obj = getattr(mod, attr_name)
             if isinstance(obj, type) and issubclass(obj, Model) and obj is not Model:
                 return obj()
-        # If no class found, look for a module-level 'model' variable
-        if hasattr(mod, 'model'):
+        if hasattr(mod, "model"):
             return mod.model
         raise RuntimeError(f"No Model subclass found in {case_dir}/model.py")
 
