@@ -11,6 +11,8 @@ dependencies = [
     "numpy",
     "h5py",
     "meshio",
+    "jupytext",
+    "nbformat",
 ]
 
 [project.scripts]

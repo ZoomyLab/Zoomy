@@ -1,5 +1,7 @@
 """FastAPI routes for Zoomy Solver Server."""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -28,6 +30,16 @@ class JobRequest(BaseModel):
     case_dir: str
 
 
+class CaseRequest(BaseModel):
+    """A self-contained case submitted by a client (e.g. the browser GUI): the
+    canonical composed ``.py`` (``zoomy_prepost.case`` format) plus an optional
+    uploaded mesh (base64). The server materializes it into a case folder and
+    runs it with the configured adapter — no pre-existing server-side folder."""
+    case_py: str
+    mesh_b64: Optional[str] = None
+    mesh_name: Optional[str] = None
+
+
 @router.get("/health")
 def health():
     return {"status": "ok", "tag": _adapter.tag if _adapter else "unknown"}
@@ -51,6 +63,32 @@ def create_job(req: JobRequest):
     if not _adapter:
         raise HTTPException(503, "No adapter configured")
     job_id = jobs.submit(_adapter, req.case_dir)
+    return {"job_id": job_id}
+
+
+@router.post("/cases")
+def create_case_job(req: CaseRequest):
+    """Ingest a self-contained composed case, materialize the adapter case
+    folder (model.py, mesh.py, settings.json [+ uploaded mesh]) and run it.
+    This is the endpoint the browser GUI uses — it uploads the composed .py
+    rather than naming a server-side path."""
+    if not _adapter:
+        raise HTTPException(503, "No adapter configured")
+    import base64
+    import os
+    import tempfile
+    from zoomy_prepost import to_folder
+
+    case_dir = tempfile.mkdtemp(prefix="zoomy_case_")
+    try:
+        to_folder(req.case_py, case_dir)
+        if req.mesh_b64 and req.mesh_name:
+            dest = os.path.join(case_dir, os.path.basename(req.mesh_name))
+            with open(dest, "wb") as f:
+                f.write(base64.b64decode(req.mesh_b64))
+    except Exception as e:
+        raise HTTPException(400, f"Invalid case: {e}")
+    job_id = jobs.submit(_adapter, case_dir)
     return {"job_id": job_id}
 
 
