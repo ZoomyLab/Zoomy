@@ -35,8 +35,47 @@ class AmrexAdapter(SolverAdapter):
         self.run_mesh_script(case_dir)
         model = self.resolve_model(case_dir)
 
+        # run_case wants a structured spec (dimension/domain/n_cells). The shared
+        # folder case carries its grid in mesh.h5 instead — derive the spec from
+        # it so ONE case runs on every backend (regular create_1d/create_2d grids).
+        if "domain" not in settings or "n_cells" not in settings:
+            derived = self._structured_spec_from_mesh(case_dir)
+            if derived:
+                for k, v in derived.items():
+                    settings.setdefault(k, v)
+                logger.info("amrex: derived structured spec from mesh.h5: %s", derived)
+
         logger.info("amrex: running case on a structured grid via zoomy_amrex.run_case")
         run_case(model, settings, output_dir, on_progress=on_progress)
+
+    @staticmethod
+    def _structured_spec_from_mesh(case_dir):
+        """Read mesh.h5 (BaseMesh layout) and return {dimension, domain, n_cells}
+        for a REGULAR create_1d/create_2d grid, else None."""
+        import os
+        try:
+            import h5py
+            import numpy as np
+            path = os.path.join(case_dir, "mesh.h5")
+            if not os.path.exists(path):
+                return None
+            with h5py.File(path, "r") as f:
+                g = f["mesh"] if "mesh" in f else f
+                dim = int(np.asarray(g["dimension"])[()])
+                verts = np.asarray(g["vertex_coordinates"])  # (dim, n_vert)
+            xs = np.unique(np.round(verts[0], 12))
+            if dim == 1:
+                return {"dimension": 1,
+                        "domain": [float(xs.min()), float(xs.max())],
+                        "n_cells": int(len(xs) - 1)}
+            ys = np.unique(np.round(verts[1], 12))
+            return {"dimension": 2,
+                    "domain": [float(xs.min()), float(xs.max()),
+                               float(ys.min()), float(ys.max())],
+                    "n_cells": [int(len(xs) - 1), int(len(ys) - 1)]}
+        except Exception as e:
+            logger.warning("amrex: could not derive structured spec from mesh.h5: %s", e)
+            return None
 
     def list_models(self):
         try:
