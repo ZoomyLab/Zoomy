@@ -15,8 +15,9 @@ From: ubuntu:24.04
     Description PETSc/DMPlex + Zoomy solver server (--adapter dmplex) on :8080
 
 %files
-    library/zoomy_core   /opt/src/zoomy_core
-    library/zoomy_server /opt/src/zoomy_server
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
     # The dmplex adapter compiles the C++ solver source at run time (make CPU),
     # so ship it at ZOOMY_ROOT=/workspace where _find_solver_source looks.
     library/zoomy_dmplex /workspace/library/zoomy_dmplex
@@ -29,6 +30,8 @@ From: ubuntu:24.04
     export LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH"
     export PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH"
     export ZOOMY_ROOT=/workspace
+    export ZOOMY_ADAPTER=dmplex
+    export ZOOMY_PORT=8080
 
 %post
     set -e
@@ -41,7 +44,8 @@ From: ubuntu:24.04
 
     python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy "sympy>=1.14" param loguru attrs "cython<3.1" pytest h5py meshio \
-        "fastapi>=0.100" "uvicorn[standard]>=0.20"
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
 
     # --- PETSc from source ---
     export PETSC_DIR=/opt/petsc PETSC_ARCH=arch-container-opt
@@ -63,19 +67,29 @@ From: ubuntu:24.04
     # Zoomy core + the FastAPI server (LAST, so a failure aborts under set -e).
     export PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH"
     python3 -m pip install --no-cache-dir --break-system-packages \
-        /opt/src/zoomy_core /opt/src/zoomy_server
+        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost
     rm -rf /opt/src
 
 %runscript
-    exec zoomy-server --adapter dmplex --port "${1:-8080}"
+    # Triple-purpose dispatch ($ZOOMY_ADAPTER=dmplex baked):
+    #   run img | run img <port> | run img server [adapter] [port]
+    #   run img jupyter [port] | run img shell
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
 
 %startscript
-    exec zoomy-server --adapter dmplex --port 8080
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
 
 %test
     export PETSC_DIR=/opt/petsc PETSC_ARCH=arch-container-opt
     export PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH"
-    python3 -c "import zoomy_core, zoomy_server, h5py, meshio; print('zoomy imports OK')"
+    python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, h5py, meshio; print('zoomy imports OK')"
     test -f "$PETSC_DIR/$PETSC_ARCH/lib/libpetsc.so" && echo "PETSc library OK"
     python3 -c "import petsc4py; petsc4py.init(); from petsc4py import PETSc; print('petsc4py OK')"
-    zoomy-server --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"

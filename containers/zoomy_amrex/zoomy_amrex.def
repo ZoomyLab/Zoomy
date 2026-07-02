@@ -16,14 +16,17 @@ From: ubuntu:24.04
     Description AMReX + Zoomy solver server (--adapter amrex) on :8080
 
 %files
-    library/zoomy_core   /opt/src/zoomy_core
-    library/zoomy_amrex  /opt/src/zoomy_amrex
-    library/zoomy_server /opt/src/zoomy_server
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_amrex   /opt/src/zoomy_amrex
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
 
 %environment
     export AMREX_HOME=/opt/amrex
     export ZOOMY_AMREX_HOME=/opt/amrex
     export ZOOMY_ROOT=/workspace
+    export ZOOMY_ADAPTER=amrex
+    export ZOOMY_PORT=8080
     export LC_ALL=C
     export PATH="/usr/local/bin:$PATH"
 
@@ -39,7 +42,8 @@ From: ubuntu:24.04
     # h5py/meshio = HDF5 mesh/result IO; fastapi/uvicorn = the server.
     python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs meshio pytest rasterio h5py \
-        "fastapi>=0.100" "uvicorn[standard]>=0.20"
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
 
     # AMReX from source (headers + source kept, object files pruned). zoomy_amrex
     # code-gens + compiles per model at RUNTIME, so no compile at install time.
@@ -52,17 +56,26 @@ From: ubuntu:24.04
     # aborts the build under `set -e`).
     export AMREX_HOME=/opt/amrex ZOOMY_AMREX_HOME=/opt/amrex
     python3 -m pip install --no-cache-dir --break-system-packages \
-        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server
+        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server /opt/src/zoomy_prepost
     rm -rf /opt/src
 
 %runscript
-    # $1 = port (default 8080). Serves the amrex backend over the FastAPI.
-    exec zoomy-server --adapter amrex --port "${1:-8080}"
+    # Triple-purpose dispatch ($ZOOMY_ADAPTER=amrex baked):
+    #   run img | run img <port> | run img server [adapter] [port]
+    #   run img jupyter [port] | run img shell
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
 
 %startscript
-    exec zoomy-server --adapter amrex --port 8080
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
 
 %test
-    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, h5py, meshio; print('imports OK')"
+    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
     test -d /opt/amrex/Src/Base && echo "AMReX source OK"
-    zoomy-server --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
+    zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
