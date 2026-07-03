@@ -55,107 +55,159 @@ mesh = os.path.join(misc.get_main_directory(), "data", "malpasset",
 # including the normal stresses. Friction is applied through the explicit slot.
 
 # %%
-class ShallowWater(SystemModel):
-    def __init__(self, g=9.81, n=0.033, nu=1.0, eps=1e-2, u_max=30.0):
-        t = sp.Symbol("t", real=True)
-        x, y = sp.symbols("x y", real=True)
-        n0, n1 = sp.symbols("n0 n1", real=True)
-        distance = sp.Symbol("distance", real=True)
-        position = Zstruct(X0=sp.Symbol("X0"), X1=sp.Symbol("X1"),
-                           X2=sp.Symbol("X2"))
-        position._symbolic_name = "X"
+class SystemModelSpec(SystemModel):
+    """Author a SystemModel by writing each operator as a method.
 
-        b, h, hu, hv = sp.symbols("b h hu hv", real=True)
-        state = [b, h, hu, hv]
-        variables = Zstruct(b=b, h=h, hu=hu, hv=hv)
-        variables._symbolic_name = "Q"
-        aux = Zstruct()
-        aux._symbolic_name = "Qaux"
+    Declare `variables`, `aux_variables`, `parameters` (name -> default), then
+    define any of the operators below as a method returning its symbolic tensor.
+    State and parameter symbols are exposed as attributes (`self.h`, `self.g`,
+    ...); boundary conditions come from a `boundary_conditions()` method.
+    """
 
-        g_, n_, nu_, eps_, u_max_ = sp.symbols("g n nu eps u_max", positive=True)
-        parameters = Zstruct(g=g_, n=n_, nu=nu_, eps=eps_, u_max=u_max_)
-        parameters._symbolic_name = "p"
-        parameter_values = Zstruct(g=g, n=n, nu=nu, eps=eps, u_max=u_max)
-        normal = Zstruct(n0=n0, n1=n1)
-        normal._symbolic_name = "n"
+    variables = ()
+    aux_variables = ()
+    parameters = {}
+    _operators = ("flux", "hydrostatic_pressure", "nonconservative_matrix",
+                  "source", "source_explicit", "diffusion_matrix_explicit",
+                  "eigenvalues", "update_variables", "update_aux_variables",
+                  "reconstruction_variables")
 
-        hinv = sqrt(2) * h / sqrt(h ** 4 + Max(h, eps_) ** 4)
-        u, w = hu * hinv, hv * hinv
-        speed = sqrt(u * u + w * w)
+    def __init__(self, **parameter_overrides):
+        self.t = sp.Symbol("t", real=True)
+        self.x, self.y = sp.symbols("x y", real=True)
+        self._distance = sp.Symbol("distance", real=True)
+        self._position = Zstruct(X0=sp.Symbol("X0"), X1=sp.Symbol("X1"),
+                                 X2=sp.Symbol("X2"))
+        self._position._symbolic_name = "X"
+        self.n0, self.n1 = sp.symbols("n0 n1", real=True)
+        self._normal = Zstruct(n0=self.n0, n1=self.n1)
+        self._normal._symbolic_name = "n"
 
-        flux = zeros(4, 2)
-        flux[1, 0], flux[1, 1] = hu, hv
-        flux[2, 0], flux[2, 1] = hu * u, hu * w
-        flux[3, 0], flux[3, 1] = hv * u, hv * w
+        state = [sp.Symbol(k, real=True) for k in self.variables]
+        aux = [sp.Symbol(k, real=True) for k in self.aux_variables]
+        for k, s in zip(tuple(self.variables) + tuple(self.aux_variables),
+                        state + aux):
+            setattr(self, k, s)
+        q = Zstruct(**dict(zip(self.variables, state))); q._symbolic_name = "Q"
+        qaux = Zstruct(**dict(zip(self.aux_variables, aux)))
+        qaux._symbolic_name = "Qaux"
 
-        pressure = zeros(4, 2)
-        pressure[2, 0] = g_ * h ** 2 / 2
-        pressure[3, 1] = g_ * h ** 2 / 2
+        values = {**self.parameters, **parameter_overrides}
+        params = Zstruct(**{k: sp.Symbol(k, positive=True) for k in values})
+        params._symbolic_name = "p"
+        for k in values:
+            setattr(self, k, getattr(params, k))
 
-        bed_slope = sp.MutableDenseNDimArray.zeros(4, 4, 2)
-        bed_slope[2, 0, 0] = g_ * h
-        bed_slope[3, 0, 1] = g_ * h
+        neq = len(state)
+        fields = dict(
+            time=self.t, space=[self.x, self.y], state=state, aux_state=aux,
+            parameters=params, parameter_values=Zstruct(**values),
+            normal=self._normal, mass_matrix=eye(neq), source=zeros(neq, 1),
+            hydrostatic_pressure=zeros(neq, 2),
+            nonconservative_matrix=sp.MutableDenseNDimArray.zeros(neq, neq, 2))
+        cls = type(self)
+        for name in self._operators:
+            method = getattr(cls, name, None)
+            if callable(method):
+                fields[name] = method(self)
 
-        friction = -g_ * n_ ** 2 * speed / Max(h, eps_) ** Rational(1, 3)
-        friction_source = Matrix([0, 0, friction * u, friction * w])
+        if callable(getattr(cls, "boundary_conditions", None)):
+            walls = bc.BoundaryConditions(self.boundary_conditions())
+            args = (self.t, self._position, self._distance, q, qaux, params,
+                    self._normal)
+            fields["boundary_conditions"] = walls.get_boundary_condition_function(
+                *args, function_name="boundary_conditions")
+            fields["boundary_gradients"] = walls.get_boundary_gradient_function(
+                *args, function_name="boundary_gradients")
+            aux_walls = bc.BoundaryConditions(
+                [aux_bc.Extrapolation(tag=w.tag)
+                 for w in walls.boundary_conditions_list])
+            fields["aux_boundary_conditions"] = aux_walls.get_boundary_condition_function(
+                *args, function_name="aux_boundary_conditions")
+            self._boundary_tags = walls._boundary_tags
 
-        stress = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        vel = {2: u, 3: w}
+        super().__init__(**fields)
+        self.expose_aux_atoms()
 
-        def viscous(i, m, d, e, factor):
-            stress[i, m, d, e] += factor * nu_
-            stress[i, 1, d, e] += -factor * nu_ * vel[m]
 
-        viscous(2, 2, 0, 0, 2); viscous(2, 2, 1, 1, 1); viscous(2, 3, 1, 0, 1)
-        viscous(3, 3, 0, 0, 1); viscous(3, 2, 0, 1, 1); viscous(3, 3, 1, 1, 2)
+# %%
+class ShallowWater(SystemModelSpec):
+    variables = ("b", "h", "hu", "hv")
+    parameters = dict(g=9.81, n=0.033, nu=1.0, eps=1e-2, u_max=30.0)
 
-        normal_velocity = u * n0 + w * n1
-        wave = sqrt(g_ * Max(h, eps_))
+    @property
+    def hinv(self):
+        return sqrt(2) * self.h / sqrt(self.h ** 4 + Max(self.h, self.eps) ** 4)
+
+    @property
+    def u(self):
+        return self.hu * self.hinv
+
+    @property
+    def w(self):
+        return self.hv * self.hinv
+
+    @property
+    def speed(self):
+        return sqrt(self.u ** 2 + self.w ** 2)
+
+    def flux(self):
+        f = zeros(4, 2)
+        f[1, 0], f[1, 1] = self.hu, self.hv
+        f[2, 0], f[2, 1] = self.hu * self.u, self.hu * self.w
+        f[3, 0], f[3, 1] = self.hv * self.u, self.hv * self.w
+        return f
+
+    def hydrostatic_pressure(self):
+        p = zeros(4, 2)
+        p[2, 0] = self.g * self.h ** 2 / 2
+        p[3, 1] = self.g * self.h ** 2 / 2
+        return p
+
+    def nonconservative_matrix(self):
+        bed = sp.MutableDenseNDimArray.zeros(4, 4, 2)
+        bed[2, 0, 0] = self.g * self.h
+        bed[3, 0, 1] = self.g * self.h
+        return bed
+
+    def source_explicit(self):
+        rate = -self.g * self.n ** 2 * self.speed / Max(self.h, self.eps) ** Rational(1, 3)
+        return Matrix([0, 0, rate * self.u, rate * self.w])
+
+    def diffusion_matrix_explicit(self):
+        # full deviatoric stress div(nu h (grad u + grad u^T)) — normal stresses
+        # tau_xx = 2 nu du/dx, tau_yy = 2 nu dv/dy plus the shear/transpose terms.
+        a = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
+        velocity = {2: self.u, 3: self.w}
+
+        def stress(i, m, d, e, factor):
+            a[i, m, d, e] += factor * self.nu
+            a[i, 1, d, e] += -factor * self.nu * velocity[m]
+
+        stress(2, 2, 0, 0, 2); stress(2, 2, 1, 1, 1); stress(2, 3, 1, 0, 1)
+        stress(3, 3, 0, 0, 1); stress(3, 2, 0, 1, 1); stress(3, 3, 1, 1, 2)
+        return a
+
+    def eigenvalues(self):
+        normal_velocity = self.u * self.n0 + self.w * self.n1
+        wave = sqrt(self.g * Max(self.h, self.eps))
         dry = sp.Function("conditional")
-        eigenvalues = Matrix([
-            dry(h > eps_, e, sp.S.Zero)
+        return Matrix([
+            dry(self.h > self.eps, e, sp.S.Zero)
             for e in (sp.S.Zero, normal_velocity,
                       normal_velocity - wave, normal_velocity + wave)])
 
-        cap = Max(h - eps_, sp.S.Zero) * u_max_
+    def update_variables(self):
+        cap = Max(self.h - self.eps, sp.S.Zero) * self.u_max
         clamp = lambda q: Max(-cap, Min(q, cap))
-        update_variables = Matrix([b, h, clamp(hu), clamp(hv)])
+        return Matrix([self.b, self.h, clamp(self.hu), clamp(self.hv)])
 
-        reconstruction = Matrix([b, b + h, hu, hv])
+    def reconstruction_variables(self):
+        return Matrix([self.b, self.b + self.h, self.hu, self.hv])
 
-        walls = bc.BoundaryConditions([
-            bc.Wall(tag="wall", momentum_field_indices=[[2, 3]],
-                    permeability=0.0, wall_slip=1.0)])
-        wall_kernel = walls.get_boundary_condition_function(
-            t, position, distance, variables, aux, parameters, normal,
-            function_name="boundary_conditions")
-        gradient_kernel = walls.get_boundary_gradient_function(
-            t, position, distance, variables, aux, parameters, normal,
-            function_name="boundary_gradients")
-        aux_walls = bc.BoundaryConditions([aux_bc.Extrapolation(tag="wall")])
-        aux_kernel = aux_walls.get_boundary_condition_function(
-            t, position, distance, variables, aux, parameters, normal,
-            function_name="aux_boundary_conditions")
-
-        super().__init__(
-            time=t, space=[x, y], state=state, aux_state=[],
-            parameters=parameters, parameter_values=parameter_values,
-            normal=normal,
-            flux=flux,
-            hydrostatic_pressure=pressure,
-            nonconservative_matrix=bed_slope,
-            source=zeros(4, 1),
-            source_explicit=friction_source,
-            diffusion_matrix_explicit=stress,
-            mass_matrix=eye(4),
-            eigenvalues=eigenvalues,
-            update_variables=update_variables,
-            reconstruction_variables=reconstruction,
-            boundary_conditions=wall_kernel,
-            boundary_gradients=gradient_kernel,
-            aux_boundary_conditions=aux_kernel)
-        self._boundary_tags = walls._boundary_tags
-        self.expose_aux_atoms()
+    def boundary_conditions(self):
+        return [bc.Wall(tag="wall", momentum_field_indices=[[2, 3]],
+                        permeability=0.0, wall_slip=1.0)]
 
 
 model = ShallowWater()
