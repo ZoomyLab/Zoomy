@@ -159,10 +159,9 @@ jobs:
           mkdir -p docs/book/_build/html/gui
           # Copy the submodule GUI first
           cp -r library/zoomy_gui/* docs/book/_build/html/gui/
-          # Ship the mesh catalog (1.6MB) so catalog mesh cards resolve to a
-          # fetchable URL (../meshes/<...>.msh next to gui/) — used by the
-          # exported notebooks' fetch-or-load mesh cells.
-          cp -r meshes docs/book/_build/html/meshes
+          # (Mesh catalog is NOT shipped here: the meshes-repo publishes all
+          # built .msh files to its own Pages at zoomylab.github.io/meshes/,
+          # which the exported notebooks' fetch-or-load mesh cells use.)
           # Then overwrite with freshly generated cards + previews
           cp library/zoomy_gui/cards/meshes/generated.json docs/book/_build/html/gui/cards/meshes/generated.json
           cp -r library/zoomy_gui/previews/* docs/book/_build/html/gui/previews/ 2>/dev/null || true
