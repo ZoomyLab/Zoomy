@@ -119,17 +119,30 @@ class ShallowWater(SWE):
         return ZArray([sp.S.Zero, sp.S.Zero, rate * u, rate * w])
 
     def diffusion_matrix_explicit(self):
+        # FULL horizontal deviatoric viscous stress divergence
+        #   ∇·( ν h (∇u + (∇u)ᵀ) )
+        # i.e. WITH the normal stresses τ_xx = 2ν ∂ₓu, τ_yy = 2ν ∂_yv and the
+        # transpose-gradient cross-coupling — not just the Laplacian ∇·(νh∇u).
+        # Component form (u=hu/h, v=hv/h):
+        #   u-mom: ∂ₓ(2νh ∂ₓu) + ∂_y(νh ∂_yu) + ∂_y(νh ∂ₓv)
+        #   v-mom: ∂ₓ(νh ∂ₓv) + ∂ₓ(νh ∂_yu) + ∂_y(2νh ∂_yv)
+        # Diffusion is in the VELOCITY, so each ∂_e term carries the h
+        # chain-rule (−ν·vel on the h column) that turns ∂(h·vel) into h·∂vel.
+        # Every term ∝ a velocity gradient ⇒ vanishes at rest ⇒ well-balanced.
         _, h, hu, hv, hinv = self._primitives()
         u, w = hu * hinv, hv * hinv
         st = swe_closure_state(self)
-        D = sum((c.expression(st) for c in self.closures
-                 if c.closes == "horizontal"), sp.S.Zero)
+        nu = sum((c.expression(st) for c in self.closures
+                  if c.closes == "horizontal"), sp.S.Zero)
         A = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        for d in (0, 1):
-            A[2, 2, d, d] = D
-            A[3, 3, d, d] = D
-            A[2, 1, d, d] = -D * u
-            A[3, 1, d, d] = -D * w
+        vel = {2: u, 3: w}                       # velocity carried by momentum m
+
+        def add(i, m, d, e, c=1):                # += ∂_d( c·νh ∂_e vel[m] ) to eq i
+            A[i, m, d, e] += c * nu
+            A[i, 1, d, e] += -c * nu * vel[m]    # h chain-rule column
+
+        add(2, 2, 0, 0, 2); add(2, 2, 1, 1, 1); add(2, 3, 1, 0, 1)   # u-momentum
+        add(3, 3, 0, 0, 1); add(3, 2, 0, 1, 1); add(3, 3, 1, 1, 2)   # v-momentum
         return ZArray(A)
 
     def update_variables(self):
