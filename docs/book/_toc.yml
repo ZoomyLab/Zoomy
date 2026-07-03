@@ -63,9 +63,6 @@ parts:
       - file: api/amrex
       - file: api/dmplex
       - file: api/firedrake
-  - caption: Legal
-    chapters:
-      - file: legal
   - caption: WIP
     chapters:
       - file: software

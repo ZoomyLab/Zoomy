@@ -5,7 +5,7 @@
 Ingo Steldermann  
 Ringstr. 103  
 52078 Aachen  
-E-Mail: info@shallowflow.com
+E-Mail: steldermann@mbd.rwth-aachen.de
 
 ## Disclaimer
 
