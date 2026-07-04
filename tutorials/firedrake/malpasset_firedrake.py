@@ -170,19 +170,26 @@ class ShallowWater(SystemModelSpec):
         return Matrix([0, 0, rate * u, rate * w])
 
     def diffusion_matrix_explicit(self):
-        # full deviatoric stress div(nu h (grad u + grad u^T)) — normal stresses
-        # tau_xx = 2 nu du/dx, tau_yy = 2 nu dv/dy plus the shear/transpose terms.
+        # full deviatoric stress div(nu h (grad u + grad u^T)); the [i, 1, d, e]
+        # entries carry the -velocity part because the moments are hu, hv.
+        # tau_xx = 2 nu du/dx (factor 2), tau_yy = 2 nu dv/dy, the rest is shear.
         b, h, hu, hv, u, w = self.get_fields()
         nu = self.parameters.nu
         a = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        velocity = {2: u, 3: w}
-
-        def stress(i, m, d, e, factor):
-            a[i, m, d, e] += factor * nu
-            a[i, 1, d, e] += -factor * nu * velocity[m]
-
-        stress(2, 2, 0, 0, 2); stress(2, 2, 1, 1, 1); stress(2, 3, 1, 0, 1)
-        stress(3, 3, 0, 0, 1); stress(3, 2, 0, 1, 1); stress(3, 3, 1, 1, 2)
+        # u-momentum
+        a[2, 2, 0, 0] = 2 * nu
+        a[2, 1, 0, 0] = -2 * nu * u
+        a[2, 2, 1, 1] = nu
+        a[2, 1, 1, 1] = -nu * u
+        a[2, 3, 1, 0] = nu
+        a[2, 1, 1, 0] = -nu * w
+        # v-momentum
+        a[3, 3, 0, 0] = nu
+        a[3, 1, 0, 0] = -nu * w
+        a[3, 2, 0, 1] = nu
+        a[3, 1, 0, 1] = -nu * u
+        a[3, 3, 1, 1] = 2 * nu
+        a[3, 1, 1, 1] = -2 * nu * w
         return a
 
     def eigenvalues(self):
