@@ -126,4 +126,3 @@ _build
 # Description exports (generated)
 notebooks/*.md
 thesis
-tutorials/firedrake/malpasset_firedrake.ipynb
