@@ -7,215 +7,255 @@
 #     display_name: Python 3
 #     name: python3
 # ---
-# Self-contained Malpasset dam-break on Firedrake DG0.  No dependency on any
-# other Malpasset notebook: the shallow-water model, the reservoir initial
-# condition and the wall boundary condition are all defined here.  The
-# numerics come from the single source of truth — FiredrakeHyperbolicSolver
-# (the up-to-date IMEX solver: explicit hyperbolic + implicit source, MPI).
 
-# %% 1. imports
+# %% [markdown]
+# # Malpasset dam-break — Firedrake DG0
+#
+# Self-contained shallow-water run. The model is written directly as a
+# `SystemModel`: every operator (flux, hydrostatic pressure, non-conservative
+# bed-slope matrix, friction, viscous stress, eigenvalues) is given by hand, so
+# there is no model-tagging and no closures. Boundary conditions are part of the
+# model. The only downstream step is lifting the `SystemModel` to a
+# `NumericalSystemModel` and solving.
+
+# %% [markdown]
+# ## Imports
+
+# %%
 import os
 import numpy as np
 import sympy as sp
-from sympy import sqrt
+from sympy import Matrix, Max, Min, sqrt, Rational, zeros, eye
 import firedrake as fd
 import meshio
 
-from zoomy_core.misc.misc import ZArray
 import zoomy_core.misc.misc as misc
-import zoomy_core.model.boundary_conditions as BC
-from zoomy_core.model.models.swe import SWE
-from zoomy_core.model.models.closures import (
-    ManningFriction, EddyViscosity, swe_closure_state)
+from zoomy_core.misc.misc import Zstruct
+import zoomy_core.model.boundary_conditions as bc
+import zoomy_core.model.aux_boundary_conditions as aux_bc
+from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL
 from zoomy_core.fvm.solver_numpy import Settings
-from zoomy_core.misc.misc import Zstruct
 from zoomy_firedrake.firedrake_solver import FiredrakeHyperbolicSolver
 
-# %% 2. load mesh
-MESH = os.path.join(misc.get_main_directory(), "data", "malpasset",
+# %% [markdown]
+# ## Mesh
+
+# %%
+mesh = os.path.join(misc.get_main_directory(), "data", "malpasset",
                     "geo_malpasset-small.msh")
 
-# %% 3. shallow-water model (from scratch) -> SystemModel
-# State [b, h, hu, hv] + aux [hinv] (KP-desingularised 1/h). Well-balanced
-# encoding: convective flux only; hydrostatic pressure 1/2 g h^2 as a SEPARATE
-# operator; bed slope g h db as the nonconservative product; Manning bed
-# friction + eddy viscosity via composable closures.
-class ShallowWater(SWE):
-    variables = ["b", "h", "hu", "hv"]
-    parameters = {
-        "g":   (9.81, "positive"),
-        "n":   (0.033, "nonnegative"),      # Manning roughness
-        "nu":  (1.0, "nonnegative"),        # eddy viscosity
-        "wet_dry_eps": (1e-2, "positive"),  # wet/dry depth threshold
-    }
-    U_MAX = 30.0                            # per-cell velocity cap (m/s)
+# %% [markdown]
+# ## Shallow-water model
+#
+# State `(b, h, hu, hv)`, parameters `g, n, nu, eps, u_max`. `hinv` is the
+# Kurganov-Petrova desingularised `1/h`. The bed friction is classical Manning;
+# the viscous term is the full deviatoric stress `div(nu h (grad u + grad u^T))`
+# including the normal stresses. Friction is applied through the explicit slot.
 
-    def __init__(self, *, g=9.81, n=0.033, nu=1.0, eps=1e-2,
-                 h_friction_floor=0.5, ev_gate=True):
-        self._h_friction_floor = float(h_friction_floor)
-        self._ev_gate = bool(ev_gate)
-        self.closures = [ManningFriction(h_floor=float(h_friction_floor)),
-                         EddyViscosity()]
-        super().__init__(
-            dimension=2, aux_variables=["hinv"], eigenvalue_mode="symbolic",
-            parameters={"g": (float(g), "positive"),
-                        "n": (float(n), "nonnegative"),
-                        "nu": (float(nu), "nonnegative"),
-                        "wet_dry_eps": (float(eps), "positive")})
+# %%
+class SystemModelSpec(SystemModel):
+    """Author a SystemModel by writing each operator as a method.
 
-    def _build_function_groups(self):
-        return {}
+    Declare `variables`, `aux_variables`, `parameters` (name -> default), then
+    define any of the operators below as a method returning its symbolic tensor.
+    State/aux/parameter symbols are exposed as Zstructs (`self.variables.h`,
+    `self.parameters.g`); boundary conditions come from a `boundary_conditions()`
+    method. A subclass may add a `get_fields()` helper for common shorthands.
+    """
 
-    @property
-    def _parameter_symbols(self):
-        return self.parameters
+    variables = ()
+    aux_variables = ()
+    parameters = {}
+    _operators = ("flux", "hydrostatic_pressure", "nonconservative_matrix",
+                  "source", "source_explicit", "diffusion_matrix_explicit",
+                  "eigenvalues", "update_variables", "update_aux_variables",
+                  "reconstruction_variables")
 
-    def _primitives(self):
-        v, a = self.variables, self.aux_variables
-        return v.b, v.h, v.hu, v.hv, a.hinv
+    def __init__(self, **parameter_overrides):
+        cls = type(self)
+        self.time = sp.Symbol("t", real=True)
+        self.space = list(sp.symbols("x y", real=True))
+        self._distance = sp.Symbol("distance", real=True)
+        self.position = Zstruct(X0=sp.Symbol("X0"), X1=sp.Symbol("X1"),
+                                X2=sp.Symbol("X2"))
+        self.position._symbolic_name = "X"
+        self.normal = Zstruct(n0=sp.Symbol("n0", real=True),
+                              n1=sp.Symbol("n1", real=True))
+        self.normal._symbolic_name = "n"
+
+        state = [sp.Symbol(k, real=True) for k in cls.variables]
+        aux = [sp.Symbol(k, real=True) for k in cls.aux_variables]
+        self.variables = Zstruct(**dict(zip(cls.variables, state)))
+        self.variables._symbolic_name = "Q"
+        self.aux_variables = Zstruct(**dict(zip(cls.aux_variables, aux)))
+        self.aux_variables._symbolic_name = "Qaux"
+
+        values = {**dict(cls.parameters), **parameter_overrides}
+        self.parameters = Zstruct(**{k: sp.Symbol(k, positive=True)
+                                     for k in values})
+        self.parameters._symbolic_name = "p"
+
+        neq = len(state)
+        fields = dict(
+            time=self.time, space=self.space, state=state, aux_state=aux,
+            parameters=self.parameters, parameter_values=Zstruct(**values),
+            normal=self.normal, mass_matrix=eye(neq), source=zeros(neq, 1),
+            hydrostatic_pressure=zeros(neq, 2),
+            nonconservative_matrix=sp.MutableDenseNDimArray.zeros(neq, neq, 2))
+        for name in self._operators:
+            method = getattr(cls, name, None)
+            if callable(method):
+                fields[name] = method(self)
+
+        if callable(getattr(cls, "boundary_conditions", None)):
+            walls = bc.BoundaryConditions(self.boundary_conditions())
+            args = (self.time, self.position, self._distance, self.variables,
+                    self.aux_variables, self.parameters, self.normal)
+            fields["boundary_conditions"] = walls.get_boundary_condition_function(
+                *args, function_name="boundary_conditions")
+            fields["boundary_gradients"] = walls.get_boundary_gradient_function(
+                *args, function_name="boundary_gradients")
+            aux_walls = bc.BoundaryConditions(
+                [aux_bc.Extrapolation(tag=w.tag)
+                 for w in walls.boundary_conditions_list])
+            fields["aux_boundary_conditions"] = aux_walls.get_boundary_condition_function(
+                *args, function_name="aux_boundary_conditions")
+            self._boundary_tags = walls._boundary_tags
+
+        super().__init__(**fields)
+        self.expose_aux_atoms()
+
+
+# %%
+class ShallowWater(SystemModelSpec):
+    variables = ("b", "h", "hu", "hv")
+    parameters = dict(g=9.81, n=0.033, nu=1.0, eps=1e-2, u_max=30.0)
+
+    def get_fields(self):
+        """Optional shorthand: state plus the desingularised velocities."""
+        v, p = self.variables, self.parameters
+        hinv = sqrt(2) * v.h / sqrt(v.h ** 4 + Max(v.h, p.eps) ** 4)
+        u, w = v.hu * hinv, v.hv * hinv
+        return v.b, v.h, v.hu, v.hv, u, w
 
     def flux(self):
-        _, h, hu, hv, hinv = self._primitives()
-        F = sp.Matrix.zeros(4, 2)
-        F[1, 0], F[1, 1] = hu, hv                          # mass
-        F[2, 0], F[2, 1] = hu * hu * hinv, hu * hv * hinv  # momentum (convective)
-        F[3, 0], F[3, 1] = hu * hv * hinv, hv * hv * hinv
-        return ZArray(F)
+        b, h, hu, hv, u, w = self.get_fields()
+        f = zeros(4, 2)
+        f[1, 0], f[1, 1] = hu, hv
+        f[2, 0], f[2, 1] = hu * u, hu * w
+        f[3, 0], f[3, 1] = hv * u, hv * w
+        return f
 
     def hydrostatic_pressure(self):
-        _, h, _, _, _ = self._primitives()
-        g = self._parameter_symbols.g
-        P = ZArray.zeros(4, 2)
-        P[2, 0] = g * h ** 2 / 2
-        P[3, 1] = g * h ** 2 / 2
-        return P
+        h, g = self.variables.h, self.parameters.g
+        p = zeros(4, 2)
+        p[2, 0] = g * h ** 2 / 2
+        p[3, 1] = g * h ** 2 / 2
+        return p
 
     def nonconservative_matrix(self):
-        _, h, _, _, _ = self._primitives()
-        g = self._parameter_symbols.g
-        N = ZArray.zeros(4, 4, 2)
-        N[2, 0, 0] = g * h            # g h db/dx
-        N[3, 0, 1] = g * h            # g h db/dy
-        return N
-
-    def source(self):
-        # Bed friction is applied EXPLICITLY via source_explicit (below), not
-        # here.  The fully-implicit Lie-split source solve is unstable at wet/dry
-        # shorelines — it spuriously drains still water (the sea collapses ~12 m
-        # over the Malpasset run) even though the friction value is correct.
-        # jax applies friction explicitly and is stable; matching that here.
-        return ZArray([sp.S.Zero] * 4)
+        h, g = self.variables.h, self.parameters.g
+        bed = sp.MutableDenseNDimArray.zeros(4, 4, 2)
+        bed[2, 0, 0] = g * h
+        bed[3, 0, 1] = g * h
+        return bed
 
     def source_explicit(self):
-        # Manning bed friction, evaluated at Qn in the (explicit) convective
-        # step — jax's treatment.  Stable at wet/dry and damps identically.
-        _, h, hu, hv, hinv = self._primitives()
-        u, w = hu * hinv, hv * hinv
-        st = swe_closure_state(self)
-        rate = sum((c.expression(st) for c in self.closures
-                    if c.closes == "bottom"), sp.S.Zero)
-        return ZArray([sp.S.Zero, sp.S.Zero, rate * u, rate * w])
+        b, h, hu, hv, u, w = self.get_fields()
+        p = self.parameters
+        speed = sqrt(u ** 2 + w ** 2)
+        rate = -p.g * p.n ** 2 * speed / Max(h, p.eps) ** Rational(1, 3)
+        return Matrix([0, 0, rate * u, rate * w])
 
     def diffusion_matrix_explicit(self):
-        # FULL horizontal deviatoric viscous stress divergence
-        #   ∇·( ν h (∇u + (∇u)ᵀ) )
-        # i.e. WITH the normal stresses τ_xx = 2ν ∂ₓu, τ_yy = 2ν ∂_yv and the
-        # transpose-gradient cross-coupling — not just the Laplacian ∇·(νh∇u).
-        # Component form (u=hu/h, v=hv/h):
-        #   u-mom: ∂ₓ(2νh ∂ₓu) + ∂_y(νh ∂_yu) + ∂_y(νh ∂ₓv)
-        #   v-mom: ∂ₓ(νh ∂ₓv) + ∂ₓ(νh ∂_yu) + ∂_y(2νh ∂_yv)
-        # Diffusion is in the VELOCITY, so each ∂_e term carries the h
-        # chain-rule (−ν·vel on the h column) that turns ∂(h·vel) into h·∂vel.
-        # Every term ∝ a velocity gradient ⇒ vanishes at rest ⇒ well-balanced.
-        _, h, hu, hv, hinv = self._primitives()
-        u, w = hu * hinv, hv * hinv
-        st = swe_closure_state(self)
-        nu = sum((c.expression(st) for c in self.closures
-                  if c.closes == "horizontal"), sp.S.Zero)
-        A = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
-        vel = {2: u, 3: w}                       # velocity carried by momentum m
+        # full deviatoric stress div(nu h (grad u + grad u^T)) — normal stresses
+        # tau_xx = 2 nu du/dx, tau_yy = 2 nu dv/dy plus the shear/transpose terms.
+        b, h, hu, hv, u, w = self.get_fields()
+        nu = self.parameters.nu
+        a = sp.MutableDenseNDimArray.zeros(4, 4, 2, 2)
+        velocity = {2: u, 3: w}
 
-        def add(i, m, d, e, c=1):                # += ∂_d( c·νh ∂_e vel[m] ) to eq i
-            A[i, m, d, e] += c * nu
-            A[i, 1, d, e] += -c * nu * vel[m]    # h chain-rule column
+        def stress(i, m, d, e, factor):
+            a[i, m, d, e] += factor * nu
+            a[i, 1, d, e] += -factor * nu * velocity[m]
 
-        add(2, 2, 0, 0, 2); add(2, 2, 1, 1, 1); add(2, 3, 1, 0, 1)   # u-momentum
-        add(3, 3, 0, 0, 1); add(3, 2, 0, 1, 1); add(3, 3, 1, 1, 2)   # v-momentum
-        return ZArray(A)
-
-    def update_variables(self):
-        v, p = self.variables, self._parameter_symbols
-        h, hu, hv = v.h, v.hu, v.hv
-        u_max = sp.Float(self.U_MAX)
-        max_hu = sp.Max(h - p.wet_dry_eps, sp.S.Zero) * u_max
-        cap = lambda c: sp.Max(-max_hu, sp.Min(c, max_hu))
-        return ZArray([v.b, h, cap(hu), cap(hv)])
-
-    def update_variables_jacobian_wrt_variables(self):
-        return ZArray.zeros(self.n_variables, self.n_variables)
+        stress(2, 2, 0, 0, 2); stress(2, 2, 1, 1, 1); stress(2, 3, 1, 0, 1)
+        stress(3, 3, 0, 0, 1); stress(3, 2, 0, 1, 1); stress(3, 3, 1, 1, 2)
+        return a
 
     def eigenvalues(self):
-        _, h, hu, hv, hinv = self._primitives()
-        p, nrm = self._parameter_symbols, self.normal
-        un = hu * hinv * nrm.n0 + hv * hinv * nrm.n1
-        c = sqrt(p.g * sp.Max(h, p.wet_dry_eps))
-        raw = [sp.S.Zero, un, un - c, un + c]
-        if not self._ev_gate:
-            return ZArray(raw)
-        cond = sp.Function("conditional")
-        return ZArray([cond(h > p.wet_dry_eps, e, sp.S.Zero) for e in raw])
+        b, h, hu, hv, u, w = self.get_fields()
+        p, normal = self.parameters, self.normal
+        normal_velocity = u * normal.n0 + w * normal.n1
+        wave = sqrt(p.g * Max(h, p.eps))
+        dry = sp.Function("conditional")
+        return Matrix([
+            dry(h > p.eps, e, sp.S.Zero)
+            for e in (sp.S.Zero, normal_velocity,
+                      normal_velocity - wave, normal_velocity + wave)])
 
-    def update_aux_variables(self):
-        v, p = self.variables, self._parameter_symbols
-        h_floor = sp.Max(v.h, p.wet_dry_eps)
-        return ZArray([sqrt(2) * v.h / sqrt(v.h ** 4 + h_floor ** 4)])
+    def update_variables(self):
+        v, p = self.variables, self.parameters
+        cap = Max(v.h - p.eps, sp.S.Zero) * p.u_max
+        clamp = lambda q: Max(-cap, Min(q, cap))
+        return Matrix([v.b, v.h, clamp(v.hu), clamp(v.hv)])
+
+    def reconstruction_variables(self):
+        v = self.variables
+        return Matrix([v.b, v.b + v.h, v.hu, v.hv])
+
+    def boundary_conditions(self):
+        return [bc.Wall(tag="wall", momentum_field_indices=[[2, 3]],
+                        permeability=0.0, wall_slip=1.0)]
 
 
-sm = ShallowWater().system_model
+model = ShallowWater()
 
-# %% 4. NumericalSystemModel
-nsm = NumericalSystemModel.from_system_model(sm)
+# %% [markdown]
+# ## Numerical system model
 
-# %% 5. settings + default solver
-# The model declares no initial_conditions, so the solver zeros every field
-# first; this hook then overwrites with the reservoir state [b, h, hu, hv]
-# from the mesh point-data (B, H, U, V) — the one Malpasset-specific bit.
-def reservoir_ic(Q, model):
-    mesh = Q.function_space().mesh()
-    mio = meshio.read(MESH)
-    dim = mesh.geometric_dimension
-    cfd = np.round(mesh.coordinates.dat.data_ro[:, :dim], 12)
-    cmio = np.round(mio.points[:, :dim], 12)
-    lut = {tuple(c): i for i, c in enumerate(cmio)}
-    perm = np.array([lut[tuple(c)] for c in cfd], dtype=np.int64)
-    pd = mio.point_data
-    # Well-balanced IC: build the DG0 cell state in the EQUILIBRIUM variable
-    # eta = b + h, NOT in h.  L2-projecting h directly cell-averages
-    # max(0, eta-b), and by Jensen on the convex max the cell-mean of h exceeds
-    # max(0, -b_cellmean) -> the free surface OVERSHOOTS at every wet/dry
-    # shoreline (spurious eta != still-water level).  That seed drains the sea
-    # over the run.  Instead: cell-average b and eta separately, then set
-    # h = max(0, eta - b) per cell so still water stays exactly at rest.
-    CG = fd.FunctionSpace(mesh, "CG", 1)
-    DG = fd.FunctionSpace(mesh, "DG", 0)
+# %%
+nsm = NumericalSystemModel.from_system_model(
+    model, riemann=PositiveNonconservativeHLL)
 
-    def to_dg0(vertex_values):
-        f = fd.Function(CG)
-        f.dat.data[:] = vertex_values
-        return np.asarray(fd.Function(DG).project(f).dat.data)
+# %% [markdown]
+# ## Reservoir initial condition + solve
+#
+# The free surface `eta = b + h` is projected cell-wise (so `h = max(0, eta - b)`
+# stays exactly at rest on wet/dry shorelines); the reservoir/sea depths and
+# velocities come from the mesh point-data.
 
-    B = pd["B"][perm]
-    H = pd["H"][perm]
-    b0 = to_dg0(B)
-    eta0 = to_dg0(B + H)                       # free surface, projected as one field
-    h0 = np.maximum(eta0 - b0, 0.0)            # consistent per cell -> no overshoot
+# %%
+def reservoir(Q, m):
+    grid = Q.function_space().mesh()
+    data = meshio.read(mesh)
+    dim = grid.geometric_dimension
+    coords = np.round(grid.coordinates.dat.data_ro[:, :dim], 12)
+    points = np.round(data.points[:, :dim], 12)
+    lookup = {tuple(c): i for i, c in enumerate(points)}
+    order = np.array([lookup[tuple(c)] for c in coords], dtype=np.int64)
+    cg = fd.FunctionSpace(grid, "CG", 1)
+    dg = fd.FunctionSpace(grid, "DG", 0)
+
+    def cell_mean(values):
+        field = fd.Function(cg)
+        field.dat.data[:] = values
+        return np.asarray(fd.Function(dg).project(field).dat.data)
+
+    bed = data.point_data["B"][order]
+    depth = data.point_data["H"][order]
+    b0 = cell_mean(bed)
+    eta0 = cell_mean(bed + depth)
+    h0 = np.maximum(eta0 - b0, 0.0)
+    wet = h0 > 0.0
     Q.dat.data[:, 0] = b0
     Q.dat.data[:, 1] = h0
-    wet = h0 > 0.0
-    Q.dat.data[:, 2] = np.where(wet, to_dg0((pd["H"] * pd["U"])[perm]), 0.0)
-    Q.dat.data[:, 3] = np.where(wet, to_dg0((pd["H"] * pd["V"])[perm]), 0.0)
+    momentum_x = data.point_data["H"] * data.point_data["U"]
+    momentum_y = data.point_data["H"] * data.point_data["V"]
+    Q.dat.data[:, 2] = np.where(wet, cell_mean(momentum_x[order]), 0.0)
+    Q.dat.data[:, 3] = np.where(wet, cell_mean(momentum_y[order]), 0.0)
 
 
 solver = FiredrakeHyperbolicSolver(
@@ -224,11 +264,6 @@ solver = FiredrakeHyperbolicSolver(
         filename="dg", clean_directory=True)),
     time_end=2000.0, CFL=0.5, dg_degree=0, limiter="none",
     riemann_solver_cls=PositiveNonconservativeHLL,
-    initial_condition_overwrite=reservoir_ic)
-
-# %% 6. boundary conditions + solve
-bcs = BC.BoundaryConditions(
-    [BC.Wall(tag="wall", momentum_field_indices=[[2, 3]],
-             permeability=0.0, wall_slip=1.0)])
-solver.setup_simulation(MESH, nsm, boundary_conditions=bcs)
+    initial_condition_overwrite=reservoir)
+solver.setup_simulation(mesh, nsm)
 solver.run_simulation()
