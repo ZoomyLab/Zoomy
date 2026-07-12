@@ -86,7 +86,9 @@ viscosity              = param.Number(default=0.01)
 `h_index`, `nc_integration_order`, `well_balanced`, `jacobian_mode`
 (`"sparse_fd" | "dense_fd"`). `ChorinSplitVAMSolver`: `pressure_tol`,
 `pressure_maxit`, `time_order`, `pressure_solver` (`"gmres" | "lu"`),
-`riemann_solver` (`"hr" | "ncp"`), `limited_aux_fields`.
+`riemann_solver` (`"hr" | "ncp"`). Aux-derivative limiting (for a shock
+that overshoots into the elliptic/source block) is model-declared via
+`zoomy_core.model.numerics.limit` (a `limited_derivative` tag), not a solver knob.
 
 ## The numerics menu — what you compose, not subclass
 
