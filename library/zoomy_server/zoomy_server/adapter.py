@@ -4,14 +4,31 @@ Each backend (NumPy, JAX, DMPlex, AMReX, Firedrake) implements a subclass
 that knows how to run a case folder.
 
 A case folder contains:
-  model.py, numerics.py, mesh.py, settings.json
+  model.py, numerics.py, mesh.py, settings.json [, run.py]
+
+When the folder carries a ``run.py`` (the composed case's ``## Run`` section,
+materialized by ``zoomy_prepost.case.to_folder``) the adapters execute the
+case's OWN solver code via :meth:`run_case_script` instead of translating
+settings into solver calls (the generic runner).
 """
 
 import json
+import logging
 import os
+import re
+import shutil
 import sys
 import importlib
 import subprocess
+
+logger = logging.getLogger("zoomy.adapter")
+
+#: progress lines recognized in case-script output: the zoomy python solvers
+#: ("iteration: N, time: T, dt: D, ...") and the C++ solvers ("Step N, Time T, dt D").
+_PROGRESS_RES = (
+    re.compile(r"iteration:\s*(\d+).*?time:\s*([0-9.eE+-]+).*?dt:\s*([0-9.eE+-]+)"),
+    re.compile(r"Step\s+(\d+).*?Time\s+([0-9.eE+-]+).*?dt\s+([0-9.eE+-]+)"),
+)
 
 
 class SolverAdapter:
@@ -77,6 +94,110 @@ class SolverAdapter:
                 cwd=case_dir,
                 check=True,
             )
+
+    # ── Generic runner (run-py-first) ────────────────────────────────
+
+    def run_case_script(self, case_dir, output_dir, on_progress):
+        """Execute the case's OWN ``run.py`` (the composed case's ``## Run``
+        section) and collect its artifacts into ``output_dir``.
+
+        The case folder is copied to ``output_dir/case`` first (isolation:
+        the script runs with the copy as cwd, so a shared case folder is
+        never mutated by outputs), then ``[sys.executable, "run.py"]`` runs
+        there with stdout streamed for progress lines. Artifacts
+        (simulation.h5, images, VTK) are copied into ``output_dir``; when the
+        script produced VTK but no simulation.h5, the VTK output is converted
+        via ``zoomy_prepost.vtk_to_hdf5``. The full captured output is written
+        to ``output_dir/run.log``.
+        """
+        logger.info("runner: executing case run.py")
+        run_dir = os.path.join(output_dir, "case")
+        if os.path.abspath(case_dir) != os.path.abspath(run_dir):
+            shutil.copytree(case_dir, run_dir, dirs_exist_ok=True)
+
+        proc = subprocess.Popen(
+            [sys.executable, "run.py"], cwd=run_dir,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        out_lines = []
+        for line in proc.stdout:
+            s = line.rstrip()
+            out_lines.append(s)
+            self._parse_progress_line(s, on_progress)
+            logger.debug(s)
+        proc.wait()
+        with open(os.path.join(output_dir, "run.log"), "w") as f:
+            f.write("\n".join(out_lines) + "\n")
+        if proc.returncode != 0:
+            tail = "\n".join(out_lines[-30:])
+            raise RuntimeError(
+                f"run.py exited with code {proc.returncode}\n"
+                f"--- run.py output tail ---\n{tail}"
+            )
+        logger.info("runner: run.py finished: %s", out_lines[-1] if out_lines else "")
+
+        self._collect_artifacts(run_dir, output_dir)
+        time_end = 0.0
+        try:
+            time_end = float(self.load_settings(case_dir).get("time_end", 0.0))
+        except Exception:
+            pass
+        on_progress(-1, time_end, 0.0)
+
+    @staticmethod
+    def _parse_progress_line(line, on_progress):
+        for rx in _PROGRESS_RES:
+            m = rx.search(line)
+            if m:
+                try:
+                    on_progress(int(m.group(1)), float(m.group(2)), float(m.group(3)))
+                except (ValueError, TypeError):
+                    pass
+                return
+
+    def _collect_artifacts(self, run_dir, output_dir):
+        """Copy the results run.py produced into output_dir: simulation.h5,
+        images, VTK (mesh.h5/mesh.msh are inputs, not results)."""
+        for f in sorted(os.listdir(run_dir)):
+            src = os.path.join(run_dir, f)
+            if not os.path.isfile(src):
+                continue
+            if f == "simulation.h5" or f.endswith(
+                (".png", ".gif", ".vtu", ".pvd", ".vtk", ".vtu.series")
+            ):
+                shutil.copy2(src, output_dir)
+        if not os.path.exists(os.path.join(output_dir, "simulation.h5")):
+            self._convert_vtk_outputs(output_dir)
+
+    @staticmethod
+    def _convert_vtk_outputs(output_dir):
+        """VTK output (a ``.pvd``, or a ParaView ``.vtu.series`` a ``.pvd`` is
+        synthesized from — see the dmplex adapter) -> simulation.h5 via
+        zoomy_prepost, so the server serves the same HDF5 for every backend."""
+        names = sorted(os.listdir(output_dir))
+        pvds = [f for f in names if f.endswith(".pvd")]
+        series = [f for f in names if f.endswith(".vtu.series")]
+        try:
+            from zoomy_prepost import vtk_to_hdf5
+            if pvds:
+                pvd = os.path.join(output_dir, pvds[0])
+            elif series:
+                with open(os.path.join(output_dir, series[0])) as f:
+                    entries = json.load(f).get("files", [])
+                pvd = os.path.join(output_dir, series[0][: -len(".vtu.series")] + ".pvd")
+                with open(pvd, "w") as f:
+                    f.write('<?xml version="1.0"?>\n<VTKFile type="Collection"><Collection>\n')
+                    for e in entries:
+                        f.write(f'<DataSet timestep="{e["time"]}" file="{e["name"]}"/>\n')
+                    f.write("</Collection></VTKFile>\n")
+            else:
+                logger.warning(
+                    "runner: no simulation.h5 and no VTK output to convert in %s", output_dir)
+                return
+            vtk_to_hdf5(pvd, os.path.join(output_dir, "simulation.h5"))
+            logger.info("runner: converted %s -> simulation.h5", os.path.basename(pvd))
+        except Exception as e:
+            logger.error("runner: VTK->HDF5 conversion failed: %s", e)
 
     @staticmethod
     def import_from_case(case_dir, module_name):

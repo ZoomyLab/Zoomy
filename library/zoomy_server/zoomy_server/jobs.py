@@ -17,6 +17,11 @@ def _write_progress(progress_file, iteration, time_val, dt):
 def _run_job(adapter_cls_path, case_dir, output_dir, progress_file):
     try:
         import importlib
+        import logging
+        # Worker process: make the adapters' logger.info visible in the server
+        # log (no-op when handlers were inherited via fork).
+        logging.basicConfig(level=logging.INFO,
+                            format="%(levelname)s: [%(name)s] %(message)s")
         mod_path, cls_name = adapter_cls_path.rsplit(".", 1)
         mod = importlib.import_module(mod_path)
         adapter = getattr(mod, cls_name)()
