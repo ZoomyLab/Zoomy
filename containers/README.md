@@ -56,5 +56,26 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 | firedrake | ✅ | ✅ 2D (REQ-95 fixed: source-integral domain pin + vtk-VTU fallback) |
 | foam | (openfoam sif; host adapter) | ✅ 1D (REQ-93 run_case + REQ-110 case-dir wiring) |
 
-Build any image: `apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def`
+## Pulling prebuilt images (no local build)
+
+The Containers pipeline publishes every backend to ghcr (public, anonymous
+pull). Apptainer users pull the ORAS-pushed SIF; Docker users pull the image:
+
+```bash
+# backend server, e.g. numpy (same pattern: zoomy_postprocess, zoomy_jax,
+# zoomy_amrex, zoomy_dmplex, zoomy_firedrake)
+apptainer pull zoomy_numpy.sif oras://ghcr.io/zoomylab/zoomy_numpy_sif:latest
+apptainer run zoomy_numpy.sif 8080        # -> GUI "Connect" target
+
+docker pull ghcr.io/zoomylab/zoomy_numpy:latest
+docker run --rm -p 8080:8080 ghcr.io/zoomylab/zoomy_numpy:latest
+```
+
+All images share the `zoomy-entry` dispatch (`containers/common/zoomy-entry`):
+bare `run` → server on `$ZOOMY_PORT`, `<port>` → server on that port,
+`jupyter [port]`, `shell`, or any other command is exec'd as-is — identical
+between the Docker image and the pipeline-converted SIF.
+
+Build any image locally instead:
+`apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def`
 (from the repo root, so the `%files` sources resolve).
