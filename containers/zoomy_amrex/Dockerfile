@@ -36,8 +36,11 @@ RUN git clone --depth 1 --branch 25.02 \
 COPY library/zoomy_core /tmp/src/zoomy_core
 COPY library/zoomy_amrex /tmp/src/zoomy_amrex
 COPY library/zoomy_server /tmp/src/zoomy_server
+COPY library/zoomy_prepost /tmp/src/zoomy_prepost
+COPY library/zoomy_plotting /tmp/src/zoomy_plotting
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
         /tmp/src/zoomy_core /tmp/src/zoomy_amrex /tmp/src/zoomy_server \
+        /tmp/src/zoomy_prepost /tmp/src/zoomy_plotting \
     && rm -rf /tmp/src
 
 ENV ZOOMY_ROOT=/workspace
