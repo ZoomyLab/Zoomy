@@ -43,8 +43,16 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
         /tmp/src/zoomy_prepost /tmp/src/zoomy_plotting \
     && rm -rf /tmp/src
 
-ENV ZOOMY_ROOT=/workspace
+ENV ZOOMY_ROOT=/workspace \
+    ZOOMY_ADAPTER=amrex \
+    ZOOMY_PORT=8080
+
+COPY containers/common/zoomy-entry /usr/local/bin/zoomy-entry
+RUN chmod +x /usr/local/bin/zoomy-entry
 
 WORKDIR /workspace
 EXPOSE 8080
-CMD ["zoomy-server", "--adapter", "amrex", "--port", "8080"]
+# ENTRYPOINT (not bare CMD): survives the pipeline's docker->sif conversion as
+# the runscript, so `apptainer run img [port|jupyter|shell]` keeps working.
+ENTRYPOINT ["/usr/local/bin/zoomy-entry"]
+CMD []
