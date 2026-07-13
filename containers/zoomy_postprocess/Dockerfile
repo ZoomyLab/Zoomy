@@ -21,5 +21,11 @@ RUN python -m pip install --upgrade pip && \
       /tmp/src/zoomy_core /tmp/src/zoomy_plotting /tmp/src/zoomy_server /tmp/src/zoomy_prepost \
     && rm -rf /tmp/src && mkdir -p /workspace
 
+COPY containers/common/zoomy-entry /usr/local/bin/zoomy-entry
+RUN chmod +x /usr/local/bin/zoomy-entry
+
 EXPOSE 8080 8888
-CMD ["zoomy-server", "--adapter", "postprocess", "--port", "8080"]
+# ENTRYPOINT (not bare CMD): survives the pipeline's docker->sif conversion as
+# the runscript, so `apptainer run img [port|jupyter|shell]` keeps working.
+ENTRYPOINT ["/usr/local/bin/zoomy-entry"]
+CMD []
