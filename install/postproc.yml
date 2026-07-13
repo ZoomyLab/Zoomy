@@ -1,0 +1,18 @@
+# Minimal local post-processing env: read/plot zoomy results, convert
+# HDF5 <-> VTK.  micromamba create -f install/postproc.yml
+name: zoomy-postproc
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - zoomy-plotting
+    - matplotlib
+    - h5py
+    - meshio
+    # For the pipeline steps (hdf5_to_vtk / lift3d / zoomy-postproc CLI) and
+    # the postprocess server adapter, install the repo packages editable:
+    # - -e library/zoomy_prepost
+    # - -e library/zoomy_core      # lift3d (model interpolate_to_3d)
+    # - -e library/zoomy_server    # zoomy-server --adapter postprocess
