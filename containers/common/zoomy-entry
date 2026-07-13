@@ -1,0 +1,21 @@
+#!/bin/sh
+# Triple-purpose dispatch shared by every backend image. Mirrors the .def
+# %runscript so `apptainer run img [port]` behaves the same whether the sif
+# was built from the .def or converted from the Docker image by the pipeline
+# (docker-daemon conversion turns ENTRYPOINT into the runscript; a bare CMD
+# would be REPLACED by the args, breaking `run img <port>`).
+#   run img                       -> API on $ZOOMY_PORT
+#   run img <port>                -> API on <port>              (back-compat)
+#   run img server [adapter] [port]
+#   run img jupyter [port]        -> Jupyter Lab (default 8888)
+#   run img shell                 -> interactive bash (dev container)
+#   run img <cmd> [args...]       -> exec the command (CI: docker run img pytest ...)
+case "${1:-}" in
+    jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+    shell)      exec /bin/bash ;;
+    bash)       if [ $# -eq 1 ]; then exec /bin/bash; else exec "$@"; fi ;;
+    server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-${ZOOMY_PORT:-8080}}" ;;
+    "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "${ZOOMY_PORT:-8080}" ;;
+    *[!0-9]*)   exec "$@" ;;
+    *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+esac
