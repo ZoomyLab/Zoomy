@@ -20,6 +20,7 @@ From: ubuntu:24.04
     library/zoomy_amrex   /opt/src/zoomy_amrex
     library/zoomy_server  /opt/src/zoomy_server
     library/zoomy_prepost /opt/src/zoomy_prepost
+    library/zoomy_plotting /opt/src/zoomy_plotting
 
 %environment
     export AMREX_HOME=/opt/amrex
@@ -56,7 +57,7 @@ From: ubuntu:24.04
     # aborts the build under `set -e`).
     export AMREX_HOME=/opt/amrex ZOOMY_AMREX_HOME=/opt/amrex
     python3 -m pip install --no-cache-dir --break-system-packages \
-        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server /opt/src/zoomy_prepost
+        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting
     rm -rf /opt/src
 
 %runscript
@@ -75,7 +76,7 @@ From: ubuntu:24.04
     exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
 
 %test
-    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
+    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, zoomy_plotting, h5py, meshio; print('imports OK')"
     test -d /opt/amrex/Src/Base && echo "AMReX source OK"
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
