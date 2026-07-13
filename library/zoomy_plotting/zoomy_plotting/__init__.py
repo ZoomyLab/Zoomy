@@ -28,6 +28,13 @@ from .plot import (
     animate,
     render_frame,
 )
+from . import column_plots
+from .overlays import (
+    station_markers,
+    inset_wedge_colorbar,
+    bars,
+    compare_animate,
+)
 
 __all__ = [
     "__version__",
@@ -58,4 +65,9 @@ __all__ = [
     "MatplotlibPlotter",
     "animate",
     "render_frame",
+    "column_plots",
+    "station_markers",
+    "inset_wedge_colorbar",
+    "bars",
+    "compare_animate",
 ]

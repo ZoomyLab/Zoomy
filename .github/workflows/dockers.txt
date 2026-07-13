@@ -8,3 +8,5 @@ zoomy_dmplex
 zoomy_openfoam
 zoomy_amrex_dummy
 zoomy_fenicsx_dummy
+zoomy_numpy
+zoomy_postprocess

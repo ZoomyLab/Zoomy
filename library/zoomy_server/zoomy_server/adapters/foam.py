@@ -42,4 +42,7 @@ class FoamAdapter(SolverAdapter):
         model = self.resolve_model(case_dir)
 
         logger.info("foam: delegating to zoomy_foam.run_case")
-        run_case(model, settings, output_dir, on_progress=on_progress)
+        # REQ-110: run_case resolves settings["mesh"] (a relative "mesh.h5")
+        # against the case dir — pass it explicitly (falls back to CWD).
+        settings["_case_dir"] = os.path.abspath(case_dir)
+        return run_case(model, settings, output_dir, on_progress=on_progress)
