@@ -1,8 +1,12 @@
 import argparse
 import importlib
+import logging
 
 
 def main():
+    # Surface the adapters' logger.info (e.g. the generic runner's
+    # "runner: executing case run.py") in the server log.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: [%(name)s] %(message)s")
     parser = argparse.ArgumentParser(description="Zoomy Solver Server")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--host", default="0.0.0.0")
@@ -17,6 +21,7 @@ def main():
         "firedrake": "zoomy_server.adapters.firedrake.FiredrakeAdapter",
         "foam": "zoomy_server.adapters.foam.FoamAdapter",
         "mesh": "zoomy_server.adapters.mesh.MeshAdapter",
+        "postprocess": "zoomy_server.adapters.postprocess.PostprocessAdapter",
     }
 
     adapter_path = builtin.get(args.adapter, args.adapter)

@@ -29,6 +29,15 @@ class DmplexAdapter(SolverAdapter):
     tag = "dmplex"
 
     def solve(self, case_dir, output_dir, on_progress):
+        # Generic runner: a composed case carries its own run.py (the ## Run
+        # section) — execute THAT instead of translating settings into solver
+        # calls. Legacy case folders (no run.py) fall through unchanged.
+        # (Inert until the dmplex backend wrapper class lands in run.py form.)
+        if os.path.exists(os.path.join(case_dir, "run.py")):
+            self.run_mesh_script(case_dir)
+            self.run_case_script(case_dir, output_dir, on_progress)
+            return
+
         from zoomy_core.transformation.to_c import CppModel, CppNumerics
 
         # 1. Execute mesh.py (preprocessing)

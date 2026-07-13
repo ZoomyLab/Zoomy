@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 zoomy-convert = "zoomy_prepost.cli:main"
 zoomy-case = "zoomy_prepost.case_cli:main"
+zoomy-postproc = "zoomy_prepost.postproc_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["zoomy_prepost*"]

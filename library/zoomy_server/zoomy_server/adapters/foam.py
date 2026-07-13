@@ -7,6 +7,7 @@ amrex REQ-89); this adapter just resolves the case and delegates. The foam
 run_case should convert its VTK output with `zoomy_prepost.vtk_to_hdf5`.
 """
 import logging
+import os
 
 from zoomy_server.adapter import SolverAdapter
 
@@ -17,6 +18,15 @@ class FoamAdapter(SolverAdapter):
     tag = "foam"
 
     def solve(self, case_dir, output_dir, on_progress):
+        # Generic runner: a composed case carries its own run.py (the ## Run
+        # section) — execute THAT instead of translating settings into solver
+        # calls. Legacy case folders (no run.py) fall through unchanged.
+        # (Inert until the foam backend wrapper class lands in run.py form.)
+        if os.path.exists(os.path.join(case_dir, "run.py")):
+            self.run_mesh_script(case_dir)
+            self.run_case_script(case_dir, output_dir, on_progress)
+            return
+
         try:
             from zoomy_foam import run_case
         except ImportError as e:

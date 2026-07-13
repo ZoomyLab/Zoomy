@@ -9,11 +9,13 @@ data. This one file is simultaneously:
     container's Jupyter kernel,
   * a lossless projection of the GUI cards (the ``zoomy`` cell metadata).
 
-Roles (cell order): ``meta``, ``model``, ``mesh``, ``settings``, ``solver``.
+Roles (cell order): ``meta``, ``model``, ``mesh``, ``settings``, ``run``,
+``visualization``.
 
 The server runs a case by ``to_folder`` -> the adapter's case folder
-(``model.py``, ``mesh.py``, ``settings.json``), keeping the existing per-backend
-adapters unchanged.
+(``model.py``, ``mesh.py``, ``settings.json``, ``run.py``). Adapters execute
+the case's OWN ``run.py`` when present (the generic runner); folders without
+one fall back to the legacy per-backend settings translation.
 
     spec = {
       "meta":     {"title": str, "description": str},
@@ -238,12 +240,26 @@ print("figure -> simulation.png")'''
 def _run_code():
     """The generated in-process runner: resolves the effective settings
     (general keys + the numpy branch) and solves with the numpy solver.
-    Uses only `model`, `mesh`, `settings` from the sections above."""
+    Uses `model`, `mesh`, `settings` from the sections above in notebook
+    form; a bare ``python run.py`` in a materialized case folder loads them
+    from the sibling files (model.py, mesh.py, settings.json) instead."""
     return '''\
 # Runs IN-PROCESS with the numpy solver (no server needed) — works in
-# JupyterLite, a backend container's JupyterLab, or any env with zoomy_core.
+# JupyterLite, a backend container's JupyterLab, any env with zoomy_core,
+# or standalone as `python run.py` in a materialized case folder (the
+# zoomy-server generic runner executes exactly this file).
 # For other backends, submit this file via the Zoomy GUI / zoomy-server.
+import json
 import os
+
+# Folder form: the notebook defines model/mesh/settings in the cells above;
+# a standalone run.py loads them from the sibling case-folder files.
+if "model" not in globals():
+    exec(open("model.py").read())
+if "mesh" not in globals():
+    exec(open("mesh.py").read())
+if "settings" not in globals():
+    settings = json.load(open("settings.json"))
 
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
@@ -378,17 +394,19 @@ def _tag_from_code(source: str):
 # --------------------------------------------------------------------------- #
 def to_folder(py: str, dest_dir: str) -> str:
     """canonical percent ``.py`` -> {model.py, mesh.py, settings.json
-    [, numerics.py, visualize.py]} in dest_dir (the folder format the
+    [, run.py, numerics.py, visualize.py]} in dest_dir (the folder format the
     zoomy-server adapters consume; visualize.py is the optional reproducible
     viz — adapters ignore it). Heading-based via parse(). Returns dest_dir."""
     spec = parse(py)
     os.makedirs(dest_dir, exist_ok=True)
-    # NOTE: the "run" section is deliberately NOT materialized — the server
-    # adapters invoke the solver themselves; the runner only lives in the
-    # single-file/notebook form.
+    # NOTE: the "run" section IS materialized as run.py — the server adapters
+    # execute the case's own runner (run-py-first, the generic runner) and
+    # only fall back to translating settings into solver calls when a case
+    # folder carries no run.py.
     files = {
         "model.py": (spec.get("model") or {}).get("code"),
         "mesh.py": (spec.get("mesh") or {}).get("code"),
+        "run.py": (spec.get("run") or {}).get("code"),
         "numerics.py": (spec.get("numerics") or {}).get("code"),
         "visualize.py": (spec.get("visualization") or {}).get("code"),
     }
@@ -420,9 +438,9 @@ def from_notebook(ipynb: str) -> str:
 
 def from_folder(case_dir: str) -> str:
     """An existing adapter case folder (model.py, mesh.py, settings.json
-    [, numerics.py, visualize.py]) -> canonical heading-based percent ``.py``.
-    Lets any runnable case be exported as a single file / notebook and
-    re-ingested unchanged (to_folder(from_folder(d)) round-trips)."""
+    [, run.py, numerics.py, visualize.py]) -> canonical heading-based percent
+    ``.py``. Lets any runnable case be exported as a single file / notebook
+    and re-ingested unchanged (to_folder(from_folder(d)) round-trips)."""
     import jupytext
     import nbformat
 
@@ -459,6 +477,7 @@ def from_folder(case_dir: str) -> str:
 
     for section, fname, htitle in (
         ("numerics", "numerics.py", "Numerics"),
+        ("run", "run.py", "Run"),
         ("visualization", "visualize.py", "Visualization"),
     ):
         path = os.path.join(case_dir, fname)
