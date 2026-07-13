@@ -56,9 +56,13 @@ From: ubuntu:24.04
     # Zoomy core + amrex backend + the FastAPI server (LAST, so a failure here
     # aborts the build under `set -e`).
     export AMREX_HOME=/opt/amrex ZOOMY_AMREX_HOME=/opt/amrex
+    # zoomy_amrex EDITABLE: run_case resolves the C++ templates as
+    # <pkg>/../Source (repo layout) — a plain install ships only the python
+    # package. Keep /opt/src/zoomy_amrex; prune the rest.
     python3 -m pip install --no-cache-dir --break-system-packages \
-        /opt/src/zoomy_core /opt/src/zoomy_amrex /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting
-    rm -rf /opt/src
+        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting \
+        -e /opt/src/zoomy_amrex
+    rm -rf /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting
 
 %runscript
     # Triple-purpose dispatch ($ZOOMY_ADAPTER=amrex baked):
