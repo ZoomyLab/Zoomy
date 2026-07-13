@@ -1,15 +1,15 @@
 Bootstrap: docker
 From: python:3.11-slim-bookworm
 
-# Triple-purpose NumPy solver-server image:
+# Triple-purpose NumPy backend image (formerly zoomy_solver_server):
 #   1. Solver API   : apptainer run zoomy_solver_server.sif [port]      (FastAPI :8080)
 #   2. Jupyter      : apptainer run zoomy_solver_server.sif jupyter [port]   (Lab :8888)
 #   3. Dev/shell    : apptainer run zoomy_solver_server.sif shell
 # Apptainer shares host networking, so :8080/:8888 are reachable at localhost.
 # Build from the Zoomy repo root so the %files sources resolve:
 #   apptainer build --fakeroot \
-#     containers/zoomy_solver_server/zoomy_solver_server.sif \
-#     containers/zoomy_solver_server/zoomy_solver_server.def
+#     containers/zoomy_numpy/zoomy_numpy.sif \
+#     containers/zoomy_numpy/zoomy_numpy.def
 
 %labels
     Author ZoomyLab
