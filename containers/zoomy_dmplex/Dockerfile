@@ -70,8 +70,16 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
 
 ENV LD_LIBRARY_PATH="/opt/petsc/arch-container-opt/lib:$LD_LIBRARY_PATH" \
     PYTHONPATH="/opt/petsc/arch-container-opt/lib:$PYTHONPATH" \
-    ZOOMY_ROOT=/workspace
+    ZOOMY_ROOT=/workspace \
+    ZOOMY_ADAPTER=dmplex \
+    ZOOMY_PORT=8080
+
+COPY containers/common/zoomy-entry /usr/local/bin/zoomy-entry
+RUN chmod +x /usr/local/bin/zoomy-entry
 
 WORKDIR /workspace
 EXPOSE 8080
-CMD ["zoomy-server", "--adapter", "dmplex", "--port", "8080"]
+# ENTRYPOINT (not bare CMD): survives the pipeline's docker->sif conversion as
+# the runscript, so `apptainer run img [port|jupyter|shell]` keeps working.
+ENTRYPOINT ["/usr/local/bin/zoomy-entry"]
+CMD []

@@ -25,4 +25,26 @@ RUN python3 -m pip install --no-cache-dir \
       /tmp/pkgs/zoomy_tests \
  && rm -rf /tmp/pkgs
 
-CMD ["/bin/bash"]
+# Server env + triple-purpose dispatch (parity with the backend .def images):
+# the GUI's firedrake backend runs `apptainer run img [port]` on this image too.
+COPY library/zoomy_server   /tmp/pkgs2/zoomy_server
+COPY library/zoomy_prepost  /tmp/pkgs2/zoomy_prepost
+COPY library/zoomy_plotting /tmp/pkgs2/zoomy_plotting
+RUN python3 -m pip install --no-cache-dir \
+      /tmp/pkgs2/zoomy_server \
+      /tmp/pkgs2/zoomy_prepost \
+      /tmp/pkgs2/zoomy_plotting \
+ && rm -rf /tmp/pkgs2
+
+ENV ZOOMY_ADAPTER=firedrake \
+    ZOOMY_PORT=8080 \
+    ZOOMY_ROOT=/workspace \
+    MPLBACKEND=Agg
+COPY containers/common/zoomy-entry /usr/local/bin/zoomy-entry
+RUN chmod +x /usr/local/bin/zoomy-entry && mkdir -p /workspace
+
+EXPOSE 8080 8888
+# ENTRYPOINT (not bare CMD): survives the pipeline's docker->sif conversion as
+# the runscript; arbitrary commands (CI `docker run img bash -lc ...`) pass through.
+ENTRYPOINT ["/usr/local/bin/zoomy-entry"]
+CMD []
