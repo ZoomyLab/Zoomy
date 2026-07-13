@@ -40,6 +40,12 @@ def test_to_folder():
     assert "model = SME(level=2, dimension=2)" in model_src
     mesh_src = open(os.path.join(d, "mesh.py")).read()
     assert "create_2d" in mesh_src and "mesh.h5" in mesh_src and "mesh.msh" in mesh_src
+    # the run section IS materialized: run.py = the case's own runner (the
+    # server's generic runner executes exactly this file)
+    run_src = open(os.path.join(d, "run.py")).read()
+    assert "solver.solve(" in run_src and "simulation.h5" in run_src
+    # standalone form: loads model/mesh/settings from the sibling files
+    assert 'exec(open("model.py").read())' in run_src
     print(f"OK to_folder -> {sorted(os.listdir(d))}")
 
 
@@ -109,11 +115,12 @@ def test_to_folder_writes_visualize():
     d = tempfile.mkdtemp()
     to_folder(compose(spec), d)
     assert open(os.path.join(d, "visualize.py")).read().strip() == "print('viz')"
-    # and from_folder picks it back up
+    # and from_folder picks it back up (run.py too, as the run section)
     from zoomy_prepost import from_folder
     s2 = parse(from_folder(d))
     assert s2["visualization"]["code"] == "print('viz')"
-    print("OK visualize.py folder round-trip")
+    assert s2["run"]["code"] == parse(compose(spec))["run"]["code"]
+    print("OK visualize.py + run.py folder round-trip")
 
 
 if __name__ == "__main__":
