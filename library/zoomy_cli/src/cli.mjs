@@ -405,9 +405,17 @@ export class ZoomyCLI {
         ];
         /* Visualization is ALWAYS attached: the selected viz card's code
            (with the notebook prelude) when provided, else the generated
-           default plot — case AND figure reproduce. */
+           default plot — case AND figure reproduce. The post-processing
+           chain lives INSIDE the viz code (prepended by gatherCaseSpec via
+           chainCode — survives jupytext); spec.postproc rides along as a
+           zoomy metadata hint so parseCase can round-trip the enabled
+           steps and the GUI strip can restore from an imported case. */
+        const vizMeta = { role: "visualization" };
+        if (Array.isArray(spec.postproc) && spec.postproc.length) {
+            vizMeta.postproc = spec.postproc;
+        }
         cells.push(H("visualization", "Visualization"));
-        cells.push({ type: "code", meta: { role: "visualization" },
+        cells.push({ type: "code", meta: vizMeta,
                      source: trim(viz.code) || this._vizCode() });
         return cells;
     }
@@ -430,6 +438,43 @@ export class ZoomyCLI {
             "    display = lambda *a: None            # plain-script fallback",
             "",
         ].join("\n");
+    }
+
+    /** Post-processing chain code (zoomy_prepost.steps) for the enabled
+     *  steps — a subset of ["lift3d", "to_h5"]. The GUI prepends this to
+     *  the visualization code (gatherCaseSpec) so exports/notebooks
+     *  reproduce the pipeline; the chain runs BEFORE the plot. Blocks are
+     *  emitted in EXECUTION order regardless of input order: to_h5 first
+     *  (it produces the simulation.h5 that lift3d and the viz read).
+     *  Every block is guarded so the case still runs where a step doesn't
+     *  apply (no VTK output, zoomy_prepost not installed). */
+    chainCode(steps) {
+        steps = steps || [];
+        const blocks = [];
+        if (steps.indexOf("to_h5") !== -1) {
+            blocks.push([
+                "# post-processing: VTK -> H5 (zoomy_prepost.vtk_to_hdf5)",
+                "try:",
+                "    import os, glob",
+                "    pvds = sorted(glob.glob(\"*.pvd\"))    # (no VTK present -> skip)",
+                "    if pvds and not os.path.exists(\"simulation.h5\"):",
+                "        from zoomy_prepost import vtk_to_hdf5",
+                "        vtk_to_hdf5(pvds[0], \"simulation.h5\")",
+                "except ImportError:",
+                "    pass  # zoomy_prepost/meshio missing -> skip",
+            ].join("\n"));
+        }
+        if (steps.indexOf("lift3d") !== -1) {
+            blocks.push([
+                "# post-processing: 2D -> 3D lift (zoomy_prepost.lift3d; needs the case model)",
+                "try:",
+                "    from zoomy_prepost import lift3d",
+                "    lift3d(\".\", \"simulation.h5\", \"simulation_3d\", Nz=10)",
+                "except ImportError:",
+                "    pass  # needs zoomy_prepost (available in containers; Lite lockfile TBD)",
+            ].join("\n"));
+        }
+        return blocks.length ? blocks.join("\n\n") + "\n" : "";
     }
 
     /** Generated default visualization (mirrors zoomy_prepost.case._viz_code). */
@@ -601,6 +646,9 @@ export class ZoomyCLI {
         }
         if (tag) spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
         if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
+        /* post-processing chain hint (round-trips the GUI strip toggles) */
+        const vh = hints.visualization;
+        if (vh && Array.isArray(vh.postproc) && vh.postproc.length) spec.postproc = vh.postproc;
         if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
         if (sources.run !== undefined) spec.run = { code: sources.run };   // re-export fidelity
         return spec;
