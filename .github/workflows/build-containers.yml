@@ -133,7 +133,7 @@ jobs:
           # Tier 1: heavy bases (Firedrake/PETSc, micromamba+JAX, …). Tier 2: thin images on top for CI/pull;
           # they pull :latest tier-1 from GHCR. Pairing is one-way (dev → release) so editing a tier-2 Dockerfile
           # alone does not rebuild tier 1.
-          TIER1_NAMES=" zoomy_core zoomy_jax_dev zoomy_firedrake_dev zoomy_amrex zoomy_dmplex zoomy_openfoam zoomy_amrex_dummy zoomy_fenicsx_dummy "
+          TIER1_NAMES=" zoomy_core zoomy_jax_dev zoomy_firedrake_dev zoomy_amrex zoomy_dmplex zoomy_openfoam zoomy_amrex_dummy zoomy_fenicsx_dummy zoomy_numpy zoomy_postprocess "
           TIER2_NAMES=" zoomy_jax zoomy_firedrake "
 
           tier1=()
