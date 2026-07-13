@@ -34,13 +34,17 @@ RUN git clone --depth 1 --branch 25.02 \
     && find /opt/amrex -name "*.o" -delete 2>/dev/null || true
 
 COPY library/zoomy_core /tmp/src/zoomy_core
-COPY library/zoomy_amrex /tmp/src/zoomy_amrex
 COPY library/zoomy_server /tmp/src/zoomy_server
 COPY library/zoomy_prepost /tmp/src/zoomy_prepost
 COPY library/zoomy_plotting /tmp/src/zoomy_plotting
+# zoomy_amrex EDITABLE from a persistent tree: run_case resolves the C++
+# templates as <pkg>/../Source (repo layout) — a plain pip install ships only
+# the python package and codegen dies with ".../dist-packages/Source missing".
+COPY library/zoomy_amrex /opt/src/zoomy_amrex
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
-        /tmp/src/zoomy_core /tmp/src/zoomy_amrex /tmp/src/zoomy_server \
+        /tmp/src/zoomy_core /tmp/src/zoomy_server \
         /tmp/src/zoomy_prepost /tmp/src/zoomy_plotting \
+        -e /opt/src/zoomy_amrex \
     && rm -rf /tmp/src
 
 ENV ZOOMY_ROOT=/workspace \
