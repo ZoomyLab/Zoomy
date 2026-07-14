@@ -78,6 +78,7 @@ def main() -> int:
         "--junitxml",
         str(junit_path),
         "-q",
+        "--durations=25",
     ]
     if have_pytest_html:
         cmd.extend(["--html", str(html_path), "--self-contained-html"])
@@ -100,6 +101,19 @@ def main() -> int:
     if have_pytest_html:
         print(f"HTML report:  {html_path}")
     print(f"JUnit report: {junit_path}")
+    # Size-rule audit (per user 2026-07-14): any test >5 min individually is
+    # LARGE.  Flag small-suite violators so they get marked @pytest.mark.large.
+    if junit_path.is_file() and not args.run_large:
+        try:
+            import xml.etree.ElementTree as _ET
+            slow = [(tc.get("classname", ""), tc.get("name", ""), float(tc.get("time", 0) or 0))
+                    for tc in _ET.parse(junit_path).getroot().iter("testcase")
+                    if float(tc.get("time", 0) or 0) > 300.0]
+            for cls, name, sec in slow:
+                print(f"SIZE-RULE VIOLATION: {cls}::{name} took {sec:.0f}s (>300s) "
+                      "in the small suite - mark it @pytest.mark.large.")
+        except Exception as exc:
+            print(f"size-rule audit skipped: {exc}")
     wrote_junit = junit_path.is_file()
     wrote_html = have_pytest_html and html_path.is_file()
     if args.ignore_pytest_exit_code and (wrote_junit or wrote_html):

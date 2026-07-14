@@ -171,6 +171,7 @@ jobs:
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest" \
             bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && python tests/reporting/generate_test_report.py \
               --markers "small and (core or (numpy and not jax))" \
+              --pytest-paths "tests library/zoomy_core/tests" \
               --ignore-pytest-exit-code \
               --allow-no-tests \
               --output-dir artifacts/test-reports/core'
@@ -220,6 +221,7 @@ jobs:
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest" \
             bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_jax && python tests/reporting/generate_test_report.py \
               --markers "small and jax" \
+              --pytest-paths "tests library/zoomy_jax/tests" \
               --ignore-pytest-exit-code \
               --allow-no-tests \
               --output-dir artifacts/test-reports/jax'
@@ -425,6 +427,7 @@ jobs:
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest" \
             bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && python tests/reporting/generate_test_report.py \
               --markers "(large or benchmark) and (core or (numpy and not jax))" \
+              --pytest-paths "tests library/zoomy_core/tests" \
               --run-large \
               --run-benchmark \
               --ignore-pytest-exit-code \
@@ -468,6 +471,7 @@ jobs:
             "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest" \
             bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_jax && python tests/reporting/generate_test_report.py \
               --markers "(large or benchmark) and jax" \
+              --pytest-paths "tests library/zoomy_jax/tests" \
               --run-large \
               --run-benchmark \
               --ignore-pytest-exit-code \
