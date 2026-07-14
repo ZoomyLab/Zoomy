@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from zoomy_server import jobs
+from zoomy_server import results
 from zoomy_server.registry import build_registry
 
 router = APIRouter(prefix="/api/v1")
@@ -28,6 +29,12 @@ def set_session(session_dir=None, predefined_json=None):
 
 class JobRequest(BaseModel):
     case_dir: str
+
+
+class SaveResultRequest(BaseModel):
+    """Save a completed job's HDF5 store into the named results shelf."""
+    job_id: str
+    name: str
 
 
 class CaseRequest(BaseModel):
@@ -144,3 +151,49 @@ def cancel_job(job_id: str):
     if jobs.cancel(job_id):
         return {"status": "cancelled"}
     raise HTTPException(404, "Job not found")
+
+
+# ---------------------------------------------------------------------------
+# Named result stores — the RESULTS SHELF. A completed job's simulation.h5
+# lives in the ephemeral jobs dir (GC'd on cancel / restart); saving it here
+# copies it into a persistent-ish results dir so it can be reopened by name
+# from any later session or run. See results.py for the storage contract.
+# ---------------------------------------------------------------------------
+
+@router.post("/results")
+def save_result(req: SaveResultRequest):
+    """Copy a completed job's HDF5 into the results shelf under ``name``."""
+    status = jobs.get_status(req.job_id)
+    if not status:
+        raise HTTPException(404, "Job not found")
+    if status["status"] != "complete":
+        raise HTTPException(425, "Job not complete")  # 425 Too Early
+    src = jobs.get_hdf5_path(req.job_id)
+    if not src:
+        raise HTTPException(404, "HDF5 not available")
+    try:
+        return results.save(src, req.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/results")
+def list_results():
+    """List named results: ``[{name, size, created}, ...]`` (newest first)."""
+    return results.list_results()
+
+
+@router.get("/results/{name}/hdf5")
+def download_result(name: str):
+    path = results.get_path(name)
+    if not path:
+        raise HTTPException(404, "Result not found")
+    return FileResponse(path, media_type="application/x-hdf5",
+                        filename=results.slugify(name) + ".h5")
+
+
+@router.delete("/results/{name}")
+def delete_result(name: str):
+    if results.delete(name):
+        return {"status": "deleted"}
+    raise HTTPException(404, "Result not found")

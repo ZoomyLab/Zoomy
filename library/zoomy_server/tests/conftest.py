@@ -94,6 +94,18 @@ def jobs_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def results_dir(tmp_path, monkeypatch):
+    """Redirect the named-results shelf into tmp_path so saved results
+    don't touch the shared location."""
+    from zoomy_server import results as results_module
+    d = tmp_path / "zoomy_results"
+    d.mkdir()
+    monkeypatch.setattr(results_module, "RESULTS_DIR", str(d))
+    yield str(d)
+    shutil.rmtree(str(d), ignore_errors=True)
+
+
+@pytest.fixture
 def case_dir(tmp_path):
     """A minimal case directory with the files the adapter base class
     expects (settings.json). The MockSolverAdapter ignores the content

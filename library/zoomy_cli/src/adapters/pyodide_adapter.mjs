@@ -152,6 +152,26 @@ export class PyodideAdapter {
     }
 
     /**
+     * Write HDF5 bytes into the local results shelf (Pyodide VFS
+     * /tmp/zoomy_results/<name>.h5) WITHOUT installing them as the active
+     * `store`. Lets a viz card `open_result(name)` a saved run without
+     * clobbering the store the current run produced.
+     */
+    async writeResultBytes(name, bytes) {
+        return await this._postCmd({ cmd: "write_result_bytes", name, bytes });
+    }
+
+    /** List the names saved in the local (Pyodide-VFS) results shelf. */
+    async listResultsLocal() {
+        return await this._postCmd({ cmd: "list_results_local" });
+    }
+
+    /** Save the current run's open store into the local shelf under `name`. */
+    async saveResultLocal(name) {
+        return await this._postCmd({ cmd: "save_result_local", name });
+    }
+
+    /**
      * Materialise a user-uploaded mesh file (gmsh .msh bytes) into the
      * Pyodide VFS at `path` so a mesh snippet can `meshio.read(path)`.
      * Ensures meshio is installed in the worker on first call.

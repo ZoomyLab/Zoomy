@@ -143,6 +143,72 @@ def test_delete_twice_second_is_404(client, case_dir):
 
 
 # ---------------------------------------------------------------------------
+# /results — the named RESULTS SHELF
+# ---------------------------------------------------------------------------
+
+def _run_to_complete(client, case_dir):
+    job_id = client.post("/api/v1/jobs", json={"case_dir": case_dir}).json()["job_id"]
+    _poll_until(client, job_id, lambda b: b.get("status") == "complete", timeout_s=5.0)
+    return job_id
+
+
+def test_save_result_then_list_and_download(client, case_dir, results_dir):
+    job_id = _run_to_complete(client, case_dir)
+
+    r = client.post("/api/v1/results", json={"job_id": job_id, "name": "Ref A"})
+    assert r.status_code == 200, r.text
+    entry = r.json()
+    assert entry["name"] == "ref-a"          # slugged
+    assert entry["size"] > 0
+    assert "created" in entry
+
+    listing = client.get("/api/v1/results").json()
+    assert any(e["name"] == "ref-a" for e in listing)
+
+    dl = client.get("/api/v1/results/ref-a/hdf5")
+    assert dl.status_code == 200
+    assert len(dl.content) > 0
+    # Same bytes as the job's own HDF5 download.
+    orig = client.get(f"/api/v1/jobs/{job_id}/results/hdf5")
+    assert dl.content == orig.content
+
+
+def test_save_result_slug_lookup_by_original_name(client, case_dir, results_dir):
+    """A result saved under a fancy name is fetchable by its slug OR the
+    original (both slugify to the same key)."""
+    job_id = _run_to_complete(client, case_dir)
+    client.post("/api/v1/results", json={"job_id": job_id, "name": "SWE Reference!"})
+    assert client.get("/api/v1/results/SWE Reference!/hdf5").status_code == 200
+    assert client.get("/api/v1/results/swe-reference/hdf5").status_code == 200
+
+
+def test_save_result_unknown_job_404(client, results_dir):
+    r = client.post("/api/v1/results", json={"job_id": "nope", "name": "x"})
+    assert r.status_code == 404
+
+
+def test_save_result_empty_name_400(client, case_dir, results_dir):
+    job_id = _run_to_complete(client, case_dir)
+    r = client.post("/api/v1/results", json={"job_id": job_id, "name": "!!!"})
+    assert r.status_code == 400
+
+
+def test_download_unknown_result_404(client, results_dir):
+    assert client.get("/api/v1/results/does-not-exist/hdf5").status_code == 404
+
+
+def test_delete_result(client, case_dir, results_dir):
+    job_id = _run_to_complete(client, case_dir)
+    client.post("/api/v1/results", json={"job_id": job_id, "name": "ref-a"})
+    r = client.delete("/api/v1/results/ref-a")
+    assert r.status_code == 200
+    assert r.json() == {"status": "deleted"}
+    # Now gone.
+    assert client.get("/api/v1/results/ref-a/hdf5").status_code == 404
+    assert client.delete("/api/v1/results/ref-a").status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # /registry
 # ---------------------------------------------------------------------------
 

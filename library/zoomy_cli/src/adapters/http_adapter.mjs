@@ -140,6 +140,45 @@ export class HttpAdapter {
         });
     }
 
+    // ------------------------------------------------------------------
+    // Named result stores — the RESULTS SHELF (server-side registry).
+    // A completed job's HDF5 can be saved under a name and reopened by
+    // name from any later session/run. See zoomy_server/results.py.
+    // ------------------------------------------------------------------
+
+    /** Save a completed job's HDF5 into the shelf. Returns {name,size,created}. */
+    async saveResult(jobId, name) {
+        const r = await fetch(this.url + "/api/v1/results", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_id: jobId, name }),
+        });
+        if (!r.ok) throw new Error("saveResult failed: HTTP " + r.status);
+        return await r.json();
+    }
+
+    /** List named results: [{name, size, created}, ...] (newest first). */
+    async listResults() {
+        return await this._fetchJson("/api/v1/results");
+    }
+
+    /** Fetch a named result's HDF5 bytes as an ArrayBuffer. */
+    async fetchResult(name) {
+        const r = await fetch(this.url + "/api/v1/results/" +
+                              encodeURIComponent(name) + "/hdf5");
+        if (!r.ok) throw new Error("fetchResult failed: HTTP " + r.status);
+        return await r.arrayBuffer();
+    }
+
+    /** Delete a named result. Returns {status} or {status:"not_found"}. */
+    async deleteResult(name) {
+        const r = await fetch(this.url + "/api/v1/results/" +
+                              encodeURIComponent(name), { method: "DELETE" });
+        if (!r.ok && r.status !== 404) throw new Error("deleteResult failed: HTTP " + r.status);
+        if (r.status === 404) return { status: "not_found" };
+        return await r.json();
+    }
+
     async cancelJob(jobId) {
         const h = this._pollTimers.get(jobId);
         if (h) { clearInterval(h); this._pollTimers.delete(jobId); }

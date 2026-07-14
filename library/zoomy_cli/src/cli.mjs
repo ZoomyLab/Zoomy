@@ -445,6 +445,73 @@ export class ZoomyCLI {
         return { mode: "pyodide", result };
     }
 
+    // ------------------------------------------------------------------
+    // Named result stores — the RESULTS SHELF.
+    //
+    // A run's HDF5 store can be SAVED UNDER A NAME and any visualization
+    // can OPEN other results by name, across sessions and runs:
+    //   - remote runs   -> the connected backend's server-side registry
+    //                      (POST/GET/DELETE /api/v1/results);
+    //   - local runs     -> the Pyodide VFS shelf /tmp/zoomy_results/*.h5.
+    // ------------------------------------------------------------------
+
+    /** Save a completed remote job's HDF5 into the backend `tag`'s shelf. */
+    async saveResult(tag, jobId, name) {
+        const a = this.httpFor(tag);
+        if (!a || !a.isConnected()) throw new Error("saveResult: backend '" + tag + "' not connected");
+        return await a.saveResult(jobId, name);
+    }
+
+    /** List named results from the backend `tag`'s shelf. */
+    async listResults(tag) {
+        const a = this.httpFor(tag);
+        if (!a || !a.isConnected()) throw new Error("listResults: backend '" + tag + "' not connected");
+        return await a.listResults(tag);
+    }
+
+    /** Fetch a named result's HDF5 bytes (ArrayBuffer) from backend `tag`. */
+    async fetchResult(tag, name) {
+        const a = this.httpFor(tag);
+        if (!a || !a.isConnected()) throw new Error("fetchResult: backend '" + tag + "' not connected");
+        return await a.fetchResult(name);
+    }
+
+    /** Delete a named result from backend `tag`'s shelf. */
+    async deleteResult(tag, name) {
+        const a = this.httpFor(tag);
+        if (!a || !a.isConnected()) throw new Error("deleteResult: backend '" + tag + "' not connected");
+        return await a.deleteResult(name);
+    }
+
+    /**
+     * Make a named result available to viz cards: fetch its bytes from
+     * backend `tag` and stage them into the local Pyodide results shelf
+     * (/tmp/zoomy_results/<name>.h5) so `open_result(name)` works. When
+     * `bytes` is passed it is staged directly (used for local runs — no
+     * server round-trip).
+     */
+    async stageResult(name, options) {
+        options = options || {};
+        let bytes = options.bytes || null;
+        if (!bytes) {
+            if (!options.tag) throw new Error("stageResult: need bytes or a backend tag");
+            const buf = await this.fetchResult(options.tag, name);
+            bytes = new Uint8Array(buf);
+        }
+        await this.pyodide.writeResultBytes(name, bytes);
+        return { name, size: bytes.byteLength };
+    }
+
+    /** Names present in the local (Pyodide-VFS) results shelf. */
+    async listResultsLocal() {
+        return await this.pyodide.listResultsLocal();
+    }
+
+    /** Save the current LOCAL run's open store into the local shelf. */
+    async saveResultLocal(name) {
+        return await this.pyodide.saveResultLocal(name);
+    }
+
     // ----- case interchange (the real work; the GUI is a thin frontend) ------
     //
     // A case is a single jupytext "percent" .py where each section is a cell
