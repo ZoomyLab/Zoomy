@@ -215,8 +215,11 @@ export class ZoomyCLI {
     async listCards(dir, opts) {
         opts = opts || {};
         const buckets = [];
-        const authored = await this.storage.tryReadJson("cards/" + dir + "/default.json");
-        if (Array.isArray(authored)) buckets.push(authored);
+        // Tier 1: the effective catalog = shipped default.json overlaid with
+        // the user's catalog overlay {removed, added} (see readCatalogOverlay).
+        // With no overlay this returns the shipped default.json unchanged.
+        const effective = await this.effectiveCatalog(dir);
+        if (Array.isArray(effective) && effective.length) buckets.push(effective);
         if (opts.session) {
             const { listUserCards } = await import("./user_cards.mjs");
             const userCards = await listUserCards(this.storage, opts.session, dir);
@@ -237,6 +240,95 @@ export class ZoomyCLI {
             }
         }
         return result;
+    }
+
+    // ------------------------------------------------------------------
+    // Catalog overlay — the single card-curation mechanism.
+    //
+    // The card list a user sees is the shipped cards/<dir>/default.json
+    // OVERLAID with a per-dir overlay {removed:[ids], added:[cards]} kept
+    // in the writable storage (IndexedDB in the browser, disk on Node):
+    //
+    //   effective = shipped.filter(not in removed).concat(added)
+    //
+    // Removing a shipped card records its id in `removed`; removing a
+    // catalog-added card drops it from `added`; "restore defaults" clears
+    // the overlay. Save/Load project export/adopt the effective catalog as
+    // cards/<dir>/default.json. This is distinct from the per-session
+    // runtime user cards (listCards tier 2) — those are session scratch,
+    // never part of the shipped catalog.
+    // ------------------------------------------------------------------
+
+    _catalogOverlayPath(dir) {
+        return "catalog/" + dir + ".json";
+    }
+
+    /** Read the {removed, added} overlay for a dir (empty when none). */
+    async readCatalogOverlay(dir) {
+        const ov = await this.storage.tryReadJson(this._catalogOverlayPath(dir));
+        return {
+            removed: (ov && Array.isArray(ov.removed)) ? ov.removed.slice() : [],
+            added:   (ov && Array.isArray(ov.added))   ? ov.added.slice()   : [],
+        };
+    }
+
+    /** Persist the {removed, added} overlay for a dir. */
+    async writeCatalogOverlay(dir, overlay) {
+        const clean = {
+            removed: (overlay && Array.isArray(overlay.removed)) ? overlay.removed : [],
+            added:   (overlay && Array.isArray(overlay.added))   ? overlay.added   : [],
+        };
+        await this.storage.writeJson(this._catalogOverlayPath(dir), clean);
+        return clean;
+    }
+
+    /** Drop the overlay for a dir entirely ("restore defaults"). */
+    async clearCatalogOverlay(dir) {
+        try {
+            if (this.storage.deletePath) {
+                await this.storage.deletePath(this._catalogOverlayPath(dir));
+                return;
+            }
+        } catch (e) { /* fall through to empty write */ }
+        await this.writeCatalogOverlay(dir, { removed: [], added: [] });
+    }
+
+    /**
+     * The effective catalog for a dir: shipped default.json minus the
+     * overlay's `removed` ids, plus the overlay's `added` cards (added
+     * cards whose id already survives in the kept set are skipped so a
+     * stale add can't shadow a shipped card). Order = shipped order first,
+     * then added.
+     */
+    async effectiveCatalog(dir) {
+        const shipped = await this.storage.tryReadJson("cards/" + dir + "/default.json");
+        const base = Array.isArray(shipped) ? shipped : [];
+        const ov = await this.readCatalogOverlay(dir);
+        const removed = new Set(ov.removed);
+        const kept = base.filter((c) => !(c && c.id && removed.has(c.id)));
+        const keptIds = new Set(kept.map((c) => c && c.id).filter(Boolean));
+        const added = ov.added.filter((c) => c && c.id && !keptIds.has(c.id));
+        return kept.concat(added);
+    }
+
+    /**
+     * Adopt an externally-supplied catalog array (e.g. a project zip's
+     * cards/<dir>/default.json) as this dir's catalog, by rewriting the
+     * overlay so effectiveCatalog(dir) reproduces it against the *current*
+     * shipped default.json:
+     *   removed = shipped ids absent from the incoming catalog
+     *   added   = incoming cards whose id is not a shipped id
+     * Returns the overlay written.
+     */
+    async adoptCatalog(dir, catalog) {
+        const incoming = Array.isArray(catalog) ? catalog : [];
+        const shipped = await this.storage.tryReadJson("cards/" + dir + "/default.json");
+        const base = Array.isArray(shipped) ? shipped : [];
+        const shippedIds = new Set(base.map((c) => c && c.id).filter(Boolean));
+        const incomingIds = new Set(incoming.map((c) => c && c.id).filter(Boolean));
+        const removed = [...shippedIds].filter((id) => !incomingIds.has(id));
+        const added = incoming.filter((c) => c && c.id && !shippedIds.has(c.id));
+        return await this.writeCatalogOverlay(dir, { removed, added });
     }
 
     async fetchSnippet(path) {

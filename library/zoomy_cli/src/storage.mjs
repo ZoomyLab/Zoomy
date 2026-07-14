@@ -42,12 +42,15 @@ export class FetchStorage {
     }
 
     /**
-     * Overlay-first applies only under `cards/sessions/`. Keeping this
-     * narrow avoids accidentally shadowing the shipped read-only card
-     * registry (default.json, snippets/) with stale IndexedDB entries.
+     * Overlay-first applies under `cards/sessions/` (per-session user
+     * cards) and `catalog/` (the writable card-catalog overlay). Both are
+     * mutable state that only ever lives in the overlay; keeping the match
+     * narrow avoids shadowing the shipped read-only registry (the
+     * `cards/<dir>/default.json` files, `snippets/`) with stale IndexedDB
+     * entries.
      */
     _overlayFirst(path) {
-        return !!this.overlay && /^cards\/sessions\//.test(path);
+        return !!this.overlay && (/^cards\/sessions\//.test(path) || /^catalog\//.test(path));
     }
 
     async readJson(path) {

@@ -17,7 +17,7 @@
     "./src/*": "./src/*"
   },
   "scripts": {
-    "test": "node --test tests/test_cli_contract.js tests/test_adapter_symmetry.js tests/test_storage_writes.js tests/test_user_cards.js tests/test_card_commands.js"
+    "test": "node --test tests/test_cli_contract.js tests/test_adapter_symmetry.js tests/test_storage_writes.js tests/test_user_cards.js tests/test_card_commands.js tests/test_catalog_overlay.js"
   },
   "dependencies": {
     "jszip": "^3.10.1"
