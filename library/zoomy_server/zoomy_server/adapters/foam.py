@@ -122,6 +122,16 @@ class FoamAdapter(SolverAdapter):
                     found.append((name, os.path.getsize(src)))
         canonical = primary if os.path.exists(primary) else (
             os.path.join(out, found[0][0]) if found else None)
+        # A case's run entry may stage the canonical artifact itself (the
+        # composed live-session launcher drives the real case tree elsewhere
+        # and drops simulation.h5 + figures at the case root).
+        staged = os.path.join(case_dir, "simulation.h5")
+        if canonical is None and os.path.exists(staged):
+            canonical = staged
+        for name in sorted(os.listdir(case_dir)):
+            if name.endswith((".png", ".gif")):
+                shutil.copy2(os.path.join(case_dir, name),
+                             os.path.join(output_dir, name))
         if canonical:
             shutil.copy2(canonical, os.path.join(output_dir, "simulation.h5"))
             logger.info("foam runner: promoted %s -> simulation.h5 (%d bytes); h5=%s",
