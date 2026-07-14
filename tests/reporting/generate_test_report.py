@@ -64,9 +64,10 @@ def main() -> int:
     except Exception:
         have_pytest_html = False
 
+    # Default: NO explicit paths — pytest.ini `testpaths` (tests + the
+    # library/*/tests glob) governs collection, and the root conftest's
+    # capability rule skips suites whose backend isn't installed here.
     path_args = [p for p in args.pytest_paths.split() if p.strip()]
-    if not path_args:
-        path_args = ["tests"]
 
     cmd = [
         sys.executable,
