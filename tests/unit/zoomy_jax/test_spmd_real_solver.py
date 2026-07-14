@@ -35,7 +35,16 @@ from zoomy_core.systemmodel import SystemModel
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.mesh import partition_1d_contiguous, partition_xaxis_structured
 from zoomy_jax.fvm.spmd_jax import (shard_global_state, gather_owned,
-                                    run_solver_sharded)
+                                    run_solver_sharded, distributed_gmres,
+                                    collective_inner, spmd_device_mesh,
+                                    halo_exchange_periodic)
+
+from functools import partial
+from jax.sharding import PartitionSpec as P
+try:
+    from jax.experimental.shard_map import shard_map
+except ImportError:                                   # pragma: no cover
+    from jax import shard_map
 
 from sympy import Matrix
 
@@ -151,3 +160,39 @@ def test_spmd_real_solver_2d_transparent(order):
     a, b = run(3), run(4)
     assert np.isfinite(b).all()
     assert np.max(np.abs(a - b)) < 1e-10, "2D real-solver SPMD not device-count transparent"
+
+
+@pytest.mark.jax
+def test_distributed_gmres_solves_global_elliptic_system():
+    """Stage 2 core: distributed_gmres (halo-in-matvec + psum inner products)
+    solves the GLOBAL 1D periodic diffusion system (I - alpha*L) x = b across 4
+    devices — matching the single-device dense solve.  This is the reusable
+    primitive the global-implicit source / diffusion / Chorin-pressure solves
+    need (their local jax_gmres would otherwise converge each device's slab)."""
+    if jax.device_count() < 4:
+        pytest.skip("need 4 devices")
+    N, N_DEVS, HALO, ALPHA = 64, 4, 1, 0.35
+    rng = np.random.default_rng(0)
+    b_np = rng.standard_normal(N)
+    L = -2*np.eye(N) + np.eye(N, k=1) + np.eye(N, k=-1)
+    L[0, -1] = 1.0; L[-1, 0] = 1.0
+    A = np.eye(N) - ALPHA*L
+    x_ref = np.linalg.solve(A, b_np)
+
+    def matvec(v):
+        vp = jnp.pad(v, ((0, 0), (HALO, HALO)))
+        vp = halo_exchange_periodic(vp, HALO, "cells", N_DEVS)
+        lap = vp[:, :-2] - 2*vp[:, 1:-1] + vp[:, 2:]
+        return v - ALPHA*lap
+
+    dmesh = spmd_device_mesh(N_DEVS, "cells")
+    inner = collective_inner("cells")
+
+    @partial(shard_map, mesh=dmesh, in_specs=P(None, "cells"),
+             out_specs=P(None, "cells"), check_rep=False)
+    def solve(b):
+        return distributed_gmres(matvec, b, inner=inner, maxiter=N, tol=1e-12)
+
+    x_spmd = np.asarray(solve(jnp.asarray(b_np[None, :])))[0]
+    assert np.max(np.abs(x_spmd - x_ref)) < 1e-8
+    assert np.max(np.abs(A @ x_spmd - b_np)) < 1e-8
