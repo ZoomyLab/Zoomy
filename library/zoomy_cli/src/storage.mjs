@@ -44,8 +44,7 @@ export class FetchStorage {
     /**
      * Overlay-first applies only under `cards/sessions/`. Keeping this
      * narrow avoids accidentally shadowing the shipped read-only card
-     * tiers (default.json, generated.json, snippets/) with stale
-     * IndexedDB entries.
+     * registry (default.json, snippets/) with stale IndexedDB entries.
      */
     _overlayFirst(path) {
         return !!this.overlay && /^cards\/sessions\//.test(path);

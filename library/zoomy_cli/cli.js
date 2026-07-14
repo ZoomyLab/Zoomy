@@ -24,7 +24,12 @@ function findDefaultConfig() {
 function _loadJsonSafe(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch (e) { return null; } }
 
 function _loadCardsFolder(baseDir) {
-    /* Load tabs.json + default/generated/user per category — mirrors GUI _loadAllCards */
+    /* Load tabs.json + the single authored default.json per category —
+       mirrors GUI _loadAllCards. The generated.json / user.json merge
+       tiers were removed: the catalog is now hand-curated into
+       default.json. (Per-session runtime user cards live under
+       cards/sessions/... and are handled by src/cli.mjs listCards, not
+       this static node-twin loader.) */
     var tabsPath = path.join(baseDir, "cards", "tabs.json");
     var tabsMeta = _loadJsonSafe(tabsPath);
     if (!tabsMeta) return null;
@@ -40,12 +45,8 @@ function _loadCardsFolder(baseDir) {
     categories.forEach(function (cat) {
         var cardsDir = path.join(baseDir, "cards", cat.dir);
         var def = _loadJsonSafe(path.join(cardsDir, "default.json")) || [];
-        var gen = _loadJsonSafe(path.join(cardsDir, "generated.json")) || [];
-        var usr = _loadJsonSafe(path.join(cardsDir, "user.json")) || [];
         var seen = {}, merged = [];
-        [def, gen, usr].forEach(function (list) {
-            list.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = true; merged.push(c); } });
-        });
+        def.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = true; merged.push(c); } });
         var meta = tabsMeta[cat.tabId] || { id: cat.tabId, title: cat.dir, type: "cards" };
         meta.cards = merged;
         tabs.push(meta);

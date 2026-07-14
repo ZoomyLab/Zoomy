@@ -97,74 +97,23 @@ jobs:
             "$DOCS_IMAGE" \
             bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
-      - name: Download mesh artifacts and generate GUI previews
-        run: |
-          # Fetch the latest mesh release from the meshes repo
-          MESHES_REPO="${{ github.repository_owner }}/meshes"
-
-          echo "Fetching latest mesh release assets..."
-          mkdir -p meshes_download
-
-          # Download .msh files from the meshes repo's latest release
-          RELEASE_JSON=$(gh api "repos/${MESHES_REPO}/releases/latest" 2>/dev/null || echo '{}')
-          if echo "$RELEASE_JSON" | jq -e '.assets' >/dev/null 2>&1; then
-            for url in $(echo "$RELEASE_JSON" | jq -r '.assets[].browser_download_url // empty'); do
-              fname=$(basename "$url")
-              # Download every .msh including __coarse/__medium/__fine
-              # size variants; generate_mesh_previews.py groups them and
-              # populates each card's mesh_sizes array.
-              if [[ "$fname" == *.msh ]]; then
-                echo "  Downloading: $fname"
-                curl -sL "$url" -o "meshes_download/$fname"
-              fi
-            done
-          else
-            echo "  No mesh release found, using local .msh files only"
-          fi
-
-          # Place every downloaded .msh flat under meshes/. We do NOT
-          # convert __ → / — the build-meshes CI collapses directory
-          # separators to single _ and uses __size only as the size
-          # suffix (e.g. basic_shapes_quad_2d_hole_mesh__coarse.msh).
-          # generate_mesh_previews.py::_parse_mesh_identity parses both
-          # the category (by matching known-prefix heuristic) and the
-          # size suffix from a flat filename, so we just let it walk
-          # meshes/ as-is.
-          mkdir -p meshes
-          for f in meshes_download/*.msh; do
-            [ -f "$f" ] || continue
-            cp "$f" "meshes/$(basename "$f")"
-          done
-          echo "  Placed $(ls meshes/*.msh 2>/dev/null | wc -l) .msh files at meshes/"
-
-          # Also copy any .msh files from the submodule checkout itself
-          # (square/ has committed .msh files)
-          echo "Checking submodule meshes..."
-          find meshes/ -name '*.msh' 2>/dev/null | head -20
-
-          # Generate mesh previews (force rebuild with all available .msh files)
-          echo "Generating mesh preview SVGs..."
-          pip install meshio matplotlib numpy
-          cd library/zoomy_gui
-          python generate_mesh_previews.py --force
-          cd ../..
-
-          echo "Mesh preview generation complete."
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # NOTE: mesh cards are an AUTHORED registry now (cards/meshes/default.json,
+      # hand-curated). CI no longer downloads release .msh files or regenerates
+      # mesh previews/cards. Mesh files are served on demand from the meshes-repo
+      # Pages (zoomylab.github.io/meshes/), which the GUI's fetch-or-load mesh
+      # cells and exported notebooks use directly — the GUI deploy needs no
+      # local .msh at all.
 
       - name: Copy GUI into docs site
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
           mkdir -p docs/book/_build/html/gui
-          # Copy the submodule GUI first
+          # Copy the submodule GUI verbatim — cards/ (authored default.json)
+          # and previews/ ship as committed. (Mesh .msh files are NOT shipped
+          # here: the meshes-repo publishes them to its own Pages at
+          # zoomylab.github.io/meshes/, which the GUI's fetch-or-load mesh
+          # cells and exported notebooks use.)
           cp -r library/zoomy_gui/* docs/book/_build/html/gui/
-          # (Mesh catalog is NOT shipped here: the meshes-repo publishes all
-          # built .msh files to its own Pages at zoomylab.github.io/meshes/,
-          # which the exported notebooks' fetch-or-load mesh cells use.)
-          # Then overwrite with freshly generated cards + previews
-          cp library/zoomy_gui/cards/meshes/generated.json docs/book/_build/html/gui/cards/meshes/generated.json
-          cp -r library/zoomy_gui/previews/* docs/book/_build/html/gui/previews/ 2>/dev/null || true
           # Copy the isomorphic CLI package so the GUI can import it as
           # ./zoomy_cli/browser.mjs (see app.js). Strip node-only and
           # dev detritus to keep the deploy small.

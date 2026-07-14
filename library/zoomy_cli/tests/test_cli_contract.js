@@ -67,20 +67,27 @@ describe("zoomy_cli public surface", () => {
         if (out !== '{"status":"success","output":"ok"}') throw new Error("runCode did not forward result");
     });
 
-    test("ZoomyCLI.listCards merges default/generated/user sources", async () => {
+    test("ZoomyCLI.listCards loads the authored default.json only", async () => {
+        /* The catalog is an AUTHORED registry: default.json is the sole
+           static tier. The old generated.json / user.json merge tiers were
+           removed — listCards must ignore them even if present on disk. */
         const pyodide = { runCode: async () => "", interrupt: () => ({}) };
+        const reads = [];
         const storage = {
             tryReadJson: async (path) => {
+                reads.push(path);
                 if (path === "cards/models/default.json") return [{ id: "a" }];
                 if (path === "cards/models/generated.json") return [{ id: "b" }];
-                return null;              // user.json missing
+                return null;
             },
             readJson: async () => ({}), readText: async () => "", tryReadText: async () => null,
         };
         const cli = new mod.ZoomyCLI({ pyodide, storage });
         const cards = await cli.listCards("models");
-        if (cards.length !== 2) throw new Error("expected 2 cards, got " + cards.length);
-        if (cards[0].id !== "a" || cards[1].id !== "b") throw new Error("merge order wrong");
+        if (cards.length !== 1 || cards[0].id !== "a")
+            throw new Error("expected only the authored [a], got " + JSON.stringify(cards));
+        if (reads.some((p) => /generated\.json|user\.json/.test(p)))
+            throw new Error("listCards must not read legacy tiers: " + reads.join(", "));
     });
 
     test("ZoomyCLI.listRegistry returns null with no HTTP adapters", async () => {

@@ -115,13 +115,10 @@ describe("ZoomyCLI.listCards with session override", () => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), "zoomy-listcards-"));
         const storage = new mod.FsStorage({ root, fs, path });
 
-        // Seed legacy tiers.
+        // Seed the authored registry (the sole static tier).
         await storage.writeJson("cards/models/default.json", [
             { id: "sme-l0", title: "SME L0" },
             { id: "sme-l1", title: "SME L1" },
-        ]);
-        await storage.writeJson("cards/models/user.json", [
-            { id: "legacy-user-card", title: "Legacy User Card" },
         ]);
 
         // Session-scoped user card that overrides sme-l0 by id.
@@ -141,20 +138,17 @@ describe("ZoomyCLI.listCards with session override", () => {
 
     after(() => fs.rmSync(root, { recursive: true, force: true }));
 
-    test("without session, only legacy tiers show", async () => {
+    test("without session, only the authored default shows", async () => {
         const cards = await cli.listCards("models");
         const ids = cards.map(c => c.id);
-        assert.deepStrictEqual(ids, ["sme-l0", "sme-l1", "legacy-user-card"]);
+        assert.deepStrictEqual(ids, ["sme-l0", "sme-l1"]);
         assert.strictEqual(cards[0].title, "SME L0");
     });
 
-    test("with session, new layout overrides legacy by id", async () => {
+    test("with session, per-session user cards override the default by id", async () => {
         const cards = await cli.listCards("models", { session: "sess-42" });
         const ids = cards.map(c => c.id);
-        assert.deepStrictEqual(
-            ids,
-            ["sme-l0", "sme-l1", "legacy-user-card", "user-novel"],
-        );
+        assert.deepStrictEqual(ids, ["sme-l0", "sme-l1", "user-novel"]);
         // sme-l0 was overridden by the session's user card.
         const override = cards.find(c => c.id === "sme-l0");
         assert.strictEqual(override.title, "My Override");
@@ -164,10 +158,10 @@ describe("ZoomyCLI.listCards with session override", () => {
         assert.strictEqual(novel.source, "user");
     });
 
-    test("unknown session returns legacy-only result", async () => {
+    test("unknown session returns the authored default only", async () => {
         const cards = await cli.listCards("models", { session: "sess-does-not-exist" });
         const ids = cards.map(c => c.id);
-        assert.deepStrictEqual(ids, ["sme-l0", "sme-l1", "legacy-user-card"]);
+        assert.deepStrictEqual(ids, ["sme-l0", "sme-l1"]);
         assert.strictEqual(cards[0].title, "SME L0");
     });
 });
