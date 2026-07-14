@@ -5,7 +5,8 @@ Two conversions on the zoomy HDF5 result store
 cell_vertices}`` + ``/fields/iteration_i/{time,Q[,Qaux]}``):
 
 * :func:`hdf5_to_vtk` — store -> ``.vtu`` series + ParaView ``.pvd``
-  (the inverse of :func:`zoomy_prepost.vtk.vtk_to_hdf5`).
+  (the inverse of :func:`zoomy_prepost.vtk.vtk_to_hdf5`; the single h5 -> vtk
+  writer, optionally naming rows / including ``Qaux``).
 * :func:`lift3d` — lift a depth-averaged result to a (d+1)-dimensional
   VTK series through the MODEL's symbolic ``interpolate_to_3d``.
 
@@ -138,12 +139,23 @@ def _out_base(out, default_basename):
 # --------------------------------------------------------------------------- #
 # hdf5 -> vtk (inverse of vtk_to_hdf5)
 # --------------------------------------------------------------------------- #
-def hdf5_to_vtk(h5_path, out_dir, basename="simulation"):
+def hdf5_to_vtk(h5_path, out_dir, basename="simulation", *,
+               include_aux=False, field_names=None, aux_field_names=None):
     """Convert a zoomy HDF5 result store to a ``.vtu`` series + ``.pvd``.
 
-    Each state row ``Q[i]`` becomes a cell_data field ``q<i>``; snapshot
-    times land in the ``.pvd``.  Ghost-cell columns (``Q.shape[1] >
-    n_inner_cells``) are dropped.  Returns the ``.pvd`` path.
+    Each state row ``Q[i]`` becomes a cell_data field (default name ``q<i>``);
+    pass ``field_names`` to name them after the model's state symbols so
+    ParaView shows ``h``, ``hu``, ...  With ``include_aux=True`` the store's
+    ``Qaux`` rows are appended as further cell_data fields (default ``aux_<i>``,
+    matching the former ``zoomy_core.misc.io.generate_vtk``); name them via
+    ``aux_field_names``.  Snapshot times land in the ``.pvd``.  Ghost-cell
+    columns (``Q.shape[1] > n_inner_cells``) are dropped.  Returns the ``.pvd``
+    path.
+
+    This is the single h5 -> vtk writer (the legacy ``generate_vtk`` /
+    ``_write_to_vtk_from_vertices_edges`` in zoomy_core were removed in favour
+    of it); the ``.vtu``/``.pvd`` shape is what the postprocessing adapters and
+    ``vtk_to_hdf5`` round-trip on.
     """
     mesh, store_frames = _read_store(h5_path)
     meshio_type = _ZOOMY_TO_MESHIO.get(mesh["type"])
@@ -151,9 +163,16 @@ def hdf5_to_vtk(h5_path, out_dir, basename="simulation"):
         raise ValueError(f"unsupported zoomy mesh type {mesh['type']!r}")
     n_inner = mesh["n_inner_cells"]
 
+    def _name(names, i, default):
+        return names[i] if names is not None and i < len(names) else default
+
     frames = []
-    for time, Q, _qaux in store_frames:
-        named = {f"q{i}": Q[i, :n_inner] for i in range(Q.shape[0])}
+    for time, Q, Qaux in store_frames:
+        named = {_name(field_names, i, f"q{i}"): Q[i, :n_inner]
+                 for i in range(Q.shape[0])}
+        if include_aux and Qaux is not None:
+            for i in range(Qaux.shape[0]):
+                named[_name(aux_field_names, i, f"aux_{i}")] = Qaux[i, :n_inner]
         frames.append((time, named))
 
     return _write_vtu_series(
