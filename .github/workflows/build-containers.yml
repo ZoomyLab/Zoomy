@@ -243,24 +243,32 @@ jobs:
           c="${{ matrix.container }}"
           base_ver=$(tr -d '[:space:]' < "containers/$c/VERSION")
           full_ver="${base_ver}.${{ github.run_number }}"
-          def_file=$(find "containers/$c" -maxdepth 1 -name '*.def' | head -1)
-
-          # Build SIF from the Docker image we just pushed (faster than rebuilding from .def)
           image="ghcr.io/$OWNER_LC/$c"
-          echo "==> Building SIF from Docker image"
-          sudo apptainer build "containers/$c/$c.sif" "docker-daemon:${image}:${full_ver}"
+          sif="containers/$c/$c.sif"
+
+          # The build_image step already builds $sif directly from the .def (the
+          # has_def path also derives the Docker image from that sif via a sandbox
+          # import). REUSE it: rebuilding from docker-daemon both collides here
+          # ("build target already exists") AND drops the .def's %runscript /
+          # %environment / %startscript — `docker import` yields an empty Config, so
+          # the round-tripped sif loses ZOOMY_ADAPTER and the dispatch runscript.
+          # Only build from the Docker image when no def-built sif exists (a
+          # Dockerfile-preferred container that also ships a .def).
+          if [ -f "$sif" ]; then
+            echo "==> Reusing SIF built from .def (preserves %runscript/%environment)"
+          else
+            echo "==> Building SIF from Docker image"
+            sudo apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
+          fi
+          sudo chown "$(id -u):$(id -g)" "$sif"
 
           echo "==> Pushing SIF to GHCR via ORAS"
-          apptainer push \
-            "containers/$c/$c.sif" \
-            "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
+          apptainer push "$sif" "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
             echo "WARNING: ORAS push failed (may need package visibility set to public)"
-          apptainer push \
-            "containers/$c/$c.sif" \
-            "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
+          apptainer push "$sif" "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
             echo "WARNING: ORAS push of :latest failed"
 
-          rm -f "containers/$c/$c.sif"
+          rm -f "$sif"
 
   build-tier2:
     runs-on: ubuntu-latest
@@ -339,19 +347,23 @@ jobs:
           c="${{ matrix.container }}"
           base_ver=$(tr -d '[:space:]' < "containers/$c/VERSION")
           full_ver="${base_ver}.${{ github.run_number }}"
-
           image="ghcr.io/$OWNER_LC/$c"
-          echo "==> Building SIF from Docker image"
-          sudo apptainer build "containers/$c/$c.sif" "docker-daemon:${image}:${full_ver}"
+          sif="containers/$c/$c.sif"
+
+          # Reuse a .def-built sif if the build_image step produced one (see the
+          # tier-1 note); only convert from the Docker image otherwise.
+          if [ -f "$sif" ]; then
+            echo "==> Reusing SIF built from .def (preserves %runscript/%environment)"
+          else
+            echo "==> Building SIF from Docker image"
+            sudo apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
+          fi
+          sudo chown "$(id -u):$(id -g)" "$sif"
 
           echo "==> Pushing SIF to GHCR via ORAS"
-          apptainer push \
-            "containers/$c/$c.sif" \
-            "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
+          apptainer push "$sif" "oras://ghcr.io/$OWNER_LC/${c}_sif:${full_ver}" || \
             echo "WARNING: ORAS push failed (may need package visibility set to public)"
-          apptainer push \
-            "containers/$c/$c.sif" \
-            "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
+          apptainer push "$sif" "oras://ghcr.io/$OWNER_LC/${c}_sif:latest" || \
             echo "WARNING: ORAS push of :latest failed"
 
-          rm -f "containers/$c/$c.sif"
+          rm -f "$sif"
