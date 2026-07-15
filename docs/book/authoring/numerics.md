@@ -373,6 +373,80 @@ standard operator slots (`flux`, `source`, `update_aux_variables`, …) are
 registered through exactly this mechanism — a custom function is not a special
 case, just one more entry.
 
+## 6. The solver architecture — a march over a stage list
+
+A solver marches over an **ordered list of stages**. Each stage is
+`Stage(label, kind, sm)`:
+
+- **`label`** — a *stable, deterministic* per-stage identifier
+  (`"predictor"` / `"pressure"` / `"corrector"` for the Chorin split).
+  Code-generating backends key generated names off it — amrex emits
+  `Model_<label>.H`. It **must never be derived from the list position**:
+  any reordering would silently rename every header and invalidate every
+  build cache.
+- **`kind`** — the *executor kind*, drawn from a small extensible
+  vocabulary: `hyperbolic | elliptic | pointwise`. The kind selects which
+  per-kind executor the backend runs for the stage; it is the concept the
+  six backends (numpy / jax / dmplex / amrex / OpenFOAM / firedrake) march
+  *concept-for-concept* the same way.
+- **`sm`** — the `SystemModel` for the stage (frozen, printable exactly
+  like any other — §0/§1).
+
+The split is **data, not solver code**: `model.chorin_split(dt)` returns a
+`SplitForPressureResult` whose `.stages` property is
+
+```python
+[Stage("predictor", "hyperbolic", SM_pred),   # evolution rows
+ Stage("pressure",  "elliptic",   SM_press),  # divergence-constraint block
+ Stage("corrector", "pointwise",  SM_corr)]   # projection update
+```
+
+A **plain `HyperbolicSolver` is the degenerate one-stage list**
+`[Stage("evolution", "hyperbolic", sm)]`; a split (Chorin, or any future
+pressure-corrector structure) just adds stages. `ChorinSplitVAMSolver`
+accepts either the legacy positional triple or `stages=split.stages`, and
+binds each sub-model to its executor **by `kind`, never by position**.
+
+### A backend supplies one executor per kind
+
+| kind | what the executor does |
+|---|---|
+| `hyperbolic` | the Riemann/reconstruction step (§1, §4) — a `HyperbolicSolver` substep; cannot silently under-solve |
+| `elliptic`   | the linear/GMRES (or KSP) solve of the stage's constraint block |
+| `pointwise`  | the `update_variables` scatter (§2) — a cell-local algebraic update |
+
+Adding a `kind` is additive: a backend that does not implement a kind
+refuses that stage list loudly, rather than mis-marching it.
+
+### The `elliptic` executor contract — it MUST surface its residual
+
+An `elliptic` executor **must compute and surface the relative residual**
+
+$$\mathrm{rel\_resid} \;=\; \frac{\lVert b - A x\rVert}{\lVert b\rVert}$$
+
+after its solve (numpy: `solver.last_elliptic_rel_resid`). This is a hard
+part of the contract, not a diagnostic nicety:
+
+- An executor that returns only `x` is **indistinguishable between
+  "solved" and "gave up"**. jax's `jax_gmres` hard-codes `info = 0` — its
+  own docstring calls it a *"placeholder"* — so a converged solve and one
+  starved to `maxiter=1` return identical status; the retry branch that
+  read `info != 0` was structurally unreachable. dmplex hit the same class
+  from the other side: PCNONE **diverges while reporting green
+  downstream** — a wrong answer that passed.
+- The one extra matvec that measures `‖b − A x‖/‖b‖` costs <1% of a solve
+  that already spent ~10² matvecs, and it is the difference between a wall
+  you can see and one you find months later in a baseline.
+
+`hyperbolic` and `pointwise` stages need nothing added — neither can
+silently under-solve.
+
+> **Cross-backend cost note.** For numpy/jax a stage list is a constructor
+> and a loop (the per-stage executors already exist — they were just
+> Chorin-named). For amrex/dmplex/OpenFOAM the stage march is *structure*
+> (the printer emits N named model headers; the C++ driver allocates
+> per-stage state), so "backends follow" is not a uniform-cost rename.
+
 ## Running example — SWE end-to-end
 
 From `thesis/notebooks/legacy/modeling/swe/simple_swe_v2.py`
