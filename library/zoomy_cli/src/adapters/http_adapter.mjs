@@ -16,6 +16,18 @@ import { NotSupportedError } from "./pyodide_adapter.mjs";
 
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 
+/** Portable Uint8Array -> base64 (Node Buffer or browser btoa in chunks). */
+function _bytesToBase64(bytes) {
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (typeof Buffer !== "undefined") return Buffer.from(u8).toString("base64");
+    let bin = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < u8.length; i += CHUNK) {
+        bin += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+}
+
 export class HttpAdapter {
     /**
      * @param {object} options
@@ -138,6 +150,53 @@ export class HttpAdapter {
             this._pollTimers.set(jobId, handle);
             tick();
         });
+    }
+
+    /**
+     * Route the post-processing chain to this (postprocess) backend: upload a
+     * result store + the enabled steps to POST /postprocess, poll to
+     * completion, then download every collected artifact.
+     *
+     * @param {object} options
+     * @param {Uint8Array|ArrayBuffer} options.storeBytes   The run's simulation.h5.
+     * @param {string[]} options.steps        Enabled steps (to_h5 / to_vtk / lift3d).
+     * @param {number}  [options.nz]          Vertical layers for lift3d.
+     * @param {string}  [options.modelPy]     Model cell (needed by lift3d).
+     * @param {function}[options.onStatus]    cb(statusJson) per poll.
+     * @returns {Promise<{job_id, artifacts: [{name, bytes:Uint8Array}]}>}
+     */
+    async runPostprocChain(options) {
+        options = options || {};
+        const resp = await fetch(this.url + "/api/v1/postprocess", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                store_b64: _bytesToBase64(options.storeBytes),
+                steps: options.steps || [],
+                nz: options.nz || 10,
+                model_py: options.modelPy || null,
+            }),
+        });
+        if (!resp.ok) {
+            let detail = "";
+            try { detail = " — " + (await resp.text()); } catch (e) {}
+            throw new Error("postprocess submit failed: HTTP " + resp.status + detail);
+        }
+        const jobId = (await resp.json()).job_id;
+
+        const status = await this._pollUntilTerminal(jobId, { onStatus: options.onStatus });
+        if (status.status === "failed") throw new Error(status.error || "postprocess job failed");
+        if (status.status === "cancelled") return { job_id: jobId, artifacts: [] };
+
+        const list = await this._fetchJson("/api/v1/jobs/" + jobId + "/artifacts");
+        const artifacts = [];
+        for (const a of (list.artifacts || [])) {
+            const r = await fetch(this.url + "/api/v1/jobs/" + jobId +
+                                  "/artifacts/" + encodeURIComponent(a.name));
+            if (!r.ok) continue;
+            artifacts.push({ name: a.name, bytes: new Uint8Array(await r.arrayBuffer()) });
+        }
+        return { job_id: jobId, artifacts };
     }
 
     // ------------------------------------------------------------------

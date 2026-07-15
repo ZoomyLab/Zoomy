@@ -166,6 +166,13 @@ export class PyodideAdapter {
         return await this._postCmd({ cmd: "list_results_local" });
     }
 
+    /** Raw HDF5 bytes of the current run's open store (its ``source_path``
+     *  in the VFS). Used to route the post-processing chain to a backend
+     *  after a local run. Returns a Uint8Array. */
+    async readStoreBytes() {
+        return await this._postCmd({ cmd: "read_store_bytes" });
+    }
+
     /** Save the current run's open store into the local shelf under `name`. */
     async saveResultLocal(name) {
         return await this._postCmd({ cmd: "save_result_local", name });

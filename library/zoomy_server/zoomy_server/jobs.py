@@ -83,6 +83,39 @@ def get_hdf5_path(job_id):
     return path if os.path.exists(path) else None
 
 
+def list_artifacts(job_id):
+    """Every collected output file in the job's output dir (name + size).
+
+    The postprocess adapter drops the chain's products here — the
+    normalized ``simulation.h5``, the ``to_vtk`` series, the ``lift3d``
+    3-D store/series, and any ``*.png``/``*.gif``. ``progress.json`` (the
+    server's own bookkeeping) is not an artifact.
+    """
+    if job_id not in JOBS:
+        return []
+    out_dir = JOBS[job_id]["output_dir"]
+    items = []
+    for fn in sorted(os.listdir(out_dir)):
+        if fn == "progress.json":
+            continue
+        p = os.path.join(out_dir, fn)
+        if os.path.isfile(p):
+            items.append({"name": fn, "size": os.path.getsize(p)})
+    return items
+
+
+def get_artifact_path(job_id, name):
+    """Absolute path of a named artifact in the job's output dir, or None.
+
+    ``name`` is reduced to its basename so a client can never escape the
+    output dir with ``../`` traversal."""
+    if job_id not in JOBS:
+        return None
+    safe = os.path.basename(name)
+    p = os.path.join(JOBS[job_id]["output_dir"], safe)
+    return p if os.path.isfile(p) else None
+
+
 def get_results(job_id, timeline=False):
     """Return simulation results as a JSON-serializable dict.
 

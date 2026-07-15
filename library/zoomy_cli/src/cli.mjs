@@ -445,6 +445,46 @@ export class ZoomyCLI {
         return { mode: "pyodide", result };
     }
 
+    /**
+     * Route the enabled post-processing chain to a connected `postprocess`
+     * backend (the chain's steps — lift3d / to_vtk — live in zoomy_prepost,
+     * which the browser worker does NOT ship, so they can only execute on a
+     * backend). Uploads the just-finished run's store + steps, waits, and
+     * returns the transformed artifacts; the caller stages them into the VFS.
+     *
+     * @param {object} options
+     * @param {string} [options.tag]        Postprocess backend tag (default "postprocess").
+     * @param {Uint8Array|ArrayBuffer} options.storeBytes   The run's simulation.h5.
+     * @param {string[]} options.steps      Enabled steps.
+     * @param {number}  [options.nz]        Vertical layers for lift3d.
+     * @param {string}  [options.modelPy]   Model cell (needed by lift3d).
+     * @param {function}[options.onStatus]  cb(statusJson) per poll.
+     * @returns {Promise<{job_id, artifacts:[{name,bytes}]}>}
+     */
+    async runPostprocChain(options) {
+        options = options || {};
+        const tag = options.tag || "postprocess";
+        const a = this.httpFor(tag);
+        if (!a || !a.isConnected()) {
+            throw new Error("runPostprocChain: backend '" + tag + "' not connected");
+        }
+        const steps = options.steps || [];
+        if (!steps.length) return { job_id: null, artifacts: [] };
+        return await a.runPostprocChain({
+            storeBytes: options.storeBytes,
+            steps,
+            nz: options.nz || 10,
+            modelPy: options.modelPy || null,
+            onStatus: options.onStatus,
+        });
+    }
+
+    /** Read the CURRENT local (Pyodide) run's open store as raw HDF5 bytes —
+     *  the source for routing the chain after a local run. */
+    async readStoreBytes() {
+        return await this.pyodide.readStoreBytes();
+    }
+
     // ------------------------------------------------------------------
     // Named result stores — the RESULTS SHELF.
     //

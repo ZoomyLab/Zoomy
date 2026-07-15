@@ -47,6 +47,21 @@ class CaseRequest(BaseModel):
     mesh_name: Optional[str] = None
 
 
+class PostprocessRequest(BaseModel):
+    """Run the post-processing chain on an EXISTING result store.
+
+    The GUI/CLI uploads the just-finished run's ``simulation.h5`` (base64) plus
+    the enabled chain steps; the server materializes a RESULTS folder (store +
+    ``steps.json`` [+ ``model.py``]) and runs it through the connected
+    ``postprocess`` adapter (see ``adapters/postprocess.py``). ``model_py`` is
+    the composed case's model cell — only the ``lift3d`` step needs it (its
+    ``interpolate_to_3d`` does the vertical lift)."""
+    store_b64: str
+    steps: list = []
+    nz: int = 10
+    model_py: Optional[str] = None
+
+
 @router.get("/health")
 def health():
     return {"status": "ok", "tag": _adapter.tag if _adapter else "unknown"}
@@ -99,6 +114,40 @@ def create_case_job(req: CaseRequest):
     return {"job_id": job_id}
 
 
+@router.post("/postprocess")
+def create_postprocess_job(req: PostprocessRequest):
+    """Materialize a RESULTS folder from an uploaded store + enabled steps and
+    run it through the connected ``postprocess`` adapter. This is the endpoint
+    the GUI/CLI post-processing chain routes to when a postprocess backend is
+    connected — the chain executes HERE (where ``zoomy_prepost`` lives), not in
+    the browser. Artifacts are fetched back via ``GET /jobs/{id}/artifacts``."""
+    if not _adapter:
+        raise HTTPException(503, "No adapter configured")
+    if getattr(_adapter, "tag", None) != "postprocess":
+        raise HTTPException(
+            409, "connected backend is not a postprocess adapter (tag=%r)"
+            % getattr(_adapter, "tag", None))
+    import base64
+    import json
+    import os
+    import tempfile
+
+    case_dir = tempfile.mkdtemp(prefix="zoomy_postproc_case_")
+    try:
+        with open(os.path.join(case_dir, "simulation.h5"), "wb") as f:
+            f.write(base64.b64decode(req.store_b64))
+        with open(os.path.join(case_dir, "steps.json"), "w") as f:
+            json.dump({"steps": list(req.steps), "nz": int(req.nz)}, f)
+        # lift3d resolves the model from model.py (module-level `model`).
+        if req.model_py:
+            with open(os.path.join(case_dir, "model.py"), "w") as f:
+                f.write(req.model_py)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid postprocess request: {e}")
+    job_id = jobs.submit(_adapter, case_dir)
+    return {"job_id": job_id}
+
+
 @router.get("/jobs")
 def list_all_jobs():
     return jobs.list_jobs()
@@ -128,6 +177,32 @@ def download_hdf5(job_id: str):
     if not path:
         raise HTTPException(404, "HDF5 not available")
     return FileResponse(path, media_type="application/x-hdf5", filename="simulation.h5")
+
+
+@router.get("/jobs/{job_id}/artifacts")
+def list_job_artifacts(job_id: str):
+    """List every collected output file of a (complete) job. Used by the
+    post-processing chain to discover the transformed products — the lifted
+    3-D store, the VTK series, figures — before downloading them."""
+    status = jobs.get_status(job_id)
+    if not status:
+        raise HTTPException(404, "Job not found")
+    if status["status"] == "failed":
+        raise HTTPException(500, f"Job failed: {str(status.get('error', ''))[:1000]}")
+    if status["status"] != "complete":
+        raise HTTPException(425, "Job still running")  # 425 Too Early
+    return {"artifacts": jobs.list_artifacts(job_id)}
+
+
+@router.get("/jobs/{job_id}/artifacts/{name}")
+def download_job_artifact(job_id: str, name: str):
+    """Download a single named artifact (h5 / vtu / pvd / png / gif) by name."""
+    import os
+
+    path = jobs.get_artifact_path(job_id, name)
+    if not path:
+        raise HTTPException(404, "Artifact not found")
+    return FileResponse(path, filename=os.path.basename(path))
 
 
 @router.get("/jobs/{job_id}/results")

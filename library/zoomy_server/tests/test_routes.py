@@ -209,6 +209,57 @@ def test_delete_result(client, case_dir, results_dir):
 
 
 # ---------------------------------------------------------------------------
+# /jobs/{id}/artifacts — chain output discovery + download
+# ---------------------------------------------------------------------------
+
+def test_list_artifacts_after_complete(client, case_dir):
+    job_id = _run_to_complete(client, case_dir)
+    r = client.get(f"/api/v1/jobs/{job_id}/artifacts")
+    assert r.status_code == 200
+    names = [a["name"] for a in r.json()["artifacts"]]
+    assert "simulation.h5" in names
+    # progress.json is bookkeeping, never an artifact.
+    assert "progress.json" not in names
+    assert all(a["size"] > 0 for a in r.json()["artifacts"])
+
+
+def test_download_artifact_matches_hdf5(client, case_dir):
+    job_id = _run_to_complete(client, case_dir)
+    art = client.get(f"/api/v1/jobs/{job_id}/artifacts/simulation.h5")
+    assert art.status_code == 200
+    assert art.content == client.get(f"/api/v1/jobs/{job_id}/results/hdf5").content
+
+
+def test_download_artifact_traversal_safe(client, case_dir):
+    """A ``../`` name is reduced to its basename — no escape from the job dir."""
+    job_id = _run_to_complete(client, case_dir)
+    r = client.get(f"/api/v1/jobs/{job_id}/artifacts/..%2f..%2fetc%2fpasswd")
+    assert r.status_code == 404
+
+
+def test_list_artifacts_unknown_job_404(client):
+    assert client.get("/api/v1/jobs/nope/artifacts").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# /postprocess — the chain-routing endpoint (only a postprocess adapter serves)
+# ---------------------------------------------------------------------------
+
+def test_postprocess_requires_postprocess_adapter(client):
+    """The mock adapter (tag 'mock') is not a postprocess adapter -> 409."""
+    import base64
+    body = {"store_b64": base64.b64encode(b"\x89HDF\r\n\x1a\n").decode(),
+            "steps": ["to_h5"]}
+    r = client.post("/api/v1/postprocess", json=body)
+    assert r.status_code == 409
+
+
+def test_postprocess_rejects_garbage_body(client):
+    # store_b64 is required — Pydantic responds 422.
+    assert client.post("/api/v1/postprocess", json={"steps": []}).status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # /registry
 # ---------------------------------------------------------------------------
 

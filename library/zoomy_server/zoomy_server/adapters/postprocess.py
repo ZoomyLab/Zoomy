@@ -111,7 +111,7 @@ class PostprocessAdapter(SolverAdapter):
 
     @staticmethod
     def _run_step(step, work, h5, nz):
-        from zoomy_prepost import hdf5_to_vtk, lift3d
+        from zoomy_prepost import hdf5_to_vtk, lift3d, vtk_to_hdf5
 
         name = str(step).replace("-", "_")
         if name == "to_h5":
@@ -124,7 +124,12 @@ class PostprocessAdapter(SolverAdapter):
                 raise RuntimeError(
                     "step 'lift3d' needs the case's model.py (the model's "
                     "interpolate_to_3d does the lifting) — none in the case folder")
-            lift3d(work, h5, os.path.join(work, "simulation_3d"), Nz=nz)
+            pvd = lift3d(work, h5, os.path.join(work, "simulation_3d"), Nz=nz)
+            # Also emit the lifted result as a zoomy store so consumers that
+            # speak the store format (zoomy_plotting.read_hdf5 / the GUI viz
+            # cards + results shelf) can open the 3-D lift directly, not only
+            # the VTK series. Same conversion the VTK-input normalization uses.
+            vtk_to_hdf5(pvd, os.path.join(work, "simulation_3d.h5"))
             return
         raise RuntimeError(
             f"unknown postprocess step {step!r} (known: to_h5, to_vtk, lift3d)")
