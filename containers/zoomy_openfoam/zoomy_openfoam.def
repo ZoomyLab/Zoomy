@@ -44,6 +44,10 @@ From: ubuntu:24.04
     library/zoomy_prepost  /opt/src/zoomy_prepost
     library/zoomy_plotting /opt/src/zoomy_plotting
     library/zoomy_foam     /opt/src/zoomy_foam
+    # Triple-purpose dispatch, baked at a fixed path so the pipeline's
+    # docker-twin (built by `docker import --change ENTRYPOINT=...`) reuses the
+    # exact same script as the .sif %runscript below.
+    containers/zoomy_openfoam/zoomy-entry /usr/local/bin/zoomy-entry
 
 %environment
     export LC_ALL=C
@@ -132,6 +136,7 @@ From: ubuntu:24.04
     mkdir -p /workspace     # dev-container / bind target ($ZOOMY_ROOT)
 
     echo "##### STEP 7/7: env wiring + slim down"
+    chmod +x /usr/local/bin/zoomy-entry
     grep -q 'openfoam13/etc/bashrc' /root/.bashrc 2>/dev/null || \
         echo '. /opt/openfoam13/etc/bashrc' >> /root/.bashrc
     apt-get clean
@@ -139,25 +144,11 @@ From: ubuntu:24.04
     echo "##### POST COMPLETE"
 
 %runscript
-    # Ensure foamRun/wmake are on PATH so the foam adapter + case scripts detect
-    # "in-container" and run directly (belt-and-suspenders with %environment).
-    if [ -f /opt/openfoam13/etc/bashrc ]; then . /opt/openfoam13/etc/bashrc || true; fi
-    # Triple-purpose dispatch (mirrors containers/common/zoomy-entry):
-    #   run img                -> foam API on $ZOOMY_PORT
-    #   run img <port>         -> foam API on <port>
-    #   run img server [adapter] [port]
-    #   run img jupyter [port] -> Jupyter Lab
-    #   run img shell|bash     -> interactive / dev shell
-    #   run img <cmd> [args]   -> exec the command (e.g. exec-style wmake)
-    case "${1:-}" in
-        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
-        shell)      exec /bin/bash ;;
-        bash)       if [ $# -eq 1 ]; then exec /bin/bash; else exec "$@"; fi ;;
-        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-${ZOOMY_PORT:-8080}}" ;;
-        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "${ZOOMY_PORT:-8080}" ;;
-        *[!0-9]*)   exec "$@" ;;
-        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
-    esac
+    # Delegate to the baked /usr/local/bin/zoomy-entry (sources the OpenFOAM env,
+    # then the triple-purpose dispatch). The pipeline's Docker twin uses the same
+    # file as its ENTRYPOINT, so `run img [port|jupyter|shell|<cmd>]` is identical
+    # between the .sif and the Docker image.
+    exec /usr/local/bin/zoomy-entry "$@"
 
 %startscript
     exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "${ZOOMY_PORT:-8080}"

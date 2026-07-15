@@ -222,7 +222,27 @@ jobs:
             echo "==> Apptainer build + convert to Docker: $def_file"
             sudo apptainer build "containers/$c/$c.sif" "$def_file"
             sudo apptainer build --sandbox "/tmp/${c}_sandbox" "containers/$c/$c.sif"
-            sudo tar -C "/tmp/${c}_sandbox" -c . | docker import - "$image:$full_ver"
+            # A bare `docker import` yields an EMPTY image Config — no
+            # ENTRYPOINT/ENV/CMD — so the round-tripped Docker twin loses the
+            # .def's server wiring and cannot serve the backend API (unlike the
+            # Dockerfile-built twins, which bake ENTRYPOINT=zoomy-entry +
+            # ZOOMY_ADAPTER). Reproduce the essentials via --change. The adapter
+            # is the per-container BACKEND marker (single source of truth, also
+            # consumed by the smoke test); ENTRYPOINT is the zoomy-entry the .def
+            # installs at /usr/local/bin/zoomy-entry.
+            chg=()
+            if [ -f "containers/$c/BACKEND" ]; then
+              adapter=$(tr -d '[:space:]' < "containers/$c/BACKEND")
+              chg+=(--change 'ENTRYPOINT ["/usr/local/bin/zoomy-entry"]')
+              chg+=(--change "ENV ZOOMY_ADAPTER=$adapter")
+              chg+=(--change 'ENV ZOOMY_PORT=8080')
+              chg+=(--change 'ENV ZOOMY_ROOT=/workspace')
+              chg+=(--change 'ENV LC_ALL=C')
+              echo "==> docker import with backend Config (adapter=$adapter)"
+            else
+              echo "==> docker import (non-backend def: no Config injected)"
+            fi
+            sudo tar -C "/tmp/${c}_sandbox" -c . | docker import "${chg[@]}" - "$image:$full_ver"
             docker tag "$image:$full_ver" "$image:latest"
             sudo rm -rf "/tmp/${c}_sandbox"
           fi
@@ -235,6 +255,37 @@ jobs:
           image="ghcr.io/$OWNER_LC/$c"
           docker push "$image:${{ steps.build_image.outputs.version }}"
           docker push "$image:latest"
+
+      # Backend images (those with a containers/<c>/BACKEND marker) must boot the
+      # solver API and report their adapter tag. Non-backends (core, *_dev,
+      # *_dummy) have no marker and skip. Health-only — no simulation.
+      - name: Smoke-test backend image
+        if: ${{ hashFiles(format('containers/{0}/BACKEND', matrix.container)) != '' }}
+        run: |
+          set -eo pipefail
+          c="${{ matrix.container }}"
+          image="ghcr.io/$OWNER_LC/$c"
+          ver="${{ steps.build_image.outputs.version }}"
+          adapter=$(tr -d '[:space:]' < "containers/$c/BACKEND")
+          echo "== Smoke: $image:$ver (expect status=ok tag=$adapter) =="
+          cid=$(docker run -d -p 8080:8080 "$image:$ver")
+          cleanup() { echo '--- container logs (tail) ---'; docker logs "$cid" 2>&1 | tail -n 40 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ok=""
+          # ~90s budget (jax/firedrake/openfoam import slowly): 45 * 2s.
+          for i in $(seq 1 45); do
+            resp=$(curl -fsS http://localhost:8080/api/v1/health 2>/dev/null) || { sleep 2; continue; }
+            echo "health[$i]: $resp"
+            status=$(echo "$resp" | jq -r '.status // empty')
+            tag=$(echo "$resp" | jq -r '.tag // empty')
+            if [ "$status" = "ok" ] && [ "$tag" = "$adapter" ]; then ok=1; break; fi
+            if [ -n "$status" ]; then
+              echo "FAIL: server up but status=$status tag=$tag (expected ok/$adapter)"; exit 1
+            fi
+            sleep 2
+          done
+          [ -n "$ok" ] || { echo "FAIL: /api/v1/health not ok/$adapter within ~90s"; exit 1; }
+          echo "SMOKE PASS: $c -> status=ok tag=$adapter"
 
       - name: Build and push SIF (if .def exists)
         if: ${{ hashFiles(format('containers/{0}/*.def', matrix.container)) != '' }}
@@ -328,6 +379,35 @@ jobs:
           image="ghcr.io/$OWNER_LC/$c"
           docker push "$image:${{ steps.build_image.outputs.version }}"
           docker push "$image:latest"
+
+      # Same backend smoke as tier 1: boot the API, assert status=ok + adapter tag.
+      - name: Smoke-test backend image
+        if: ${{ hashFiles(format('containers/{0}/BACKEND', matrix.container)) != '' }}
+        run: |
+          set -eo pipefail
+          c="${{ matrix.container }}"
+          image="ghcr.io/$OWNER_LC/$c"
+          ver="${{ steps.build_image.outputs.version }}"
+          adapter=$(tr -d '[:space:]' < "containers/$c/BACKEND")
+          echo "== Smoke: $image:$ver (expect status=ok tag=$adapter) =="
+          cid=$(docker run -d -p 8080:8080 "$image:$ver")
+          cleanup() { echo '--- container logs (tail) ---'; docker logs "$cid" 2>&1 | tail -n 40 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ok=""
+          # ~90s budget (jax/firedrake/openfoam import slowly): 45 * 2s.
+          for i in $(seq 1 45); do
+            resp=$(curl -fsS http://localhost:8080/api/v1/health 2>/dev/null) || { sleep 2; continue; }
+            echo "health[$i]: $resp"
+            status=$(echo "$resp" | jq -r '.status // empty')
+            tag=$(echo "$resp" | jq -r '.tag // empty')
+            if [ "$status" = "ok" ] && [ "$tag" = "$adapter" ]; then ok=1; break; fi
+            if [ -n "$status" ]; then
+              echo "FAIL: server up but status=$status tag=$tag (expected ok/$adapter)"; exit 1
+            fi
+            sleep 2
+          done
+          [ -n "$ok" ] || { echo "FAIL: /api/v1/health not ok/$adapter within ~90s"; exit 1; }
+          echo "SMOKE PASS: $c -> status=ok tag=$adapter"
 
       - name: Install Apptainer (if needed)
         if: ${{ hashFiles(format('containers/{0}/*.def', matrix.container)) != '' }}
