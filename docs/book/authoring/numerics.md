@@ -438,6 +438,21 @@ part of the contract, not a diagnostic nicety:
   that already spent ~10² matvecs, and it is the difference between a wall
   you can see and one you find months later in a baseline.
 
+The elliptic executor **must also consume the stage's declared boundary
+conditions, and must not substitute a default** (REQ-174). A silently
+substituted BC is the same silent-wrong-answer class as an unreported
+residual: the numpy Chorin pressure stage hardcoded a homogeneous-Neumann
+(`u_boundary_face="extrapolation"`) gradient and never read
+`SM_press.boundary_conditions`, so a user-declared Dirichlet P pin at an
+outflow was silently replaced by `zeroGradient` — a well-posed solve of the
+*wrong* problem (the operator is full-rank without the pin, so this is not a
+singularity). The executor must honour `SM_press.boundary_conditions`: the
+declared per-field BC drives the derivative-aux stencil, and a declared
+Dirichlet is imposed as a real Dirichlet row in the operator/residual (so the
+boundary cells carry the value exactly) — no shift, penalty, or rank fix. When
+no BC is declared, homogeneous Neumann (`∂ₙP = 0`) remains the default Chorin
+pressure BC.
+
 `hyperbolic` and `pointwise` stages need nothing added — neither can
 silently under-solve.
 
