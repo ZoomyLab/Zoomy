@@ -33,6 +33,7 @@ from jax.experimental.shard_map import shard_map  # stable signature in this jax
 
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
+from zoomy_core.systemmodel import SystemModel
 from zoomy_core.model.models import SME
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
 from zoomy_core.numerics import NumericalSystemModel
@@ -80,7 +81,7 @@ def _setup(order):
     bcs = BoundaryConditions([Extrapolation(tag="left"),
                               Extrapolation(tag="right")])
     model = SME(level=0, dimension=2)
-    sm = model.system_model
+    sm = SystemModel.from_model(model)
     sm.attach_boundary_conditions(bcs)
     ns = len(sm.state)
     ih = [str(s) for s in sm.state].index("h")

@@ -1,7 +1,7 @@
 """ChorinSplitVAMSolverJax on the modern declarative VAM model.
 
 Ported off the deleted ``VAMModelGalerkin`` (legacy model tree removed in the
-restructure) onto ``VAM(level=1).system_model`` + ``VAM.chorin_split`` — the
+restructure) onto ``SystemModel.from_model(VAM(level=1))`` + ``VAM.chorin_split`` — the
 same pipeline the numpy ``test_vam_dambreak`` drives, but through the JAX
 Chorin solver.
 
@@ -21,6 +21,7 @@ import jax.numpy as jnp
 import pytest
 
 import zoomy_core.model.initial_conditions as IC
+from zoomy_core.systemmodel import SystemModel
 from zoomy_core.model.models import VAM
 from zoomy_core.model.models.closures import Newtonian, NavierSlip, StressFree
 from zoomy_core.mesh import BaseMesh
@@ -30,7 +31,7 @@ from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
 
 def _build_solver(nc=60):
     model = VAM(closures=[Newtonian(), NavierSlip(), StressFree()], level=1)
-    sm = model.system_model
+    sm = SystemModel.from_model(model)
 
     def bump_ic(xv):
         xx = float(xv[0])
