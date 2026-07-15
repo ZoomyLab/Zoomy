@@ -27,6 +27,7 @@ dependencies = [
   "h5py",
   "meshio",
   "sympy",
+  "imageio",
 ]
 
 [project.scripts]
