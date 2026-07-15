@@ -171,7 +171,10 @@ def test_distributed_gmres_solves_global_elliptic_system():
     need (their local jax_gmres would otherwise converge each device's slab)."""
     if jax.device_count() < 4:
         pytest.skip("need 4 devices")
-    N, N_DEVS, HALO, ALPHA = 64, 4, 1, 0.35
+    # N=16, not 64: `maxiter=N` unrolls an N-step Arnoldi with O(N^2) H updates
+    # + collectives under shard_map, and XLA compile blows past 20 min at N=64.
+    # 16 still gives a full-dimension Krylov space (=> exact solve) on 4 devices.
+    N, N_DEVS, HALO, ALPHA = 16, 4, 1, 0.35
     rng = np.random.default_rng(0)
     b_np = rng.standard_normal(N)
     L = -2*np.eye(N) + np.eye(N, k=1) + np.eye(N, k=-1)
@@ -188,11 +191,35 @@ def test_distributed_gmres_solves_global_elliptic_system():
     dmesh = spmd_device_mesh(N_DEVS, "cells")
     inner = collective_inner("cells")
 
-    @partial(shard_map, mesh=dmesh, in_specs=P(None, "cells"),
-             out_specs=P(None, "cells"), check_rep=False)
-    def solve(b):
-        return distributed_gmres(matvec, b, inner=inner, maxiter=N, tol=1e-12)
+    def make_solve(m):
+        # m is the STATIC Krylov dimension (the Arnoldi loop is a python
+        # `range(m)`), so it must be closed over, not passed through shard_map.
+        @partial(shard_map, mesh=dmesh, in_specs=P(None, "cells"),
+                 out_specs=(P(None, "cells"), P(None)), check_rep=False)
+        def solve(b):
+            x, rel = distributed_gmres(matvec, b, inner=inner, maxiter=m)
+            return x, jnp.asarray([rel])
+        return solve
 
-    x_spmd = np.asarray(solve(jnp.asarray(b_np[None, :])))[0]
+    solve = make_solve(N)
+    x_spmd, rel = solve(jnp.asarray(b_np[None, :]))
+    x_spmd = np.asarray(x_spmd)[0]
     assert np.max(np.abs(x_spmd - x_ref)) < 1e-8
     assert np.max(np.abs(A @ x_spmd - b_np)) < 1e-8
+    # the reported residual must match the residual the caller can measure —
+    # a diagnostic nobody can trust is what this return value replaced.
+    assert float(np.asarray(rel).ravel()[0]) < 1e-8
+    assert np.isclose(float(np.asarray(rel).ravel()[0]),
+                      np.linalg.norm(A @ x_spmd - b_np) / np.linalg.norm(b_np),
+                      atol=1e-8)
+
+    # ⚠ maxiter=N gives a FULL-dimension Krylov space — an exact solve in
+    # disguise, which is why the original version of this test could not have
+    # caught a convergence failure.  Starve the subspace and the primitive must
+    # SAY so rather than return a confident-looking wrong answer.
+    x_bad, rel_bad = make_solve(3)(jnp.asarray(b_np[None, :]))
+    rel_bad = float(np.asarray(rel_bad).ravel()[0])
+    assert rel_bad > 1e-6, "starved Krylov space must report a large residual"
+    assert np.isclose(rel_bad,
+                      np.linalg.norm(A @ np.asarray(x_bad)[0] - b_np)
+                      / np.linalg.norm(b_np), rtol=1e-5)
