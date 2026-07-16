@@ -28,13 +28,25 @@ CYCLE = [
     "#E69F00", "#56B4E9", "#F0E442", "#000000",
 ]
 
-#: semantic roles used across the coupling/reduced-model figures
+#: semantic roles used across the coupling/reduced-model figures.
+#:
+#: The three cross-figure DATA roles a case should reach for so the same kind
+#: of curve looks identical in every figure (never cycle these):
+#:   * ``experiment`` — measured data (points / dashed markers);
+#:   * ``reference``  — a trusted ground-truth benchmark (TELEMAC, VOF, DNS,
+#:     refined semi-analytic);
+#:   * ``analytic``   — a closed-form / asymptotic reference line.
+#: Model SERIES (SME levels, our runs) keep the Okabe–Ito :data:`CYCLE`.
 COLORS = {
+    # --- cross-figure data roles ---
+    "experiment": "#D55E00",   # measured data (vermillion, Okabe–Ito)
+    "reference":  "#666666",   # ground-truth benchmark (grey)
+    "analytic":   "#000000",   # closed-form / asymptotic (black)
+    # --- coupling / reduced-model roles ---
     "water":     "#56B4E9",
     "reduced":   "#0072B2",
     "resolved":  "#D55E00",
     "interface": "#C8102E",
-    "reference": "#666666",
     "station":   "#009E73",
 }
 
@@ -53,17 +65,47 @@ CMAP_TOPO = "Greys"
 #: (publication norm 9pt at true figsize); "screen" = gifs/slides on large
 #: canvases need proportionally larger fonts.
 #:
-#: The two SELECTABLE TEMPLATES a case opts into (REQ-98):
-#:   * ``thesis``       — final-print sizes (identical to ``print``).
-#:   * ``presentation`` — projector/slide sizes: ~DOUBLES the fonts and, via
-#:     ``min_pt``, CLAMPS every text element (ticks, colorbar, legend, axis
-#:     titles) so nothing renders below 14 pt at 1080p slide scale.
-#: ``print``/``screen`` are kept as the original aliases.
+#: The SELECTABLE TEMPLATES a case opts into (REQ-98 / CASE_STYLE §7). Pick one
+#: per render with :func:`use` or :func:`subplots`; NEVER edit a case to change
+#: format — switch the preset instead:
+#:   * ``publication`` — final-print journal sizes (9 pt at true figsize).
+#:   * ``thesis``      — final-print sizes; differs from ``publication`` only in
+#:     the figure WIDTHS (thesis text-column, see :data:`SIZES`).
+#:   * ``screen``      — slides/GIFs: larger fonts on a big canvas.
+#:   * ``presentation``— projector: ~DOUBLES the fonts and, via ``min_pt``,
+#:     CLAMPS every text element so nothing renders below 14 pt at 1080p.
+#: ``print`` is kept as the original alias of ``publication``.
 PROFILES = {
+    "publication":  {"scale": 1.0, "lw": 1.4, "ms": 4},
     "print":        {"scale": 1.0, "lw": 1.4, "ms": 4},
-    "screen":       {"scale": 1.6, "lw": 2.0, "ms": 6},
     "thesis":       {"scale": 1.0, "lw": 1.4, "ms": 4},
+    "screen":       {"scale": 1.6, "lw": 2.0, "ms": 6},
     "presentation": {"scale": 2.0, "lw": 2.6, "ms": 8, "min_pt": 14.0},
+}
+
+#: Figure-SIZE presets, in inches — the missing half of a template (PROFILES
+#: only carried fonts). ``cell`` is the size of ONE axes; a grid of
+#: ``ncols x nrows`` axes is ``(cell_w * ncols, cell_h * nrows)`` (this is what
+#: :func:`subplots` / :func:`figsize` use). ``widths`` gives fixed FULL-figure
+#: sizes for a single-panel figure at that medium's ``1col`` / ``2col`` /
+#: ``full`` width. Switch the preset to reflow a case from journal to thesis
+#: to slides without touching its plotting code.
+SIZES = {
+    "publication":  {"cell": (3.4, 2.6),
+                     "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
+                                "full": (7.0, 3.4)}},
+    "print":        {"cell": (3.4, 2.6),
+                     "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
+                                "full": (7.0, 3.4)}},
+    "thesis":       {"cell": (2.75, 2.4),
+                     "widths": {"1col": (2.7, 2.2), "2col": (5.5, 3.4),
+                                "full": (5.5, 3.4)}},
+    "screen":       {"cell": (5.0, 3.6),
+                     "widths": {"1col": (6.0, 4.0), "2col": (11.0, 5.0),
+                                "full": (12.0, 6.0)}},
+    "presentation": {"cell": (6.0, 4.2),
+                     "widths": {"1col": (7.0, 4.5), "2col": (12.0, 6.0),
+                                "full": (13.3, 7.5)}},
 }
 
 
@@ -138,7 +180,10 @@ def _as_rcparams(cfg: PlotConfig) -> dict:
         "font.family": cfg.font_family,
         "mathtext.fontset": "stix",
         "font.size": _sz(base),
+        # Titles are SETUP-only and small (CASE_STYLE §7): axes titles at body
+        # size, the figure suptitle just one point up — never a headline.
         "axes.titlesize": _sz(base),
+        "figure.titlesize": _sz(base + 1),
         "axes.labelsize": _sz(base),
         "xtick.labelsize": _sz(base - 1),
         "ytick.labelsize": _sz(base - 1),
@@ -160,12 +205,53 @@ def _as_rcparams(cfg: PlotConfig) -> dict:
     }
 
 
-def use(profile="print"):
-    """Apply the Zoomy publication style GLOBALLY (non-scoped variant of
-    :func:`apply_style`)."""
+def use(profile="publication"):
+    """Select a template GLOBALLY (non-scoped variant of :func:`apply_style`).
+
+    ``profile`` is a key of :data:`PROFILES` / :data:`SIZES`
+    (``publication`` / ``thesis`` / ``screen`` / ``presentation``; ``print`` is
+    an alias). Sets the fonts AND the default figure size for that medium so a
+    bare ``plt.subplots()`` afterwards is already correctly sized.
+    """
     import matplotlib as mpl
     CONFIG.profile = profile
+    spec = SIZES.get(profile)
+    if spec is not None:
+        CONFIG.figure_figsize = spec["widths"]["full"]
     mpl.rcParams.update(_as_rcparams(CONFIG))
+
+
+def figsize(preset=None, ncols=1, nrows=1, width=None):
+    """Figure size (inches) for a ``ncols x nrows`` axes grid in ``preset``.
+
+    ``preset`` defaults to the active :data:`CONFIG` ``profile``. Pass ``width``
+    (``"1col"`` / ``"2col"`` / ``"full"``) to get a fixed single-panel width
+    from :data:`SIZES` instead of the per-axes-cell grid size.
+    """
+    preset = preset or CONFIG.profile
+    spec = SIZES.get(preset, SIZES["publication"])
+    if width is not None:
+        return spec["widths"][width]
+    cw, ch = spec["cell"]
+    return (cw * ncols, ch * nrows)
+
+
+def subplots(nrows=1, ncols=1, *, preset=None, width=None, apply=True, **kwargs):
+    """``plt.subplots`` with the Zoomy template pre-applied and sized.
+
+    A case writes ``fig, axes = zp.subplots(1, 3, preset="thesis")`` and owns
+    NO styling: :func:`use` activates the preset's fonts/cycle/ticks and the
+    figure is sized from :data:`SIZES` (per-axes cell * grid, or the fixed
+    ``width`` token). ``figsize`` in ``kwargs`` overrides the computed size;
+    ``apply=False`` skips the global style switch (keep whatever is active).
+    Returns ``(fig, axes)`` exactly like ``plt.subplots``.
+    """
+    import matplotlib.pyplot as plt
+    preset = preset or CONFIG.profile
+    if apply:
+        use(preset)
+    fs = kwargs.pop("figsize", None) or figsize(preset, ncols, nrows, width)
+    return plt.subplots(nrows, ncols, figsize=fs, **kwargs)
 
 
 def resolve_color(role_or_color):
@@ -178,6 +264,39 @@ def resolve_color(role_or_color):
     the ``COLORS`` lookup lives in exactly one place.
     """
     return COLORS.get(role_or_color, role_or_color)
+
+
+class _Colors:
+    """Attribute view over :data:`COLORS` — ``colors.experiment`` etc.
+
+    Gives cases a typo-safe, discoverable handle on the semantic palette
+    (``colors.experiment`` / ``colors.reference`` / ``colors.analytic`` and the
+    coupling roles) so an experimental or reference curve looks identical in
+    every figure. ``colors.cycle`` returns the Okabe–Ito data-series cycle;
+    ``colors["anything"]`` falls through :func:`resolve_color`.
+    """
+
+    @property
+    def cycle(self):
+        return list(CYCLE)
+
+    def __getattr__(self, name):
+        try:
+            return COLORS[name]
+        except KeyError:
+            raise AttributeError(
+                f"no semantic color {name!r}; known: {sorted(COLORS)} (+ 'cycle')"
+            )
+
+    def __getitem__(self, name):
+        return resolve_color(name)
+
+    def __dir__(self):
+        return sorted(COLORS) + ["cycle"]
+
+
+#: Singleton semantic-color accessor (``zp.colors.experiment`` …).
+colors = _Colors()
 
 
 def line(role_or_color, ls="-", lw=None, marker=None):

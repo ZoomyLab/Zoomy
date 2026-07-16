@@ -167,3 +167,128 @@ def test_thesis_profile_matches_print():
         assert rc_thesis == rc_print
     finally:
         reset_config()
+
+
+# ── the template overhaul: size presets, semantic colors, subplots ──────────
+
+def test_all_named_presets_resolve():
+    """The three user-named presets + aliases have both fonts AND sizes."""
+    from zoomy_plotting.plot.style import PROFILES, SIZES
+    for name in ("publication", "thesis", "screen"):
+        assert name in PROFILES and name in SIZES
+        assert "cell" in SIZES[name]
+        for w in ("1col", "2col", "full"):
+            assert w in SIZES[name]["widths"]
+
+
+def test_figure_titlesize_is_small_and_scales():
+    """suptitle size is body+1, and the presentation floor clamps it too."""
+    from zoomy_plotting.plot.style import _as_rcparams, PROFILES
+    try:
+        CONFIG.profile = "publication"
+        rc = _as_rcparams(CONFIG)
+        # one point above body, never a headline
+        assert rc["figure.titlesize"] == rc["font.size"] + 1
+        CONFIG.profile = "presentation"
+        rc = _as_rcparams(CONFIG)
+        assert rc["figure.titlesize"] >= PROFILES["presentation"]["min_pt"]
+    finally:
+        reset_config()
+
+
+def test_figsize_grid_scales_with_ncols_nrows():
+    """Grid size = per-axes cell * (ncols, nrows); thesis is narrower than screen."""
+    from zoomy_plotting import figsize
+    from zoomy_plotting.plot.style import SIZES
+    cw, ch = SIZES["publication"]["cell"]
+    assert figsize("publication", ncols=3, nrows=1) == (cw * 3, ch)
+    assert figsize("publication", ncols=1, nrows=2) == (cw, ch * 2)
+    # switching the preset reflows the SAME layout smaller (thesis text column)
+    assert figsize("thesis", ncols=2)[0] < figsize("screen", ncols=2)[0]
+
+
+def test_figsize_named_width_token():
+    from zoomy_plotting import figsize
+    from zoomy_plotting.plot.style import SIZES
+    assert figsize("thesis", width="2col") == SIZES["thesis"]["widths"]["2col"]
+
+
+def test_figsize_defaults_to_active_preset():
+    from zoomy_plotting import figsize, use
+    from zoomy_plotting.plot.style import SIZES
+    try:
+        use("thesis")
+        assert figsize(ncols=2) == (SIZES["thesis"]["cell"][0] * 2,
+                                    SIZES["thesis"]["cell"][1])
+    finally:
+        reset_config()
+
+
+def test_subplots_applies_preset_and_size():
+    """zp.subplots activates the preset and sizes the figure — no case styling."""
+    import matplotlib.pyplot as plt
+    from zoomy_plotting import subplots
+    from zoomy_plotting.plot.style import SIZES
+    try:
+        fig, axes = subplots(1, 3, preset="thesis")
+        assert CONFIG.profile == "thesis"
+        assert axes.shape == (3,)
+        cw, ch = SIZES["thesis"]["cell"]
+        assert tuple(fig.get_size_inches()) == (cw * 3, ch)
+        plt.close(fig)
+    finally:
+        reset_config()
+
+
+def test_subplots_figsize_override_and_no_apply():
+    import matplotlib.pyplot as plt
+    from zoomy_plotting import subplots
+    try:
+        CONFIG.profile = "publication"
+        fig, ax = subplots(preset="screen", apply=False, figsize=(4.0, 3.0))
+        # apply=False keeps the previously-active preset
+        assert CONFIG.profile == "publication"
+        assert tuple(fig.get_size_inches()) == (4.0, 3.0)
+        plt.close(fig)
+    finally:
+        reset_config()
+
+
+def test_use_reflows_default_figure_size():
+    import matplotlib as mpl
+    from zoomy_plotting import use
+    from zoomy_plotting.plot.style import SIZES
+    try:
+        use("thesis")
+        assert tuple(mpl.rcParams["figure.figsize"]) == SIZES["thesis"]["widths"]["full"]
+    finally:
+        reset_config()
+
+
+def test_semantic_colors_namespace():
+    """colors.experiment / reference / analytic are fixed, distinct, and stable."""
+    from zoomy_plotting import colors
+    from zoomy_plotting.plot.style import COLORS
+    assert colors.experiment == COLORS["experiment"]
+    assert colors.reference == COLORS["reference"]
+    assert colors.analytic == COLORS["analytic"]
+    # the three data roles are mutually distinct
+    assert len({colors.experiment, colors.reference, colors.analytic}) == 3
+    # cycle is the Okabe–Ito data-series rotation (not the semantic roles)
+    from zoomy_plotting import CYCLE
+    assert colors.cycle == list(CYCLE)
+    # unknown fall-through / typo safety
+    assert colors["#123456"] == "#123456"
+    import pytest
+    with pytest.raises(AttributeError):
+        colors.nonexistent_role
+
+
+def test_colors_dict_identity_preserved():
+    """COLORS stays the same dict object (zoomy_core shim + dict-access callers)."""
+    import zoomy_plotting
+    from zoomy_plotting.plot.style import COLORS as canon
+    assert zoomy_plotting.COLORS is canon
+    # additive: the pre-existing coupling roles are untouched
+    assert canon["water"] == "#56B4E9"
+    assert canon["reference"] == "#666666"
