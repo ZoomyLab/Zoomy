@@ -155,8 +155,13 @@ def _extract_Q(mesh, block_index, cell_idx, n_cells):
     return np.vstack(cols).astype(float), names
 
 
-def vtk_to_hdf5(source, out_path):
+def vtk_to_hdf5(source, out_path, fields=None, exclude=()):
     """Convert a VTK series to the zoomy HDF5 format.
+
+    Field NAMES are written to ``/fields@names`` so readers resolve
+    variables by name instead of position (REQ-158: PETSc/DMPlex writes a
+    ``Rank`` cell array as the FIRST CellData entry, silently shifting
+    every positional row).
 
     Parameters
     ----------
@@ -165,6 +170,11 @@ def vtk_to_hdf5(source, out_path):
         of frame files.
     out_path : str
         Destination ``.h5`` (overwritten).
+    fields : list[str], optional
+        Keep exactly these fields, in this order (error if one is missing).
+    exclude : tuple[str, ...], optional
+        Drop these fields (e.g. ``("Rank",)``); applied when ``fields`` is
+        not given.
 
     Returns
     -------
@@ -196,12 +206,25 @@ def vtk_to_hdf5(source, out_path):
         g.create_dataset("vertex_coordinates", data=verts)
         g.create_dataset("cell_vertices", data=cells)
 
-        fields = f.create_group("fields")
+        fgroup = f.create_group("fields")
+        kept = None
         for i, (t, path) in enumerate(frames):
             mesh = mesh0 if i == 0 else _read(path)
-            Q, _names = _extract_Q(mesh, bi, cell_idx, n_cells)
-            it = fields.create_group(f"iteration_{i}")
+            Q, names = _extract_Q(mesh, bi, cell_idx, n_cells)
+            if kept is None:
+                if fields is not None:
+                    missing = [n for n in fields if n not in names]
+                    if missing:
+                        raise ValueError(f"requested fields not in VTK data: "
+                                         f"{missing} (have {names})")
+                    kept = list(fields)
+                else:
+                    kept = [n for n in names if n not in set(exclude)]
+                fgroup.attrs["names"] = np.array(kept, dtype="S")
+            # select by NAME per frame — robust to field-order changes
+            rows = [names.index(n) for n in kept]
+            it = fgroup.create_group(f"iteration_{i}")
             it.create_dataset("time", data=float(t), dtype=float)
-            it.create_dataset("Q", data=Q)
+            it.create_dataset("Q", data=Q[rows])
 
     return out_path
