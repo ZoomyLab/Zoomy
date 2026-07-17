@@ -509,3 +509,23 @@ printing.
 - Cross-backend invariant: every printer consumes the *same*
   `SystemModel`. If a backend needs different operators, fix the
   derivation, not the printer.
+
+### The lowering-seam shape contract (scalar == tensor)
+
+Backends never write shape-handling code. Core's lowering seam guarantees,
+entry-wise and independent of container rank (scalar through the rank-4
+diffusion matrix):
+
+1. **Scalarization (C-family printers).** Every emitted statement's RHS is a
+   plain scalar sympy expression — the shared `generic_c` pass expands
+   conditionals over arrays and flattens gate/guard entries. A printer must
+   never need an `NDimArray` handler; local unwrap overrides are forbidden
+   (they go dead and rot).
+2. **Rank-uniformity (vectorized runtimes: numpy / jax / UFL).** Before
+   lambdify, `transformation.vectorize.uniform_rank` wraps every
+   dependence-free entry as `c·ones_like(anchor)` / `zeros_like(anchor)`.
+   `ones_like` is rank-polymorphic, so the same symbolic form evaluates
+   correctly per-cell (scalar anchor) and face-batched (array anchor).
+
+Pinned by `tests/transformation/test_lowering_shape_contract.py` — if a
+backend appears to need custom shape code, the seam regressed; fix it there.
