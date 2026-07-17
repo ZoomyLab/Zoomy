@@ -108,12 +108,19 @@ def read_hdf5(path, *, swmr: bool = False) -> SimulationStore:
                     aux_shape = first["Qaux"].shape
                     n_aux = int(aux_shape[0])
 
-                # Build {name -> index} mapping. Collisions between Q and
-                # Qaux names can't happen here because we use disjoint
-                # prefixes (q_*, aux_*), but the aux_ prefix is explicit
-                # to help users distinguish in case we later read names
-                # from attributes.
-                mapping = {f"q{i}": i for i in range(n_q)}
+                # Build {name -> index} mapping. Converters that know the
+                # variable names store them as ``/fields@names`` (REQ-158:
+                # positional resolution silently row-shifts DMPlex stores,
+                # whose first CellData entry is ``Rank``); use them when
+                # present and consistent, else fall back to q0..qN. The
+                # aux_ prefix is explicit to keep resolution unambiguous.
+                stored = fields_g.attrs.get("names")
+                if stored is not None and len(stored) == n_q:
+                    mapping = {
+                        (n.decode() if isinstance(n, bytes) else str(n)): i
+                        for i, n in enumerate(stored)}
+                else:
+                    mapping = {f"q{i}": i for i in range(n_q)}
                 mapping.update({f"aux_{i}": n_q + i for i in range(n_aux)})
                 field_ztable = Zstruct(mapping)
 
