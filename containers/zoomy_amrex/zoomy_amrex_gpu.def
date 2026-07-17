@@ -1,0 +1,94 @@
+Bootstrap: docker
+From: nvidia/cuda:12.6.3-devel-ubuntu24.04
+
+# AMReX + Zoomy solver server, MPI + CUDA (GPU) build.  Same as zoomy_amrex.def
+# but on a CUDA -devel base (ships nvcc) and with ZOOMY_AMREX_CUDA=1 baked in, so
+# run_case compiles the AMReX driver with USE_CUDA=TRUE USE_MPI=TRUE.  The whole
+# SWE/SME device path (make_rhs, MOOD, update_variables) is already AMREX_GPU_*.
+#
+# Build from the Zoomy repo root (so the %files sources resolve):
+#   apptainer build --fakeroot \
+#     containers/zoomy_amrex/zoomy_amrex_gpu.sif containers/zoomy_amrex/zoomy_amrex_gpu.def
+#
+# RUN WITH --nv (exposes the host NVIDIA driver + devices into the container):
+#   apptainer exec --nv containers/zoomy_amrex/zoomy_amrex_gpu.sif <cmd>
+#   apptainer run  --nv containers/zoomy_amrex/zoomy_amrex_gpu.sif [port]   # server
+# Without --nv there is no GPU inside; the build still targets CUDA and would
+# fail at run for lack of a device.  cuda_arch defaults to 89 (Ada / L40S);
+# override with ZOOMY_AMREX_CUDA_ARCH for other GPUs.
+#
+# NOTE: %files dest is /opt/src, NOT /tmp — Apptainer bind-mounts the host /tmp
+# during %post, which would mask anything copied under /tmp.
+
+%labels
+    Author ZoomyLab
+    Description AMReX + Zoomy solver server, MPI + CUDA/GPU (--adapter amrex) on :8080
+
+%files
+    library/zoomy_core    /opt/src/zoomy_core
+    library/zoomy_amrex   /opt/src/zoomy_amrex
+    library/zoomy_server  /opt/src/zoomy_server
+    library/zoomy_prepost /opt/src/zoomy_prepost
+    library/zoomy_plotting /opt/src/zoomy_plotting
+
+%environment
+    export AMREX_HOME=/opt/amrex
+    export ZOOMY_AMREX_HOME=/opt/amrex
+    export ZOOMY_ROOT=/workspace
+    export ZOOMY_ADAPTER=amrex
+    export ZOOMY_PORT=8080
+    # GPU build: run_case reads these -> GNUmakefile USE_CUDA=TRUE, arch sm_89.
+    export ZOOMY_AMREX_CUDA=1
+    export ZOOMY_AMREX_CUDA_ARCH=89
+    export PATH="/usr/local/cuda/bin:/usr/local/bin:$PATH"
+    export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+    export LC_ALL=C
+
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    # The CUDA -devel base ships nvcc + the CUDA toolkit; add the CPU toolchain,
+    # MPI and HDF5 (openmpi for AMReX's MPI; nvcc drives the device compile).
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential gfortran git ca-certificates \
+        python3 python3-pip python3-dev python3-venv pkg-config \
+        libopenmpi-dev openmpi-bin libhdf5-openmpi-dev wget \
+    && rm -rf /var/lib/apt/lists/*
+
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        numpy scipy sympy attrs meshio pytest rasterio h5py \
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
+
+    # AMReX from source (headers + source kept, objects pruned).  zoomy_amrex
+    # code-gens + compiles per model at RUNTIME (nvcc, USE_CUDA=TRUE), so nothing
+    # is compiled at install time.
+    git clone --depth 1 --branch 25.02 \
+        https://github.com/AMReX-Codes/amrex.git /opt/amrex
+    find /opt/amrex -name "*.o" -delete 2>/dev/null || true
+    mkdir -p /workspace
+
+    export AMREX_HOME=/opt/amrex ZOOMY_AMREX_HOME=/opt/amrex
+    # zoomy_amrex EDITABLE: run_case resolves the C++ templates as <pkg>/../Source.
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting \
+        -e /opt/src/zoomy_amrex
+    rm -rf /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost /opt/src/zoomy_plotting
+
+%runscript
+    case "${1:-}" in
+        jupyter)    exec zoomy-jupyter --port "${2:-8888}" ;;
+        shell|bash) exec /bin/bash ;;
+        server)     exec zoomy-server --adapter "${2:-$ZOOMY_ADAPTER}" --port "${3:-$ZOOMY_PORT}" ;;
+        "")         exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT" ;;
+        *)          exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$1" ;;
+    esac
+
+%startscript
+    exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
+
+%test
+    python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, zoomy_plotting, h5py, meshio; print('imports OK')"
+    test -d /opt/amrex/Src/Base && echo "AMReX source OK"
+    command -v nvcc >/dev/null && nvcc --version | tail -1 && echo "nvcc OK"
+    zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
