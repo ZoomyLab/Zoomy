@@ -5,6 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.2
 #   kernelspec:
 #     display_name: zoomy
 #     language: python
@@ -48,6 +50,7 @@ from zoomy_core.fvm.solver_numpy import HyperbolicSolver
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.misc.misc import Settings, Zstruct
 import zoomy_plotting as zp
+from zoomy_core.systemmodel.system_model import SystemModel
 
 zp.apply_style()
 
@@ -96,15 +99,15 @@ def run_dambreak(sm, name):
     return zp.read(os.path.join(ART, name + ".h5"))
 
 
-sme = SME(
+sme = SystemModel.from_model(SME(
     closures=CLOSURES, level=2, parameters=FRICTION,
     boundary_conditions=BoundaryConditions(
-        [Extrapolation(tag="left"), Extrapolation(tag="right")])).system_model
-mlsme = MLSME(
+        [Extrapolation(tag="left"), Extrapolation(tag="right")])))
+mlsme = SystemModel.from_model(MLSME(
     closures=CLOSURES, level=0, n_layers=2, interface_velocity="mean",
     parameters=FRICTION,
     boundary_conditions=BoundaryConditions(
-        [Extrapolation(tag="left"), Extrapolation(tag="right")])).system_model
+        [Extrapolation(tag="left"), Extrapolation(tag="right")])))
 
 print("SME(2)      state:", [str(s) for s in sme.state])
 print("ML-SME(0,2) state:", [str(s) for s in mlsme.state])
