@@ -1,0 +1,9 @@
+{
+  "time_end": 0.3,
+  "cfl": 0.45,
+  "output_snapshots": 3,
+  "numpy": {
+    "reconstruction_order": 1
+  },
+  "backend": "numpy"
+}

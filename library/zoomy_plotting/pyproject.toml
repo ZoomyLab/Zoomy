@@ -61,4 +61,6 @@ include = ["zoomy_plotting*"]
 testpaths = ["zoomy_plotting/tests"]
 markers = [
   "image: opt-in image-diff tests via pytest-mpl",
+  "small: quick test (superrepo tier marker)",
+  "postprocessing: postproc suite (prepost/plotting/server IO, style, readers, lift3d)",
 ]
