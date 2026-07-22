@@ -5,14 +5,14 @@ solver, and couples it across an interface to another solver (a second Zoomy
 participant, or a 3-D OpenFOAM region) through the [preCICE](https://precice.org/)
 library. It is the one backend where preCICE is in scope; the coupling is built on
 the `interpolate_to_3d` / `project_from_3d` maps every Zoomy model already carries
-(see [authoring/model.md](../authoring/model.md#3-d-lift--interpolate_to_3d--project_from_3d)).
+(see [authoring/model.md](../authoring/system-model.md#the-shape-contract)).
 
 ## How it is built — code generation, then compile
 
 Unlike NumPy/JAX, zoomyFoam is **generated, then compiled**. A C++ code printer
 emits per-case OpenFOAM headers from a frozen `SystemModel` + `Numerics`
 (`zoomy_core/transformation/to_openfoam.py`; see the
-[printer inventory](../authoring/numerics.md#1-printers)):
+[printer inventory](../authoring/numerics.md#generating-code)):
 
 | Printer | Emits | Contents |
 | --- | --- | --- |

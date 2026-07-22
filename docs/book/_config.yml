@@ -22,6 +22,9 @@ sphinx:
     - sphinx.ext.autodoc
     - sphinx.ext.napoleon
   config:
+    # Generate id anchors for h1-h3 so in-page links like
+    # installation.md#prebuilt-containers resolve.
+    myst_heading_anchors: 3
     # Long stdout/stderr in frozen tutorial notebooks: limit vertical growth (see also cell tag scroll-output).
     nb_scroll_outputs: true
     html_css_files:

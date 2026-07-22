@@ -1,5 +1,11 @@
 # Testing Guide
 
+```{warning}
+**Work in progress.** The folder layout and workflow descriptions below have
+drifted from the tree. The parts that are current are the **marker model** and
+the **CI tiering**, both summarised on [CI Test Reports](ci-reports.md).
+```
+
 ## Purpose
 
 The test setup separates quick correctness checks from expensive benchmark runs and tutorial/notebook validation.

@@ -33,7 +33,7 @@ The Zenodo record preserves the configuration permanently. The GUI loads it and 
 **Solution:** Open the model's code editor in the GUI, use `display()` calls to inspect intermediate state:
 
 ```python
-model = SMEInviscid(level=2)
+model = SME(level=2)
 display(model.describe())                    # show model equations
 display(mermaid="graph LR; h-->hu-->hv")     # visualize structure
 display(latex=model.flux_expression())       # render flux
@@ -64,7 +64,7 @@ Connect the required backends, run each session, compare results on the Dashboar
 ```bash
 for N in 50 100 200 400; do
   zoomy start
-  zoomy select model sme-l0
+  zoomy select model swe
   zoomy select mesh create-1d
   zoomy select solver numpy
   zoomy run --local

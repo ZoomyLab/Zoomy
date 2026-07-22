@@ -114,7 +114,7 @@ A solver picks its discretisation off a fixed menu carried by the
 Time integration lives in `fvm/ode.py` (RK1/Heun-RK2/RK3/implicit),
 `fvm/imex_ark.py` (IMEX-ARK tableaux: `ars232`, `ars343`), and
 `fvm/timestepping.py` (`constant`, `adaptive(CFL=…)`). The full Riemann registry
-and how to add a variant are in [`../authoring/numerics.md`](../authoring/numerics.md#4-riemann-solver-registry).
+and how to add a variant are in [`../authoring/numerics.md`](../authoring/numerics.md#riemann-solvers).
 
 ## How a solver consumes a Model / SystemModel
 

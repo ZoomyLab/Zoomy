@@ -208,7 +208,24 @@ jobs:
           has_dockerfile=false
           has_def=false
           [ -f "containers/$c/Dockerfile" ] && has_dockerfile=true
-          def_file=$(find "containers/$c" -maxdepth 1 -name '*.def' | head -1)
+          # The canonical recipe is containers/<c>/<c>.def. Do NOT glob-and-take-
+          # first: zoomy_amrex ships both zoomy_amrex.def and zoomy_amrex_gpu.def,
+          # and `find ... | head -1` returns them in filesystem order — so a plain
+          # CPU build could publish the 4.5 GB CUDA image under the CPU tag.
+          # Variants (…_gpu.def) are built explicitly, never picked up implicitly.
+          def_file=""
+          if [ -f "containers/$c/$c.def" ]; then
+            def_file="containers/$c/$c.def"
+          else
+            # single-recipe container whose .def is not named after the dir
+            n_def=$(find "containers/$c" -maxdepth 1 -name '*.def' | wc -l)
+            if [ "$n_def" -eq 1 ]; then
+              def_file=$(find "containers/$c" -maxdepth 1 -name '*.def')
+            elif [ "$n_def" -gt 1 ]; then
+              echo "::error::containers/$c has $n_def .def files and none named $c.def — ambiguous, refusing to guess."
+              exit 1
+            fi
+          fi
           [ -n "$def_file" ] && has_def=true
 
           # Build Docker image (prefer Dockerfile if available)

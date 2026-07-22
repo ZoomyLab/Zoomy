@@ -50,15 +50,23 @@ Edit mesh parameters via the gear icon (domain bounds, cell counts).
 ### 3. Select a Solver
 
 Switch to the **Solver** tab. Available solvers:
-- **NumPy Solver (Pyodide)** -- runs directly in the browser, always available
-- **JAX Solver** -- requires a connected JAX backend
-- **AMReX / DMPlex** -- require their respective Docker backends
+- **NumPy** (Hyperbolic / IMEX / Split) -- run directly in the browser via
+  Pyodide, always available, **no backend needed**
+- **JAX**, **AMReX**, **DMPlex**, **OpenFOAM** -- require a connected backend
+  server (see [Connecting to Backends](#connecting-to-backends))
+
+Pick the solver that matches the model: hyperbolic models run on the plain
+hyperbolic solver, while the non-hydrostatic VAM family needs the split
+(Chorin) solver.
 
 ### 4. Run the Simulation
 
-Click **Run simulation** in the sidebar. For the NumPy solver, the simulation executes in-browser via Pyodide. Results (plots, output) appear on the Dashboard tab.
+Click **Run simulation** in the sidebar. For the NumPy solvers the simulation
+executes in-browser via Pyodide — nothing to install. Results (plots, output)
+appear on the Dashboard tab.
 
-For backend solvers, connect to a backend first (enter URL, click Connect), then run. Job progress is polled automatically.
+For backend solvers, connect to a backend first (enter URL, click Connect), then
+run. Job progress is polled automatically.
 
 ## Sessions
 
@@ -85,9 +93,9 @@ Click the **Run** button in the output panel toolbar to execute the editor code 
 Inside the editor code, use `display()` to send rich output to individual cells in the output panel:
 
 ```python
-from zoomy_core.model.models.sme_model import SMEInviscid
+from zoomy_core.model.models import SME
 
-model = SMEInviscid(level=0)
+model = SME(level=0)
 
 # Text output
 display(model.describe())
@@ -149,10 +157,20 @@ https://mbd-rwth.github.io/Zoomy/gui/?project=zenodo:12345/dam-break.zip&session
 
 ## Connecting to Backends
 
-For solvers other than NumPy (JAX, AMReX, DMPlex), you need a running backend server:
+For solvers other than NumPy you need a running backend server. The simplest
+route is the prebuilt container for that backend — every image serves the solver
+API on `:8080` by default:
 
-1. Start the server: `zoomy-server --adapter numpy --port 8080`
-2. In the GUI sidebar, enter `http://localhost:8080` and click **Connect**
-3. Connected backends appear in the navbar. Solver cards that require them become selectable.
+```bash
+apptainer pull zoomy_jax.sif oras://ghcr.io/zoomylab/zoomy_jax_sif:latest
+apptainer run zoomy_jax.sif 8080
+# or: docker run --rm -p 8080:8080 ghcr.io/zoomylab/zoomy_jax:latest
+```
 
-Multiple backends can be connected simultaneously.
+From a source checkout instead: `zoomy-server --adapter jax --port 8080`.
+
+Then, in the GUI sidebar, enter `http://localhost:8080` and click **Connect**.
+Connected backends appear in the navbar, and solver cards that require them
+become selectable. Multiple backends can be connected simultaneously.
+
+See [Installation](installation.md) for the full container list.

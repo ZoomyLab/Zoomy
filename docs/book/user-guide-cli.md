@@ -34,13 +34,13 @@ zoomy overview          # all tabs at a glance
 zoomy list model        # list model cards
 zoomy list mesh         # list mesh cards
 zoomy list solver       # list solver cards
-zoomy show model sme-l0 # detailed card info
+zoomy show model swe    # detailed card info
 ```
 
 ### 3. Select cards
 
 ```bash
-zoomy select model sme-l0       # SWE (SME L0) model
+zoomy select model swe          # Shallow Water
 zoomy select mesh create-1d     # 1D mesh
 zoomy select solver numpy       # NumPy solver
 zoomy status                    # verify selections
@@ -57,7 +57,7 @@ Output:
 {
   "version": "1.0",
   "model": {
-    "class_path": "zoomy_core.model.models.sme_model.SMEInviscid",
+    "class_path": "zoomy_core.model.models.SME",
     "init": {"level": 0},
     "parameters": {}
   },
@@ -109,7 +109,7 @@ zoomy session rename "New name"  # rename active session
 set -euo pipefail
 
 zoomy start
-zoomy select model sme-l0
+zoomy select model swe
 zoomy select mesh create-1d
 zoomy select solver numpy
 zoomy run --local
@@ -121,7 +121,7 @@ See `library/zoomy_cli/examples/tutorial-pipeline.sh` for a complete example.
 
 ```bash
 zoomy start
-zoomy select model sme-l0
+zoomy select model swe
 zoomy select solver numpy
 
 # Coarse mesh
@@ -145,7 +145,7 @@ zoomy save convergence-study.zip
 - name: Run simulation
   run: |
     node library/zoomy_cli/cli.js start
-    node library/zoomy_cli/cli.js select model sme-l0
+    node library/zoomy_cli/cli.js select model swe
     node library/zoomy_cli/cli.js select mesh create-1d
     node library/zoomy_cli/cli.js select solver numpy
     node library/zoomy_cli/cli.js run --local

@@ -20,14 +20,15 @@ LEGACY_ROOT = ROOT / "artifacts" / "test-reports"
 TUTORIALS_SRC = ROOT / "tutorials"
 TUTORIALS_MIRROR = ROOT / "docs" / "book" / "tutorials" / "ipynb"
 
-# slug -> book heading
+# slug -> book heading.
+# MUST match the stack matrix in .github/workflows/tests-report.yml. CI tests
+# four stacks (user ruling, 2026-07-22); dmplex / fenicsx / firedrake were
+# dropped from CI scope, so listing them here only produced empty tables.
 BACKENDS: tuple[tuple[str, str], ...] = (
     ("core", "Zoomy Core"),
     ("jax", "Zoomy JAX"),
     ("amrex", "AMReX"),
-    ("dmplex", "DMPlex"),
-    ("fenicsx", "FEniCSx"),
-    ("firedrake", "Firedrake"),
+    ("foam", "OpenFOAM"),
 )
 
 
@@ -177,16 +178,29 @@ def _write_junit_summary() -> int:
     return 0
 
 
+# Only these tutorial subdirectories are published. The book sets
+# only_build_toc_files: false, so anything mirrored here is BUILT — a blanket
+# rglob dragged in tutorials/legacy/ and every scratch notebook, which then had
+# to render (and fail) on the site.
+PUBLISHED_TUTORIAL_DIRS: tuple[str, ...] = ("swe", "sme", "amrex")
+
+
 def _sync_tutorial_notebooks() -> None:
     if not TUTORIALS_SRC.is_dir():
         return
     if TUTORIALS_MIRROR.exists():
         shutil.rmtree(TUTORIALS_MIRROR)
-    for ipynb in TUTORIALS_SRC.rglob("*.ipynb"):
-        rel = ipynb.relative_to(TUTORIALS_SRC)
-        dest = TUTORIALS_MIRROR / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ipynb, dest)
+    for sub in PUBLISHED_TUTORIAL_DIRS:
+        src_dir = TUTORIALS_SRC / sub
+        if not src_dir.is_dir():
+            continue
+        for ipynb in sorted(src_dir.rglob("*.ipynb")):
+            if ".ipynb_checkpoints" in ipynb.parts:
+                continue
+            rel = ipynb.relative_to(TUTORIALS_SRC)
+            dest = TUTORIALS_MIRROR / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ipynb, dest)
 
 
 def _stub(*, backend: str, tier: str) -> str:

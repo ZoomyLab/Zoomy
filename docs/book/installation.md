@@ -1,181 +1,169 @@
 # Installation
 
-This page collects every supported installation path. For a one-line install
-of just the core symbolic + NumPy solver, use `pip install zoomy_core`.
+Pick the lightest path that covers what you need:
 
-ZoomyLab is split into a base repository plus per-backend sub-repositories:
+| You want to… | Use |
+| --- | --- |
+| try the symbolic layer + NumPy solver | `pip install zoomy_core` |
+| run in a browser, install nothing | the [GUI](user-guide-gui.md) or the [Pyodide notebook](notebooks.md) |
+| run one backend (JAX, AMReX, OpenFOAM…) | a [prebuilt container](#prebuilt-containers) |
+| develop Zoomy itself | [clone with submodules](#git-clone-with-submodules) + conda |
 
-- **Base repository** (`Zoomy`): symbolic modeling layer, pre/post-processing,
-  NumPy solver (`zoomy_core`).
-- **Solver backends**: see [Backends](backends/index.md) for the list and
-  links.
-- **Utility repositories**: `meshes` (GMSH `.geo` / `.msh` catalogue), `data`
-  (large-scale test cases).
-
-## Pip (core only)
-
-The fastest path. Symbolic layer + NumPy solver only:
+## Pip — core only
 
 ```bash
 pip install zoomy_core
 ```
 
-For other backends see [Backends](backends/index.md); each one is its own pip
-package, e.g. `pip install zoomy_jax`.
+Symbolic layer, model families, and the reference NumPy solver. Other backends
+are separate packages (`pip install zoomy_jax`), but the compiled ones (AMReX,
+OpenFOAM, PETSc/DMPlex, Firedrake) are far easier via containers.
+
+## Prebuilt containers
+
+CI publishes every backend to GHCR on each container change — public, anonymous
+pull. **Apptainer** users pull the ORAS-pushed SIF; **Docker** users pull the
+image.
+
+```bash
+# Apptainer (recommended on HPC — no daemon, no root)
+apptainer pull zoomy_numpy.sif oras://ghcr.io/zoomylab/zoomy_numpy_sif:latest
+apptainer run zoomy_numpy.sif 8080          # solver API on :8080
+
+# Docker
+docker pull ghcr.io/zoomylab/zoomy_numpy:latest
+docker run --rm -p 8080:8080 ghcr.io/zoomylab/zoomy_numpy:latest
+```
+
+Substitute any name from the table below.
+
+### What ships
+
+| Container | Backend tag | Docker | Apptainer SIF | Notes |
+| --- | --- | :---: | :---: | --- |
+| `zoomy_numpy` | `numpy` | ✅ | ✅ | reference solver; smallest image |
+| `zoomy_jax` | `jax` | ✅ | ✅ | CPU and GPU (`--nv`) |
+| `zoomy_amrex` | `amrex` | ✅ | ✅ | block-structured AMR; a GPU variant also builds |
+| `zoomy_dmplex` | `dmplex` | ✅ | ✅ | builds PETSc from source |
+| `zoomy_firedrake` | `firedrake` | ✅ | ✅ | |
+| `zoomy_openfoam` | `foam` | — | ✅ | OpenFOAM 13 + preCICE |
+| `zoomy_postprocess` | `postprocess` | ✅ | ✅ | plotting / HDF5 tooling |
+| `zoomy_jax_dev`, `zoomy_firedrake_dev` | — | ✅ | — | heavy base layers the two above build on |
+
+```{note}
+`zoomy_core`, `zoomy_amrex_dummy` and `zoomy_fenicsx_dummy` are also published
+but are **CI placeholders**: they install `zoomy_core` from PyPI and carry no
+backend toolchain. Do not use them to run simulations. `containers/zoomy_mesh`,
+`containers/basilisk` and `containers/zoomy_telemac` are experimental, are not
+built by CI, and have no published image.
+```
+
+### Three modes per image
+
+The same image serves three roles, chosen by the first argument:
+
+```bash
+apptainer run IMG [port]     # 1. solver API on :8080  (the GUI's "Connect" target)
+apptainer run IMG jupyter    # 2. JupyterLab on :8888 with the backend's kernel
+apptainer run IMG shell      # 3. interactive dev shell
+```
+
+Apptainer shares the host network namespace, so `:8080` / `:8888` are reachable
+at `localhost` with no port publishing. Add `--nv` for GPU.
+
+Use an image as a notebook kernel:
+
+```bash
+apptainer run --bind $PWD:/workspace containers/zoomy_jax/zoomy_jax.sif jupyter
+# open the printed http://127.0.0.1:8888/?token=... , or in VS Code:
+# "Jupyter: Connect to Existing Server" -> that URL
+```
+
+`import zoomy_core, zoomy_jax` just work; `$ZOOMY_ROOT=/workspace` is the served
+root, so bind your repo there.
+
+### Building locally instead
+
+```bash
+# from the repository root, so the %files sources resolve
+apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def
+```
+
+Recipes live in `containers/<name>/`; the Docker and Apptainer recipes for a
+given backend are kept in sync.
 
 ## Git clone with submodules
 
-Zoomy pins **exact commits** for each submodule (reproducible checkouts).
-`.gitmodules` also records `branch = main`, so you can optionally move
-submodules to the latest `main` of their own repos.
-
-### Full tree at the pins recorded by Zoomy (typical)
+Zoomy pins exact commits per submodule for reproducible checkouts.
 
 ```bash
 git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
 cd Zoomy
 ```
 
-If you already cloned without submodules:
+Already cloned without submodules:
 
 ```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
 git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
-### Full tree with every submodule on latest `main`
+Only what you need:
 
 ```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule sync --recursive
-git submodule update --init --recursive
+git submodule update --init library/zoomy_core library/zoomy_jax meshes
+```
+
+Move everything to the latest upstream `main`:
+
+```bash
 git submodule update --remote --merge --recursive
 ```
 
-### Only selected submodules
-
-```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule update --init meshes
-git submodule update --init library/zoomy_core
-git submodule update --init library/zoomy_jax
-```
-
-Paths match `.gitmodules` (e.g. `library/zoomy_firedrake`,
-`library/zoomy_dmplex`, `data`, …).
-
-### Bump one submodule to latest `main`
-
-```bash
-git submodule update --init library/zoomy_jax
-git submodule update --remote --merge library/zoomy_jax
-```
-
-To persist the new commit in your Zoomy branch:
-
-```bash
-git add library/zoomy_jax
-git commit -m "Bump zoomy_jax submodule to latest main"
-```
-
-`git pull` does not auto-advance submodules; use `git pull --recurse-submodules`
-or follow up with `git submodule update --remote --merge --recursive`.
-
-The individual sub-repositories are listed under
+`git pull` does not advance submodules — use `git pull --recurse-submodules`.
+The sub-repositories are listed under
 [ZoomyLab](https://github.com/ZoomyLab) on GitHub.
 
 ## Conda / Mamba / Micromamba
 
-After cloning the repository:
-
-**Core (NumPy + GMSH)**:
+After cloning:
 
 ```bash
+# core (NumPy + GMSH)
 conda env create -f install/Zoomy.yml
 conda activate zoomy
-pip install library/zoomy_core
-```
+pip install -e library/zoomy_core
 
-**Core + JAX**:
-
-```bash
-conda env create -f install/Zoomy.yml
-conda activate zoomy
+# add JAX
 conda env update -f install/zoomy_jax.yml
-pip install library/zoomy_core
-pip install library/zoomy_jax
+pip install -e library/zoomy_jax
 ```
 
-Other env files in `install/`: `zoomy_fenicsx.yml`, `zoomy_game.yml`,
-`minimal.yml`, `jupyter-lite.yml`, `pyodide.yml`.
+Other environment files in `install/`: `zoomy_fenicsx.yml`, `zoomy_game.yml`,
+`minimal.yml`, `jupyter-lite.yml`, `pyodide.yml`. These files are the
+authoritative dependency list.
 
 ## Devcontainer (VS Code)
 
-Open the repository in VS Code with the *Dev Containers* extension installed.
-A popup will offer:
-
-- Zoomy + JAX
-- Zoomy + Firedrake
-
-**Requires**: Docker, *Dev Containers* extension. On Windows, use Linux
-containers.
-
-## Docker
-
-**Standalone** (locked, no library edits):
-
-```bash
-docker pull ghcr.io/zoomylab/zoomy_jax_standalone:latest
-docker pull ghcr.io/zoomylab/zoomy_firedrake_standalone:latest
-```
-
-**Development** (allows editing the Zoomy libraries; `pip install -e` the
-locals or use the devcontainers):
-
-```bash
-docker pull ghcr.io/zoomylab/zoomy_jax:latest
-docker pull ghcr.io/zoomylab/zoomy_firedrake:latest
-```
-
-On Windows, use Linux containers.
-
-## Apptainer / Singularity
-
-Apptainer images can be built from the `ghcr.io/zoomylab/...` Docker images:
-
-```bash
-apptainer build zoomy_jax.sif docker://ghcr.io/zoomylab/zoomy_jax:latest
-apptainer run --nv zoomy_jax.sif
-```
-
-This is the recommended path on HPC clusters where Docker is unavailable.
+Open the repository with the *Dev Containers* extension; it offers **Zoomy +
+JAX** and **Zoomy + Firedrake**. Requires Docker (Linux containers on Windows).
 
 ## Backend-specific setup
 
-- **AMReX**: completely independent of the Conda/Mamba environment; follow
+- **AMReX** — the container is the supported path. To build against a local
+  AMReX instead, see
   [amrex-codes.github.io/amrex](https://amrex-codes.github.io/amrex/docs_html/Introduction.html).
-- **OpenFOAM**: requires OpenFOAM 12+ and the preCICE adapter; see
-  `install/setup_precice.sh`.
-- **preCICE**: see `install/setup_precice.sh` and the example configurations
-  in `tools/precice_configs/`.
-- **PETSc** (needed by `zoomy_dmplex`): `install/install-petsc.sh` and
+- **OpenFOAM** — OpenFOAM 12+ and the preCICE adapter; `install/setup_precice.sh`.
+  The `zoomy_openfoam` container already has both.
+- **preCICE** — `install/setup_precice.sh`, example configs in `tools/precice_configs/`.
+- **PETSc** (for `zoomy_dmplex`) — `install/install-petsc.sh`,
   `install/activate-petsc.sh`.
-
-See the per-backend pages under [Backends](backends/index.md) for details.
 
 ## Environment variables
 
 ```bash
 export ZOOMY_DIR=/path/to/Zoomy
 export JAX_ENABLE_X64=True
-export PETSC_DIR=/path/to/petsc/installation
-export PETSC_ARCH=architecture-used-for-compiling-petsc
+export PETSC_DIR=/path/to/petsc
+export PETSC_ARCH=<arch-used-for-compiling-petsc>
 ```
-
-## Manual dependency list
-
-See the `install/*.yml` files for the authoritative dependency list.

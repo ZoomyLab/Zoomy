@@ -1,6 +1,25 @@
 name: Smart Tests
 
-# Library packages under library/* are git submodules; checkout must initialize them or pip -e fails.
+# Scope (user ruling, 2026-07-22): we test FOUR stacks — zoomy_core, zoomy_jax,
+# zoomy_amrex, zoomy_foam. dmplex / firedrake / fenicsx are out of CI scope.
+#
+# Tiering:
+#   small tier -> every push and PR. This is a REAL GATE: a failing test fails
+#                 the job. (Every job previously passed --ignore-pytest-exit-code,
+#                 so no test could ever fail CI.)
+#   large tier -> weekly (Sun 03:00 UTC) + manual. Covers the large, benchmark
+#                 and regression markers.
+#
+# Every job runs inside the GHCR container for its stack and pip-installs the
+# checked-out tree over it, so reports match the commit under test.
+#
+# Interpreter differs per image: the core/jax images are python:3.11-slim /
+# conda based (`python`, no PEP 668); the amrex/foam images are Ubuntu system
+# python (`python3`, needs --break-system-packages). Hence the matrix `py` and
+# `pipflags` entries — do not collapse them.
+#
+# library/* are git submodules; checkout must init them or pip -e fails.
+
 permissions:
   contents: read
   packages: read
@@ -13,13 +32,8 @@ on:
       - "tests/**"
       - "tutorials/**"
       - "pytest.ini"
+      - "conftest.py"
       - ".github/workflows/tests-report.yml"
-  workflow_dispatch:
-    inputs:
-      run_large:
-        description: "Also run large/benchmark test suite"
-        required: false
-        default: "false"
   pull_request:
     branches: [ main ]
     paths:
@@ -27,15 +41,21 @@ on:
       - "tests/**"
       - "tutorials/**"
       - "pytest.ini"
+      - "conftest.py"
       - ".github/workflows/tests-report.yml"
-  # After a successful Containers build, re-run Smart Tests on the same commit so GHCR :latest matches this tree.
+  workflow_dispatch:
+    inputs:
+      run_large:
+        description: "Also run the large/benchmark/regression suite"
+        required: false
+        default: "false"
+  # After a successful Containers build, re-run on the same commit so GHCR
+  # :latest matches this tree.
   workflow_run:
     workflows: [ "Containers" ]
-    types:
-      - completed
+    types: [ completed ]
   schedule:
-    # Weekly large/benchmark run (Sunday 03:00 UTC)
-    - cron: "0 3 * * 0"
+    - cron: "0 3 * * 0"   # weekly large/regression run, Sunday 03:00 UTC
 
 jobs:
   meta:
@@ -52,105 +72,51 @@ jobs:
             echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
-  changes:
+  # ---------------------------------------------------------------- small tier
+  small:
+    name: small · ${{ matrix.stack }}
     needs: [meta]
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    outputs:
-      git_ref: ${{ needs.meta.outputs.checkout_ref }}
-      core: ${{ github.event_name == 'pull_request' && steps.filter.outputs.core || steps.defaults.outputs.core }}
-      jax: ${{ github.event_name == 'pull_request' && steps.filter.outputs.jax || steps.defaults.outputs.jax }}
-      amrex: ${{ github.event_name == 'pull_request' && steps.filter.outputs.amrex || steps.defaults.outputs.amrex }}
-      dmplex: ${{ github.event_name == 'pull_request' && steps.filter.outputs.dmplex || steps.defaults.outputs.dmplex }}
-      fenicsx: ${{ github.event_name == 'pull_request' && steps.filter.outputs.fenicsx || steps.defaults.outputs.fenicsx }}
-      firedrake: ${{ github.event_name == 'pull_request' && steps.filter.outputs.firedrake || steps.defaults.outputs.firedrake }}
-      infra: ${{ github.event_name == 'pull_request' && steps.filter.outputs.infra || steps.defaults.outputs.infra }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stack: core
+            image: zoomy_core
+            py: python
+            pipflags: ""
+            installs: "-e library/zoomy_core"
+            paths: "tests library/zoomy_core/tests"
+            markers: "small and (core or (numpy and not jax))"
+          - stack: jax
+            image: zoomy_jax
+            py: python
+            pipflags: ""
+            installs: "-e library/zoomy_core -e library/zoomy_jax"
+            paths: "tests library/zoomy_jax/tests"
+            markers: "small and jax"
+          - stack: amrex
+            image: zoomy_amrex
+            py: python3
+            pipflags: "--break-system-packages"
+            installs: "-e library/zoomy_core -e library/zoomy_amrex"
+            paths: "tests library/zoomy_amrex/tests"
+            markers: "small and amrex"
+          - stack: foam
+            image: zoomy_openfoam
+            py: python3
+            pipflags: "--break-system-packages"
+            installs: "-e library/zoomy_core -e library/zoomy_foam"
+            paths: "tests library/zoomy_foam/tests"
+            markers: "small and openfoam"
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
-      - uses: dorny/paths-filter@v4
-        id: filter
-        if: github.event_name == 'pull_request'
-        with:
-          filters: |
-            core:
-              - 'library/zoomy_core/**'
-              - 'tests/unit/zoomy_core/**'
-              - 'tests/regression/zoomy_core/**'
-              - 'tests/scripts/**'
-              - 'tutorials/swe/**'
-              - 'tutorials/poisson/**'
-            jax:
-              - 'library/zoomy_jax/**'
-              - 'tests/unit/zoomy_jax/**'
-              - 'tests/regression/zoomy_jax/**'
-              - 'tests/benchmarks/zoomy_jax/**'
-              - 'tests/scripts/**'
-            amrex:
-              - 'library/zoomy_amrex/**'
-              - 'tests/unit/zoomy_amrex/**'
-              - 'tests/regression/zoomy_amrex/**'
-              - 'tests/benchmarks/zoomy_amrex/**'
-              - 'tutorials/amrex/**'
-            dmplex:
-              # Bare path: submodule gitlink-only bumps do not match library/zoomy_dmplex/**
-              - 'library/zoomy_dmplex'
-              - 'library/zoomy_dmplex/**'
-              - 'tests/unit/zoomy_dmplex/**'
-              - 'tests/regression/zoomy_dmplex/**'
-              - 'tests/benchmarks/zoomy_dmplex/**'
-              - 'tutorials/dmplex/**'
-            fenicsx:
-              - 'library/zoomy_fenicsx/**'
-              - 'tests/unit/zoomy_fenicsx/**'
-              - 'tests/regression/zoomy_fenicsx/**'
-              - 'tests/benchmarks/zoomy_fenicsx/**'
-              - 'tutorials/dolfinx/**'
-            firedrake:
-              - 'library/zoomy_firedrake/**'
-              - 'library/firedrake_animate/**'
-              - 'tests/unit/zoomy_firedrake/**'
-              - 'tests/regression/zoomy_firedrake/**'
-              - 'tests/benchmarks/zoomy_firedrake/**'
-              - 'tutorials/firedrake/**'
-            infra:
-              - 'pytest.ini'
-              - 'tests/conftest.py'
-              - 'tests/reporting/**'
-              - '.github/workflows/tests-report.yml'
-              - 'containers/**'
-              - 'install/**'
-              - '.github/workflows/build-containers.yml'
-              - '.github/workflows/dockers.txt'
-      - id: defaults
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "core=true" >> "$GITHUB_OUTPUT"
-          echo "jax=true" >> "$GITHUB_OUTPUT"
-          echo "amrex=true" >> "$GITHUB_OUTPUT"
-          echo "dmplex=true" >> "$GITHUB_OUTPUT"
-          echo "fenicsx=true" >> "$GITHUB_OUTPUT"
-          echo "firedrake=true" >> "$GITHUB_OUTPUT"
-          echo "infra=true" >> "$GITHUB_OUTPUT"
 
-  tests-core:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_run' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.changes.outputs.git_ref }}
-          submodules: recursive
-
-      - name: Set lowercase owner
-        id: own
+      - id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v4
@@ -159,603 +125,156 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull zoomy_core image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest"
+      - name: Pull ${{ matrix.image }}
+        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest"
 
-      - name: Generate core report
+      # No --ignore-pytest-exit-code: this tier gates. --allow-no-tests is kept
+      # so a stack with zero matching tests is not a failure.
+      - name: Run ${{ matrix.stack }} small suite
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && python tests/reporting/generate_test_report.py \
-              --markers "small and (core or (numpy and not jax))" \
-              --pytest-paths "tests library/zoomy_core/tests" \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/core'
+            "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
+            bash -lc '${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
+              ${{ matrix.py }} tests/reporting/generate_test_report.py \
+                --markers "${{ matrix.markers }}" \
+                --pytest-paths "${{ matrix.paths }}" \
+                --allow-no-tests \
+                --output-dir artifacts/test-reports/small/${{ matrix.stack }}'
 
-      - name: Upload core report artifacts
+      - name: Upload ${{ matrix.stack }} small report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-report-core
-          path: artifacts/test-reports/core/**
+          name: test-report-small-${{ matrix.stack }}
+          path: artifacts/test-reports/small/${{ matrix.stack }}/**
           if-no-files-found: ignore
 
-  tests-jax:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_run' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.jax == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.changes.outputs.git_ref }}
-          submodules: recursive
-
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull zoomy_jax image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest"
-
-      - name: Generate jax report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_jax && python tests/reporting/generate_test_report.py \
-              --markers "small and jax" \
-              --pytest-paths "tests library/zoomy_jax/tests" \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/jax'
-
-      - name: Upload jax report artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-jax
-          path: artifacts/test-reports/jax/**
-          if-no-files-found: ignore
-
-  tests-amrex:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_run' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.amrex == 'true' || needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.changes.outputs.git_ref }}
-          submodules: recursive
-
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull AMReX placeholder image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_amrex_dummy:latest"
-
-      - name: Generate amrex report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_amrex_dummy:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_amrex && python tests/reporting/generate_test_report.py \
-              --markers "small and amrex" \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/amrex'
-
-      - name: Upload amrex report artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-amrex
-          path: artifacts/test-reports/amrex/**
-          if-no-files-found: ignore
-
-  # DMPlex + Firedrake share one runner install; FEniCSx is a separate job (different stack).
-  tests-dmplex-firedrake:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_run' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.dmplex == 'true' || needs.changes.outputs.firedrake == 'true' ||
-        needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.changes.outputs.git_ref }}
-          submodules: recursive
-
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull zoomy_firedrake image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest"
-
-      - name: Generate DMPlex and Firedrake reports
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/firedrake_animate -e library/zoomy_firedrake && \
-              ( python3 tests/reporting/generate_test_report.py \
-                  --markers "small and dmplex" \
-                  --ignore-pytest-exit-code \
-                  --allow-no-tests \
-                  --output-dir artifacts/test-reports/dmplex; \
-                python3 tests/reporting/generate_test_report.py \
-                  --markers "small and firedrake" \
-                  --ignore-pytest-exit-code \
-                  --allow-no-tests \
-                  --output-dir artifacts/test-reports/firedrake )'
-
-      - name: Upload DMPlex report artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-dmplex
-          path: artifacts/test-reports/dmplex/**
-          if-no-files-found: ignore
-
-      - name: Upload Firedrake report artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-firedrake
-          path: artifacts/test-reports/firedrake/**
-          if-no-files-found: ignore
-
-  tests-fenicsx:
-    needs: [changes]
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_run' ||
-      (github.event_name == 'pull_request' &&
-       (needs.changes.outputs.fenicsx == 'true' || needs.changes.outputs.infra == 'true'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.changes.outputs.git_ref }}
-          submodules: recursive
-
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull FEniCSx placeholder image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_fenicsx_dummy:latest"
-
-      - name: Generate FEniCSx report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_fenicsx_dummy:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install --no-cache-dir -q -e library/zoomy_fenicsx; fi && python tests/reporting/generate_test_report.py \
-              --markers "small and fenicsx" \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/fenicsx'
-
-      - name: Upload FEniCSx report artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-fenicsx
-          path: artifacts/test-reports/fenicsx/**
-          if-no-files-found: ignore
-
-  tests-large-core:
+  # ---------------------------------------------------------------- large tier
+  large:
+    name: large · ${{ matrix.stack }}
     needs: [meta]
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stack: core
+            image: zoomy_core
+            py: python
+            pipflags: ""
+            installs: "-e library/zoomy_core"
+            paths: "tests library/zoomy_core/tests"
+            markers: "(large or benchmark or regression) and (core or (numpy and not jax))"
+          - stack: jax
+            image: zoomy_jax
+            py: python
+            pipflags: ""
+            installs: "-e library/zoomy_core -e library/zoomy_jax"
+            paths: "tests library/zoomy_jax/tests"
+            markers: "(large or benchmark or regression) and jax"
+          - stack: amrex
+            image: zoomy_amrex
+            py: python3
+            pipflags: "--break-system-packages"
+            installs: "-e library/zoomy_core -e library/zoomy_amrex"
+            paths: "tests library/zoomy_amrex/tests"
+            markers: "(large or benchmark or regression) and amrex"
+          - stack: foam
+            image: zoomy_openfoam
+            py: python3
+            pipflags: "--break-system-packages"
+            installs: "-e library/zoomy_core -e library/zoomy_foam"
+            paths: "tests library/zoomy_foam/tests"
+            markers: "(large or benchmark or regression) and openfoam"
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.meta.outputs.checkout_ref }}
           submodules: recursive
-      - name: Set lowercase owner
-        id: own
+
+      - id: own
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull zoomy_core image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest"
-      - name: Generate large core report
+
+      - name: Pull ${{ matrix.image }}
+        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest"
+
+      - name: Run ${{ matrix.stack }} large suite
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_core:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && python tests/reporting/generate_test_report.py \
-              --markers "(large or benchmark) and (core or (numpy and not jax))" \
-              --pytest-paths "tests library/zoomy_core/tests" \
-              --run-large \
-              --run-benchmark \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/large-core'
-      - name: Upload large core report
+            "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
+            bash -lc '${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
+              ${{ matrix.py }} tests/reporting/generate_test_report.py \
+                --markers "${{ matrix.markers }}" \
+                --pytest-paths "${{ matrix.paths }}" \
+                --run-large --run-benchmark \
+                --allow-no-tests \
+                --output-dir artifacts/test-reports/large/${{ matrix.stack }}'
+
+      - name: Upload ${{ matrix.stack }} large report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-report-large-core
-          path: artifacts/test-reports/large-core/**
+          name: test-report-large-${{ matrix.stack }}
+          path: artifacts/test-reports/large/${{ matrix.stack }}/**
           if-no-files-found: ignore
 
-  tests-large-jax:
-    needs: [meta]
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.meta.outputs.checkout_ref }}
-          submodules: recursive
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull zoomy_jax image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest"
-      - name: Generate large jax report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_jax:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_jax && python tests/reporting/generate_test_report.py \
-              --markers "(large or benchmark) and jax" \
-              --pytest-paths "tests library/zoomy_jax/tests" \
-              --run-large \
-              --run-benchmark \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/large-jax'
-      - name: Upload large jax report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-large-jax
-          path: artifacts/test-reports/large-jax/**
-          if-no-files-found: ignore
-
-  tests-large-amrex:
-    needs: [meta]
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.meta.outputs.checkout_ref }}
-          submodules: recursive
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull AMReX placeholder image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_amrex_dummy:latest"
-      - name: Generate large amrex report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_amrex_dummy:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core -e library/zoomy_amrex && python tests/reporting/generate_test_report.py \
-              --markers "(large or benchmark) and amrex" \
-              --run-large \
-              --run-benchmark \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/large-amrex'
-      - name: Upload large amrex report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-large-amrex
-          path: artifacts/test-reports/large-amrex/**
-          if-no-files-found: ignore
-
-  tests-large-dmplex-firedrake:
-    needs: [meta]
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.meta.outputs.checkout_ref }}
-          submodules: recursive
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull zoomy_firedrake image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest"
-      - name: Generate large DMPlex and Firedrake reports
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_firedrake:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q -e library/zoomy_core -e library/firedrake_animate -e library/zoomy_firedrake && \
-              ( python3 tests/reporting/generate_test_report.py \
-                  --markers "(large or benchmark) and dmplex" \
-                  --run-large \
-                  --run-benchmark \
-                  --ignore-pytest-exit-code \
-                  --allow-no-tests \
-                  --output-dir artifacts/test-reports/large-dmplex; \
-                python3 tests/reporting/generate_test_report.py \
-                  --markers "(large or benchmark) and firedrake" \
-                  --run-large \
-                  --run-benchmark \
-                  --ignore-pytest-exit-code \
-                  --allow-no-tests \
-                  --output-dir artifacts/test-reports/large-firedrake )'
-      - name: Upload large DMPlex report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-large-dmplex
-          path: artifacts/test-reports/large-dmplex/**
-          if-no-files-found: ignore
-      - name: Upload large Firedrake report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-large-firedrake
-          path: artifacts/test-reports/large-firedrake/**
-          if-no-files-found: ignore
-
-  tests-large-fenicsx:
-    needs: [meta]
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.meta.outputs.checkout_ref }}
-          submodules: recursive
-      - name: Set lowercase owner
-        id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull FEniCSx placeholder image
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_fenicsx_dummy:latest"
-      - name: Generate large FEniCSx report
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/zoomy_fenicsx_dummy:latest" \
-            bash -lc 'python -m pip install --no-cache-dir -q -e library/zoomy_core && if [ -f library/zoomy_fenicsx/pyproject.toml ]; then python -m pip install --no-cache-dir -q -e library/zoomy_fenicsx; fi && python tests/reporting/generate_test_report.py \
-              --markers "(large or benchmark) and fenicsx" \
-              --run-large \
-              --run-benchmark \
-              --ignore-pytest-exit-code \
-              --allow-no-tests \
-              --output-dir artifacts/test-reports/large-fenicsx'
-      - name: Upload large FEniCSx report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-report-large-fenicsx
-          path: artifacts/test-reports/large-fenicsx/**
-          if-no-files-found: ignore
-
-  aggregate-large-reports:
-    name: Bundle large-suite reports
-    needs:
-      - tests-large-core
-      - tests-large-jax
-      - tests-large-amrex
-      - tests-large-dmplex-firedrake
-      - tests-large-fenicsx
+  # --------------------------------------------------------------- aggregation
+  # Render Webpage downloads these two bundles BY NAME to build the CI report
+  # page, so test-reports-{small,large}-bundle are load-bearing.
+  bundle:
+    name: Bundle ${{ matrix.tier }}-suite reports
+    needs: [small, large]
     if: always()
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [small, large]
     steps:
-      - name: Init bundle directory
-        run: mkdir -p artifacts/test-reports/large
-      - name: Download large core report
+      - name: Download ${{ matrix.tier }} reports
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
-          name: test-report-large-core
-          path: artifacts/test-reports/large/core
-      - name: Download large jax report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-large-jax
-          path: artifacts/test-reports/large/jax
-      - name: Download large amrex report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-large-amrex
-          path: artifacts/test-reports/large/amrex
-      - name: Download large DMPlex report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-large-dmplex
-          path: artifacts/test-reports/large/dmplex
-      - name: Download large Firedrake report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-large-firedrake
-          path: artifacts/test-reports/large/firedrake
-      - name: Download large FEniCSx report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-large-fenicsx
-          path: artifacts/test-reports/large/fenicsx
-      - name: Detect merged large HTML reports
-        id: check
+          pattern: test-report-${{ matrix.tier }}-*
+          path: staging
+
+      # download-artifact names each directory after the artifact; the docs
+      # generator expects <tier>/<stack>/.
+      - name: Reshape into ${{ matrix.tier }}/<stack>/
         run: |
-          if [ -d artifacts/test-reports/large ] && \
-             find artifacts/test-reports/large -name report.html -print -quit | grep -q .; then
+          mkdir -p "artifacts/test-reports/${{ matrix.tier }}"
+          for d in staging/test-report-${{ matrix.tier }}-*; do
+            [ -d "$d" ] || continue
+            stack="${d##*-}"
+            mv "$d" "artifacts/test-reports/${{ matrix.tier }}/$stack"
+          done
+
+      - id: check
+        run: |
+          if find "artifacts/test-reports/${{ matrix.tier }}" -name report.html -print -quit | grep -q .; then
             echo "has_reports=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_reports=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Upload large-suite bundle
+
+      - name: Upload ${{ matrix.tier }}-suite bundle
         if: steps.check.outputs.has_reports == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: test-reports-large-bundle
-          path: artifacts/test-reports/large
-
-  aggregate-small-reports:
-    name: Bundle small-suite reports
-    needs:
-      - tests-core
-      - tests-jax
-      - tests-amrex
-      - tests-dmplex-firedrake
-      - tests-fenicsx
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Init bundle directory
-        run: mkdir -p artifacts/test-reports/small
-      - name: Download core report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-core
-          path: artifacts/test-reports/small/core
-      - name: Download jax report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-jax
-          path: artifacts/test-reports/small/jax
-      - name: Download amrex report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-amrex
-          path: artifacts/test-reports/small/amrex
-      - name: Download DMPlex report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-dmplex
-          path: artifacts/test-reports/small/dmplex
-      - name: Download Firedrake report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-firedrake
-          path: artifacts/test-reports/small/firedrake
-      - name: Download FEniCSx report
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: test-report-fenicsx
-          path: artifacts/test-reports/small/fenicsx
-      - name: Detect merged HTML reports
-        id: check
-        run: |
-          if [ -d artifacts/test-reports/small ] && \
-             find artifacts/test-reports/small -name report.html -print -quit | grep -q .; then
-            echo "has_reports=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_reports=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Upload small-suite bundle
-        if: steps.check.outputs.has_reports == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-reports-small-bundle
-          path: artifacts/test-reports/small
-
+          name: test-reports-${{ matrix.tier }}-bundle
+          path: artifacts/test-reports/${{ matrix.tier }}

@@ -9,10 +9,10 @@ Cards are the fundamental configuration unit shared by GUI and CLI. Each card de
 **Card structure:**
 ```json
 {
-  "id": "sme-l0",
-  "title": "SWE (SME L0)",
-  "class": "zoomy_core.model.models.sme_model.SMEInviscid",
-  "init": {"level": 0},
+  "id": "swe",
+  "title": "Shallow Water",
+  "class": "zoomy_core.model.models.SWE",
+  "init": {"dimension": 1},
   "description": "Shallow water equations...",
   "requires_tag": "numpy",
   "template": "from ... import ...\nmodel = ...",
@@ -21,11 +21,22 @@ Cards are the fundamental configuration unit shared by GUI and CLI. Each card de
 }
 ```
 
+Card **ids must be globally unique across all four catalog directories**, not
+just within one — `tests/test_registry.py::test_ids_globally_unique` enforces it.
+
 **Card sources** (loaded in priority order):
-1. `cards/<category>/default.json` -- built-in cards
-2. `cards/<category>/generated.json` -- auto-discovered from `zoomy_core`
-3. `cards/<category>/user.json` -- user-created cards
+1. `cards/<category>/default.json` -- the shipped catalog
+2. A per-user **overlay** (`catalog/<category>.json` in IndexedDB) recording
+   `added` and `removed` entries
+3. Per-session runtime user cards
 4. Server registry (`/api/v1/registry`) -- additional cards from running backends
+
+```{note}
+The overlay means a user who has added or removed catalog entries keeps seeing
+their version after a shipped-catalog change, until they use
+**Restore default GUI**. The older `generated.json` / `user.json` tiers were
+removed; `tests/test_registry.py::test_no_stale_tiers` asserts they stay gone.
+```
 
 **Code resolution** (for execution):
 1. User-edited code (from editor) -- highest priority

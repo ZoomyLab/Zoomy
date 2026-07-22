@@ -70,7 +70,7 @@ The `render-webpage.yml` workflow copies `library/zoomy_gui/*` into the Jupyter 
 Each solver backend runs as a Docker container:
 
 ```bash
-docker run -p 8080:8080 ghcr.io/zoomylab/zoomy-numpy:latest
+docker run -p 8080:8080 ghcr.io/zoomylab/zoomy_numpy:latest
 ```
 
 Multiple backends can run on different ports. The GUI/CLI connects to each independently.

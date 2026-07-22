@@ -7,16 +7,15 @@ parts:
         sections:
           - file: user-guide-gui
           - file: user-guide-cli
+          - file: user-guide-use-cases
       - file: installation
       - file: backends/index
         sections:
           - file: backends/numpy
           - file: backends/jax
-          - file: backends/firedrake
-          - file: backends/fenicsx
-          - file: backends/dmplex
           - file: backends/amrex
           - file: backends/openfoam
+          - file: backends/firedrake
   - caption: Authoring
     chapters:
       - file: authoring/model
@@ -27,33 +26,19 @@ parts:
       - file: tutorials/swe
         sections:
           - file: tutorials/ipynb/swe/simple_numpy
-          - file: tutorials/ipynb/swe/simple_jax
+          - file: tutorials/ipynb/swe/advanced_numpy
       - file: tutorials/sme
         sections:
           - file: tutorials/ipynb/sme/simple
           - file: tutorials/ipynb/sme/minimal
-          - file: tutorials/ipynb/sme/non_legendre
-          - file: tutorials/ipynb/sme/timedependend_bc
-          - file: tutorials/ipynb/sme/topo
-          - file: tutorials/ipynb/sme/topo_turbulent
-          - file: tutorials/ipynb/sme/tc_intro_variable_friction
       - file: tutorials/amrex
         sections:
-          - file: tutorials/ipynb/amrex/from_DEM
-          - file: tutorials/ipynb/amrex/buoy
+          - file: tutorials/ipynb/amrex/minimal
   - caption: Notebooks
     chapters:
       - file: notebooks
-        sections:
-          - file: notebooks/pyodide_sample
-  - caption: Developer Guide
+  - caption: Reference
     chapters:
-      - file: dev-guide
-        sections:
-          - file: dev-architecture
-          - file: dev-components
-          - file: dev-gui-cli
-      - file: testing
       - file: logging
       - file: ci-reports
   - caption: API
@@ -61,10 +46,18 @@ parts:
       - file: api/_apidoc_zoomy_core/zoomy_core
       - file: api/_apidoc_zoomy_jax/zoomy_jax
       - file: api/amrex
+  - caption: Work in progress
+    chapters:
+      - file: dev-guide
+        sections:
+          - file: dev-architecture
+          - file: dev-components
+          - file: dev-gui-cli
+      - file: testing
+      - file: backends/dmplex
+      - file: backends/fenicsx
       - file: api/dmplex
       - file: api/firedrake
-  - caption: WIP
-    chapters:
       - file: software
       - file: documentation
       - file: research
