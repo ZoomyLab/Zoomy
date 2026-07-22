@@ -1,5 +1,18 @@
-# Curated list of lightweight notebooks for periodic execution in CI.
-# Keep this list short and stable.
+# Notebooks executed by the weekly notebook job
+# (.github/workflows/notebooks.yml --execute-smoke).
 #
-# Example:
-# tutorials/code_printers/to_c.ipynb
+# This list MUST match PUBLISHED_TUTORIALS in
+# docs/scripts/generate_ci_test_report.py — every notebook shipped on the site
+# is executed here, and nothing else is shipped. The file was previously empty,
+# so the weekly job resolved zero notebooks and passed vacuously while a stale
+# SWASHES traceback sat on the live docs.
+#
+# Each of these runs on plain zoomy_core (NumPy) with no external binary, no
+# data submodule and no compiler, and asserts something real (mass conservation
+# on a closed domain; monotone energy loss under drag; no unresolved symbolic
+# Integral in generated C++).
+
+tutorials/swe/simple_numpy.ipynb
+tutorials/swe/advanced_numpy.ipynb
+tutorials/amrex/minimal.ipynb
+tutorials/pyodide/pyodide.ipynb

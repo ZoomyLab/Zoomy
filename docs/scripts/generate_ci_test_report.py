@@ -178,11 +178,18 @@ def _write_junit_summary() -> int:
     return 0
 
 
-# Only these tutorial subdirectories are published. The book sets
-# only_build_toc_files: false, so anything mirrored here is BUILT — a blanket
-# rglob dragged in tutorials/legacy/ and every scratch notebook, which then had
-# to render (and fail) on the site.
-PUBLISHED_TUTORIAL_DIRS: tuple[str, ...] = ("swe", "sme", "amrex")
+# EXPLICIT allow-list of published notebooks — not a directory glob.
+# The book sets only_build_toc_files: false, so ANYTHING mirrored here is built
+# and shipped. A blanket rglob previously dragged in tutorials/legacy/ and every
+# stale scratch notebook; one of them (swe/simple_numpy, old version) published a
+# frozen `RuntimeError: SWASHES executable not found` traceback to the live site.
+# Add a notebook here only once it executes clean — see tests/notebooks/
+# smoke_notebooks.txt, which runs exactly this set.
+PUBLISHED_TUTORIALS: tuple[str, ...] = (
+    "swe/simple_numpy.ipynb",
+    "swe/advanced_numpy.ipynb",
+    "amrex/minimal.ipynb",
+)
 
 
 def _sync_tutorial_notebooks() -> None:
@@ -190,17 +197,14 @@ def _sync_tutorial_notebooks() -> None:
         return
     if TUTORIALS_MIRROR.exists():
         shutil.rmtree(TUTORIALS_MIRROR)
-    for sub in PUBLISHED_TUTORIAL_DIRS:
-        src_dir = TUTORIALS_SRC / sub
-        if not src_dir.is_dir():
+    for rel in PUBLISHED_TUTORIALS:
+        src = TUTORIALS_SRC / rel
+        if not src.is_file():
+            print(f"  WARNING: published tutorial missing: {src}")
             continue
-        for ipynb in sorted(src_dir.rglob("*.ipynb")):
-            if ".ipynb_checkpoints" in ipynb.parts:
-                continue
-            rel = ipynb.relative_to(TUTORIALS_SRC)
-            dest = TUTORIALS_MIRROR / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ipynb, dest)
+        dest = TUTORIALS_MIRROR / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
 
 
 def _stub(*, backend: str, tier: str) -> str:

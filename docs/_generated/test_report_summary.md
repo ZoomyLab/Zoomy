@@ -1,9 +1,3 @@
-_Generated: 2026-03-27 07:57:52 UTC_
+_Generated: 2026-07-22 14:11:06 UTC_
 
-### Local / legacy layout (`artifacts/test-reports/` without `small/` or `large/`)
-
-| Report | Tests | Failures | Skipped | Duration (s) |
-|---|---:|---:|---:|---:|
-| `artifacts/test-reports/20260327-075713/junit.xml` | 28 | 0 | 0 | 10.96 |
-| `artifacts/test-reports/20260327-075741/junit.xml` | 28 | 0 | 0 | 10.64 |
-
+No JUnit report files found under `artifacts/test-reports/small/`, `artifacts/test-reports/large/`, or legacy `artifacts/test-reports/**/`.
