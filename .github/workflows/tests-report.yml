@@ -7,6 +7,16 @@ name: Smart Tests
 #   small tier -> every push and PR. This is a REAL GATE: a failing test fails
 #                 the job. (Every job previously passed --ignore-pytest-exit-code,
 #                 so no test could ever fail CI.)
+#                 It excludes `regression` DELIBERATELY. The root conftest gives
+#                 any test without a size marker `small`, so regression tests --
+#                 which are not size-marked -- were landing in the per-push gate
+#                 AND the weekly one. User intent (2026-07-22): smalls on every
+#                 push, regression once a week. Measured effect is small in test
+#                 COUNT (jax 97 -> 95, core 327 -> 327) -- only two tests carry
+#                 the marker today -- but it is the correct policy and both of
+#                 those are slow VAM regressions.
+#                 NOTE: this does NOT explain why the jax small job takes 35+
+#                 minutes. That is still open; the durations run is pending.
 #   large tier -> weekly (Sun 03:00 UTC) + manual. Covers the large, benchmark
 #                 and regression markers.
 #
@@ -103,28 +113,28 @@ jobs:
             pipflags: ""
             installs: "-e library/zoomy_core"
             paths: "tests library/zoomy_core/tests"
-            markers: "small and (core or (numpy and not jax))"
+            markers: "small and not regression and (core or (numpy and not jax))"
           - stack: jax
             image: zoomy_jax
             py: python
             pipflags: ""
             installs: "-e library/zoomy_core -e library/zoomy_jax"
             paths: "tests library/zoomy_jax/tests"
-            markers: "small and jax"
+            markers: "small and not regression and jax"
           - stack: amrex
             image: zoomy_amrex
             py: python3
             pipflags: "--break-system-packages"
             installs: "-e library/zoomy_core -e library/zoomy_amrex"
             paths: "tests"
-            markers: "small and amrex"
+            markers: "small and not regression and amrex"
           - stack: foam
             image: zoomy_openfoam
             py: python3
             pipflags: "--break-system-packages"
             installs: "-e library/zoomy_core -e library/zoomy_foam"
             paths: "tests library/zoomy_foam/tests"
-            markers: "small and openfoam"
+            markers: "small and not regression and openfoam"
     steps:
       - uses: actions/checkout@v5
         with:
