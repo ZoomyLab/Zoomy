@@ -30,9 +30,6 @@ parts:
       - file: tutorials/amrex
         sections:
           - file: tutorials/ipynb/amrex/minimal
-  - caption: Notebooks
-    chapters:
-      - file: notebooks
   - caption: Reference
     chapters:
       - file: logging

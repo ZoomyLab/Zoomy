@@ -25,6 +25,10 @@ sphinx:
     # Generate id anchors for h1-h3 so in-page links like
     # installation.md#prebuilt-containers resolve.
     myst_heading_anchors: 3
+    # describe() returns an object with a _repr_markdown_ that emits $$...$$
+    # LaTeX. Without this, myst-nb passes text/markdown outputs through as
+    # LITERAL text and the operator matrices render as raw \begin{matrix}.
+    nb_render_markdown_format: myst
     # Long stdout/stderr in frozen tutorial notebooks: limit vertical growth (see also cell tag scroll-output).
     nb_scroll_outputs: true
     html_css_files:

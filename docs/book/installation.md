@@ -5,7 +5,7 @@ Pick the lightest path that covers what you need:
 | You want to… | Use |
 | --- | --- |
 | try the symbolic layer + NumPy solver | `pip install zoomy_core` |
-| run in a browser, install nothing | the [GUI](user-guide-gui.md) or the [Pyodide notebook](notebooks.md) |
+| run in a browser, install nothing | the [GUI](user-guide-gui.md) or the <a href="jupyter-lite/_output/lab/index.html?path=pyodide.ipynb">Pyodide notebook</a> |
 | run one backend (JAX, AMReX, OpenFOAM…) | a [prebuilt container](#prebuilt-containers) |
 | develop Zoomy itself | [clone with submodules](#git-clone-with-submodules) + conda |
 

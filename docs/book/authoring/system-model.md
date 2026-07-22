@@ -17,8 +17,8 @@ set of tensors with a fixed shape contract.
 from zoomy_core.systemmodel import SystemModel
 
 sm = SystemModel.from_model(model)
-print(sm.describe())              # the operator block
-print(sm.describe(full=True))     # + Jacobians, spectrum, reconstruction maps
+sm.describe()                     # the operator block
+sm.describe(full=True)            # + Jacobians, spectrum, reconstruction maps
 ```
 
 ## The shape contract

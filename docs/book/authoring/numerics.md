@@ -181,7 +181,7 @@ ordinary `SystemModel` that prints like any other.
 
 ## Checklist
 
-- `print(sm.describe())` before running — the operator slots are the cheapest
+- `sm.describe()` before running — the operator slots are the cheapest
   bug detector you have.
 - Riemann solver matches the physics: NCP terms need a `Nonconservative*`
   variant; wet/dry needs a `Positive*` one.

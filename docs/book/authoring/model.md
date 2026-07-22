@@ -64,7 +64,7 @@ model = SME(
 )
 
 sm = SystemModel.from_model(model)
-print(sm.describe())                            # look at the operators first
+sm.describe()                                   # look at the operators first
 
 sm.aux_initial_conditions = IC.Constant(constants=lambda n: np.zeros(n))
 mesh = BaseMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=50)
@@ -80,7 +80,9 @@ spatial derivatives were discovered and registered for you. In a closed (wall)
 box, mass is conserved to round-off: `Q[1].sum()` stays at `75.0` to 1e-14.
 
 ```{tip}
-`print(sm.describe())` before you run anything. A missing hydrostatic-pressure
+`sm.describe()` before you run anything. In a notebook, **display** it rather
+than `print()`-ing it — it renders the operator matrices as LaTeX, whereas
+`print()` gives the plain-text form (which is what you want in a terminal). A missing hydrostatic-pressure
 entry or an empty NCP slot is visible on sight, and costs 30 seconds instead of
 a day.
 ```

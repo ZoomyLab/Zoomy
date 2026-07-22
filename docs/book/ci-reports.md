@@ -142,7 +142,7 @@ jupyter-book build docs/book
 | `docs/_generated/test_report_summary.md` | Summary tables for this page (`{include}`) |
 | `docs/book/_static/pytest-report-small-<stack>.html` | Embedded small-suite HTML per stack |
 | `docs/book/_static/pytest-report-large-<stack>.html` | Embedded large-suite HTML per stack |
-| `docs/book/tutorials/ipynb/**` | Mirror of the published `tutorials/{swe,sme,amrex}` notebooks |
+| `docs/book/tutorials/ipynb/**` | Mirror of the published tutorial notebooks (explicit allow-list) |
 
 Stub HTML is written when no matching `report.html` exists under `artifacts/`.
 
