@@ -15,18 +15,6 @@ Zoomy's main objective is to provide a convenient modeling interface for complex
 
 See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user guide, tutorials, API reference, and full installation / development setup.
 
-## Citation
-
-```bibtex
-@online{Zoomy,
-  author  = {Ingo Steldermann},
-  title   = {Zoomy: Flexible modeling and simulation software for free-surface flows},
-  year    = 2026,
-  url     = {https://github.com/ZoomyLab/Zoomy},
-  urldate = {YYYY-MM-DD}
-}
-```
-
 ## Installation
 
 - **Try it now in your browser** — interactive GUI at [zoomylab.github.io/Zoomy/gui](https://zoomylab.github.io/Zoomy/gui/).
@@ -46,10 +34,10 @@ Zoomy's symbolic layer compiles to several solver backends. Each one has its own
 - [Firedrake](https://zoomylab.github.io/Zoomy/backends/firedrake.html)
 - [PETSc DMPlex](https://zoomylab.github.io/Zoomy/backends/dmplex.html)
 - [AMReX](https://zoomylab.github.io/Zoomy/backends/amrex.html)
-
-### Currently out-of-service
-- [FEniCSx](https://zoomylab.github.io/Zoomy/backends/fenicsx.html)
 - [OpenFOAM](https://zoomylab.github.io/Zoomy/backends/openfoam.html)
+- [FEniCSx](https://zoomylab.github.io/Zoomy/backends/fenicsx.html)
+
+Note: Many backends are in an very early development status. If you are interested in a particular solver and you find no information, please contact us.
 
 ## Testing
 
@@ -58,6 +46,48 @@ CI test reports for each backend are published with the docs site: see [CI Repor
 ## License
 
 The Zoomy source code is free open-source software, licensed under version 3 or later of the GNU Lesser General Public License (LGPLv3+). See [LICENSE](LICENSE) for full copying permissions.
+
+## Citation
+
+```bibtex
+@misc{steldermann_dimensionally_2025,
+	author       = {Steldermann, Ingo and Bünning, Jonas and Pummer, Elena and Kowalski, Julia},
+	editor       = {Pummer, Elena and Albayrak, Ismail},
+	title        = {Dimensionally Reduced Shallow Moment Simulations of a Pumped-Storage Plant Tunnel System},
+	publisher    = {ETH Zurich},
+	date         = {2025},
+	doi          = {10.3929/ETHZ-B-000727194},
+	url          = {http://hdl.handle.net/20.500.11850/727194},
+}
+
+@incollection{steldermann_shallow_2024,
+	author       = {Steldermann, Ingo and Torrilhon, Manuel and Kowalski, Julia},
+	editor       = {Parés, Carlos and Castro, Manuel J. and Morales De Luna, Tomás and Muñoz-Ruiz, María Luz},
+	title        = {Shallow Moment Equations—Comparing Legendre and Chebyshev Basis Functions},
+	booktitle    = {Hyperbolic Problems: Theory, Numerics, Applications. Volume {II}},
+	volume       = {35},
+	pages        = {457--466},
+	publisher    = {Springer Nature Switzerland},
+	location     = {Cham},
+	date         = {2024},
+	isbn         = {978-3-031-55264-9},
+	doi          = {10.1007/978-3-031-55264-9_39},
+	url          = {https://link.springer.com/10.1007/978-3-031-55264-9_39},
+}
+
+@article{steldermann_shallow_2023,
+	author       = {Steldermann, Ingo and Torrilhon, Manuel and Kowalski, Julia},
+	title        = {Shallow Moments to Capture Vertical Structure in Open Curved Shallow Flow},
+	journaltitle = {Journal of Computational and Theoretical Transport},
+	volume       = {52},
+	number       = {7},
+	pages        = {475--505},
+	date         = {2023-11-10},
+	issn         = {2332-4309},
+	doi          = {10.1080/23324309.2023.2284202},
+	url          = {https://www.tandfonline.com/doi/full/10.1080/23324309.2023.2284202},
+}
+```
 
 ## Acknowledgements
 
