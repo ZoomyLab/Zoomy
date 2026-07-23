@@ -13,6 +13,10 @@ on:
     paths:
       - "docs/**"
       - "library/zoomy_gui/**"
+      # Bare gitlink too: a submodule bump changes only the pointer entry
+      # `library/zoomy_gui`, which the `/**` glob (it needs a path segment
+      # after the slash) never matches — so bumps would not trigger a deploy.
+      - "library/zoomy_gui"
       - "library/zoomy_js/**"
       - "apps/swe-game/**"
       - "tutorials/**/*.ipynb"
