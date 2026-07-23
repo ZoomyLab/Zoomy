@@ -36,7 +36,7 @@ The source code is available on [GitHub](https://github.com/ZoomyLab/Zoomy).
 ## Funding
 
 This work was partially funded through **HDS-LEE — the Helmholtz School for Data
-Science in Life, Earth and Energy**.
+Science in Life, Earth and Energy**, a Helmholtz graduate school.
 
 ```{image} images/hdslee_logo.png
 :alt: HDS-LEE — Helmholtz School for Data Science in Life, Earth and Energy

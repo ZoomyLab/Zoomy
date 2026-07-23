@@ -1,0 +1,8 @@
+/* Long stdout/stderr in frozen tutorial notebooks: limit vertical growth so a
+ * chatty solver log cannot push the rest of the page off screen (see also the
+ * scroll-output cell tag). Referenced from _config.yml -> html_css_files.
+ */
+div.cell_output {
+  max-height: 24rem;
+  overflow-y: auto;
+}

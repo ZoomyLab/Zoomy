@@ -1,8 +1,7 @@
 .vscode
 __pycache__
 output/
-*output*
-*out*
+*.out
 autowraptmp
 .tmp
 .tmp/*

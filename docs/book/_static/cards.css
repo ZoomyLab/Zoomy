@@ -1,0 +1,16 @@
+/* Card thumbnails.
+ *
+ * A portrait image scaled to the card width renders several times taller than
+ * a landscape one, which stretches its card badly out of line with the rest of
+ * the grid. Cap the rendered height rather than cropping the artwork:
+ * max-height only bites when the natural rendered height exceeds it, so the
+ * wide landscape thumbnails are left completely untouched.
+ */
+.sd-card-body img {
+  max-height: 190px;
+  width: auto;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+}

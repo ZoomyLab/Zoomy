@@ -33,6 +33,7 @@ sphinx:
     nb_scroll_outputs: true
     html_css_files:
       - notebook-output-scroll.css
+      - cards.css
     autodoc_mock_imports:
       - petsc4py
       - firedrake
