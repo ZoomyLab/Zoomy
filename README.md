@@ -65,6 +65,16 @@ The Zoomy source code is free open-source software, licensed under version 3 or 
 ## Zoomy or Shallow Moment Method related publication
 
 ```bibtex
+@misc{steldermann_dimensionally_2025,
+	author       = {Steldermann, Ingo and Bünning, Jonas and Pummer, Elena and Kowalski, Julia},
+	editor       = {Pummer, Elena and Albayrak, Ismail},
+	title        = {Dimensionally Reduced Shallow Moment Simulations of a Pumped-Storage Plant Tunnel System},
+	publisher    = {ETH Zurich},
+	date         = {2025},
+	doi          = {10.3929/ETHZ-B-000727194},
+	url          = {http://hdl.handle.net/20.500.11850/727194},
+}
+
 @incollection{steldermann_shallow_2024,
 	author       = {Steldermann, Ingo and Torrilhon, Manuel and Kowalski, Julia},
 	editor       = {Parés, Carlos and Castro, Manuel J. and Morales De Luna, Tomás and Muñoz-Ruiz, María Luz},
