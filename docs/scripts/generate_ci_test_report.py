@@ -187,7 +187,7 @@ def _write_junit_summary() -> int:
 # smoke_notebooks.txt, which runs exactly this set.
 PUBLISHED_TUTORIALS: tuple[str, ...] = (
     "swe/simple_numpy.ipynb",
-    "swe/advanced_numpy.ipynb",
+    "sme/moments_2d.ipynb",
     "amrex/minimal.ipynb",
 )
 

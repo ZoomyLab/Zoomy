@@ -31,4 +31,4 @@ The bar is the same as for any published notebook:
    second is what CI executes weekly.
 4. Add it to `docs/book/_toc.yml`.
 
-See `tutorials/swe/advanced_numpy.ipynb` for the current house style.
+See `tutorials/sme/moments_2d.ipynb` for the current house style.

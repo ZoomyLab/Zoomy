@@ -168,8 +168,13 @@ jobs:
           #    (no %pip / micropip cell; param+loguru wheels bundled, numpy/
           #    sympy/scipy from the pyodide CDN; overrides.txt relaxes sympy's
           #    stale mpmath<1.4 pin against pyodide's mpmath).
-          #  - contentsStorageName "zoomy-jupyterlite": a FIXED IndexedDB name
-          #    so the GUI's "Open in Jupyter" stages notebooks deterministically.
+          #  - contentsStorageName "zoomy-jupyterlite-<hash>": JupyterLite copies
+          #    notebooks into IndexedDB on first open and the LOCAL copy then wins
+          #    forever, so a redeploy silently kept serving the old notebook (a
+          #    stale `zoomy_core.model.models.system_model` import kept 404-ing in
+          #    users' browsers long after it was fixed on main). The name carries a
+          #    hash of tutorials/pyodide, so the store is invalidated exactly when
+          #    the notebooks change and is stable otherwise.
           # cd matters: uv resolves the relative --override in the build cwd.
           #
           # PYTHON PIN: jupyterlite-core 0.8 SILENTLY drops all federated
@@ -181,6 +186,18 @@ jobs:
           /usr/bin/python3 -m venv .litevenv
           .litevenv/bin/pip install --quiet "jupyterlite-core==0.8.*" \
             "jupyterlite-pyodide-kernel[lock]==0.8.*" jupyter-server
+          # Bust the IndexedDB contents store whenever the notebooks change.
+          LITE_HASH=$(find tutorials/pyodide -type f -name '*.ipynb' -print0 \
+            | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)
+          echo "JupyterLite contents hash: $LITE_HASH"
+          python3 - "$LITE_HASH" <<'JSON'
+          import json, sys
+          p = 'docs/jupyterlite/jupyter-lite.json'
+          cfg = json.load(open(p))
+          cfg['jupyter-config-data']['contentsStorageName'] = f"zoomy-jupyterlite-{sys.argv[1]}"
+          json.dump(cfg, open(p, 'w'), indent=2)
+          print('contentsStorageName ->', cfg['jupyter-config-data']['contentsStorageName'])
+          JSON
           cd docs/jupyterlite
           ../../.litevenv/bin/jupyter lite build \
             --contents ../../tutorials/pyodide \
@@ -194,7 +211,7 @@ jobs:
           cfg = json.load(open('docs/book/_build/html/jupyter-lite/_output/jupyter-lite.json'))['jupyter-config-data']
           names = [e['name'] for e in cfg.get('federated_extensions', [])]
           assert '@jupyterlite/pyodide-kernel-extension' in names, f"pyodide kernel extension MISSING: {names}"
-          assert cfg.get('contentsStorageName') == 'zoomy-jupyterlite', cfg.get('contentsStorageName')
+          assert cfg.get('contentsStorageName', '').startswith('zoomy-jupyterlite-'), cfg.get('contentsStorageName')
           print('lite build OK — federated_extensions:', names)
           EOF
           ls docs/book/_build/html/jupyter-lite/_output/static/pyodide-lock/ | head

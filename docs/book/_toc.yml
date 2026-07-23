@@ -26,7 +26,9 @@ parts:
       - file: tutorials/swe
         sections:
           - file: tutorials/ipynb/swe/simple_numpy
-          - file: tutorials/ipynb/swe/advanced_numpy
+      - file: tutorials/sme
+        sections:
+          - file: tutorials/ipynb/sme/moments_2d
       - file: tutorials/amrex
         sections:
           - file: tutorials/ipynb/amrex/minimal
