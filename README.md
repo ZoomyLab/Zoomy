@@ -60,6 +60,11 @@ The Zoomy source code is free open-source software, licensed under version 3 or 
 	url          = {http://hdl.handle.net/20.500.11850/727194},
 }
 
+```
+
+## Zoomy or Shallow Moment Method related publication
+
+```bibtex
 @incollection{steldermann_shallow_2024,
 	author       = {Steldermann, Ingo and Torrilhon, Manuel and Kowalski, Julia},
 	editor       = {Parés, Carlos and Castro, Manuel J. and Morales De Luna, Tomás and Muñoz-Ruiz, María Luz},
