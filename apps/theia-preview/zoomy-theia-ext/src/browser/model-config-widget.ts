@@ -284,16 +284,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         setDisplaySink(cell => { out.cells.push(cell); this.update(); });
         try {
             const snippet = await this.cli.fetchSnippet(vizCard.snippet);
-            // Show the final snapshot of the most interesting field (height h if
-            // present) rather than q0(bed) at t≈0. Fields come from store_meta.
-            const meta = this.storeMeta || {};
-            const fields: string[] = meta.fields || [];
-            // Prefer the 2nd real field (index 1 — usually the depth, above bed);
-            // fall back to the first, or let the snippet default. Use REAL names
-            // from store_meta so we never pass an invalid field.
-            const field = fields.length > 1 ? fields[1] : (fields[0] || null);
-            const step = Math.max(0, (meta.n_snapshots || 1) - 1);
-            const code = 'time_step = ' + step + '\nfield_name = ' + JSON.stringify(field) + '\n' + snippet;
+            // Let the snippet default field/step (proven path). field_name=None →
+            // first store field; time_step=0 → first snapshot. (Field/timeline
+            // selectors are a follow-up.)
+            const code = 'time_step = 0\nfield_name = None\n' + snippet;
             const res = await this.cli.runCode(code);
             out.stdout = res?.output || ''; out.status = res?.status || 'success';
         } catch (e: any) {
