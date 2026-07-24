@@ -1,49 +1,30 @@
 name: Smart Tests
 
-# Scope (user ruling, 2026-07-22): we test FOUR stacks — zoomy_core, zoomy_jax,
-# zoomy_amrex, zoomy_foam. dmplex / firedrake / fenicsx are out of CI scope.
+# Three report groups (user ruling, 2026-07-24):
+#   zoomy      — the superproject `tests/`, run per backend.
+#   library    — each library/zoomy_*/tests, run in its backend container
+#                (prepost/server are pure-Python → the core image).
+#   notebooks  — tests/notebooks/ (@pytest.mark.notebook), published tutorials
+#                executed end to end, per backend they need.
 #
-# Tiering:
-#   small tier -> every push and PR. This is a REAL GATE: a failing test fails
-#                 the job. (Every job previously passed --ignore-pytest-exit-code,
-#                 so no test could ever fail CI.)
-#                 It excludes `regression` DELIBERATELY. The root conftest gives
-#                 any test without a size marker `small`, so regression tests --
-#                 which are not size-marked -- were landing in the per-push gate
-#                 AND the weekly one. User intent (2026-07-22): smalls on every
-#                 push, regression once a week. Measured effect is small in test
-#                 COUNT (jax 97 -> 95, core 327 -> 327) -- only two tests carry
-#                 the marker today -- but it is the correct policy and both of
-#                 those are slow VAM regressions.
-#                 NOTE: this does NOT explain why the jax small job takes 35+
-#                 minutes. That is still open; the durations run is pending.
-#   large tier -> weekly (Sun 03:00 UTC) + manual. Covers the large, benchmark
-#                 and regression markers.
+# Two tiers:
+#   small  — every push and PR. A REAL GATE: a failing test fails the job.
+#            Excludes `regression` (that lands in the weekly tier).
+#   large  — weekly (Sun 03:00 UTC) + manual. large / benchmark / regression.
 #
-# Every job runs inside the GHCR container for its stack and pip-installs the
-# checked-out tree over it, so reports match the commit under test.
+# Each report unit runs in ONE container, pip-installs the checked-out tree over
+# it (so reports match the commit), and writes to
+#   artifacts/test-reports/<tier>/<group>/<unit>/<timestamp>/{report.html,junit.xml}
+# The bundle job reshapes those into test-reports-{small,large}-bundle, which
+# Render Webpage downloads to build docs/book/ci-reports.md.
 #
-# Test paths: each job runs the superproject `tests/` AND its own library
-# suite — both homes, which is the point. It does NOT fall back to pytest.ini's
-# `testpaths` glob (`library/*/tests`), because that makes EVERY library's
-# tests an initial arg, and pytest loads every initial arg's conftest.py during
-# startup — before `collect_ignore` or `pytest_ignore_collect` can veto it. A
-# container without that stack then dies at conftest import. Scoping per stack
-# avoids it by construction.
+# amrex's library suite is a STANDALONE pytest project (its tests/ is a package
+# doing `from tests.conftest import ...`) that collides with the superproject's
+# `tests` package from the repo root — so it runs via --chdir into its own
+# rootdir. See docs/book/ci-reports.md "Architecture".
 #
-# amrex is the exception: `library/zoomy_amrex` is a STANDALONE pytest project
-# (its own [tool.pytest.ini_options], and its tests/ is a package doing
-# `from tests.conftest import ...`). Collected from the superproject root, its
-# `tests` package collides with the superproject's and aborts the session with
-# "Plugin already registered under a different name". So it gets a second step
-# that runs it from its own rootdir, which is how that suite is built to run.
-#
-# Interpreter differs per image: the core/jax images are python:3.11-slim /
-# conda based (`python`, no PEP 668); the amrex/foam images are Ubuntu system
-# python (`python3`, needs --break-system-packages). Hence the matrix `py` and
-# `pipflags` entries — do not collapse them.
-#
-# library/* are git submodules; checkout must init them or pip -e fails.
+# Interpreter differs per image: core/jax are conda/slim (`python`, no PEP 668);
+# amrex/foam are Ubuntu system python (`python3`, --break-system-packages).
 
 permissions:
   contents: read
@@ -74,8 +55,6 @@ on:
         description: "Also run the large/benchmark/regression suite"
         required: false
         default: "false"
-  # After a successful Containers build, re-run on the same commit so GHCR
-  # :latest matches this tree.
   workflow_run:
     workflows: [ "Containers" ]
     types: [ completed ]
@@ -97,44 +76,69 @@ jobs:
             echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
-  # ---------------------------------------------------------------- small tier
-  small:
-    name: small · ${{ matrix.stack }}
+  # ------------------------------------------------------------------ reports
+  report:
+    name: ${{ matrix.group }}·${{ matrix.unit }}
     needs: [meta]
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
         include:
-          - stack: core
-            image: zoomy_core
-            py: python
-            pipflags: ""
-            installs: "-e library/zoomy_core"
-            paths: "tests library/zoomy_core/tests"
-            markers: "small and not regression and (core or (numpy and not jax))"
-          - stack: jax
-            image: zoomy_jax
-            py: python
-            pipflags: ""
-            installs: "-e library/zoomy_core -e library/zoomy_jax"
-            paths: "tests library/zoomy_jax/tests"
-            markers: "small and not regression and jax"
-          - stack: amrex
-            image: zoomy_amrex
-            py: python3
-            pipflags: "--break-system-packages"
-            installs: "-e library/zoomy_core -e library/zoomy_amrex"
-            paths: "tests"
-            markers: "small and not regression and amrex"
-          - stack: foam
-            image: zoomy_openfoam
-            py: python3
-            pipflags: "--break-system-packages"
-            installs: "-e library/zoomy_core -e library/zoomy_foam"
-            paths: "tests library/zoomy_foam/tests"
-            markers: "small and not regression and openfoam"
+          # ---- zoomy: superproject tests/, per backend --------------------
+          - { group: zoomy, unit: core, image: zoomy_core, py: python, pipflags: "",
+              installs: "-e library/zoomy_core pytest-html", paths: "tests", chdir: "",
+              small: "small and not regression and (core or (numpy and not jax))",
+              large: "(large or benchmark or regression) and (core or (numpy and not jax))" }
+          - { group: zoomy, unit: jax, image: zoomy_jax, py: python, pipflags: "",
+              installs: "-e library/zoomy_core -e library/zoomy_jax pytest-html", paths: "tests", chdir: "",
+              small: "small and not regression and jax",
+              large: "(large or benchmark or regression) and jax" }
+          - { group: zoomy, unit: amrex, image: zoomy_amrex, py: python3, pipflags: "--break-system-packages",
+              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html", paths: "tests", chdir: "",
+              small: "small and not regression and amrex",
+              large: "(large or benchmark or regression) and amrex" }
+          - { group: zoomy, unit: foam, image: zoomy_openfoam, py: python3, pipflags: "--break-system-packages",
+              installs: "-e library/zoomy_core -e library/zoomy_foam pytest-html", paths: "tests", chdir: "",
+              small: "small and not regression and openfoam",
+              large: "(large or benchmark or regression) and openfoam" }
+          # ---- library: each submodule's own tests/ -----------------------
+          - { group: library, unit: core, image: zoomy_core, py: python, pipflags: "",
+              installs: "-e library/zoomy_core pytest-html", paths: "library/zoomy_core/tests", chdir: "",
+              small: "small and not regression and (core or (numpy and not jax))",
+              large: "(large or benchmark or regression) and (core or (numpy and not jax))" }
+          - { group: library, unit: jax, image: zoomy_jax, py: python, pipflags: "",
+              installs: "-e library/zoomy_core -e library/zoomy_jax pytest-html", paths: "library/zoomy_jax/tests", chdir: "",
+              small: "small and not regression and jax",
+              large: "(large or benchmark or regression) and jax" }
+          - { group: library, unit: amrex, image: zoomy_amrex, py: python3, pipflags: "--break-system-packages",
+              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html", paths: "tests", chdir: "library/zoomy_amrex",
+              small: "small and not regression",
+              large: "large or benchmark or regression" }
+          - { group: library, unit: foam, image: zoomy_openfoam, py: python3, pipflags: "--break-system-packages",
+              installs: "-e library/zoomy_core -e library/zoomy_foam pytest-html", paths: "library/zoomy_foam/tests", chdir: "",
+              small: "small and not regression and openfoam",
+              large: "(large or benchmark or regression) and openfoam" }
+          - { group: library, unit: prepost, image: zoomy_core, py: python, pipflags: "",
+              installs: "-e library/zoomy_core -e library/zoomy_plotting -e library/zoomy_prepost pytest-html",
+              paths: "library/zoomy_prepost/tests", chdir: "",
+              small: "small and not regression",
+              large: "large or benchmark or regression" }
+          - { group: library, unit: server, image: zoomy_core, py: python, pipflags: "",
+              installs: "-e library/zoomy_core -e library/zoomy_plotting -e library/zoomy_prepost -e library/zoomy_server pytest-html",
+              paths: "library/zoomy_server/tests", chdir: "",
+              small: "small and not regression",
+              large: "large or benchmark or regression" }
+          # ---- notebooks: published tutorials, per backend (small only) ----
+          - { group: notebooks, unit: core, image: zoomy_core, py: python, pipflags: "",
+              installs: "-e library/zoomy_core -e library/zoomy_plotting pytest-html jupytext nbclient nbformat ipykernel",
+              paths: "tests/notebooks", chdir: "",
+              small: "notebook and core", large: "" }
+          - { group: notebooks, unit: amrex, image: zoomy_amrex, py: python3, pipflags: "--break-system-packages",
+              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html jupytext nbclient nbformat ipykernel",
+              paths: "tests/notebooks", chdir: "",
+              small: "notebook and amrex", large: "" }
     steps:
       - uses: actions/checkout@v5
         with:
@@ -153,160 +157,63 @@ jobs:
       - name: Pull ${{ matrix.image }}
         run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest"
 
-      # No --ignore-pytest-exit-code: this tier gates. --allow-no-tests is kept
-      # so a stack with zero matching tests is not a failure.
-      - name: Run ${{ matrix.stack }} small suite
+      # small tier — every event EXCEPT the weekly schedule. Real gate.
+      - name: small · ${{ matrix.group }}/${{ matrix.unit }}
+        if: github.event_name != 'schedule'
         run: |
+          CHDIR="${{ matrix.chdir }}"; CHARG=""; [ -n "$CHDIR" ] && CHARG="--chdir $CHDIR"
           docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
             -e LOGURU_LEVEL=WARNING \
             "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
-            bash -lc '${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
+            bash -lc "${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
               ${{ matrix.py }} tests/reporting/generate_test_report.py \
-                --markers "${{ matrix.markers }}" \
-                --pytest-paths "${{ matrix.paths }}" \
+                --markers '${{ matrix.small }}' --pytest-paths '${{ matrix.paths }}' $CHARG \
                 --allow-no-tests \
-                --output-dir artifacts/test-reports/small/${{ matrix.stack }}'
+                --output-dir artifacts/test-reports/small/${{ matrix.group }}/${{ matrix.unit }}"
 
-
-      # amrex's suite is a standalone pytest project — run it from its own
-      # rootdir (see header). Feeds the same output dir as the step above.
-      - name: Run ${{ matrix.stack }} own suite (standalone rootdir)
-        if: matrix.stack == 'amrex'
-        # NON-BLOCKING, deliberately and visibly, pending coordd task 96:
-        # two of amrex's seven gate tests assert wall-clock budgets
-        # (parity_numpy_n100: 16.08s vs 10.72s ref; stoker_wet: 13.00s vs
-        # 10.413s ref) measured on a developer box. A shared CI runner is
-        # slower and more variable, so they would fail permanently and train
-        # everyone to ignore a red gate. Filed with the amrex steward with a
-        # proposed fix (re-mark as @pytest.mark.benchmark -> they still run in
-        # the weekly tier). REMOVE continue-on-error once task 96 lands.
-        # This is scoped to one known suite with an owner and a ticket — it is
-        # NOT the blanket --ignore-pytest-exit-code that was removed.
-        continue-on-error: true
+      # large tier — weekly schedule, or a manual run with large enabled. Units
+      # with an empty `large` marker (notebooks) skip it.
+      - name: large · ${{ matrix.group }}/${{ matrix.unit }}
+        if: >
+          matrix.large != '' &&
+          (github.event_name == 'schedule' ||
+           (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true'))
         run: |
+          CHDIR="${{ matrix.chdir }}"; CHARG=""; [ -n "$CHDIR" ] && CHARG="--chdir $CHDIR"
           docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace/library/zoomy_amrex \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
             -e LOGURU_LEVEL=WARNING \
             "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q --break-system-packages \
-                -e /workspace/library/zoomy_core -e /workspace/library/zoomy_amrex && \
-              python3 -m pytest -m "small" -q \
-                --junitxml=/workspace/artifacts/test-reports/small/amrex/own-suite/junit.xml'
+            bash -lc "${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
+              ${{ matrix.py }} tests/reporting/generate_test_report.py \
+                --markers '${{ matrix.large }}' --pytest-paths '${{ matrix.paths }}' $CHARG \
+                --run-large --run-benchmark --allow-no-tests \
+                --output-dir artifacts/test-reports/large/${{ matrix.group }}/${{ matrix.unit }}"
 
-      - name: Upload ${{ matrix.stack }} small report
+      - name: Upload small report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-report-small-${{ matrix.stack }}
-          path: artifacts/test-reports/small/${{ matrix.stack }}/**
+          name: test-report-small-${{ matrix.group }}-${{ matrix.unit }}
+          path: artifacts/test-reports/small/${{ matrix.group }}/${{ matrix.unit }}/**
           if-no-files-found: ignore
 
-  # ---------------------------------------------------------------- large tier
-  large:
-    name: large · ${{ matrix.stack }}
-    needs: [meta]
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_large == 'true')
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - stack: core
-            image: zoomy_core
-            py: python
-            pipflags: ""
-            installs: "-e library/zoomy_core"
-            paths: "tests library/zoomy_core/tests"
-            markers: "(large or benchmark or regression) and (core or (numpy and not jax))"
-          - stack: jax
-            image: zoomy_jax
-            py: python
-            pipflags: ""
-            installs: "-e library/zoomy_core -e library/zoomy_jax"
-            paths: "tests library/zoomy_jax/tests"
-            markers: "(large or benchmark or regression) and jax"
-          - stack: amrex
-            image: zoomy_amrex
-            py: python3
-            pipflags: "--break-system-packages"
-            installs: "-e library/zoomy_core -e library/zoomy_amrex"
-            paths: "tests"
-            markers: "(large or benchmark or regression) and amrex"
-          - stack: foam
-            image: zoomy_openfoam
-            py: python3
-            pipflags: "--break-system-packages"
-            installs: "-e library/zoomy_core -e library/zoomy_foam"
-            paths: "tests library/zoomy_foam/tests"
-            markers: "(large or benchmark or regression) and openfoam"
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.meta.outputs.checkout_ref }}
-          submodules: recursive
-
-      - id: own
-        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull ${{ matrix.image }}
-        run: docker pull "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest"
-
-      - name: Run ${{ matrix.stack }} large suite
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
-            bash -lc '${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
-              ${{ matrix.py }} tests/reporting/generate_test_report.py \
-                --markers "${{ matrix.markers }}" \
-                --pytest-paths "${{ matrix.paths }}" \
-                --run-large --run-benchmark \
-                --allow-no-tests \
-                --output-dir artifacts/test-reports/large/${{ matrix.stack }}'
-
-
-      # amrex's suite is a standalone pytest project — run it from its own
-      # rootdir (see header). Feeds the same output dir as the step above.
-      - name: Run ${{ matrix.stack }} own suite (standalone rootdir)
-        if: matrix.stack == 'amrex'
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace/library/zoomy_amrex \
-            -e LOGURU_LEVEL=WARNING \
-            "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
-            bash -lc 'python3 -m pip install --no-cache-dir -q --break-system-packages \
-                -e /workspace/library/zoomy_core -e /workspace/library/zoomy_amrex && \
-              python3 -m pytest -m "large or benchmark or regression" -q \
-                --junitxml=/workspace/artifacts/test-reports/large/amrex/own-suite/junit.xml'
-
-      - name: Upload ${{ matrix.stack }} large report
+      - name: Upload large report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-report-large-${{ matrix.stack }}
-          path: artifacts/test-reports/large/${{ matrix.stack }}/**
+          name: test-report-large-${{ matrix.group }}-${{ matrix.unit }}
+          path: artifacts/test-reports/large/${{ matrix.group }}/${{ matrix.unit }}/**
           if-no-files-found: ignore
 
   # --------------------------------------------------------------- aggregation
-  # Render Webpage downloads these two bundles BY NAME to build the CI report
-  # page, so test-reports-{small,large}-bundle are load-bearing.
+  # Render Webpage downloads test-reports-{small,large}-bundle BY NAME and
+  # extracts each into artifacts/test-reports/{small,large}/, where the docs
+  # generator expects <group>/<unit>/.
   bundle:
-    name: Bundle ${{ matrix.tier }}-suite reports
-    needs: [small, large]
+    name: Bundle ${{ matrix.tier }} reports
+    needs: [report]
     if: always()
     runs-on: ubuntu-latest
     strategy:
@@ -314,34 +221,35 @@ jobs:
       matrix:
         tier: [small, large]
     steps:
-      - name: Download ${{ matrix.tier }} reports
+      - name: Download ${{ matrix.tier }} unit reports
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: test-report-${{ matrix.tier }}-*
           path: staging
 
-      # download-artifact names each directory after the artifact; the docs
-      # generator expects <tier>/<stack>/.
-      - name: Reshape into ${{ matrix.tier }}/<stack>/
+      - name: Reshape into ${{ matrix.tier }}/<group>/<unit>/
         run: |
-          mkdir -p "artifacts/test-reports/${{ matrix.tier }}"
+          dst="artifacts/test-reports/${{ matrix.tier }}"
+          mkdir -p "$dst"
           for d in staging/test-report-${{ matrix.tier }}-*; do
             [ -d "$d" ] || continue
-            stack="${d##*-}"
-            mv "$d" "artifacts/test-reports/${{ matrix.tier }}/$stack"
+            rest="$(basename "$d")"; rest="${rest#test-report-${{ matrix.tier }}-}"
+            group="${rest%%-*}"; unit="${rest#*-}"
+            mkdir -p "$dst/$group/$unit"
+            cp -r "$d/." "$dst/$group/$unit/"
           done
 
       - id: check
         run: |
-          if find "artifacts/test-reports/${{ matrix.tier }}" -name report.html -print -quit | grep -q .; then
-            echo "has_reports=true" >> "$GITHUB_OUTPUT"
+          if find "artifacts/test-reports/${{ matrix.tier }}" \( -name report.html -o -name junit.xml \) -print -quit | grep -q .; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_reports=false" >> "$GITHUB_OUTPUT"
+            echo "has=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload ${{ matrix.tier }}-suite bundle
-        if: steps.check.outputs.has_reports == 'true'
+      - name: Upload ${{ matrix.tier }} bundle
+        if: steps.check.outputs.has == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: test-reports-${{ matrix.tier }}-bundle

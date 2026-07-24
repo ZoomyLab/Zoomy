@@ -1,15 +1,25 @@
 # CI Test Reports
 
+Every push runs the **small** suite as a gate; the **large / regression** suite
+runs weekly. The results below cover three groups:
+
+- **Zoomy** — the superproject's own `tests/`, run per backend.
+- **Library** — each `library/zoomy_*` submodule's own `tests/`.
+- **Notebooks** — the published tutorial notebooks, executed end to end.
+
 ## Summary
 
 ```{include} ../_generated/test_report_summary.md
 ```
 
+A ⚠️ marks a suite with failures. A dash means that suite produced no report in
+the latest run (a stub is shown in its section below).
+
 ---
 
-## Detailed HTML reports (per stack)
+## Detailed HTML reports
 
-Embedded **pytest-html** reports (wider layout: scroll horizontally on narrow viewports).
+Embedded **pytest-html** reports. Scroll horizontally on narrow viewports.
 
 ```{eval-rst}
 .. raw:: html
@@ -22,145 +32,50 @@ Embedded **pytest-html** reports (wider layout: scroll horizontally on narrow vi
    </style>
 ```
 
-### Zoomy Core
-
-#### Small
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-small-core.html"
-     title="Pytest HTML — Zoomy Core small"></iframe>
-   </div>
+```{include} ../_generated/test_report_embeds.md
 ```
-
-#### Large
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-large-core.html"
-     title="Pytest HTML — Zoomy Core large"></iframe>
-   </div>
-```
-
-### Zoomy JAX
-
-#### Small
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-small-jax.html"
-     title="Pytest HTML — Zoomy JAX small"></iframe>
-   </div>
-```
-
-#### Large
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-large-jax.html"
-     title="Pytest HTML — Zoomy JAX large"></iframe>
-   </div>
-```
-
-### AMReX
-
-#### Small
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-small-amrex.html"
-     title="Pytest HTML — AMReX small"></iframe>
-   </div>
-```
-
-#### Large
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-large-amrex.html"
-     title="Pytest HTML — AMReX large"></iframe>
-   </div>
-```
-
-### OpenFOAM
-
-#### Small
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-small-foam.html"
-     title="Pytest HTML — OpenFOAM small"></iframe>
-   </div>
-```
-
-#### Large
-
-```{eval-rst}
-.. raw:: html
-
-   <div class="pytest-report-scroll">
-   <iframe src="_static/pytest-report-large-foam.html"
-     title="Pytest HTML — OpenFOAM large"></iframe>
-   </div>
-```
-
-Missing reports show a short placeholder inside the iframe.
 
 ---
 
 ## How to use this page
 
-### Local book build with real reports
+### Local build with real reports
 
 From the **repository root**:
 
 ```bash
-python tests/reporting/generate_test_report.py … \
-  --output-dir artifacts/test-reports/small/core   # or large/<stack>/…
+# one suite (repeat per group/unit you care about)
+python tests/reporting/generate_test_report.py \
+  --markers "small and core" --pytest-paths "tests" \
+  --output-dir artifacts/test-reports/small/zoomy/core
+# then assemble + build
 python docs/scripts/generate_ci_test_report.py
 jupyter-book build docs/book
 ```
 
-**Files created or refreshed by `docs/scripts/generate_ci_test_report.py`:**
-
-| Output | Role |
-|--------|------|
-| `docs/_generated/test_report_summary.md` | Summary tables for this page (`{include}`) |
-| `docs/book/_static/pytest-report-small-<stack>.html` | Embedded small-suite HTML per stack |
-| `docs/book/_static/pytest-report-large-<stack>.html` | Embedded large-suite HTML per stack |
-| `docs/book/tutorials/ipynb/**` | Mirror of the published tutorial notebooks (explicit allow-list) |
-
-Stub HTML is written when no matching `report.html` exists under `artifacts/`.
+`docs/scripts/generate_ci_test_report.py` reads
+`artifacts/test-reports/<tier>/<group>/<unit>/**` and writes the summary
+(`docs/_generated/test_report_summary.md`), the embeds
+(`docs/_generated/test_report_embeds.md`), the per-unit
+`docs/book/_static/pytest-report-<tier>-<group>-<unit>.html`, and mirrors the
+published tutorials into `docs/book/tutorials/ipynb/`. A stub is written wherever
+a run produced no `report.html`.
 
 ### Adding or changing tests
 
-Markers are mostly **automatic** — the root `conftest.py` applies them, so there
-are no hand-maintained lists:
+Markers are mostly **automatic** — the root `conftest.py` applies them:
 
-- A test under `library/zoomy_<stack>/tests` gets the `<stack>` marker from its
-  path (`foam` maps to `openfoam`).
-- A test with no size marker becomes `small`. Anything taking more than
+- A test under `library/zoomy_<stack>/tests` (or `tests/**/zoomy_<stack>/`) gets
+  the `<stack>` marker from its path (`foam` → `openfoam`).
+- A test with no size marker becomes `small`; anything taking more than
   **5 minutes individually** must be marked `large` explicitly.
-- `library/zoomy_<stack>/tests` is only collected when `import zoomy_<stack>`
-  resolves, so each container automatically runs exactly the suites it can.
+- `library/zoomy_<stack>/tests` is collected only when `import zoomy_<stack>`
+  resolves, so each container runs exactly the suites it can.
 
-So in practice: put the test in the right directory, and mark it `large` if it
-is slow. After CI runs, read the **Summary** table and the matching
-**pytest-html** section above.
+A **tutorial notebook** joins the Notebooks group by being added to
+`tests/notebooks/test_tutorials.py::PUBLISHED` (path + the backend marker it
+needs) and to `PUBLISHED_TUTORIALS` in the docs generator — it is then executed
+as a `@pytest.mark.notebook` test and mirrored onto the site.
 
 ### Docs-only changes
 
@@ -171,24 +86,26 @@ re-downloads the latest Smart Tests artifacts from **`main`** when it runs.
 
 ## Architecture
 
-**Scope.** CI tests four stacks: **zoomy_core**, **zoomy_jax**, **zoomy_amrex**
-and **zoomy_foam**. Each runs in its own GHCR image, with the checked-out tree
-`pip install -e`'d over it so reports match the commit under test.
+**Scope.** CI runs three groups across four backend containers (GHCR images with
+the checked-out tree `pip install -e`'d over them, so reports match the commit):
+
+| Group | What runs | Where |
+|---|---|---|
+| Zoomy | superproject `tests/`, filtered per backend | core / jax / amrex / foam images |
+| Library | each `library/zoomy_*/tests/` | its own backend image (`prepost`/`server` in the core image) |
+| Notebooks | `tests/notebooks/` (`@pytest.mark.notebook`) | core (+ amrex) images |
 
 **Two tiers.**
 
 | Tier | Runs on | Markers | Gates? |
 |---|---|---|---|
-| small | every push and PR | `small and <stack>` | **yes** — a failing test fails the build |
-| large | weekly (Sun 03:00 UTC) + manual | `(large or benchmark or regression) and <stack>` | yes |
+| small | every push and PR | `small and not regression and …` | **yes** — a failing test fails the build |
+| large | weekly (Sun 03:00 UTC) + manual | `(large or benchmark or regression) and …` | yes |
 
 **Chain.** `Containers` publishes the images → `Smart Tests`
-(`.github/workflows/tests-report.yml`) runs both tiers and merges per-stack
+(`.github/workflows/tests-report.yml`) runs both tiers and merges the per-unit
 HTML/JUnit into `test-reports-small-bundle` and `test-reports-large-bundle` →
 `Render Webpage` downloads those bundles, runs
-`docs/scripts/generate_ci_test_report.py`, and builds this page. A successful
-`Containers` run re-triggers `Smart Tests` on the same SHA so `:latest` images
-match the tree.
-
-`Smart Tests` checks out with `submodules: recursive` — `library/*` are
-submodules and `pip install -e` fails without them.
+`docs/scripts/generate_ci_test_report.py`, and builds this page. `Smart Tests`
+checks out with `submodules: recursive` — `library/*` are submodules and
+`pip install -e` fails without them.

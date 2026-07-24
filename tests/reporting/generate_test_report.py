@@ -40,14 +40,23 @@ def _parse_args() -> argparse.Namespace:
         help="Whitespace-separated roots for pytest (default: tests).",
     )
     p.add_argument("--extra-pytest-args", default="", help="Additional raw pytest args.")
+    p.add_argument(
+        "--chdir",
+        default="",
+        help="Run pytest from this directory (for standalone-rootdir suites like "
+        "library/zoomy_amrex). --output-dir stays relative to the original cwd.",
+    )
     return p.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    out_dir = Path(args.output_dir) / stamp
+    # Keep the output dir anchored to the ORIGINAL cwd even when --chdir moves
+    # pytest's rootdir (standalone suites); otherwise reports would scatter.
+    out_dir = (Path.cwd() / args.output_dir / stamp).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    run_cwd = str(Path(args.chdir).resolve()) if args.chdir.strip() else None
 
     env = os.environ.copy()
     env.setdefault("LOGURU_LEVEL", "WARNING")
@@ -94,8 +103,8 @@ def main() -> int:
     if args.extra_pytest_args.strip():
         cmd.extend(args.extra_pytest_args.split())
 
-    print("Running:", " ".join(cmd))
-    rc = subprocess.call(cmd, env=env)
+    print("Running:", " ".join(cmd), f"(cwd={run_cwd})" if run_cwd else "")
+    rc = subprocess.call(cmd, env=env, cwd=run_cwd)
     if rc == 5 and args.allow_no_tests:
         print("No tests collected; allowed by --allow-no-tests.")
         rc = 0
