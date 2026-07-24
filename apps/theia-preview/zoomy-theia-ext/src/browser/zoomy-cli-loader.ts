@@ -28,6 +28,23 @@ function loadScript(src: string): Promise<void> {
     });
 }
 
+let libsPromise: Promise<void> | undefined;
+/** Load KaTeX (+ auto-render) and marked so card descriptions and describe()
+ *  output render markdown + math — the same CDN libs the standalone GUI uses. */
+export function ensureRenderLibs(): Promise<void> {
+    if (!libsPromise) {
+        libsPromise = (async () => {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+            document.head.appendChild(link);
+            await loadScript('https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/marked@12/marked.min.js');
+        })().catch(() => { /* offline / blocked — fall back to plain text */ });
+    }
+    return libsPromise;
+}
+
 /** The single shared ZoomyCLI. First call boots the vendored brain + Pyodide worker. */
 export function getZoomyCli(): Promise<any> {
     if (!cliPromise) {
@@ -42,8 +59,14 @@ export function getZoomyCli(): Promise<any> {
             const { ZoomyCLI, PyodideAdapter, FetchStorage, IdbStorage } = mod;
             const pyodide = new PyodideAdapter({
                 workerUrl: base + 'pyodide-worker.js',
-                onLog: (level: string, msg: string) => logSink && logSink(level, msg),
-                onDisplay: (cell: DisplayCell) => displaySink && displaySink(cell),
+                // The adapter calls onLog with the whole {level,msg} message object.
+                onLog: (m: any) => { logSink && logSink(m?.level || 'info', m?.msg ?? String(m)); },
+                // The worker posts display cells as a JSON string (json.dumps(cell)).
+                onDisplay: (cell: any) => {
+                    let c = cell;
+                    if (typeof cell === 'string') { try { c = JSON.parse(cell); } catch { c = { mime: 'text/plain', content: cell }; } }
+                    displaySink && displaySink(c);
+                },
             });
             let overlay: any = null;
             try { overlay = new IdbStorage(); } catch (e) { /* private mode: writes error later */ }
