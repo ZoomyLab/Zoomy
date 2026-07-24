@@ -190,6 +190,11 @@ jobs:
         run: |
           cd apps/theia-preview
           npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          # Compile the vendored Zoomy extension: Baukasten start page, code-editor
+          # route, and the native Theia notebook driven by an in-browser Pyodide
+          # kernel. @theia/* resolve from the app's node_modules (parent), so this
+          # only fetches typescript.
+          ( cd zoomy-theia-ext && npm install --no-audit --no-fund && npm run build )
           npx theia build --mode production
           cd ../..
           mkdir -p docs/book/_build/html/theia-preview

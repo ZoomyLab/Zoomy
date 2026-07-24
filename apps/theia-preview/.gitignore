@@ -2,4 +2,6 @@ node_modules/
 lib/
 src-gen/
 gen-webpack*.js
+gen-esbuild*.mjs
+esbuild.mjs
 .browser_modules/

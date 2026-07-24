@@ -23,7 +23,8 @@
     "@theia/messages": "1.73.1",
     "@theia/markers": "1.73.1",
     "@theia/outline-view": "1.73.1",
-    "@theia/notebook": "1.73.1"
+    "@theia/notebook": "1.73.1",
+    "zoomy-theia-ext": "file:./zoomy-theia-ext"
   },
   "devDependencies": { "@theia/cli": "1.73.1" },
   "scripts": {

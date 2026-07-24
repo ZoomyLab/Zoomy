@@ -1,0 +1,13 @@
+{
+  "name": "zoomy-theia-ext",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zoomy Theia extension: Baukasten start page, code-editor route, and a native Theia notebook driven by an in-browser Pyodide kernel (zoomy-core + zoomy-plotting).",
+  "files": ["lib", "src"],
+  "comment": "@theia/* are provided by the host app (apps/theia-preview) and resolved from its node_modules — intentionally not duplicated here so `npm install` in this folder only fetches typescript.",
+  "devDependencies": { "typescript": "~5.4.5" },
+  "scripts": { "build": "tsc -p ." },
+  "theiaExtensions": [
+    { "frontend": "lib/browser/zoomy-frontend-module" }
+  ]
+}
