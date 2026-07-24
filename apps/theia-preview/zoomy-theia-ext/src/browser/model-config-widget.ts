@@ -95,6 +95,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // Accordion (one expanded card) + selection (one selected card per tab).
     protected expanded: string | undefined;
     protected readonly selected: Record<string, string> = {};
+    // Assembled simulation: run selected model→mesh→solver→viz in shared scope.
+    protected simRan = false;
+    protected simBusy = false;
+    protected simStatus = '';
+    protected vizOut: CardOut | undefined;
+    protected storeMeta: any;
 
     @postConstruct()
     protected init(): void {
@@ -224,11 +230,77 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         return h('div', { style: { marginTop: 10, borderTop: '1px dashed var(--theia-panel-border)', paddingTop: 8 } }, names.map(field));
     }
 
-    /** Clicking a card selects it in its tab and expands it (accordion: one open). */
+    /** Clicking a card selects it in its tab and expands it (accordion: one open).
+     *  Selecting a visualization after a sim has run re-renders it (viz changes). */
     protected pick(card: any, dir: string): void {
+        const wasExpanded = this.expanded === card.id;
         this.selected[dir] = card.id;
-        this.expanded = this.expanded === card.id ? undefined : card.id;
+        this.expanded = wasExpanded ? undefined : card.id;
         this.update();
+        if (dir === 'visualizations' && this.simRan && !this.simBusy && card.snippet) { this.runViz(card); }
+    }
+
+    /** The selected card for a tab, else the first with runnable code (models/
+     *  meshes/solvers) or the first snippet card (visualizations). */
+    protected pickedCard(dir: string): any {
+        const cards = this.cardsByTab[dir] || [];
+        const sel = cards.find(c => c.id === this.selected[dir]);
+        if (sel) { return sel; }
+        if (dir === 'visualizations') { return cards.find(c => c.snippet); }
+        return cards.find(c => !!cardCode(c, this.mergedInit(c)));
+    }
+
+    /** Run the selected model → mesh → solver in the shared scope, then the
+     *  selected visualization. This is the "assembly → visualization" flow. */
+    protected async runAssembly(): Promise<void> {
+        if (this.simBusy) { return; }
+        this.simBusy = true; this.simRan = false; this.vizOut = undefined;
+        try {
+            for (const [dir, label] of [['models', 'model'], ['meshes', 'mesh'], ['solvers', 'solver']] as const) {
+                const card = this.pickedCard(dir);
+                if (!card) { this.simStatus = 'No ' + label + ' selected.'; this.update(); return; }
+                const code = cardCode(card, this.mergedInit(card));
+                if (!code) { this.simStatus = label + ' "' + (card.title || card.id) + '" is a remote backend — connect a backend to run it.'; this.update(); return; }
+                this.simStatus = 'Running ' + label + ': ' + (card.title || card.id) + '…'; this.update();
+                const res = await this.cli.runCode(code);
+                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.vizOut = { cells: [], stdout: res.output || '', status: 'error', running: false }; this.update(); return; }
+                if (res?.store_meta) { this.storeMeta = res.store_meta; }
+            }
+            this.simRan = true; this.simStatus = 'Simulation done — rendering visualization…'; this.update();
+            await this.runViz(this.pickedCard('visualizations'));
+            this.simStatus = 'Done.';
+        } catch (e: any) {
+            this.simStatus = 'Error: ' + (e?.message || String(e));
+        } finally {
+            this.simBusy = false; this.update();
+        }
+    }
+
+    /** Run one visualization snippet against the current store and show its plot. */
+    protected async runViz(vizCard: any): Promise<void> {
+        if (!vizCard?.snippet) { return; }
+        const out: CardOut = { cells: [], stdout: '', status: 'running', running: true };
+        this.vizOut = out; this.update();
+        setDisplaySink(cell => { out.cells.push(cell); this.update(); });
+        try {
+            const snippet = await this.cli.fetchSnippet(vizCard.snippet);
+            // Show the final snapshot of the most interesting field (height h if
+            // present) rather than q0(bed) at t≈0. Fields come from store_meta.
+            const meta = this.storeMeta || {};
+            const fields: string[] = meta.fields || [];
+            // Prefer the 2nd real field (index 1 — usually the depth, above bed);
+            // fall back to the first, or let the snippet default. Use REAL names
+            // from store_meta so we never pass an invalid field.
+            const field = fields.length > 1 ? fields[1] : (fields[0] || null);
+            const step = Math.max(0, (meta.n_snapshots || 1) - 1);
+            const code = 'time_step = ' + step + '\nfield_name = ' + JSON.stringify(field) + '\n' + snippet;
+            const res = await this.cli.runCode(code);
+            out.stdout = res?.output || ''; out.status = res?.status || 'success';
+        } catch (e: any) {
+            out.status = 'error'; out.stdout = e?.message || String(e);
+        } finally {
+            setDisplaySink(undefined); out.running = false; this.update();
+        }
     }
 
     protected renderCard(card: any, dir: string): React.ReactNode {
@@ -275,13 +347,26 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             style: { cursor: 'pointer', border: 'none', borderBottom: this.active === t.dir ? '2px solid var(--theia-button-background)' : '2px solid transparent', background: 'transparent', color: this.active === t.dir ? 'var(--theia-foreground)' : 'var(--theia-descriptionForeground)', padding: '8px 14px', fontSize: 13, fontWeight: 600 },
         }, t.label + ' (' + (this.cardsByTab[t.dir]?.length || 0) + ')');
         const cards = this.cardsByTab[this.active] || [];
+        const selName = (dir: string): string => { const c = this.pickedCard(dir); return c ? (c.title || c.id) : '—'; };
+        const runBtn: React.CSSProperties = { cursor: this.simBusy ? 'default' : 'pointer', border: 'none', borderRadius: 6, padding: '9px 18px', fontSize: 14, fontWeight: 700, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.simBusy ? 0.7 : 1 };
+        const chip = (label: string, val: string) => h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, label + ': ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, val));
+        const runBar = h('div', { style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 14, marginBottom: 16, background: 'var(--theia-editorWidget-background)' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' } },
+                h('button', { style: runBtn, disabled: this.simBusy || !this.kernelReady, onClick: () => this.runAssembly() },
+                    h('span', { className: 'codicon codicon-play', style: { verticalAlign: 'middle', marginRight: 6 } }), this.simBusy ? 'Running…' : 'Run simulation'),
+                h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap' } }, chip('model', selName('models')), chip('mesh', selName('meshes')), chip('solver', selName('solvers')), chip('viz', selName('visualizations')))),
+            this.simStatus ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginTop: 8 } }, this.simStatus) : null,
+            this.vizOut ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: this.vizOut.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
+                this.vizOut.cells.map((c, i) => this.renderCell(c, 'v' + i)),
+                this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
         return h('div', { style: page },
             h('h1', { style: { fontSize: 26, margin: '0 0 4px', fontWeight: 700 } }, 'Model configuration'),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
-                'The real Zoomy card catalog, loaded through ', h('code', null, 'zoomy_cli'), ' and run on the in-browser Pyodide kernel. Pick a card and Run.'),
+                'Select a model, mesh, solver and visualization, then Run — or run any card on its own. Everything runs on the in-browser Pyodide kernel.'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)'),
+            runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'));
     }
