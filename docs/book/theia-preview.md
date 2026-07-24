@@ -8,12 +8,15 @@ tracks what is live.
 ```
 
 **[▶ Open the Theia prototype](theia-preview/index.html)** — it opens on a
-**Baukasten start page**. From there: *Open code editor* drops you into Theia's
-Monaco editor, and *Open Pyodide notebook* opens a **native Theia notebook**
-that runs the classic Zoomy notebook on an **in-browser Pyodide kernel**. The
-**🏠 Zoomy start** item in the status bar takes you back from anywhere. All of
-this with **no backend and no server**. First load is a large download (Theia is
-heavy) and the kernel installs `zoomy-core` on first run — give it a moment.
+**Baukasten start page** in a clean, full-window GUI (the VS Code chrome — menus,
+activity bar, tabs, status bar — is hidden). *Open code editor* drops you into
+Theia's Monaco editor with the full IDE revealed; *Open Pyodide notebook* opens a
+**native Theia notebook** that runs the classic Zoomy notebook on an **in-browser
+Pyodide kernel**. The **🏠 Zoomy start** item in the status bar returns you to the
+GUI from anywhere. Python surfaces have **jedi autocomplete** (type `np.` or, after
+a cell runs, `model.`). All of this with **no backend and no server**. First load
+is a large download (Theia is heavy) and the kernel warms `zoomy-core` + jedi in
+the background — give it a moment.
 
 ![Backend-less Theia](images/theia-preview.png)
 
@@ -46,16 +49,20 @@ and run it everywhere, changing only the host + one stylesheet:
 | | Status |
 |---|---|
 | 1. Backend-less Theia builds + runs | **live** |
-| 2. Baukasten start page as the opening Theia view | **live** |
-| 3. Click → Theia code editor, with a way back | **live** |
+| 2. Baukasten start page as the opening full-window GUI view | **live** |
+| 3. Click → Theia code editor (full IDE), with a way back | **live** |
 | 4. Native Theia notebook on a **Pyodide kernel**, running the classic Zoomy notebook | **live** |
+| 5. Pyodide off the main thread (Web Worker) + jedi autocomplete | **live** |
+| 6. App view vs IDE view — chrome only appears when editing code | **live** |
 
-The Pyodide kernel is a thin wrapper today; the next step is to fold in the
-**same worker the GUI already runs** — its jedi autocomplete, interrupts and
-package set — so everything built there carries over rather than being a
-throwaway kernel. The start page is styled with Theia/Baukasten theme tokens;
-swapping in the real `baukasten-ui` React components (already proven on the
-[Baukasten preview](baukasten-preview.md)) is the remaining polish.
+The kernel now runs in a **Web Worker** so the UI never blocks, and reuses the
+Zoomy GUI's proven machinery: tiered background installs warmed at boot, a parso
+AST cache on IndexedDB (jedi cold-start drops from ~20 s to <1 s on the 2nd
+visit), and the GUI's `complete_code` (jedi) driving a Monaco completion provider
+across the editor and every notebook cell. Next: fold in the rest of the GUI's
+worker (interrupts, the full package set) and swap the start page's theme-token
+styling for the real `baukasten-ui` React components (already proven on the
+[Baukasten preview](baukasten-preview.md)).
 
 Source: `apps/theia-preview/` — a standard `@theia/cli` browser-only app plus the
 `zoomy-theia-ext/` native extension. CI builds it non-blocking and serves it at

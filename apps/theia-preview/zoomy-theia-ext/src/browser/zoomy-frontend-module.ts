@@ -17,6 +17,8 @@ import { PyodideKernel } from './pyodide-kernel';
 import { NOTEBOOK_JSON } from './notebook-content';
 import { DomOutputWebview } from './dom-output-webview';
 import { ZoomyStartWidget, OPEN_EDITOR, OPEN_NOTEBOOK } from './start-page-widget';
+import { getPyodideClient, PyodideClient } from './pyodide-runtime';
+import { registerZoomyCompletions } from './completion-provider';
 
 const VIEW_TYPE = 'zoomy-notebook';
 const NB_URI = new URI('file:///pyodide.ipynb');
@@ -59,19 +61,31 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     @inject(ApplicationShell) protected readonly shell: ApplicationShell;
     @inject(StatusBar) protected readonly statusBar: StatusBar;
     protected kernel: PyodideKernel;
+    protected client: PyodideClient;
 
     onStart(): void {
         console.log('ZOOMY onStart running');
+        // Construct the worker NOW so Pyodide boots + zoomy-core/jedi/plotting
+        // install in the background while the user reads the start page.
+        this.client = getPyodideClient(m => console.log('[pyodide]', m));
         try { this.notebookService.registerNotebookSerializer(VIEW_TYPE, this.serializer); console.log('ZOOMY serializer ok'); } catch (e) { console.error('ZOOMY serializer FAIL', e); }
         try { this.typeRegistry.registerNotebookType({ type: VIEW_TYPE, displayName: 'Zoomy Notebook', selector: [{ filenamePattern: '*.ipynb' }] }, 'Zoomy'); console.log('ZOOMY type ok'); } catch (e) { console.error('ZOOMY type FAIL', e); }
         try { this.notebookService.markReady(); } catch { /* already ready */ }
-        this.kernel = new PyodideKernel(this.notebookService, this.execService, m => console.log('[pyodide]', m));
+        this.kernel = new PyodideKernel(this.notebookService, this.execService, this.client, m => console.log('[pyodide]', m));
         try { this.kernelService.registerKernel(this.kernel); console.log('ZOOMY kernel registered'); } catch (e) { console.error('ZOOMY kernel FAIL', e); }
+        try { registerZoomyCompletions(this.client, m => console.log('[pyodide]', m)); console.log('ZOOMY completions registered'); } catch (e) { console.error('ZOOMY completions FAIL', e); }
 
         this.statusBar.setElement('zoomy.back', {
             text: '$(home) Zoomy start', tooltip: 'Back to the Zoomy start page',
             command: START.id, alignment: StatusBarAlignment.LEFT, priority: 5000,
         });
+
+        // Full-GUI ("app") mode vs VS-Code ("IDE") mode. The start page is the
+        // app; opening the editor or notebook reveals the IDE chrome. Toggled by
+        // whichever widget is current, so tab clicks and the status-bar back
+        // item both flip it.
+        this.injectAppModeStyle();
+        this.shell.onDidChangeCurrentWidget(() => this.updateAppMode());
 
         this.openStart().catch(e => console.error('zoomy start', e));
         if (typeof location !== 'undefined' && /[?&]autorun/.test(location.search)) {
@@ -79,20 +93,55 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         }
     }
 
+    protected setAppMode(on: boolean): void {
+        document.body.classList.toggle('zoomy-app-mode', on);
+        console.log('ZOOMY appmode=' + on + ' current=' + this.shell.currentWidget?.id);
+    }
+    protected updateAppMode(): void {
+        this.setAppMode(this.shell.currentWidget?.id === ZoomyStartWidget.ID);
+    }
+
+    protected injectAppModeStyle(): void {
+        if (document.getElementById('zoomy-app-mode-style')) { return; }
+        const style = document.createElement('style');
+        style.id = 'zoomy-app-mode-style';
+        // In app mode: hide the IDE chrome (visibility keeps layout, so flipping
+        // back is instant and gap-free) and float the start page over the whole
+        // viewport as a clean full-screen GUI.
+        style.textContent = `
+            body.zoomy-app-mode #theia-top-panel,
+            body.zoomy-app-mode #theia-statusBar,
+            body.zoomy-app-mode #theia-left-content-panel,
+            body.zoomy-app-mode #theia-right-content-panel,
+            body.zoomy-app-mode .theia-app-sidebar-container,
+            body.zoomy-app-mode #theia-left-right-split-panel > .lm-SplitPanel-handle,
+            body.zoomy-app-mode #theia-main-content-panel .lm-TabBar.lm-DockPanel-tabBar {
+                visibility: hidden !important;
+            }
+            body.zoomy-app-mode .zoomy-start-widget {
+                position: fixed !important; inset: 0 !important; z-index: 1000 !important;
+                background: var(--theia-editor-background, #1e1e1e) !important;
+            }`;
+        document.head.appendChild(style);
+    }
+
     protected async openStart(): Promise<void> {
         const w = await this.widgetManager.getOrCreateWidget(ZoomyStartWidget.ID);
         if (!w.isAttached) { this.shell.addWidget(w, { area: 'main' }); }
         this.shell.activateWidget(w.id);
+        this.setAppMode(true);
     }
 
     protected async openEditor(): Promise<void> {
         await this.fileService.write(EDITOR_URI, SAMPLE_PY);
         await open(this.openerService, EDITOR_URI);
+        this.setAppMode(false);
     }
 
     protected async openNotebook(run = false): Promise<void> {
         await this.fileService.write(NB_URI, NOTEBOOK_JSON);
         await open(this.openerService, NB_URI);
+        this.setAppMode(false);
         try { this.kernelService.selectKernelForNotebook(this.kernel, { uri: NB_URI, viewType: VIEW_TYPE }); } catch (e) { console.warn('kernel select', e); }
         if (run) {
             await new Promise(r => setTimeout(r, 1200));

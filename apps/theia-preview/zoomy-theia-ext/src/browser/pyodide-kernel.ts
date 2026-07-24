@@ -4,7 +4,7 @@ import { NotebookKernel, NotebookKernelChangeEvent } from '@theia/notebook/lib/b
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { NotebookExecutionStateService } from '@theia/notebook/lib/browser/service/notebook-execution-state-service';
 import { CellExecutionUpdateType } from '@theia/notebook/lib/common';
-import { getPyodide, runCell, CellOut } from './pyodide-runtime';
+import { PyodideClient, CellOut } from './pyodide-runtime';
 
 /** A Jupyter-style output item carries binary data; images are base64 -> bytes. */
 function toItem(mime: string, value: string): { mime: string; data: BinaryBuffer } {
@@ -51,13 +51,13 @@ export class PyodideKernel implements NotebookKernel {
     constructor(
         protected readonly notebookService: NotebookService,
         protected readonly execService: NotebookExecutionStateService,
+        protected readonly client: PyodideClient,
         protected readonly log: (m: string) => void,
     ) { }
 
     async executeNotebookCellsRequest(uri: URI, cellHandles: number[]): Promise<void> {
         const model = this.notebookService.getNotebookEditorModel(uri);
         if (!model) { return; }
-        const py = await getPyodide(this.log);
         let order = 1;
         for (const handle of cellHandles) {
             const cell = model.getCellByHandle(handle);
@@ -65,7 +65,7 @@ export class PyodideKernel implements NotebookKernel {
             const exec = this.execService.getOrCreateCellExecution(uri, handle);
             exec.confirm();
             exec.update([{ editType: CellExecutionUpdateType.ExecutionState, executionOrder: order++, runStartTime: Date.now() }]);
-            const outs = await runCell(py, cell.source);
+            const outs = await this.client.runCell(cell.source);
             const items = toOutputItems(outs);
             const cellOutput = { outputId: 'o' + handle + '-' + Date.now(), outputs: items };
             exec.update([{ editType: CellExecutionUpdateType.Output, cellHandle: handle, outputs: [cellOutput], append: false }]);
