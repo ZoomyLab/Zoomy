@@ -125,3 +125,7 @@ _build
 # Description exports (generated)
 notebooks/*.md
 thesis
+
+# Committed test fixtures (small, versioned with the tests that read them) are
+# NOT simulation output — exempt them from the output-oriented ignores above.
+!library/zoomy_prepost/tests/fixtures/**
