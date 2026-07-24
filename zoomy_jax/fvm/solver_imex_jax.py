@@ -495,8 +495,15 @@ class IMEXSourceSolverJax(DerivativeAwareSolverMixin, HyperbolicSolver):
         if bcs_obj is not None and hasattr(mesh_numpy, "resolve_periodic_bcs"):
             mesh_numpy.resolve_periodic_bcs(bcs_obj)
 
-        Q, Qaux = self.initialize(
-            mesh_numpy, source_model if source_model is not None else nsm.sm)
+        # Size (Q, Qaux) from the NSM's SystemModel, NOT the raw source Model:
+        # aux like the KP ``hinv`` is auto-promoted at the NSM level, so a raw
+        # Model reports 0 aux and yields a (0, nc) Qaux while the runtime
+        # operators (built from the NSM) expect the promoted aux — an empty-axis
+        # gather in the per-cell operator (cid=101).  ``nsm.sm`` carries the
+        # ICs too (NSM-by-construction deepcopy), so this also fills Q correctly.
+        # For a pre-built-NSM caller source_model is None already, so this only
+        # corrects the raw-Model entry path.
+        Q, Qaux = self.initialize(mesh_numpy, nsm.sm)
         Q, Qaux, parameters, jmesh, rmodel = self.create_runtime(
             Q, Qaux, mesh_numpy, nsm)
 

@@ -942,7 +942,12 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # `initialize` only needs the SystemModel's shape info + the
         # initial_conditions if the SM carries them.  Source Model is
         # no longer required — JaxRuntime is the runtime.
-        Q, Qaux = self.initialize(mesh, source_model if source_model is not None else nsm.sm)
+        # Size (Q, Qaux) from the NSM's SystemModel (aux like ``hinv`` is
+        # promoted at the NSM level; a raw source Model reports 0 aux and yields
+        # a (0, nc) Qaux that mismatches the NSM-built operators — cid=101).
+        # ``nsm.sm`` carries the ICs, so Q is filled correctly; for a pre-built
+        # NSM caller source_model is None already, so this is a no-op there.
+        Q, Qaux = self.initialize(mesh, nsm.sm)
         Q, Qaux, parameters, jax_mesh, runtime_model = self.create_runtime(
             Q, Qaux, mesh, nsm.sm,
         )
