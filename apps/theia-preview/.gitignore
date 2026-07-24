@@ -5,3 +5,5 @@ gen-webpack*.js
 gen-esbuild*.mjs
 esbuild.mjs
 .browser_modules/
+# vendored GUI brain (core.js is otherwise caught by the root core* rule)
+!gui/core.js

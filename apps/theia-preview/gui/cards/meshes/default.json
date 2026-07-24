@@ -1,0 +1,100 @@
+[
+  {
+    "id": "mesh-create-1d",
+    "title": "Create 1D",
+    "source": "builtin",
+    "init": {
+      "x_min": 0.0,
+      "x_max": 10.0,
+      "n_cells": 50
+    },
+    "description": "Uniform 1D mesh",
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_1d(domain=({x_min}, {x_max}), n_inner_cells={n_cells})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+  },
+  {
+    "id": "mesh-create-2d",
+    "title": "Create 2D",
+    "source": "builtin",
+    "init": {
+      "x_min": 0.0,
+      "x_max": 1.0,
+      "y_min": 0.0,
+      "y_max": 1.0,
+      "nx": 50,
+      "ny": 50
+    },
+    "description": "Uniform 2D quad mesh",
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_2d(({x_min}, {x_max}, {y_min}, {y_max}), nx={nx}, ny={ny})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+  },
+  {
+    "id": "mesh-create-3d",
+    "title": "Create 3D",
+    "source": "builtin",
+    "init": {
+      "x_min": 0.0,
+      "x_max": 1.0,
+      "y_min": 0.0,
+      "y_max": 1.0,
+      "z_min": 0.0,
+      "z_max": 1.0,
+      "nx": 10,
+      "ny": 10,
+      "nz": 10
+    },
+    "description": "Uniform 3D hex mesh",
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_3d(({x_min}, {x_max}, {y_min}, {y_max}, {z_min}, {z_max}), nx={nx}, ny={ny}, nz={nz})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+  },
+  {
+    "id": "mesh-gen-channels-channel_quad_2d_mesh",
+    "title": "Channel Quad 2D",
+    "source": "curated",
+    "category": "Channels",
+    "description": "placeholder — curated list TBD. A quad channel from the meshes catalog; fetched on demand from zoomylab.github.io/meshes.",
+    "mesh_file": "meshes/channel_quad_2d_mesh.msh",
+    "mesh_sizes": [
+      "coarse",
+      "medium",
+      "fine"
+    ],
+    "preview": "previews/mesh_channel_quad_2d_mesh.svg"
+  },
+  {
+    "id": "mesh-gen-channels-channel_junction_mesh_2d",
+    "title": "Confluence Junction 2D",
+    "source": "curated",
+    "category": "Channels",
+    "description": "Y-junction confluence channel (mono, single domain) from the meshes catalog. The Hsu-1998 30-degree confluence coupling variant (confluence_hsu: mono mesh_2d + 4-part part_* split) is staged in the meshes repo but not yet published to the Pages catalog.",
+    "mesh_file": "meshes/channels_channel_junction_mesh_2d.msh",
+    "mesh_sizes": [
+      "coarse",
+      "medium",
+      "fine"
+    ]
+  },
+  {
+    "id": "mesh-gen-curved-curved_open_channel_mesh",
+    "title": "Curved Open Channel (Steffler/Ghamry bend)",
+    "source": "curated",
+    "category": "Curved",
+    "description": "Curved open-channel bend (Steffler/Ghamry secondary-flow case) from the meshes catalog.",
+    "mesh_file": "meshes/curved_curved_open_channel_mesh.msh",
+    "mesh_sizes": [
+      "coarse",
+      "medium",
+      "fine"
+    ],
+    "preview": "previews/mesh-gen-curved-curved_open_channel-mesh.png"
+  },
+  {
+    "id": "mesh-gen-complex-pump_power_storage_monolithic",
+    "title": "Pumped-Storage Hydropower (monolithic)",
+    "source": "curated",
+    "category": "Hydropower",
+    "description": "Monolithic pumped-storage hydropower domain from the meshes catalog (the index.json complex/pump-power-storage category).",
+    "mesh_file": "meshes/complex_pump_power_storage_monolithic.msh",
+    "mesh_sizes": [
+      "coarse",
+      "medium"
+    ]
+  }
+]

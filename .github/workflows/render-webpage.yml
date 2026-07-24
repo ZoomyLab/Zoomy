@@ -199,6 +199,10 @@ jobs:
           cd ../..
           mkdir -p docs/book/_build/html/theia-preview
           cp -r apps/theia-preview/lib/frontend/. docs/book/_build/html/theia-preview/
+          # The vendored Zoomy GUI "brain" (zoomy_cli + pyodide-worker.js + engine.py
+          # + card catalog) is served as static assets under gui/; the model-config
+          # widget + worker fetch them relative to the page.
+          cp -r apps/theia-preview/gui docs/book/_build/html/theia-preview/gui
           # source maps are large and dev-only — drop them from the deploy
           rm -f docs/book/_build/html/theia-preview/*.map
           echo "Copied Theia preview to /theia-preview/"

@@ -1,0 +1,199 @@
+[
+  {
+    "id": "solver-numpy",
+    "title": "Hyperbolic (NumPy)",
+    "description": "Explicit finite-volume march (HyperbolicSolver). Runs locally in the browser via Pyodide — no server needed. IMEX / splitting schemes live in zoomy_core.fvm.solver_imex_numpy / solver_splitting_numpy.",
+    "requires_tag": "numpy",
+    "class": "zoomy_core.fvm.solver_numpy.HyperbolicSolver",
+    "init": {
+      "time_end": 0.1,
+      "reconstruction_order": 1
+    },
+    "template": "# Slim numpy solver card template (HANDOFF for the regen agent -> cards/solvers/default.json \"template\").\n# engine.py now auto-closes the previous run's store, so NO close_store() call is needed here.\nimport os\nfrom zoomy_core.fvm.solver_numpy import HyperbolicSolver\nimport zoomy_core.fvm.timestepping as ts\nfrom zoomy_core.misc.misc import Zstruct\nfrom zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec\n\n_h5_path = '/tmp/zoomy_sim/sim.h5'\nos.makedirs(os.path.dirname(_h5_path), exist_ok=True)\n\nsettings = Zstruct(output=Zstruct(\n    directory=os.path.dirname(_h5_path),\n    filename=os.path.splitext(os.path.basename(_h5_path))[0],\n    snapshots=20,\n    clean_directory=True,\n))\n\nnsm = NumericalSystemModel.from_system_model(\n    model, reconstruction=ReconstructionSpec(order=1))\n\nsolver = HyperbolicSolver(\n    time_end=0.1,\n    compute_dt=ts.adaptive(CFL=0.3),\n    settings=settings,\n)\n\nmesh.write_to_hdf5(_h5_path)\nsolver.solve(mesh, nsm, write_output=True)\n\nopen_hdf5(_h5_path)\n"
+  },
+  {
+    "id": "solver-imex-numpy",
+    "title": "IMEX (NumPy)",
+    "description": "IMEX march — explicit Riemann flux + implicit (Newton/GMRES) source (IMEXSolver). Runs locally in the browser via Pyodide — no server needed.",
+    "requires_tag": "numpy",
+    "class": "zoomy_core.fvm.solver_imex_numpy.IMEXSolver",
+    "init": {
+      "time_end": 0.1,
+      "reconstruction_order": 1
+    },
+    "template": "import os\nfrom zoomy_core.fvm.solver_imex_numpy import IMEXSolver\nimport zoomy_core.fvm.timestepping as ts\nfrom zoomy_core.misc.misc import Zstruct\n\n# IMEX: explicit Riemann flux + implicit (Newton/GMRES) source. Same\n# HDF5-first pattern as the Hyperbolic card — mesh written first, the\n# solver appends /fields/, and open_hdf5 hands the store to the viz layer.\n_h5_path = '/tmp/zoomy_sim/sim.h5'\nos.makedirs(os.path.dirname(_h5_path), exist_ok=True)\n\nclose_store()\n\nsettings = Zstruct(output=Zstruct(\n    directory=os.path.dirname(_h5_path),\n    filename=os.path.splitext(os.path.basename(_h5_path))[0],\n    snapshots=20,\n    clean_directory=True,\n))\n\nfrom zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec\nnsm = NumericalSystemModel.from_system_model(\n    model, reconstruction=ReconstructionSpec(order=1))\n\nsolver = IMEXSolver(\n    time_end=0.1,\n    compute_dt=ts.adaptive(CFL=0.3),\n    settings=settings,\n)\n\nmesh.write_to_hdf5(_h5_path)\nsolver.solve(mesh, nsm, write_output=True)\n\nopen_hdf5(_h5_path)\n"
+  },
+  {
+    "id": "solver-split-numpy",
+    "title": "Split / Chorin (NumPy)",
+    "description": "Chorin projection split for the non-hydrostatic VAM chain (ChorinSplitVAMSolver: hyperbolic predictor + elliptic pressure solve + pointwise corrector). Runs locally via Pyodide. Consumes the `split` binding the VAM model card publishes; hydrostatic models take the Hyperbolic (NumPy) card instead.",
+    "requires_tag": "numpy",
+    "class": "zoomy_core.fvm.solver_chorin_vam_numpy.ChorinSplitVAMSolver",
+    "init": {
+      "time_end": 0.1,
+      "reconstruction_order": 1
+    },
+    "template": "import os\nfrom zoomy_core.fvm.solver_chorin_vam_numpy import ChorinSplitVAMSolver\nimport zoomy_core.fvm.timestepping as ts\nfrom zoomy_core.misc.misc import Zstruct\n\n# Chorin projection march for the NON-HYDROSTATIC VAM chain.  The model card\n# binds `split` (predictor / pressure / corrector stages); this solver consumes\n# it by KIND.  A model card that does not bind `split` is hydrostatic -- march\n# it with the \"Hyperbolic (NumPy)\" card instead.\n_h5_path = '/tmp/zoomy_sim/sim.h5'\nos.makedirs(os.path.dirname(_h5_path), exist_ok=True)\n\nsettings = Zstruct(output=Zstruct(\n    directory=os.path.dirname(_h5_path),\n    filename=os.path.splitext(os.path.basename(_h5_path))[0],\n    snapshots=20,\n    clean_directory=True,\n))\n\nsolver = ChorinSplitVAMSolver(\n    stages=split.stages,\n    pressure_solver=\"lu\",\n    riemann_solver=\"hr\",\n    time_end=0.1,\n    compute_dt=ts.adaptive(CFL=0.3, dimension=1),\n    settings=settings,\n)\n\nmesh.write_to_hdf5(_h5_path)\nsolver.setup_simulation(mesh, write_output=True)\nsolver.run_simulation()\n\nopen_hdf5(_h5_path)\n"
+  },
+  {
+    "id": "solver-jax",
+    "title": "Hyperbolic (JAX)",
+    "description": "Explicit finite-volume march (HyperbolicSolver) on the JAX/GPU backend — needs the zoomy-jax container.",
+    "requires_tag": "jax",
+    "class": "zoomy_jax.fvm.solver_jax.HyperbolicSolver",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1,
+        "bounds": [
+          0,
+          null
+        ]
+      },
+      "CFL": {
+        "type": "Number",
+        "default": 0.45,
+        "bounds": [
+          0.01,
+          0.99
+        ]
+      },
+      "reconstruction_order": {
+        "type": "Integer",
+        "default": 1,
+        "bounds": [
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "solver-imex-jax",
+    "title": "IMEX (JAX)",
+    "description": "IMEX march — explicit flux + implicit source (IMEXSourceSolverJax) on the JAX/GPU backend — needs the zoomy-jax container.",
+    "requires_tag": "jax",
+    "class": "zoomy_jax.fvm.IMEXSourceSolverJax",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1,
+        "bounds": [
+          0,
+          null
+        ]
+      },
+      "CFL": {
+        "type": "Number",
+        "default": 0.45,
+        "bounds": [
+          0.01,
+          0.99
+        ]
+      },
+      "reconstruction_order": {
+        "type": "Integer",
+        "default": 1,
+        "bounds": [
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "id": "solver-amrex",
+    "title": "Hyperbolic (AMReX)",
+    "description": "Explicit finite-volume march on block-structured AMR (HyperbolicSolver) — needs the zoomy-amrex container.",
+    "requires_tag": "amrex",
+    "class": "zoomy_amrex.solvers.HyperbolicSolver",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1
+      },
+      "CFL": {
+        "type": "Number",
+        "default": 0.45,
+        "bounds": [
+          0.0,
+          1.0
+        ]
+      },
+      "order": {
+        "type": "Integer",
+        "default": 1,
+        "bounds": [
+          1,
+          2
+        ]
+      },
+      "max_level": {
+        "type": "Integer",
+        "default": 0,
+        "bounds": [
+          0,
+          4
+        ]
+      }
+    }
+  },
+  {
+    "id": "solver-split-amrex",
+    "title": "Split (AMReX)",
+    "description": "Chorin pressure-projection split (SplitSolver; needs a chorin_split model) on AMReX — needs the zoomy-amrex container. Pressure preconditioner is fixed at 3 downstream (the precond knob is currently dead).",
+    "requires_tag": "amrex",
+    "class": "zoomy_amrex.solvers.SplitSolver",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1
+      },
+      "CFL": {
+        "type": "Number",
+        "default": 0.3,
+        "bounds": [
+          0.0,
+          1.0
+        ]
+      },
+      "max_level": {
+        "type": "Integer",
+        "default": 0,
+        "bounds": [
+          0,
+          4
+        ]
+      }
+    }
+  },
+  {
+    "id": "solver-dmplex",
+    "title": "Hyperbolic (DMPlex)",
+    "description": "Explicit finite-volume march on a PETSc DMPlex unstructured mesh — needs the zoomy-dmplex container.",
+    "requires_tag": "dmplex",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1
+      },
+      "CFL": {
+        "type": "Number",
+        "default": 0.45,
+        "bounds": [
+          0.01,
+          0.99
+        ]
+      }
+    }
+  },
+  {
+    "id": "solver-foam",
+    "title": "Coupled (Foam+preCICE)",
+    "description": "OpenFOAM+preCICE backend: compiles the emitted SME participant on demand and runs the coupled pair. Pull oras://ghcr.io/zoomylab/zoomy_openfoam_sif:latest",
+    "requires_tag": "foam",
+    "params": {
+      "time_end": 4.0
+    }
+  }
+]

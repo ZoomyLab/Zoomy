@@ -5,6 +5,7 @@ import { CommandRegistry } from '@theia/core';
 
 export const OPEN_EDITOR = 'zoomy.openEditor';
 export const OPEN_NOTEBOOK = 'zoomy.openNotebook';
+export const OPEN_MODELCONFIG = 'zoomy.openModelConfig';
 
 /** The Baukasten "start page" — the single GUI surface that will host model
  *  configuration. In the prototype it is the landing view and the launch pad:
@@ -52,9 +53,11 @@ export class ZoomyStartWidget extends ReactWidget {
                 h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--theia-descriptionForeground)' } },
                     iconOf('settings-gear'), 'Model configuration'),
                 h('div', { style: { ...sub, marginTop: 10 } },
-                    'This is where the Baukasten model builder will live — pick a model, set its closures and parameters, and launch a run. For now, jump straight into the two Theia surfaces this prototype proves out:')),
+                    'Pick a model, mesh, solver and visualization from the real Zoomy card catalog and run it on the in-browser kernel. Or drop into a notebook or the code editor.')),
             h('div', { style: btnRow },
-                h('button', { style: primaryBtn, onClick: () => this.go(OPEN_NOTEBOOK) },
+                h('button', { style: primaryBtn, onClick: () => this.go(OPEN_MODELCONFIG) },
+                    iconOf('settings-gear'), 'Open model configuration'),
+                h('button', { style: secondaryBtn, onClick: () => this.go(OPEN_NOTEBOOK) },
                     iconOf('notebook'), 'Open Pyodide notebook'),
                 h('button', { style: secondaryBtn, onClick: () => this.go(OPEN_EDITOR) },
                     iconOf('code'), 'Open code editor')),

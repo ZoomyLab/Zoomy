@@ -16,7 +16,8 @@ import { IpynbSerializer } from './ipynb-serializer';
 import { PyodideKernel } from './pyodide-kernel';
 import { NOTEBOOK_JSON } from './notebook-content';
 import { DomOutputWebview } from './dom-output-webview';
-import { ZoomyStartWidget, OPEN_EDITOR, OPEN_NOTEBOOK } from './start-page-widget';
+import { ZoomyStartWidget, OPEN_EDITOR, OPEN_NOTEBOOK, OPEN_MODELCONFIG } from './start-page-widget';
+import { ZoomyModelConfigWidget } from './model-config-widget';
 import { getPyodideClient, PyodideClient } from './pyodide-runtime';
 import { registerZoomyCompletions } from './completion-provider';
 
@@ -26,6 +27,9 @@ const EDITOR_URI = new URI('file:///zoomy_model.py');
 const START = { id: 'zoomy.start', label: 'Zoomy: Go to start page' };
 const CMD_EDITOR = { id: OPEN_EDITOR, label: 'Zoomy: Open code editor' };
 const CMD_NOTEBOOK = { id: OPEN_NOTEBOOK, label: 'Zoomy: Open Pyodide notebook' };
+const CMD_MODELCONFIG = { id: OPEN_MODELCONFIG, label: 'Zoomy: Open model configuration' };
+// Widgets that are part of the full-window GUI ("app mode", chrome hidden).
+const APP_WIDGET_IDS = new Set([ZoomyStartWidget.ID, ZoomyModelConfigWidget.ID]);
 
 const SAMPLE_PY = `"""A Zoomy model, edited in a backend-less Theia editor.
 
@@ -98,7 +102,14 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         console.log('ZOOMY appmode=' + on + ' current=' + this.shell.currentWidget?.id);
     }
     protected updateAppMode(): void {
-        this.setAppMode(this.shell.currentWidget?.id === ZoomyStartWidget.ID);
+        this.setAppMode(APP_WIDGET_IDS.has(this.shell.currentWidget?.id ?? ''));
+    }
+
+    protected async openModelConfig(): Promise<void> {
+        const w = await this.widgetManager.getOrCreateWidget(ZoomyModelConfigWidget.ID);
+        if (!w.isAttached) { this.shell.addWidget(w, { area: 'main' }); }
+        this.shell.activateWidget(w.id);
+        this.setAppMode(true);
     }
 
     protected injectAppModeStyle(): void {
@@ -157,6 +168,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand(START, { execute: () => this.openStart() });
         reg.registerCommand(CMD_EDITOR, { execute: () => this.openEditor() });
         reg.registerCommand(CMD_NOTEBOOK, { execute: () => this.openNotebook() });
+        reg.registerCommand(CMD_MODELCONFIG, { execute: () => this.openModelConfig() });
     }
     registerMenus(menus: MenuModelRegistry): void {
         menus.registerMenuAction(CommonMenus.FILE, { commandId: START.id, label: START.label });
@@ -177,6 +189,11 @@ export default new ContainerModule(bind => {
     bind(WidgetFactory).toDynamicValue(ctx => ({
         id: ZoomyStartWidget.ID,
         createWidget: () => ctx.container.get(ZoomyStartWidget),
+    })).inSingletonScope();
+    bind(ZoomyModelConfigWidget).toSelf();
+    bind(WidgetFactory).toDynamicValue(ctx => ({
+        id: ZoomyModelConfigWidget.ID,
+        createWidget: () => ctx.container.get(ZoomyModelConfigWidget),
     })).inSingletonScope();
     bind(ZoomyContribution).toSelf().inSingletonScope();
     bind(FrontendApplicationContribution).toService(ZoomyContribution);
