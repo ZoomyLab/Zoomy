@@ -20,6 +20,7 @@ on:
       - "library/zoomy_js/**"
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
+      - "apps/theia-preview/**"
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
@@ -178,6 +179,25 @@ jobs:
           cp -r apps/baukasten-preview/dist/. docs/book/_build/html/baukasten-preview/
           echo "Copied Baukasten preview to /baukasten-preview/"
           ls docs/book/_build/html/baukasten-preview/ | head
+
+      # WIP: a backend-less (browser-only) Eclipse Theia, deployed to
+      # /theia-preview/. `theia build --mode production` webpacks the app from
+      # package.json into lib/frontend as a static site (no backend). Assets are
+      # relative, so it mounts fine under /Zoomy/theia-preview/. NON-BLOCKING —
+      # a failure must never break the site deploy.
+      - name: Build Theia preview (WIP, backend-less, non-blocking)
+        continue-on-error: true
+        run: |
+          cd apps/theia-preview
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          npx theia build --mode production
+          cd ../..
+          mkdir -p docs/book/_build/html/theia-preview
+          cp -r apps/theia-preview/lib/frontend/. docs/book/_build/html/theia-preview/
+          # source maps are large and dev-only — drop them from the deploy
+          rm -f docs/book/_build/html/theia-preview/*.map
+          echo "Copied Theia preview to /theia-preview/"
+          ls -la docs/book/_build/html/theia-preview/ | head
 
       - name: Build JupyterLite Pyodide deployment
         run: |

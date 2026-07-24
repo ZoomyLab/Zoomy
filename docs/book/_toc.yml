@@ -44,6 +44,7 @@ parts:
   - caption: Work in progress
     chapters:
       - file: baukasten-preview
+      - file: theia-preview
       - file: dev-guide
         sections:
           - file: dev-architecture
