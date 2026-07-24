@@ -169,10 +169,11 @@ jobs:
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -e LOGURU_LEVEL=WARNING \
             "ghcr.io/${{ steps.own.outputs.lc }}/${{ matrix.image }}:latest" \
-            bash -lc "${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} ${{ matrix.installs }} && \
+            bash -lc "${{ matrix.py }} -m pip install --no-cache-dir -q ${{ matrix.pipflags }} pytest-timeout ${{ matrix.installs }} && \
               ${{ matrix.py }} tests/reporting/generate_test_report.py \
                 --markers '${{ matrix.small }}' --pytest-paths '${{ matrix.paths }}' $CHARG \
                 --allow-no-tests \
+                --extra-pytest-args '--timeout=300 --timeout-method=thread' \
                 --output-dir artifacts/test-reports/small/${{ matrix.group }}/${{ matrix.unit }}"
 
       # large tier — weekly schedule, or a manual run with large enabled. Units
