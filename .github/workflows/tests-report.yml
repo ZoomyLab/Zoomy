@@ -112,8 +112,11 @@ jobs:
               installs: "-e library/zoomy_core -e library/zoomy_jax pytest-html", paths: "library/zoomy_jax/tests", chdir: "",
               small: "small and not regression and jax",
               large: "(large or benchmark or regression) and jax" }
+          # amrex runs from its own rootdir (--chdir); paths empty so its own
+          # [tool.pytest.ini_options] testpaths=["tests"] governs collection —
+          # passing `tests` explicitly fights that and errors "not found: tests".
           - { group: library, unit: amrex, image: zoomy_amrex, py: python3, pipflags: "--break-system-packages",
-              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html", paths: "tests", chdir: "library/zoomy_amrex",
+              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html", paths: "", chdir: "library/zoomy_amrex",
               small: "small and not regression",
               large: "large or benchmark or regression" }
           - { group: library, unit: foam, image: zoomy_openfoam, py: python3, pipflags: "--break-system-packages",
@@ -126,7 +129,7 @@ jobs:
               small: "small and not regression",
               large: "large or benchmark or regression" }
           - { group: library, unit: server, image: zoomy_core, py: python, pipflags: "",
-              installs: "-e library/zoomy_core -e library/zoomy_plotting -e library/zoomy_prepost -e library/zoomy_server pytest-html",
+              installs: "-e library/zoomy_core -e library/zoomy_plotting -e library/zoomy_prepost -e library/zoomy_server pytest-html httpx",
               paths: "library/zoomy_server/tests", chdir: "",
               small: "small and not regression",
               large: "large or benchmark or regression" }
