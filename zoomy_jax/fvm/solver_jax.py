@@ -721,7 +721,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
         @jax.jit
         @partial(jax.named_call, name="Flux")
-        def flux_operator(dt, time, Q, Qaux, parameters, dQ, force_o1=None):
+        def flux_operator(dt, time, Q, Qaux, parameters, dQ, force_o1=None,
+                          coupled_dm=None, coupled_mask=None):
             dQ = jnp.zeros_like(dQ)
 
             # 1. Boundary face values via BC kernel (vmap over boundary faces).
@@ -862,8 +863,24 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 fluct_bnd = rt_num_fluct(
                     Q_L_bnd, Q_R_bnd, qauxBnd, qauxBnd, parameters, normals_bnd)
                 Dm_bnd = fluct_bnd[1]
+                # Coupled-BC flux injection (conservative characteristic
+                # coupling, Dahm-Giesselmann-Helzel / PreciceManager.H
+                # applyCoupledFaceFlux).  At coupled boundary faces the face
+                # contribution is the SHARED high-fidelity Riemann flux
+                # ``F + D_minus`` computed on the projected (own, peer) pair in
+                # the agreed high-fidelity model space and passed in per window
+                # (``coupled_dm``, aligned to the boundary-face axis); both
+                # participants build the identical pair with their own outward
+                # normal, so the two contributions telescope -> conservative.
+                # ``coupled_mask`` selects the coupled faces; normal faces keep
+                # the ghost flux.  Both static-None by default -> the branch is
+                # dropped at trace time and behaviour is unchanged.
+                face_contrib_bnd = F_num_bnd + Dm_bnd
+                if coupled_dm is not None:
+                    face_contrib_bnd = jnp.where(
+                        coupled_mask[None, :], coupled_dm, face_contrib_bnd)
                 dQ = dQ.at[:, iInner_bnd].subtract(
-                    (F_num_bnd + Dm_bnd) * fv_bnd / cv_bnd)
+                    face_contrib_bnd * fv_bnd / cv_bnd)
 
                 # 4b. EMITTED interior nonconservative term at the BOUNDARY
                 # face.  A boundary cell's in-cell integral has TWO halves: the
@@ -1097,8 +1114,16 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
         return wrapped
 
-    def step(self, dt, time, Q, Qaux, parameters=None):
+    def step(self, dt, time, Q, Qaux, parameters=None, coupled=None):
         """Perform a single explicit time step.
+
+        ``coupled`` (optional) = ``(coupled_dm, coupled_mask)`` for
+        conservative characteristic interface coupling: ``coupled_dm`` is the
+        shared high-fidelity Riemann face flux ``F + D_minus`` (state rows x
+        boundary faces) and ``coupled_mask`` (boundary faces) flags the coupled
+        faces.  Threaded into the jitted flux operator so a coupled boundary
+        face uses this RP flux instead of its ghost flux.  ``None`` (all
+        existing callers) => uncoupled, bit-identical to before.
 
         Each RK stage starts by refreshing the boundary ghost cells from
         the *current* interior state — mirroring the numpy solver, which
@@ -1114,6 +1139,16 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # w.r.t. physical parameters (forward-mode jvp/jacfwd).
         parameters = self._rt_parameters if parameters is None else parameters
         flux = self._rt_flux_op
+        if coupled is not None:
+            # Bind the per-window coupled-face flux into the flux operator so the
+            # RK/MOOD driver's fixed ``flux(dt,time,Q,Qaux,p,dQ[,force_o1])``
+            # call signature is preserved (the coupled data rides as kwargs).
+            _coupled_dm, _coupled_mask = coupled
+            _flux_base = flux
+
+            def flux(*a, **k):
+                return _flux_base(*a, coupled_dm=_coupled_dm,
+                                  coupled_mask=_coupled_mask, **k)
 
         # BC is now applied INSIDE flux_operator at the right time
         # (just before reconstruction), so step() no longer pre-fills
