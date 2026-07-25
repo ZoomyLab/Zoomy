@@ -453,6 +453,46 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         return h('div', { style: { marginTop: 10, borderTop: '1px dashed var(--theia-panel-border)', paddingTop: 8 } }, names.map(field));
     }
 
+    /** A preview of a mesh card: the shipped image for curated meshes, else a
+     *  lightweight schematic grid drawn from the parametric card's own init
+     *  (nx/ny/nz + bounds) — no kernel, no network. */
+    protected renderMeshPreview(card: any): React.ReactNode {
+        const h = React.createElement;
+        const box: React.CSSProperties = { marginTop: 10, border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: 8, background: 'var(--theia-editorWidget-background)' };
+        const label: React.CSSProperties = { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 6 };
+        // Curated mesh with a shipped preview image (same-origin in production).
+        if (card.preview) {
+            const src = 'https://zoomylab.github.io/meshes/' + String(card.preview).replace(/^\/+/, '');
+            return h('div', { style: box },
+                h('div', { style: label }, 'Mesh preview'),
+                h('img', { src, alt: (card.title || 'mesh') + ' preview', style: { maxWidth: '100%', display: 'block', borderRadius: 4 }, onError: (e: any) => { e.currentTarget.style.display = 'none'; } }));
+        }
+        // Builtin parametric grid → schematic.
+        const init = this.mergedInit(card);
+        const nx = Math.max(1, Math.round(Number(init.nx ?? init.n_cells ?? 10)) || 10);
+        const ny = Math.max(1, Math.round(Number(init.ny ?? 1)) || 1);
+        const nz = init.nz != null ? Math.max(1, Math.round(Number(init.nz)) || 1) : 0;
+        const W = 280, H = 130, pad = 10;
+        const dcx = Math.min(nx, 28), dcy = Math.min(Math.max(ny, 1), 16);
+        const stroke = 'var(--theia-descriptionForeground)';
+        const lines: React.ReactNode[] = [];
+        for (let i = 0; i <= dcx; i++) { const x = pad + i * (W - 2 * pad) / dcx; lines.push(h('line', { key: 'vx' + i, x1: x, y1: pad, x2: x, y2: H - pad, stroke, strokeWidth: 0.6, opacity: 0.45 })); }
+        for (let j = 0; j <= dcy; j++) { const y = pad + j * (H - 2 * pad) / dcy; lines.push(h('line', { key: 'hz' + j, x1: pad, y1: y, x2: W - pad, y2: y, stroke, strokeWidth: 0.6, opacity: 0.45 })); }
+        const dims = nz ? `${nx}×${ny}×${nz}` : (ny > 1 ? `${nx}×${ny}` : `${nx}`);
+        const fmt = (v: any) => (v == null ? '?' : (+v).toString());
+        let domain = `x∈[${fmt(init.x_min)}, ${fmt(init.x_max)}]`;
+        if (init.y_max != null) { domain += `, y∈[${fmt(init.y_min)}, ${fmt(init.y_max)}]`; }
+        if (init.z_max != null) { domain += `, z∈[${fmt(init.z_min)}, ${fmt(init.z_max)}]`; }
+        return h('div', { style: box },
+            h('div', { style: label }, 'Mesh preview'),
+            h('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'xMidYMid meet', style: { maxHeight: 150, display: 'block' } },
+                h('rect', { x: pad, y: pad, width: W - 2 * pad, height: H - 2 * pad, fill: 'none', stroke: 'var(--theia-focusBorder, var(--theia-button-background))', strokeWidth: 1.2 }),
+                lines),
+            h('div', { style: { fontSize: 11.5, color: 'var(--theia-descriptionForeground)', marginTop: 5 } },
+                dims + ' cells' + (nz ? ' — 3-D (one face shown)' : '') + ' · ' + domain
+                + (nx > dcx ? ' · grid subsampled' : '')));
+    }
+
     /** Rendered inside the right-hand "Zoomy Parameters" panel: the active card's
      *  header, description (with math) and its editable parameter form. */
     renderActiveParams(): React.ReactNode {
@@ -663,6 +703,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
+            dir === 'meshes' ? this.renderMeshPreview(card) : null,
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
                 hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), paramsActive ? 'Parameters ▸' : 'Parameters') : null,
