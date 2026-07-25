@@ -756,7 +756,6 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
         const hasParams = !!(card.params || card.class || (card.init && Object.keys(card.init).length));
-        const paramsActive = this.activeParamCardId === card.id;
         const isSel = this.selected[dir] === card.id;
         const isExp = this.expanded === card.id;
         const cardStyle: React.CSSProperties = {
@@ -765,7 +764,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             borderRadius: 8, padding: 14, marginBottom: 12, background: 'var(--theia-editorWidget-background)',
         };
         const btn: React.CSSProperties = { cursor: runnable ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, background: runnable ? 'var(--theia-button-background)' : 'var(--theia-button-secondaryBackground)', color: 'var(--theia-button-foreground)', opacity: runnable ? 1 : 0.6 };
-        const gearBtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid ' + (paramsActive ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 6, padding: '5px 10px', fontSize: 12.5, background: paramsActive ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' };
+        // Plain, consistent secondary-button look — no toggled/grayed active state.
+        const gearBtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 10px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' };
+        const mm = dir === 'models' ? this.modelMath.get(card.id) : undefined;
+        const displaying = mm?.status === 'loading';
+        const displayBtn: React.CSSProperties = { cursor: this.kernelReady && !displaying ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.kernelReady && !displaying ? 1 : 0.6 };
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
             h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } }),
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
@@ -775,15 +778,19 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             dir === 'meshes' ? this.renderMeshPreview(card) : null,
-            dir === 'models' ? this.renderModelMath(card) : null,
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
-                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), paramsActive ? 'Parameters ▸' : 'Parameters') : null,
+                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
                 dir !== 'visualizations' ? h('button', { style: gearBtn, title: 'Open this case (case.py) in the editor', onClick: () => this.editCardFile() }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit') : null,
-                h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
-            out ? h('div', { style: { marginTop: 10, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 8, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
-                out.cells.map((c, i) => this.renderCell(c, 'c' + i)),
-                out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null) : null);
+                dir === 'models'
+                    ? h('button', { style: displayBtn, disabled: !this.kernelReady || displaying, title: 'Build the model and display its equations below', onClick: () => this.loadModelMath(card, true) }, h('span', { className: 'codicon codicon-' + (displaying ? 'loading codicon-modifier-spin' : 'symbol-structure'), style: { verticalAlign: 'middle', marginRight: 6 } }), displaying ? 'Displaying…' : 'Display model')
+                    : h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
+            // Single output cell below the buttons: for models the derived equations
+            // (Display model rewrites this same cell); for mesh/solver the run output.
+            dir === 'models' ? this.renderModelMath(card)
+                : (out ? h('div', { style: { marginTop: 10, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 8, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
+                    out.cells.map((c, i) => this.renderCell(c, 'c' + i)),
+                    out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null) : null));
         return h('div', { key: card.id, style: cardStyle }, header, body);
     }
 
