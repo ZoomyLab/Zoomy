@@ -1,6 +1,7 @@
 import React from '@theia/core/shared/react';
 import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
+import { OpenerService, open } from '@theia/core/lib/browser';
 import { URI, Emitter } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, DisplayCell } from './zoomy-cli-loader';
@@ -138,6 +139,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // Case-as-source-of-truth. The GUI is only usable with an open case; every
     // edit is written back to the case folder's case.py.
     @inject(FileService) protected readonly fileService: FileService;
+    @inject(OpenerService) protected readonly openerService: OpenerService;
     protected caseUri: URI | undefined;
     caseName = '';
     cases: string[] = [];
@@ -305,6 +307,16 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const py = this.cli.exportCase(spec, 'py');
             await this.fileService.write(this.caseUri, py);
         } catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
+    }
+    /** "Edit" on a model/mesh/solver card: flush pending edits, then open the
+     *  case's case.py in the editor (auto-revealed in the Explorer). The case is
+     *  the single source of truth, so editing = editing case.py directly. */
+    async editCardFile(): Promise<void> {
+        if (!this.caseUri) { return; }
+        try {
+            await this.persistCase();
+            await open(this.openerService, this.caseUri);
+        } catch (e: any) { this.setNotice('Open in editor failed: ' + (e?.message || e)); }
     }
     protected schedulePersist(): void {
         if (!this.caseUri) { return; }
@@ -640,6 +652,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
                 hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), paramsActive ? 'Parameters ▸' : 'Parameters') : null,
+                dir !== 'visualizations' ? h('button', { style: gearBtn, title: 'Open this case (case.py) in the editor', onClick: () => this.editCardFile() }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit') : null,
                 h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
             out ? h('div', { style: { marginTop: 10, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 8, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
                 out.cells.map((c, i) => this.renderCell(c, 'c' + i)),
