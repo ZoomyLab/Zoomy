@@ -896,7 +896,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' } },
                 h('button', { style: runBtn, disabled: this.simBusy || !this.kernelReady, onClick: () => this.runAssembly() },
                     h('span', { className: 'codicon codicon-play', style: { verticalAlign: 'middle', marginRight: 6 } }), this.simBusy ? 'Running…' : 'Run simulation'),
-                h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap' } }, chip('model', selName('models')), chip('mesh', selName('meshes')), chip('solver', selName('solvers')), chip('viz', selName('visualizations')))),
+                h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap' } }, chip('model', selName('models')), chip('mesh', selName('meshes')), chip('solver', selName('solvers')))),
             this.simStatus ? h('div', { style: { fontSize: 12, color: this.simRan && !this.simError ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-descriptionForeground)', marginTop: 8 } }, this.simStatus) : null,
             // Run computes only — compute errors surface here; the visualization
             // itself renders in the Visualization tab's viewer, never here.

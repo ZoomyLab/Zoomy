@@ -78,32 +78,28 @@ export class ZoomyViewWidget extends ReactWidget {
                     ['notebook', 'Open in Notebook Mode', 'zoomy.openInNotebook'],
                     ['play', 'Run simulation', 'zoomy.run'],
                 ]),
-                this.group('Case', [
-                    ['arrow-down', 'Export case (.py)', 'zoomy.exportPy'],
-                    ['notebook', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
-                    ['arrow-up', 'Import case…', 'zoomy.importCase'],
-                ]),
                 this.group('Project', [
                     ['save', 'Save project', 'zoomy.saveProject'],
                     ['folder-opened', 'Load project', 'zoomy.loadProject'],
+                    ['arrow-down', 'Export case (.py)', 'zoomy.exportPy'],
+                    ['notebook', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
+                    ['arrow-up', 'Import case…', 'zoomy.importCase'],
                 ]),
                 this.renderBackends()),
             this.renderFooter());
     }
 
-    /** The Zoomy wordmark + tagline at the top of the panel. Replace the inline
-     *  SVG with the real Zoomy logo asset when available. */
+    /** Absolute URL for a bundled gui/ asset (served next to the app). */
+    protected asset(file: string): string { try { return new URL('gui/assets/' + file, document.baseURI).href; } catch { return 'gui/assets/' + file; } }
+
+    /** The Zoomy logo + tagline at the top of the panel. */
     protected renderBrand(): React.ReactNode {
         const h = React.createElement;
-        const wave = h('svg', { width: 26, height: 26, viewBox: '0 0 32 32', style: { flex: '0 0 auto' } },
-            h('circle', { cx: 16, cy: 16, r: 15, fill: 'var(--theia-button-background)', opacity: 0.14 }),
-            h('path', { d: 'M3 20 q4 -6 8 0 t8 0 t8 0', fill: 'none', stroke: 'var(--theia-button-background)', strokeWidth: 2.4, strokeLinecap: 'round' }),
-            h('path', { d: 'M3 13 q4 -6 8 0 t8 0 t8 0', fill: 'none', stroke: 'var(--theia-button-background)', strokeWidth: 1.6, strokeLinecap: 'round', opacity: 0.5 }));
         return h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 10px', borderBottom: '1px solid var(--theia-panel-border)' } },
-            wave,
+            h('img', { src: this.asset('zoomy-logo.svg'), alt: 'Zoomy', style: { height: 34, width: 'auto', flex: '0 0 auto' } }),
             h('div', null,
-                h('div', { style: { fontSize: 16, fontWeight: 800, letterSpacing: '.02em', lineHeight: 1.1 } }, 'Zoomy'),
-                h('div', { style: { fontSize: 10.5, color: 'var(--theia-descriptionForeground)' } }, 'Shallow-flow modeling')));
+                h('div', { style: { fontSize: 17, fontWeight: 800, letterSpacing: '.02em', lineHeight: 1.1 } }, 'Zoomy'),
+                h('div', { style: { fontSize: 10.5, color: 'var(--theia-descriptionForeground)' } }, 'Free Surface Flow Modeling')));
     }
 
     /** Footer: GitHub + MBD-chair links. Swap the text for the real logos when
@@ -116,11 +112,11 @@ export class ZoomyViewWidget extends ReactWidget {
             onMouseEnter: (e: any) => { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; },
             onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; },
         }, icon ? h('span', { className: 'codicon codicon-' + icon }) : null, label);
-        return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 10px', borderTop: '1px solid var(--theia-panel-border)' } },
+        return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 12px', borderTop: '1px solid var(--theia-panel-border)' } },
             link('github-inverted', 'GitHub repository', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
-            // TODO: point to the MBD chair page + swap in the chair logo asset.
-            link('mortar-board', 'MBD Chair · RWTH Aachen', 'https://www.rwth-aachen.de/', 'Chair for Methods for Model-Based Development (MBD), RWTH Aachen'),
-            h('div', { style: { fontSize: 10, color: 'var(--theia-descriptionForeground)', padding: '4px 4px 0' } }, 'Zoomy — backend-less GUI'));
+            // MBD chair logo — clickable, on a light chip so it reads in either theme.
+            h('a', { href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University', style: { display: 'inline-block', marginTop: 8, padding: '6px 8px', background: '#ffffff', borderRadius: 6 } },
+                h('img', { src: this.asset('mbd-logo.png'), alt: 'MBD — RWTH Aachen University', style: { height: 30, width: 'auto', display: 'block' } })));
     }
 
     /** The Backend group: a "Connect backend…" action plus each connected backend
