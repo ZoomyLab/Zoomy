@@ -91,6 +91,12 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         this.injectAppModeStyle();
         this.shell.onDidChangeCurrentWidget(() => this.updateAppMode());
 
+        // #10 offline + cross-origin isolation: register the service worker (it
+        // caches the shell/gui/CDN/wheels for offline and injects COOP/COEP so
+        // SharedArrayBuffer / kernel interrupt work on GitHub Pages). Takes effect
+        // from the next visit (no disruptive first-load reload).
+        try { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); } } catch { /* ignore */ }
+
         this.openStart().catch(e => console.error('zoomy start', e));
         if (typeof location !== 'undefined' && /[?&]autorun/.test(location.search)) {
             setTimeout(() => this.openNotebook(true).catch(e => console.error('zoomy autorun', e)), 1500);
