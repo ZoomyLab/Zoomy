@@ -10,7 +10,9 @@ import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-ba
 import { FileService, FileServiceContribution } from '@theia/filesystem/lib/browser/file-service';
 import { RemoteFileServiceContribution } from '@theia/filesystem/lib/browser/remote-file-service-contribution';
 import { WorkspaceService } from '@theia/workspace/lib/browser/workspace-service';
+import { FileChangeType } from '@theia/filesystem/lib/common/files';
 import { MemoryFileSystemProvider } from './memory-fs-provider';
+import { getZoomyCli } from './zoomy-cli-loader';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
 import { NotebookTypeRegistry } from '@theia/notebook/lib/browser/notebook-type-registry';
@@ -151,6 +153,8 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         try { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); } } catch { /* ignore */ }
 
         this.setBackendStatus([]);
+        // Keep every case's case.py and case.ipynb in sync on save.
+        this.startCaseSync();
         // Open file:///zoomy as the workspace (so the Explorer shows the cases as
         // folders), then land on the model configuration. openWorkspace reloads
         // the window once with preserveWindow; guarded so it can never loop.
@@ -183,6 +187,46 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         } catch (e) { console.warn('zoomy workspace open', e); }
         // Land directly on the model configuration, in the classical IDE layout.
         this.openModelConfig().catch(e => console.error('zoomy open config', e));
+    }
+
+    /** Extract the .py source (jupytext) from a case.ipynb's cells. */
+    protected pyFromIpynb(ipynb: string): string {
+        const nb = JSON.parse(ipynb);
+        return (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : (c.source || ''))).join('\n\n');
+    }
+
+    /** Keep every case's case.py and case.ipynb in sync: whenever one is saved,
+     *  regenerate the other from it (parseCase → exportCase). Writes only when the
+     *  content actually changes, and an echo-guard skips our own writes, so it can
+     *  never loop. Only syncs a pair that already exists (won't auto-create). */
+    protected async startCaseSync(): Promise<void> {
+        let cli: any;
+        try { cli = await getZoomyCli(); } catch (e) { console.warn('zoomy sync: cli unavailable', e); return; }
+        const echo = new Map<string, string>(); // path → content we just wrote
+        const rx = /^\/zoomy\/cases\/[^/]+\/case\.(py|ipynb)$/;
+        this.fileService.onDidFilesChange(async event => {
+            for (const change of event.changes) {
+                if (change.type === FileChangeType.DELETED) { continue; }
+                const uri = change.resource;
+                const p = uri.path.toString();
+                const m = rx.exec(p);
+                if (!m) { continue; }
+                let content: string;
+                try { content = (await this.fileService.read(uri)).value; } catch { continue; }
+                if (echo.get(p) === content) { echo.delete(p); continue; } // our own write
+                const isPy = m[1] === 'py';
+                const sibling = uri.parent.resolve(isPy ? 'case.ipynb' : 'case.py');
+                if (!(await this.fileService.exists(sibling))) { continue; } // only sync an existing pair
+                try {
+                    const spec = cli.parseCase(isPy ? content : this.pyFromIpynb(content));
+                    const next = cli.exportCase(spec, isPy ? 'ipynb' : 'py');
+                    const cur = (await this.fileService.read(sibling)).value;
+                    if (cur === next) { continue; } // already in sync — stop the chain
+                    echo.set(sibling.path.toString(), next);
+                    await this.fileService.write(sibling, next);
+                } catch (e) { console.warn('zoomy case sync', p, e); }
+            }
+        });
     }
 
     protected async mc(): Promise<ZoomyModelConfigWidget> {

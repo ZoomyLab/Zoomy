@@ -374,8 +374,13 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         let schema: any;
         if (card.params) { schema = card.params; }
         else if (card.class) {
-            try { const res = await this.cli.extractParams(card.class, card.init || {}); schema = res?.params || deriveSchema(card.init); }
-            catch { schema = deriveSchema(card.init); }
+            // extract_param_schema returns a JSON STRING (json.dumps) — parse it,
+            // else res?.params is undefined and we lose every introspected param.
+            try {
+                const res = await this.cli.extractParams(card.class, card.init || {});
+                const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+                schema = (parsed && parsed.params) ? parsed.params : deriveSchema(card.init);
+            } catch { schema = deriveSchema(card.init); }
         } else { schema = deriveSchema(card.init); }
         this.schemas.set(card.id, schema);
         this.onParamsChangedEmitter.fire(); this.update();
@@ -454,12 +459,19 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 const step = type === 'Integer' ? 1 : (p.step || 'any');
                 input = h('input', { type: 'number', step, style: inputS, value: cur == null ? '' : cur, onChange: (e: any) => { const v = e.target.value; this.setParam(card, name, v === '' ? null : (type === 'Integer' ? parseInt(v, 10) : parseFloat(v))); } });
             } else {
-                input = h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, JSON.stringify(cur));
+                // Structural / composed params (Dict, List, ClassSelector, Parameter):
+                // shown read-only — they're built in code, not via a simple input.
+                const short = cur == null ? '—'
+                    : (Array.isArray(cur) ? '[' + cur.length + ' item' + (cur.length === 1 ? '' : 's') + ']'
+                    : (typeof cur === 'object' ? '⟨' + (p.type || 'object') + '⟩' : String(cur)));
+                input = h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', fontStyle: 'italic' }, title: 'Composed in code (' + (p.type || 'object') + ')' }, short);
             }
+            const docTip = p.doc ? h('span', { title: p.doc, style: { fontSize: 11, color: 'var(--theia-descriptionForeground)', cursor: 'help' } }, ' ⓘ') : null;
             return h('div', { key: name, style: rowS },
                 h('label', { style: labelS, title: p.doc || '' }, name),
                 input,
-                (p.bounds && Array.isArray(p.bounds)) ? h('span', { style: { fontSize: 11, color: 'var(--theia-descriptionForeground)' } }, '[' + (p.bounds[0] ?? '') + ', ' + (p.bounds[1] ?? '') + ']') : null);
+                (p.bounds && Array.isArray(p.bounds)) ? h('span', { style: { fontSize: 11, color: 'var(--theia-descriptionForeground)' } }, '[' + (p.bounds[0] ?? '') + ', ' + (p.bounds[1] ?? '') + ']') : null,
+                docTip);
         };
         return h('div', { style: { marginTop: 10, borderTop: '1px dashed var(--theia-panel-border)', paddingTop: 8 } }, names.map(field));
     }
