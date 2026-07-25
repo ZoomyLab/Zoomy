@@ -38,7 +38,8 @@ export class ZoomyViewWidget extends ReactWidget {
     protected render(): React.ReactNode {
         const h = React.createElement;
         return h('div', { style: { padding: '8px 4px', fontFamily: 'var(--theia-font-family)' } },
-            this.group('Configuration', [
+            this.group('Cases', [
+                ['new-folder', 'New case…', 'zoomy.newCase'],
                 ['settings-gear', 'Open model configuration', 'zoomy.openModelConfig'],
                 ['play', 'Run simulation', 'zoomy.run'],
             ]),

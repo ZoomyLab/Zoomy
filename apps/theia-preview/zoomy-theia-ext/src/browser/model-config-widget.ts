@@ -1,7 +1,16 @@
 import React from '@theia/core/shared/react';
-import { injectable, postConstruct } from '@theia/core/shared/inversify';
+import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureGit, DisplayCell } from './zoomy-cli-loader';
+import { URI } from '@theia/core';
+import { FileService } from '@theia/filesystem/lib/browser/file-service';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, DisplayCell } from './zoomy-cli-loader';
+
+// The project root in the browser FS. A case is a folder here with a canonical
+// `case.py` (zoomy_prepost jupytext) that is the SINGLE SOURCE OF TRUTH — the GUI
+// only ever edits an open case, and every edit is written back to case.py, so the
+// folder / CLI / GUI can never drift out of sync.
+const PROJECT_ROOT = 'file:///zoomy/cases';
+const CURRENT_CASE_KEY = 'zoomy-current-case';
 
 declare const window: any;
 /** Render markdown via marked when available, else the minimal inline fallback. */
@@ -113,12 +122,17 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
     backendUrl = 'http://localhost:8080';
-    protected connectedTags: string[] = [];
-    // #7 In-browser git (isomorphic-git + lightning-fs).
-    protected repoUrl = 'https://github.com/ZoomyLab/Zoomy';
-    protected gitToken = '';
-    protected gitBusy = false;
-    protected repoCases: string[] = [];
+    connectedTags: string[] = [];
+    // Case-as-source-of-truth. The GUI is only usable with an open case; every
+    // edit is written back to the case folder's case.py.
+    @inject(FileService) protected readonly fileService: FileService;
+    protected caseUri: URI | undefined;
+    protected caseName = '';
+    protected cases: string[] = [];
+    protected newCaseName = '';
+    protected persistTimer: any;
+    /** External hook so the module can reflect connected backends in the status bar. */
+    onBackendsChanged: ((tags: string[]) => void) | undefined;
 
     @postConstruct()
     protected init(): void {
@@ -154,15 +168,84 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 catch (e) { this.cardsByTab[t.dir] = []; }
             }
             this.loaded = true;
-            // #4 URL-autoload: ?case=<url> imports a case into the selection.
-            try {
-                const caseUrl = new URLSearchParams(location.search).get('case');
-                if (caseUrl) { const text = await (await fetch(caseUrl)).text(); this.applySpec(this.cli.parseCase(text)); this.setNotice('Loaded case from URL.'); }
-            } catch (e) { /* ignore autoload errors */ }
+            await this.listCases();
+            // #4 URL-autoload: ?case=<url> imports a case into a new case.
+            const caseUrl = new URLSearchParams(location.search).get('case');
+            if (caseUrl) {
+                try { const text = await (await fetch(caseUrl)).text(); await this.newCase('imported', this.cli.parseCase(text)); } catch { /* ignore */ }
+            } else {
+                // Restore the last open case (single source of truth); else stay gated.
+                const last = (() => { try { return localStorage.getItem(CURRENT_CASE_KEY); } catch { return null; } })();
+                if (last && this.cases.includes(last)) { await this.openCaseByName(last); }
+            }
         } catch (e: any) {
             this.error = e?.message || String(e);
         }
         this.update();
+    }
+
+    // === Case as the single source of truth =================================
+    protected caseFileUri(name: string): URI { return new URI(PROJECT_ROOT + '/' + name + '/case.py'); }
+
+    /** List case folders under the project root (each has a case.py). */
+    protected async listCases(): Promise<void> {
+        try {
+            const root = new URI(PROJECT_ROOT);
+            if (!(await this.fileService.exists(root))) { this.cases = []; return; }
+            const stat = await this.fileService.resolve(root);
+            const names: string[] = [];
+            for (const child of stat.children || []) {
+                if (child.isDirectory && await this.fileService.exists(child.resource.resolve('case.py'))) { names.push(child.resource.path.base); }
+            }
+            this.cases = names.sort();
+        } catch { this.cases = []; }
+    }
+
+    /** Create a new case folder with a case.py, then open it. If a spec is given
+     *  (import), use it; otherwise start from the first runnable card in each tab. */
+    async newCase(name: string, spec?: any): Promise<void> {
+        const clean = (name || 'case').trim().replace(/[^a-zA-Z0-9_-]+/g, '_') || 'case';
+        this.selected['models'] = ''; this.selected['meshes'] = ''; this.selected['solvers'] = ''; this.selected['visualizations'] = '';
+        this.edited.clear();
+        if (spec) { this.applySpec(spec); }
+        else {
+            for (const dir of ['models', 'meshes', 'solvers', 'visualizations']) { const c = this.pickedCard(dir); if (c) { this.selected[dir] = c.id; } }
+        }
+        this.caseUri = this.caseFileUri(clean); this.caseName = clean;
+        await this.persistCase();
+        await this.listCases();
+        try { localStorage.setItem(CURRENT_CASE_KEY, clean); } catch { /* ignore */ }
+        this.setNotice('Created case "' + clean + '".'); this.update();
+        this.onBackendsChanged?.(this.connectedTags);
+    }
+
+    async openCaseByName(name: string): Promise<void> {
+        try {
+            const uri = this.caseFileUri(name);
+            const content = await this.fileService.read(uri);
+            this.applySpec(this.cli.parseCase(content.value));
+            this.caseUri = uri; this.caseName = name;
+            try { localStorage.setItem(CURRENT_CASE_KEY, name); } catch { /* ignore */ }
+            this.setNotice('Opened case "' + name + '".'); this.update();
+        } catch (e: any) { this.setNotice('Open case failed: ' + (e?.message || e)); }
+    }
+
+    /** Recompose the spec from the current selection and write it back to case.py
+     *  — keeping the folder the single source of truth. Debounced by schedulePersist. */
+    async persistCase(): Promise<void> {
+        if (!this.caseUri) { return; }
+        try {
+            const dir = this.caseUri.parent;
+            if (!(await this.fileService.exists(dir))) { await this.fileService.createFolder(dir); }
+            const spec = await this.gatherSpec();
+            const py = this.cli.exportCase(spec, 'py');
+            await this.fileService.write(this.caseUri, py);
+        } catch (e: any) { console.error('persistCase', e); }
+    }
+    protected schedulePersist(): void {
+        if (!this.caseUri) { return; }
+        clearTimeout(this.persistTimer);
+        this.persistTimer = setTimeout(() => this.persistCase(), 600);
     }
 
     /** card.init overlaid with the user's edits from the param form. */
@@ -186,6 +269,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
 
     protected setParam(card: any, name: string, value: any): void {
         const e = this.edited.get(card.id) || {}; e[name] = value; this.edited.set(card.id, e); this.update();
+        this.schedulePersist();
     }
 
     protected async runCard(card: any): Promise<void> {
@@ -260,6 +344,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.selected[dir] = card.id;
         this.expanded = wasExpanded ? undefined : card.id;
         this.update();
+        this.schedulePersist();
         if (dir === 'visualizations' && this.simRan && !this.simBusy && card.snippet) { this.runViz(card); }
     }
 
@@ -363,13 +448,13 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         };
         input.click();
     }
-    /** Load a case from raw .py/.ipynb text into the configurator (used by the
-     *  Explorer "Open in model configurator" context command). */
-    openCaseText(text: string, isIpynb: boolean, name?: string): void {
+    /** Load a case from raw .py/.ipynb text (Explorer "Open in model configurator")
+     *  as a new case in the project — keeping the case-as-source-of-truth model. */
+    async openCaseText(text: string, isIpynb: boolean, name?: string): Promise<void> {
         try {
             if (isIpynb) { const nb = JSON.parse(text); text = (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : c.source)).join('\n\n'); }
-            this.applySpec(this.cli.parseCase(text));
-            this.setNotice('Opened case' + (name ? ': ' + name : '') + ' in the configurator.');
+            const spec = this.cli.parseCase(text);
+            await this.newCase((name || 'case').replace(/\.(py|ipynb)$/, ''), spec);
         } catch (e: any) { this.setNotice('Open case failed: ' + (e?.message || e)); }
     }
     /** Re-select the cards a spec refers to (by class_path / mesh spec / tag). */
@@ -409,75 +494,13 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const tag = adapter?.tag || (this.cli.availableTags ? this.cli.availableTags() : []).slice(-1)[0];
             this.connectedTags = this.cli.availableTags ? this.cli.availableTags() : (tag ? [tag] : []);
             this.setNotice('Connected backend: ' + (tag || url));
-            try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => { this.connectedTags = this.cli.availableTags(); this.update(); }); } catch { /* ignore */ }
+            this.onBackendsChanged?.(this.connectedTags);
+            try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => { this.connectedTags = this.cli.availableTags(); this.onBackendsChanged?.(this.connectedTags); this.update(); }); } catch { /* ignore */ }
             this.update();
         } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
     }
 
-    // --- #7 In-browser git: clone a case repo, list its cases, import/save. ---
-    protected readonly GIT_DIR = '/repo';
-    protected readonly CORS_PROXY = 'https://cors.isomorphic-git.org';
-    protected gitAuth(): any { return this.gitToken ? { username: this.gitToken, password: 'x-oauth-basic' } : {}; }
-
-    async cloneRepo(): Promise<void> {
-        const url = this.repoUrl.trim(); if (!url || this.gitBusy) { return; }
-        this.gitBusy = true; this.setNotice('Cloning ' + url + '… (shallow, browser git)');
-        try {
-            const { git, http, fs } = await ensureGit();
-            try { await fs.promises.rmdir(this.GIT_DIR, { recursive: true }); } catch { /* fresh */ }
-            await git.clone({ fs, http, dir: this.GIT_DIR, url, corsProxy: this.CORS_PROXY, singleBranch: true, depth: 1, onAuth: () => this.gitAuth() });
-            await this.listRepoCases(fs);
-            this.setNotice('Cloned. Found ' + this.repoCases.length + ' case file(s).');
-        } catch (e: any) { this.setNotice('Clone failed: ' + (e?.message || e)); }
-        finally { this.gitBusy = false; this.update(); }
-    }
-    /** Walk the cloned repo for .py/.ipynb files that look like cases. */
-    protected async listRepoCases(fs: any): Promise<void> {
-        const out: string[] = [];
-        const walk = async (dir: string, depth: number) => {
-            if (depth > 4) { return; }
-            let entries: string[] = [];
-            try { entries = await fs.promises.readdir(dir); } catch { return; }
-            for (const name of entries) {
-                if (name === '.git' || name === 'node_modules') { continue; }
-                const full = dir + '/' + name;
-                let stat: any; try { stat = await fs.promises.stat(full); } catch { continue; }
-                if (stat.isDirectory()) { await walk(full, depth + 1); }
-                else if (/\.(py|ipynb)$/.test(name)) { out.push(full.slice(this.GIT_DIR.length + 1)); }
-            }
-        };
-        await walk(this.GIT_DIR, 0);
-        this.repoCases = out.slice(0, 200);
-    }
-    protected async importFromRepo(path: string): Promise<void> {
-        try {
-            const { fs } = await ensureGit();
-            let text = await fs.promises.readFile(this.GIT_DIR + '/' + path, 'utf8');
-            if (path.endsWith('.ipynb')) { const nb = JSON.parse(text); text = (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : c.source)).join('\n\n'); }
-            this.applySpec(this.cli.parseCase(text));
-            this.setNotice('Imported ' + path + ' from repo.');
-        } catch (e: any) { this.setNotice('Import failed: ' + (e?.message || e)); }
-    }
-    /** Write the current selection as a case into the repo, commit and push. */
-    async pushCaseToRepo(): Promise<void> {
-        if (this.gitBusy) { return; }
-        this.gitBusy = true; this.setNotice('Committing + pushing case…');
-        try {
-            const { git, http, fs } = await ensureGit();
-            const spec = await this.gatherSpec();
-            const py = this.cli.exportCase(spec, 'py');
-            const rel = 'cases/' + (spec.meta?.title || 'zoomy_case').toLowerCase().replace(/[^a-z0-9]+/g, '_') + '.py';
-            try { await fs.promises.mkdir(this.GIT_DIR + '/cases'); } catch { /* exists */ }
-            await fs.promises.writeFile(this.GIT_DIR + '/' + rel, py, 'utf8');
-            await git.add({ fs, dir: this.GIT_DIR, filepath: rel });
-            await git.commit({ fs, dir: this.GIT_DIR, message: 'Add/update ' + rel + ' from Zoomy GUI', author: { name: 'Zoomy GUI', email: 'gui@zoomy' } });
-            await git.push({ fs, http, dir: this.GIT_DIR, corsProxy: this.CORS_PROXY, onAuth: () => this.gitAuth() });
-            this.setNotice('Committed + pushed ' + rel + '.');
-        } catch (e: any) { this.setNotice('Push failed: ' + (e?.message || e) + ' (needs a repo you can write + a token).'); }
-        finally { this.gitBusy = false; this.update(); }
-    }
-
-    protected renderCard(card: any, dir: string): React.ReactNode {
+        protected renderCard(card: any, dir: string): React.ReactNode {
         const h = React.createElement;
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
@@ -511,11 +534,39 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         return h('div', { key: card.id, style: cardStyle }, header, body);
     }
 
+    /** Shown when no case is open: the GUI is gated until a case exists. */
+    protected renderGate(): React.ReactNode {
+        const h = React.createElement;
+        const page: React.CSSProperties = { maxWidth: 640, margin: '0 auto', padding: '48px 24px', color: 'var(--theia-foreground)', fontFamily: 'var(--theia-font-family)' };
+        const card: React.CSSProperties = { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 18, marginTop: 18, background: 'var(--theia-editorWidget-background)' };
+        const inputS: React.CSSProperties = { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '7px 10px', fontSize: 13, flex: 1 };
+        const primary: React.CSSProperties = { cursor: 'pointer', border: 'none', borderRadius: 6, padding: '7px 16px', fontSize: 13, fontWeight: 600, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)' };
+        const listBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, background: 'transparent', color: 'var(--theia-foreground)', width: '100%', textAlign: 'left', marginTop: 6 };
+        const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 8 };
+        return h('div', { style: page },
+            h('h1', { style: { fontSize: 26, margin: '0 0 6px', fontWeight: 700 } }, 'Model configuration'),
+            h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, lineHeight: 1.6 } },
+                'A Zoomy project is a set of ', h('strong', null, 'cases'), ', and each case is a ', h('strong', null, 'folder'),
+                ' that is the single source of truth. The configurator only edits an open case — every change is written straight back to the case, so it can never drift out of sync with the CLI. Create or open a case to begin.'),
+            h('div', { style: card },
+                h('div', { style: label }, 'New case'),
+                h('div', { style: { display: 'flex', gap: 8 } },
+                    h('input', { style: inputS, value: this.newCaseName, placeholder: 'case name (e.g. dam_break_1d)', onChange: (e: any) => { this.newCaseName = e.target.value; this.update(); }, onKeyDown: (e: any) => { if (e.key === 'Enter' && this.newCaseName.trim()) { this.newCase(this.newCaseName); } } }),
+                    h('button', { style: primary, disabled: !this.newCaseName.trim(), onClick: () => this.newCase(this.newCaseName) }, 'Create case'))),
+            this.cases.length ? h('div', { style: card },
+                h('div', { style: label }, 'Open a case'),
+                this.cases.map(name => h('button', { key: name, style: listBtn, onClick: () => this.openCaseByName(name) }, h('span', { className: 'codicon codicon-folder' }), name))) : null,
+            this.notice ? h('div', { style: { fontSize: 12, marginTop: 16, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))' } }, this.notice) : null);
+    }
+
     protected render(): React.ReactNode {
         const h = React.createElement;
         const page: React.CSSProperties = { maxWidth: 900, margin: '0 auto', padding: '32px 24px', color: 'var(--theia-foreground)', fontFamily: 'var(--theia-font-family)' };
         if (this.error) { return h('div', { style: page }, h('h2', null, 'Model configuration'), h('pre', { style: { color: 'var(--theia-errorForeground)' } }, this.error)); }
         if (!this.loaded) { return h('div', { style: page }, h('h2', null, 'Model configuration'), h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'Loading the card catalog + booting the in-browser kernel…')); }
+        // Case-as-source-of-truth: no open case → the GUI is not usable; you must
+        // create or open a case first (so the GUI can never be out of sync with a folder).
+        if (!this.caseUri) { return this.renderGate(); }
         const tabBtn = (t: TabDef): React.ReactNode => h('button', {
             key: t.dir, onClick: () => { this.active = t.dir; this.update(); },
             style: { cursor: 'pointer', border: 'none', borderBottom: this.active === t.dir ? '2px solid var(--theia-button-background)' : '2px solid transparent', background: 'transparent', color: this.active === t.dir ? 'var(--theia-foreground)' : 'var(--theia-descriptionForeground)', padding: '8px 14px', fontSize: 13, fontWeight: 600 },
@@ -538,24 +589,16 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // Case / Project / Backend actions live in the Zoomy activity-bar view and
         // the top "Zoomy" menu now, not in a self-coded toolbar here. The git row
         // stays (kept, per feedback); native SCM binding is a follow-up.
-        const gitRow = h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 } },
-            h('span', { className: 'codicon codicon-git-merge', style: { color: 'var(--theia-descriptionForeground)' } }),
-            h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Repository:'),
-            h('input', { style: { ...inputS, minWidth: 320 }, value: this.repoUrl, onChange: (e: any) => { this.repoUrl = e.target.value; this.update(); }, placeholder: 'https://github.com/you/cases' }),
-            h('button', { style: tbtn, disabled: this.gitBusy, onClick: () => this.cloneRepo() }, this.gitBusy ? 'Working…' : 'Clone'),
-            h('input', { style: { ...inputS, minWidth: 150 }, type: 'password', value: this.gitToken, onChange: (e: any) => { this.gitToken = e.target.value; this.update(); }, placeholder: 'token (for push)' }),
-            h('button', { style: tbtn, disabled: this.gitBusy, onClick: () => this.pushCaseToRepo() }, 'Commit + push case'),
-            this.repoCases.length ? h('select', { style: inputS, onChange: (e: any) => { if (e.target.value) { this.importFromRepo(e.target.value); } }, value: '' },
-                [h('option', { key: '_', value: '' }, this.repoCases.length + ' case(s) — import…'), ...this.repoCases.map(p => h('option', { key: p, value: p }, p))]) : null);
         return h('div', { style: page },
-            h('h1', { style: { fontSize: 26, margin: '0 0 4px', fontWeight: 700 } }, 'Model configuration'),
+            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 4px' } },
+                h('h1', { style: { fontSize: 26, fontWeight: 700, margin: 0 } }, 'Model configuration'),
+                h('span', { style: { fontSize: 13, color: 'var(--theia-descriptionForeground)' } }, 'case: ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, this.caseName || '—'))),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
-                'Select a model, mesh, solver and visualization, then Run — or run any card on its own. Everything runs on the in-browser Pyodide kernel.'),
+                'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh, solver and visualization, then Run.'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)',
                 this.connectedTags.length ? h('span', { style: { fontSize: 11, marginLeft: 12, color: 'var(--theia-successForeground, #3fb950)' } }, '● backend: ' + this.connectedTags.join(', ')) : null),
-            gitRow,
             this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),

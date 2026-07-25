@@ -6,6 +6,7 @@ import {
     WidgetFactory, WidgetManager, ApplicationShell, AbstractViewContribution, bindViewContribution,
     QuickInputService
 } from '@theia/core/lib/browser';
+import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
@@ -33,6 +34,7 @@ const CMD = {
     openModelConfig: 'zoomy.openModelConfig',
     openEditor: 'zoomy.openEditor',
     openNotebook: 'zoomy.openNotebook',
+    newCase: 'zoomy.newCase',
     run: 'zoomy.run',
     exportPy: 'zoomy.exportPy',
     exportIpynb: 'zoomy.exportIpynb',
@@ -83,6 +85,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     @inject(ApplicationShell) protected readonly shell: ApplicationShell;
     @inject(QuickInputService) protected readonly quickInput: QuickInputService;
     @inject(SelectionService) protected readonly selectionService: SelectionService;
+    @inject(StatusBar) protected readonly statusBar: StatusBar;
     protected kernel: PyodideKernel;
     protected client: PyodideClient;
 
@@ -98,8 +101,9 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         // #10 offline + cross-origin isolation service worker.
         try { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); } } catch { /* ignore */ }
 
+        this.setBackendStatus([]);
         // Land directly on the model configuration, in the classical IDE layout
-        // (Explorer + Git + menu bar visible). No start page, no full-screen app mode.
+        // (Explorer + menu bar visible). No start page, no full-screen app mode.
         this.openModelConfig().catch(e => console.error('zoomy open config', e));
         if (typeof location !== 'undefined' && /[?&]autorun/.test(location.search)) {
             setTimeout(() => this.openNotebook(true).catch(e => console.error('zoomy autorun', e)), 1500);
@@ -107,12 +111,27 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     }
 
     protected async mc(): Promise<ZoomyModelConfigWidget> {
-        return (await this.widgetManager.getOrCreateWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget;
+        const w = (await this.widgetManager.getOrCreateWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget;
+        // Reflect connected backends in the status bar (the "connected backend"
+        // indicator brought over from the old GUI, in a native, portable slot).
+        if (!w.onBackendsChanged) { w.onBackendsChanged = tags => this.setBackendStatus(tags); this.setBackendStatus(w.connectedTags || []); }
+        return w;
+    }
+    protected setBackendStatus(tags: string[]): void {
+        this.statusBar.setElement('zoomy.backend', {
+            text: tags.length ? '$(server) ' + tags.join(', ') : '$(server) no backend',
+            tooltip: tags.length ? 'Connected Zoomy backends: ' + tags.join(', ') : 'No backend connected — running in-browser (Pyodide). Click to connect.',
+            command: CMD.connectBackend, alignment: StatusBarAlignment.LEFT, priority: 6000,
+        });
     }
     protected async openModelConfig(): Promise<void> {
         const w = await this.mc();
         if (!w.isAttached) { this.shell.addWidget(w, { area: 'main' }); }
         this.shell.activateWidget(w.id);
+    }
+    protected async newCase(): Promise<void> {
+        const name = await this.quickInput.input({ prompt: 'New case name', placeHolder: 'dam_break_1d' });
+        if (name && name.trim()) { const w = await this.mc(); await this.openModelConfig(); await w.newCase(name); }
     }
     protected async openEditor(): Promise<void> {
         await this.fileService.write(EDITOR_URI, SAMPLE_PY);
@@ -160,6 +179,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.openModelConfig, label: 'Zoomy: Open model configuration' }, { execute: () => this.openModelConfig() });
         reg.registerCommand({ id: CMD.openEditor, label: 'Zoomy: Open code editor' }, { execute: () => this.openEditor() });
         reg.registerCommand({ id: CMD.openNotebook, label: 'Zoomy: Open Pyodide notebook' }, { execute: () => this.openNotebook() });
+        reg.registerCommand({ id: CMD.newCase, label: 'Zoomy: New case…' }, { execute: () => this.newCase() });
         reg.registerCommand({ id: CMD.run, label: 'Zoomy: Run simulation' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).runAssembly(); } });
         reg.registerCommand({ id: CMD.exportPy, label: 'Zoomy: Export case (.py)' }, { execute: async () => (await this.mc()).exportCase('py') });
         reg.registerCommand({ id: CMD.exportIpynb, label: 'Zoomy: Export case (.ipynb)' }, { execute: async () => (await this.mc()).exportCase('ipynb') });
@@ -175,6 +195,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     registerMenus(menus: MenuModelRegistry): void {
         // A top-level "Zoomy" menu next to Help.
         menus.registerSubmenu(ZOOMY_MENU, 'Zoomy');
+        menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.newCase, label: 'New case…' });
         menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.openModelConfig, label: 'Model configuration' });
         menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.run, label: 'Run simulation' });
         menus.registerMenuAction([...ZOOMY_MENU, '2_case'], { commandId: CMD.exportPy, label: 'Export case (.py)' });
