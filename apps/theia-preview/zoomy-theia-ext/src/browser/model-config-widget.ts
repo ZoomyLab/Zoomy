@@ -104,6 +104,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected active = 'models';
     /** Active subtab (category) per tab. */
     protected readonly activeSub: Record<string, string> = {};
+    /** Card edit mode: reveals add/remove controls so a user can author a set. */
+    protected editMode = false;
     protected loaded = false;
     protected error = '';
     protected kernelStatus = '';
@@ -403,6 +405,44 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); this.update();
         await this.loadSchema(card, dir);
     }
+    // === Card authoring (edit mode) — via the cli catalog overlay ============
+    /** Add a card to the active tab: duplicate the selected/first card (a good
+     *  starting point to customise) into the active category. Persisted in the
+     *  catalog overlay so it survives reloads and can be saved with the project. */
+    async addCardToActive(): Promise<void> {
+        const dir = this.active;
+        try {
+            const base = this.pickedCard(dir) || (this.cardsByTab[dir] || [])[0];
+            const id = 'user-' + dir.replace(/s$/, '') + '-' + Date.now().toString(36);
+            const card = base
+                ? { ...JSON.parse(JSON.stringify(base)), id, title: (base.title || 'Card') + ' (copy)', category: this.activeSub[dir] || base.category || 'Custom', source: 'user' }
+                : { id, title: 'New card', category: this.activeSub[dir] || 'Custom', source: 'user' };
+            const ov = await this.cli.readCatalogOverlay(dir);
+            ov.added = (ov.added || []).filter((c: any) => c.id !== id); ov.added.push(card);
+            await this.cli.writeCatalogOverlay(dir, ov);
+            this.cardsByTab[dir] = await this.cli.listCards(dir);
+            this.expanded = id; if (dir !== 'visualizations') { this.selected[dir] = id; } else { this.selectedViz.add(id); }
+            this.setNotice('Added card "' + card.title + '". Edit its Parameters, then Save project to keep it.');
+            this.update();
+        } catch (e: any) { this.setNotice('Add card failed: ' + (e?.message || e)); }
+    }
+    /** Remove a card from the active tab (a user-added one is dropped; a shipped
+     *  one is hidden via the overlay's `removed` list). */
+    async removeCard(card: any): Promise<void> {
+        const dir = this.active;
+        try {
+            const ov = await this.cli.readCatalogOverlay(dir);
+            if ((ov.added || []).some((c: any) => c.id === card.id)) { ov.added = ov.added.filter((c: any) => c.id !== card.id); }
+            else { ov.removed = [...new Set([...(ov.removed || []), card.id])]; }
+            await this.cli.writeCatalogOverlay(dir, ov);
+            this.cardsByTab[dir] = await this.cli.listCards(dir);
+            if (this.expanded === card.id) { this.expanded = undefined; }
+            this.selectedViz.delete(card.id);
+            this.setNotice('Removed card "' + (card.title || card.id) + '".');
+            this.update();
+        } catch (e: any) { this.setNotice('Remove card failed: ' + (e?.message || e)); }
+    }
+
     /** Rebuild the open viz card's field/time schema from the current store. */
     protected refreshVizParams(): void {
         const t = this.activeParamTarget();
@@ -949,6 +989,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
             (() => { const f = this.cardFlag(card, dir, runnable); if (!f) { return null; } return h('span', { title: f.tip, style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: f.available ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: f.available ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: f.available ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, f.available ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, f.label); })(),
+            this.editMode ? h('button', { title: 'Remove this card', onClick: (e: any) => { e.stopPropagation(); this.removeCard(card); }, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-errorForeground)', padding: 2 } }, h('span', { className: 'codicon codicon-trash' })) : null,
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
@@ -1015,7 +1056,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             key: cat, onClick: () => { this.activeSub[this.active] = cat; this.update(); },
             style: { cursor: 'pointer', border: '1px solid ' + (cat === activeCat ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 999, padding: '3px 12px', fontSize: 12, background: cat === activeCat ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' },
         }, cat + ' (' + allCards.filter(c => (c.category || 'General') === cat).length + ')');
-        const subTabs = cats.length > 1 ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 } }, cats.map(subBtn)) : null;
+        const editToggle = h('button', { title: 'Toggle card editing (add / remove cards)', onClick: () => { this.editMode = !this.editMode; this.update(); }, style: { cursor: 'pointer', border: '1px solid ' + (this.editMode ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 6, padding: '3px 10px', fontSize: 12, background: this.editMode ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' } },
+            h('span', { className: 'codicon codicon-' + (this.editMode ? 'check' : 'edit'), style: { marginRight: 4 } }), this.editMode ? 'Done editing' : 'Edit cards');
+        const subTabs = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 } },
+            cats.length > 1 ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 } }, cats.map(subBtn)) : h('div', { style: { flex: 1 } }),
+            editToggle);
         const selName = (dir: string): string => { const c = this.pickedCard(dir); return c ? (c.title || c.id) : '—'; };
         const runBtn: React.CSSProperties = { cursor: this.simBusy ? 'default' : 'pointer', border: 'none', borderRadius: 6, padding: '9px 18px', fontSize: 14, fontWeight: 700, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.simBusy ? 0.7 : 1 };
         const chip = (label: string, val: string) => h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, label + ': ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, val));
@@ -1067,7 +1112,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
             subTabs,
             this.active === 'visualizations' ? this.renderVizViewer() : null,
-            cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'));
+            cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'),
+            this.editMode ? h('button', { title: 'Add a card to this tab (duplicates the selected one to start from)', onClick: () => this.addCardToActive(), style: { cursor: 'pointer', border: '1px dashed var(--theia-panel-border)', borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'transparent', color: 'var(--theia-foreground)', width: '100%', textAlign: 'left' } }, h('span', { className: 'codicon codicon-add', style: { marginRight: 6 } }), 'Add card' + (cats.length > 1 ? ' to "' + activeCat + '"' : '')) : null);
     }
 
     /** The Visualization tab's viewer: pick a viewer card below, then Render here
