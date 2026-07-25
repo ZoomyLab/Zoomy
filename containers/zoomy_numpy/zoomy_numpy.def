@@ -16,18 +16,25 @@ From: python:3.11-slim-bookworm
     Description Zoomy solver server (NumPy) — API :8080 + Jupyter :8888 + dev shell
 
 %files
-    library/zoomy_core    /opt/src/zoomy_core
-    library/zoomy_server  /opt/src/zoomy_server
-    library/zoomy_prepost /opt/src/zoomy_prepost
+    library/zoomy_core     /opt/src/zoomy_core
+    library/zoomy_server   /opt/src/zoomy_server
+    library/zoomy_prepost  /opt/src/zoomy_prepost
+    library/zoomy_plotting /opt/src/zoomy_plotting
 
 %post
     export DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
     python -m pip install --upgrade pip
     # h5py/meshio: HDF5 mesh/result IO + .msh loading (optional deps of zoomy_core).
     # jupyterlab/jupyter-server/ipykernel: the "spawn a Jupyter kernel" mode.
+    # jupytext/nbformat: case.py <-> .ipynb conversion the server uses to
+    #   materialize a submitted case (to_folder/to_notebook) — WITHOUT these a
+    #   remote submit dies with "No module named jupytext". zoomy_plotting: the
+    #   visualization/postprocess reads (zoomy_plotting as zp). Keep in sync with
+    #   ./Dockerfile.
     python -m pip install --no-cache-dir \
-        h5py meshio jupyterlab jupyter-server ipykernel \
-        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost
+        h5py meshio jupyterlab jupyter-server ipykernel jupytext nbformat \
+        /opt/src/zoomy_core /opt/src/zoomy_server /opt/src/zoomy_prepost \
+        /opt/src/zoomy_plotting
     rm -rf /opt/src
     mkdir -p /workspace     # dev-container / Jupyter bind target ($ZOOMY_ROOT)
 
@@ -56,7 +63,7 @@ From: python:3.11-slim-bookworm
     exec zoomy-server --adapter "$ZOOMY_ADAPTER" --port "$ZOOMY_PORT"
 
 %test
-    python -c "import zoomy_core, zoomy_server, zoomy_prepost, h5py, meshio; print('imports OK')"
+    python -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, h5py, meshio, jupytext, nbformat; print('imports OK')"
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
     python -c "import jupyterlab" && echo "jupyterlab OK"

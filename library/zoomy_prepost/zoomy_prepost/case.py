@@ -252,6 +252,15 @@ def _run_code():
 import json
 import os
 
+# Headless shim: the model/mesh cards end in display(model.describe()), a
+# Jupyter builtin. Define a no-op so `python run.py` runs on any backend /
+# plain env (the GUI worker & Jupyter provide the real one).
+try:
+    display
+except NameError:
+    def display(*_a, **_k):
+        pass
+
 # Folder form: the notebook defines model/mesh/settings in the cells above;
 # a standalone run.py loads them from the sibling case-folder files.
 if "model" not in globals():
