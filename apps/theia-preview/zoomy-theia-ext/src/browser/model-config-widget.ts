@@ -396,15 +396,33 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.selected[dir] = card.id;
         this.activeParamCardId = card.id; this.activeParamDir = dir;
         // Show an immediate preview schema so the panel has content right away.
-        if (!this.schemas.has(card.id) && !card.params) { this.schemas.set(card.id, deriveSchema(card.init)); }
+        if (dir === 'visualizations') { this.schemas.set(card.id, this.vizParamSchema()); }
+        else if (!this.schemas.has(card.id) && !card.params) { this.schemas.set(card.id, deriveSchema(card.init)); }
         this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); this.update();
-        await this.loadSchema(card);
+        await this.loadSchema(card, dir);
+    }
+    /** Rebuild the open viz card's field/time schema from the current store. */
+    protected refreshVizParams(): void {
+        const t = this.activeParamTarget();
+        if (t && t.dir === 'visualizations') { this.schemas.set(t.card.id, this.vizParamSchema()); this.onParamsChangedEmitter.fire(); }
+    }
+    /** Field selector + time slider for a visualization, from the last run's store
+     *  (store_meta.fields / n_snapshots). Editable like any card parameter and
+     *  passed to the viz snippet — no bespoke visualizer code needed. */
+    protected vizParamSchema(): any {
+        const fields: string[] = (this.storeMeta?.fields || this.storeMeta?.field_names || []) as string[];
+        const nSnap = Math.max(1, Number(this.storeMeta?.n_snapshots || this.storeMeta?.n_steps || 1));
+        return {
+            field: { type: 'Selector', objects: fields, default: fields[0] ?? null, doc: 'Which stored field to plot (from the last run).' },
+            time_step: { type: 'Integer', default: 0, bounds: [0, nSnap - 1], step: 1, widget: 'slider', doc: 'Snapshot index (time) to plot.' },
+        };
     }
     /** Load a card's real parameter schema (class introspection via the worker;
      *  inline `params` need no worker; builtin cards expose their init). */
-    protected async loadSchema(card: any): Promise<void> {
+    protected async loadSchema(card: any, dir?: string): Promise<void> {
         let schema: any;
-        if (card.params) { schema = card.params; }
+        if (dir === 'visualizations') { schema = this.vizParamSchema(); }
+        else if (card.params) { schema = card.params; }
         else if (card.class) {
             // extract_param_schema returns a JSON STRING (json.dumps) — parse it,
             // else res?.params is undefined and we lose every introspected param.
@@ -487,6 +505,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                     p.objects.map((o: any) => h('option', { key: String(o), value: String(o) }, String(o))));
             } else if (type === 'String') {
                 input = h('input', { type: 'text', style: inputS, value: cur == null ? '' : String(cur), onChange: (e: any) => this.setParam(card, name, e.target.value) });
+            } else if (p.widget === 'slider' && Array.isArray(p.bounds) && p.bounds[1] != null) {
+                const lo = p.bounds[0] ?? 0, hi = p.bounds[1];
+                input = h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 8 } },
+                    h('input', { type: 'range', min: lo, max: hi, step: p.step || 1, value: cur == null ? lo : cur, style: { width: 130 }, onChange: (e: any) => this.setParam(card, name, parseInt(e.target.value, 10)) }),
+                    h('span', { style: { fontSize: 12, minWidth: 44, color: 'var(--theia-foreground)' } }, (cur == null ? lo : cur) + ' / ' + hi));
             } else if (type === 'Integer' || type === 'Number') {
                 const step = type === 'Integer' ? 1 : (p.step || 'any');
                 input = h('input', { type: 'number', step, style: inputS, value: cur == null ? '' : cur, onChange: (e: any) => { const v = e.target.value; this.setParam(card, name, v === '' ? null : (type === 'Integer' ? parseInt(v, 10) : parseFloat(v))); } });
@@ -681,6 +704,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             if (this.simStopped) { this.simStatus = 'Stopped.'; emitSimOutput({ kind: 'line', level: 'error', text: '■ Stopped.' }); return; }
             if (this.simError) { return; }
             this.simRan = true;
+            this.refreshVizParams(); // populate the viz field selector + time slider from the store
             this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
             emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Simulation complete — open Visualization to render.' });
         } catch (e: any) {
@@ -756,8 +780,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 setDisplaySink(cell => { out.cells.push(cell); this.update(); });
                 try {
                     const snippet = await this.cli.fetchSnippet(card.snippet);
-                    // Default field/step (proven path); field/timeline selectors TBD.
-                    const code = 'time_step = 0\nfield_name = None\n' + snippet;
+                    // Pass the viewer's edited field + time_step (Parameters panel:
+                    // field Selector + time slider). Unset field → snippet default.
+                    const ed = this.edited.get(card.id) || {};
+                    const ts = Number.isFinite(ed.time_step) ? ed.time_step : 0;
+                    const fld = ed.field != null && ed.field !== '' ? JSON.stringify(String(ed.field)) : 'None';
+                    const code = 'time_step = ' + ts + '\nfield_name = ' + fld + '\n' + snippet;
                     const res = await this.cli.runCode(code);
                     out.stdout = res?.output || ''; out.status = res?.status || 'success';
                 } catch (e: any) {
@@ -896,7 +924,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const h = React.createElement;
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
-        const hasParams = !!(card.params || card.class || (card.init && Object.keys(card.init).length));
+        const hasParams = dir === 'visualizations' || !!(card.params || card.class || (card.init && Object.keys(card.init).length));
         // Visualization is multi-select (checkbox); other tabs single-select.
         const vizMulti = dir === 'visualizations';
         const isSel = vizMulti ? this.selectedViz.has(card.id) : this.selected[dir] === card.id;
