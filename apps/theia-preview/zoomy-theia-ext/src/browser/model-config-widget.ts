@@ -138,7 +138,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected simBusy = false;
     protected simStatus = '';
     protected simError: CardOut | undefined;
-    protected vizOut: CardOut | undefined;
+    // Visualization is multi-select: a composed viz can stack several viewers.
+    protected readonly selectedViz = new Set<string>();
+    protected vizOuts: Array<{ title: string; out: CardOut }> = [];
     protected vizBusy = false;
     protected storeMeta: any;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
@@ -239,11 +241,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     async newCase(name: string, spec?: any): Promise<void> {
         const clean = (name || 'case').trim().replace(/[^a-zA-Z0-9_-]+/g, '_') || 'case';
         this.selected['models'] = ''; this.selected['meshes'] = ''; this.selected['solvers'] = ''; this.selected['visualizations'] = '';
+        this.selectedViz.clear(); this.vizOuts = [];
         this.edited.clear();
         if (spec) { this.applySpec(spec); }
         else {
-            for (const dir of ['models', 'meshes', 'solvers', 'visualizations']) { const c = this.pickedCard(dir); if (c) { this.selected[dir] = c.id; } }
+            for (const dir of ['models', 'meshes', 'solvers']) { const c = this.pickedCard(dir); if (c) { this.selected[dir] = c.id; } }
         }
+        // Start with the first visualization viewer ticked (composed viz seed).
+        const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
+        if (firstViz) { this.selectedViz.add(firstViz.id); this.selected['visualizations'] = firstViz.id; }
         this.caseUri = this.caseFileUri(clean); this.caseName = clean;
         await this.persistCase();
         await this.listCases();
@@ -597,18 +603,30 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.schedulePersist();
         // Visualization is DECOUPLED from selection + Run now: picking a viewer
         // no longer renders. The user clicks "Render visualization" in the
-        // Visualization tab's viewer to generate the plot.
+        // Visualization tab's viewer to generate the plot(s).
         // Derive the governing equations for a newly expanded model card.
         if (dir === 'models' && this.expanded === card.id && card.class) { this.loadModelMath(card).catch(() => { /* shown as error */ }); }
     }
+    /** Expand/collapse a card without changing selection (visualization tab uses
+     *  this so the checkbox owns selection). */
+    protected toggleExpand(card: any): void {
+        this.expanded = this.expanded === card.id ? undefined : card.id; this.update();
+    }
+    /** Toggle a visualization viewer's membership in the composed visualization. */
+    protected toggleVizSelect(card: any): void {
+        if (this.selectedViz.has(card.id)) { this.selectedViz.delete(card.id); } else { this.selectedViz.add(card.id); }
+        this.selected['visualizations'] = [...this.selectedViz][0] || '';
+        this.update(); this.schedulePersist();
+    }
 
     /** The selected card for a tab, else the first with runnable code (models/
-     *  meshes/solvers) or the first snippet card (visualizations). */
+     *  meshes/solvers) or the first snippet card (visualizations). For viz the
+     *  "primary" (used for the case spec) is the first selected viewer. */
     protected pickedCard(dir: string): any {
         const cards = this.cardsByTab[dir] || [];
+        if (dir === 'visualizations') { return cards.find(c => this.selectedViz.has(c.id) && c.snippet) || cards.find(c => c.snippet); }
         const sel = cards.find(c => c.id === this.selected[dir]);
         if (sel) { return sel; }
-        if (dir === 'visualizations') { return cards.find(c => c.snippet); }
         return cards.find(c => !!cardCode(c, this.mergedInit(c)));
     }
 
@@ -617,7 +635,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
      *  Visualization tab, pick a viewer and click "Render visualization". */
     async runAssembly(): Promise<void> {
         if (this.simBusy) { return; }
-        this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOut = undefined;
+        this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOuts = [];
         // Stream the run's console output to the bottom "Simulation" panel.
         emitSimOutput({ kind: 'clear' });
         this.simPanel?.reveal();
@@ -646,36 +664,33 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         }
     }
 
-    /** Render the selected visualization against the computed store. Called
-     *  explicitly from the Visualization tab's viewer (not from Run). */
+    /** Render the composed visualization: run EACH selected viewer against the
+     *  computed store and stack their plots. Called explicitly from the
+     *  Visualization tab's viewer (not from Run), reusing the last run's store. */
     async renderVisualization(): Promise<void> {
         if (this.vizBusy) { return; }
-        const vizCard = this.pickedCard('visualizations');
         if (!this.simRan) { this.setNotice('Run a simulation first (the Simulation bar), then Render.'); return; }
-        if (!vizCard?.snippet) { this.setNotice('Select a visualization viewer first.'); return; }
-        this.vizBusy = true;
-        try { await this.runViz(vizCard); } finally { this.vizBusy = false; this.update(); }
-    }
-
-    /** Run one visualization snippet against the current store and show its plot. */
-    protected async runViz(vizCard: any): Promise<void> {
-        if (!vizCard?.snippet) { return; }
-        const out: CardOut = { cells: [], stdout: '', status: 'running', running: true };
-        this.vizOut = out; this.update();
-        setDisplaySink(cell => { out.cells.push(cell); this.update(); });
+        const cards = (this.cardsByTab['visualizations'] || []).filter(c => this.selectedViz.has(c.id) && c.snippet);
+        if (!cards.length) { this.setNotice('Select one or more visualization viewers (the checkboxes) first.'); return; }
+        this.vizBusy = true; this.vizOuts = []; this.update();
         try {
-            const snippet = await this.cli.fetchSnippet(vizCard.snippet);
-            // Let the snippet default field/step (proven path). field_name=None →
-            // first store field; time_step=0 → first snapshot. (Field/timeline
-            // selectors are a follow-up.)
-            const code = 'time_step = 0\nfield_name = None\n' + snippet;
-            const res = await this.cli.runCode(code);
-            out.stdout = res?.output || ''; out.status = res?.status || 'success';
-        } catch (e: any) {
-            out.status = 'error'; out.stdout = e?.message || String(e);
-        } finally {
-            setDisplaySink(undefined); out.running = false; this.update();
-        }
+            for (const card of cards) {
+                const out: CardOut = { cells: [], stdout: '', status: 'running', running: true };
+                this.vizOuts.push({ title: card.title || card.id, out }); this.update();
+                setDisplaySink(cell => { out.cells.push(cell); this.update(); });
+                try {
+                    const snippet = await this.cli.fetchSnippet(card.snippet);
+                    // Default field/step (proven path); field/timeline selectors TBD.
+                    const code = 'time_step = 0\nfield_name = None\n' + snippet;
+                    const res = await this.cli.runCode(code);
+                    out.stdout = res?.output || ''; out.status = res?.status || 'success';
+                } catch (e: any) {
+                    out.status = 'error'; out.stdout = e?.message || String(e);
+                } finally {
+                    setDisplaySink(undefined); out.running = false; this.update();
+                }
+            }
+        } finally { this.vizBusy = false; this.update(); }
     }
 
     protected setNotice(msg: string): void { this.notice = msg; this.update(); if (msg) { setTimeout(() => { if (this.notice === msg) { this.notice = ''; this.update(); } }, 6000); } }
@@ -736,6 +751,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         if (spec?.model?.class_path) { const c = byClass('models', spec.model.class_path); if (c) { this.selected['models'] = c.id; if (spec.model.init) { this.edited.set(c.id, { ...spec.model.init }); } } }
         if (spec?.mesh?.spec) { const meshes = this.cardsByTab['meshes'] || []; const c = meshes[0]; if (c) { this.selected['meshes'] = c.id; this.edited.set(c.id, { ...spec.mesh.spec }); } }
         if (spec?.solver?.tag) { const c = (this.cardsByTab['solvers'] || []).find(s => (s.requires_tag || 'numpy') === spec.solver.tag); if (c) { this.selected['solvers'] = c.id; } }
+        // Seed the composed visualization with the first available viewer.
+        this.selectedViz.clear(); this.vizOuts = [];
+        const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
+        if (firstViz) { this.selectedViz.add(firstViz.id); this.selected['visualizations'] = firstViz.id; }
         this.update();
     }
 
@@ -789,7 +808,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
         const hasParams = !!(card.params || card.class || (card.init && Object.keys(card.init).length));
-        const isSel = this.selected[dir] === card.id;
+        // Visualization is multi-select (checkbox); other tabs single-select.
+        const vizMulti = dir === 'visualizations';
+        const isSel = vizMulti ? this.selectedViz.has(card.id) : this.selected[dir] === card.id;
         const isExp = this.expanded === card.id;
         const cardStyle: React.CSSProperties = {
             border: '1px solid ' + (isSel ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-editorWidget-border, var(--theia-panel-border))'),
@@ -802,8 +823,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const mm = dir === 'models' ? this.modelMath.get(card.id) : undefined;
         const displaying = mm?.status === 'loading';
         const displayBtn: React.CSSProperties = { cursor: this.kernelReady && !displaying ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.kernelReady && !displaying ? 1 : 0.6 };
-        const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
-            h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } }),
+        const selectIcon = vizMulti
+            ? h('span', { title: 'Include this viewer in the composed visualization', className: 'codicon codicon-' + (isSel ? 'check-all' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)', cursor: 'pointer' }, onClick: (e: any) => { e.stopPropagation(); this.toggleVizSelect(card); } })
+            : h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } });
+        const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => vizMulti ? this.toggleExpand(card) : this.pick(card, dir) },
+            selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
             card.requires_tag ? (() => { const connected = this.connectedTags.includes(card.requires_tag); return h('span', { title: connected ? 'Backend connected — this solver can run' : 'Needs a "' + card.requires_tag + '" backend (not connected)', style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: connected ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: connected ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: connected ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, connected ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, card.requires_tag); })() : null,
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
@@ -920,21 +944,25 @@ export class ZoomyModelConfigWidget extends ReactWidget {
      *  computes; visualization happens on demand here. */
     protected renderVizViewer(): React.ReactNode {
         const h = React.createElement;
-        const viz = this.pickedCard('visualizations');
-        const ready = this.simRan && !this.simBusy && this.kernelReady && !!viz?.snippet;
+        const n = this.selectedViz.size;
+        const ready = this.simRan && !this.simBusy && this.kernelReady && n > 0;
         const btn: React.CSSProperties = { cursor: ready && !this.vizBusy ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 13, fontWeight: 700, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: ready && !this.vizBusy ? 1 : 0.6 };
-        const hint = !this.simRan ? 'Run a simulation first (the Simulation bar above), then Render here.'
-            : !this.kernelReady ? 'Waiting for the kernel…'
-            : !viz?.snippet ? 'Select a viewer card below.'
-            : 'Viewer: ' + (viz.title || viz.id) + ' — click Render to generate the plot.';
+        const sel = n + ' viewer' + (n === 1 ? '' : 's') + ' selected';
+        const hint = n === 0 ? 'Tick one or more viewers below to compose a visualization.'
+            : !this.simRan ? sel + ' — run a simulation first (the Simulation bar above), then Render.'
+            : !this.kernelReady ? sel + ' — waiting for the kernel…'
+            : sel + ' — click Render to generate the plot' + (n === 1 ? '' : 's') + '.';
+        const outBlock = (title: string, out: CardOut, key: string): React.ReactNode => h('div', { key, style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
+            this.vizOuts.length > 1 ? h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 6 } }, title) : null,
+            out.running && !out.cells.length ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Rendering ' + title + '…') : null,
+            out.cells.map((c, i) => this.renderCell(c, key + '_' + i)),
+            out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null);
         return h('div', { className: 'zoomy-viz-viewer', style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 14, marginBottom: 16, background: 'var(--theia-editorWidget-background)' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' } },
                 h('button', { style: btn, disabled: !ready || this.vizBusy, onClick: () => this.renderVisualization() },
                     h('span', { className: 'codicon codicon-' + (this.vizBusy ? 'loading codicon-modifier-spin' : 'graph'), style: { verticalAlign: 'middle', marginRight: 6 } }),
                     this.vizBusy ? 'Rendering…' : 'Render visualization'),
                 h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, hint)),
-            this.vizOut ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: this.vizOut.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
-                this.vizOut.cells.map((c, i) => this.renderCell(c, 'vv' + i)),
-                this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
+            this.vizOuts.map((v, i) => outBlock(v.title, v.out, 'vv' + i)));
     }
 }
