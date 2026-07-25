@@ -44,6 +44,7 @@ const TABS: TabDef[] = [
     { dir: 'models', label: 'Model' },
     { dir: 'meshes', label: 'Mesh' },
     { dir: 'solvers', label: 'Solver' },
+    { dir: 'vof', label: 'Volume of Fluid' },
     { dir: 'visualizations', label: 'Visualization' },
 ];
 
