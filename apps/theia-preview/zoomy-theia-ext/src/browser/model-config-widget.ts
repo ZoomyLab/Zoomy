@@ -4,7 +4,7 @@ import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { OpenerService, open } from '@theia/core/lib/browser';
 import { URI, Emitter } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, emitBackendsChanged, DisplayCell } from './zoomy-cli-loader';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, emitBackendsChanged, emitSimOutput, DisplayCell } from './zoomy-cli-loader';
 
 // The project root in the browser FS. A case is a folder here with a canonical
 // `case.py` (zoomy_prepost jupytext) that is the SINGLE SOURCE OF TRUTH — the GUI
@@ -126,6 +126,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
      *  desired state (open with the active card, or collapsed). Idempotent +
      *  last-write-wins, so rapid open/close/tab-switch can't leave it half-open. */
     paramsPanel: { sync(): void } | undefined;
+    /** Set by the frontend module: reveal the bottom "Simulation" output panel. */
+    simPanel: { reveal(): void } | undefined;
     /** Whether the Parameters panel should currently be open. */
     hasActiveParams(): boolean { return this.activeParamCardId !== undefined; }
     // Accordion (one expanded card) + selection (one selected card per tab).
@@ -616,21 +618,29 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     async runAssembly(): Promise<void> {
         if (this.simBusy) { return; }
         this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOut = undefined;
+        // Stream the run's console output to the bottom "Simulation" panel.
+        emitSimOutput({ kind: 'clear' });
+        this.simPanel?.reveal();
+        emitSimOutput({ kind: 'line', level: 'info', text: '▶ Running case "' + this.caseName + '"…' });
         try {
             for (const [dir, label] of [['models', 'model'], ['meshes', 'mesh'], ['solvers', 'solver']] as const) {
                 const card = this.pickedCard(dir);
-                if (!card) { this.simStatus = 'No ' + label + ' selected.'; this.update(); return; }
+                if (!card) { this.simStatus = 'No ' + label + ' selected.'; emitSimOutput({ kind: 'line', level: 'error', text: 'No ' + label + ' selected.' }); this.update(); return; }
                 const code = cardCode(card, this.mergedInit(card));
-                if (!code) { this.simStatus = label + ' "' + (card.title || card.id) + '" is a remote backend — connect a backend to run it.'; this.update(); return; }
+                if (!code) { this.simStatus = label + ' "' + (card.title || card.id) + '" is a remote backend — connect a backend to run it.'; emitSimOutput({ kind: 'line', level: 'error', text: label + ' "' + (card.title || card.id) + '" needs a backend.' }); this.update(); return; }
                 this.simStatus = 'Running ' + label + ': ' + (card.title || card.id) + '…'; this.update();
+                emitSimOutput({ kind: 'line', level: 'info', text: '· ' + label + ': ' + (card.title || card.id) + '…' });
                 const res = await this.cli.runCode(code);
-                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; this.update(); return; }
+                if (res?.output) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(res.output).trimEnd() }); }
+                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: '✗ Error in ' + label + '.' }); this.update(); return; }
                 if (res?.store_meta) { this.storeMeta = res.store_meta; }
             }
             this.simRan = true;
             this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
+            emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Simulation complete — open Visualization to render.' });
         } catch (e: any) {
             this.simStatus = 'Error: ' + (e?.message || String(e));
+            emitSimOutput({ kind: 'line', level: 'error', text: '✗ ' + (e?.message || String(e)) });
         } finally {
             this.simBusy = false; this.update();
         }

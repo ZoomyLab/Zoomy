@@ -57,6 +57,13 @@ const backendListeners = new Set<() => void>();
 export function onBackendsChanged(fn: () => void): () => void { backendListeners.add(fn); return () => backendListeners.delete(fn); }
 export function emitBackendsChanged(): void { backendListeners.forEach(f => { try { f(); } catch { /* ignore */ } }); }
 
+// Shared event: simulation console output. The bottom "Simulation" panel
+// subscribes and streams these; `{kind:'clear'}` resets it.
+export interface SimOutputEvent { kind: 'clear' | 'line'; level?: 'info' | 'stdout' | 'error' | 'ok'; text?: string; }
+const simListeners = new Set<(e: SimOutputEvent) => void>();
+export function onSimOutput(fn: (e: SimOutputEvent) => void): () => void { simListeners.add(fn); return () => simListeners.delete(fn); }
+export function emitSimOutput(e: SimOutputEvent): void { simListeners.forEach(f => { try { f(e); } catch { /* ignore */ } }); }
+
 let jszipPromise: Promise<void> | undefined;
 /** Load JSZip from a CDN (for shipping a set of cases as a ZIP artefact by URL,
  *  like the old GUI). Exposes window.JSZip. */

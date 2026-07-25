@@ -27,6 +27,7 @@ import { ZoomyStartWidget } from './start-page-widget';
 import { ZoomyModelConfigWidget } from './model-config-widget';
 import { ZoomyViewWidget } from './zoomy-view-widget';
 import { ZoomyParamsWidget } from './zoomy-params-widget';
+import { ZoomySimOutputWidget } from './zoomy-sim-output-widget';
 import { getPyodideClient, PyodideClient } from './pyodide-runtime';
 import { registerZoomyCompletions } from './completion-provider';
 
@@ -92,6 +93,21 @@ export class ZoomyParamsViewContribution extends AbstractViewContribution<ZoomyP
         });
     }
     // Dock it in the right area (so its icon shows) without expanding the panel.
+    async initializeLayout(): Promise<void> { await this.openView({ activate: false, reveal: false }); }
+}
+
+/** Places the "Simulation" console in the BOTTOM panel (docked, collapsed). It is
+ *  auto-revealed when a simulation runs. */
+@injectable()
+export class ZoomySimOutputViewContribution extends AbstractViewContribution<ZoomySimOutputWidget> {
+    constructor() {
+        super({
+            widgetId: ZoomySimOutputWidget.ID,
+            widgetName: 'Simulation',
+            defaultWidgetOptions: { area: 'bottom', rank: 300 },
+            toggleCommandId: 'zoomy.toggleSimOutput',
+        });
+    }
     async initializeLayout(): Promise<void> { await this.openView({ activate: false, reveal: false }); }
 }
 
@@ -238,7 +254,16 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         if (!w.onBackendsChanged) { w.onBackendsChanged = tags => this.setBackendStatus(tags); this.setBackendStatus(w.connectedTags || []); }
         // Let the config widget reconcile the right-hand Parameters panel.
         if (!w.paramsPanel) { w.paramsPanel = { sync: () => { this.syncParams(); } }; }
+        // Let the config widget reveal the bottom "Simulation" console on Run.
+        if (!w.simPanel) { w.simPanel = { reveal: () => this.revealSimOutput() }; }
         return w;
+    }
+    /** Reveal + expand the bottom "Simulation" console. */
+    protected async revealSimOutput(): Promise<void> {
+        const sw = await this.widgetManager.getOrCreateWidget(ZoomySimOutputWidget.ID);
+        if (!sw.isAttached) { await this.shell.addWidget(sw, { area: 'bottom' }); }
+        await this.shell.activateWidget(sw.id);
+        this.shell.expandPanel('bottom');
     }
     /** Reconcile the right-hand Parameters panel to the widget's desired state.
      *  Serialized + last-write-wins: activateWidget can take ~2s, so rapid
@@ -392,6 +417,11 @@ export default new ContainerModule((bind, _unbind, isBound, rebind) => {
     bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyParamsWidget.ID, createWidget: () => ctx.container.get(ZoomyParamsWidget) })).inSingletonScope();
     bindViewContribution(bind, ZoomyParamsViewContribution);
     bind(FrontendApplicationContribution).toService(ZoomyParamsViewContribution);
+    // The bottom "Simulation" console.
+    bind(ZoomySimOutputWidget).toSelf();
+    bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomySimOutputWidget.ID, createWidget: () => ctx.container.get(ZoomySimOutputWidget) })).inSingletonScope();
+    bindViewContribution(bind, ZoomySimOutputViewContribution);
+    bind(FrontendApplicationContribution).toService(ZoomySimOutputViewContribution);
     // Kept but no longer the landing surface.
     bind(ZoomyStartWidget).toSelf();
     bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyStartWidget.ID, createWidget: () => ctx.container.get(ZoomyStartWidget) })).inSingletonScope();
