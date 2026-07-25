@@ -219,6 +219,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.onBackendsChanged?.(this.connectedTags);
     }
 
+    /** Return to the gate (no open case) — e.g. to create another case. */
+    closeCase(): void { this.caseUri = undefined; this.caseName = ''; this.newCaseName = ''; this.listCases(); this.update(); }
+
     async openCaseByName(name: string): Promise<void> {
         try {
             const uri = this.caseFileUri(name);
@@ -590,9 +593,18 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // the top "Zoomy" menu now, not in a self-coded toolbar here. The git row
         // stays (kept, per feedback); native SCM binding is a follow-up.
         return h('div', { style: page },
-            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 4px' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 4px', flexWrap: 'wrap' } },
                 h('h1', { style: { fontSize: 26, fontWeight: 700, margin: 0 } }, 'Model configuration'),
-                h('span', { style: { fontSize: 13, color: 'var(--theia-descriptionForeground)' } }, 'case: ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, this.caseName || '—'))),
+                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'case:'),
+                h('select', {
+                    style: { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '4px 8px', fontSize: 13 },
+                    value: this.caseName,
+                    onChange: (e: any) => { const v = e.target.value; if (v === '__new__') { this.closeCase(); } else if (v !== this.caseName) { this.openCaseByName(v); } },
+                }, [
+                    ...this.cases.map(n => h('option', { key: n, value: n }, n)),
+                    !this.cases.includes(this.caseName) && this.caseName ? h('option', { key: this.caseName, value: this.caseName }, this.caseName) : null,
+                    h('option', { key: '__new__', value: '__new__' }, '＋ New case…'),
+                ])),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
                 'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh, solver and visualization, then Run.'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
