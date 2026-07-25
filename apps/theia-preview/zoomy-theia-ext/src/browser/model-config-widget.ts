@@ -318,6 +318,20 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             await open(this.openerService, this.caseUri);
         } catch (e: any) { this.setNotice('Open in editor failed: ' + (e?.message || e)); }
     }
+    /** "Open in Notebook Mode": export the current case to a .ipynb next to its
+     *  case.py and open it in the notebook editor. The case stays the source of
+     *  truth (case.py); the notebook is a live, runnable view of the same spec. */
+    async openInNotebook(): Promise<void> {
+        if (!this.caseUri) { this.setNotice('Open a case first.'); return; }
+        try {
+            await this.persistCase();
+            const spec = await this.gatherSpec();
+            const ipynb = this.cli.exportCase(spec, 'ipynb');
+            const nbUri = this.caseUri.parent.resolve('case.ipynb');
+            await this.fileService.write(nbUri, ipynb);
+            await open(this.openerService, nbUri);
+        } catch (e: any) { this.setNotice('Open in notebook failed: ' + (e?.message || e)); }
+    }
     protected schedulePersist(): void {
         if (!this.caseUri) { return; }
         clearTimeout(this.persistTimer);
@@ -730,6 +744,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 ])),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
                 'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh, solver and visualization, then Run.'),
+            h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
+                h('button', { style: { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 12px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' }, title: 'Open this case as a runnable Jupyter notebook', onClick: () => this.openInNotebook() },
+                    h('span', { className: 'codicon codicon-notebook', style: { verticalAlign: 'middle', marginRight: 5 } }), 'Open in Notebook Mode'),
+                h('button', { style: { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 12px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' }, title: 'Open this case (case.py) in the editor', onClick: () => this.editCardFile() },
+                    h('span', { className: 'codicon codicon-file-code', style: { verticalAlign: 'middle', marginRight: 5 } }), 'Open case.py')),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)',

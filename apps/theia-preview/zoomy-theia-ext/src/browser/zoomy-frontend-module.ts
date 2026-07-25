@@ -284,6 +284,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.newCase, label: 'Zoomy: New case…' }, { execute: () => this.newCase() });
         reg.registerCommand({ id: 'zoomy.openNamedCase' }, { execute: async (name: string) => { await this.openModelConfig(); (await this.mc()).openCaseByName(name); } });
         reg.registerCommand({ id: CMD.run, label: 'Zoomy: Run simulation' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).runAssembly(); } });
+        reg.registerCommand({ id: 'zoomy.openInNotebook', label: 'Zoomy: Open case in Notebook Mode' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).openInNotebook(); } });
         reg.registerCommand({ id: CMD.exportPy, label: 'Zoomy: Export case (.py)' }, { execute: async () => (await this.mc()).exportCase('py') });
         reg.registerCommand({ id: CMD.exportIpynb, label: 'Zoomy: Export case (.ipynb)' }, { execute: async () => (await this.mc()).exportCase('ipynb') });
         reg.registerCommand({ id: CMD.importCase, label: 'Zoomy: Import case…' }, { execute: async () => (await this.mc()).importCase() });
@@ -300,6 +301,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         menus.registerSubmenu(ZOOMY_MENU, 'Zoomy');
         menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.newCase, label: 'New case…' });
         menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.openModelConfig, label: 'Model configuration' });
+        menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: 'zoomy.openInNotebook', label: 'Open in Notebook Mode' });
         menus.registerMenuAction([...ZOOMY_MENU, '1_config'], { commandId: CMD.run, label: 'Run simulation' });
         menus.registerMenuAction([...ZOOMY_MENU, '2_case'], { commandId: CMD.exportPy, label: 'Export case (.py)' });
         menus.registerMenuAction([...ZOOMY_MENU, '2_case'], { commandId: CMD.exportIpynb, label: 'Export case (.ipynb)' });

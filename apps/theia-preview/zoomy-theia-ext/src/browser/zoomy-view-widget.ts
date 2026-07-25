@@ -71,6 +71,7 @@ export class ZoomyViewWidget extends ReactWidget {
             this.renderCases(),
             this.group('Configuration', [
                 ['settings-gear', 'Open model configuration', 'zoomy.openModelConfig'],
+                ['notebook', 'Open in Notebook Mode', 'zoomy.openInNotebook'],
                 ['play', 'Run simulation', 'zoomy.run'],
             ]),
             this.group('Case', [
