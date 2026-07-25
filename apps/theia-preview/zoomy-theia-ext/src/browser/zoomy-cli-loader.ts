@@ -51,6 +51,12 @@ const caseListeners = new Set<() => void>();
 export function onCasesChanged(fn: () => void): () => void { caseListeners.add(fn); return () => caseListeners.delete(fn); }
 export function emitCasesChanged(): void { caseListeners.forEach(f => { try { f(); } catch { /* ignore */ } }); }
 
+// Shared event: connected backends changed (connect / disconnect). The status
+// bar and the left Zoomy view both refresh from it.
+const backendListeners = new Set<() => void>();
+export function onBackendsChanged(fn: () => void): () => void { backendListeners.add(fn); return () => backendListeners.delete(fn); }
+export function emitBackendsChanged(): void { backendListeners.forEach(f => { try { f(); } catch { /* ignore */ } }); }
+
 let jszipPromise: Promise<void> | undefined;
 /** Load JSZip from a CDN (for shipping a set of cases as a ZIP artefact by URL,
  *  like the old GUI). Exposes window.JSZip. */

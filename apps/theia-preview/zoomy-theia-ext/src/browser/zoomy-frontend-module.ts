@@ -12,7 +12,7 @@ import { RemoteFileServiceContribution } from '@theia/filesystem/lib/browser/rem
 import { WorkspaceService } from '@theia/workspace/lib/browser/workspace-service';
 import { FileChangeType } from '@theia/filesystem/lib/common/files';
 import { MemoryFileSystemProvider } from './memory-fs-provider';
-import { getZoomyCli } from './zoomy-cli-loader';
+import { getZoomyCli, onBackendsChanged } from './zoomy-cli-loader';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
 import { NotebookTypeRegistry } from '@theia/notebook/lib/browser/notebook-type-registry';
@@ -153,6 +153,8 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         try { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); } } catch { /* ignore */ }
 
         this.setBackendStatus([]);
+        // Reflect connect/disconnect (from anywhere) in the status bar.
+        onBackendsChanged(() => { this.mc().then(w => this.setBackendStatus(w.connectedTags || [])).catch(() => { /* ignore */ }); });
         // Keep every case's case.py and case.ipynb in sync on save.
         this.startCaseSync();
         // Open file:///zoomy as the workspace (so the Explorer shows the cases as
@@ -264,9 +266,12 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         } catch (e) { console.warn('zoomy params sync', e); } finally { this.paramsSyncing = false; }
     }
     protected setBackendStatus(tags: string[]): void {
+        const connected = tags.length > 0;
         this.statusBar.setElement('zoomy.backend', {
-            text: tags.length ? '$(server) ' + tags.join(', ') : '$(server) no backend',
-            tooltip: tags.length ? 'Connected Zoomy backends: ' + tags.join(', ') : 'No backend connected — running in-browser (Pyodide). Click to connect.',
+            text: connected ? '$(server) ' + tags.join(', ') : '$(plug) Connect backend',
+            tooltip: connected
+                ? 'Connected Zoomy backends: ' + tags.join(', ') + '. Click to connect another; manage/disconnect in the Zoomy panel.'
+                : 'No backend — running in-browser (Pyodide). Click to connect a compute backend.',
             command: CMD.connectBackend, alignment: StatusBarAlignment.LEFT, priority: 6000,
         });
     }
@@ -335,6 +340,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.saveProject, label: 'Zoomy: Save project' }, { execute: async () => (await this.mc()).saveProject() });
         reg.registerCommand({ id: CMD.loadProject, label: 'Zoomy: Load project' }, { execute: async () => (await this.mc()).loadProject() });
         reg.registerCommand({ id: CMD.connectBackend, label: 'Zoomy: Connect backend…' }, { execute: () => this.connectBackend() });
+        reg.registerCommand({ id: 'zoomy.disconnectBackend', label: 'Zoomy: Disconnect backend' }, { execute: async (tag: string) => { if (tag) { (await this.mc()).disconnectBackend(tag); } } });
         reg.registerCommand({ id: 'zoomy.openCaseHere', label: 'Open in model configurator' }, {
             execute: () => this.openCaseInConfigurator(),
             isVisible: () => { const u = this.selectedUri(); return !!u && /\.(py|ipynb)$/.test(u.path.toString()); },

@@ -3,7 +3,7 @@ import { injectable, inject, postConstruct } from '@theia/core/shared/inversify'
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { WidgetManager } from '@theia/core/lib/browser';
 import { CommandRegistry } from '@theia/core';
-import { onCasesChanged } from './zoomy-cli-loader';
+import { onCasesChanged, onBackendsChanged } from './zoomy-cli-loader';
 import { ZoomyModelConfigWidget } from './model-config-widget';
 
 /** The Zoomy activity-bar view (left panel): the project's CASES (each a folder =
@@ -16,6 +16,7 @@ export class ZoomyViewWidget extends ReactWidget {
     @inject(WidgetManager) protected readonly widgetManager: WidgetManager;
     protected cases: string[] = [];
     protected current = '';
+    protected connected: string[] = [];
 
     @postConstruct()
     protected init(): void {
@@ -27,6 +28,7 @@ export class ZoomyViewWidget extends ReactWidget {
         this.addClass('zoomy-view-widget');
         this.node.style.overflow = 'auto';
         onCasesChanged(() => this.refresh());
+        onBackendsChanged(() => this.refresh());
         this.refresh();
         this.update();
     }
@@ -34,7 +36,7 @@ export class ZoomyViewWidget extends ReactWidget {
     protected async refresh(): Promise<void> {
         try {
             const w = (await this.widgetManager.getWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget | undefined;
-            if (w) { this.cases = w.cases || []; this.current = w.caseName || ''; this.update(); }
+            if (w) { this.cases = w.cases || []; this.current = w.caseName || ''; this.connected = w.connectedTags || []; this.update(); }
         } catch { /* ignore */ }
     }
 
@@ -83,8 +85,25 @@ export class ZoomyViewWidget extends ReactWidget {
                 ['save', 'Save project', 'zoomy.saveProject'],
                 ['folder-opened', 'Load project', 'zoomy.loadProject'],
             ]),
-            this.group('Backend', [
-                ['server', 'Connect backend…', 'zoomy.connectBackend'],
-            ]));
+            this.renderBackends());
+    }
+
+    /** The Backend group: a "Connect backend…" action plus each connected backend
+     *  with an ✕ to disconnect it. */
+    protected renderBackends(): React.ReactNode {
+        const h = React.createElement;
+        const rowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', padding: '6px 8px', fontSize: 13, textAlign: 'left', borderRadius: 4 };
+        const item = (tag: string): React.ReactNode => h('div', { key: tag, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', fontSize: 13 } },
+            h('span', { className: 'codicon codicon-pass-filled', style: { color: 'var(--theia-successForeground, #3fb950)' } }),
+            h('span', { style: { flex: 1 } }, tag),
+            h('button', { title: 'Disconnect ' + tag, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)' }, onClick: () => this.commands.executeCommand('zoomy.disconnectBackend', tag) }, h('span', { className: 'codicon codicon-close' })));
+        return h('div', { key: 'backend', style: { marginBottom: 10 } },
+            h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)', padding: '4px 8px' } }, 'Backend'),
+            this.connected.length ? this.connected.map(item) : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '2px 10px' } }, 'None — running in-browser.'),
+            h('button', {
+                style: rowBtn, onClick: () => this.commands.executeCommand('zoomy.connectBackend'),
+                onMouseEnter: (e: any) => { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; },
+                onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; },
+            }, h('span', { className: 'codicon codicon-plug' }), 'Connect backend…'));
     }
 }

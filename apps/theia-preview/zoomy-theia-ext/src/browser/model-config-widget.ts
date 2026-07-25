@@ -4,7 +4,7 @@ import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { OpenerService, open } from '@theia/core/lib/browser';
 import { URI, Emitter } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, DisplayCell } from './zoomy-cli-loader';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, emitBackendsChanged, DisplayCell } from './zoomy-cli-loader';
 
 // The project root in the browser FS. A case is a folder here with a canonical
 // `case.py` (zoomy_prepost jupytext) that is the SINGLE SOURCE OF TRUTH — the GUI
@@ -755,12 +755,23 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         try {
             const adapter = await this.cli.connect(url);
             const tag = adapter?.tag || (this.cli.availableTags ? this.cli.availableTags() : []).slice(-1)[0];
-            this.connectedTags = this.cli.availableTags ? this.cli.availableTags() : (tag ? [tag] : []);
+            this.refreshBackends();
             this.setNotice('Connected backend: ' + (tag || url));
-            this.onBackendsChanged?.(this.connectedTags);
-            try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => { this.connectedTags = this.cli.availableTags(); this.onBackendsChanged?.(this.connectedTags); this.update(); }); } catch { /* ignore */ }
-            this.update();
+            try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => this.refreshBackends()); } catch { /* ignore */ }
         } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
+    }
+    /** Disconnect a connected backend by its tag. */
+    async disconnectBackend(tag: string): Promise<void> {
+        try { this.cli.disconnect && this.cli.disconnect(tag); this.setNotice('Disconnected backend: ' + tag); }
+        catch (e: any) { this.setNotice('Disconnect failed: ' + (e?.message || e)); }
+        this.refreshBackends();
+    }
+    /** Re-read connected tags and notify the status bar + Zoomy view. */
+    protected refreshBackends(): void {
+        this.connectedTags = this.cli?.availableTags ? this.cli.availableTags() : [];
+        this.onBackendsChanged?.(this.connectedTags);
+        emitBackendsChanged();
+        this.update();
     }
 
         protected renderCard(card: any, dir: string): React.ReactNode {
@@ -784,7 +795,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
             h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } }),
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
-            card.requires_tag ? h('span', { style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--theia-badge-background)', color: 'var(--theia-badge-foreground)' } }, card.requires_tag) : null,
+            card.requires_tag ? (() => { const connected = this.connectedTags.includes(card.requires_tag); return h('span', { title: connected ? 'Backend connected — this solver can run' : 'Needs a "' + card.requires_tag + '" backend (not connected)', style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: connected ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: connected ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: connected ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, connected ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, card.requires_tag); })() : null,
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
