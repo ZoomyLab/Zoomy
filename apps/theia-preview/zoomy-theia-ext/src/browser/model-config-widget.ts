@@ -37,6 +37,15 @@ const TABS: TabDef[] = [
     { dir: 'visualizations', label: 'Visualization' },
 ];
 
+/** Trigger a browser download of text content. */
+function download(name: string, text: string, mime: string): void {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 /** Derive a param schema from a card's init dict when there's no class/params
  *  schema (builtin mesh cards): infer type from each value. */
 function deriveSchema(init: any): any {
@@ -101,6 +110,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected simStatus = '';
     protected vizOut: CardOut | undefined;
     protected storeMeta: any;
+    // Case interchange (#3/#5), project persistence (#6), backends (#4).
+    protected notice = '';
+    protected backendUrl = 'http://localhost:8080';
+    protected connectedTags: string[] = [];
 
     @postConstruct()
     protected init(): void {
@@ -136,6 +149,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 catch (e) { this.cardsByTab[t.dir] = []; }
             }
             this.loaded = true;
+            // #4 URL-autoload: ?case=<url> imports a case into the selection.
+            try {
+                const caseUrl = new URLSearchParams(location.search).get('case');
+                if (caseUrl) { const text = await (await fetch(caseUrl)).text(); this.applySpec(this.cli.parseCase(text)); this.setNotice('Loaded case from URL.'); }
+            } catch (e) { /* ignore autoload errors */ }
         } catch (e: any) {
             this.error = e?.message || String(e);
         }
@@ -297,6 +315,91 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         }
     }
 
+    protected setNotice(msg: string): void { this.notice = msg; this.update(); if (msg) { setTimeout(() => { if (this.notice === msg) { this.notice = ''; this.update(); } }, 6000); } }
+
+    // --- #3/#5 Case interchange via zoomy_prepost.case (through zoomy_cli). ---
+    /** Build the canonical case spec from the current selection + edits. */
+    protected async gatherSpec(): Promise<any> {
+        const model = this.pickedCard('models'), mesh = this.pickedCard('meshes'), solver = this.pickedCard('solvers'), viz = this.pickedCard('visualizations');
+        const spec: any = {
+            meta: { title: (model?.title || 'Zoomy case'), description: 'Exported from the Zoomy model-config GUI.' },
+            model: { code: cardCode(model, this.mergedInit(model)) || '', class_path: model?.class || null, init: this.mergedInit(model) },
+            mesh: { code: cardCode(mesh, this.mergedInit(mesh)) || '', spec: this.mergedInit(mesh) },
+            settings: {},
+            solver: { tag: solver?.requires_tag || 'numpy', params: solver?.params ? this.mergedInit(solver) : {} },
+        };
+        const solverCode = cardCode(solver, this.mergedInit(solver));
+        if (solverCode) { spec.run = { code: solverCode }; }
+        if (viz?.snippet) {
+            try { const snip = await this.cli.fetchSnippet(viz.snippet); spec.visualization = { code: this.cli.vizPrelude() + '\n' + snip }; } catch { /* skip viz */ }
+        }
+        return spec;
+    }
+    protected async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
+        try {
+            const spec = await this.gatherSpec();
+            const text = this.cli.exportCase(spec, fmt);
+            download('zoomy_case.' + (fmt === 'ipynb' ? 'ipynb' : 'py'), text, fmt === 'ipynb' ? 'application/json' : 'text/x-python');
+            this.setNotice('Exported case as .' + fmt);
+        } catch (e: any) { this.setNotice('Export failed: ' + (e?.message || e)); }
+    }
+    /** Import a case (.py/.ipynb): parse it and re-select the matching cards. */
+    protected importCase(): void {
+        const input = document.createElement('input'); input.type = 'file'; input.accept = '.py,.ipynb';
+        input.onchange = async () => {
+            const file = input.files?.[0]; if (!file) { return; }
+            try {
+                let text = await file.text();
+                if (file.name.endsWith('.ipynb')) { const nb = JSON.parse(text); text = (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : c.source)).join('\n\n'); }
+                const spec = this.cli.parseCase(text);
+                this.applySpec(spec);
+                this.setNotice('Imported case: ' + file.name);
+            } catch (e: any) { this.setNotice('Import failed: ' + (e?.message || e)); }
+        };
+        input.click();
+    }
+    /** Re-select the cards a spec refers to (by class_path / mesh spec / tag). */
+    protected applySpec(spec: any): void {
+        const byClass = (dir: string, cls: string) => (this.cardsByTab[dir] || []).find(c => c.class === cls);
+        if (spec?.model?.class_path) { const c = byClass('models', spec.model.class_path); if (c) { this.selected['models'] = c.id; if (spec.model.init) { this.edited.set(c.id, { ...spec.model.init }); } } }
+        if (spec?.mesh?.spec) { const meshes = this.cardsByTab['meshes'] || []; const c = meshes[0]; if (c) { this.selected['meshes'] = c.id; this.edited.set(c.id, { ...spec.mesh.spec }); } }
+        if (spec?.solver?.tag) { const c = (this.cardsByTab['solvers'] || []).find(s => (s.requires_tag || 'numpy') === spec.solver.tag); if (c) { this.selected['solvers'] = c.id; } }
+        this.update();
+    }
+
+    // --- #6 Project persistence (IndexedDB via zoomy_cli storage). ---
+    protected async saveProject(): Promise<void> {
+        const data = { selected: this.selected, edited: Array.from(this.edited.entries()), active: this.active };
+        try { await this.cli.storage.writeJson('projects/current.json', data); this.setNotice('Project saved to browser (IndexedDB).'); }
+        catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
+        // also offer a download so it can be shared / version-controlled
+        download('zoomy_project.json', JSON.stringify(data, null, 2), 'application/json');
+    }
+    protected async loadProject(): Promise<void> {
+        try {
+            const data = await this.cli.storage.tryReadJson('projects/current.json');
+            if (!data) { this.setNotice('No saved project in this browser.'); return; }
+            Object.assign(this.selected, data.selected || {});
+            this.edited.clear(); for (const [k, v] of (data.edited || [])) { this.edited.set(k, v); }
+            if (data.active) { this.active = data.active; }
+            this.setNotice('Project loaded.'); this.update();
+        } catch (e: any) { this.setNotice('Load failed: ' + (e?.message || e)); }
+    }
+
+    // --- #4 Connect a remote backend by URL. ---
+    protected async connectBackend(): Promise<void> {
+        const url = this.backendUrl.trim(); if (!url) { return; }
+        this.setNotice('Connecting to ' + url + '…');
+        try {
+            const adapter = await this.cli.connect(url);
+            const tag = adapter?.tag || (this.cli.availableTags ? this.cli.availableTags() : []).slice(-1)[0];
+            this.connectedTags = this.cli.availableTags ? this.cli.availableTags() : (tag ? [tag] : []);
+            this.setNotice('Connected backend: ' + (tag || url));
+            try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => { this.connectedTags = this.cli.availableTags(); this.update(); }); } catch { /* ignore */ }
+            this.update();
+        } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
+    }
+
     protected renderCard(card: any, dir: string): React.ReactNode {
         const h = React.createElement;
         const runnable = !!cardCode(card, this.mergedInit(card));
@@ -353,6 +456,23 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             this.vizOut ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: this.vizOut.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
                 this.vizOut.cells.map((c, i) => this.renderCell(c, 'v' + i)),
                 this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
+        const tbtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 11px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' };
+        const inputS: React.CSSProperties = { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '4px 8px', fontSize: 12.5, minWidth: 220 };
+        const toolbar = h('div', { style: { display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid var(--theia-panel-border)' } },
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Case:'),
+                h('button', { style: tbtn, onClick: () => this.exportCase('py') }, 'Export .py'),
+                h('button', { style: tbtn, onClick: () => this.exportCase('ipynb') }, 'Export .ipynb'),
+                h('button', { style: tbtn, onClick: () => this.importCase() }, 'Import…')),
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Project:'),
+                h('button', { style: tbtn, onClick: () => this.saveProject() }, 'Save'),
+                h('button', { style: tbtn, onClick: () => this.loadProject() }, 'Load')),
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Backend:'),
+                h('input', { style: inputS, value: this.backendUrl, onChange: (e: any) => { this.backendUrl = e.target.value; this.update(); }, placeholder: 'http://localhost:8080' }),
+                h('button', { style: tbtn, onClick: () => this.connectBackend() }, 'Connect'),
+                this.connectedTags.length ? h('span', { style: { fontSize: 11, color: 'var(--theia-successForeground, #3fb950)' } }, '● ' + this.connectedTags.join(', ')) : null));
         return h('div', { style: page },
             h('h1', { style: { fontSize: 26, margin: '0 0 4px', fontWeight: 700 } }, 'Model configuration'),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
@@ -360,6 +480,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)'),
+            toolbar,
+            this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'));
