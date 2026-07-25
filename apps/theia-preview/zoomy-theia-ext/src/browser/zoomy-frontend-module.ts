@@ -9,6 +9,7 @@ import {
 import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar';
 import { FileService, FileServiceContribution } from '@theia/filesystem/lib/browser/file-service';
 import { RemoteFileServiceContribution } from '@theia/filesystem/lib/browser/remote-file-service-contribution';
+import { WorkspaceService } from '@theia/workspace/lib/browser/workspace-service';
 import { MemoryFileSystemProvider } from './memory-fs-provider';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
@@ -115,6 +116,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     @inject(QuickInputService) protected readonly quickInput: QuickInputService;
     @inject(SelectionService) protected readonly selectionService: SelectionService;
     @inject(StatusBar) protected readonly statusBar: StatusBar;
+    @inject(WorkspaceService) protected readonly workspaceService: WorkspaceService;
     protected kernel: PyodideKernel;
     protected client: PyodideClient;
 
@@ -131,12 +133,38 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         try { if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); } } catch { /* ignore */ }
 
         this.setBackendStatus([]);
-        // Land directly on the model configuration, in the classical IDE layout
-        // (Explorer + menu bar visible). No start page, no full-screen app mode.
-        this.openModelConfig().catch(e => console.error('zoomy open config', e));
+        // Open file:///zoomy as the workspace (so the Explorer shows the cases as
+        // folders), then land on the model configuration. openWorkspace reloads
+        // the window once with preserveWindow; guarded so it can never loop.
+        this.ensureWorkspaceThenOpen();
         if (typeof location !== 'undefined' && /[?&]autorun/.test(location.search)) {
             setTimeout(() => this.openNotebook(true).catch(e => console.error('zoomy autorun', e)), 1500);
         }
+    }
+
+    /** Root of the single-source-of-truth project (cases live under cases/). */
+    protected static readonly WORKSPACE_ROOT = 'file:///zoomy';
+    protected async ensureWorkspaceThenOpen(): Promise<void> {
+        const root = ZoomyContribution.WORKSPACE_ROOT;
+        try {
+            await this.workspaceService.ready;
+            const isRoot = this.workspaceService.tryGetRoots().some(r => r.resource.toString() === root);
+            const tried = (() => { try { return !!sessionStorage.getItem('zoomy-ws-open-tried'); } catch { return false; } })();
+            if (!isRoot && !tried) {
+                try { sessionStorage.setItem('zoomy-ws-open-tried', '1'); } catch { /* ignore */ }
+                const uri = new URI(root);
+                if (!(await this.fileService.exists(uri))) { await this.fileService.createFolder(uri); }
+                const cases = uri.resolve('cases');
+                if (!(await this.fileService.exists(cases))) { await this.fileService.createFolder(cases); }
+                // preserveWindow (auto when nothing is open) reloads THIS window
+                // with the workspace set; the reload re-enters onStart with the
+                // workspace already open, so we fall through to openModelConfig.
+                this.workspaceService.open(uri);
+                return;
+            }
+        } catch (e) { console.warn('zoomy workspace open', e); }
+        // Land directly on the model configuration, in the classical IDE layout.
+        this.openModelConfig().catch(e => console.error('zoomy open config', e));
     }
 
     protected async mc(): Promise<ZoomyModelConfigWidget> {

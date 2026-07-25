@@ -8,7 +8,7 @@
     "frontend": {
       "config": {
         "applicationName": "Zoomy (Theia + Baukasten preview)",
-        "preferences": { "files.enableTrash": false, "workbench.colorTheme": "Dark+" }
+        "preferences": { "files.enableTrash": false, "workbench.colorTheme": "Dark+", "security.workspace.trust.enabled": false }
       }
     }
   },
