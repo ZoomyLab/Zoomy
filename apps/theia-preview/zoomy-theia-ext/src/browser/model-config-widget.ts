@@ -884,6 +884,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // the top "Zoomy" menu now, not in a self-coded toolbar here. The git row
         // stays (kept, per feedback); native SCM binding is a follow-up.
         return h('div', { style: page },
+            h('div', { style: { fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--theia-button-background)', marginBottom: 2 } }, 'ZOOMY'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 4px', flexWrap: 'wrap' } },
                 h('h1', { style: { fontSize: 26, fontWeight: 700, margin: 0 } }, 'Model configuration'),
                 h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'case:'),

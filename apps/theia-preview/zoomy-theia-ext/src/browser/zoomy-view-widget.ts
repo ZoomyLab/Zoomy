@@ -69,23 +69,58 @@ export class ZoomyViewWidget extends ReactWidget {
 
     protected render(): React.ReactNode {
         const h = React.createElement;
-        return h('div', { style: { padding: '8px 4px', fontFamily: 'var(--theia-font-family)' } },
-            this.renderCases(),
-            this.group('Configuration', [
-                ['settings-gear', 'Open model configuration', 'zoomy.openModelConfig'],
-                ['notebook', 'Open in Notebook Mode', 'zoomy.openInNotebook'],
-                ['play', 'Run simulation', 'zoomy.run'],
-            ]),
-            this.group('Case', [
-                ['arrow-down', 'Export case (.py)', 'zoomy.exportPy'],
-                ['notebook', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
-                ['arrow-up', 'Import case…', 'zoomy.importCase'],
-            ]),
-            this.group('Project', [
-                ['save', 'Save project', 'zoomy.saveProject'],
-                ['folder-opened', 'Load project', 'zoomy.loadProject'],
-            ]),
-            this.renderBackends());
+        return h('div', { style: { display: 'flex', flexDirection: 'column', minHeight: '100%', fontFamily: 'var(--theia-font-family)' } },
+            this.renderBrand(),
+            h('div', { style: { flex: '1 1 auto', padding: '8px 4px' } },
+                this.renderCases(),
+                this.group('Configuration', [
+                    ['settings-gear', 'Open model configuration', 'zoomy.openModelConfig'],
+                    ['notebook', 'Open in Notebook Mode', 'zoomy.openInNotebook'],
+                    ['play', 'Run simulation', 'zoomy.run'],
+                ]),
+                this.group('Case', [
+                    ['arrow-down', 'Export case (.py)', 'zoomy.exportPy'],
+                    ['notebook', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
+                    ['arrow-up', 'Import case…', 'zoomy.importCase'],
+                ]),
+                this.group('Project', [
+                    ['save', 'Save project', 'zoomy.saveProject'],
+                    ['folder-opened', 'Load project', 'zoomy.loadProject'],
+                ]),
+                this.renderBackends()),
+            this.renderFooter());
+    }
+
+    /** The Zoomy wordmark + tagline at the top of the panel. Replace the inline
+     *  SVG with the real Zoomy logo asset when available. */
+    protected renderBrand(): React.ReactNode {
+        const h = React.createElement;
+        const wave = h('svg', { width: 26, height: 26, viewBox: '0 0 32 32', style: { flex: '0 0 auto' } },
+            h('circle', { cx: 16, cy: 16, r: 15, fill: 'var(--theia-button-background)', opacity: 0.14 }),
+            h('path', { d: 'M3 20 q4 -6 8 0 t8 0 t8 0', fill: 'none', stroke: 'var(--theia-button-background)', strokeWidth: 2.4, strokeLinecap: 'round' }),
+            h('path', { d: 'M3 13 q4 -6 8 0 t8 0 t8 0', fill: 'none', stroke: 'var(--theia-button-background)', strokeWidth: 1.6, strokeLinecap: 'round', opacity: 0.5 }));
+        return h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 10px', borderBottom: '1px solid var(--theia-panel-border)' } },
+            wave,
+            h('div', null,
+                h('div', { style: { fontSize: 16, fontWeight: 800, letterSpacing: '.02em', lineHeight: 1.1 } }, 'Zoomy'),
+                h('div', { style: { fontSize: 10.5, color: 'var(--theia-descriptionForeground)' } }, 'Shallow-flow modeling')));
+    }
+
+    /** Footer: GitHub + MBD-chair links. Swap the text for the real logos when
+     *  the assets/URL are provided. */
+    protected renderFooter(): React.ReactNode {
+        const h = React.createElement;
+        const link = (icon: string | null, label: string, href: string, title: string): React.ReactNode => h('a', {
+            key: label, href, target: '_blank', rel: 'noreferrer', title,
+            style: { display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'var(--theia-foreground)', fontSize: 12, padding: '4px 4px', borderRadius: 4 },
+            onMouseEnter: (e: any) => { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; },
+            onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; },
+        }, icon ? h('span', { className: 'codicon codicon-' + icon }) : null, label);
+        return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 10px', borderTop: '1px solid var(--theia-panel-border)' } },
+            link('github-inverted', 'GitHub repository', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
+            // TODO: point to the MBD chair page + swap in the chair logo asset.
+            link('mortar-board', 'MBD Chair · RWTH Aachen', 'https://www.rwth-aachen.de/', 'Chair for Methods for Model-Based Development (MBD), RWTH Aachen'),
+            h('div', { style: { fontSize: 10, color: 'var(--theia-descriptionForeground)', padding: '4px 4px 0' } }, 'Zoomy — backend-less GUI'));
     }
 
     /** The Backend group: a "Connect backend…" action plus each connected backend
