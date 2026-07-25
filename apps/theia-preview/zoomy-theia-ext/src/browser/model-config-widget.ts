@@ -1,7 +1,7 @@
 import React from '@theia/core/shared/react';
 import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
-import { URI } from '@theia/core';
+import { URI, Emitter } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, DisplayCell } from './zoomy-cli-loader';
 
@@ -106,10 +106,22 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected kernelStatus = '';
     protected kernelReady = false;
     protected readonly outputs = new Map<string, CardOut>();
-    // Param editing (the "gear"): open state, loaded schema, and edited values.
-    protected readonly paramsOpen = new Set<string>();
+    // Param editing: the active card whose parameters show in the right-hand
+    // "Zoomy Parameters" panel, the loaded schemas, and the edited values.
+    protected activeParamCardId: string | undefined;
+    protected activeParamDir: string | undefined;
     protected readonly schemas = new Map<string, any>();
     protected readonly edited = new Map<string, any>();
+    /** Fired whenever the params target or its values change, so the right-hand
+     *  Parameters panel re-renders. */
+    protected readonly onParamsChangedEmitter = new Emitter<void>();
+    readonly onParamsChanged = this.onParamsChangedEmitter.event;
+    /** Set by the frontend module: reconcile the right-hand panel to the current
+     *  desired state (open with the active card, or collapsed). Idempotent +
+     *  last-write-wins, so rapid open/close/tab-switch can't leave it half-open. */
+    paramsPanel: { sync(): void } | undefined;
+    /** Whether the Parameters panel should currently be open. */
+    hasActiveParams(): boolean { return this.activeParamCardId !== undefined; }
     // Accordion (one expanded card) + selection (one selected card per tab).
     protected expanded: string | undefined;
     protected readonly selected: Record<string, string> = {};
@@ -303,24 +315,50 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     /** card.init overlaid with the user's edits from the param form. */
     protected mergedInit(card: any): any { return { ...(card.init || {}), ...(this.edited.get(card.id) || {}) }; }
 
-    protected async toggleParams(card: any): Promise<void> {
-        if (this.paramsOpen.has(card.id)) { this.paramsOpen.delete(card.id); this.update(); return; }
-        this.paramsOpen.add(card.id); this.update();
-        if (!this.schemas.has(card.id)) {
-            // Inline params-card schema needs no worker; class-cards introspect
-            // via extract_params (cached in the worker after boot); builtin cards
-            // (mesh) expose their init directly ({placeholder} edits bite there).
-            if (card.params) { this.schemas.set(card.id, card.params); }
-            else if (card.class) {
-                try { const res = await this.cli.extractParams(card.class, card.init || {}); this.schemas.set(card.id, res?.params || {}); }
-                catch (e) { this.schemas.set(card.id, deriveSchema(card.init)); }
-            } else { this.schemas.set(card.id, deriveSchema(card.init)); }
-            this.update();
+    /** Open the right-hand Parameters panel for a card (or toggle it closed if it
+     *  is already the active one). Also selects the card. The schema loads async;
+     *  a preview (derived from the card's init) shows immediately so the panel is
+     *  never blank — this is what fixes "Parameters doesn't open for the model". */
+    async openParams(card: any, dir: string): Promise<void> {
+        if (this.activeParamCardId === card.id) {
+            this.activeParamCardId = undefined; this.activeParamDir = undefined;
+            this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); this.update(); return;
         }
+        this.selected[dir] = card.id;
+        this.activeParamCardId = card.id; this.activeParamDir = dir;
+        // Show an immediate preview schema so the panel has content right away.
+        if (!this.schemas.has(card.id) && !card.params) { this.schemas.set(card.id, deriveSchema(card.init)); }
+        this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); this.update();
+        await this.loadSchema(card);
+    }
+    /** Load a card's real parameter schema (class introspection via the worker;
+     *  inline `params` need no worker; builtin cards expose their init). */
+    protected async loadSchema(card: any): Promise<void> {
+        let schema: any;
+        if (card.params) { schema = card.params; }
+        else if (card.class) {
+            try { const res = await this.cli.extractParams(card.class, card.init || {}); schema = res?.params || deriveSchema(card.init); }
+            catch { schema = deriveSchema(card.init); }
+        } else { schema = deriveSchema(card.init); }
+        this.schemas.set(card.id, schema);
+        this.onParamsChangedEmitter.fire(); this.update();
+    }
+    /** The card currently targeted by the Parameters panel, with its tab dir. */
+    activeParamTarget(): { card: any; dir: string } | undefined {
+        if (!this.activeParamCardId || !this.activeParamDir) { return undefined; }
+        const card = (this.cardsByTab[this.activeParamDir] || []).find(c => c.id === this.activeParamCardId);
+        return card ? { card, dir: this.activeParamDir } : undefined;
+    }
+    /** Close the panel from tab switches / the panel's own close button. */
+    closeParams(): void {
+        if (this.activeParamCardId === undefined) { return; }
+        this.activeParamCardId = undefined; this.activeParamDir = undefined;
+        this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); this.update();
     }
 
     protected setParam(card: any, name: string, value: any): void {
         const e = this.edited.get(card.id) || {}; e[name] = value; this.edited.set(card.id, e); this.update();
+        this.onParamsChangedEmitter.fire();
         this.schedulePersist();
     }
 
@@ -387,6 +425,30 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 (p.bounds && Array.isArray(p.bounds)) ? h('span', { style: { fontSize: 11, color: 'var(--theia-descriptionForeground)' } }, '[' + (p.bounds[0] ?? '') + ', ' + (p.bounds[1] ?? '') + ']') : null);
         };
         return h('div', { style: { marginTop: 10, borderTop: '1px dashed var(--theia-panel-border)', paddingTop: 8 } }, names.map(field));
+    }
+
+    /** Rendered inside the right-hand "Zoomy Parameters" panel: the active card's
+     *  header, description (with math) and its editable parameter form. */
+    renderActiveParams(): React.ReactNode {
+        const h = React.createElement;
+        const wrap = (children: React.ReactNode): React.ReactNode => h('div', { style: { padding: 14, fontFamily: 'var(--theia-font-family)', color: 'var(--theia-foreground)' } }, children);
+        const target = this.activeParamTarget();
+        if (!target) {
+            return wrap(h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, lineHeight: 1.7 } },
+                'Select a model, mesh, solver or visualization, then click ',
+                h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle' } }), ' Parameters on the card to edit its values here.'));
+        }
+        const { card, dir } = target;
+        const label = TABS.find(t => t.dir === dir)?.label || dir;
+        return wrap([
+            h('div', { key: 'hd', style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 } },
+                h('span', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, label),
+                h('div', { style: { fontWeight: 700, fontSize: 15, flex: 1 } }, card.title || card.id),
+                h('button', { title: 'Close', onClick: () => this.closeParams(), style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)', padding: 2 } }, h('span', { className: 'codicon codicon-close' }))),
+            card.requires_tag ? h('div', { key: 'tag', style: { fontSize: 11, marginBottom: 6 } }, h('span', { style: { padding: '1px 6px', borderRadius: 4, background: 'var(--theia-badge-background)', color: 'var(--theia-badge-foreground)' } }, card.requires_tag)) : null,
+            card.description ? h('div', { key: 'desc', className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5, marginBottom: 4 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
+            h('div', { key: 'form' }, this.renderParamForm(card)),
+        ]);
     }
 
     /** Clicking a card selects it in its tab and expands it (accordion: one open).
@@ -557,7 +619,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
         const hasParams = !!(card.params || card.class || (card.init && Object.keys(card.init).length));
-        const open = this.paramsOpen.has(card.id);
+        const paramsActive = this.activeParamCardId === card.id;
         const isSel = this.selected[dir] === card.id;
         const isExp = this.expanded === card.id;
         const cardStyle: React.CSSProperties = {
@@ -566,7 +628,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             borderRadius: 8, padding: 14, marginBottom: 12, background: 'var(--theia-editorWidget-background)',
         };
         const btn: React.CSSProperties = { cursor: runnable ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, background: runnable ? 'var(--theia-button-background)' : 'var(--theia-button-secondaryBackground)', color: 'var(--theia-button-foreground)', opacity: runnable ? 1 : 0.6 };
-        const gearBtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 10px', fontSize: 12.5, background: open ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' };
+        const gearBtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid ' + (paramsActive ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 6, padding: '5px 10px', fontSize: 12.5, background: paramsActive ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' };
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
             h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } }),
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
@@ -577,9 +639,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
-                hasParams ? h('button', { style: gearBtn, onClick: () => this.toggleParams(card) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
+                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), paramsActive ? 'Parameters ▸' : 'Parameters') : null,
                 h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
-            open ? this.renderParamForm(card) : null,
             out ? h('div', { style: { marginTop: 10, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 8, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
                 out.cells.map((c, i) => this.renderCell(c, 'c' + i)),
                 out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null) : null);
@@ -620,7 +681,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // create or open a case first (so the GUI can never be out of sync with a folder).
         if (!this.caseUri) { return this.renderGate(); }
         const tabBtn = (t: TabDef): React.ReactNode => h('button', {
-            key: t.dir, onClick: () => { this.active = t.dir; this.update(); },
+            key: t.dir, onClick: () => { this.active = t.dir; this.closeParams(); this.update(); },
             style: { cursor: 'pointer', border: 'none', borderBottom: this.active === t.dir ? '2px solid var(--theia-button-background)' : '2px solid transparent', background: 'transparent', color: this.active === t.dir ? 'var(--theia-foreground)' : 'var(--theia-descriptionForeground)', padding: '8px 14px', fontSize: 13, fontWeight: 600 },
         }, t.label + ' (' + (this.cardsByTab[t.dir]?.length || 0) + ')');
         const cards = this.cardsByTab[this.active] || [];

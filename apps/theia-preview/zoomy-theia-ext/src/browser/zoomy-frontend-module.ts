@@ -24,6 +24,7 @@ import { DomOutputWebview } from './dom-output-webview';
 import { ZoomyStartWidget } from './start-page-widget';
 import { ZoomyModelConfigWidget } from './model-config-widget';
 import { ZoomyViewWidget } from './zoomy-view-widget';
+import { ZoomyParamsWidget } from './zoomy-params-widget';
 import { getPyodideClient, PyodideClient } from './pyodide-runtime';
 import { registerZoomyCompletions } from './completion-provider';
 
@@ -73,6 +74,23 @@ export class ZoomyViewContribution extends AbstractViewContribution<ZoomyViewWid
         });
     }
     async initializeLayout(): Promise<void> { await this.openView({ activate: false, reveal: true }); }
+}
+
+/** Places the "Zoomy Parameters" view in the RIGHT activity bar (docked but
+ *  collapsed by default). The config widget reveals it when a card's Parameters
+ *  button is clicked and collapses it on tab switch. */
+@injectable()
+export class ZoomyParamsViewContribution extends AbstractViewContribution<ZoomyParamsWidget> {
+    constructor() {
+        super({
+            widgetId: ZoomyParamsWidget.ID,
+            widgetName: 'Parameters',
+            defaultWidgetOptions: { area: 'right', rank: 200 },
+            toggleCommandId: 'zoomy.toggleParamsView',
+        });
+    }
+    // Dock it in the right area (so its icon shows) without expanding the panel.
+    async initializeLayout(): Promise<void> { await this.openView({ activate: false, reveal: false }); }
 }
 
 /**
@@ -172,7 +190,34 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         // Reflect connected backends in the status bar (the "connected backend"
         // indicator brought over from the old GUI, in a native, portable slot).
         if (!w.onBackendsChanged) { w.onBackendsChanged = tags => this.setBackendStatus(tags); this.setBackendStatus(w.connectedTags || []); }
+        // Let the config widget reconcile the right-hand Parameters panel.
+        if (!w.paramsPanel) { w.paramsPanel = { sync: () => { this.syncParams(); } }; }
         return w;
+    }
+    /** Reconcile the right-hand Parameters panel to the widget's desired state.
+     *  Serialized + last-write-wins: activateWidget can take ~2s, so rapid
+     *  open→tab-switch must not leave the panel expanded after a collapse. */
+    protected paramsSyncing = false;
+    protected paramsSyncPending = false;
+    protected async syncParams(): Promise<void> {
+        if (this.paramsSyncing) { this.paramsSyncPending = true; return; }
+        this.paramsSyncing = true;
+        try {
+            const pw = await this.widgetManager.getOrCreateWidget(ZoomyParamsWidget.ID);
+            do {
+                this.paramsSyncPending = false;
+                const w = (await this.widgetManager.getWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget | undefined;
+                const shouldOpen = !!w?.hasActiveParams();
+                if (shouldOpen) {
+                    if (!pw.isAttached) { await this.shell.addWidget(pw, { area: 'right' }); }
+                    await this.shell.activateWidget(pw.id);
+                    // Re-check after the (slow) activate — a collapse may have raced in.
+                    if (!this.paramsSyncPending && w?.hasActiveParams()) { this.shell.expandPanel('right'); }
+                } else {
+                    await this.shell.collapsePanel('right');
+                }
+            } while (this.paramsSyncPending);
+        } catch (e) { console.warn('zoomy params sync', e); } finally { this.paramsSyncing = false; }
     }
     protected setBackendStatus(tags: string[]): void {
         this.statusBar.setElement('zoomy.backend', {
@@ -290,6 +335,11 @@ export default new ContainerModule((bind, _unbind, isBound, rebind) => {
     bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyViewWidget.ID, createWidget: () => ctx.container.get(ZoomyViewWidget) })).inSingletonScope();
     bindViewContribution(bind, ZoomyViewContribution);
     bind(FrontendApplicationContribution).toService(ZoomyViewContribution);
+    // The right-hand "Zoomy Parameters" panel.
+    bind(ZoomyParamsWidget).toSelf();
+    bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyParamsWidget.ID, createWidget: () => ctx.container.get(ZoomyParamsWidget) })).inSingletonScope();
+    bindViewContribution(bind, ZoomyParamsViewContribution);
+    bind(FrontendApplicationContribution).toService(ZoomyParamsViewContribution);
     // Kept but no longer the landing surface.
     bind(ZoomyStartWidget).toSelf();
     bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyStartWidget.ID, createWidget: () => ctx.container.get(ZoomyStartWidget) })).inSingletonScope();
