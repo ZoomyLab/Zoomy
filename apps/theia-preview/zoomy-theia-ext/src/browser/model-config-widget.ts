@@ -102,6 +102,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected cli: any;
     protected cardsByTab: Record<string, any[]> = {};
     protected active = 'models';
+    /** Active subtab (category) per tab. */
+    protected readonly activeSub: Record<string, string> = {};
     protected loaded = false;
     protected error = '';
     protected kernelStatus = '';
@@ -1005,7 +1007,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             key: t.dir, onClick: () => { this.active = t.dir; this.closeParams(); this.update(); },
             style: { cursor: 'pointer', border: 'none', borderBottom: this.active === t.dir ? '2px solid var(--theia-button-background)' : '2px solid transparent', background: 'transparent', color: this.active === t.dir ? 'var(--theia-foreground)' : 'var(--theia-descriptionForeground)', padding: '8px 14px', fontSize: 13, fontWeight: 600 },
         }, t.label + ' (' + (this.cardsByTab[t.dir]?.length || 0) + ')');
-        const cards = this.cardsByTab[this.active] || [];
+        const allCards = this.cardsByTab[this.active] || [];
+        const cats = [...new Set(allCards.map(c => c.category || 'General'))];
+        const activeCat = cats.includes(this.activeSub[this.active]) ? this.activeSub[this.active] : cats[0];
+        const cards = cats.length > 1 ? allCards.filter(c => (c.category || 'General') === activeCat) : allCards;
+        const subBtn = (cat: string): React.ReactNode => h('button', {
+            key: cat, onClick: () => { this.activeSub[this.active] = cat; this.update(); },
+            style: { cursor: 'pointer', border: '1px solid ' + (cat === activeCat ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 999, padding: '3px 12px', fontSize: 12, background: cat === activeCat ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' },
+        }, cat + ' (' + allCards.filter(c => (c.category || 'General') === cat).length + ')');
+        const subTabs = cats.length > 1 ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 } }, cats.map(subBtn)) : null;
         const selName = (dir: string): string => { const c = this.pickedCard(dir); return c ? (c.title || c.id) : '—'; };
         const runBtn: React.CSSProperties = { cursor: this.simBusy ? 'default' : 'pointer', border: 'none', borderRadius: 6, padding: '9px 18px', fontSize: 14, fontWeight: 700, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.simBusy ? 0.7 : 1 };
         const chip = (label: string, val: string) => h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, label + ': ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, val));
@@ -1054,7 +1064,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 this.connectedTags.length ? h('span', { style: { fontSize: 11, marginLeft: 12, color: 'var(--theia-successForeground, #3fb950)' } }, '● backend: ' + this.connectedTags.join(', ')) : null),
             this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
-            h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),
+            h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
+            subTabs,
             this.active === 'visualizations' ? this.renderVizViewer() : null,
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'));
     }

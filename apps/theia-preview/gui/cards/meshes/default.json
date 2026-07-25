@@ -4,45 +4,48 @@
     "title": "Create 1D",
     "source": "builtin",
     "init": {
-      "x_min": 0.0,
-      "x_max": 10.0,
+      "x_min": 0,
+      "x_max": 10,
       "n_cells": 50
     },
     "description": "Uniform 1D mesh",
-    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_1d(domain=({x_min}, {x_max}), n_inner_cells={n_cells})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_1d(domain=({x_min}, {x_max}), n_inner_cells={n_cells})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n",
+    "category": "Grids"
   },
   {
     "id": "mesh-create-2d",
     "title": "Create 2D",
     "source": "builtin",
     "init": {
-      "x_min": 0.0,
-      "x_max": 1.0,
-      "y_min": 0.0,
-      "y_max": 1.0,
+      "x_min": 0,
+      "x_max": 1,
+      "y_min": 0,
+      "y_max": 1,
       "nx": 50,
       "ny": 50
     },
     "description": "Uniform 2D quad mesh",
-    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_2d(({x_min}, {x_max}, {y_min}, {y_max}), nx={nx}, ny={ny})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_2d(({x_min}, {x_max}, {y_min}, {y_max}), nx={nx}, ny={ny})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n",
+    "category": "Grids"
   },
   {
     "id": "mesh-create-3d",
     "title": "Create 3D",
     "source": "builtin",
     "init": {
-      "x_min": 0.0,
-      "x_max": 1.0,
-      "y_min": 0.0,
-      "y_max": 1.0,
-      "z_min": 0.0,
-      "z_max": 1.0,
+      "x_min": 0,
+      "x_max": 1,
+      "y_min": 0,
+      "y_max": 1,
+      "z_min": 0,
+      "z_max": 1,
       "nx": 10,
       "ny": 10,
       "nz": 10
     },
     "description": "Uniform 3D hex mesh",
-    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_3d(({x_min}, {x_max}, {y_min}, {y_max}, {z_min}, {z_max}), nx={nx}, ny={ny}, nz={nz})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n"
+    "template": "from zoomy_core.mesh import BaseMesh\nmesh = BaseMesh.create_3d(({x_min}, {x_max}, {y_min}, {y_max}, {z_min}, {z_max}), nx={nx}, ny={ny}, nz={nz})\n\nmesh.write_to_hdf5(\"mesh.h5\")\ntry:\n    from zoomy_prepost import mesh_to_gmsh\n    mesh_to_gmsh(mesh, \"mesh.msh\", boundary_group=None)\nexcept Exception:\n    pass  # .msh (dmplex/firedrake) — server has zoomy_prepost; local Pyodide skips\n",
+    "category": "Grids"
   },
   {
     "id": "mesh-gen-channels-channel_quad_2d_mesh",
