@@ -7,7 +7,9 @@ import {
     QuickInputService
 } from '@theia/core/lib/browser';
 import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar';
-import { FileService } from '@theia/filesystem/lib/browser/file-service';
+import { FileService, FileServiceContribution } from '@theia/filesystem/lib/browser/file-service';
+import { RemoteFileServiceContribution } from '@theia/filesystem/lib/browser/remote-file-service-contribution';
+import { MemoryFileSystemProvider } from './memory-fs-provider';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
 import { NotebookTypeRegistry } from '@theia/notebook/lib/browser/notebook-type-registry';
@@ -70,6 +72,33 @@ export class ZoomyViewContribution extends AbstractViewContribution<ZoomyViewWid
         });
     }
     async initializeLayout(): Promise<void> { await this.openView({ activate: false, reveal: true }); }
+}
+
+/**
+ * Registers our reliable in-memory + IndexedDB provider for the `file` scheme,
+ * synchronously, at FileService init. Theia's browser-only default registers
+ * `file` via RemoteFileServiceContribution, which only calls
+ * `service.registerProvider('file', …)` AFTER the OPFS provider's `ready`
+ * resolves — and OPFS fails to initialize in a blob worker on some browsers, so
+ * `ready` rejects and `file` is NEVER registered (every read/write throws
+ * ENOPRO, breaking the workspace). We claim `file` synchronously here and
+ * neutralize the Remote contribution (below) so nothing conflicts or boots OPFS.
+ */
+@injectable()
+export class ZoomyFileServiceContribution implements FileServiceContribution {
+    @inject(MemoryFileSystemProvider) protected readonly provider: MemoryFileSystemProvider;
+    registerFileSystemProviders(service: FileService): void {
+        try { service.registerProvider('file', this.provider as any); }
+        catch (e) { console.error('[zoomy-fs] register file provider failed', e); }
+    }
+}
+
+/** No-op replacement for RemoteFileServiceContribution: keeps OPFS from ever
+ *  constructing (its @postConstruct init is what fails) and from double-
+ *  registering the `file` scheme. */
+@injectable()
+export class NoopFileServiceContribution implements FileServiceContribution {
+    registerFileSystemProviders(): void { /* intentionally empty */ }
 }
 
 @injectable()
@@ -213,7 +242,18 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
 }
 
 console.log('ZOOMY module evaluated');
-export default new ContainerModule(bind => {
+export default new ContainerModule((bind, _unbind, isBound, rebind) => {
+    // Replace Theia's OPFS filesystem provider (fails to init in a blob worker on
+    // some browsers → breaks the whole FileService/workspace) with a reliable
+    // in-memory + IndexedDB provider registered synchronously for the `file`
+    // scheme. This extension loads after @theia/filesystem, so the rebind wins.
+    bind(MemoryFileSystemProvider).toSelf().inSingletonScope();
+    bind(ZoomyFileServiceContribution).toSelf().inSingletonScope();
+    bind(FileServiceContribution).toService(ZoomyFileServiceContribution);
+    // Neutralize the OPFS/remote contribution so it neither double-registers
+    // `file` nor constructs the OPFS provider (whose @postConstruct init fails).
+    if (isBound(RemoteFileServiceContribution)) { rebind(RemoteFileServiceContribution).to(NoopFileServiceContribution as any).inSingletonScope(); }
+
     bind(IpynbSerializer).toSelf().inSingletonScope();
     // browser-only: the iframe output webview factory is unbound — supply a DOM one.
     bind(CellOutputWebviewFactory).toConstantValue((() => new DomOutputWebview()) as any);

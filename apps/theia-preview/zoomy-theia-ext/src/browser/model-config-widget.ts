@@ -292,7 +292,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const spec = await this.gatherSpec();
             const py = this.cli.exportCase(spec, 'py');
             await this.fileService.write(this.caseUri, py);
-        } catch (e: any) { console.error('persistCase', e); }
+        } catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
     }
     protected schedulePersist(): void {
         if (!this.caseUri) { return; }
