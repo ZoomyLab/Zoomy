@@ -138,6 +138,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected simBusy = false;
     protected simStatus = '';
     protected simError: CardOut | undefined;
+    protected simStopped = false;
     // Visualization is multi-select: a composed viz can stack several viewers.
     protected readonly selectedViz = new Set<string>();
     protected vizOuts: Array<{ title: string; out: CardOut }> = [];
@@ -189,6 +190,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 }
             });
             this.cli = await getZoomyCli();
+            // The built-in numpy (Pyodide) backend is always available — seed the
+            // connected list from it so it shows connected/green from the start.
+            this.refreshBackends();
             // Warm the Pyodide worker NOW (it auto-boots on creation) so the first
             // Run isn't stuck behind the cold boot + param pre-extract.
             this.cli.runCode('pass').catch(() => { /* background warm-up */ });
@@ -330,12 +334,32 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     /** "Edit" on a model/mesh/solver card: flush pending edits, then open the
      *  case's case.py in the editor (auto-revealed in the Explorer). The case is
      *  the single source of truth, so editing = editing case.py directly. */
-    async editCardFile(): Promise<void> {
+    async editCardFile(dir?: string): Promise<void> {
         if (!this.caseUri) { return; }
         try {
             await this.persistCase();
-            await open(this.openerService, this.caseUri);
+            const options: any = {};
+            if (dir) {
+                const section = ({ models: 'model', meshes: 'mesh', solvers: 'run', visualizations: 'visualization' } as any)[dir];
+                const line = await this.sectionLine(section);
+                if (line >= 0) { options.selection = { start: { line, character: 0 }, end: { line, character: 0 } }; options.mode = 'reveal'; }
+            }
+            await open(this.openerService, this.caseUri, options);
         } catch (e: any) { this.setNotice('Open in editor failed: ' + (e?.message || e)); }
+    }
+    /** 0-based line of a case.py section (from its `# %% … zoomy={…}` marker). */
+    protected async sectionLine(section: string): Promise<number> {
+        if (!this.caseUri || !section) { return -1; }
+        try {
+            const lines = (await this.fileService.read(this.caseUri)).value.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                const m = /#\s*%%.*zoomy=(\{.*\})\s*$/.exec(lines[i]);
+                if (!m) { continue; }
+                let meta: any; try { meta = JSON.parse(m[1]); } catch { continue; }
+                if (meta.section === section || meta.role === section) { return i; }
+            }
+        } catch { /* ignore */ }
+        return -1;
     }
     /** "Open in Notebook Mode": export the current case to a .ipynb next to its
      *  case.py and open it in the notebook editor. The case stays the source of
@@ -635,33 +659,85 @@ export class ZoomyModelConfigWidget extends ReactWidget {
      *  Visualization tab, pick a viewer and click "Render visualization". */
     async runAssembly(): Promise<void> {
         if (this.simBusy) { return; }
-        this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOuts = [];
+        this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOuts = []; this.simStopped = false;
         // Stream the run's console output to the bottom "Simulation" panel.
         emitSimOutput({ kind: 'clear' });
         this.simPanel?.reveal();
         emitSimOutput({ kind: 'line', level: 'info', text: '▶ Running case "' + this.caseName + '"…' });
         try {
-            for (const [dir, label] of [['models', 'model'], ['meshes', 'mesh'], ['solvers', 'solver']] as const) {
-                const card = this.pickedCard(dir);
-                if (!card) { this.simStatus = 'No ' + label + ' selected.'; emitSimOutput({ kind: 'line', level: 'error', text: 'No ' + label + ' selected.' }); this.update(); return; }
-                const code = cardCode(card, this.mergedInit(card));
-                if (!code) { this.simStatus = label + ' "' + (card.title || card.id) + '" is a remote backend — connect a backend to run it.'; emitSimOutput({ kind: 'line', level: 'error', text: label + ' "' + (card.title || card.id) + '" needs a backend.' }); this.update(); return; }
-                this.simStatus = 'Running ' + label + ': ' + (card.title || card.id) + '…'; this.update();
-                emitSimOutput({ kind: 'line', level: 'info', text: '· ' + label + ': ' + (card.title || card.id) + '…' });
-                const res = await this.cli.runCode(code);
-                if (res?.output) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(res.output).trimEnd() }); }
-                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: '✗ Error in ' + label + '.' }); this.update(); return; }
-                if (res?.store_meta) { this.storeMeta = res.store_meta; }
+            const solver = this.pickedCard('solvers');
+            const solverTag = solver?.requires_tag || 'numpy';
+            const solverLocal = !!cardCode(solver, this.mergedInit(solver));
+            if (!solverLocal) {
+                // Remote solver: submit the whole case to its connected backend.
+                if (!this.connectedTags.includes(solverTag)) {
+                    this.simStatus = 'Solver "' + (solver?.title || solverTag) + '" needs a "' + solverTag + '" backend — connect one.';
+                    emitSimOutput({ kind: 'line', level: 'error', text: '✗ Needs a "' + solverTag + '" backend (not connected).' }); this.update(); return;
+                }
+                await this.runOnBackend(solverTag, solver);
+            } else {
+                await this.runLocalSteps();
             }
+            if (this.simStopped) { this.simStatus = 'Stopped.'; emitSimOutput({ kind: 'line', level: 'error', text: '■ Stopped.' }); return; }
+            if (this.simError) { return; }
             this.simRan = true;
             this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
             emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Simulation complete — open Visualization to render.' });
         } catch (e: any) {
-            this.simStatus = 'Error: ' + (e?.message || String(e));
-            emitSimOutput({ kind: 'line', level: 'error', text: '✗ ' + (e?.message || String(e)) });
+            if (this.simStopped) { this.simStatus = 'Stopped.'; }
+            else { this.simStatus = 'Error: ' + (e?.message || String(e)); emitSimOutput({ kind: 'line', level: 'error', text: '✗ ' + (e?.message || String(e)) }); }
         } finally {
             this.simBusy = false; this.update();
         }
+    }
+
+    /** Local numpy (Pyodide) run: model → mesh → solver in the shared scope. */
+    protected async runLocalSteps(): Promise<void> {
+        for (const [dir, label] of [['models', 'model'], ['meshes', 'mesh'], ['solvers', 'solver']] as const) {
+            if (this.simStopped) { return; }
+            const card = this.pickedCard(dir);
+            if (!card) { this.simError = { cells: [], stdout: 'No ' + label + ' selected.', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: 'No ' + label + ' selected.' }); return; }
+            const code = cardCode(card, this.mergedInit(card));
+            if (!code) { this.simError = { cells: [], stdout: label + ' needs a backend.', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: label + ' "' + (card.title || card.id) + '" needs a backend.' }); return; }
+            this.simStatus = 'Running ' + label + ': ' + (card.title || card.id) + '…'; this.update();
+            emitSimOutput({ kind: 'line', level: 'info', text: '· ' + label + ': ' + (card.title || card.id) + '…' });
+            const res = await this.cli.runCode(code);
+            if (res?.output) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(res.output).trimEnd() }); }
+            if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: '✗ Error in ' + label + '.' }); return; }
+            if (res?.store_meta) { this.storeMeta = res.store_meta; }
+        }
+    }
+
+    /** Remote run: submit the composed case.py to a connected backend, then pull
+     *  the returned store into Pyodide's VFS so the viz cards can read it. */
+    protected async runOnBackend(tag: string, solver: any): Promise<void> {
+        this.simStatus = 'Submitting case to "' + tag + '" backend…'; this.update();
+        emitSimOutput({ kind: 'line', level: 'info', text: '· submitting to "' + tag + '" (' + (solver?.title || solver?.id) + ')…' });
+        const spec = await this.gatherSpec();
+        const casePy = this.cli.exportCase(spec, 'py');
+        const r = await this.cli.submitCase({ tag, casePy, onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
+        const res = r?.result || r || {};
+        if (res.output || res.log) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(res.output || res.log).trimEnd() }); }
+        if (res.status === 'error' || res.error) { this.simError = { cells: [], stdout: res.error || res.output || 'Backend error', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: '✗ Backend error.' }); return; }
+        // submitCase already wrote the HDF5 to /tmp/zoomy_sim/<job_id>.h5 — open it.
+        if (res.job_id) {
+            try { const meta = await this.cli.openHdf5('/tmp/zoomy_sim/' + res.job_id + '.h5'); if (meta?.store_meta) { this.storeMeta = meta.store_meta; } else if (meta) { this.storeMeta = meta; } }
+            catch (e: any) { emitSimOutput({ kind: 'line', level: 'error', text: 'Could not open the returned store: ' + (e?.message || e) }); }
+        }
+    }
+
+    /** Stop a running simulation (cooperative SIGINT if available, else the
+     *  worker is terminated + recreated — the kernel then reboots). */
+    async stopAssembly(): Promise<void> {
+        if (!this.simBusy) { return; }
+        this.simStopped = true;
+        this.simStatus = 'Stopping…'; emitSimOutput({ kind: 'line', level: 'error', text: '■ Stopping…' }); this.update();
+        try {
+            const mode = this.cli.interrupt ? this.cli.interrupt() : undefined;
+            // A terminate+recreate reboots the kernel — reflect that so Run waits.
+            if (!mode || mode.mode === 'terminate+recreate') { this.kernelReady = false; this.kernelStatus = 'restarting…'; }
+        } catch (e) { /* ignore */ }
+        this.update();
     }
 
     /** Render the composed visualization: run EACH selected viewer against the
@@ -803,6 +879,19 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.update();
     }
 
+        /** A card's backend "flag": solver/viz cards advertise built-in (runs in
+     *  the browser, always green) vs a required backend tag (green when that
+     *  backend is connected) vs post-processing. Cards can override via
+     *  `card.flag` ('built-in' | 'post-processing') and `card.requires_tag`. */
+    protected cardFlag(card: any, dir: string, runnable: boolean): { label: string; available: boolean; tip: string } | null {
+        if (dir !== 'solvers' && dir !== 'visualizations') { return card.requires_tag ? { label: card.requires_tag, available: this.connectedTags.includes(card.requires_tag), tip: 'Needs a "' + card.requires_tag + '" backend' } : null; }
+        // Built-in: has a local template (solver) or a snippet with no remote tag (viz).
+        const builtin = card.flag === 'built-in' || (card.requires_tag ? runnable : (dir === 'visualizations' ? !!card.snippet : runnable));
+        if (builtin) { return { label: 'built-in', available: true, tip: 'Built in — runs in the browser (Pyodide), no backend needed.' }; }
+        if (card.requires_tag) { const ok = this.connectedTags.includes(card.requires_tag); return { label: card.requires_tag, available: ok, tip: ok ? 'Backend "' + card.requires_tag + '" connected — can run.' : 'Needs a "' + card.requires_tag + '" backend (not connected).' }; }
+        return { label: 'post-processing', available: false, tip: 'Needs a post-processing backend (e.g. 3-D interpolation on a general mesh).' };
+    }
+
         protected renderCard(card: any, dir: string): React.ReactNode {
         const h = React.createElement;
         const runnable = !!cardCode(card, this.mergedInit(card));
@@ -829,7 +918,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => vizMulti ? this.toggleExpand(card) : this.pick(card, dir) },
             selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
-            card.requires_tag ? (() => { const connected = this.connectedTags.includes(card.requires_tag); return h('span', { title: connected ? 'Backend connected — this solver can run' : 'Needs a "' + card.requires_tag + '" backend (not connected)', style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: connected ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: connected ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: connected ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, connected ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, card.requires_tag); })() : null,
+            (() => { const f = this.cardFlag(card, dir, runnable); if (!f) { return null; } return h('span', { title: f.tip, style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: f.available ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: f.available ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: f.available ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, f.available ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, f.label); })(),
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
@@ -838,7 +927,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
                 hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
-                dir !== 'visualizations' ? h('button', { style: gearBtn, title: 'Open this case (case.py) in the editor', onClick: () => this.editCardFile() }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit') : null,
+                h('button', { style: gearBtn, title: 'Open this section of case.py in the editor', onClick: () => this.editCardFile(dir) }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit'),
                 dir === 'models'
                     ? h('button', { style: displayBtn, disabled: !this.kernelReady || displaying, title: 'Build the model and display its equations below', onClick: () => this.loadModelMath(card, true) }, h('span', { className: 'codicon codicon-' + (displaying ? 'loading codicon-modifier-spin' : 'symbol-structure'), style: { verticalAlign: 'middle', marginRight: 6 } }), displaying ? 'Displaying…' : 'Display model')
                     : h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
@@ -894,8 +983,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const chip = (label: string, val: string) => h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, label + ': ', h('span', { style: { color: 'var(--theia-foreground)', fontWeight: 600 } }, val));
         const runBar = h('div', { style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 14, marginBottom: 16, background: 'var(--theia-editorWidget-background)' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' } },
-                h('button', { style: runBtn, disabled: this.simBusy || !this.kernelReady, onClick: () => this.runAssembly() },
-                    h('span', { className: 'codicon codicon-play', style: { verticalAlign: 'middle', marginRight: 6 } }), this.simBusy ? 'Running…' : 'Run simulation'),
+                this.simBusy
+                    ? h('button', { style: { ...runBtn, background: 'var(--theia-errorForeground, #d13438)', opacity: 1, cursor: 'pointer' }, onClick: () => this.stopAssembly() },
+                        h('span', { className: 'codicon codicon-debug-stop', style: { verticalAlign: 'middle', marginRight: 6 } }), 'Stop simulation')
+                    : h('button', { style: runBtn, disabled: !this.kernelReady, onClick: () => this.runAssembly() },
+                        h('span', { className: 'codicon codicon-play', style: { verticalAlign: 'middle', marginRight: 6 } }), 'Run simulation'),
                 h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap' } }, chip('model', selName('models')), chip('mesh', selName('meshes')), chip('solver', selName('solvers')))),
             this.simStatus ? h('div', { style: { fontSize: 12, color: this.simRan && !this.simError ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-descriptionForeground)', marginTop: 8 } }, this.simStatus) : null,
             // Run computes only — compute errors surface here; the visualization
