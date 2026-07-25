@@ -1,7 +1,7 @@
 import React from '@theia/core/shared/react';
 import { injectable, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, DisplayCell } from './zoomy-cli-loader';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureGit, DisplayCell } from './zoomy-cli-loader';
 
 declare const window: any;
 /** Render markdown via marked when available, else the minimal inline fallback. */
@@ -114,6 +114,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected notice = '';
     protected backendUrl = 'http://localhost:8080';
     protected connectedTags: string[] = [];
+    // #7 In-browser git (isomorphic-git + lightning-fs).
+    protected repoUrl = 'https://github.com/ZoomyLab/Zoomy';
+    protected gitToken = '';
+    protected gitBusy = false;
+    protected repoCases: string[] = [];
 
     @postConstruct()
     protected init(): void {
@@ -400,6 +405,69 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
     }
 
+    // --- #7 In-browser git: clone a case repo, list its cases, import/save. ---
+    protected readonly GIT_DIR = '/repo';
+    protected readonly CORS_PROXY = 'https://cors.isomorphic-git.org';
+    protected gitAuth(): any { return this.gitToken ? { username: this.gitToken, password: 'x-oauth-basic' } : {}; }
+
+    protected async cloneRepo(): Promise<void> {
+        const url = this.repoUrl.trim(); if (!url || this.gitBusy) { return; }
+        this.gitBusy = true; this.setNotice('Cloning ' + url + '… (shallow, browser git)');
+        try {
+            const { git, http, fs } = await ensureGit();
+            try { await fs.promises.rmdir(this.GIT_DIR, { recursive: true }); } catch { /* fresh */ }
+            await git.clone({ fs, http, dir: this.GIT_DIR, url, corsProxy: this.CORS_PROXY, singleBranch: true, depth: 1, onAuth: () => this.gitAuth() });
+            await this.listRepoCases(fs);
+            this.setNotice('Cloned. Found ' + this.repoCases.length + ' case file(s).');
+        } catch (e: any) { this.setNotice('Clone failed: ' + (e?.message || e)); }
+        finally { this.gitBusy = false; this.update(); }
+    }
+    /** Walk the cloned repo for .py/.ipynb files that look like cases. */
+    protected async listRepoCases(fs: any): Promise<void> {
+        const out: string[] = [];
+        const walk = async (dir: string, depth: number) => {
+            if (depth > 4) { return; }
+            let entries: string[] = [];
+            try { entries = await fs.promises.readdir(dir); } catch { return; }
+            for (const name of entries) {
+                if (name === '.git' || name === 'node_modules') { continue; }
+                const full = dir + '/' + name;
+                let stat: any; try { stat = await fs.promises.stat(full); } catch { continue; }
+                if (stat.isDirectory()) { await walk(full, depth + 1); }
+                else if (/\.(py|ipynb)$/.test(name)) { out.push(full.slice(this.GIT_DIR.length + 1)); }
+            }
+        };
+        await walk(this.GIT_DIR, 0);
+        this.repoCases = out.slice(0, 200);
+    }
+    protected async importFromRepo(path: string): Promise<void> {
+        try {
+            const { fs } = await ensureGit();
+            let text = await fs.promises.readFile(this.GIT_DIR + '/' + path, 'utf8');
+            if (path.endsWith('.ipynb')) { const nb = JSON.parse(text); text = (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : c.source)).join('\n\n'); }
+            this.applySpec(this.cli.parseCase(text));
+            this.setNotice('Imported ' + path + ' from repo.');
+        } catch (e: any) { this.setNotice('Import failed: ' + (e?.message || e)); }
+    }
+    /** Write the current selection as a case into the repo, commit and push. */
+    protected async pushCaseToRepo(): Promise<void> {
+        if (this.gitBusy) { return; }
+        this.gitBusy = true; this.setNotice('Committing + pushing case…');
+        try {
+            const { git, http, fs } = await ensureGit();
+            const spec = await this.gatherSpec();
+            const py = this.cli.exportCase(spec, 'py');
+            const rel = 'cases/' + (spec.meta?.title || 'zoomy_case').toLowerCase().replace(/[^a-z0-9]+/g, '_') + '.py';
+            try { await fs.promises.mkdir(this.GIT_DIR + '/cases'); } catch { /* exists */ }
+            await fs.promises.writeFile(this.GIT_DIR + '/' + rel, py, 'utf8');
+            await git.add({ fs, dir: this.GIT_DIR, filepath: rel });
+            await git.commit({ fs, dir: this.GIT_DIR, message: 'Add/update ' + rel + ' from Zoomy GUI', author: { name: 'Zoomy GUI', email: 'gui@zoomy' } });
+            await git.push({ fs, http, dir: this.GIT_DIR, corsProxy: this.CORS_PROXY, onAuth: () => this.gitAuth() });
+            this.setNotice('Committed + pushed ' + rel + '.');
+        } catch (e: any) { this.setNotice('Push failed: ' + (e?.message || e) + ' (needs a repo you can write + a token).'); }
+        finally { this.gitBusy = false; this.update(); }
+    }
+
     protected renderCard(card: any, dir: string): React.ReactNode {
         const h = React.createElement;
         const runnable = !!cardCode(card, this.mergedInit(card));
@@ -473,6 +541,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 h('input', { style: inputS, value: this.backendUrl, onChange: (e: any) => { this.backendUrl = e.target.value; this.update(); }, placeholder: 'http://localhost:8080' }),
                 h('button', { style: tbtn, onClick: () => this.connectBackend() }, 'Connect'),
                 this.connectedTags.length ? h('span', { style: { fontSize: 11, color: 'var(--theia-successForeground, #3fb950)' } }, '● ' + this.connectedTags.join(', ')) : null));
+        const gitRow = h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 } },
+            h('span', { className: 'codicon codicon-git-merge', style: { color: 'var(--theia-descriptionForeground)' } }),
+            h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Repository:'),
+            h('input', { style: { ...inputS, minWidth: 320 }, value: this.repoUrl, onChange: (e: any) => { this.repoUrl = e.target.value; this.update(); }, placeholder: 'https://github.com/you/cases' }),
+            h('button', { style: tbtn, disabled: this.gitBusy, onClick: () => this.cloneRepo() }, this.gitBusy ? 'Working…' : 'Clone'),
+            h('input', { style: { ...inputS, minWidth: 150 }, type: 'password', value: this.gitToken, onChange: (e: any) => { this.gitToken = e.target.value; this.update(); }, placeholder: 'token (for push)' }),
+            h('button', { style: tbtn, disabled: this.gitBusy, onClick: () => this.pushCaseToRepo() }, 'Commit + push case'),
+            this.repoCases.length ? h('select', { style: inputS, onChange: (e: any) => { if (e.target.value) { this.importFromRepo(e.target.value); } }, value: '' },
+                [h('option', { key: '_', value: '' }, this.repoCases.length + ' case(s) — import…'), ...this.repoCases.map(p => h('option', { key: p, value: p }, p))]) : null);
         return h('div', { style: page },
             h('h1', { style: { fontSize: 26, margin: '0 0 4px', fontWeight: 700 } }, 'Model configuration'),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
@@ -481,6 +558,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)'),
             toolbar,
+            gitRow,
             this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),

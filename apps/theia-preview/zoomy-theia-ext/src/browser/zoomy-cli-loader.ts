@@ -45,6 +45,27 @@ export function ensureRenderLibs(): Promise<void> {
     return libsPromise;
 }
 
+let gitPromise: Promise<any> | undefined;
+/** Load isomorphic-git + a browser FS (lightning-fs, IndexedDB-backed) + the web
+ *  http client from a CDN. Returns {git, http, fs} for in-browser clone/commit/push.
+ *  Hidden dynamic import so the bundler leaves the ESM alone. */
+export function ensureGit(): Promise<any> {
+    if (!gitPromise) {
+        gitPromise = (async () => {
+            const imp = new Function('u', 'return import(u)') as (u: string) => Promise<any>;
+            const [gitMod, httpMod, fsMod] = await Promise.all([
+                imp('https://esm.sh/isomorphic-git@1.27.1'),
+                imp('https://esm.sh/isomorphic-git@1.27.1/http/web'),
+                imp('https://esm.sh/@isomorphic-git/lightning-fs@4.6.0'),
+            ]);
+            const FS = fsMod.default || fsMod;
+            const fs = new FS('zoomy-git');
+            return { git: gitMod.default || gitMod, http: httpMod.default || httpMod, fs };
+        })();
+    }
+    return gitPromise;
+}
+
 /** The single shared ZoomyCLI. First call boots the vendored brain + Pyodide worker. */
 export function getZoomyCli(): Promise<any> {
     if (!cliPromise) {
