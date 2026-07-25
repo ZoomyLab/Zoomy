@@ -1,5 +1,6 @@
 import { ContainerModule, injectable, inject } from '@theia/core/shared/inversify';
-import { CommandContribution, CommandRegistry, MenuContribution, MenuModelRegistry, MenuPath, MAIN_MENU_BAR, URI } from '@theia/core';
+import { CommandContribution, CommandRegistry, MenuContribution, MenuModelRegistry, MenuPath, MAIN_MENU_BAR, SelectionService, URI } from '@theia/core';
+import { NavigatorContextMenu } from '@theia/navigator/lib/browser/navigator-contribution';
 import {
     FrontendApplicationContribution, OpenerService, open, CommonMenus,
     WidgetFactory, WidgetManager, ApplicationShell, AbstractViewContribution, bindViewContribution,
@@ -81,6 +82,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     @inject(WidgetManager) protected readonly widgetManager: WidgetManager;
     @inject(ApplicationShell) protected readonly shell: ApplicationShell;
     @inject(QuickInputService) protected readonly quickInput: QuickInputService;
+    @inject(SelectionService) protected readonly selectionService: SelectionService;
     protected kernel: PyodideKernel;
     protected client: PyodideClient;
 
@@ -134,6 +136,25 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         const url = await this.quickInput.input({ prompt: 'Connect a Zoomy backend by URL', value: w.backendUrl, placeHolder: 'http://localhost:8080' });
         if (url) { w.backendUrl = url; await w.connectBackend(); }
     }
+    /** Explorer context command: open the selected case file in the configurator. */
+    protected selectedUri(): URI | undefined {
+        const sel: any = this.selectionService.selection;
+        const node = Array.isArray(sel) ? sel[0] : sel;
+        const u = node?.uri || node?.fileStat?.resource;
+        return u ? new URI(u.toString()) : undefined;
+    }
+    protected async openCaseInConfigurator(): Promise<void> {
+        const uri = this.selectedUri();
+        if (!uri) { return; }
+        const path = uri.path.toString();
+        if (!/\.(py|ipynb)$/.test(path)) { return; }
+        try {
+            const content = await this.fileService.read(uri);
+            const w = await this.mc();
+            w.openCaseText(content.value, path.endsWith('.ipynb'), uri.path.base);
+            await this.openModelConfig();
+        } catch (e) { console.error('openCaseInConfigurator', e); }
+    }
 
     registerCommands(reg: CommandRegistry): void {
         reg.registerCommand({ id: CMD.openModelConfig, label: 'Zoomy: Open model configuration' }, { execute: () => this.openModelConfig() });
@@ -146,6 +167,10 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.saveProject, label: 'Zoomy: Save project' }, { execute: async () => (await this.mc()).saveProject() });
         reg.registerCommand({ id: CMD.loadProject, label: 'Zoomy: Load project' }, { execute: async () => (await this.mc()).loadProject() });
         reg.registerCommand({ id: CMD.connectBackend, label: 'Zoomy: Connect backend…' }, { execute: () => this.connectBackend() });
+        reg.registerCommand({ id: 'zoomy.openCaseHere', label: 'Open in model configurator' }, {
+            execute: () => this.openCaseInConfigurator(),
+            isVisible: () => { const u = this.selectedUri(); return !!u && /\.(py|ipynb)$/.test(u.path.toString()); },
+        });
     }
     registerMenus(menus: MenuModelRegistry): void {
         // A top-level "Zoomy" menu next to Help.
@@ -160,6 +185,8 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         menus.registerMenuAction([...ZOOMY_MENU, '4_backend'], { commandId: CMD.connectBackend, label: 'Connect backend…' });
         menus.registerMenuAction(CommonMenus.FILE, { commandId: CMD.openNotebook, label: 'Zoomy: Open Pyodide notebook' });
         menus.registerMenuAction(CommonMenus.FILE, { commandId: CMD.openEditor, label: 'Zoomy: Open code editor' });
+        // Right-click a .py/.ipynb in the Explorer → Open in model configurator.
+        menus.registerMenuAction(NavigatorContextMenu.NAVIGATION, { commandId: 'zoomy.openCaseHere', label: 'Open in model configurator', order: 'z' });
     }
 }
 

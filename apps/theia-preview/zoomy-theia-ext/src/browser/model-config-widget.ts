@@ -363,6 +363,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         };
         input.click();
     }
+    /** Load a case from raw .py/.ipynb text into the configurator (used by the
+     *  Explorer "Open in model configurator" context command). */
+    openCaseText(text: string, isIpynb: boolean, name?: string): void {
+        try {
+            if (isIpynb) { const nb = JSON.parse(text); text = (nb.cells || []).map((c: any) => (Array.isArray(c.source) ? c.source.join('') : c.source)).join('\n\n'); }
+            this.applySpec(this.cli.parseCase(text));
+            this.setNotice('Opened case' + (name ? ': ' + name : '') + ' in the configurator.');
+        } catch (e: any) { this.setNotice('Open case failed: ' + (e?.message || e)); }
+    }
     /** Re-select the cards a spec refers to (by class_path / mesh spec / tag). */
     protected applySpec(spec: any): void {
         const byClass = (dir: string, cls: string) => (this.cardsByTab[dir] || []).find(c => c.class === cls);
