@@ -13,6 +13,7 @@ import { WorkspaceService } from '@theia/workspace/lib/browser/workspace-service
 import { FileChangeType } from '@theia/filesystem/lib/common/files';
 import { MemoryFileSystemProvider } from './memory-fs-provider';
 import { getZoomyCli, onBackendsChanged } from './zoomy-cli-loader';
+import * as monaco from '@theia/monaco-editor-core';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { CellKind } from '@theia/notebook/lib/common';
 import { NotebookTypeRegistry } from '@theia/notebook/lib/browser/notebook-type-registry';
@@ -173,6 +174,8 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         onBackendsChanged(() => { this.mc().then(w => this.setBackendStatus(w.connectedTags || [])).catch(() => { /* ignore */ }); });
         // Keep every case's case.py and case.ipynb in sync on save.
         this.startCaseSync();
+        // Make the right-hand Outline jump between a case.py's sections.
+        this.registerCaseOutline();
         // Open file:///zoomy as the workspace (so the Explorer shows the cases as
         // folders), then land on the model configuration. openWorkspace reloads
         // the window once with preserveWindow; guarded so it can never loop.
@@ -205,6 +208,37 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         } catch (e) { console.warn('zoomy workspace open', e); }
         // Land directly on the model configuration, in the classical IDE layout.
         this.openModelConfig().catch(e => console.error('zoomy open config', e));
+    }
+
+    /** Register a Monaco document-symbol provider so the native Outline shows a
+     *  case.py's sections (Model / Mesh / Settings / Run / Visualization) parsed
+     *  from its `# %% … zoomy={…}` cell markers — click to jump to a section. */
+    protected registerCaseOutline(): void {
+        const m: any = monaco;
+        if (!m?.languages?.registerDocumentSymbolProvider) { console.warn('zoomy outline: monaco languages unavailable'); return; }
+        const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+        const SECTIONS = ['meta', 'model', 'mesh', 'solver', 'settings', 'run', 'visualization'];
+        m.languages.registerDocumentSymbolProvider('python', {
+            displayName: 'Zoomy Case',
+            provideDocumentSymbols: (model: any) => {
+                const path = String(model?.uri?.path || '');
+                if (!/\/cases\/[^/]+\/case\.py$/.test(path)) { return []; }
+                const lines = String(model.getValue()).split('\n');
+                const seen = new Map<string, number>();
+                lines.forEach((line, i) => {
+                    const m = /#\s*%%.*zoomy=(\{.*\})\s*$/.exec(line);
+                    if (!m) { return; }
+                    let meta: any; try { meta = JSON.parse(m[1]); } catch { return; }
+                    const sec = meta.section || (SECTIONS.includes(meta.role) ? meta.role : null);
+                    if (sec && sec !== 'meta' && !seen.has(sec)) { seen.set(sec, i); }
+                });
+                const kind = m.languages.SymbolKind.Module;
+                return [...seen.entries()].map(([sec, i]) => {
+                    const range = new m.Range(i + 1, 1, i + 1, Math.max(1, (lines[i] || '').length));
+                    return { name: cap(sec), detail: '', kind, range, selectionRange: range, tags: [] };
+                });
+            },
+        });
     }
 
     /** Extract the .py source (jupytext) from a case.ipynb's cells. */
