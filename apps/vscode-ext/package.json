@@ -1,0 +1,31 @@
+{
+  "name": "zoomy-gui",
+  "displayName": "Zoomy",
+  "description": "Zoomy model-configuration GUI (backend-less, in-browser Pyodide) inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "zoomylab",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Other", "Data Science"],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "command": "zoomy.openGui", "title": "Zoomy: Open model configuration" }
+    ],
+    "configuration": {
+      "title": "Zoomy",
+      "properties": {
+        "zoomy.guiUrl": {
+          "type": "string",
+          "default": "https://zoomylab.github.io/Zoomy/theia-preview/",
+          "description": "URL of the Zoomy GUI to embed. Point at a local build for offline use."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package --allow-missing-repository -o zoomy-gui.vsix"
+  },
+  "devDependencies": { "@vscode/vsce": "^2.24.0" }
+}
