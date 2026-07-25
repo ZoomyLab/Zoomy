@@ -45,6 +45,17 @@ export function ensureRenderLibs(): Promise<void> {
     return libsPromise;
 }
 
+let jszipPromise: Promise<void> | undefined;
+/** Load JSZip from a CDN (for shipping a set of cases as a ZIP artefact by URL,
+ *  like the old GUI). Exposes window.JSZip. */
+export function ensureJSZip(): Promise<void> {
+    if (!jszipPromise) {
+        jszipPromise = loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')
+            .catch(() => { /* offline — project-from-URL just won't work */ });
+    }
+    return jszipPromise;
+}
+
 let gitPromise: Promise<any> | undefined;
 /** Load isomorphic-git + a browser FS (lightning-fs, IndexedDB-backed) + the web
  *  http client from a CDN. Returns {git, http, fs} for in-browser clone/commit/push.

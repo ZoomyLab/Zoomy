@@ -3,7 +3,7 @@ import { injectable, inject, postConstruct } from '@theia/core/shared/inversify'
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { URI } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, DisplayCell } from './zoomy-cli-loader';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, DisplayCell } from './zoomy-cli-loader';
 
 // The project root in the browser FS. A case is a folder here with a canonical
 // `case.py` (zoomy_prepost jupytext) that is the SINGLE SOURCE OF TRUTH — the GUI
@@ -169,9 +169,14 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             }
             this.loaded = true;
             await this.listCases();
-            // #4 URL-autoload: ?case=<url> imports a case into a new case.
-            const caseUrl = new URLSearchParams(location.search).get('case');
-            if (caseUrl) {
+            // URL-autoload: ?project=<url> ships a SET of cases (a ZIP artefact,
+            // like the old GUI); ?case=<url> a single case; else restore last.
+            const params = new URLSearchParams(location.search);
+            const projectUrl = params.get('project');
+            const caseUrl = params.get('case');
+            if (projectUrl) {
+                await this.loadProjectFromUrl(projectUrl);
+            } else if (caseUrl) {
                 try { const text = await (await fetch(caseUrl)).text(); await this.newCase('imported', this.cli.parseCase(text)); } catch { /* ignore */ }
             } else {
                 // Restore the last open case (single source of truth); else stay gated.
@@ -221,6 +226,49 @@ export class ZoomyModelConfigWidget extends ReactWidget {
 
     /** Return to the gate (no open case) — e.g. to create another case. */
     closeCase(): void { this.caseUri = undefined; this.caseName = ''; this.newCaseName = ''; this.listCases(); this.update(); }
+
+    /** Ship a SET of cases by URL (like the old GUI's ?project=). Resolves the
+     *  URL (zenodo:<id> / direct .zip), unzips, and materializes each .py entry
+     *  as a case folder — then opens the first. */
+    async loadProjectFromUrl(url: string): Promise<void> {
+        this.setNotice('Downloading project artefact…'); this.update();
+        try {
+            const zipUrl = await this.resolveArtefactUrl(url);
+            const buf = await (await fetch(zipUrl)).arrayBuffer();
+            await ensureJSZip();
+            const JSZip = (window as any).JSZip;
+            if (!JSZip) { throw new Error('JSZip unavailable (offline?)'); }
+            const zip = await JSZip.loadAsync(buf);
+            const entries: any[] = Object.values(zip.files).filter((f: any) => !f.dir && /\.py$/.test(f.name));
+            let count = 0; let first: string | undefined;
+            for (const f of entries) {
+                const text = await f.async('string');
+                const m = f.name.match(/(?:^|\/)([^/]+)\/case\.py$/) || f.name.match(/([^/]+)\.py$/);
+                const name = (m?.[1] || 'case').replace(/[^a-zA-Z0-9_-]+/g, '_');
+                const uri = this.caseFileUri(name);
+                if (!(await this.fileService.exists(uri.parent))) { await this.fileService.createFolder(uri.parent); }
+                await this.fileService.write(uri, text);
+                count++; if (!first) { first = name; }
+            }
+            await this.listCases();
+            if (first) { await this.openCaseByName(first); }
+            this.setNotice('Loaded ' + count + ' case(s) from the artefact.');
+        } catch (e: any) { this.setNotice('Project load failed: ' + (e?.message || e)); this.update(); }
+    }
+    /** Resolve an artefact URL: zenodo:<recordId>[/file] → the record's ZIP;
+     *  anything else is used as-is (GitHub release asset, raw URL, …). */
+    protected async resolveArtefactUrl(url: string): Promise<string> {
+        const zen = url.match(/^zenodo:(\d+)(?:\/(.+))?$/);
+        if (zen) {
+            const rec = await (await fetch('https://zenodo.org/api/records/' + zen[1])).json();
+            const files: any[] = rec.files || [];
+            const target = (zen[2] && files.find(f => f.key === zen[2])) || files.find(f => /\.zip$/i.test(f.key)) || files[0];
+            const link = target?.links?.self || target?.links?.download;
+            if (!link) { throw new Error('No file found in Zenodo record ' + zen[1]); }
+            return link;
+        }
+        return url;
+    }
 
     async openCaseByName(name: string): Promise<void> {
         try {
