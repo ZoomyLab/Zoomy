@@ -112,7 +112,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected storeMeta: any;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
-    protected backendUrl = 'http://localhost:8080';
+    backendUrl = 'http://localhost:8080';
     protected connectedTags: string[] = [];
     // #7 In-browser git (isomorphic-git + lightning-fs).
     protected repoUrl = 'https://github.com/ZoomyLab/Zoomy';
@@ -275,7 +275,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
 
     /** Run the selected model → mesh → solver in the shared scope, then the
      *  selected visualization. This is the "assembly → visualization" flow. */
-    protected async runAssembly(): Promise<void> {
+    async runAssembly(): Promise<void> {
         if (this.simBusy) { return; }
         this.simBusy = true; this.simRan = false; this.vizOut = undefined;
         try {
@@ -340,7 +340,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         }
         return spec;
     }
-    protected async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
+    async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
         try {
             const spec = await this.gatherSpec();
             const text = this.cli.exportCase(spec, fmt);
@@ -349,7 +349,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         } catch (e: any) { this.setNotice('Export failed: ' + (e?.message || e)); }
     }
     /** Import a case (.py/.ipynb): parse it and re-select the matching cards. */
-    protected importCase(): void {
+    importCase(): void {
         const input = document.createElement('input'); input.type = 'file'; input.accept = '.py,.ipynb';
         input.onchange = async () => {
             const file = input.files?.[0]; if (!file) { return; }
@@ -373,14 +373,14 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     }
 
     // --- #6 Project persistence (IndexedDB via zoomy_cli storage). ---
-    protected async saveProject(): Promise<void> {
+    async saveProject(): Promise<void> {
         const data = { selected: this.selected, edited: Array.from(this.edited.entries()), active: this.active };
         try { await this.cli.storage.writeJson('projects/current.json', data); this.setNotice('Project saved to browser (IndexedDB).'); }
         catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
         // also offer a download so it can be shared / version-controlled
         download('zoomy_project.json', JSON.stringify(data, null, 2), 'application/json');
     }
-    protected async loadProject(): Promise<void> {
+    async loadProject(): Promise<void> {
         try {
             const data = await this.cli.storage.tryReadJson('projects/current.json');
             if (!data) { this.setNotice('No saved project in this browser.'); return; }
@@ -392,7 +392,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     }
 
     // --- #4 Connect a remote backend by URL. ---
-    protected async connectBackend(): Promise<void> {
+    async connectBackend(): Promise<void> {
         const url = this.backendUrl.trim(); if (!url) { return; }
         this.setNotice('Connecting to ' + url + '…');
         try {
@@ -410,7 +410,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected readonly CORS_PROXY = 'https://cors.isomorphic-git.org';
     protected gitAuth(): any { return this.gitToken ? { username: this.gitToken, password: 'x-oauth-basic' } : {}; }
 
-    protected async cloneRepo(): Promise<void> {
+    async cloneRepo(): Promise<void> {
         const url = this.repoUrl.trim(); if (!url || this.gitBusy) { return; }
         this.gitBusy = true; this.setNotice('Cloning ' + url + '… (shallow, browser git)');
         try {
@@ -450,7 +450,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         } catch (e: any) { this.setNotice('Import failed: ' + (e?.message || e)); }
     }
     /** Write the current selection as a case into the repo, commit and push. */
-    protected async pushCaseToRepo(): Promise<void> {
+    async pushCaseToRepo(): Promise<void> {
         if (this.gitBusy) { return; }
         this.gitBusy = true; this.setNotice('Committing + pushing case…');
         try {
@@ -526,21 +526,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
         const tbtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 11px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' };
         const inputS: React.CSSProperties = { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '4px 8px', fontSize: 12.5, minWidth: 220 };
-        const toolbar = h('div', { style: { display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid var(--theia-panel-border)' } },
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Case:'),
-                h('button', { style: tbtn, onClick: () => this.exportCase('py') }, 'Export .py'),
-                h('button', { style: tbtn, onClick: () => this.exportCase('ipynb') }, 'Export .ipynb'),
-                h('button', { style: tbtn, onClick: () => this.importCase() }, 'Import…')),
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Project:'),
-                h('button', { style: tbtn, onClick: () => this.saveProject() }, 'Save'),
-                h('button', { style: tbtn, onClick: () => this.loadProject() }, 'Load')),
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginRight: 2 } }, 'Backend:'),
-                h('input', { style: inputS, value: this.backendUrl, onChange: (e: any) => { this.backendUrl = e.target.value; this.update(); }, placeholder: 'http://localhost:8080' }),
-                h('button', { style: tbtn, onClick: () => this.connectBackend() }, 'Connect'),
-                this.connectedTags.length ? h('span', { style: { fontSize: 11, color: 'var(--theia-successForeground, #3fb950)' } }, '● ' + this.connectedTags.join(', ')) : null));
+        // Case / Project / Backend actions live in the Zoomy activity-bar view and
+        // the top "Zoomy" menu now, not in a self-coded toolbar here. The git row
+        // stays (kept, per feedback); native SCM binding is a follow-up.
         const gitRow = h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 } },
             h('span', { className: 'codicon codicon-git-merge', style: { color: 'var(--theia-descriptionForeground)' } }),
             h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Repository:'),
@@ -556,8 +544,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 'Select a model, mesh, solver and visualization, then Run — or run any card on its own. Everything runs on the in-browser Pyodide kernel.'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
-                'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)'),
-            toolbar,
+                'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)',
+                this.connectedTags.length ? h('span', { style: { fontSize: 11, marginLeft: 12, color: 'var(--theia-successForeground, #3fb950)' } }, '● backend: ' + this.connectedTags.join(', ')) : null),
             gitRow,
             this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
