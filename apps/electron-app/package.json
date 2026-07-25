@@ -1,0 +1,26 @@
+{
+  "name": "zoomy-desktop",
+  "productName": "Zoomy",
+  "version": "0.1.0",
+  "description": "Zoomy model-configuration GUI as a cross-platform desktop app (Electron).",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:all": "electron-builder -mwl --publish never"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "org.zoomylab.zoomy",
+    "productName": "Zoomy",
+    "files": ["main.js", "package.json"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["nsis"] },
+    "mac": { "target": ["dmg"], "category": "public.app-category.education" },
+    "linux": { "target": ["AppImage"], "category": "Science" }
+  }
+}
