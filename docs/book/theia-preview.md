@@ -1,69 +1,60 @@
-# Theia + Baukasten prototype (experiment)
+# Zoomy GUI (work in progress)
 
 ```{warning}
-Work-in-progress experiment. This is a **backend-less Eclipse Theia** running
-entirely in your browser — the foundation for a future GUI that is the *same*
-code on web, VS Code, Theia and Electron. It is being built in stages; this page
-tracks what is live.
+Work in progress. This is the browser-based **Zoomy GUI** — configure a model,
+mesh and solver from cards, run it in the browser, or submit it to a backend you
+connect. It is being built in stages; this page tracks what is live.
 ```
 
-**[▶ Open the Theia prototype](theia-preview/index.html)** — it opens on a
-**Baukasten start page** in a clean, full-window GUI (the VS Code chrome — menus,
-activity bar, tabs, status bar — is hidden). *Open code editor* drops you into
-Theia's Monaco editor with the full IDE revealed; *Open Pyodide notebook* opens a
-**native Theia notebook** that runs the classic Zoomy notebook on an **in-browser
-Pyodide kernel**. The **🏠 Zoomy start** item in the status bar returns you to the
-GUI from anywhere. Python surfaces have **jedi autocomplete** (type `np.` or, after
-a cell runs, `model.`). All of this with **no backend and no server**. First load
-is a large download (Theia is heavy) and the kernel warms `zoomy-core` + jedi in
-the background — give it a moment.
+**[▶ Open the Zoomy GUI](theia-preview/index.html)** — it opens on a clean,
+full-window GUI (the VS Code chrome — menus, activity bar, tabs — is hidden until
+you edit code). First load is a large download (the shell is heavy) and the
+in-browser kernel warms `zoomy-core` in the background — give it a moment.
 
-![Backend-less Theia](images/theia-preview.png)
+![Zoomy GUI](images/theia-preview.png)
 
-## What this proves
+## What it is
 
-Eclipse Theia's official **`browser-only`** target builds the whole IDE frontend
-to **static files** — no Node backend, no editor host, and (crucially) no plugin
-host. So VS Code–style `contributes.*` plugins do not run here. Instead, a small
-**native Theia extension** registers everything the standard way: a notebook
-serializer + type, an in-browser Pyodide `NotebookKernel`, and — because the
-iframe output webview is a backend feature — a DOM output surface that renders
-text, matplotlib PNGs and rich `describe()` output directly under each cell.
+A card-based GUI for composing and running a free-surface-flow case:
 
-The kernel installs `zoomy-core` + `zoomy-plotting` from PyPI with micropip,
-exactly like the JupyterLite page, and runs the *same* classic notebook
-(`SME(level=2)` → `SystemModel` → C++ codegen → NumPy solve → vertical velocity
-profile). It is Theia's **native** notebook UI, not an embedded JupyterLite page.
+- **Compose** — pick a **Model**, **Mesh**, **Solver** (and optionally a
+  **Volume of Fluid** participant and **Visualization** viewers) from cards
+  grouped into sub-tabs. A parameters panel edits each card's inputs, the model
+  equations render inline (KaTeX), and the mesh previews live.
+- **Run in the browser** — the built-in **NumPy** solver runs on an in-browser
+  **Pyodide kernel** (off the main thread, with jedi autocomplete). No install,
+  no server.
+- **Run on a backend** — connect an external `zoomy-server` (numpy / jax / amrex
+  / dmplex / foam) and the composed case is submitted and solved remotely; the
+  result store comes back for visualization. NumPy-in-browser is always
+  available; other tags light up when you connect a matching backend.
+- **It's just a case** — every GUI action edits one canonical `case.py`
+  (`## Model / ## Mesh / ## Solver settings / ## Run`), which round-trips to a
+  Jupyter notebook and exports as `.py` / `.ipynb`. *Edit* jumps to the right
+  section; edit mode adds or removes cards.
 
-## The plan (three targets, one GUI)
+## How it's built
 
-The point is to write the Zoomy GUI **once** in [Baukasten](baukasten-preview.md)
-and run it everywhere, changing only the host + one stylesheet:
+Eclipse Theia's **`browser-only`** target builds the whole IDE frontend to
+**static files** — no Node backend, no plugin host. A small **native Theia
+extension** (`zoomy-theia-ext`) registers everything the standard way: the
+card GUI view, a native notebook + in-browser Pyodide `NotebookKernel`, and a
+DOM output surface for text, matplotlib and rich `describe()` output. The kernel
+reuses the vendored Zoomy GUI "brain" (`zoomy_cli`) for the card catalog, case
+composition, param extraction and backend submission.
 
-- **web** — this backend-less Theia + Baukasten GUI + notebooks on a Pyodide kernel
-- **local** — a VS Code / Theia extension: install it and you have the GUI
-- **desktop** — a Theia Electron app
+The goal is **one GUI, three targets** — the same code on the **web** (this
+backend-less build), as a **VS Code / Theia extension** (local), and as a
+**Theia Electron app** (desktop), changing only the host and one stylesheet.
 
-## Milestones
+## Connecting your own backend
 
-| | Status |
-|---|---|
-| 1. Backend-less Theia builds + runs | **live** |
-| 2. Baukasten start page as the opening full-window GUI view | **live** |
-| 3. Click → Theia code editor (full IDE), with a way back | **live** |
-| 4. Native Theia notebook on a **Pyodide kernel**, running the classic Zoomy notebook | **live** |
-| 5. Pyodide off the main thread (Web Worker) + jedi autocomplete | **live** |
-| 6. App view vs IDE view — chrome only appears when editing code | **live** |
+The page is served over HTTPS, but browsers exempt `http://localhost` from
+mixed-content blocking, so a `zoomy-server` container on **your own machine**
+(`:8080`) can be connected with no tunnel or certificate — run the container and
+connect. For a backend on another machine, forward it to localhost
+(`ssh -L 8080:localhost:8080 …`) or expose it over HTTPS (e.g. Tailscale Serve).
 
-The kernel now runs in a **Web Worker** so the UI never blocks, and reuses the
-Zoomy GUI's proven machinery: tiered background installs warmed at boot, a parso
-AST cache on IndexedDB (jedi cold-start drops from ~20 s to <1 s on the 2nd
-visit), and the GUI's `complete_code` (jedi) driving a Monaco completion provider
-across the editor and every notebook cell. Next: fold in the rest of the GUI's
-worker (interrupts, the full package set) and swap the start page's theme-token
-styling for the real `baukasten-ui` React components (already proven on the
-[Baukasten preview](baukasten-preview.md)).
-
-Source: `apps/theia-preview/` — a standard `@theia/cli` browser-only app plus the
-`zoomy-theia-ext/` native extension. CI builds it non-blocking and serves it at
-`/theia-preview/`.
+Source: `apps/theia-preview/` — a `@theia/cli` browser-only app plus the
+`zoomy-theia-ext/` native extension and the vendored `gui/` brain. CI builds it
+non-blocking and serves it at `/theia-preview/`.
