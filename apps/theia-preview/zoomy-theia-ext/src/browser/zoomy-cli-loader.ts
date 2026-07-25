@@ -45,6 +45,12 @@ export function ensureRenderLibs(): Promise<void> {
     return libsPromise;
 }
 
+// Tiny shared event so the activity-bar view can refresh its case list when the
+// config widget creates/loads/switches cases.
+const caseListeners = new Set<() => void>();
+export function onCasesChanged(fn: () => void): () => void { caseListeners.add(fn); return () => caseListeners.delete(fn); }
+export function emitCasesChanged(): void { caseListeners.forEach(f => { try { f(); } catch { /* ignore */ } }); }
+
 let jszipPromise: Promise<void> | undefined;
 /** Load JSZip from a CDN (for shipping a set of cases as a ZIP artefact by URL,
  *  like the old GUI). Exposes window.JSZip. */

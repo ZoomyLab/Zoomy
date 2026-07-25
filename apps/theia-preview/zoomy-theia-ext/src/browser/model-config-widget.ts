@@ -3,7 +3,7 @@ import { injectable, inject, postConstruct } from '@theia/core/shared/inversify'
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { URI } from '@theia/core';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, DisplayCell } from './zoomy-cli-loader';
+import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, DisplayCell } from './zoomy-cli-loader';
 
 // The project root in the browser FS. A case is a folder here with a canonical
 // `case.py` (zoomy_prepost jupytext) that is the SINGLE SOURCE OF TRUTH — the GUI
@@ -127,8 +127,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // edit is written back to the case folder's case.py.
     @inject(FileService) protected readonly fileService: FileService;
     protected caseUri: URI | undefined;
-    protected caseName = '';
-    protected cases: string[] = [];
+    caseName = '';
+    cases: string[] = [];
     protected newCaseName = '';
     protected persistTimer: any;
     /** External hook so the module can reflect connected backends in the status bar. */
@@ -204,6 +204,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             }
             this.cases = names.sort();
         } catch { this.cases = []; }
+        emitCasesChanged();
     }
 
     /** Create a new case folder with a case.py, then open it. If a spec is given

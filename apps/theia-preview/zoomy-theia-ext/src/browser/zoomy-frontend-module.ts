@@ -180,6 +180,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.openEditor, label: 'Zoomy: Open code editor' }, { execute: () => this.openEditor() });
         reg.registerCommand({ id: CMD.openNotebook, label: 'Zoomy: Open Pyodide notebook' }, { execute: () => this.openNotebook() });
         reg.registerCommand({ id: CMD.newCase, label: 'Zoomy: New case…' }, { execute: () => this.newCase() });
+        reg.registerCommand({ id: 'zoomy.openNamedCase' }, { execute: async (name: string) => { await this.openModelConfig(); (await this.mc()).openCaseByName(name); } });
         reg.registerCommand({ id: CMD.run, label: 'Zoomy: Run simulation' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).runAssembly(); } });
         reg.registerCommand({ id: CMD.exportPy, label: 'Zoomy: Export case (.py)' }, { execute: async () => (await this.mc()).exportCase('py') });
         reg.registerCommand({ id: CMD.exportIpynb, label: 'Zoomy: Export case (.ipynb)' }, { execute: async () => (await this.mc()).exportCase('ipynb') });
