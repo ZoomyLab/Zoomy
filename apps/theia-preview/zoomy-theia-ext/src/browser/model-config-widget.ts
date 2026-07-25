@@ -113,6 +113,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected activeParamDir: string | undefined;
     protected readonly schemas = new Map<string, any>();
     protected readonly edited = new Map<string, any>();
+    // Derived governing equations per model card. We run the card's template
+    // (which ends in `display(model.describe())`) and capture the display cells —
+    // the same proven path as the card's Run button, so the $$-math renders as
+    // KaTeX. Slow (symbolic derivation) + needs the kernel, so cached by card.id.
+    protected readonly modelMath = new Map<string, { status: 'waiting' | 'loading' | 'done' | 'error'; cells: DisplayCell[]; stdout: string; key: string }>();
     /** Fired whenever the params target or its values change, so the right-hand
      *  Parameters panel re-renders. */
     protected readonly onParamsChangedEmitter = new Emitter<void>();
@@ -130,7 +135,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected simRan = false;
     protected simBusy = false;
     protected simStatus = '';
+    protected simError: CardOut | undefined;
     protected vizOut: CardOut | undefined;
+    protected vizBusy = false;
     protected storeMeta: any;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
@@ -169,7 +176,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 console.log('[zoomy-cli]', lvl, msg);
                 if (/Booting|Installing|Kernel ready|runtime ready|installing|cache|ready/i.test(msg)) {
                     this.kernelStatus = msg;
-                    if (/runtime ready|Kernel ready/i.test(msg)) { this.kernelReady = true; }
+                    if (/runtime ready|Kernel ready/i.test(msg)) {
+                        const wasReady = this.kernelReady; this.kernelReady = true;
+                        // Now that the kernel is up, derive equations for an expanded model card.
+                        if (!wasReady && this.expanded) { const c = (this.cardsByTab['models'] || []).find(x => x.id === this.expanded); if (c?.class) { this.loadModelMath(c).catch(() => { /* shown as error */ }); } }
+                    }
                     this.update();
                 }
             });
@@ -453,6 +464,51 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         return h('div', { style: { marginTop: 10, borderTop: '1px dashed var(--theia-panel-border)', paddingTop: 8 } }, names.map(field));
     }
 
+    /** Derive a model card's governing equations via describeModel (Pyodide,
+     *  ~30–60s + kernel boot). Cached by card.id; keyed by params so a manual
+     *  recompute picks up parameter changes. */
+    async loadModelMath(card: any, force = false): Promise<void> {
+        if (!card.class) { return; }
+        const code = cardCode(card, this.mergedInit(card));
+        if (!code) { return; }
+        const key = JSON.stringify(this.mergedInit(card));
+        const cur = this.modelMath.get(card.id);
+        if (!force && cur && (cur.status === 'loading' || cur.status === 'done') && cur.key === key) { return; }
+        if (!this.kernelReady) { this.modelMath.set(card.id, { status: 'waiting', cells: [], stdout: '', key }); this.update(); return; }
+        const entry = { status: 'loading' as const, cells: [] as DisplayCell[], stdout: '', key };
+        this.modelMath.set(card.id, entry); this.update();
+        // Capture the template's display(model.describe()) cells (the $$-math).
+        setDisplaySink(cell => { entry.cells.push(cell); this.update(); });
+        try {
+            const res = await this.cli.runCode(code);
+            this.modelMath.set(card.id, { status: res?.status === 'error' ? 'error' : 'done', cells: entry.cells, stdout: res?.output || '', key });
+        } catch (e: any) {
+            this.modelMath.set(card.id, { status: 'error', cells: entry.cells, stdout: e?.message || String(e), key });
+        } finally {
+            setDisplaySink(undefined); this.update();
+        }
+    }
+    /** The "Governing equations" block shown in an expanded model card. */
+    protected renderModelMath(card: any): React.ReactNode {
+        const h = React.createElement;
+        if (!card.class) { return null; }
+        const box: React.CSSProperties = { marginTop: 10, border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '8px 10px', background: 'var(--theia-editorWidget-background)' };
+        const label: React.CSSProperties = { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 };
+        const m = this.modelMath.get(card.id);
+        const recompute = h('button', { title: 'Recompute with current parameters', onClick: () => this.loadModelMath(card, true), style: { marginLeft: 'auto', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)', fontSize: 11 } }, h('span', { className: 'codicon codicon-refresh' }));
+        const head = (extra?: React.ReactNode) => h('div', { style: label }, 'Governing equations', extra, m?.status === 'done' ? recompute : null);
+        if (!m || m.status === 'waiting') {
+            return h('div', { style: box }, head(),
+                h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } },
+                    this.kernelReady ? 'Deriving…' : 'Waiting for the in-browser kernel to boot (first time ~2–3 min), then the equations are derived symbolically.'));
+        }
+        const spin = m.status === 'loading';
+        const cells = m.cells.length ? h('div', { style: { fontSize: 12.5, overflowX: 'auto' } }, m.cells.map((c, i) => this.renderCell(c, 'mm' + i))) : null;
+        if (spin && !m.cells.length) { return h('div', { style: box }, head(h('span', { className: 'codicon codicon-loading codicon-modifier-spin', style: { fontSize: 11 } })), h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Deriving the equations symbolically (~30–60s)…')); }
+        if (m.status === 'error' && !m.cells.length) { return h('div', { style: box }, head(), h('pre', { style: { fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--theia-errorForeground)' } }, m.stdout)); }
+        return h('div', { style: box }, head(spin ? h('span', { className: 'codicon codicon-loading codicon-modifier-spin', style: { fontSize: 11 } }) : undefined), cells);
+    }
+
     /** A preview of a mesh card: the shipped image for curated meshes, else a
      *  lightweight schematic grid drawn from the parametric card's own init
      *  (nx/ny/nz + bounds) — no kernel, no network. */
@@ -525,7 +581,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.expanded = wasExpanded ? undefined : card.id;
         this.update();
         this.schedulePersist();
-        if (dir === 'visualizations' && this.simRan && !this.simBusy && card.snippet) { this.runViz(card); }
+        // Visualization is DECOUPLED from selection + Run now: picking a viewer
+        // no longer renders. The user clicks "Render visualization" in the
+        // Visualization tab's viewer to generate the plot.
+        // Derive the governing equations for a newly expanded model card.
+        if (dir === 'models' && this.expanded === card.id && card.class) { this.loadModelMath(card).catch(() => { /* shown as error */ }); }
     }
 
     /** The selected card for a tab, else the first with runnable code (models/
@@ -538,11 +598,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         return cards.find(c => !!cardCode(c, this.mergedInit(c)));
     }
 
-    /** Run the selected model → mesh → solver in the shared scope, then the
-     *  selected visualization. This is the "assembly → visualization" flow. */
+    /** Run the selected model → mesh → solver in the shared scope. This COMPUTES
+     *  only — it no longer auto-renders a visualization. To visualize, open the
+     *  Visualization tab, pick a viewer and click "Render visualization". */
     async runAssembly(): Promise<void> {
         if (this.simBusy) { return; }
-        this.simBusy = true; this.simRan = false; this.vizOut = undefined;
+        this.simBusy = true; this.simRan = false; this.simError = undefined; this.vizOut = undefined;
         try {
             for (const [dir, label] of [['models', 'model'], ['meshes', 'mesh'], ['solvers', 'solver']] as const) {
                 const card = this.pickedCard(dir);
@@ -551,17 +612,27 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 if (!code) { this.simStatus = label + ' "' + (card.title || card.id) + '" is a remote backend — connect a backend to run it.'; this.update(); return; }
                 this.simStatus = 'Running ' + label + ': ' + (card.title || card.id) + '…'; this.update();
                 const res = await this.cli.runCode(code);
-                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.vizOut = { cells: [], stdout: res.output || '', status: 'error', running: false }; this.update(); return; }
+                if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; this.update(); return; }
                 if (res?.store_meta) { this.storeMeta = res.store_meta; }
             }
-            this.simRan = true; this.simStatus = 'Simulation done — rendering visualization…'; this.update();
-            await this.runViz(this.pickedCard('visualizations'));
-            this.simStatus = 'Done.';
+            this.simRan = true;
+            this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
         } catch (e: any) {
             this.simStatus = 'Error: ' + (e?.message || String(e));
         } finally {
             this.simBusy = false; this.update();
         }
+    }
+
+    /** Render the selected visualization against the computed store. Called
+     *  explicitly from the Visualization tab's viewer (not from Run). */
+    async renderVisualization(): Promise<void> {
+        if (this.vizBusy) { return; }
+        const vizCard = this.pickedCard('visualizations');
+        if (!this.simRan) { this.setNotice('Run a simulation first (the Simulation bar), then Render.'); return; }
+        if (!vizCard?.snippet) { this.setNotice('Select a visualization viewer first.'); return; }
+        this.vizBusy = true;
+        try { await this.runViz(vizCard); } finally { this.vizBusy = false; this.update(); }
     }
 
     /** Run one visualization snippet against the current store and show its plot. */
@@ -704,6 +775,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             dir === 'meshes' ? this.renderMeshPreview(card) : null,
+            dir === 'models' ? this.renderModelMath(card) : null,
             !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
                 hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), paramsActive ? 'Parameters ▸' : 'Parameters') : null,
@@ -761,10 +833,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 h('button', { style: runBtn, disabled: this.simBusy || !this.kernelReady, onClick: () => this.runAssembly() },
                     h('span', { className: 'codicon codicon-play', style: { verticalAlign: 'middle', marginRight: 6 } }), this.simBusy ? 'Running…' : 'Run simulation'),
                 h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap' } }, chip('model', selName('models')), chip('mesh', selName('meshes')), chip('solver', selName('solvers')), chip('viz', selName('visualizations')))),
-            this.simStatus ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginTop: 8 } }, this.simStatus) : null,
-            this.vizOut ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: this.vizOut.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
-                this.vizOut.cells.map((c, i) => this.renderCell(c, 'v' + i)),
-                this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
+            this.simStatus ? h('div', { style: { fontSize: 12, color: this.simRan && !this.simError ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-descriptionForeground)', marginTop: 8 } }, this.simStatus) : null,
+            // Run computes only — compute errors surface here; the visualization
+            // itself renders in the Visualization tab's viewer, never here.
+            this.simError ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: 'var(--theia-errorForeground)' } },
+                this.simError.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.simError.stdout) : null) : null);
         const tbtn: React.CSSProperties = { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 11px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' };
         const inputS: React.CSSProperties = { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '4px 8px', fontSize: 12.5, minWidth: 220 };
         // Case / Project / Backend actions live in the Zoomy activity-bar view and
@@ -784,7 +857,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                     h('option', { key: '__new__', value: '__new__' }, '＋ New case…'),
                 ])),
             h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
-                'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh, solver and visualization, then Run.'),
+                'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh and solver, Run to compute, then open the Visualization tab and Render.'),
             h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
                 h('button', { style: { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 12px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' }, title: 'Open this case as a runnable Jupyter notebook', onClick: () => this.openInNotebook() },
                     h('span', { className: 'codicon codicon-notebook', style: { verticalAlign: 'middle', marginRight: 5 } }), 'Open in Notebook Mode'),
@@ -797,6 +870,30 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: 16 } }, TABS.map(tabBtn)),
+            this.active === 'visualizations' ? this.renderVizViewer() : null,
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'));
+    }
+
+    /** The Visualization tab's viewer: pick a viewer card below, then Render here
+     *  to generate the plot from the computed store. Decoupled from Run — Run only
+     *  computes; visualization happens on demand here. */
+    protected renderVizViewer(): React.ReactNode {
+        const h = React.createElement;
+        const viz = this.pickedCard('visualizations');
+        const ready = this.simRan && !this.simBusy && this.kernelReady && !!viz?.snippet;
+        const btn: React.CSSProperties = { cursor: ready && !this.vizBusy ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '8px 16px', fontSize: 13, fontWeight: 700, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: ready && !this.vizBusy ? 1 : 0.6 };
+        const hint = !this.simRan ? 'Run a simulation first (the Simulation bar above), then Render here.'
+            : !this.kernelReady ? 'Waiting for the kernel…'
+            : !viz?.snippet ? 'Select a viewer card below.'
+            : 'Viewer: ' + (viz.title || viz.id) + ' — click Render to generate the plot.';
+        return h('div', { className: 'zoomy-viz-viewer', style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 14, marginBottom: 16, background: 'var(--theia-editorWidget-background)' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' } },
+                h('button', { style: btn, disabled: !ready || this.vizBusy, onClick: () => this.renderVisualization() },
+                    h('span', { className: 'codicon codicon-' + (this.vizBusy ? 'loading codicon-modifier-spin' : 'graph'), style: { verticalAlign: 'middle', marginRight: 6 } }),
+                    this.vizBusy ? 'Rendering…' : 'Render visualization'),
+                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, hint)),
+            this.vizOut ? h('div', { style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: this.vizOut.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
+                this.vizOut.cells.map((c, i) => this.renderCell(c, 'vv' + i)),
+                this.vizOut.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, this.vizOut.stdout) : null) : null);
     }
 }
