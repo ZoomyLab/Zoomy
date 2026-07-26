@@ -508,33 +508,47 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     break
                 except (TypeError, ValueError):
                     pass
-        if self.nsm.reconstruction.order >= 2:
-            mode = self.reconstruction_variables
-            limiter = self.nsm.reconstruction.limiter
-            if mode == "eta":
-                assert self.free_surface_h_index is not None, (
-                    "reconstruction_variables='eta' requires "
-                    "free_surface_h_index to be set")
-                if runtime.state_from_reconstruction_uses_aux:
-                    raise NotImplementedError(
-                        "This model's emitted ``state_from_reconstruction`` "
-                        "reads AUX variables, but the order-2 face pass has "
-                        "only CELL-centre aux — feeding it there would "
-                        "silently use the wrong aux at every face.  Reported, "
-                        "not worked around.")
-                return EmittedWLSQMUSCLJAX(
-                    mesh, dim,
-                    runtime.reconstruction_variables,
-                    runtime.state_from_reconstruction,
-                    aux_of_q=getattr(runtime, "update_aux_variables", None),
-                    eps_wet=emitted_wet_dry_eps,
-                    b_index=int(self.free_surface_b_index),
-                    h_index=int(self.free_surface_h_index),
-                    momentum_indices=self.free_surface_momentum_indices,
-                    positivity=(self.positivity_method or None),
-                    front_tol=self.front_theta_tol,
-                    limiter=limiter,
-                )
+        order = self.nsm.reconstruction.order
+        mode = self.reconstruction_variables
+        limiter = self.nsm.reconstruction.limiter
+        # The Audusse-Bouchut η/HR free-surface reconstruction runs at BOTH
+        # orders.  At order 1 it is piecewise-constant in ``W`` (zero slope) but
+        # STILL applies the free-surface face-state machinery — the W-space
+        # Audusse clip ``η_f := max(η_f, b_f)`` (⇒ ``h_f = max(0, η_f−b_f) ≥ 0``)
+        # and the emitted inverse ``q_f = u_f·h_f`` (dry-face momentum vanishes
+        # as a matched pair).  That clip is what makes first order positivity-
+        # preserving at a draining wet/dry front; the plain
+        # ``ConstantReconstruction`` order-1 fallback below omits it (the flux is
+        # ``NonconservativeRusanov``, which carries no hydrostatic
+        # reconstruction), so O1 pushed ``h < 0`` and NaN'd (2-D Thacker planar).
+        # O2 is untouched: ``piecewise_constant`` is False and the a-priori
+        # positivity / front knobs pass through exactly as before.
+        if mode == "eta":
+            assert self.free_surface_h_index is not None, (
+                "reconstruction_variables='eta' requires "
+                "free_surface_h_index to be set")
+            if runtime.state_from_reconstruction_uses_aux:
+                raise NotImplementedError(
+                    "This model's emitted ``state_from_reconstruction`` "
+                    "reads AUX variables, but the face pass has "
+                    "only CELL-centre aux — feeding it there would "
+                    "silently use the wrong aux at every face.  Reported, "
+                    "not worked around.")
+            return EmittedWLSQMUSCLJAX(
+                mesh, dim,
+                runtime.reconstruction_variables,
+                runtime.state_from_reconstruction,
+                aux_of_q=getattr(runtime, "update_aux_variables", None),
+                eps_wet=emitted_wet_dry_eps,
+                b_index=int(self.free_surface_b_index),
+                h_index=int(self.free_surface_h_index),
+                momentum_indices=self.free_surface_momentum_indices,
+                positivity=(self.positivity_method or None) if order >= 2 else None,
+                front_tol=self.front_theta_tol if order >= 2 else None,
+                piecewise_constant=(order < 2),
+                limiter=limiter,
+            )
+        if order >= 2:
             if mode == "xz":
                 assert self.free_surface_h_index is not None, (
                     "reconstruction_variables='xz' requires "

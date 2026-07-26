@@ -1064,7 +1064,7 @@ class EmittedWLSQMUSCLJAX(_ZhangShuPP, LSQMUSCLReconstructionJAX):
     def __init__(self, mesh, dim, w_of_q, q_of_w, aux_of_q=None,
                  eps_wet=None, b_index=0, h_index=1,
                  momentum_indices=None, positivity=None,
-                 front_tol=None,
+                 front_tol=None, piecewise_constant=False,
                  limiter="venkatakrishnan", unlimited_indices=None):
         super().__init__(mesh, dim, limiter=limiter,
                          unlimited_indices=unlimited_indices)
@@ -1129,6 +1129,17 @@ class EmittedWLSQMUSCLJAX(_ZhangShuPP, LSQMUSCLReconstructionJAX):
         # (Gallardo-Parés-Castro: 1st order near wet/dry transitions).  ``None``
         # → off.  Lets the run use the linear-stability CFL instead of 1/(2k+1).
         self._front_tol = front_tol
+        # ``piecewise_constant=True`` → ORDER-1 Audusse η/HR reconstruction: zero
+        # the reconstruction slope so ``W`` is piecewise-constant per cell, but
+        # STILL apply the free-surface face-state machinery — the ``η→h`` W-space
+        # Audusse clip ``η_f := max(η_f, b_f)`` (giving ``h_f = max(0, η_f−b_f) ≥
+        # 0``) and the emitted inverse ``q_f = u_f·h_f`` (dry-face momentum
+        # vanishes as a matched pair, no threshold).  This is Audusse-Bouchut
+        # 2005 hydrostatic reconstruction at first order, positivity-preserving
+        # by construction under the Audusse CFL — the piece the plain
+        # :class:`ConstantReconstruction` order-1 fallback omitted, which let the
+        # draining wet/dry front push ``h < 0`` and NaN (2-D Thacker planar O1).
+        self._piecewise_constant = bool(piecewise_constant)
         self._build_cell_face_rays(mesh, dim)
 
     def _eta_core(self, Q, bf_face_values, force_o1=None,
@@ -1170,6 +1181,14 @@ class EmittedWLSQMUSCLJAX(_ZhangShuPP, LSQMUSCLReconstructionJAX):
         n_var = Q.shape[0]
         grads = self._compute_gradients(W, n_var, bf_W)
         phi = self._compute_phi(W, n_var, bf_W, grads)
+
+        # ORDER-1 Audusse η/HR: zero every slope so ``W`` reconstructs
+        # piecewise-constant.  φ=0 makes the tie / front / zhang_shu / o1 blocks
+        # below no-ops (all key on φ·∇W = 0 ⇒ θ=1, no front), and ``grads`` is
+        # then dead (XLA DCEs the LSQ gradient).  The Audusse face clip +
+        # emitted inverse further down still run — that is the whole point.
+        if self._piecewise_constant:
+            phi = jnp.zeros_like(phi)
 
         # Dry-cell demotion, threshold from the EMITTED ``wet_dry_eps`` ONLY.
         # ``None`` => no demotion at all (the model emitted no threshold); this
