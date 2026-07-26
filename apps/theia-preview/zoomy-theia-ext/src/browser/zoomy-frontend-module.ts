@@ -4,8 +4,10 @@ import { NavigatorContextMenu } from '@theia/navigator/lib/browser/navigator-con
 import {
     FrontendApplicationContribution, OpenerService, open, CommonMenus,
     WidgetFactory, WidgetManager, ApplicationShell, AbstractViewContribution, bindViewContribution,
-    QuickInputService
+    QuickInputService, codicon
 } from '@theia/core/lib/browser';
+import { OutlineViewService } from '@theia/outline-view/lib/browser/outline-view-service';
+import { OutlineSymbolInformationNode } from '@theia/outline-view/lib/browser/outline-view-widget';
 import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar';
 import { FileService, FileServiceContribution } from '@theia/filesystem/lib/browser/file-service';
 import { RemoteFileServiceContribution } from '@theia/filesystem/lib/browser/remote-file-service-contribution';
@@ -429,6 +431,44 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
     }
 }
 
+/** Outline for the .ipynb notebook. Theia's built-in NotebookOutlineContribution
+ *  only fires on its own focus tracking (which doesn't trigger for this custom
+ *  notebook — hence "cannot provide outline information"). This publishes an
+ *  outline straight from the active notebook's cells (duck-typed via `.model.
+ *  cells`), labelled by each markdown cell's heading, so the .ipynb gets the
+ *  same Model / Mesh / … outline as the .py editor. */
+@injectable()
+class ZoomyNotebookOutlineContribution implements FrontendApplicationContribution {
+    @inject(ApplicationShell) protected readonly shell: ApplicationShell;
+    @inject(OutlineViewService) protected readonly outline: OutlineViewService;
+
+    onStart(): void {
+        this.shell.onDidChangeActiveWidget(() => this.refresh());
+        this.shell.onDidChangeCurrentWidget(() => this.refresh());
+    }
+    protected refresh(): void {
+        try {
+            const w: any = this.shell.activeWidget || this.shell.currentWidget;
+            const cells: any[] = w?.model?.cells;
+            if (!Array.isArray(cells) || !cells.length) { return; }   // not a notebook → leave others' outline alone
+            this.outline.publish(cells.map((c, i) => this.node(c, i)));
+        } catch { /* ignore */ }
+    }
+    protected node(cell: any, i: number): OutlineSymbolInformationNode {
+        const src = String(cell?.source || '');
+        const md = cell?.cellKind === CellKind.Markup;
+        let label: string;
+        if (md) { const m = src.match(/^\s*#{1,6}\s+(.+?)\s*$/m); label = (m ? m[1] : (src.split('\n').find((l: string) => l.trim()) || 'Markdown')).slice(0, 60); }
+        else { label = (src.split('\n').find((l: string) => l.trim()) || 'Code').slice(0, 60); }
+        return {
+            id: 'zoomy-nb-cell-' + i,
+            name: label,
+            iconClass: codicon(md ? 'markdown' : 'symbol-namespace'),
+            children: [], parent: undefined, selected: false, expanded: false,
+        } as OutlineSymbolInformationNode;
+    }
+}
+
 console.log('ZOOMY module evaluated');
 export default new ContainerModule((bind, _unbind, isBound, rebind) => {
     // Replace Theia's OPFS filesystem provider (fails to init in a blob worker on
@@ -467,6 +507,8 @@ export default new ContainerModule((bind, _unbind, isBound, rebind) => {
     bind(WidgetFactory).toDynamicValue(ctx => ({ id: ZoomyModelConfigWidget.ID, createWidget: () => ctx.container.get(ZoomyModelConfigWidget) })).inSingletonScope();
     bind(ZoomyContribution).toSelf().inSingletonScope();
     bind(FrontendApplicationContribution).toService(ZoomyContribution);
+    bind(ZoomyNotebookOutlineContribution).toSelf().inSingletonScope();
+    bind(FrontendApplicationContribution).toService(ZoomyNotebookOutlineContribution);
     bind(CommandContribution).toService(ZoomyContribution);
     bind(MenuContribution).toService(ZoomyContribution);
 });

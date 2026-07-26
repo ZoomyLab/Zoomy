@@ -17,6 +17,7 @@ export class ZoomyViewWidget extends ReactWidget {
     protected cases: string[] = [];
     protected current = '';
     protected connected: string[] = [];
+    protected commit = '';   // build commit hash from version.json (deploy-injected)
 
     @postConstruct()
     protected init(): void {
@@ -28,6 +29,7 @@ export class ZoomyViewWidget extends ReactWidget {
         this.addClass('zoomy-view-widget');
         ensureZoomyStyles();
         this.node.style.overflow = 'auto';
+        this.loadVersion();
         onCasesChanged(() => this.refresh());
         onBackendsChanged(() => this.refresh());
         this.refresh();
@@ -115,6 +117,17 @@ export class ZoomyViewWidget extends ReactWidget {
     /** Absolute URL for a bundled gui/ asset (served next to the app). */
     protected asset(file: string): string { try { return new URL('gui/assets/' + file, document.baseURI).href; } catch { return 'gui/assets/' + file; } }
 
+    /** Read the deploy-injected version.json ({commit}) for the footer build tag. */
+    protected async loadVersion(): Promise<void> {
+        try {
+            const r = await fetch(new URL('version.json', document.baseURI).href, { cache: 'no-store' });
+            if (!r.ok) { return; }
+            const v = await r.json();
+            this.commit = String(v.commit || v.sha || '').slice(0, 8);
+            this.update();
+        } catch { /* local/dev build: no version.json */ }
+    }
+
     /** The Zoomy logo + tagline at the top of the panel — clickable, jumps to
      *  the Model configuration tab. */
     protected renderBrand(): React.ReactNode {
@@ -145,7 +158,10 @@ export class ZoomyViewWidget extends ReactWidget {
             // chip-free on light themes and adds a subtle light backing on dark
             // themes so the dark-navy wordmarks stay legible.
             h('a', { className: 'zoomy-mbd-logo', href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University' },
-                h('img', { src: this.asset('mbd-logo.png'), alt: 'MBD — RWTH Aachen University', onError: (e: any) => { e.currentTarget.style.display = 'none'; } })));
+                h('img', { src: this.asset('mbd-logo.png'), alt: 'MBD — RWTH Aachen University', onError: (e: any) => { e.currentTarget.style.display = 'none'; } })),
+            // Build commit hash (deploy-injected version.json) — for reporting which
+            // build is live. Links to the exact commit on GitHub.
+            this.commit ? h('a', { href: 'https://github.com/ZoomyLab/Zoomy/commit/' + this.commit, target: '_blank', rel: 'noreferrer', title: 'This build’s commit', style: { display: 'block', marginTop: 8, fontSize: 11, color: 'var(--theia-descriptionForeground)', textDecoration: 'none', fontFamily: 'var(--theia-code-font-family, monospace)' } }, 'build ' + this.commit) : null);
     }
 
     /** The Backend group: a "Connect backend…" action plus each connected backend
