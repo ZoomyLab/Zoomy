@@ -100,7 +100,7 @@ VAM_PRESSURE_TOL = 1e-13
 # The cached SWASHES analytic tables live in the thesis case; zoomy_jax always
 # sits inside the superrepo, so this relative hop is stable.
 SWASHES_REF_DIR = (pathlib.Path(__file__).resolve().parents[3]
-                   / "thesis" / "cases" / "swe_swashes_verification"
+                   / "thesis" / "cases" / "verification" / "swe_swashes"
                    / "reference")
 
 
@@ -323,7 +323,7 @@ def swashes_table(case: str) -> dict:
         raise AssertionError(
             f"missing SWASHES analytic table {path} — regenerate it with "
             f"`python run_verification.py` in thesis/cases/"
-            f"swe_swashes_verification (needs the `swashes` binary).")
+            f"verification/swe_swashes (needs the `swashes` binary).")
     cols: dict = {}
     with path.open() as fh:
         for row in csv.DictReader(fh):
