@@ -28,7 +28,6 @@ import zoomy_core.misc.io as io
 import zoomy_core.misc.misc as _misc
 import zoomy_jax.misc.io as jax_io
 from zoomy_core.misc.misc import Zstruct, Settings
-import zoomy_jax.fvm.ode as ode
 import zoomy_core.fvm.timestepping as timestepping
 from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNumpy
 from zoomy_core.fvm.solver_numpy import Solver as SolverNumpy
@@ -1277,15 +1276,29 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return Q, Qaux
 
     def _explicit_hyperbolic_step(self, dt, time, Q, Qaux, parameters, flux, nc,
-                                  *, time_euler=False, aux_of_q=None):
-        """The explicit hyperbolic (flux) sub-step, MOOD-aware — WITHOUT the
-        source.  Factored out of ``step`` so the IMEX solver's explicit stage
-        reuses the SAME a-priori front pre-detector (which rides inside the
-        reconstruction) AND a-posteriori MOOD corrector (the ``lax.cond`` re-run
-        here).  ``flux`` is the ``(dt, time, Q, Qaux, p, dQ, force_o1)``
-        operator; ``nc`` = #inner cells (for the troubled-cell mask).  order≥2 =
-        SSP-RK2 (Heun); order 1 = explicit Euler.  The caller applies the source
-        afterwards (explicit RK1 in ``step``, implicit in the IMEX loop).
+                                  *, time_euler=False, aux_of_q=None,
+                                  source=None):
+        """The explicit hyperbolic (flux) sub-step, MOOD-aware.  Factored out of
+        ``step`` so the IMEX solver's explicit stage reuses the SAME a-priori
+        front pre-detector (which rides inside the reconstruction) AND
+        a-posteriori MOOD corrector (the ``lax.cond`` re-run here).  ``flux`` is
+        the ``(dt, time, Q, Qaux, p, dQ, force_o1)`` operator; ``nc`` = #inner
+        cells (for the troubled-cell mask).  order≥2 = SSP-RK2 (Heun); order 1 =
+        explicit Euler.
+
+        ``source`` (optional, ``(dt, time, Q, Qaux, p, dQ)`` operator): when
+        given, its contribution is folded into the RK RHS at EACH stage
+        (mirroring ``solver_numpy`` ``rhs = flux + source``) so a source-carrying
+        row reaches the flux's design order instead of the 1st-order Godunov
+        split a separate explicit-Euler source sub-step would impose (cid 151).
+        The base explicit ``step`` passes the source here; the IMEX loop leaves
+        it ``None`` and steps the source IMPLICITLY afterwards; the Chorin-VAM
+        predictor leaves it ``None`` and adds the source in its own splitting
+        cycle (Escalante eq. 11).  ``None`` ⇒ flux-only, byte-identical to
+        before.  The point-implicit ``source_treatment="linearized"`` update is
+        baked INTO the source operator itself (NSM rewrites ``sm.source`` into
+        ``(I − dt·J)⁻¹ S``), so folding it here linearizes inside each RK stage —
+        no second split.
 
         ``time_euler=True`` keeps the order-≥2 SPATIAL reconstruction (and the
         whole MOOD apparatus) but advances with a SINGLE Euler step in time.
@@ -1312,6 +1325,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 Q0 = Q
                 dQ = flux(dt, time, Q0, Qaux, parameters,
                           jnp.zeros_like(Q), force_o1)
+                if source is not None:
+                    dQ = dQ + source(dt, time, Q0, Qaux, parameters,
+                                     jnp.zeros_like(Q))
                 Q1 = Q0 + dt * dQ
                 # REFRESH THE AUX AGAINST THE STAGE STATE.  Qaux is a FUNCTION
                 # of Q (SME/VAM carry the desingularized ``hinv`` = f(h)), so
@@ -1331,12 +1347,21 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                          if aux_of_q is not None else Qaux)
                 dQ = flux(dt, time + dt, Q1, Qaux1, parameters,
                           jnp.zeros_like(Q), force_o1)
+                if source is not None:
+                    # Stage 2 uses the REFRESHED aux (consistent with the flux)
+                    # and the stage-2 time level ``time + dt`` — a
+                    # time-dependent source samples both levels like numpy's RK2.
+                    dQ = dQ + source(dt, time + dt, Q1, Qaux1, parameters,
+                                     jnp.zeros_like(Q))
                 Q2 = Q1 + dt * dQ
                 return 0.5 * (Q0 + Q2)
 
             def _euler(force_o1):
                 dQ = flux(dt, time, Q, Qaux, parameters,
                           jnp.zeros_like(Q), force_o1)
+                if source is not None:
+                    dQ = dQ + source(dt, time, Q, Qaux, parameters,
+                                     jnp.zeros_like(Q))
                 return Q + dt * dQ
 
             _advance = _euler if time_euler else _rk2
@@ -1360,6 +1385,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 )
             return _advance(None)
         dQ = flux(dt, time, Q, Qaux, parameters, jnp.zeros_like(Q))
+        if source is not None:
+            dQ = dQ + source(dt, time, Q, Qaux, parameters, jnp.zeros_like(Q))
         return Q + dt * dQ
 
     def _halo_wrap(self, flux):
@@ -1421,24 +1448,32 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # (just before reconstruction), so step() no longer pre-fills
         # ghost cells.  Mirrors the NumPy solver — one BC kernel
         # invocation per face per stage, no stale-ghost reads.
+        #
         # The explicit hyperbolic (flux) sub-step, MOOD-aware — factored into
         # ``_explicit_hyperbolic_step`` so the IMEX solver reuses the SAME
-        # front pre-detector + MOOD corrector for its explicit stage.
+        # front pre-detector + MOOD corrector for its explicit stage.  The
+        # source is FOLDED into that step's RK RHS at the flux's order
+        # (``source=`` below), mirroring ``solver_numpy`` ``rhs = flux + source``
+        # — NOT stepped separately.  The old separate ``ode.RK1(source)`` was a
+        # 1st-order Godunov split: it injected an O(dt)=O(dx) error into every
+        # source-carrying row, capping MMS/steady friction/moment-source cases
+        # at 1st order even with a 2nd-order flux (cid 151).
+        #
+        # REQ-185: ``time`` is threaded into the step so a time-dependent source
+        # binds ``t`` (dt + cell positions are added by ``get_compute_source``);
+        # folding samples the source at both RK time levels like numpy.
+        #
+        # The FULLY well-balanced ODE moving-equilibrium path carries the source
+        # (friction) INSIDE the equilibrium reconstruction U* (paper eq 28,
+        # midpoint quadrature → no additive source term), so no source is folded
+        # there to avoid double-counting.
+        source_op = (None if getattr(self, "_bern_ode", False)
+                     else self._rt_source_op)
         Q = self._explicit_hyperbolic_step(
             dt, time, Q, Qaux, parameters, flux,
             int(self._rt_mesh.n_inner_cells),
+            source=source_op,
             aux_of_q=getattr(self._rt_model, "update_aux_variables", None))
-
-        # Source step (explicit Euler is fine — source is treated as O1).
-        # REQ-185: thread the current ``time`` into the timestepping so a
-        # time-dependent source binds ``t`` (dt + cell positions are added by
-        # ``get_compute_source``).
-        # The FULLY well-balanced ODE moving-equilibrium path carries the source
-        # (friction) INSIDE the equilibrium reconstruction U* (paper eq 28,
-        # midpoint quadrature → no additive source term), so the separate source
-        # sub-step is skipped there to avoid double-counting.
-        if not getattr(self, "_bern_ode", False):
-            Q = ode.RK1(self._rt_source_op, Q, Qaux, parameters, dt, time)
 
         return Q
 
