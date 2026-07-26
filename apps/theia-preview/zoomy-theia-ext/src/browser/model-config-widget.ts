@@ -268,8 +268,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 else if (this.cases.length) { await this.openCaseByName(this.cases[0]); }
                 else { await this.newCase('test'); }
             }
-            // Discover any local backends once at startup (best-effort, quiet).
-            this.scanBackends().catch(() => { /* ignore */ });
+            // NO automatic backend scan on load: probing localhost ports makes
+            // the browser (Firefox especially) prompt/warn about the page issuing
+            // cross-origin requests unprompted, which hurts first-load UX. The
+            // user scans on demand via the ↻ refresh button (zoomy.scanBackends).
         } catch (e: any) {
             this.error = e?.message || String(e);
         }

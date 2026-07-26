@@ -178,7 +178,7 @@ export class ZoomyViewWidget extends ReactWidget {
         return h('div', { key: 'backend', style: { marginBottom: 10 } },
             h('div', { style: { display: 'flex', alignItems: 'center', padding: '4px 8px' } },
                 h('div', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, 'Backend'),
-                h('button', { title: 'Scan localhost:8080–8090 for backends', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)' }, onClick: () => this.commands.executeCommand('zoomy.scanBackends') }, h('span', { className: 'codicon codicon-refresh' }))),
+                h('button', { title: 'Scan localhost:8080–8100 for backends', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)' }, onClick: () => this.commands.executeCommand('zoomy.scanBackends') }, h('span', { className: 'codicon codicon-refresh' }))),
             this.connected.length ? this.connected.map(item) : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '2px 10px' } }, 'None — running in-browser.'),
             h('button', {
                 style: rowBtn, onClick: () => this.commands.executeCommand('zoomy.connectBackend'),
