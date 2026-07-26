@@ -196,6 +196,27 @@
     "category": "DMPlex"
   },
   {
+    "id": "solver-firedrake",
+    "title": "Hyperbolic (Firedrake)",
+    "description": "Explicit finite-volume / FEM march on a Firedrake unstructured mesh (reads a gmsh `.msh`; named physical groups = BC tags), VTK converted to the shared HDF5. Needs the **zoomy-firedrake** container.",
+    "requires_tag": "firedrake",
+    "params": {
+      "time_end": {
+        "type": "Number",
+        "default": 0.1
+      },
+      "cfl": {
+        "type": "Number",
+        "default": 0.9,
+        "bounds": [
+          0.01,
+          0.99
+        ]
+      }
+    },
+    "category": "Firedrake"
+  },
+  {
     "id": "solver-foam",
     "title": "Coupled (Foam+preCICE)",
     "description": "OpenFOAM+preCICE backend: compiles the emitted SME participant on demand and runs the coupled pair. Pull oras://ghcr.io/zoomylab/zoomy_openfoam_sif:latest",
