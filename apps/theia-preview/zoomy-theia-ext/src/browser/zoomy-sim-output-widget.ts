@@ -17,8 +17,8 @@ export class ZoomySimOutputWidget extends ReactWidget {
     @postConstruct()
     protected init(): void {
         this.id = ZoomySimOutputWidget.ID;
-        this.title.label = 'Simulation';
-        this.title.caption = 'Zoomy — simulation output';
+        this.title.label = 'Log';
+        this.title.caption = 'Zoomy — run output + log';
         this.title.iconClass = 'codicon codicon-pulse';
         this.title.closable = true;
         this.addClass('zoomy-sim-output-widget');
@@ -45,7 +45,7 @@ export class ZoomySimOutputWidget extends ReactWidget {
         const iconBtn: React.CSSProperties = { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)', padding: 2 };
         const bar = h('div', { style: { position: 'sticky', top: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--theia-editor-background, var(--theia-editorWidget-background))', borderBottom: '1px solid var(--theia-panel-border)' } },
             h('span', { className: 'codicon codicon-pulse', style: { color: 'var(--theia-descriptionForeground)' } }),
-            h('span', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)' } }, 'Simulation'),
+            h('span', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)' } }, 'Log'),
             h('button', { title: 'Clear', style: iconBtn, onClick: () => { this.lines = []; this.update(); } }, h('span', { className: 'codicon codicon-clear-all' })),
             h('button', { title: 'Close panel', style: iconBtn, onClick: () => this.close() }, h('span', { className: 'codicon codicon-close' })));
         const bodyStyle: React.CSSProperties = !this.lines.length

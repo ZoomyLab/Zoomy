@@ -221,6 +221,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         try {
             setLogSink((lvl, msg) => {
                 console.log('[zoomy-cli]', lvl, msg);
+                // Funnel the Pyodide worker's loguru output into the bottom Log panel.
+                emitSimOutput({ kind: 'line', level: /error|warn|crit/i.test(lvl || '') ? 'error' : 'info', text: String(msg) });
                 if (/Booting|Installing|Kernel ready|runtime ready|installing|cache|ready/i.test(msg)) {
                     this.kernelStatus = msg;
                     if (/runtime ready|Kernel ready/i.test(msg)) {

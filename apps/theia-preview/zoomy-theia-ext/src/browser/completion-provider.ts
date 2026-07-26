@@ -22,6 +22,44 @@ function kindFor(type: string): monaco.languages.CompletionItemKind {
     }
 }
 
+/** Register a compact Python Monarch tokenizer so `.py` files and notebook code
+ *  cells get syntax coloring — Theia's monaco-editor-core ships the language id
+ *  but no Python grammar, so without this everything renders as plain text. */
+let _pyGrammarDone = false;
+function ensurePythonGrammar(log: (m: string) => void): void {
+    if (_pyGrammarDone) { return; }
+    try {
+        monaco.languages.setLanguageConfiguration('python', {
+            comments: { lineComment: '#' },
+            brackets: [['{', '}'], ['[', ']'], ['(', ')']],
+            autoClosingPairs: [{ open: '{', close: '}' }, { open: '[', close: ']' }, { open: '(', close: ')' }, { open: '"', close: '"' }, { open: "'", close: "'" }],
+        });
+        monaco.languages.setMonarchTokensProvider('python', {
+            defaultToken: '',
+            keywords: ['and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'],
+            constants: ['True', 'False', 'None', 'self', 'cls'],
+            tokenizer: {
+                root: [
+                    [/[a-zA-Z_]\w*/, { cases: { '@keywords': 'keyword', '@constants': 'constant.language', '@default': 'identifier' } }],
+                    [/#.*$/, 'comment'],
+                    [/@[a-zA-Z_]\w*/, 'annotation'],
+                    [/"""/, { token: 'string', next: '@tstringd' }],
+                    [/'''/, { token: 'string', next: '@tstrings' }],
+                    [/"/, { token: 'string', next: '@stringd' }],
+                    [/'/, { token: 'string', next: '@strings' }],
+                    [/\d+\.?\d*([eE][+-]?\d+)?[jJ]?/, 'number'],
+                    [/[+\-*/%=<>!&|^~]+/, 'operator'],
+                ],
+                tstringd: [[/[^"]+/, 'string'], [/"""/, { token: 'string', next: '@pop' }], [/"/, 'string']],
+                tstrings: [[/[^']+/, 'string'], [/'''/, { token: 'string', next: '@pop' }], [/'/, 'string']],
+                stringd: [[/[^"\\]+/, 'string'], [/\\./, 'string.escape'], [/"/, { token: 'string', next: '@pop' }]],
+                strings: [[/[^'\\]+/, 'string'], [/\\./, 'string.escape'], [/'/, { token: 'string', next: '@pop' }]],
+            },
+        } as any);
+        _pyGrammarDone = true;
+    } catch (e) { log('python grammar: ' + ((e as any)?.message || e)); }
+}
+
 export function registerZoomyCompletions(client: PyodideClient, log: (m: string) => void): monaco.IDisposable {
     // This minimal Theia app has no Python grammar extension, so `.py` files and
     // notebook cells can open as plaintext. Register the language id so they get
@@ -30,6 +68,7 @@ export function registerZoomyCompletions(client: PyodideClient, log: (m: string)
         if (!monaco.languages.getLanguages().some(l => l.id === 'python')) {
             monaco.languages.register({ id: 'python', extensions: ['.py'], aliases: ['Python', 'python'] });
         }
+        ensurePythonGrammar(log);
     } catch (e) { log('register python lang: ' + ((e as any)?.message || e)); }
 
     const provider: monaco.languages.CompletionItemProvider = {
