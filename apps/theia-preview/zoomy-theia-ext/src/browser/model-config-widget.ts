@@ -1179,12 +1179,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => this.refreshBackends()); } catch { /* ignore */ }
         } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
     }
-    /** Auto-discover local backends: probe localhost:8080–8090 concurrently and
+    /** Auto-discover local backends: probe localhost:8080–8100 concurrently and
      *  connect any that answer the /health handshake (skipping the ones already
      *  connected). One-click convenience — no need to type URLs. */
     async scanBackends(): Promise<void> {
-        this.setNotice('Scanning localhost:8080–8090 for backends…');
-        const ports: number[] = []; for (let p = 8080; p <= 8090; p++) { ports.push(p); }
+        this.setNotice('Scanning localhost:8080–8100 for backends…');
+        const ports: number[] = []; for (let p = 8080; p <= 8100; p++) { ports.push(p); }
         const before = new Set(this.connectedTags);
         const results = await Promise.all(ports.map(async (p) => {
             try { return await this.cli.connect('http://localhost:' + p); } catch { return null; }
@@ -1194,7 +1194,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const fresh = results.filter((a: any) => a && a.tag && !before.has(a.tag));
         this.setNotice(fresh.length
             ? 'Connected ' + fresh.length + ' backend' + (fresh.length === 1 ? '' : 's') + ': ' + fresh.map((a: any) => a.tag).join(', ') + '.'
-            : 'No new backends found on localhost:8080–8090.');
+            : 'No new backends found on localhost:8080–8100. For a backend on another port, use "Connect backend…" with its full URL.');
     }
     /** Disconnect a connected backend by its tag — actually drops the CLI's
      *  HttpAdapter + heartbeat (cli.disconnect), not just the GUI list. The
