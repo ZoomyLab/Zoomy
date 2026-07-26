@@ -76,9 +76,9 @@ CMAP_TOPO = "Greys"
 #:     CLAMPS every text element so nothing renders below 14 pt at 1080p.
 #: ``print`` is kept as the original alias of ``publication``.
 PROFILES = {
-    "publication":  {"scale": 1.0, "lw": 1.4, "ms": 4},
-    "print":        {"scale": 1.0, "lw": 1.4, "ms": 4},
-    "thesis":       {"scale": 1.0, "lw": 1.4, "ms": 4},
+    "publication":  {"scale": 1.0, "lw": 1.4, "ms": 4, "min_pt": 9.0},
+    "print":        {"scale": 1.0, "lw": 1.4, "ms": 4, "min_pt": 9.0},
+    "thesis":       {"scale": 1.0, "lw": 1.4, "ms": 4, "min_pt": 9.0},
     "screen":       {"scale": 1.6, "lw": 2.0, "ms": 6},
     "presentation": {"scale": 2.0, "lw": 2.6, "ms": 8, "min_pt": 14.0},
 }
