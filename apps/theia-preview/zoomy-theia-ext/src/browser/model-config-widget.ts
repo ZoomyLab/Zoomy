@@ -44,7 +44,6 @@ const TABS: TabDef[] = [
     { dir: 'models', label: 'Model' },
     { dir: 'meshes', label: 'Mesh' },
     { dir: 'solvers', label: 'Solver' },
-    { dir: 'vof', label: 'Volume of Fluid' },
     { dir: 'visualizations', label: 'Visualization' },
 ];
 
@@ -149,6 +148,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected vizOuts: Array<{ title: string; out: CardOut }> = [];
     protected vizBusy = false;
     protected storeMeta: any;
+    /** Which rendered visualization output blocks are collapsed (by block key). */
+    protected readonly vizCollapsed = new Set<string>();
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
     backendUrl = 'http://localhost:8080';
@@ -444,10 +445,14 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         } catch (e: any) { this.setNotice('Remove card failed: ' + (e?.message || e)); }
     }
 
-    /** Rebuild the open viz card's field/time schema from the current store. */
+    /** Rebuild EVERY visualization card's field/time schema from the current
+     *  store — the fields + number of snapshots are only known after a run, so
+     *  this is called whenever a run/render updates the store (one mechanism for
+     *  all viz cards, no per-card wiring). */
     protected refreshVizParams(): void {
-        const t = this.activeParamTarget();
-        if (t && t.dir === 'visualizations') { this.schemas.set(t.card.id, this.vizParamSchema()); this.onParamsChangedEmitter.fire(); }
+        const schema = this.vizParamSchema();
+        for (const c of (this.cardsByTab['visualizations'] || [])) { this.schemas.set(c.id, schema); }
+        this.onParamsChangedEmitter.fire();
     }
     /** Field selector + time slider for a visualization, from the last run's store
      *  (store_meta.fields / n_snapshots). Editable like any card parameter and
@@ -677,7 +682,6 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 h('span', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, label),
                 h('div', { style: { fontWeight: 700, fontSize: 15, flex: 1 } }, card.title || card.id),
                 h('button', { title: 'Close', onClick: () => this.closeParams(), style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)', padding: 2 } }, h('span', { className: 'codicon codicon-close' }))),
-            card.requires_tag ? h('div', { key: 'tag', style: { fontSize: 11, marginBottom: 6 } }, h('span', { style: { padding: '1px 6px', borderRadius: 4, background: 'var(--theia-badge-background)', color: 'var(--theia-badge-foreground)' } }, card.requires_tag)) : null,
             card.description ? h('div', { key: 'desc', className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5, marginBottom: 4 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             h('div', { key: 'form' }, this.renderParamForm(card)),
         ]);
@@ -830,6 +834,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                     const fld = ed.field != null && ed.field !== '' ? JSON.stringify(String(ed.field)) : 'None';
                     const code = 'time_step = ' + ts + '\nfield_name = ' + fld + '\n' + snippet;
                     const res = await this.cli.runCode(code);
+                    // The viz snippet installs `store` (vizPrelude) → the engine
+                    // returns its metadata; capture it so the field selector +
+                    // time slider populate for every viewer from the actual run.
+                    if (res && (res as any).store_meta) { this.storeMeta = (res as any).store_meta; }
                     out.stdout = res?.output || ''; out.status = res?.status || 'success';
                 } catch (e: any) {
                     out.status = 'error'; out.stdout = e?.message || String(e);
@@ -837,7 +845,21 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                     setDisplaySink(undefined); out.running = false; this.update();
                 }
             }
-        } finally { this.vizBusy = false; this.update(); }
+        } finally {
+            this.vizBusy = false;
+            // Populate every viewer's field/time params from the store and open
+            // the Parameters panel for the primary viewer, so field + time step
+            // are immediately tweakable after a render (then Render again).
+            this.refreshVizParams();
+            const primary = cards[0];
+            if (primary) {
+                this.selected['visualizations'] = primary.id;
+                this.activeParamCardId = primary.id; this.activeParamDir = 'visualizations';
+                this.schemas.set(primary.id, this.vizParamSchema());
+                this.paramsPanel?.sync();
+            }
+            this.update();
+        }
     }
 
     protected setNotice(msg: string): void { this.notice = msg; this.update(); if (msg) { setTimeout(() => { if (this.notice === msg) { this.notice = ''; this.update(); } }, 6000); } }
@@ -925,19 +947,47 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     }
 
     // --- #4 Connect a remote backend by URL. ---
+    /** Report a connected adapter's handshake result: it declares its own
+     *  identity (tag) + capabilities (backends) at /health — we never assume. */
+    protected announceConnected(adapter: any): void {
+        const caps: string[] = (adapter?.backends && adapter.backends.length) ? adapter.backends : (adapter?.tag ? [adapter.tag] : []);
+        this.setNotice('Connected "' + (adapter?.tag || '?') + '" backend' + (caps.length ? ' — solvers: ' + caps.join(', ') : '') + '.');
+    }
     async connectBackend(): Promise<void> {
         const url = this.backendUrl.trim(); if (!url) { return; }
         this.setNotice('Connecting to ' + url + '…');
         try {
+            // connect() does the /health handshake: the server declares its tag +
+            // capabilities; the adapter registers under the tag IT reports.
             const adapter = await this.cli.connect(url);
-            const tag = adapter?.tag || (this.cli.availableTags ? this.cli.availableTags() : []).slice(-1)[0];
+            if (!adapter) { this.setNotice('No healthy zoomy-server at ' + url + '. Is one running there?'); return; }
             this.refreshBackends();
-            this.setNotice('Connected backend: ' + (tag || url));
+            this.announceConnected(adapter);
             try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => this.refreshBackends()); } catch { /* ignore */ }
         } catch (e: any) { this.setNotice('Connect failed: ' + (e?.message || e) + ' — is a zoomy-server running there?'); }
     }
-    /** Disconnect a connected backend by its tag. */
+    /** Auto-discover local backends: probe localhost:8080–8090 concurrently and
+     *  connect any that answer the /health handshake (skipping the ones already
+     *  connected). One-click convenience — no need to type URLs. */
+    async scanBackends(): Promise<void> {
+        this.setNotice('Scanning localhost:8080–8090 for backends…');
+        const ports: number[] = []; for (let p = 8080; p <= 8090; p++) { ports.push(p); }
+        const before = new Set(this.connectedTags);
+        const results = await Promise.all(ports.map(async (p) => {
+            try { return await this.cli.connect('http://localhost:' + p); } catch { return null; }
+        }));
+        this.refreshBackends();
+        try { this.cli.onConnectionsChange && this.cli.onConnectionsChange(() => this.refreshBackends()); } catch { /* ignore */ }
+        const fresh = results.filter((a: any) => a && a.tag && !before.has(a.tag));
+        this.setNotice(fresh.length
+            ? 'Connected ' + fresh.length + ' backend' + (fresh.length === 1 ? '' : 's') + ': ' + fresh.map((a: any) => a.tag).join(', ') + '.'
+            : 'No new backends found on localhost:8080–8090.');
+    }
+    /** Disconnect a connected backend by its tag — actually drops the CLI's
+     *  HttpAdapter + heartbeat (cli.disconnect), not just the GUI list. The
+     *  in-browser numpy (pyodide) runtime is always-on and cannot be removed. */
     async disconnectBackend(tag: string): Promise<void> {
+        if (!tag || tag.indexOf('numpy') === 0) { return; }
         try { this.cli.disconnect && this.cli.disconnect(tag); this.setNotice('Disconnected backend: ' + tag); }
         catch (e: any) { this.setNotice('Disconnect failed: ' + (e?.message || e)); }
         this.refreshBackends();
@@ -989,20 +1039,20 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => vizMulti ? this.toggleExpand(card) : this.pick(card, dir) },
             selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
-            (() => { const f = this.cardFlag(card, dir, runnable); if (!f) { return null; } return h('span', { title: f.tip, style: { fontSize: 11, padding: '1px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: f.available ? 'var(--theia-successBackground, rgba(63,185,80,0.18))' : 'var(--theia-badge-background)', color: f.available ? 'var(--theia-successForeground, #3fb950)' : 'var(--theia-badge-foreground)', border: f.available ? '1px solid var(--theia-successForeground, #3fb950)' : 'none' } }, f.available ? h('span', { className: 'codicon codicon-pass-filled', style: { fontSize: 10 } }) : null, f.label); })(),
             this.editMode ? h('button', { title: 'Remove this card', onClick: (e: any) => { e.stopPropagation(); this.removeCard(card); }, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-errorForeground)', padding: 2 } }, h('span', { className: 'codicon codicon-trash' })) : null,
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             dir === 'meshes' ? this.renderMeshPreview(card) : null,
-            !runnable ? h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 12, marginTop: 6, fontStyle: 'italic' } }, 'Remote backend card — connect a backend to run.') : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
                 hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
                 h('button', { style: gearBtn, title: 'Open this section of case.py in the editor', onClick: () => this.editCardFile(dir) }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit'),
                 dir === 'models'
                     ? h('button', { style: displayBtn, disabled: !this.kernelReady || displaying, title: 'Build the model and display its equations below', onClick: () => this.loadModelMath(card, true) }, h('span', { className: 'codicon codicon-' + (displaying ? 'loading codicon-modifier-spin' : 'symbol-structure'), style: { verticalAlign: 'middle', marginRight: 6 } }), displaying ? 'Displaying…' : 'Display model')
-                    : h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
+                    : dir === 'visualizations'
+                        ? null
+                        : h('button', { style: btn, disabled: !runnable || (out && out.running), onClick: () => runnable && this.runCard(card) }, out && out.running ? 'Running…' : 'Run')),
             // Single output cell below the buttons: for models the derived equations
             // (Display model rewrites this same cell); for mesh/solver the run output.
             dir === 'models' ? this.renderModelMath(card)
@@ -1053,9 +1103,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const cats = [...new Set(allCards.map(c => c.category || 'General'))];
         const activeCat = cats.includes(this.activeSub[this.active]) ? this.activeSub[this.active] : cats[0];
         const cards = cats.length > 1 ? allCards.filter(c => (c.category || 'General') === activeCat) : allCards;
+        // Selected subtab: change ONLY the (blue) outline, keep the inner
+        // background transparent so the label stays readable (no graying).
         const subBtn = (cat: string): React.ReactNode => h('button', {
             key: cat, onClick: () => { this.activeSub[this.active] = cat; this.update(); },
-            style: { cursor: 'pointer', border: '1px solid ' + (cat === activeCat ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 999, padding: '3px 12px', fontSize: 12, background: cat === activeCat ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' },
+            style: { cursor: 'pointer', border: '1px solid ' + (cat === activeCat ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 999, padding: '3px 12px', fontSize: 12, background: 'transparent', color: 'var(--theia-foreground)', fontWeight: cat === activeCat ? 600 : 400 },
         }, cat + ' (' + allCards.filter(c => (c.category || 'General') === cat).length + ')');
         const editToggle = h('button', { title: 'Toggle card editing (add / remove cards)', onClick: () => { this.editMode = !this.editMode; this.update(); }, style: { cursor: 'pointer', border: '1px solid ' + (this.editMode ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 6, padding: '3px 10px', fontSize: 12, background: this.editMode ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' } },
             h('span', { className: 'codicon codicon-' + (this.editMode ? 'check' : 'edit'), style: { marginRight: 4 } }), this.editMode ? 'Done editing' : 'Edit cards');
@@ -1085,25 +1137,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // stays (kept, per feedback); native SCM binding is a follow-up.
         return h('div', { style: page },
             h('div', { style: { fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--theia-button-background)', marginBottom: 2 } }, 'ZOOMY'),
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 4px', flexWrap: 'wrap' } },
+            // Cases live in the left Zoomy panel (selector + open-in-editor);
+            // the config page starts straight at the kernel status + cockpit.
+            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 12px', flexWrap: 'wrap' } },
                 h('h1', { style: { fontSize: 26, fontWeight: 700, margin: 0 } }, 'Model configuration'),
-                h('span', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'case:'),
-                h('select', {
-                    style: { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '4px 8px', fontSize: 13 },
-                    value: this.caseName,
-                    onChange: (e: any) => { const v = e.target.value; if (v === '__new__') { this.closeCase(); } else if (v !== this.caseName) { this.openCaseByName(v); } },
-                }, [
-                    ...this.cases.map(n => h('option', { key: n, value: n }, n)),
-                    !this.cases.includes(this.caseName) && this.caseName ? h('option', { key: this.caseName, value: this.caseName }, this.caseName) : null,
-                    h('option', { key: '__new__', value: '__new__' }, '＋ New case…'),
-                ])),
-            h('div', { style: { color: 'var(--theia-descriptionForeground)', fontSize: 13, marginBottom: 10 } },
-                'Editing case ', h('strong', null, this.caseName), ' — the folder is the source of truth; every change is saved back to it. Select a model, mesh and solver, Run to compute, then open the Visualization tab and Render.'),
-            h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
-                h('button', { style: { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 12px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' }, title: 'Open this case as a runnable Jupyter notebook', onClick: () => this.openInNotebook() },
-                    h('span', { className: 'codicon codicon-notebook', style: { verticalAlign: 'middle', marginRight: 5 } }), 'Open in Notebook Mode'),
-                h('button', { style: { cursor: 'pointer', border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: '5px 12px', fontSize: 12.5, background: 'transparent', color: 'var(--theia-foreground)' }, title: 'Open this case (case.py) in the editor', onClick: () => this.editCardFile() },
-                    h('span', { className: 'codicon codicon-file-code', style: { verticalAlign: 'middle', marginRight: 5 } }), 'Open case.py')),
+                this.caseName ? h('span', { style: { fontSize: 13, color: 'var(--theia-descriptionForeground)' } }, 'case: ', h('strong', { style: { color: 'var(--theia-foreground)' } }, this.caseName)) : null),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
                 h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
                 'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)',
@@ -1130,11 +1168,19 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             : !this.simRan ? sel + ' — run a simulation first (the Simulation bar above), then Render.'
             : !this.kernelReady ? sel + ' — waiting for the kernel…'
             : sel + ' — click Render to generate the plot' + (n === 1 ? '' : 's') + '.';
-        const outBlock = (title: string, out: CardOut, key: string): React.ReactNode => h('div', { key, style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
-            this.vizOuts.length > 1 ? h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 6 } }, title) : null,
-            out.running && !out.cells.length ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Rendering ' + title + '…') : null,
-            out.cells.map((c, i) => this.renderCell(c, key + '_' + i)),
-            out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null);
+        // Each viewer's output is an individually collapsible block: click its
+        // title to fold/unfold. Default expanded; state keyed by block position.
+        const outBlock = (title: string, out: CardOut, key: string): React.ReactNode => {
+            const collapsed = this.vizCollapsed.has(key);
+            return h('div', { key, style: { marginTop: 12, borderTop: '1px solid var(--theia-panel-border)', paddingTop: 10, color: out.status === 'error' ? 'var(--theia-errorForeground)' : undefined } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: collapsed ? 0 : 6 }, onClick: () => { if (collapsed) { this.vizCollapsed.delete(key); } else { this.vizCollapsed.add(key); } this.update(); } },
+                    h('span', { className: 'codicon codicon-chevron-' + (collapsed ? 'right' : 'down') }),
+                    h('span', { style: { flex: 1 } }, title)),
+                collapsed ? null : h('div', null,
+                    out.running && !out.cells.length ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Rendering ' + title + '…') : null,
+                    out.cells.map((c, i) => this.renderCell(c, key + '_' + i)),
+                    out.stdout ? h('pre', { style: { margin: '2px 0', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'var(--theia-code-font-family, monospace)' } }, out.stdout) : null));
+        };
         return h('div', { className: 'zoomy-viz-viewer', style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: 14, marginBottom: 16, background: 'var(--theia-editorWidget-background)' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' } },
                 h('button', { style: btn, disabled: !ready || this.vizBusy, onClick: () => this.renderVisualization() },

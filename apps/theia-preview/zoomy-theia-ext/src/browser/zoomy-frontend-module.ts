@@ -400,6 +400,8 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.loadProject, label: 'Zoomy: Load project' }, { execute: async () => (await this.mc()).loadProject() });
         reg.registerCommand({ id: CMD.connectBackend, label: 'Zoomy: Connect backend…' }, { execute: () => this.connectBackend() });
         reg.registerCommand({ id: 'zoomy.disconnectBackend', label: 'Zoomy: Disconnect backend' }, { execute: async (tag: string) => { if (tag) { (await this.mc()).disconnectBackend(tag); } } });
+        reg.registerCommand({ id: 'zoomy.scanBackends', label: 'Zoomy: Scan for local backends' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).scanBackends(); } });
+        reg.registerCommand({ id: 'zoomy.openCaseFile', label: 'Zoomy: Open case.py in editor' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).editCardFile(); } });
         reg.registerCommand({ id: 'zoomy.openCaseHere', label: 'Open in model configurator' }, {
             execute: () => this.openCaseInConfigurator(),
             isVisible: () => { const u = this.selectedUri(); return !!u && /\.(py|ipynb)$/.test(u.path.toString()); },

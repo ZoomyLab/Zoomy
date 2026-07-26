@@ -76,6 +76,7 @@ export class ZoomyViewWidget extends ReactWidget {
                 this.group('Configuration', [
                     ['settings-gear', 'Open model configuration', 'zoomy.openModelConfig'],
                     ['notebook', 'Open in Notebook Mode', 'zoomy.openInNotebook'],
+                    ['file-code', 'Open case.py in editor', 'zoomy.openCaseFile'],
                     ['play', 'Run simulation', 'zoomy.run'],
                 ]),
                 this.group('Project', [
@@ -114,9 +115,10 @@ export class ZoomyViewWidget extends ReactWidget {
         }, icon ? h('span', { className: 'codicon codicon-' + icon }) : null, label);
         return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 12px', borderTop: '1px solid var(--theia-panel-border)' } },
             link('github-inverted', 'GitHub repository', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
-            // MBD chair logo — clickable, on a light chip so it reads in either theme.
-            h('a', { href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University', style: { display: 'inline-block', marginTop: 8, padding: '6px 8px', background: '#ffffff', borderRadius: 6 } },
-                h('img', { src: this.asset('mbd-logo.png'), alt: 'MBD — RWTH Aachen University', style: { height: 30, width: 'auto', display: 'block' } })));
+            // MBD chair + RWTH Aachen lockup — transparent PNG, no chip. Hidden
+            // until the asset is present so there's no broken image.
+            h('a', { href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University', style: { display: 'block', marginTop: 10 } },
+                h('img', { src: this.asset('mbd-rwth-logo.png'), alt: 'MBD — RWTH Aachen University', onError: (e: any) => { e.currentTarget.style.display = 'none'; }, style: { width: '100%', maxWidth: 260, height: 'auto', display: 'block' } })));
     }
 
     /** The Backend group: a "Connect backend…" action plus each connected backend
@@ -124,12 +126,16 @@ export class ZoomyViewWidget extends ReactWidget {
     protected renderBackends(): React.ReactNode {
         const h = React.createElement;
         const rowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', padding: '6px 8px', fontSize: 13, textAlign: 'left', borderRadius: 4 };
+        // The in-browser numpy (pyodide) runtime is always-on → no disconnect.
         const item = (tag: string): React.ReactNode => h('div', { key: tag, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', fontSize: 13 } },
             h('span', { className: 'codicon codicon-pass-filled', style: { color: 'var(--theia-successForeground, #3fb950)' } }),
             h('span', { style: { flex: 1 } }, tag),
-            h('button', { title: 'Disconnect ' + tag, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)' }, onClick: () => this.commands.executeCommand('zoomy.disconnectBackend', tag) }, h('span', { className: 'codicon codicon-close' })));
+            tag.indexOf('numpy') === 0 ? null
+                : h('button', { title: 'Disconnect ' + tag, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-descriptionForeground)' }, onClick: () => this.commands.executeCommand('zoomy.disconnectBackend', tag) }, h('span', { className: 'codicon codicon-close' })));
         return h('div', { key: 'backend', style: { marginBottom: 10 } },
-            h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)', padding: '4px 8px' } }, 'Backend'),
+            h('div', { style: { display: 'flex', alignItems: 'center', padding: '4px 8px' } },
+                h('div', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, 'Backend'),
+                h('button', { title: 'Scan localhost:8080–8090 for backends', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)' }, onClick: () => this.commands.executeCommand('zoomy.scanBackends') }, h('span', { className: 'codicon codicon-refresh' }))),
             this.connected.length ? this.connected.map(item) : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '2px 10px' } }, 'None — running in-browser.'),
             h('button', {
                 style: rowBtn, onClick: () => this.commands.executeCommand('zoomy.connectBackend'),
