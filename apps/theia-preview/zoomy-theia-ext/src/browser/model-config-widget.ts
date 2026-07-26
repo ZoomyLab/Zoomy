@@ -185,6 +185,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected readonly selectedViz = new Set<string>();
     protected vizBusy = false;
     protected storeMeta: any;
+    // Post-processing chain: enabled steps routed to a connected `postprocess`
+    // backend (zoomy_prepost.steps) — reuses the CLI's runPostprocChain.
+    protected readonly postprocSteps = new Set<string>();
+    protected postprocBusy = false;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
     backendUrl = 'http://localhost:8080';
@@ -786,6 +790,65 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.update(); this.schedulePersist();
     }
 
+    // === Post-processing chain (routes the run's store to a `postprocess`
+    // backend for zoomy_prepost.steps — lift3d / VTK→HDF5). Reuses the CLI's
+    // runPostprocChain; the artifacts land in the case's outputs/. =============
+    protected togglePostprocStep(step: string): void {
+        if (this.postprocSteps.has(step)) { this.postprocSteps.delete(step); } else { this.postprocSteps.add(step); }
+        this.update();
+    }
+    async runPostproc(): Promise<void> {
+        if (this.postprocBusy) { return; }
+        const steps = [...this.postprocSteps];
+        if (!steps.length) { this.setNotice('Tick at least one post-processing step first.'); return; }
+        if (!(this.cli?.isTagConnected && this.cli.isTagConnected('postprocess'))) { this.setNotice('Connect a "postprocess" backend first — it runs the chain (lift3d / VTK→HDF5).'); return; }
+        if (!this.simRan) { this.setNotice('Run a simulation first, then post-process its result.'); return; }
+        this.postprocBusy = true; this.simPanel?.reveal(); this.update();
+        emitSimOutput({ kind: 'line', level: 'info', text: '▶ Post-processing (' + steps.join(', ') + ') on the "postprocess" backend…' });
+        try {
+            const storeBytes: Uint8Array = await this.cli.readStoreBytes();
+            const model = this.pickedCard('models');
+            const modelPy = cardCode(model, this.mergedInit(model)) || null;   // lift3d needs the model
+            const res = await this.cli.runPostprocChain({ tag: 'postprocess', storeBytes, steps, nz: 10, modelPy,
+                onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
+            const artifacts = (res && res.artifacts) || [];
+            if (this.caseUri && artifacts.length) {
+                const outDir = this.caseUri.parent.resolve('outputs');
+                if (!(await this.fileService.exists(outDir))) { await this.fileService.createFolder(outDir); }
+                for (const art of artifacts) { await this.fileService.createFile(outDir.resolve(art.name), BinaryBuffer.wrap(art.bytes), { overwrite: true }); }
+                emitCasesChanged();
+            }
+            const names = artifacts.map((a: any) => a.name).join(', ');
+            emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Post-processing complete — ' + artifacts.length + ' artifact(s) in outputs/' + (names ? ': ' + names : '') + '.' });
+            this.setNotice('Post-processing complete: ' + (names || 'done') + '.');
+        } catch (e: any) {
+            emitSimOutput({ kind: 'line', level: 'error', text: '✗ Post-processing failed: ' + (e?.message || e) });
+            this.setNotice('Post-processing failed: ' + (e?.message || e));
+        } finally { this.postprocBusy = false; this.update(); }
+    }
+    /** The post-processing strip shown in the Visualization tab: step checkboxes
+     *  + Run, gated on a connected `postprocess` backend. */
+    protected renderPostproc(): React.ReactNode {
+        const h = React.createElement;
+        const connected = !!(this.cli?.isTagConnected && this.cli.isTagConnected('postprocess'));
+        const STEPS: Array<[string, string]> = [['to_h5', 'VTK → HDF5'], ['lift3d', 'Lift 2D → 3D (Nz 10)'], ['to_vtk', 'HDF5 → VTK']];
+        const ready = connected && this.simRan && !this.postprocBusy && this.postprocSteps.size > 0;
+        const chip = (step: string, label: string): React.ReactNode => {
+            const on = this.postprocSteps.has(step);
+            return h('button', { key: step, className: 'zoomy-btn pill' + (on ? ' active' : ''), onClick: () => this.togglePostprocStep(step) },
+                h('span', { className: 'codicon codicon-' + (on ? 'check' : 'circle-large-outline'), style: { marginRight: 4, fontSize: 11 } }), label);
+        };
+        return h('div', { style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, background: 'var(--theia-editorWidget-background)' } },
+            h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 8 } }, 'Post-processing'),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+                ...STEPS.map(([s, l]) => chip(s, l)),
+                h('button', { className: 'zoomy-btn primary', disabled: !ready, style: { marginLeft: 4, opacity: ready ? 1 : 0.55, cursor: ready ? 'pointer' : 'not-allowed' }, onClick: () => this.runPostproc() },
+                    h('span', { className: 'codicon codicon-' + (this.postprocBusy ? 'loading codicon-modifier-spin' : 'server-process'), style: { marginRight: 5 } }), this.postprocBusy ? 'Running…' : 'Run post-processing')),
+            h('div', { style: { fontSize: 11.5, color: 'var(--theia-descriptionForeground)', marginTop: 8 } },
+                connected ? 'Routes the last run’s result to the connected “postprocess” backend; artifacts land in the case outputs/.'
+                    : 'Connect a “postprocess” backend (the ✕ scan / Connect backend) to run the chain — steps stay saved with the case.'));
+    }
+
     /** The selected card for a tab, else the first with runnable code (models/
      *  meshes/solvers) or the first snippet card (visualizations). */
     protected pickedCard(dir: string): any {
@@ -966,6 +1029,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 spec.visualization = { code: parts.join('\n') };
             } catch { /* skip viz */ }
         }
+        if (this.postprocSteps.size) { spec.postproc = [...this.postprocSteps]; }
         return spec;
     }
     async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
@@ -1009,6 +1073,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // Seed the selected visualization viewer (single-select).
         const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
         if (firstViz) { this.selected['visualizations'] = firstViz.id; this.selectedViz.clear(); this.selectedViz.add(firstViz.id); }
+        // Restore enabled post-processing steps (round-trips via spec.postproc).
+        this.postprocSteps.clear();
+        if (Array.isArray(spec?.postproc)) { for (const s of spec.postproc) { this.postprocSteps.add(String(s)); } }
         this.update();
     }
 
@@ -1299,6 +1366,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
             subTabs,
             this.active === 'visualizations' ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginBottom: 10 } }, this.simRan ? 'Open a viewer to tune its Field & time (right panel) and Render — the plot appears under its card. Tick the ✓ on each viewer you want exported with the case (multi-select).' : 'Run a simulation (the bar above) first, then open a viewer and Render.') : null,
+            this.active === 'visualizations' ? this.renderPostproc() : null,
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'),
             this.editMode ? h('button', { title: 'Add a card to this tab (duplicates the selected one to start from)', onClick: () => this.addCardToActive(), style: { cursor: 'pointer', border: '1px dashed var(--theia-panel-border)', borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'transparent', color: 'var(--theia-foreground)', width: '100%', textAlign: 'left' } }, h('span', { className: 'codicon codicon-add', style: { marginRight: 6 } }), 'Add card' + (cats.length > 1 ? ' to "' + activeCat + '"' : '')) : null);
     }
