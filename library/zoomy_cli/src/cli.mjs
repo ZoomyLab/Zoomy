@@ -362,7 +362,12 @@ export class ZoomyCLI {
     // ------------------------------------------------------------------
 
     async runCode(code) {
-        return await this.pyodide.runCode(code);
+        // engine.process_code returns json.dumps({status, output, store_meta, ...});
+        // parse it so callers get an OBJECT (res.output / res.status / res.store_meta),
+        // not a JSON string. (Callers that already tolerate a string still work.)
+        const r = await this.pyodide.runCode(code);
+        if (typeof r === "string") { try { return JSON.parse(r); } catch { return r; } }
+        return r;
     }
 
     async extractParams(classPath, init) {
@@ -609,12 +614,17 @@ export class ZoomyCLI {
            chainCode — survives jupytext); spec.postproc rides along as a
            zoomy metadata hint so parseCase can round-trip the enabled
            steps and the GUI strip can restore from an imported case. */
-        const vizMeta = { role: "visualization" };
+        // Post-processing: its OWN section (the zoomy_prepost chain) BEFORE the
+        // visualization, so the exported .py/.ipynb reproduces the pipeline that
+        // ran and the viz reads the post-processed result. spec.postproc rides on
+        // the cell meta so parseCase round-trips the enabled steps + Nz.
         if (Array.isArray(spec.postproc) && spec.postproc.length) {
-            vizMeta.postproc = spec.postproc;
+            cells.push(H("postproc", "Post-processing"));
+            cells.push({ type: "code", meta: { role: "postproc", steps: spec.postproc, nz: spec.postproc_nz || 10 },
+                         source: this.chainCode(spec.postproc, spec.postproc_nz) });
         }
         cells.push(H("visualization", "Visualization"));
-        cells.push({ type: "code", meta: vizMeta,
+        cells.push({ type: "code", meta: { role: "visualization" },
                      source: trim(viz.code) || this._vizCode() });
         return cells;
     }
@@ -647,8 +657,9 @@ export class ZoomyCLI {
      *  (it produces the simulation.h5 that lift3d and the viz read).
      *  Every block is guarded so the case still runs where a step doesn't
      *  apply (no VTK output, zoomy_prepost not installed). */
-    chainCode(steps) {
+    chainCode(steps, nz) {
         steps = steps || [];
+        nz = nz || 10;
         const blocks = [];
         if (steps.indexOf("to_h5") !== -1) {
             blocks.push([
@@ -668,7 +679,7 @@ export class ZoomyCLI {
                 "# post-processing: 2D -> 3D lift (zoomy_prepost.lift3d; needs the case model)",
                 "try:",
                 "    from zoomy_prepost import lift3d",
-                "    lift3d(\".\", \"simulation.h5\", \"simulation_3d\", Nz=10)",
+                "    lift3d(\".\", \"simulation.h5\", \"simulation_3d\", Nz=" + nz + ")",
                 "except ImportError:",
                 "    pass  # needs zoomy_prepost (available in containers; Lite lockfile TBD)",
             ].join("\n"));

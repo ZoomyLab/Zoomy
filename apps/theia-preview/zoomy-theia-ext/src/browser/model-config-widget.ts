@@ -188,6 +188,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // Post-processing chain: enabled steps routed to a connected `postprocess`
     // backend (zoomy_prepost.steps) — reuses the CLI's runPostprocChain.
     protected readonly postprocSteps = new Set<string>();
+    protected postprocNz = 10;   // lift3d vertical layers (editable when lift3d is on)
     protected postprocBusy = false;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
     protected notice = '';
@@ -525,6 +526,28 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         for (const c of (this.cardsByTab['visualizations'] || [])) { this.schemas.set(c.id, schema); }
         this.onParamsChangedEmitter.fire();
     }
+    /** Read the installed store's fields + n_snapshots STRAIGHT from the worker
+     *  (the `store` global that open_hdf5 installs for local AND remote runs),
+     *  so the field selector + time slider are always accurate — independent of
+     *  whatever store_meta a given run returned. Then refresh the viz params. */
+    async refreshStoreMeta(): Promise<void> {
+        try {
+            const code = [
+                'import json as _zj',
+                '_zs = store',   // always defined in the exec scope (None or a SimulationStore)
+                'print("__ZM__" + (_zj.dumps({"fields": list(_zs.field.keys()), "n_snapshots": int(_zs.n_snapshots)}) if _zs is not None else "{}"))',
+            ].join('\n');
+            const res = await this.cli.runCode(code);
+            // Prefer the engine's automatic store_meta; else parse the printed marker.
+            if ((res as any)?.store_meta && Array.isArray((res as any).store_meta.fields) && (res as any).store_meta.fields.length) {
+                this.storeMeta = (res as any).store_meta;
+            } else {
+                const m = String(res?.output || '').match(/__ZM__(\{[\s\S]*?\})/);
+                if (m) { const meta = JSON.parse(m[1]); if (meta && Array.isArray(meta.fields) && meta.fields.length) { this.storeMeta = meta; } }
+            }
+        } catch { /* ignore — keep whatever store_meta a run set */ }
+        this.refreshVizParams();
+    }
     /** Field selector + time slider for a visualization, from the last run's store
      *  (store_meta.fields / n_snapshots). Editable like any card parameter and
      *  passed to the viz snippet — no bespoke visualizer code needed. */
@@ -797,29 +820,55 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         if (this.postprocSteps.has(step)) { this.postprocSteps.delete(step); } else { this.postprocSteps.add(step); }
         this.update();
     }
+    /** Which post-processing steps need a `postprocess` backend. `to_h5` does
+     *  NOT: its output is just the run's HDF5 store, which we already hold in
+     *  the browser (readStoreBytes). `lift3d` / `to_vtk` import zoomy_prepost
+     *  (unpublished → not in Pyodide) so they run server-side. */
+    protected static readonly POSTPROC_LOCAL = new Set<string>(['to_h5']);
+    protected postprocBackendSteps(steps: string[]): string[] {
+        return steps.filter(s => !ZoomyModelConfigWidget.POSTPROC_LOCAL.has(s));
+    }
     async runPostproc(): Promise<void> {
         if (this.postprocBusy) { return; }
         const steps = [...this.postprocSteps];
         if (!steps.length) { this.setNotice('Tick at least one post-processing step first.'); return; }
-        if (!(this.cli?.isTagConnected && this.cli.isTagConnected('postprocess'))) { this.setNotice('Connect a "postprocess" backend first — it runs the chain (lift3d / VTK→HDF5).'); return; }
         if (!this.simRan) { this.setNotice('Run a simulation first, then post-process its result.'); return; }
+        const backendSteps = this.postprocBackendSteps(steps);
+        const wantsLocalH5 = steps.length !== backendSteps.length;   // to_h5 ticked
+        const connected = !!(this.cli?.isTagConnected && this.cli.isTagConnected('postprocess'));
+        if (backendSteps.length && !connected) {
+            this.setNotice('“' + backendSteps.join(', ') + '” run zoomy_prepost on a “postprocess” backend — connect one. “VTK → HDF5” needs no backend.');
+            return;
+        }
         this.postprocBusy = true; this.simPanel?.reveal(); this.update();
-        emitSimOutput({ kind: 'line', level: 'info', text: '▶ Post-processing (' + steps.join(', ') + ') on the "postprocess" backend…' });
         try {
-            const storeBytes: Uint8Array = await this.cli.readStoreBytes();
-            const model = this.pickedCard('models');
-            const modelPy = cardCode(model, this.mergedInit(model)) || null;   // lift3d needs the model
-            const res = await this.cli.runPostprocChain({ tag: 'postprocess', storeBytes, steps, nz: 10, modelPy,
-                onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
-            const artifacts = (res && res.artifacts) || [];
-            if (this.caseUri && artifacts.length) {
-                const outDir = this.caseUri.parent.resolve('outputs');
-                if (!(await this.fileService.exists(outDir))) { await this.fileService.createFolder(outDir); }
-                for (const art of artifacts) { await this.fileService.createFile(outDir.resolve(art.name), BinaryBuffer.wrap(art.bytes), { overwrite: true }); }
-                emitCasesChanged();
+            const outDir = this.caseUri ? this.caseUri.parent.resolve('outputs') : null;
+            if (outDir && !(await this.fileService.exists(outDir))) { await this.fileService.createFolder(outDir); }
+            const written: string[] = [];
+            // Local (no backend): the run's HDF5 store IS the to_h5 artifact.
+            if (wantsLocalH5) {
+                emitSimOutput({ kind: 'line', level: 'info', text: '▶ Post-processing (VTK → HDF5) locally — writing the run’s HDF5 store…' });
+                const bytes: Uint8Array = await this.cli.readStoreBytes();
+                if (outDir && bytes && bytes.length) { await this.fileService.createFile(outDir.resolve('simulation.h5'), BinaryBuffer.wrap(bytes), { overwrite: true }); written.push('simulation.h5'); }
             }
-            const names = artifacts.map((a: any) => a.name).join(', ');
-            emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Post-processing complete — ' + artifacts.length + ' artifact(s) in outputs/' + (names ? ': ' + names : '') + '.' });
+            // Backend: lift3d / to_vtk via zoomy_prepost.
+            if (backendSteps.length) {
+                emitSimOutput({ kind: 'line', level: 'info', text: '▶ Post-processing (' + backendSteps.join(', ') + ') on the "postprocess" backend…' });
+                const storeBytes: Uint8Array = await this.cli.readStoreBytes();
+                const model = this.pickedCard('models');
+                // lift3d execs the model cell (which ends in display(model.describe()),
+                // a Jupyter builtin) → prepend a headless no-op so it runs on the
+                // backend without a NameError.
+                const modelRaw = cardCode(model, this.mergedInit(model));
+                const modelPy = modelRaw ? ('try:\n    display\nexcept NameError:\n    def display(*_a, **_k):\n        pass\n' + modelRaw) : null;
+                const res = await this.cli.runPostprocChain({ tag: 'postprocess', storeBytes, steps: backendSteps, nz: this.postprocNz, modelPy,
+                    onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
+                const artifacts = (res && res.artifacts) || [];
+                if (outDir && artifacts.length) { for (const art of artifacts) { await this.fileService.createFile(outDir.resolve(art.name), BinaryBuffer.wrap(art.bytes), { overwrite: true }); written.push(art.name); } }
+            }
+            if (written.length) { emitCasesChanged(); }
+            const names = written.join(', ');
+            emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Post-processing complete — ' + written.length + ' artifact(s) in outputs/' + (names ? ': ' + names : '') + '.' });
             this.setNotice('Post-processing complete: ' + (names || 'done') + '.');
         } catch (e: any) {
             emitSimOutput({ kind: 'line', level: 'error', text: '✗ Post-processing failed: ' + (e?.message || e) });
@@ -831,22 +880,32 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected renderPostproc(): React.ReactNode {
         const h = React.createElement;
         const connected = !!(this.cli?.isTagConnected && this.cli.isTagConnected('postprocess'));
-        const STEPS: Array<[string, string]> = [['to_h5', 'VTK → HDF5'], ['lift3d', 'Lift 2D → 3D (Nz 10)'], ['to_vtk', 'HDF5 → VTK']];
-        const ready = connected && this.simRan && !this.postprocBusy && this.postprocSteps.size > 0;
-        const chip = (step: string, label: string): React.ReactNode => {
+        // [key, label, needsBackend]. to_h5 = the run's HDF5 store, done locally.
+        const STEPS: Array<[string, string, boolean]> = [['to_h5', 'VTK → HDF5', false], ['lift3d', 'Lift 2D → 3D', true], ['to_vtk', 'HDF5 → VTK', true]];
+        const backendSteps = this.postprocBackendSteps([...this.postprocSteps]);
+        const needsBackend = backendSteps.length > 0;
+        const ready = this.simRan && !this.postprocBusy && this.postprocSteps.size > 0 && (!needsBackend || connected);
+        const chip = (step: string, label: string, back: boolean): React.ReactNode => {
             const on = this.postprocSteps.has(step);
-            return h('button', { key: step, className: 'zoomy-btn pill' + (on ? ' active' : ''), onClick: () => this.togglePostprocStep(step) },
-                h('span', { className: 'codicon codicon-' + (on ? 'check' : 'circle-large-outline'), style: { marginRight: 4, fontSize: 11 } }), label);
+            return h('button', { key: step, className: 'zoomy-btn pill' + (on ? ' active' : ''), title: back ? 'Runs zoomy_prepost on a “postprocess” backend' : 'Runs locally — no backend needed', onClick: () => this.togglePostprocStep(step) },
+                h('span', { className: 'codicon codicon-' + (on ? 'check' : 'circle-large-outline'), style: { marginRight: 4, fontSize: 11 } }), label,
+                back ? h('span', { className: 'codicon codicon-server', style: { marginLeft: 5, fontSize: 10, opacity: 0.7 } }) : null);
         };
+        const inputS: React.CSSProperties = { background: 'var(--theia-input-background)', color: 'var(--theia-input-foreground)', border: '1px solid var(--theia-input-border, var(--theia-panel-border))', borderRadius: 4, padding: '2px 6px', fontSize: 12, width: 56 };
         return h('div', { style: { border: '1px solid var(--theia-panel-border)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, background: 'var(--theia-editorWidget-background)' } },
             h('div', { style: { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 8 } }, 'Post-processing'),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-                ...STEPS.map(([s, l]) => chip(s, l)),
+                ...STEPS.map(([s, l, b]) => chip(s, l, b)),
+                // lift3d's Nz parameter — editable when the step is selected.
+                this.postprocSteps.has('lift3d') ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'Nz', h('input', { type: 'number', min: 1, value: this.postprocNz, title: 'Vertical layers for the 2D→3D lift', style: inputS, onChange: (e: any) => { this.postprocNz = Math.max(1, parseInt(e.target.value, 10) || 10); this.update(); this.schedulePersist(); } })) : null,
                 h('button', { className: 'zoomy-btn primary', disabled: !ready, style: { marginLeft: 4, opacity: ready ? 1 : 0.55, cursor: ready ? 'pointer' : 'not-allowed' }, onClick: () => this.runPostproc() },
                     h('span', { className: 'codicon codicon-' + (this.postprocBusy ? 'loading codicon-modifier-spin' : 'server-process'), style: { marginRight: 5 } }), this.postprocBusy ? 'Running…' : 'Run post-processing')),
             h('div', { style: { fontSize: 11.5, color: 'var(--theia-descriptionForeground)', marginTop: 8 } },
-                connected ? 'Routes the last run’s result to the connected “postprocess” backend; artifacts land in the case outputs/.'
-                    : 'Connect a “postprocess” backend (the ✕ scan / Connect backend) to run the chain — steps stay saved with the case.'));
+                '“VTK → HDF5” writes the run’s HDF5 store — no backend. “Lift 2D → 3D” and “HDF5 → VTK” '
+                + (needsBackend ? '(' : '')
+                + 'run zoomy_prepost on a “postprocess” backend'
+                + (needsBackend ? (connected ? ', connected ✓)' : ' — not connected; connect one via the ✕ scan / Connect backend)') : '')
+                + '. Artifacts land in the case outputs/; steps stay saved with the case.'));
     }
 
     /** The selected card for a tab, else the first with runnable code (models/
@@ -886,7 +945,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             if (this.simStopped) { this.simStatus = 'Stopped.'; emitSimOutput({ kind: 'line', level: 'error', text: '■ Stopped.' }); return; }
             if (this.simError) { return; }
             this.simRan = true;
-            this.refreshVizParams(); // populate the viz field selector + time slider from the store
+            await this.refreshStoreMeta(); // populate field selector + time slider from the store
             await this.writeRunOutputs(); // materialize outputs/ inside the case folder
             this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
             emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Simulation complete — open Visualization to render.' });
@@ -987,17 +1046,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const fld = ed.field != null && ed.field !== '' ? JSON.stringify(String(ed.field)) : 'None';
             const code = 'time_step = ' + ts + '\nfield_name = ' + fld + '\n' + snippet;
             const res = await this.cli.runCode(code);
-            // The snippet installs `store` (vizPrelude) → the engine returns its
-            // metadata; capture it so the field selector + slider stay accurate.
-            if (res && (res as any).store_meta) { this.storeMeta = (res as any).store_meta; }
             out.stdout = res?.output || ''; out.status = res?.status || 'success';
         } catch (e: any) {
             out.status = 'error'; out.stdout = e?.message || String(e);
         } finally {
             setDisplaySink(undefined); out.running = false; this.vizBusy = false;
-            // Refresh THIS card's inline field/time params from the store.
-            this.schemas.set(card.id, this.vizParamSchema()); this.onParamsChangedEmitter.fire();
             this.update();
+            // Refresh field/time params straight from the store (robust for local
+            // AND remote runs), so the selector + slider reflect the actual run.
+            await this.refreshStoreMeta();
         }
     }
 
@@ -1029,7 +1086,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 spec.visualization = { code: parts.join('\n') };
             } catch { /* skip viz */ }
         }
-        if (this.postprocSteps.size) { spec.postproc = [...this.postprocSteps]; }
+        if (this.postprocSteps.size) { spec.postproc = [...this.postprocSteps]; spec.postproc_nz = this.postprocNz; }
         return spec;
     }
     async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
@@ -1073,9 +1130,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // Seed the selected visualization viewer (single-select).
         const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
         if (firstViz) { this.selected['visualizations'] = firstViz.id; this.selectedViz.clear(); this.selectedViz.add(firstViz.id); }
-        // Restore enabled post-processing steps (round-trips via spec.postproc).
+        // Restore enabled post-processing steps + Nz (round-trips via spec.postproc).
         this.postprocSteps.clear();
         if (Array.isArray(spec?.postproc)) { for (const s of spec.postproc) { this.postprocSteps.add(String(s)); } }
+        if (spec?.postproc_nz) { this.postprocNz = Math.max(1, parseInt(String(spec.postproc_nz), 10) || 10); }
         this.update();
     }
 
@@ -1263,7 +1321,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             dir === 'meshes' ? this.renderMeshPreview(card) : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
-                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), isViz ? 'Field & time' : 'Parameters') : null,
+                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
                 h('button', { style: gearBtn, title: 'Open this section of case.py in the editor', onClick: () => this.editCardFile(dir) }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit'),
                 dir === 'models'
                     ? h('button', { style: displayBtn, disabled: !this.kernelReady || displaying, title: 'Build the model and display its equations below', onClick: () => this.loadModelMath(card, true) }, h('span', { className: 'codicon codicon-' + (displaying ? 'loading codicon-modifier-spin' : 'symbol-structure'), style: { verticalAlign: 'middle', marginRight: 6 } }), displaying ? 'Displaying…' : 'Display model')
@@ -1365,7 +1423,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
             subTabs,
-            this.active === 'visualizations' ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginBottom: 10 } }, this.simRan ? 'Open a viewer to tune its Field & time (right panel) and Render — the plot appears under its card. Tick the ✓ on each viewer you want exported with the case (multi-select).' : 'Run a simulation (the bar above) first, then open a viewer and Render.') : null,
+            this.active === 'visualizations' ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginBottom: 10 } }, this.simRan ? 'Open a viewer to tune its Parameters (field + time, right panel) and Render — the plot appears under its card. Tick the ✓ on each viewer you want exported with the case (multi-select).' : 'Run a simulation (the bar above) first, then open a viewer and Render.') : null,
             this.active === 'visualizations' ? this.renderPostproc() : null,
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'),
             this.editMode ? h('button', { title: 'Add a card to this tab (duplicates the selected one to start from)', onClick: () => this.addCardToActive(), style: { cursor: 'pointer', border: '1px dashed var(--theia-panel-border)', borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'transparent', color: 'var(--theia-foreground)', width: '100%', textAlign: 'left' } }, h('span', { className: 'codicon codicon-add', style: { marginRight: 6 } }), 'Add card' + (cats.length > 1 ? ' to "' + activeCat + '"' : '')) : null);
