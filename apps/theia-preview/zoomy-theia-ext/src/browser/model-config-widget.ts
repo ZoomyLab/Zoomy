@@ -252,10 +252,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             } else if (caseUrl) {
                 try { const text = await (await fetch(caseUrl)).text(); await this.newCase('imported', this.cli.parseCase(text)); } catch { /* ignore */ }
             } else {
-                // Restore the last open case (single source of truth); else stay gated.
+                // Always open a case (no gate): the last one, else the first
+                // existing, else a fresh default "test" case.
                 const last = (() => { try { return localStorage.getItem(CURRENT_CASE_KEY); } catch { return null; } })();
                 if (last && this.cases.includes(last)) { await this.openCaseByName(last); }
+                else if (this.cases.length) { await this.openCaseByName(this.cases[0]); }
+                else { await this.newCase('test'); }
             }
+            // Discover any local backends once at startup (best-effort, quiet).
+            this.scanBackends().catch(() => { /* ignore */ });
         } catch (e: any) {
             this.error = e?.message || String(e);
         }
@@ -304,6 +309,45 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     /** Return to the gate (no open case) — e.g. to create another case. */
     closeCase(): void { this.caseUri = undefined; this.caseName = ''; this.newCaseName = ''; this.listCases(); this.update(); }
 
+    /** Re-scan the case folders from the FS (public: the left panel calls this
+     *  on activation so Explorer copy/paste of a case shows up). */
+    async rescan(): Promise<void> { await this.listCases(); this.update(); }
+
+    /** Duplicate a case folder (case.py + outputs) under a fresh name, then open
+     *  it. Exposed as a per-case action in the left panel. */
+    async duplicateCase(name: string): Promise<void> {
+        if (!name) { return; }
+        try {
+            const srcDir = new URI(PROJECT_ROOT + '/' + name);
+            let dst = name + '_copy', i = 2;
+            while (this.cases.includes(dst)) { dst = name + '_copy' + i; i++; }
+            await this.fileService.copy(srcDir, new URI(PROJECT_ROOT + '/' + dst), { overwrite: false });
+            await this.listCases();
+            await this.openCaseByName(dst);
+            this.setNotice('Duplicated "' + name + '" → "' + dst + '".'); this.update();
+        } catch (e: any) { this.setNotice('Duplicate failed: ' + (e?.message || e)); }
+    }
+
+    /** Delete a case folder (the ✕ in the left panel). If it was the active case,
+     *  fall back to another existing case, else a fresh default — a case is
+     *  always open. */
+    async removeCase(name: string): Promise<void> {
+        if (!name) { return; }
+        try {
+            const dir = new URI(PROJECT_ROOT + '/' + name);
+            if (await this.fileService.exists(dir)) { await this.fileService.delete(dir, { recursive: true, useTrash: false }); }
+            try { if (localStorage.getItem(CURRENT_CASE_KEY) === name) { localStorage.removeItem(CURRENT_CASE_KEY); } } catch { /* ignore */ }
+            const wasActive = this.caseName === name;
+            await this.listCases();
+            if (wasActive) {
+                this.caseUri = undefined; this.caseName = '';
+                if (this.cases.length) { await this.openCaseByName(this.cases[0]); }
+                else { await this.newCase('test'); }
+            }
+            this.setNotice('Removed case "' + name + '".'); this.update();
+        } catch (e: any) { this.setNotice('Remove case failed: ' + (e?.message || e)); }
+    }
+
     /** Ship a SET of cases by URL (like the old GUI's ?project=). Resolves the
      *  URL (zenodo:<id> / direct .zip), unzips, and materializes each .py entry
      *  as a case folder — then opens the first. */
@@ -337,6 +381,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             this.applySpec(this.cli.parseCase(content.value));
             this.caseUri = uri; this.caseName = name;
             try { localStorage.setItem(CURRENT_CASE_KEY, name); } catch { /* ignore */ }
+            // Single source of truth: broadcast so the left Zoomy panel highlights
+            // THIS case (keeps left panel ⇄ config selection in sync after a refresh).
+            emitCasesChanged();
             this.setNotice('Opened case "' + name + '".'); this.update();
         } catch (e: any) { this.setNotice('Open case failed: ' + (e?.message || e)); }
     }
@@ -879,7 +926,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         }
     }
 
-    protected setNotice(msg: string): void { this.notice = msg; this.update(); if (msg) { setTimeout(() => { if (this.notice === msg) { this.notice = ''; this.update(); } }, 6000); } }
+    // Notices go to the bottom Log panel, not the config header (which is now
+    // just the kernel chip). `notice` is still set for the initial gate screen.
+    protected setNotice(msg: string): void { if (msg) { emitSimOutput({ kind: 'line', level: 'info', text: msg }); } this.notice = msg; }
 
     // --- #3/#5 Case interchange via zoomy_prepost.case (through zoomy_cli). ---
     /** Build the canonical case spec from the current selection + edits. */
@@ -1219,17 +1268,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         // the top "Zoomy" menu now, not in a self-coded toolbar here. The git row
         // stays (kept, per feedback); native SCM binding is a follow-up.
         return h('div', { style: page },
-            h('div', { style: { fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--theia-button-background)', marginBottom: 2 } }, 'ZOOMY'),
-            // Cases live in the left Zoomy panel (selector + open-in-editor);
-            // the config page starts straight at the kernel status + cockpit.
-            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 12px', flexWrap: 'wrap' } },
-                h('h1', { style: { fontSize: 26, fontWeight: 700, margin: 0 } }, 'Model configuration'),
-                this.caseName ? h('span', { style: { fontSize: 13, color: 'var(--theia-descriptionForeground)' } }, 'case: ', h('strong', { style: { color: 'var(--theia-foreground)' } }, this.caseName)) : null),
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 14, color: this.kernelReady ? 'var(--theia-descriptionForeground)' : 'var(--theia-foreground)' } },
-                h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
-                'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…')) + ' (first boot takes ~2–3 min, then cached)',
-                this.connectedTags.length ? h('span', { style: { fontSize: 11, marginLeft: 12, color: 'var(--theia-successForeground, #3fb950)' } }, '● backend: ' + this.connectedTags.join(', ')) : null),
-            this.notice ? h('div', { style: { fontSize: 12, color: 'var(--theia-notificationsInfoIcon-foreground, var(--theia-foreground))', marginBottom: 12 } }, this.notice) : null,
+            // Minimal header: a small kernel-status chip only. Branding, the active
+            // case, connected backends and log messages all live in the left Zoomy
+            // panel / bottom Log — no need to duplicate them here.
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, marginBottom: 12, color: 'var(--theia-descriptionForeground)' } },
+                h('span', { className: 'codicon codicon-' + (this.kernelReady ? 'pass-filled' : 'loading codicon-modifier-spin'), style: { fontSize: 12, color: this.kernelReady ? 'var(--theia-successForeground, #3fb950)' : undefined } }),
+                'Kernel: ' + (this.kernelReady ? 'ready' : (this.kernelStatus || 'starting…'))),
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
             subTabs,

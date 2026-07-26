@@ -41,6 +41,18 @@ export class ZoomyViewWidget extends ReactWidget {
         } catch { /* ignore */ }
     }
 
+    /** Re-scan the case folders from the FS whenever the panel is (re)activated,
+     *  so a case copy/pasted in the Explorer shows up here. */
+    protected onActivateRequest(msg: any): void {
+        super.onActivateRequest(msg);
+        this.rescanCases();
+    }
+    protected async rescanCases(): Promise<void> {
+        try { const w = (await this.widgetManager.getWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget | undefined; if (w) { await w.rescan(); } }
+        catch { /* ignore */ }
+        this.refresh();
+    }
+
     protected group(title: string, items: Array<[string, string, string]>): React.ReactNode {
         const h = React.createElement;
         const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', padding: '6px 8px', fontSize: 13, textAlign: 'left', borderRadius: 4 };
@@ -55,15 +67,24 @@ export class ZoomyViewWidget extends ReactWidget {
 
     protected renderCases(): React.ReactNode {
         const h = React.createElement;
+        // ONE selection style: the active case gets a blue outline + the
+        // folder-active icon (no solid-blue fill). `current` is the single source
+        // of truth (kept in sync with the config via onCasesChanged).
         const item = (name: string): React.ReactNode => {
             const active = name === this.current;
-            const s: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', cursor: 'pointer', border: 'none', borderLeft: active ? '2px solid var(--theia-button-background)' : '2px solid transparent', background: active ? 'var(--theia-list-activeSelectionBackground, var(--theia-list-hoverBackground))' : 'transparent', color: active ? 'var(--theia-list-activeSelectionForeground, var(--theia-foreground))' : 'var(--theia-foreground)', padding: '5px 8px', fontSize: 13, textAlign: 'left' };
-            return h('button', { key: name, style: s, onClick: () => this.commands.executeCommand('zoomy.openNamedCase', name) },
-                h('span', { className: 'codicon codicon-' + (active ? 'folder-active' : 'folder') }), name);
+            const s: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'transparent'), borderRadius: 4, background: 'transparent', color: 'var(--theia-foreground)', padding: '4px 8px', margin: '1px 0', fontSize: 13 };
+            return h('div', { key: name, style: s, onClick: () => this.commands.executeCommand('zoomy.openNamedCase', name),
+                onMouseEnter: (e: any) => { if (!active) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
+                onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; } },
+                h('span', { className: 'codicon codicon-' + (active ? 'folder-active' : 'folder'), style: { color: active ? 'var(--theia-button-background)' : undefined } }),
+                h('span', { style: { flex: 1 } }, name),
+                h('span', { title: 'Duplicate case', className: 'codicon codicon-copy', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.duplicateCase', name); } }),
+                h('span', { title: 'Remove case', className: 'codicon codicon-close', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.removeCase', name); } }));
         };
         return h('div', { style: { marginBottom: 10 } },
             h('div', { style: { display: 'flex', alignItems: 'center', padding: '4px 8px' } },
                 h('div', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, 'Cases'),
+                h('button', { title: 'Rescan cases (pick up Explorer changes)', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', marginRight: 4 }, onClick: () => this.rescanCases() }, h('span', { className: 'codicon codicon-refresh' })),
                 h('button', { title: 'New case', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)' }, onClick: () => this.commands.executeCommand('zoomy.newCase') }, h('span', { className: 'codicon codicon-new-folder' }))),
             this.cases.length ? this.cases.map(item) : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '4px 10px' } }, 'No cases yet — create one.'));
     }
@@ -94,10 +115,13 @@ export class ZoomyViewWidget extends ReactWidget {
     /** Absolute URL for a bundled gui/ asset (served next to the app). */
     protected asset(file: string): string { try { return new URL('gui/assets/' + file, document.baseURI).href; } catch { return 'gui/assets/' + file; } }
 
-    /** The Zoomy logo + tagline at the top of the panel. */
+    /** The Zoomy logo + tagline at the top of the panel — clickable, jumps to
+     *  the Model configuration tab. */
     protected renderBrand(): React.ReactNode {
         const h = React.createElement;
-        return h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 10px', borderBottom: '1px solid var(--theia-panel-border)' } },
+        return h('div', { title: 'Open model configuration', style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 10px', borderBottom: '1px solid var(--theia-panel-border)', cursor: 'pointer' }, onClick: () => this.commands.executeCommand('zoomy.openModelConfig'),
+            onMouseEnter: (e: any) => { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; },
+            onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; } },
             h('img', { src: this.asset('zoomy-logo.svg'), alt: 'Zoomy', style: { height: 34, width: 'auto', flex: '0 0 auto' } }),
             h('div', null,
                 h('div', { style: { fontSize: 17, fontWeight: 800, letterSpacing: '.02em', lineHeight: 1.1 } }, 'Zoomy'),
@@ -115,7 +139,8 @@ export class ZoomyViewWidget extends ReactWidget {
             onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; },
         }, icon ? h('span', { className: 'codicon codicon-' + icon }) : null, label);
         return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 12px', borderTop: '1px solid var(--theia-panel-border)' } },
-            link('github-inverted', 'GitHub repository', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
+            link('github-inverted', 'GitHub', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
+            link('book', 'Documentation', 'https://zoomylab.github.io/Zoomy/', 'Open the Zoomy documentation'),
             // MBD chair + RWTH Aachen lockup. The .zoomy-mbd-logo class keeps it
             // chip-free on light themes and adds a subtle light backing on dark
             // themes so the dark-navy wordmarks stay legible.
