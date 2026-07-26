@@ -200,6 +200,9 @@ def _resolve_model(case_or_model):
         raise FileNotFoundError(f"no model.py found at {case_or_model!r}")
     spec = importlib.util.spec_from_file_location("zoomy_case_model", model_py)
     mod = importlib.util.module_from_spec(spec)
+    # GUI-composed model cells end in `display(model.describe())` (a Jupyter
+    # builtin). Injecting a no-op keeps a headless exec from raising NameError.
+    setattr(mod, "display", lambda *_a, **_k: None)
     spec.loader.exec_module(mod)
     if hasattr(mod, "model"):
         return mod.model
