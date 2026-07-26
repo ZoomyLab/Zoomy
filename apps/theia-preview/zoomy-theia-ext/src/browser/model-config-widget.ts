@@ -60,6 +60,38 @@ function downloadBlob(name: string, blob: Blob): void {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Inject the Zoomy widget stylesheet ONCE. A single `.zoomy-btn` rule defines
+ *  every button's look (so buttons aren't styled inline one-by-one), and the
+ *  selected/active state changes ONLY the outline (blue) — never the inner
+ *  background, so labels stay readable. Also the theme-aware MBD logo backing. */
+export function ensureZoomyStyles(): void {
+    if (document.getElementById('zoomy-widget-styles')) { return; }
+    const s = document.createElement('style');
+    s.id = 'zoomy-widget-styles';
+    s.textContent = `
+.zoomy-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--theia-panel-border); border-radius: 6px; padding: 4px 11px;
+  font-size: 12.5px; line-height: 1.4; background: transparent; color: var(--theia-foreground); }
+.zoomy-btn:hover:not(:disabled) { background: var(--theia-list-hoverBackground); }
+.zoomy-btn:disabled { opacity: .55; cursor: not-allowed; }
+/* Active / selected: change ONLY the outline — inner background is untouched. */
+.zoomy-btn.active { border-color: var(--theia-focusBorder, var(--theia-button-background));
+  box-shadow: 0 0 0 1px var(--theia-focusBorder, var(--theia-button-background)) inset; font-weight: 600; }
+.zoomy-btn.pill { border-radius: 999px; padding: 3px 12px; }
+/* Primary action button (Run / Render / Create). */
+.zoomy-btn.primary { border: none; background: var(--theia-button-background);
+  color: var(--theia-button-foreground); font-weight: 600; }
+.zoomy-btn.primary:hover:not(:disabled) { background: var(--theia-button-hoverBackground, var(--theia-button-background)); }
+/* MBD + RWTH lockup: no chip on light themes; a subtle light backing only where
+   needed so the dark-navy wordmarks stay legible on dark themes. */
+.zoomy-mbd-logo { display: block; margin-top: 10px; }
+.zoomy-mbd-logo img { width: 100%; max-width: 260px; height: auto; display: block; }
+.theia-dark .zoomy-mbd-logo, body[data-theme="dark"] .zoomy-mbd-logo {
+  background: #ffffff; border-radius: 6px; padding: 6px 8px; }
+`;
+    document.head.appendChild(s);
+}
+
 /** Derive a param schema from a card's init dict when there's no class/params
  *  schema (builtin mesh cards): infer type from each value. */
 function deriveSchema(init: any): any {
@@ -175,6 +207,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.title.iconClass = 'codicon codicon-settings-gear';
         this.title.closable = true;
         this.addClass('zoomy-modelconfig-widget');
+        ensureZoomyStyles();
         this.node.style.overflow = 'auto';
         // Re-render once the math libs land so renderMathMd bakes KaTeX HTML.
         ensureRenderLibs().then(() => this.update());
@@ -614,12 +647,20 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const h = React.createElement;
         const box: React.CSSProperties = { marginTop: 10, border: '1px solid var(--theia-panel-border)', borderRadius: 6, padding: 8, background: 'var(--theia-editorWidget-background)' };
         const label: React.CSSProperties = { fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--theia-descriptionForeground)', marginBottom: 6 };
-        // Curated mesh with a shipped preview image (same-origin in production).
+        // Curated mesh: show the preview image that ships WITH the GUI
+        // (gui/previews/…, same-origin) — the images the mesh pipeline
+        // (generate_mesh_previews.py) produces, NOT a re-invented schematic.
         if (card.preview) {
-            const src = 'https://zoomylab.github.io/meshes/' + String(card.preview).replace(/^\/+/, '');
+            const src = (() => { try { return new URL('gui/' + String(card.preview).replace(/^\/+/, ''), document.baseURI).href; } catch { return 'gui/' + card.preview; } })();
             return h('div', { style: box },
                 h('div', { style: label }, 'Mesh preview'),
                 h('img', { src, alt: (card.title || 'mesh') + ' preview', style: { maxWidth: '100%', display: 'block', borderRadius: 4 }, onError: (e: any) => { e.currentTarget.style.display = 'none'; } }));
+        }
+        // A curated mesh (has a .msh) without a preview image: don't fake a grid
+        // schematic for it — that only fits the parametric "Create N-D" grids.
+        if (card.mesh_file) {
+            return h('div', { style: box }, h('div', { style: label }, 'Mesh preview'),
+                h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)' } }, 'No preview image shipped for this mesh yet — run generate_mesh_previews.py.'));
         }
         // Builtin parametric grid → schematic.
         const init = this.mergedInit(card);
@@ -1145,11 +1186,13 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const cards = cats.length > 1 ? allCards.filter(c => (c.category || 'General') === activeCat) : allCards;
         // Selected subtab: change ONLY the (blue) outline, keep the inner
         // background transparent so the label stays readable (no graying).
+        // Unified button look via the shared .zoomy-btn class — active state is
+        // outline-only (no graying). Selected subtab / Edit-cards toggle add .active.
         const subBtn = (cat: string): React.ReactNode => h('button', {
-            key: cat, onClick: () => { this.activeSub[this.active] = cat; this.update(); },
-            style: { cursor: 'pointer', border: '1px solid ' + (cat === activeCat ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 999, padding: '3px 12px', fontSize: 12, background: 'transparent', color: 'var(--theia-foreground)', fontWeight: cat === activeCat ? 600 : 400 },
+            key: cat, className: 'zoomy-btn pill' + (cat === activeCat ? ' active' : ''),
+            onClick: () => { this.activeSub[this.active] = cat; this.update(); },
         }, cat + ' (' + allCards.filter(c => (c.category || 'General') === cat).length + ')');
-        const editToggle = h('button', { title: 'Toggle card editing (add / remove cards)', onClick: () => { this.editMode = !this.editMode; this.update(); }, style: { cursor: 'pointer', border: '1px solid ' + (this.editMode ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-panel-border)'), borderRadius: 6, padding: '3px 10px', fontSize: 12, background: this.editMode ? 'var(--theia-button-secondaryBackground)' : 'transparent', color: 'var(--theia-foreground)' } },
+        const editToggle = h('button', { title: 'Toggle card editing (add / remove cards)', className: 'zoomy-btn' + (this.editMode ? ' active' : ''), onClick: () => { this.editMode = !this.editMode; this.update(); } },
             h('span', { className: 'codicon codicon-' + (this.editMode ? 'check' : 'edit'), style: { marginRight: 4 } }), this.editMode ? 'Done editing' : 'Edit cards');
         const subTabs = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 } },
             cats.length > 1 ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 } }, cats.map(subBtn)) : h('div', { style: { flex: 1 } }),

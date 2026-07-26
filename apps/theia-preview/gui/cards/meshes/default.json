@@ -78,7 +78,7 @@
     "id": "mesh-gen-curved-curved_open_channel_mesh",
     "title": "Curved Open Channel (Steffler/Ghamry bend)",
     "source": "curated",
-    "category": "New",
+    "category": "Channel",
     "description": "Curved open-channel bend (Steffler/Ghamry secondary-flow case) from the meshes catalog.",
     "mesh_file": "meshes/curved_curved_open_channel_mesh.msh",
     "mesh_sizes": [

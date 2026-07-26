@@ -4,7 +4,7 @@ import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { WidgetManager } from '@theia/core/lib/browser';
 import { CommandRegistry } from '@theia/core';
 import { onCasesChanged, onBackendsChanged } from './zoomy-cli-loader';
-import { ZoomyModelConfigWidget } from './model-config-widget';
+import { ZoomyModelConfigWidget, ensureZoomyStyles } from './model-config-widget';
 
 /** The Zoomy activity-bar view (left panel): the project's CASES (each a folder =
  *  source of truth) plus the case/project/backend actions in a native slot.
@@ -26,6 +26,7 @@ export class ZoomyViewWidget extends ReactWidget {
         this.title.iconClass = 'codicon codicon-beaker';
         this.title.closable = true;
         this.addClass('zoomy-view-widget');
+        ensureZoomyStyles();
         this.node.style.overflow = 'auto';
         onCasesChanged(() => this.refresh());
         onBackendsChanged(() => this.refresh());
@@ -115,10 +116,11 @@ export class ZoomyViewWidget extends ReactWidget {
         }, icon ? h('span', { className: 'codicon codicon-' + icon }) : null, label);
         return h('div', { style: { flex: '0 0 auto', padding: '8px 8px 12px', borderTop: '1px solid var(--theia-panel-border)' } },
             link('github-inverted', 'GitHub repository', 'https://github.com/ZoomyLab/Zoomy', 'Open the Zoomy repository on GitHub'),
-            // MBD chair + RWTH Aachen lockup — transparent PNG, no chip. Hidden
-            // until the asset is present so there's no broken image.
-            h('a', { href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University', style: { display: 'block', marginTop: 10 } },
-                h('img', { src: this.asset('mbd-rwth-logo.png'), alt: 'MBD — RWTH Aachen University', onError: (e: any) => { e.currentTarget.style.display = 'none'; }, style: { width: '100%', maxWidth: 260, height: 'auto', display: 'block' } })));
+            // MBD chair + RWTH Aachen lockup. The .zoomy-mbd-logo class keeps it
+            // chip-free on light themes and adds a subtle light backing on dark
+            // themes so the dark-navy wordmarks stay legible.
+            h('a', { className: 'zoomy-mbd-logo', href: 'https://www.mbd.rwth-aachen.de/', target: '_blank', rel: 'noreferrer', title: 'MBD — RWTH Aachen University' },
+                h('img', { src: this.asset('mbd-logo.png'), alt: 'MBD — RWTH Aachen University', onError: (e: any) => { e.currentTarget.style.display = 'none'; } })));
     }
 
     /** The Backend group: a "Connect backend…" action plus each connected backend
