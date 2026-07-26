@@ -179,8 +179,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected simStatus = '';
     protected simError: CardOut | undefined;
     protected simStopped = false;
-    // Visualization is SINGLE-select (accordion): one active viz card carries its
-    // own params + Render + output, so params and plot never drift out of sync.
+    // Visualization: MULTI-select (checkbox) → which viewers are exported with
+    // the case; plus ONE active (expanded) card that drives the right-hand
+    // Parameters panel + its own Render + output.
+    protected readonly selectedViz = new Set<string>();
     protected vizBusy = false;
     protected storeMeta: any;
     // Case interchange (#3/#5), project persistence (#6), backends (#4).
@@ -297,7 +299,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         }
         // Seed the selected visualization viewer (single-select).
         const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
-        if (firstViz) { this.selected['visualizations'] = firstViz.id; }
+        if (firstViz) { this.selected['visualizations'] = firstViz.id; this.selectedViz.clear(); this.selectedViz.add(firstViz.id); }
         this.caseUri = this.caseFileUri(clean); this.caseName = clean;
         await this.persistCase();
         await this.listCases();
@@ -768,10 +770,18 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.schedulePersist();
         // Derive the governing equations for a newly expanded model card.
         if (dir === 'models' && this.expanded === card.id && card.class) { this.loadModelMath(card).catch(() => { /* shown as error */ }); }
-        // Visualization: the expanded card is THE active viewer — load its field
-        // + time_step params inline so they're ready to tune, then Render (below
-        // the card). Single active card ⇒ params + plot never drift out of sync.
-        if (dir === 'visualizations' && this.expanded === card.id) { this.schemas.set(card.id, this.vizParamSchema()); this.onParamsChangedEmitter.fire(); }
+        // Visualization: the expanded card is THE active viewer — open ITS field +
+        // time_step params in the right-hand Parameters panel (single active card
+        // ⇒ one set of params visible). The checkbox controls export inclusion.
+        if (dir === 'visualizations') {
+            if (this.expanded === card.id) { this.schemas.set(card.id, this.vizParamSchema()); this.activeParamCardId = card.id; this.activeParamDir = dir; this.paramsPanel?.sync(); this.onParamsChangedEmitter.fire(); }
+            else { this.closeParams(); }
+        }
+    }
+    /** Toggle a viewer's membership in the exported (multi-viewer) visualization. */
+    protected toggleVizSelect(card: any): void {
+        if (this.selectedViz.has(card.id)) { this.selectedViz.delete(card.id); } else { this.selectedViz.add(card.id); }
+        this.update(); this.schedulePersist();
     }
 
     /** The selected card for a tab, else the first with runnable code (models/
@@ -943,8 +953,16 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         };
         const solverCode = cardCode(solver, this.mergedInit(solver));
         if (solverCode) { spec.run = { code: solverCode }; }
-        if (viz?.snippet) {
-            try { const snip = await this.cli.fetchSnippet(viz.snippet); spec.visualization = { code: this.cli.vizPrelude() + '\n' + snip }; } catch { /* skip viz */ }
+        // Compose EVERY checked viewer into the ## Visualization section (multi-
+        // select → several plots of one run in the exported .py / .ipynb).
+        const vizCards = (this.cardsByTab['visualizations'] || []).filter(c => this.selectedViz.has(c.id) && c.snippet);
+        const chosen = vizCards.length ? vizCards : (viz?.snippet ? [viz] : []);
+        if (chosen.length) {
+            try {
+                const parts: string[] = [this.cli.vizPrelude()];
+                for (const vc of chosen) { parts.push('# --- ' + (vc.title || vc.id) + ' ---'); parts.push(await this.cli.fetchSnippet(vc.snippet)); }
+                spec.visualization = { code: parts.join('\n') };
+            } catch { /* skip viz */ }
         }
         return spec;
     }
@@ -988,7 +1006,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         if (spec?.solver?.tag) { const c = (this.cardsByTab['solvers'] || []).find(s => (s.requires_tag || 'numpy') === spec.solver.tag); if (c) { this.selected['solvers'] = c.id; } }
         // Seed the selected visualization viewer (single-select).
         const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
-        if (firstViz) { this.selected['visualizations'] = firstViz.id; }
+        if (firstViz) { this.selected['visualizations'] = firstViz.id; this.selectedViz.clear(); this.selectedViz.add(firstViz.id); }
         this.update();
     }
 
@@ -1144,9 +1162,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const runnable = !!cardCode(card, this.mergedInit(card));
         const out = this.outputs.get(card.id);
         const isViz = dir === 'visualizations';
-        // Viz params are shown INLINE in the card; other tabs use the right panel.
-        const hasParams = !isViz && !!(card.params || card.class || (card.init && Object.keys(card.init).length));
-        const isSel = this.selected[dir] === card.id;   // single-select everywhere
+        // Viz params show in the RIGHT panel (like every other card). Multi-select
+        // (checkbox) = export inclusion; the active/expanded card = params shown.
+        const hasParams = isViz || !!(card.params || card.class || (card.init && Object.keys(card.init).length));
+        const isSel = this.selected[dir] === card.id;   // the active card (params + outline)
+        const isChecked = isViz && this.selectedViz.has(card.id);
         const isExp = this.expanded === card.id;
         const cardStyle: React.CSSProperties = {
             border: '1px solid ' + (isSel ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'var(--theia-editorWidget-border, var(--theia-panel-border))'),
@@ -1159,7 +1179,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const mm = dir === 'models' ? this.modelMath.get(card.id) : undefined;
         const displaying = mm?.status === 'loading';
         const displayBtn: React.CSSProperties = { cursor: this.kernelReady && !displaying ? 'pointer' : 'not-allowed', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--theia-button-background)', color: 'var(--theia-button-foreground)', opacity: this.kernelReady && !displaying ? 1 : 0.6 };
-        const selectIcon = h('span', { title: isViz ? 'The active viewer — included in the exported case' : undefined, className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } });
+        const selectIcon = isViz
+            ? h('span', { title: 'Include this viewer in the exported case (multi-select)', className: 'codicon codicon-' + (isChecked ? 'check-all' : 'circle-large-outline'), style: { color: isChecked ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)', cursor: 'pointer' }, onClick: (e: any) => { e.stopPropagation(); this.toggleVizSelect(card); } })
+            : h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } });
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
             selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
@@ -1171,11 +1193,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const body = !isExp ? null : h('div', { style: { marginTop: 8 } },
             card.description ? h('div', { className: 'zoomy-md', style: { color: 'var(--theia-descriptionForeground)', fontSize: 12.5 }, dangerouslySetInnerHTML: { __html: renderMathMd(card.description) } }) : null,
             dir === 'meshes' ? this.renderMeshPreview(card) : null,
-            // Visualization: field selector + time slider INLINE, so this one
-            // active card owns its params — no separate panel to keep in sync.
-            isViz ? h('div', { style: { marginTop: 8 } }, this.renderParamForm(card)) : null,
             h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
-                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Parameters') : null,
+                hasParams ? h('button', { style: gearBtn, onClick: () => this.openParams(card, dir) }, h('span', { className: 'codicon codicon-settings-gear', style: { verticalAlign: 'middle', marginRight: 4 } }), isViz ? 'Field & time' : 'Parameters') : null,
                 h('button', { style: gearBtn, title: 'Open this section of case.py in the editor', onClick: () => this.editCardFile(dir) }, h('span', { className: 'codicon codicon-edit', style: { verticalAlign: 'middle', marginRight: 4 } }), 'Edit'),
                 dir === 'models'
                     ? h('button', { style: displayBtn, disabled: !this.kernelReady || displaying, title: 'Build the model and display its equations below', onClick: () => this.loadModelMath(card, true) }, h('span', { className: 'codicon codicon-' + (displaying ? 'loading codicon-modifier-spin' : 'symbol-structure'), style: { verticalAlign: 'middle', marginRight: 6 } }), displaying ? 'Displaying…' : 'Display model')
@@ -1277,7 +1296,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             runBar,
             h('div', { style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--theia-panel-border)', marginBottom: subTabs ? 12 : 16 } }, TABS.map(tabBtn)),
             subTabs,
-            this.active === 'visualizations' ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginBottom: 10 } }, this.simRan ? 'Open a viewer below, tune its parameters, then Render — the plot appears under its card. The open viewer is the one exported with the case.' : 'Run a simulation (the bar above) first, then open a viewer below and Render.') : null,
+            this.active === 'visualizations' ? h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', marginBottom: 10 } }, this.simRan ? 'Open a viewer to tune its Field & time (right panel) and Render — the plot appears under its card. Tick the ✓ on each viewer you want exported with the case (multi-select).' : 'Run a simulation (the bar above) first, then open a viewer and Render.') : null,
             cards.length ? cards.map(c => this.renderCard(c, this.active)) : h('div', { style: { color: 'var(--theia-descriptionForeground)' } }, 'No cards in this tab.'),
             this.editMode ? h('button', { title: 'Add a card to this tab (duplicates the selected one to start from)', onClick: () => this.addCardToActive(), style: { cursor: 'pointer', border: '1px dashed var(--theia-panel-border)', borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'transparent', color: 'var(--theia-foreground)', width: '100%', textAlign: 'left' } }, h('span', { className: 'codicon codicon-add', style: { marginRight: 6 } }), 'Add card' + (cats.length > 1 ? ' to "' + activeCat + '"' : '')) : null);
     }
