@@ -3,6 +3,7 @@ import { injectable, inject, postConstruct } from '@theia/core/shared/inversify'
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { OpenerService, open } from '@theia/core/lib/browser';
 import { URI, Emitter } from '@theia/core';
+import { BinaryBuffer } from '@theia/core/lib/common/buffer';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { getZoomyCli, setDisplaySink, setLogSink, ensureRenderLibs, ensureJSZip, emitCasesChanged, emitBackendsChanged, emitSimOutput, DisplayCell } from './zoomy-cli-loader';
 
@@ -49,7 +50,10 @@ const TABS: TabDef[] = [
 
 /** Trigger a browser download of text content. */
 function download(name: string, text: string, mime: string): void {
-    const blob = new Blob([text], { type: mime });
+    downloadBlob(name, new Blob([text], { type: mime }));
+}
+/** Trigger a browser download of a Blob (e.g. a project .zip). */
+function downloadBlob(name: string, blob: Blob): void {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
@@ -275,24 +279,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         try {
             const zipUrl = await this.resolveArtefactUrl(url);
             const buf = await (await fetch(zipUrl)).arrayBuffer();
-            await ensureJSZip();
-            const JSZip = (window as any).JSZip;
-            if (!JSZip) { throw new Error('JSZip unavailable (offline?)'); }
-            const zip = await JSZip.loadAsync(buf);
-            const entries: any[] = Object.values(zip.files).filter((f: any) => !f.dir && /\.py$/.test(f.name));
-            let count = 0; let first: string | undefined;
-            for (const f of entries) {
-                const text = await f.async('string');
-                const m = f.name.match(/(?:^|\/)([^/]+)\/case\.py$/) || f.name.match(/([^/]+)\.py$/);
-                const name = (m?.[1] || 'case').replace(/[^a-zA-Z0-9_-]+/g, '_');
-                const uri = this.caseFileUri(name);
-                if (!(await this.fileService.exists(uri.parent))) { await this.fileService.createFolder(uri.parent); }
-                await this.fileService.write(uri, text);
-                count++; if (!first) { first = name; }
-            }
-            await this.listCases();
-            if (first) { await this.openCaseByName(first); }
-            this.setNotice('Loaded ' + count + ' case(s) from the artefact.');
+            await this.loadProjectFromZip(buf);
         } catch (e: any) { this.setNotice('Project load failed: ' + (e?.message || e)); this.update(); }
     }
     /** Resolve an artefact URL: zenodo:<recordId>[/file] → the record's ZIP;
@@ -737,6 +724,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             if (this.simError) { return; }
             this.simRan = true;
             this.refreshVizParams(); // populate the viz field selector + time slider from the store
+            await this.writeRunOutputs(); // materialize outputs/ inside the case folder
             this.simStatus = 'Simulation complete. Open the Visualization tab, choose a viewer and click Render.';
             emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Simulation complete — open Visualization to render.' });
         } catch (e: any) {
@@ -762,6 +750,22 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             if (res?.status === 'error') { this.simStatus = 'Error in ' + label + ': see below'; this.simError = { cells: [], stdout: res.output || '', status: 'error', running: false }; emitSimOutput({ kind: 'line', level: 'error', text: '✗ Error in ' + label + '.' }); return; }
             if (res?.store_meta) { this.storeMeta = res.store_meta; }
         }
+    }
+
+    /** Copy the run's simulation.h5 out of the worker into the case folder's
+     *  outputs/ — so the case folder mirrors a CLI run (cases/<name>/outputs/
+     *  simulation.h5), for both local and remote runs. Best-effort: a failure
+     *  never breaks the run. */
+    protected async writeRunOutputs(): Promise<void> {
+        if (!this.caseUri) { return; }
+        try {
+            const bytes: Uint8Array = await this.cli.readStoreBytes();
+            if (!bytes || !bytes.length) { return; }
+            const outDir = this.caseUri.parent.resolve('outputs');
+            if (!(await this.fileService.exists(outDir))) { await this.fileService.createFolder(outDir); }
+            await this.fileService.createFile(outDir.resolve('simulation.h5'), BinaryBuffer.wrap(bytes), { overwrite: true });
+            emitCasesChanged();
+        } catch (e) { /* non-fatal — e.g. no local store bytes for a pure remote run */ }
     }
 
     /** Remote run: submit the composed case.py to a connected backend, then pull
@@ -898,23 +902,84 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.update();
     }
 
-    // --- #6 Project persistence (IndexedDB via zoomy_cli storage). ---
+    // --- #6 Project persistence: a project is a ZIP of project.json + every
+    // case FOLDER (case.py + its outputs/), matching the CLI/old GUI — not just
+    // a JSON. Save downloads the .zip; Load opens one and materializes it. ---
     async saveProject(): Promise<void> {
-        const data = { selected: this.selected, edited: Array.from(this.edited.entries()), active: this.active };
-        try { await this.cli.storage.writeJson('projects/current.json', data); this.setNotice('Project saved to browser (IndexedDB).'); }
-        catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
-        // also offer a download so it can be shared / version-controlled
-        download('zoomy_project.json', JSON.stringify(data, null, 2), 'application/json');
+        try {
+            await ensureJSZip();
+            const JSZip = (window as any).JSZip;
+            if (!JSZip) { throw new Error('JSZip unavailable (offline?)'); }
+            const zip = new JSZip();
+            const manifest = { version: 1, selected: this.selected, edited: Array.from(this.edited.entries()), active: this.active, cases: this.cases };
+            zip.file('project.json', JSON.stringify(manifest, null, 2));
+            const casesFolder = zip.folder('cases');
+            for (const name of this.cases) {
+                await this.addFolderToZip(casesFolder.folder(name), new URI(PROJECT_ROOT + '/' + name));
+            }
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob('zoomy_project.zip', blob);
+            await this.cli.storage.writeJson('projects/current.json', manifest);  // quick in-browser restore
+            this.setNotice('Saved zoomy_project.zip — ' + this.cases.length + ' case' + (this.cases.length === 1 ? '' : 's') + ' (incl. outputs).');
+        } catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
+    }
+    /** Recursively add a case folder's files (case.py + outputs/**) to a JSZip folder. */
+    protected async addFolderToZip(zf: any, dir: URI): Promise<void> {
+        if (!(await this.fileService.exists(dir))) { return; }
+        const stat = await this.fileService.resolve(dir);
+        for (const child of stat.children || []) {
+            if (child.isDirectory) { await this.addFolderToZip(zf.folder(child.resource.path.base), child.resource); }
+            else { const c = await this.fileService.readFile(child.resource); zf.file(child.resource.path.base, c.value.buffer); }
+        }
     }
     async loadProject(): Promise<void> {
-        try {
-            const data = await this.cli.storage.tryReadJson('projects/current.json');
-            if (!data) { this.setNotice('No saved project in this browser.'); return; }
-            Object.assign(this.selected, data.selected || {});
-            this.edited.clear(); for (const [k, v] of (data.edited || [])) { this.edited.set(k, v); }
-            if (data.active) { this.active = data.active; }
-            this.setNotice('Project loaded.'); this.update();
-        } catch (e: any) { this.setNotice('Load failed: ' + (e?.message || e)); }
+        const input = document.createElement('input'); input.type = 'file'; input.accept = '.zip,application/zip';
+        input.onchange = async () => {
+            const file = input.files && input.files[0]; if (!file) { return; }
+            this.setNotice('Loading ' + file.name + '…'); this.update();
+            try { await this.loadProjectFromZip(await file.arrayBuffer()); }
+            catch (e: any) { this.setNotice('Load failed: ' + (e?.message || e)); this.update(); }
+        };
+        input.click();
+    }
+    /** Materialize a project ZIP: write every cases/<name>/** file into the FS and
+     *  restore the manifest (selection/edits). Also accepts the legacy shape
+     *  (<name>/case.py or <name>.py). Shared by file-load and URL-load. */
+    async loadProjectFromZip(buf: ArrayBuffer): Promise<void> {
+        await ensureJSZip();
+        const JSZip = (window as any).JSZip;
+        if (!JSZip) { throw new Error('JSZip unavailable (offline?)'); }
+        const zip = await JSZip.loadAsync(buf);
+        const files: any[] = Object.values(zip.files).filter((f: any) => !f.dir);
+        let manifest: any = null;
+        const mf = zip.file('project.json'); if (mf) { try { manifest = JSON.parse(await mf.async('string')); } catch { /* ignore */ } }
+        const hasCasesPrefix = files.some((f: any) => /(?:^|\/)cases\/[^/]+\//.test(f.name));
+        const names = new Set<string>(); let count = 0; let first: string | undefined;
+        for (const f of files) {
+            if (/(?:^|\/)project\.json$/.test(f.name)) { continue; }
+            let name: string | undefined; let rel: string | undefined;
+            const mc = f.name.match(/(?:^|\/)cases\/([^/]+)\/(.+)$/);
+            if (hasCasesPrefix) { if (mc) { name = mc[1]; rel = mc[2]; } }
+            else {  // legacy: <name>/case.py  or  <name>.py
+                const ml = f.name.match(/(?:^|\/)([^/]+)\/case\.py$/) || f.name.match(/(?:^|\/)([^/]+)\.py$/);
+                if (ml) { name = ml[1]; rel = 'case.py'; }
+            }
+            if (!name || !rel) { continue; }
+            name = name.replace(/[^a-zA-Z0-9_-]+/g, '_');
+            const uri = new URI(PROJECT_ROOT + '/' + name + '/' + rel);
+            if (!(await this.fileService.exists(uri.parent))) { await this.fileService.createFolder(uri.parent); }
+            await this.fileService.createFile(uri, BinaryBuffer.wrap(await f.async('uint8array')), { overwrite: true });
+            names.add(name); count++; if (rel === 'case.py' && !first) { first = name; }
+        }
+        await this.listCases();
+        if (manifest) {
+            Object.assign(this.selected, manifest.selected || {});
+            this.edited.clear(); for (const [k, v] of (manifest.edited || [])) { this.edited.set(k, v); }
+            if (manifest.active) { this.active = manifest.active; }
+        }
+        const open = first || [...names][0];
+        if (open) { await this.openCaseByName(open); }
+        this.setNotice('Loaded project — ' + names.size + ' case(s), ' + count + ' file(s).');
     }
 
     // --- #4 Connect a remote backend by URL. ---
