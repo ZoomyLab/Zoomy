@@ -83,7 +83,7 @@ export class ZoomyViewWidget extends ReactWidget {
                     ['save', 'Save project', 'zoomy.saveProject'],
                     ['folder-opened', 'Load project', 'zoomy.loadProject'],
                     ['arrow-down', 'Export case (.py)', 'zoomy.exportPy'],
-                    ['notebook', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
+                    ['arrow-down', 'Export case (.ipynb)', 'zoomy.exportIpynb'],
                     ['arrow-up', 'Import case…', 'zoomy.importCase'],
                 ]),
                 this.renderBackends()),
