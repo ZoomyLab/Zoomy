@@ -1073,7 +1073,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             model: { code: cardCode(model, this.mergedInit(model)) || '', class_path: model?.class || null, init: this.mergedInit(model) },
             mesh: { code: cardCode(mesh, this.mergedInit(mesh)) || '', spec: this.mergedInit(mesh) },
             settings: {},
-            solver: { tag: solver?.requires_tag || 'numpy', params: solver?.params ? this.mergedInit(solver) : {} },
+            solver: { tag: solver?.requires_tag || 'numpy', id: solver?.id || null, params: solver?.params ? this.mergedInit(solver) : {} },
         };
         const solverCode = cardCode(solver, this.mergedInit(solver));
         if (solverCode) { spec.run = { code: solverCode }; }
@@ -1128,7 +1128,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const byClass = (dir: string, cls: string) => (this.cardsByTab[dir] || []).find(c => c.class === cls);
         if (spec?.model?.class_path) { const c = byClass('models', spec.model.class_path); if (c) { this.selected['models'] = c.id; if (spec.model.init) { this.edited.set(c.id, { ...spec.model.init }); } } }
         if (spec?.mesh?.spec) { const meshes = this.cardsByTab['meshes'] || []; const c = meshes[0]; if (c) { this.selected['meshes'] = c.id; this.edited.set(c.id, { ...spec.mesh.spec }); } }
-        if (spec?.solver?.tag) { const c = (this.cardsByTab['solvers'] || []).find(s => (s.requires_tag || 'numpy') === spec.solver.tag); if (c) { this.selected['solvers'] = c.id; } }
+        if (spec?.solver) {
+            const solvers = this.cardsByTab['solvers'] || [];
+            // Prefer the exact card id (several solvers can share a backend tag,
+            // e.g. coupled zoomyFoam + incompressibleVOF both on "foam"); fall
+            // back to the tag for older cases that only stored the backend.
+            const c = (spec.solver.id && solvers.find(s => s.id === spec.solver.id))
+                || (spec.solver.tag && solvers.find(s => (s.requires_tag || 'numpy') === spec.solver.tag));
+            if (c) { this.selected['solvers'] = c.id; }
+        }
         // Seed the selected visualization viewer (single-select).
         const firstViz = (this.cardsByTab['visualizations'] || []).find(c => c.snippet);
         if (firstViz) { this.selected['visualizations'] = firstViz.id; this.selectedViz.clear(); this.selectedViz.add(firstViz.id); }

@@ -55,14 +55,5 @@
     "requires_tag": "foam",
     "description": "**Incompressible Volume-of-Fluid** participant (interFoam / incompressibleVoF) for a **coupled SME ↔ VOF** run. The shallow-moment side is the *moment participant* (the Coupled solver in the Solver tab); this card is the *VOF participant*. It is not configurable here beyond the shared mesh — the two are coupled at run time over preCICE.",
     "init": {}
-  },
-  {
-    "id": "vof-openfoam-compressible",
-    "title": "Compressible Volume of Fluid",
-    "source": "builtin",
-    "category": "Volume of Fluid",
-    "requires_tag": "foam",
-    "description": "**Compressible Volume-of-Fluid** participant (compressibleInterFoam / compressibleVoF) for a coupled SME ↔ VOF run with a compressible gas phase. Pairs with the Coupled solver as the VOF participant; coupled over preCICE.",
-    "init": {}
   }
 ]

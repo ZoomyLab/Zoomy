@@ -581,6 +581,10 @@ export class ZoomyCLI {
            just an informational "backend" entry inside the settings. */
         const settingsOut = Object.assign({}, settings);
         if (solver.tag && settingsOut.backend === undefined) settingsOut.backend = solver.tag;
+        // Carry the solver card id too: several solvers can share one backend tag
+        // (e.g. the coupled zoomyFoam + incompressibleVOF both run on "foam"), so
+        // the tag alone can't restore WHICH one a case selected.
+        if (solver.id && settingsOut.solver_id === undefined) settingsOut.solver_id = solver.id;
         let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");
         if (meta.gui_url) head += "\n\n[← Back to the Zoomy GUI](" + meta.gui_url + ")";
         const H = (section, title) => ({ type: "markdown", meta: { role: "heading", section }, source: "## " + title });
@@ -875,7 +879,7 @@ export class ZoomyCLI {
                 tag = m ? m[1] : null;
             }
         }
-        if (tag) spec.solver = { tag, params: (hints.solver && hints.solver.params) || {} };
+        if (tag) spec.solver = { tag, id: (spec.settings && spec.settings.solver_id) || (hints.solver && hints.solver.id) || null, params: (hints.solver && hints.solver.params) || {} };
         if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
         /* post-processing chain hint (round-trips the GUI strip toggles) */
         const vh = hints.visualization;
