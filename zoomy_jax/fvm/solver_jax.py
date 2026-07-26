@@ -607,6 +607,42 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         from zoomy_jax.fvm.reconstruction_jax import EmittedWLSQMUSCLJAX
         needs_emitted_w = isinstance(reconstruct, EmittedWLSQMUSCLJAX)
         rt_uav = getattr(runtime, "update_aux_variables", None)
+
+        # ── Moving-equilibrium (Bernoulli) well-balanced reconstruction ──────
+        # Reconstruct the interface states to the common bed b* preserving the
+        # discharge q and the per-column specific energy, then add the
+        # conservative-flux-jump source Fc(Q)−Fc(Q*) (Fc = flux + hydrostatic
+        # pressure).  The reconstruction MATH lives in core
+        # (``reconstruct_bernoulli_level0`` + the ``newton_solve`` opaque
+        # kernel) — this backend supplies the loop; the Fc jump REUSES the
+        # emitted ``flux`` / ``hydrostatic_pressure`` kernels.  Mirrors numpy's
+        # ``solver_numpy`` step 3c.  Level-0 (SWE) 1-D only (v1): the streamline
+        # head is not yet a depth-resolved velocity vector.
+        _eqr = getattr(runtime.sm, "equilibrium_reconstruction", "none")
+        bern_enabled = _eqr in ("bernoulli", "projected_bernoulli")
+        bern_recon = None
+        if bern_enabled:
+            from zoomy_core.fvm.bernoulli_wb import reconstruct_bernoulli_level0
+            from zoomy_jax.fvm.userfunctions import newton_solve
+            _bnames = list(runtime.sm.variables.keys())
+            if "h" not in _bnames or "b" not in _bnames:
+                raise ValueError("bernoulli WB needs 'h' and 'b' fields")
+            _bh = _bnames.index("h")
+            _bb = _bnames.index("b")
+            _bq = [i for i, nm in enumerate(_bnames) if nm not in ("h", "b")]
+            if len(_bq) - 1 != 0:
+                raise NotImplementedError(
+                    "jax bernoulli moving-equilibrium WB is SME level-0 (SWE) "
+                    "only (v1); use equilibrium_reconstruction='none' for the "
+                    "higher moments or the numpy solver.")
+            _bg = float(runtime.sm.parameter_values["g"])
+            _bndim = int(runtime.sm.flux.shape[1])
+            rt_flux = runtime.flux
+            rt_press = runtime.hydrostatic_pressure
+
+            def bern_recon(Qf, bstar):
+                return reconstruct_bernoulli_level0(
+                    Qf, bstar, _bh, _bb, _bq[0], _bg, jnp, newton_solve)
         # ``hasattr`` is NOT a valid test here and was the bug: it succeeds on
         # an INHERITED base-class ``reconstruct_with_grad``, so a subclass that
         # puts its positivity / wet-dry / WB treatment only in ``__call__``
@@ -725,6 +761,17 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                           coupled_dm=None, coupled_mask=None):
             dQ = jnp.zeros_like(dQ)
 
+            def _fc_proj(Qstate, qaux_face, normals_faces):
+                # Conservative flux Fc = flux + hydrostatic_pressure at ``Qstate``,
+                # projected on the face normal (Σ_d Fc_d·n_d).  Reuses the EMITTED
+                # kernels; recomputes the LOCAL aux (``hinv`` = 1/h) from Qstate so
+                # a reconstructed h* carries the consistent 1/h*.
+                aux = (rt_uav(Qstate, qaux_face, parameters)
+                       if rt_uav is not None else qaux_face)
+                fc = (rt_flux(Qstate, aux, parameters)
+                      + rt_press(Qstate, aux, parameters))    # (n_eq, n_dim, nf)
+                return jnp.einsum("edf,df->ef", fc, normals_faces[:_bndim])
+
             # 1. Boundary face values via BC kernel (vmap over boundary faces).
             if rt_bc is not None and n_bf > 0:
                 def _per_bf(i):
@@ -797,10 +844,27 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             Q_L_int = Q_L[:, interior_faces_j]
             Q_R_int = Q_R[:, interior_faces_j]
 
+            # 3c. Bernoulli moving-equilibrium WB (interior): reconstruct both
+            # interface states to the common bed b*, run the Riemann + moment
+            # NCP on the RECONSTRUCTED states (they coincide at equilibrium, so
+            # the numerical flux + fluctuation vanish there), and add the
+            # conservative-flux-jump source Fc(Q₀)−Fc(Q*).  The interior NCP
+            # (step 3b) keeps the ORIGINAL LSQ face traces (bernoulli-
+            # independent, like numpy's cell-centre grad form).
+            QL_flux, QR_flux = Q_L_int, Q_R_int
+            if bern_enabled:
+                bstar_int = jnp.maximum(Q_L_int[_bb], Q_R_int[_bb])
+                QL_flux = bern_recon(Q_L_int, bstar_int)
+                QR_flux = bern_recon(Q_R_int, bstar_int)
+                sL_int = (_fc_proj(Q_L_int, qauxA, normals_int)
+                          - _fc_proj(QL_flux, qauxA, normals_int))
+                sR_int = (_fc_proj(Q_R_int, qauxB, normals_int)
+                          - _fc_proj(QR_flux, qauxB, normals_int))
+
             F_num_int = rt_num_flux(
-                Q_L_int, Q_R_int, qauxA, qauxB, parameters, normals_int)
+                QL_flux, QR_flux, qauxA, qauxB, parameters, normals_int)
             fluct_int = rt_num_fluct(
-                Q_L_int, Q_R_int, qauxA, qauxB, parameters, normals_int)
+                QL_flux, QR_flux, qauxA, qauxB, parameters, normals_int)
             Dp_int = fluct_int[0]
             Dm_int = fluct_int[1]
 
@@ -808,6 +872,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 (F_num_int + Dm_int) * fv_int / cvA_int)
             dQ = dQ.at[:, iB_int].subtract(
                 (-F_num_int + Dp_int) * fv_int / cvB_int)
+            if bern_enabled:
+                dQ = dQ.at[:, iA_int].subtract(sL_int * fv_int / cvA_int)
+                dQ = dQ.at[:, iB_int].add(sR_int * fv_int / cvB_int)
 
             # 3b. EMITTED interior nonconservative term, once per (cell, edge).
             # ``int_{T_ij} B(W)·grad W dx`` in surface form: with a linear
@@ -858,10 +925,24 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     Q_R_bnd = jnp.where(
                         periodic_mask_j[None, :], Q_partner, Q_R_bnd)
 
+                # 4c. Bernoulli moving-equilibrium WB (boundary): reconstruct the
+                # inner + ghost traces to b*, run the Riemann on them, and add
+                # the inner-side conservative-flux-jump source (only the inner
+                # cell exists to receive it — mirrors numpy step 4b/WB).
+                QL_bnd_flux, QR_bnd_flux = Q_L_bnd, Q_R_bnd
+                if bern_enabled:
+                    bstar_bnd = jnp.maximum(Q_L_bnd[_bb], Q_R_bnd[_bb])
+                    QL_bnd_flux = bern_recon(Q_L_bnd, bstar_bnd)
+                    QR_bnd_flux = bern_recon(Q_R_bnd, bstar_bnd)
+                    sL_bnd = (_fc_proj(Q_L_bnd, qauxBnd, normals_bnd)
+                              - _fc_proj(QL_bnd_flux, qauxBnd, normals_bnd))
+
                 F_num_bnd = rt_num_flux(
-                    Q_L_bnd, Q_R_bnd, qauxBnd, qauxBnd, parameters, normals_bnd)
+                    QL_bnd_flux, QR_bnd_flux, qauxBnd, qauxBnd, parameters,
+                    normals_bnd)
                 fluct_bnd = rt_num_fluct(
-                    Q_L_bnd, Q_R_bnd, qauxBnd, qauxBnd, parameters, normals_bnd)
+                    QL_bnd_flux, QR_bnd_flux, qauxBnd, qauxBnd, parameters,
+                    normals_bnd)
                 Dm_bnd = fluct_bnd[1]
                 # Coupled-BC flux injection (conservative characteristic
                 # coupling, Dahm-Giesselmann-Helzel / PreciceManager.H
@@ -881,6 +962,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                         coupled_mask[None, :], coupled_dm, face_contrib_bnd)
                 dQ = dQ.at[:, iInner_bnd].subtract(
                     face_contrib_bnd * fv_bnd / cv_bnd)
+                if bern_enabled:
+                    dQ = dQ.at[:, iInner_bnd].subtract(sL_bnd * fv_bnd / cv_bnd)
 
                 # 4b. EMITTED interior nonconservative term at the BOUNDARY
                 # face.  A boundary cell's in-cell integral has TWO halves: the

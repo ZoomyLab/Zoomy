@@ -37,7 +37,31 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-__all__ = ["eigensystem", "eigenvalues", "solve", "jax_userfunctions"]
+__all__ = ["eigensystem", "eigenvalues", "solve", "newton_solve",
+           "jax_userfunctions"]
+
+
+# ── newton_solve (higher-order root-find; Bernoulli moving-equilibrium WB) ────
+def newton_solve(residual, x0, n_iter=60):
+    """Batched scalar Newton root-find of ``residual(x) = 0`` from guess ``x0``.
+
+    The jax twin of ``zoomy_core.fvm.userfunctions.newton_solve`` — same
+    contract, on-device and jit/AD-safe.  The reconstruction that lives in core
+    builds the ``residual`` closure (elementwise over the grid) and the guess;
+    this backend runs the loop (``reconstruction lives in core, backend is a
+    loop``).  Consumed by the moving-equilibrium (Bernoulli) WB reconstruction:
+    at SME level 0 the per-face root is the SWE specific-energy surface ``η*``.
+
+    Fixed ``n_iter`` via ``lax.scan`` (NO data-dependent ``while`` — the trace
+    is static, so it fuses into the flux hot loop and stays reverse/forward-AD
+    safe).  The residual is elementwise (each lane independent → diagonal
+    Jacobian), so ``jax.jvp`` with a unit tangent returns the EXACT per-lane
+    derivative in one pass — no eigen/callback host round-trip."""
+    def body(x, _):
+        f, fp = jax.jvp(residual, (x,), (jnp.ones_like(x),))
+        return x - f / fp, None
+    x, _ = jax.lax.scan(body, x0, None, length=int(n_iter))
+    return x
 
 
 # ── eigenvalues (λ-only; REQ-168 GAP 1) ──────────────────────────────────────
@@ -131,4 +155,7 @@ def jax_userfunctions() -> dict:
         "eigensystem": eigensystem,
         "eigenvalues": eigenvalues,
         "solve": solve,
+        # higher-order root-find (reconstruction supplies the residual callable
+        # — NOT a lambdify-lowered REQUIRED_KERNEL, like the numpy table's)
+        "newton_solve": newton_solve,
     }
