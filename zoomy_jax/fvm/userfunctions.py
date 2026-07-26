@@ -38,7 +38,7 @@ import jax
 import jax.numpy as jnp
 
 __all__ = ["eigensystem", "eigenvalues", "solve", "newton_solve",
-           "jax_userfunctions"]
+           "solve_steady_ode", "jax_userfunctions"]
 
 
 # ── newton_solve (higher-order root-find; Bernoulli moving-equilibrium WB) ────
@@ -62,6 +62,28 @@ def newton_solve(residual, x0, n_iter=60):
         return x - f / fp, None
     x, _ = jax.lax.scan(body, x0, None, length=int(n_iter))
     return x
+
+
+# ── solve_steady_ode (moving-equilibrium WB with friction) ────────────────────
+def solve_steady_ode(slope, U0, ds, n_iter=8):
+    """Integrate one collocation step of the local stationary ODE ``U_x = G(U)``.
+
+    The jax twin of ``zoomy_core.fvm.userfunctions.solve_steady_ode`` — same
+    contract, on-device and jit-safe.  The moving-equilibrium WB reconstruction
+    (core) builds the ``slope`` closure ``G`` from the emitted operators and the
+    ``solve`` linear-solve kernel; this backend runs the RK loop.
+
+    Reversible / implicit collocation — **implicit midpoint** (1-stage Gauss),
+    the reversible RK the fully-WB property needs.  Solves the endpoint
+    ``U1 = U0 + ds·G((U0+U1)/2)`` by ``n_iter`` fixed-point sweeps via
+    ``lax.scan`` (NO data-dependent ``while`` → fuses into the flux hot loop,
+    stays forward/reverse-AD safe).  ``U0`` is ``(n_state, nf)``, ``ds`` a
+    scalar or ``(nf,)`` signed step; returns the endpoint ``(n_state, nf)``."""
+    def body(U1, _):
+        Umid = 0.5 * (U0 + U1)
+        return U0 + ds * slope(Umid), None
+    U1, _ = jax.lax.scan(body, U0, None, length=int(n_iter))
+    return U1
 
 
 # ── eigenvalues (λ-only; REQ-168 GAP 1) ──────────────────────────────────────
@@ -158,4 +180,6 @@ def jax_userfunctions() -> dict:
         # higher-order root-find (reconstruction supplies the residual callable
         # — NOT a lambdify-lowered REQUIRED_KERNEL, like the numpy table's)
         "newton_solve": newton_solve,
+        # higher-order steady-ODE integrator (moving-equilibrium WB w/ friction)
+        "solve_steady_ode": solve_steady_ode,
     }

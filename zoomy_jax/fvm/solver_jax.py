@@ -621,28 +621,102 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         _eqr = getattr(runtime.sm, "equilibrium_reconstruction", "none")
         bern_enabled = _eqr in ("bernoulli", "projected_bernoulli")
         bern_recon = None
+        bern_ode = False
+        _bb = _bh = _bndim = None
+        rt_flux = rt_press = None
         if bern_enabled:
-            from zoomy_core.fvm.bernoulli_wb import reconstruct_bernoulli_level0
-            from zoomy_jax.fvm.userfunctions import newton_solve
-            _bnames = list(runtime.sm.variables.keys())
-            if "h" not in _bnames or "b" not in _bnames:
+            import sympy as _sp
+            from zoomy_core.fvm.bernoulli_wb import (
+                reconstruct_bernoulli_level0, make_steady_ode_slope,
+                moving_equilibrium_cells)
+            from zoomy_jax.fvm.userfunctions import (newton_solve, solve as _solve_op,
+                                                     solve_steady_ode)
+            # Indices from the STATE order (== Q rows == quasilinear rows/cols).
+            _bstate = [str(s) for s in runtime.sm.state]
+            if "h" not in _bstate or "b" not in _bstate:
                 raise ValueError("bernoulli WB needs 'h' and 'b' fields")
-            _bh = _bnames.index("h")
-            _bb = _bnames.index("b")
-            _bq = [i for i, nm in enumerate(_bnames) if nm not in ("h", "b")]
-            if len(_bq) - 1 != 0:
-                raise NotImplementedError(
-                    "jax bernoulli moving-equilibrium WB is SME level-0 (SWE) "
-                    "only (v1); use equilibrium_reconstruction='none' for the "
-                    "higher moments or the numpy solver.")
+            _bh = _bstate.index("h")
+            _bb = _bstate.index("b")
+            _bq = [i for i, nm in enumerate(_bstate) if nm not in ("h", "b")]
+            _blevel = len(_bq) - 1
             _bg = float(runtime.sm.parameter_values["g"])
             _bndim = int(runtime.sm.flux.shape[1])
             rt_flux = runtime.flux
             rt_press = runtime.hydrostatic_pressure
+            # The FULLY well-balanced ODE path (Pimentel-García) is needed
+            # whenever there is friction (nonzero source) or higher moments
+            # (level ≥ 1) — neither has a closed-form moving equilibrium.  The
+            # frictionless SWE (level-0, zero source) keeps the closed-form
+            # specific-energy reconstruction so its numbers are unchanged.
+            # Substitute the PARAMETER VALUES first: the symbolic source carries
+            # free parameters (e_x, n) that are non-zero as symbols but vanish at
+            # their configured values (n=0 frictionless, e_x=0 no tilt) — testing
+            # the raw symbolic form would misroute every model to the ODE path.
+            # Match by symbol NAME (assumptions on the source symbols need not
+            # equal a freshly minted Symbol, so xreplace/subs-by-object misses).
+            _pv = dict(runtime.sm.parameter_values)
 
-            def bern_recon(Qf, bstar):
-                return reconstruct_bernoulli_level0(
-                    Qf, bstar, _bh, _bb, _bq[0], _bg, jnp, newton_solve)
+            def _numify(_e):
+                _e = _sp.sympify(_e)
+                return _e.subs({_s: _pv[_s.name] for _s in _e.free_symbols
+                                if _s.name in _pv})
+            _has_source = any(_sp.simplify(_numify(_e)) != 0
+                              for _e in _sp.flatten(runtime.sm.source))
+            bern_ode = bool(_blevel >= 1 or _has_source)
+            if runtime.sm.flux.shape[1] != 1 and bern_ode:
+                raise NotImplementedError(
+                    "moving-equilibrium ODE WB (friction / level ≥ 1) is 1-D "
+                    "only (v1).")
+
+            if not bern_ode:
+                _bq0 = _bq[0]
+
+                def bern_recon(Qf, bstar):
+                    return reconstruct_bernoulli_level0(
+                        Qf, bstar, _bh, _bb, _bq0, _bg, jnp, newton_solve)
+            else:
+                # FULLY well-balanced moving-equilibrium reconstruction via the
+                # local stationary ODE U_x = -(J_F+B)^{-1}(S H_x + R) (friction R
+                # inside the RHS): integrate the emitted operators to the
+                # intercells with ``solve_steady_ode`` (implicit midpoint), and
+                # DISABLE the separate additive source — friction is carried by
+                # the equilibrium U* alone (paper eq 28, midpoint quadrature).
+                self._bern_ode = True
+                _n_state = len(_bstate)
+                rt_quasi = getattr(runtime, "quasilinear_matrix", None)
+                rt_src = runtime.source
+                if rt_quasi is None:
+                    raise NotImplementedError(
+                        "moving-equilibrium ODE WB needs the emitted "
+                        "quasilinear_matrix (J_F+B); this runtime has none.")
+                # 1-D left/right neighbour cell indices (fc0=left, fc1=right by
+                # face normalisation); boundary cells point to themselves and are
+                # excluded from the fluctuation slope (order-1 there).
+                _ncinner = int(mesh.n_inner_cells)
+                _fc0 = np.asarray(mesh.face_cells[0])
+                _fc1 = np.asarray(mesh.face_cells[1])
+                _bfset = set(int(f) for f in np.asarray(
+                    mesh.boundary_face_face_indices))
+                _int_faces = [f for f in range(int(mesh.n_faces))
+                              if f not in _bfset]
+                _left = np.arange(_ncinner, dtype=np.int64)
+                _right = np.arange(_ncinner, dtype=np.int64)
+                for _f in _int_faces:
+                    _a, _b2 = int(_fc0[_f]), int(_fc1[_f])
+                    _right[_a] = _b2
+                    _left[_b2] = _a
+                _interior_cell = (_left != np.arange(_ncinner)) & \
+                                 (_right != np.arange(_ncinner))
+                _left_j = jnp.asarray(_left)
+                _right_j = jnp.asarray(_right)
+                _int_cell_j = jnp.asarray(_interior_cell)
+                _xc = np.asarray(mesh.cell_centers[0, :_ncinner])
+                _xc_j = jnp.asarray(_xc)
+                _dxc = _xc[_right] - _xc[_left]
+                _dxc = np.where(_dxc == 0.0, 1.0, _dxc)   # boundary guard
+                _dxc_j = jnp.asarray(_dxc)
+                _cw_j = jnp.asarray(np.asarray(mesh.cell_volumes)[:_ncinner])
+                rt_uav_ode = getattr(runtime, "update_aux_variables", None)
         # ``hasattr`` is NOT a valid test here and was the bug: it succeeds on
         # an INHERITED base-class ``reconstruct_with_grad``, so a subclass that
         # puts its positivity / wet-dry / WB treatment only in ``__call__``
@@ -844,6 +918,36 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             Q_L_int = Q_L[:, interior_faces_j]
             Q_R_int = Q_R[:, interior_faces_j]
 
+            # ── FULLY well-balanced moving-equilibrium (Pimentel-García) ──
+            # Per-cell local stationary solution U*(x) = U_i ± (Δx/2)K_i with
+            # K_i = -(J_F+B)_VV^{-1}(S·H_x + R) (friction R baked into K), and
+            # the minmod-limited slope of the FLUCTUATION V = U − U*.  Both from
+            # the emitted operators + ``solve_steady_ode``.
+            if bern_ode:
+                Q_in = Q[:, :_ncinner]
+                b_row = Q_in[_bb]
+                hx_c = (b_row[_right_j] - b_row[_left_j]) / _dxc_j
+
+                def _aux_of(U):
+                    return (rt_uav_ode(U, Qaux[:, :_ncinner], parameters)
+                            if rt_uav_ode is not None else Qaux[:, :_ncinner])
+
+                def _quasi(U):
+                    return rt_quasi(U, _aux_of(U), parameters)
+
+                def _srcU(U):
+                    return rt_src(U, _aux_of(U), parameters)
+
+                _slope = make_steady_ode_slope(
+                    _quasi, _srcU, _bb, _solve_op, jnp, _n_state, ndim=0)
+                _K_c = _slope(Q_in, hx_c)
+                Ustar_L_c, Ustar_R_c, sigma_c = moving_equilibrium_cells(
+                    Q_in, hx_c, _cw_j, _bb, _slope, solve_steady_ode, jnp,
+                    Q_left=Q_in[:, _left_j], Q_right=Q_in[:, _right_j],
+                    order=int(self.nsm.reconstruction.order))
+                sigma_c = sigma_c * _int_cell_j[None, :]   # O1 at boundary cells
+                _half_c = 0.5 * _cw_j
+
             # 3c. Bernoulli moving-equilibrium WB (interior): reconstruct both
             # interface states to the common bed b*, run the Riemann + moment
             # NCP on the RECONSTRUCTED states (they coincide at equilibrium, so
@@ -852,7 +956,26 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             # (step 3b) keeps the ORIGINAL LSQ face traces (bernoulli-
             # independent, like numpy's cell-centre grad form).
             QL_flux, QR_flux = Q_L_int, Q_R_int
-            if bern_enabled:
+            if bern_ode:
+                # Riemann on the ACTUAL traces P = U* + fluctuation; the
+                # conservative-flux correction subtracts the equilibrium flux
+                # Fc(U*) (paper eq 28) so it vanishes at a discrete stationary
+                # state (P = U*, and the two sides' U* coincide).
+                UsL_int = Ustar_R_c[:, iA_int]           # iA right intercell eq
+                UsR_int = Ustar_L_c[:, iB_int]           # iB left  intercell eq
+                QL_flux = UsL_int + _half_c[iA_int] * sigma_c[:, iA_int]
+                QR_flux = UsR_int - _half_c[iB_int] * sigma_c[:, iB_int]
+                sL_int = -_fc_proj(UsL_int, qauxA, normals_int)
+                sR_int = -_fc_proj(UsR_int, qauxB, normals_int)
+                # Aux (hinv=1/h) MUST track the reconstructed face state, not the
+                # cell mean: the Riemann flux hinv·q² would otherwise carry the
+                # cell's 1/h against the extrapolated h — an O(Δx) desync that
+                # ÷Δx leaves an O(1) momentum residual and breaks WB.
+                qauxA_f = (rt_uav(QL_flux, qauxA, parameters)
+                           if rt_uav is not None else qauxA)
+                qauxB_f = (rt_uav(QR_flux, qauxB, parameters)
+                           if rt_uav is not None else qauxB)
+            elif bern_enabled:
                 bstar_int = jnp.maximum(Q_L_int[_bb], Q_R_int[_bb])
                 QL_flux = bern_recon(Q_L_int, bstar_int)
                 QR_flux = bern_recon(Q_R_int, bstar_int)
@@ -860,11 +983,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                           - _fc_proj(QL_flux, qauxA, normals_int))
                 sR_int = (_fc_proj(Q_R_int, qauxB, normals_int)
                           - _fc_proj(QR_flux, qauxB, normals_int))
+                qauxA_f, qauxB_f = qauxA, qauxB
+            else:
+                qauxA_f, qauxB_f = qauxA, qauxB
 
             F_num_int = rt_num_flux(
-                QL_flux, QR_flux, qauxA, qauxB, parameters, normals_int)
+                QL_flux, QR_flux, qauxA_f, qauxB_f, parameters, normals_int)
             fluct_int = rt_num_fluct(
-                QL_flux, QR_flux, qauxA, qauxB, parameters, normals_int)
+                QL_flux, QR_flux, qauxA_f, qauxB_f, parameters, normals_int)
             Dp_int = fluct_int[0]
             Dm_int = fluct_int[1]
 
@@ -872,9 +998,17 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 (F_num_int + Dm_int) * fv_int / cvA_int)
             dQ = dQ.at[:, iB_int].subtract(
                 (-F_num_int + Dp_int) * fv_int / cvB_int)
-            if bern_enabled:
+            if bern_enabled or bern_ode:
                 dQ = dQ.at[:, iA_int].subtract(sL_int * fv_int / cvA_int)
                 dQ = dQ.at[:, iB_int].add(sR_int * fv_int / cvB_int)
+
+            # 3b'. FULLY-WB in-cell nonconservative term on the FLUCTUATION slope
+            # (paper eq 28): −B(U_i)·σ_i, zero at a discrete stationary state.
+            # Replaces the standard reconstruction-slope NCP for the ODE path.
+            if bern_ode and rt_ncm is not None:
+                B_cell = rt_ncm(Q_in, Qaux[:, :_ncinner], parameters)
+                ncp_c = jnp.einsum("ijdc,jdc->ic", B_cell, sigma_c[:, None, :])
+                dQ = dQ.at[:, :_ncinner].subtract(ncp_c)
 
             # 3b. EMITTED interior nonconservative term, once per (cell, edge).
             # ``int_{T_ij} B(W)·grad W dx`` in surface form: with a linear
@@ -884,7 +1018,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             # cell mean and its own edge trace, with the normal pointing OUT of
             # that cell — so B's normal is negated.  Vanishes identically at
             # order 1, where Q_L == Q[iA] and Q_R == Q[iB].
-            if use_interior_ncp and rt_ces is not None:
+            if use_interior_ncp and rt_ces is not None and not bern_ode:
                 ces_A = rt_ces(Q[:, iA_int], Q_L_int, qauxA, qauxA,
                                parameters, normals_int)
                 ces_B = rt_ces(Q[:, iB_int], Q_R_int, qauxB, qauxB,
@@ -930,7 +1064,43 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 # the inner-side conservative-flux-jump source (only the inner
                 # cell exists to receive it — mirrors numpy step 4b/WB).
                 QL_bnd_flux, QR_bnd_flux = Q_L_bnd, Q_R_bnd
-                if bern_enabled:
+                qauxBnd_fL = qauxBnd_fR = qauxBnd
+                if bern_ode:
+                    # Inner cell's equilibrium trace toward its boundary face
+                    # (sign = outward-normal x-component): U* + fluctuation vs the
+                    # BC ghost; the flux correction subtracts Fc(U*_bnd).
+                    _s_bnd = jnp.sign(normals_bnd[0])              # (n_bf,)
+                    _UsR_b = Ustar_R_c[:, iInner_bnd]
+                    _UsL_b = Ustar_L_c[:, iInner_bnd]
+                    Us_bnd = jnp.where(_s_bnd[None, :] > 0, _UsR_b, _UsL_b)
+                    _hf = (_s_bnd * _half_c[iInner_bnd])[None, :]
+                    QL_bnd_flux = Us_bnd + _hf * sigma_c[:, iInner_bnd]
+                    # Rebuild the ghost from the EQUILIBRIUM trace, not the raw
+                    # inner mean: the BC's extrapolated (non-prescribed) slots
+                    # must carry the equilibrium so the ghost coincides with the
+                    # inner U* at a steady state — otherwise the extrapolated h
+                    # sits an O(Δx) step off U*_bnd and leaves an O(1) boundary
+                    # residual that swamps the interior WB.
+                    def _bf_ghost_ode(i):
+                        cell = boundary_face_cells_j[i]
+                        fidx = boundary_faces_j[i]
+                        return rt_bc(
+                            bf_func_no_j[i], time,
+                            face_centers_j[fidx, :], d_face_j[i],
+                            Us_bnd[:, i], Qaux[:, cell],
+                            parameters, face_normals_j[:, fidx])
+                    QR_bnd_flux = jnp.stack(
+                        [_bf_ghost_ode(i) for i in range(n_bf)], axis=-1)
+                    if has_periodic:
+                        QR_bnd_flux = jnp.where(
+                            periodic_mask_j[None, :],
+                            Q[:, boundary_face_cells_j], QR_bnd_flux)
+                    sL_bnd = -_fc_proj(Us_bnd, qauxBnd, normals_bnd)
+                    qauxBnd_fL = (rt_uav(QL_bnd_flux, qauxBnd, parameters)
+                                  if rt_uav is not None else qauxBnd)
+                    qauxBnd_fR = (rt_uav(QR_bnd_flux, qauxBnd, parameters)
+                                  if rt_uav is not None else qauxBnd)
+                elif bern_enabled:
                     bstar_bnd = jnp.maximum(Q_L_bnd[_bb], Q_R_bnd[_bb])
                     QL_bnd_flux = bern_recon(Q_L_bnd, bstar_bnd)
                     QR_bnd_flux = bern_recon(Q_R_bnd, bstar_bnd)
@@ -938,10 +1108,10 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                               - _fc_proj(QL_bnd_flux, qauxBnd, normals_bnd))
 
                 F_num_bnd = rt_num_flux(
-                    QL_bnd_flux, QR_bnd_flux, qauxBnd, qauxBnd, parameters,
+                    QL_bnd_flux, QR_bnd_flux, qauxBnd_fL, qauxBnd_fR, parameters,
                     normals_bnd)
                 fluct_bnd = rt_num_fluct(
-                    QL_bnd_flux, QR_bnd_flux, qauxBnd, qauxBnd, parameters,
+                    QL_bnd_flux, QR_bnd_flux, qauxBnd_fL, qauxBnd_fR, parameters,
                     normals_bnd)
                 Dm_bnd = fluct_bnd[1]
                 # Coupled-BC flux injection (conservative characteristic
@@ -962,7 +1132,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                         coupled_mask[None, :], coupled_dm, face_contrib_bnd)
                 dQ = dQ.at[:, iInner_bnd].subtract(
                     face_contrib_bnd * fv_bnd / cv_bnd)
-                if bern_enabled:
+                if bern_enabled or bern_ode:
                     dQ = dQ.at[:, iInner_bnd].subtract(sL_bnd * fv_bnd / cv_bnd)
 
                 # 4b. EMITTED interior nonconservative term at the BOUNDARY
@@ -976,7 +1146,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 # quasilinear run at ~1.85 instead of 2.  The pair is (boundary
                 # cell mean, that cell's reconstructed boundary-face value) with
                 # the OUTWARD normal — same shape as the interior side.
-                if use_interior_ncp and rt_ces is not None:
+                if use_interior_ncp and rt_ces is not None and not bern_ode:
                     ces_bnd = rt_ces(Q[:, iInner_bnd], Q_L_bnd,
                                      qauxBnd, qauxBnd, parameters, normals_bnd)
                     dQ = dQ.at[:, iInner_bnd].subtract(
@@ -1249,7 +1419,12 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # REQ-185: thread the current ``time`` into the timestepping so a
         # time-dependent source binds ``t`` (dt + cell positions are added by
         # ``get_compute_source``).
-        Q = ode.RK1(self._rt_source_op, Q, Qaux, parameters, dt, time)
+        # The FULLY well-balanced ODE moving-equilibrium path carries the source
+        # (friction) INSIDE the equilibrium reconstruction U* (paper eq 28,
+        # midpoint quadrature → no additive source term), so the separate source
+        # sub-step is skipped there to avoid double-counting.
+        if not getattr(self, "_bern_ode", False):
+            Q = ode.RK1(self._rt_source_op, Q, Qaux, parameters, dt, time)
 
         return Q
 
