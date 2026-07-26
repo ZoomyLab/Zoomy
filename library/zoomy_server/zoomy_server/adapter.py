@@ -53,6 +53,20 @@ class SolverAdapter:
     def list_models(self):
         return []
 
+    def capabilities(self):
+        """Handshake payload returned by ``GET /health``: who this backend is
+        and what it can run. The GUI queries it at connect time — it never
+        assumes a backend's identity — and enables the solver tags in
+        ``solvers`` (defaults to this adapter's own tag). An adapter that serves
+        more than one solver tag overrides this to widen ``solvers``."""
+        cls = type(self)
+        return {
+            "tag": self.tag,
+            "name": cls.__name__.replace("Adapter", "") + " backend",
+            "solvers": [self.tag],
+            "adapter": cls.__module__ + "." + cls.__name__,
+        }
+
     # ── Shared helpers ───────────────────────────────────────────────
 
     #: per-backend settings branches recognized in settings.json

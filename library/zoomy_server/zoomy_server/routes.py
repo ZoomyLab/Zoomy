@@ -64,7 +64,21 @@ class PostprocessRequest(BaseModel):
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "tag": _adapter.tag if _adapter else "unknown"}
+    """Liveness + handshake. Beyond ``status``/``tag`` (kept for back-compat)
+    this reports the adapter's ``capabilities()``: ``name`` and ``backends``
+    (the solver tags this server can run) so the GUI learns who the backend is
+    and which solvers it unlocks — instead of assuming a name."""
+    if not _adapter:
+        return {"status": "ok", "tag": "unknown", "backends": []}
+    caps = _adapter.capabilities()
+    tag = caps.get("tag", _adapter.tag)
+    return {
+        "status": "ok",
+        "tag": tag,
+        "name": caps.get("name"),
+        "backends": caps.get("solvers", [tag]),
+        "adapter": caps.get("adapter"),
+    }
 
 
 @router.get("/registry")
