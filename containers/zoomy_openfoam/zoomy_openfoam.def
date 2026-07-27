@@ -134,9 +134,15 @@ From: ubuntu:24.04
     pip3 install --no-cache-dir --break-system-packages \
         "numpy<2" \
         h5py meshio matplotlib jupyterlab jupyter-server ipykernel \
-        pytest pytest-html pytest-metadata \
-        /opt/src/zoomy_core /opt/src/zoomy_prepost /opt/src/zoomy_plotting \
-        /opt/src/zoomy_server /opt/src/zoomy_foam
+        pytest pytest-html pytest-metadata
+    # EDITABLE installs of the zoomy layer so a runtime bind-mount of the host
+    # source over /opt/src/<pkg> updates the container WITHOUT a rebuild — e.g.
+    #   apptainer run --bind ~/git/Zoomy-tut/library/zoomy_server:/opt/src/zoomy_server \
+    #                 zoomy_openfoam.sif OpenFOAM
+    # picks up a renamed adapter tag / a new route (like /couple) live.
+    pip3 install --no-cache-dir --break-system-packages \
+        -e /opt/src/zoomy_core -e /opt/src/zoomy_prepost -e /opt/src/zoomy_plotting \
+        -e /opt/src/zoomy_server -e /opt/src/zoomy_foam
     python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, zoomy_foam, precice; print('zoomy python layer OK')"
     python3 -c "import pytest, pytest_html; print('pytest', pytest.__version__, 'OK')"
     zoomy-server --help >/dev/null && echo "zoomy-server CLI OK"
