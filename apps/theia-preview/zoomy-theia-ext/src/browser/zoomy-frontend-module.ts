@@ -408,6 +408,18 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: CMD.importCase, label: 'Zoomy: Import case…' }, { execute: async () => (await this.mc()).importCase() });
         reg.registerCommand({ id: CMD.saveProject, label: 'Zoomy: Save project' }, { execute: async () => (await this.mc()).saveProject() });
         reg.registerCommand({ id: CMD.loadProject, label: 'Zoomy: Load project' }, { execute: async () => (await this.mc()).loadProject() });
+        reg.registerCommand({ id: 'zoomy.generateGuiLink', label: 'Zoomy: Generate GUI link' }, { execute: async () => {
+            const asset = await this.quickInput.input({ prompt: 'Asset URL for the GUI link (a project .zip URL, or zenodo:<id>)', placeHolder: 'https://…/project.zip   or   zenodo:1234567' });
+            if (!asset || !asset.trim()) { return; }
+            // GUI base = origin + pathname with any query/hash stripped, so the link
+            // works on the deployed …/Zoomy/theia-preview/ path AND locally.
+            let baseUrl = '';
+            try { baseUrl = location.origin + location.pathname; } catch { /* non-browser */ }
+            const link = baseUrl + '?project=' + encodeURIComponent(asset.trim());
+            try { await navigator.clipboard.writeText(link); } catch { /* clipboard may be blocked */ }
+            // Reuses the ?project= param the GUI already consumes (loadProjectFromUrl).
+            await this.quickInput.input({ prompt: 'GUI link — copied to clipboard (Ctrl/Cmd-C to copy again)', value: link });
+        } });
         reg.registerCommand({ id: CMD.connectBackend, label: 'Zoomy: Connect backend…' }, { execute: () => this.connectBackend() });
         reg.registerCommand({ id: 'zoomy.disconnectBackend', label: 'Zoomy: Disconnect backend' }, { execute: async (tag: string) => { if (tag) { (await this.mc()).disconnectBackend(tag); } } });
         reg.registerCommand({ id: 'zoomy.scanBackends', label: 'Zoomy: Scan for local backends' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).scanBackends(); } });
