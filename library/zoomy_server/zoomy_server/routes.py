@@ -128,6 +128,68 @@ def create_case_job(req: CaseRequest):
     return {"job_id": job_id}
 
 
+class CouplingRequest(BaseModel):
+    coupling_id: str = "coupled"
+    scheme: str = "parallel-explicit"
+    end_time: Optional[float] = None
+    sif: Optional[str] = None            # apptainer image (else ZOOMY_OPENFOAM_SIF)
+    participants: list                   # [{name,type,template,binary}, ...]
+
+
+def _write_participant_runsh(case_dir, coupling_dir, binary, sif):
+    """run.sh the foam adapter executes for this participant: launch its
+    zoomyFoam/foamRun binary in-container (foamRun on PATH) or via apptainer,
+    sharing the coupling folder so preCICE participants find each other."""
+    import os
+    inner = (f"source /opt/openfoam13/etc/bashrc; unset FOAM_SIGFPE FOAM_SETNAN; "
+             f"'{binary}' -case '{case_dir}'")
+    lines = [
+        "#!/bin/bash",
+        "set +e; source /opt/openfoam13/etc/bashrc 2>/dev/null; set -e",
+        "unset FOAM_SIGFPE FOAM_SETNAN",
+        "if command -v foamRun >/dev/null 2>&1; then",
+        f"  '{binary}' -case '{case_dir}'",
+        "else",
+        f'  apptainer exec --bind "{coupling_dir}" "{sif}" bash -lc "{inner}"',
+        "fi",
+    ]
+    p = os.path.join(case_dir, "run.sh")
+    with open(p, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(p, 0o755)
+
+
+@router.post("/couple")
+def create_coupling_job(req: CouplingRequest):
+    """Assemble + launch a preCICE coupling. build_coupled_bundle lays out the
+    participant OF-cases + the shared generated precice-config under ONE coupling
+    folder (= the exchange-directory); each participant is then submitted as its
+    own foam job (they share the folder, so they find each other over sockets).
+    Concurrency must be >= #participants (ZOOMY_MAX_JOBS). Returns the child
+    job ids; poll /jobs/<id> + fetch /jobs/<id>/results/hdf5 per participant."""
+    if not _adapter:
+        raise HTTPException(503, "No adapter configured")
+    import os
+    import tempfile
+    from zoomy_prepost.coupling import build_coupled_bundle
+
+    coupling_dir = os.path.join(tempfile.mkdtemp(prefix="zoomy_couple_"), req.coupling_id)
+    try:
+        bundle = build_coupled_bundle(coupling_dir, req.participants,
+                                      end_time=req.end_time, scheme=req.scheme)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid coupling: {e}")
+    sif = req.sif or os.environ.get("ZOOMY_OPENFOAM_SIF", "")
+    out = []
+    for p, (name, case_dir) in zip(req.participants, bundle["cases"]):
+        _write_participant_runsh(case_dir, coupling_dir, p.get("binary", ""), sif)
+        out.append({"name": name, "job": jobs.submit(_adapter, case_dir),
+                    "case_dir": case_dir})
+    return {"coupling_id": req.coupling_id, "dir": coupling_dir,
+            "config": bundle["config"], "participants": out,
+            "jobs": [o["job"] for o in out]}
+
+
 @router.post("/postprocess")
 def create_postprocess_job(req: PostprocessRequest):
     """Materialize a RESULTS folder from an uploaded store + enabled steps and
