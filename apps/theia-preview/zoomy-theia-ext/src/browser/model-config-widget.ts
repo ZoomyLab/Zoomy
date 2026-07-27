@@ -382,6 +382,15 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             '</precice-configuration>', ''].join('\n');
     }
 
+    /** Open a coupling's config surface: for now, its precice-config.xml (the
+     *  coupling contract) in the editor — the "preCICE card" of the coupling. */
+    async openCoupling(name: string): Promise<void> {
+        try {
+            const uri = new URI(PROJECT_ROOT + '/' + name + '/precice-config.xml');
+            if (await this.fileService.exists(uri)) { await open(this.openerService, uri); }
+        } catch (e: any) { this.setNotice('Open coupling failed: ' + (e?.message || e)); }
+    }
+
     /** Create a new case folder with a case.py, then open it. If a spec is given
      *  (import), use it; otherwise start from the first runnable card in each tab. */
     async newCase(name: string, spec?: any): Promise<void> {

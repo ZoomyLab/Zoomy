@@ -70,12 +70,12 @@ export class ZoomyViewWidget extends ReactWidget {
     }
 
     /** Ctrl/Shift-click toggles multi-select; plain click opens + single-selects. */
-    protected selectClick(name: string, e: any, opts: { open?: boolean } = {}): void {
+    protected selectClick(name: string, e: any, opts: { openCmd?: string } = {}): void {
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
             if (this.selected.has(name)) { this.selected.delete(name); } else { this.selected.add(name); }
         } else {
             this.selected.clear(); this.selected.add(name);
-            if (opts.open !== false) { this.commands.executeCommand('zoomy.openNamedCase', name); }
+            if (opts.openCmd) { this.commands.executeCommand(opts.openCmd, name); }
         }
         this.update();
     }
@@ -98,7 +98,7 @@ export class ZoomyViewWidget extends ReactWidget {
                 padding: '4px 8px', margin: '1px 0', marginLeft: opts.child ? 20 : 0, fontSize: 13 };
             const icon = opts.coupling ? 'type-hierarchy-sub' : (opts.child ? 'file-submodule' : (active ? 'folder-active' : 'folder'));
             return h('div', { key: name, style: s,
-                onClick: (e: any) => this.selectClick(name, e, { open: !opts.coupling }),
+                onClick: (e: any) => this.selectClick(name, e, { openCmd: opts.coupling ? 'zoomy.openCoupling' : 'zoomy.openNamedCase' }),
                 onMouseEnter: (e: any) => { if (!active && !isSel) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
                 onMouseLeave: (e: any) => { if (!isSel) { e.currentTarget.style.background = 'transparent'; } } },
                 h('span', { className: 'codicon codicon-' + icon, style: { color: active ? 'var(--theia-button-background)' : undefined } }),
