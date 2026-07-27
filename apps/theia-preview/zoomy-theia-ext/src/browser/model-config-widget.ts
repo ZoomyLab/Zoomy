@@ -1295,7 +1295,13 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const manifest = { version: 1, selected: this.selected, edited: Array.from(this.edited.entries()), active: this.active, cases: this.cases };
             zip.file('project.json', JSON.stringify(manifest, null, 2));
             const casesFolder = zip.folder('cases');
-            for (const name of this.cases) {
+            // Iterate the TOP-LEVEL folders under cases/: flat cases + coupling
+            // PARENTS. addFolderToZip recurses, so a coupling parent brings its
+            // coupling.yml + precice-config.xml AND its child case folders — the
+            // whole nested structure round-trips. (this.cases holds child
+            // relative-paths, so iterating it alone would drop the parent files.)
+            const topLevel = [...this.cases.filter(n => !n.includes('/')), ...this.couplings.map(c => c.name)];
+            for (const name of topLevel) {
                 await this.addFolderToZip(casesFolder.folder(name), new URI(PROJECT_ROOT + '/' + name));
             }
             const blob = await zip.generateAsync({ type: 'blob' });
@@ -1358,7 +1364,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             this.edited.clear(); for (const [k, v] of (manifest.edited || [])) { this.edited.set(k, v); }
             if (manifest.active) { this.active = manifest.active; }
         }
-        const open = first || [...names][0];
+        // Open a real leaf case (flat or coupled child) — never a coupling
+        // parent (it has no case.py). listCases() above populated this.cases.
+        const open = first || this.cases[0];
         if (open) { await this.openCaseByName(open); }
         this.setNotice('Loaded project — ' + names.size + ' case(s), ' + count + ' file(s).');
     }
