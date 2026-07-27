@@ -214,15 +214,36 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             "shoreline + steep h extrema (Gallardo-Parés-Castro).  Reuses the "
             "_pp_theta indicator.  Lets the run use the linear-stability CFL "
             "instead of the a-priori-positivity 1/(2k+1); pair with ``mood``.")
-    mood = param.Boolean(default=False,
-        doc="A-posteriori MOOD corrector (order≥2, eta path).  False = off.  "
-            "When True: after the SSP-RK2 candidate, detect troubled cells "
-            "(PAD h<0 + CAD non-finite — NO relaxed-DMP, invalid with a source) "
-            "and, if any, re-run the step forcing those cells to 1st order "
-            "(constant reconstruction → positivity-preserving by the XZS "
-            "1st-order lemma, conservative via the shared face flux).  The "
-            "guaranteed net behind ``front_theta_tol``; needs the eta "
-            "reconstruction.  Replaces positivity_method='zhang_shu'+CFL=1/6.")
+    mood = param.Boolean(default=True,
+        doc="A-posteriori MOOD corrector — THE DEFAULT order≥2 positivity "
+            "mechanism (user directive 2026-07-27: MOOD, not Zhang-Shu, so there "
+            "is never confusion about which guard/CFL is active).  ON by default; "
+            "set False only to compare against an unguarded O2.  Engages only on "
+            "the eta reconstruction (``reconstruction_variables='eta'``), the one "
+            "path that exposes per-cell O1 demotion + an emitted-W O1-HR "
+            "fallback; on any other reconstruction it is inert (a purely-wet "
+            "conservative O2 run needs no wet/dry net).  Mechanism (per step, no "
+            "dt-halving ever): take the SSP-RK2 O2 candidate; flag inadmissible "
+            "cells (PAD h<0 + CAD non-finite); recompute those at O1 Audusse-HR "
+            "(φ:=0 → the piecewise-constant emitted-W reconstruction, positivity-"
+            "preserving by the XZS 1st-order lemma + Audusse face clip, "
+            "conservative via the shared face flux).  If whole-CELL demotion "
+            "still leaves an inadmissible cell (a draining front where an O2 wet "
+            "neighbour fluxes a denormal −h into the demoted cell — which the "
+            "next step's sqrt(g·h) eigenvalue turns into a NaN), escalate to a "
+            "whole-STEP O1-HR redo (amrex whole-step O1 MOOD), which matches the "
+            "pure-O1 march and is provably admissible.  Replaces the a-priori "
+            "Xing-Zhang-Shu cap (``positivity_method='zhang_shu'`` + CFL≤1/(2k+1)) "
+            "as the default — that code stays available but is no longer the gate.")
+    force_steady_ode_wb = param.Boolean(default=False,
+        doc="Force the fully-WB steady-ODE moving-equilibrium reconstruction "
+            "even for a frictionless level-0 model that would otherwise take the "
+            "closed-form Bernoulli fast path.  R=0 ⇒ the steady ODE integrates to "
+            "the SAME equilibrium as the closed form, so this exists only to "
+            "compare the two moving-equilibrium WB reconstructions head-to-head "
+            "on ONE model (cid 157, wb_comparison Case A).  Default off ⇒ every "
+            "existing golden is unaffected.  1-D only (the ndim≠1 guard already "
+            "raises for the ODE path).")
 
     def __init__(self, **kwargs):
         # Riemann numerics are now owned by the NSM (nsm.riemann is the
@@ -593,11 +614,17 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # Whether the reconstruction honours a per-cell ``force_o1`` demotion
         # mask (the eta path does) — required by the a-posteriori MOOD corrector.
         support_o1 = bool(getattr(reconstruct, "supports_force_o1", False))
-        if self.mood and not support_o1:
-            raise NotImplementedError(
-                f"mood=True needs a reconstruction that supports per-cell "
-                f"1st-order demotion (reconstruction_variables='eta'); "
-                f"{type(reconstruct).__name__} does not.")
+        # MOOD is the DEFAULT order≥2 positivity mechanism (``mood`` defaults
+        # True), but it can only engage where the reconstruction exposes per-cell
+        # O1 demotion — i.e. ``reconstruction_variables='eta'`` (the only one with
+        # an emitted-W O1-HR fallback).  On any other reconstruction there is
+        # nothing to demote to, so MOOD is inert: a purely-wet conservative O2 run
+        # needs no wet/dry positivity net, and the default-on flag must NOT trip
+        # every such run.  Gate on ``support_o1`` and record it for the step
+        # driver — no raise (the old ``mood=True and not support_o1`` error would
+        # now fire on every conservative O2 march, since the default is True).
+        self._mood_active = bool(
+            self.mood and support_o1 and self.nsm.reconstruction.order >= 2)
 
         # Cell-interior non-conservative integral (path-conservative,
         # order ≥ 2) — mirrors NumPy ``solver_numpy.get_flux_operator``:
@@ -675,7 +702,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                                 if _s.name in _pv})
             _has_source = any(_sp.simplify(_numify(_e)) != 0
                               for _e in _sp.flatten(runtime.sm.source))
-            bern_ode = bool(_blevel >= 1 or _has_source)
+            # ``force_steady_ode_wb`` (cid 157): route a FRICTIONLESS level-0 SWE
+            # — which otherwise takes the closed-form Bernoulli fast path —
+            # through the fully-WB steady-ODE moving-equilibrium reconstruction.
+            # With R=0 the ODE integrates to the SAME equilibrium as the closed
+            # form, so this only enables the head-to-head WB comparison; default
+            # off leaves every golden on the closed-form path.
+            bern_ode = bool(_blevel >= 1 or _has_source
+                            or self.force_steady_ode_wb)
             if runtime.sm.flux.shape[1] != 1 and bern_ode:
                 raise NotImplementedError(
                     "moving-equilibrium ODE WB (friction / level ≥ 1) is 1-D "
@@ -1366,23 +1400,55 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
             _advance = _euler if time_euler else _rk2
 
-            if self.mood:
-                # A-posteriori MOOD: take the order-2 candidate, detect troubled
-                # cells (PAD h<0 + CAD non-finite), and — only if any cell is
-                # troubled — re-run forcing those cells to 1st order.  The re-run
-                # is conservative (shared face flux) and the demoted cells are
-                # positivity-preserving (XZS 1st-order lemma + Audusse face
-                # clip).  With the front pre-detector on, troubled cells rarely
-                # form, so the lax.cond branch is rarely taken.
-                Q_cand = _advance(None)
+            if getattr(self, "_mood_active", False):
+                # ── A-posteriori MOOD — THE DEFAULT order-2 positivity net ──
+                # (user directive 2026-07-27; ``mood`` defaults True, engages on
+                # the eta path only — ``_mood_active`` set in get_flux_operator.)
+                #
+                #   1. O2 candidate (the SSP-RK2 above).
+                #   2. Flag inadmissible cells: PAD h<0 + CAD non-finite.  (No
+                #      relaxed-DMP — a DMP bound is invalid in the presence of a
+                #      source, and the physical admissibility set is exactly h≥0
+                #      + finite.)
+                #   3. Recompute the FLAGGED cells at O1 Audusse-HR: ``force_o1``
+                #      zeroes their reconstruction slope → the piecewise-constant
+                #      emitted-W reconstruction (Audusse η→h clip + emitted
+                #      inverse q=u·h), positivity-preserving by the XZS 1st-order
+                #      lemma and conservative through the shared face flux.  This
+                #      is the whole-CELL order drop — O2 is kept in the wet
+                #      interior (matters for Malpasset/Thacker), only front cells
+                #      fall to O1.
+                #   4. SAFETY NET (amrex whole-step O1 MOOD): if the whole-cell
+                #      redo STILL leaves an inadmissible cell — a capless draining
+                #      front where an O2 wet neighbour fluxes a denormal −h
+                #      (≈ −1e-142) into the demoted cell, which the NEXT step's
+                #      unguarded sqrt(g·h) eigenvalue would turn into a
+                #      domain-wide NaN (the cid-155 Ritter-O2 failure) — escalate
+                #      to a whole-STEP O1-HR redo (force_o1 everywhere).  That
+                #      matches the pure-O1 march (h ≥ 0 exactly) and is provably
+                #      admissible under the CFL.  No dt reduction anywhere.
+                #
+                # Smooth everywhere-wet cases never flag ⇒ ``jnp.any`` is False ⇒
+                # the pure-O2 candidate is returned, bit-identical: MOOD is a
+                # no-op there.  Only the taken lax.cond branch executes (scalar
+                # predicate), so the safety net costs nothing off the front.
                 h_idx = int(self.free_surface_h_index)
-                troubled = ((Q_cand[h_idx, :nc] < 0.0)
-                            | (~jnp.isfinite(Q_cand[:, :nc]).all(axis=0)))
+
+                def _troubled(Qc):
+                    return ((Qc[h_idx, :nc] < 0.0)
+                            | (~jnp.isfinite(Qc[:, :nc]).all(axis=0)))
+
+                Q_cand = _advance(None)
+
+                def _repair():
+                    Q_wc = _advance(_troubled(Q_cand))          # whole-cell O1-HR
+                    return jax.lax.cond(
+                        jnp.any(_troubled(Q_wc)),
+                        lambda: _advance(jnp.ones((nc,), dtype=bool)),  # whole-step
+                        lambda: Q_wc)
+
                 return jax.lax.cond(
-                    jnp.any(troubled),
-                    lambda: _advance(troubled),
-                    lambda: Q_cand,
-                )
+                    jnp.any(_troubled(Q_cand)), _repair, lambda: Q_cand)
             return _advance(None)
         dQ = flux(dt, time, Q, Qaux, parameters, jnp.zeros_like(Q))
         if source is not None:
