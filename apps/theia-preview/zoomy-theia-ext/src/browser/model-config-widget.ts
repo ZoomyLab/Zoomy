@@ -1491,10 +1491,24 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const selectIcon = isViz
             ? h('span', { title: 'Include this viewer in the exported case (multi-select)', className: 'codicon codicon-' + (isChecked ? 'check-all' : 'circle-large-outline'), style: { color: isChecked ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)', cursor: 'pointer' }, onClick: (e: any) => { e.stopPropagation(); this.toggleVizSelect(card); } })
             : h('span', { className: 'codicon codicon-' + (isSel ? 'pass-filled' : 'circle-large-outline'), style: { color: isSel ? 'var(--theia-button-background)' : 'var(--theia-descriptionForeground)' } });
+        // Backend-dependency pill for solver + visualization cards (numpy / jax /
+        // OpenFOAM / … from requires_tag, or "built-in"). Subtle gray box on the
+        // right, just left of the chevron — shows on any subtab. Tooltip says
+        // whether that backend is connected.
+        const flag = (dir === 'solvers' || isViz) ? this.cardFlag(card, dir, runnable) : null;
+        // Show the backend tag itself (numpy / jax / OpenFOAM / … from requires_tag)
+        // when the card declares one, else cardFlag's label (built-in / post-processing).
+        const flagLabel = flag ? (card.requires_tag || flag.label) : null;
+        const flagPill = flag ? h('span', { title: flag.tip, style: {
+            fontSize: 11, padding: '1px 7px', borderRadius: 10, whiteSpace: 'nowrap',
+            background: 'var(--theia-badge-background, rgba(128,128,128,0.22))',
+            color: 'var(--theia-descriptionForeground)',
+            border: '1px solid var(--theia-panel-border)', opacity: flag.available ? 1 : 0.75 } }, flagLabel) : null;
         const header = h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: () => this.pick(card, dir) },
             selectIcon,
             h('div', { style: { fontWeight: 600, fontSize: 14, flex: 1 } }, card.title || card.id),
             this.editMode ? h('button', { title: 'Remove this card', onClick: (e: any) => { e.stopPropagation(); this.removeCard(card); }, style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-errorForeground)', padding: 2 } }, h('span', { className: 'codicon codicon-trash' })) : null,
+            flagPill,
             h('span', { className: 'codicon codicon-chevron-' + (isExp ? 'down' : 'right'), style: { color: 'var(--theia-descriptionForeground)' } }));
         // Collapsed: header only. Expanded: full detail (description + params + run + output).
         const vizReady = this.simRan && !this.vizBusy;
