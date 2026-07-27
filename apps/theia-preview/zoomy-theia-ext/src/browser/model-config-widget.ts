@@ -555,6 +555,11 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const content = await this.fileService.read(uri);
             this.applySpec(this.cli.parseCase(content.value));
             this.caseUri = uri; this.caseName = name;
+            // A coupling child's model + run cells are regenerated from the coupling
+            // config on export — persist on open so the on-disk case.py VISIBLY shows
+            // the Coupled BC (and Save picks it up), not the plain card model that
+            // parseCase just applied.
+            if (await this.couplingInfo(name)) { await this.persistCase(); }
             try { localStorage.setItem(CURRENT_CASE_KEY, name); } catch { /* ignore */ }
             // Single source of truth: broadcast so the left Zoomy panel highlights
             // THIS case (keeps left panel ⇄ config selection in sync after a refresh).
@@ -1234,7 +1239,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const model = this.pickedCard('models'), mesh = this.pickedCard('meshes'), solver = this.pickedCard('solvers'), viz = this.pickedCard('visualizations');
         const spec: any = {
             meta: { title: (model?.title || 'Zoomy case'), description: 'Exported from the Zoomy model-config GUI.' },
-            model: { code: cardCode(model, this.mergedInit(model)) || '', class_path: model?.class || null, init: this.mergedInit(model) },
+            model: { code: cardCode(model, this.mergedInit(model)) || '', class_path: model?.class || null, init: this.mergedInit(model), card: model?.id || null },
             mesh: { code: cardCode(mesh, this.mergedInit(mesh)) || '', spec: this.mergedInit(mesh) },
             settings: {},
             solver: { tag: solver?.requires_tag || 'numpy', id: solver?.id || null, params: solver?.params ? this.mergedInit(solver) : {} },
@@ -1253,7 +1258,31 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             } catch { /* skip viz */ }
         }
         if (this.postprocSteps.size) { spec.postproc = [...this.postprocSteps]; spec.postproc_nz = this.postprocNz; }
+        // Coupling child: attach the interface derived from the config so _caseCells
+        // regenerates the visible Coupled BC + coupled run note (survives round-trip).
+        const cinfo = await this.couplingInfo(this.caseName);
+        if (cinfo) { spec.coupling = cinfo; }
         return spec;
+    }
+    /** If `name` (a case relative path "<coupling>/<child>") is a coupling child,
+     *  return its coupling interface from the sibling precice-config.xml (the
+     *  participant's provide-mesh). The model's Coupled BC is ALWAYS rebuilt from
+     *  this on export, so it survives save->reload. Returns null for a flat case. */
+    protected async couplingInfo(name: string): Promise<{ mesh: string; participant: string; type: string } | null> {
+        if (!name || !name.includes('/')) { return null; }
+        const parent = name.split('/')[0];
+        const leaf = String(name.split('/').pop());
+        const cp = this.couplings.find(c => c.name === parent);
+        if (!cp || !cp.children.includes(name)) { return null; }
+        try {
+            const uri = new URI(PROJECT_ROOT + '/' + parent + '/precice-config.xml');
+            if (!(await this.fileService.exists(uri))) { return null; }
+            const xml = (await this.fileService.read(uri)).value;
+            const block = xml.match(new RegExp('<participant name="' + leaf + '">([\\s\\S]*?)</participant>'));
+            const pm = block && block[1].match(/<provide-mesh name="([^"]+)"/);
+            if (!pm) { return null; }
+            return { mesh: pm[1], participant: leaf, type: /vof/i.test(leaf) ? 'vof' : 'sme' };
+        } catch { return null; }
     }
     async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
         try {
@@ -1290,7 +1319,14 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     /** Re-select the cards a spec refers to (by class_path / mesh spec / tag). */
     protected applySpec(spec: any): void {
         const byClass = (dir: string, cls: string) => (this.cardsByTab[dir] || []).find(c => c.class === cls);
-        if (spec?.model?.class_path) { const c = byClass('models', spec.model.class_path); if (c) { this.selected['models'] = c.id; if (spec.model.init) { this.edited.set(c.id, { ...spec.model.init }); } } }
+        if (spec?.model) {
+            // Match by class_path (the usual case); fall back to an explicit card id
+            // for cards whose Python class is null (e.g. the VOF/OpenFOAM participant,
+            // which has no zoomy_core model class but must still select vof-openfoam).
+            let mc = spec.model.class_path ? byClass('models', spec.model.class_path) : null;
+            if (!mc && spec.model.card) { mc = (this.cardsByTab['models'] || []).find(c => c.id === spec.model.card); }
+            if (mc) { this.selected['models'] = mc.id; if (spec.model.init) { this.edited.set(mc.id, { ...spec.model.init }); } }
+        }
         if (spec?.mesh?.spec) { const meshes = this.cardsByTab['meshes'] || []; const c = meshes[0]; if (c) { this.selected['meshes'] = c.id; this.edited.set(c.id, { ...spec.mesh.spec }); } }
         if (spec?.solver) {
             const solvers = this.cardsByTab['solvers'] || [];
