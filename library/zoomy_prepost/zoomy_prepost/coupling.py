@@ -185,20 +185,26 @@ def build_coupled_bundle(coupling_dir, participants, exchange_directory=None,
     precice-config.xml and expand each participant OF case as a sibling folder.
 
     ``participants``: list of ``{"name","type","template","case_name"}``. Returns
-    ``{"config": path, "cases": [(name, dir), ...]}``. The launcher runs each
+    ``{"config": path|None, "cases": [(name, dir), ...]}``. The launcher runs each
     ``<case_dir>`` (its controlDict names the participant + config) in the sif,
-    all sharing ``coupling_dir`` as the exchange-directory."""
+    all sharing ``coupling_dir`` as the exchange-directory.
+
+    N==1 is a STANDALONE OpenFOAM run (no coupling): no precice-config is written
+    and the participant template should be precice-free (e.g. the mono case) — the
+    same expand + foamToVTK + vtk_to_hdf5 path, just without a peer."""
     os.makedirs(coupling_dir, exist_ok=True)
-    exch = exchange_directory or coupling_dir
-    cfg = make_coupled_precice_config(
-        participants, exchange_directory=exch,
-        max_time=(end_time if end_time is not None else 30.0), **cfg_kw)
-    config_path = os.path.join(coupling_dir, "precice-config.xml")
-    open(config_path, "w").write(cfg)
+    config_path = None
+    if len(participants) >= 2:
+        exch = exchange_directory or coupling_dir
+        cfg = make_coupled_precice_config(
+            participants, exchange_directory=exch,
+            max_time=(end_time if end_time is not None else 30.0), **cfg_kw)
+        config_path = os.path.join(coupling_dir, "precice-config.xml")
+        open(config_path, "w").write(cfg)
     cases = []
     for p in participants:
         case_dir = os.path.join(coupling_dir, p.get("case_name", p["name"] + "_case"))
-        build_participant_case(case_dir, p["template"], p["name"], config_path,
+        build_participant_case(case_dir, p["template"], p["name"], config_path or "",
                                end_time=end_time)
         cases.append((p["name"], case_dir))
     return {"config": config_path, "cases": cases}
