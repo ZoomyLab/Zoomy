@@ -131,16 +131,17 @@ From: ubuntu:24.04
     # "/usr/bin/python3: No module named pytest" before collecting anything —
     # which is what happened the first time the foam stack was given a CI job
     # (2026-07-22). Every other test image ships these; this one did not.
-    pip3 install --no-cache-dir --break-system-packages \
-        "numpy<2" \
-        h5py meshio matplotlib jupyterlab jupyter-server ipykernel \
-        pytest pytest-html pytest-metadata
-    # EDITABLE installs of the zoomy layer so a runtime bind-mount of the host
-    # source over /opt/src/<pkg> updates the container WITHOUT a rebuild — e.g.
+    # ONE resolution pass (numpy<2 pinned FIRST so the debian numpy is not
+    # uninstalled — splitting this caused "Cannot uninstall numpy … RECORD not
+    # found") with EDITABLE zoomy installs, so a runtime bind-mount of the host
+    # source over /opt/src/<pkg> updates the container WITHOUT a rebuild:
     #   apptainer run --bind ~/git/Zoomy-tut/library/zoomy_server:/opt/src/zoomy_server \
     #                 zoomy_openfoam.sif OpenFOAM
     # picks up a renamed adapter tag / a new route (like /couple) live.
     pip3 install --no-cache-dir --break-system-packages \
+        "numpy<2" \
+        h5py meshio matplotlib jupyterlab jupyter-server ipykernel \
+        pytest pytest-html pytest-metadata \
         -e /opt/src/zoomy_core -e /opt/src/zoomy_prepost -e /opt/src/zoomy_plotting \
         -e /opt/src/zoomy_server -e /opt/src/zoomy_foam
     python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, zoomy_foam, precice; print('zoomy python layer OK')"

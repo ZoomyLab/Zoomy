@@ -20,6 +20,7 @@ def main():
         "dmplex": "zoomy_server.adapters.dmplex.DmplexAdapter",
         "firedrake": "zoomy_server.adapters.firedrake.FiredrakeAdapter",
         "OpenFOAM": "zoomy_server.adapters.foam.FoamAdapter",
+        "foam": "zoomy_server.adapters.foam.FoamAdapter",  # TEMP back-compat alias for --adapter foam
         "mesh": "zoomy_server.adapters.mesh.MeshAdapter",
         "postprocess": "zoomy_server.adapters.postprocess.PostprocessAdapter",
     }
