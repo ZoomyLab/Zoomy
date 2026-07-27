@@ -439,7 +439,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     async runCoupling(name: string): Promise<void> {
         const cp = this.couplings.find(c => c.name === name);
         if (!cp || cp.children.length < 2) { this.setNotice('Coupling "' + name + '" needs at least 2 participants.'); return; }
-        if (!this.connectedTags.includes('OpenFOAM')) {
+        if (!this.tagMatches('OpenFOAM', this.connectedTags)) {
             this.setNotice('Connect a "OpenFOAM" backend to run the coupling "' + name + '" — all its participants run there (use the ↻ scan / Connect backend).');
             return;
         }
@@ -1100,7 +1100,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const solverLocal = !!cardCode(solver, this.mergedInit(solver));
             if (!solverLocal) {
                 // Remote solver: submit the whole case to its connected backend.
-                if (!this.connectedTags.includes(solverTag)) {
+                if (!this.tagMatches(solverTag, this.connectedTags)) {
                     this.simStatus = 'Solver "' + (solver?.title || solverTag) + '" needs a "' + solverTag + '" backend — connect one.';
                     emitSimOutput({ kind: 'line', level: 'error', text: '✗ Needs a "' + solverTag + '" backend (not connected).' }); this.update(); return;
                 }
@@ -1298,7 +1298,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             // e.g. coupled zoomyFoam + incompressibleVOF both on "OpenFOAM"); fall
             // back to the tag for older cases that only stored the backend.
             const c = (spec.solver.id && solvers.find(s => s.id === spec.solver.id))
-                || (spec.solver.tag && solvers.find(s => (s.requires_tag || 'numpy') === spec.solver.tag));
+                || (spec.solver.tag && solvers.find(s => this.canonTag(s.requires_tag || 'numpy') === this.canonTag(spec.solver.tag)));
             if (c) { this.selected['solvers'] = c.id; }
         }
         // Seed the selected visualization viewer (single-select).
@@ -1457,12 +1457,21 @@ export class ZoomyModelConfigWidget extends ReactWidget {
      *  the browser, always green) vs a required backend tag (green when that
      *  backend is connected) vs post-processing. Cards can override via
      *  `card.flag` ('built-in' | 'post-processing') and `card.requires_tag`. */
+    // TEMPORARY foam≡OpenFOAM alias — remove once the zoomy_openfoam container is
+    // rebuilt to report OpenFOAM. Canonicalizes foam -> OpenFOAM so an OpenFOAM-
+    // tagged card is satisfied by a connected foam backend (and vice versa). Route
+    // ALL backend tag-matching through tagMatches — don't scatter string compares.
+    protected canonTag(t: string): string { return t === 'foam' ? 'OpenFOAM' : t; }
+    protected tagMatches(requiredTag: string, connectedTags: string[]): boolean {
+        const want = this.canonTag(requiredTag);
+        return (connectedTags || []).some(t => this.canonTag(t) === want);
+    }
     protected cardFlag(card: any, dir: string, runnable: boolean): { label: string; available: boolean; tip: string } | null {
-        if (dir !== 'solvers' && dir !== 'visualizations') { return card.requires_tag ? { label: card.requires_tag, available: this.connectedTags.includes(card.requires_tag), tip: 'Needs a "' + card.requires_tag + '" backend' } : null; }
+        if (dir !== 'solvers' && dir !== 'visualizations') { return card.requires_tag ? { label: card.requires_tag, available: this.tagMatches(card.requires_tag, this.connectedTags), tip: 'Needs a "' + card.requires_tag + '" backend' } : null; }
         // Built-in: has a local template (solver) or a snippet with no remote tag (viz).
         const builtin = card.flag === 'built-in' || (card.requires_tag ? runnable : (dir === 'visualizations' ? !!card.snippet : runnable));
         if (builtin) { return { label: 'built-in', available: true, tip: 'Built in — runs in the browser (Pyodide), no backend needed.' }; }
-        if (card.requires_tag) { const ok = this.connectedTags.includes(card.requires_tag); return { label: card.requires_tag, available: ok, tip: ok ? 'Backend "' + card.requires_tag + '" connected — can run.' : 'Needs a "' + card.requires_tag + '" backend (not connected).' }; }
+        if (card.requires_tag) { const ok = this.tagMatches(card.requires_tag, this.connectedTags); return { label: card.requires_tag, available: ok, tip: ok ? 'Backend "' + card.requires_tag + '" connected — can run.' : 'Needs a "' + card.requires_tag + '" backend (not connected).' }; }
         return { label: 'post-processing', available: false, tip: 'Needs a post-processing backend (e.g. 3-D interpolation on a general mesh).' };
     }
 

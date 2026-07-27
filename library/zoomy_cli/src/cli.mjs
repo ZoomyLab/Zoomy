@@ -63,7 +63,13 @@ export class ZoomyCLI {
 
     httpFor(tag) {
         if (!tag) return null;
-        return this.http.get(tag) || null;
+        // TEMPORARY foam≡OpenFOAM alias — remove once the zoomy_openfoam container
+        // is rebuilt to report OpenFOAM. An OpenFOAM-tagged request binds to a
+        // still-foam-reporting adapter (and vice versa).
+        return this.http.get(tag)
+            || (tag === "OpenFOAM" && this.http.get("foam"))
+            || (tag === "foam" && this.http.get("OpenFOAM"))
+            || null;
     }
 
     isHttpConnected(tag) {
