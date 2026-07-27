@@ -147,7 +147,9 @@ From: ubuntu:24.04
     python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, zoomy_foam, precice; print('zoomy python layer OK')"
     python3 -c "import pytest, pytest_html; print('pytest', pytest.__version__, 'OK')"
     zoomy-server --help >/dev/null && echo "zoomy-server CLI OK"
-    rm -rf /opt/src
+    # KEEP /opt/src — the zoomy layer is installed EDITABLE (pip -e), so its
+    # packages resolve to /opt/src/<pkg>; removing it would break every import
+    # (and it is the bind-mount target for no-rebuild source updates).
     mkdir -p /workspace     # dev-container / bind target ($ZOOMY_ROOT)
 
     echo "##### STEP 7/7: env wiring + slim down"
