@@ -1308,7 +1308,22 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.postprocSteps.clear();
         if (Array.isArray(spec?.postproc)) { for (const s of spec.postproc) { this.postprocSteps.add(String(s)); } }
         if (spec?.postproc_nz) { this.postprocNz = Math.max(1, parseInt(String(spec.postproc_nz), 10) || 10); }
+        this.jumpSubsToSelectedCategory();   // show each selected card's subtab
         this.update();
+    }
+
+    /** On a case switch, jump every tab's 2nd-level subtab to the category of the
+     *  case's SELECTED card, so the selection is always visible (e.g. a coupled
+     *  solver -> the "Coupling" subtab with zoomyFoam checked, not "Built-in
+     *  (NumPy)"). Only here (applySpec, per case-open) — a manual subtab click
+     *  within a case is not disturbed. No category on the card -> leave the tab. */
+    protected jumpSubsToSelectedCategory(): void {
+        for (const dir of ['models', 'meshes', 'solvers', 'visualizations']) {
+            const sel = this.selected[dir];
+            if (!sel) { continue; }
+            const card = (this.cardsByTab[dir] || []).find((c: any) => c.id === sel);
+            if (card && card.category) { this.activeSub[dir] = card.category; }
+        }
     }
 
     // --- #6 Project persistence: a project is a ZIP of project.json + every
