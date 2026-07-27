@@ -154,16 +154,101 @@ def make_coupled_precice_config(participants, **kw):
 # assembles: participant cases as siblings under the shared coupling folder
 # (= the exchange-directory), sharing one generated precice-config.xml.
 # --------------------------------------------------------------------------- #
+def participant_coupling_spec(participants):
+    """Per participant, the preCICE coupling identity derived the SAME way as
+    :func:`make_coupled_precice_config`: the mesh it PROVIDES, the profile it
+    WRITES on that mesh (its own suffixed ``[x]_<s>``) and the profile it READS
+    (each neighbour's). Returns a list aligned with ``participants``, each
+    ``{"name","mesh","write":[...],"read":[...]}``.
+
+    This is the single source the coupling BC injection reads: the coupling comes
+    from the *config contract*, NOT from any Python model boundary condition — a
+    round-tripped GUI model (regenerated wall/wall from its card) drops its
+    hand-written ``Coupled`` BC, so the OF-case coupling must be reconstructed
+    from here instead. Mirrors the 2-participant named contracts + the N-chain."""
+    n = len(participants)
+    names = [p["name"] for p in participants]
+    types = [p.get("type", "sme") for p in participants]
+
+    def prof(suf):
+        return [f"{f}_{suf}" for f in PROFILE]
+
+    if n < 2:
+        return [{"name": names[0], "mesh": None, "write": [], "read": []}]
+    if n == 2:
+        tt = (types[0], types[1])
+        if tt == ("sme", "sme"):
+            assign = [("Mesh0", "1"), ("Mesh1", "2")]
+        elif tt == ("sme", "vof"):
+            assign = [("SweMesh", "S"), ("VofInletMesh", "V")]
+        elif tt == ("vof", "sme"):
+            assign = [("VofInletMesh", "V"), ("SweMesh", "S")]
+        else:
+            raise NotImplementedError(f"coupling spec for types {tt} not ported")
+        specs = []
+        for i, (mesh, suf) in enumerate(assign):
+            peer_suf = assign[1 - i][1]
+            specs.append({"name": names[i], "mesh": mesh,
+                          "write": prof(suf), "read": prof(peer_suf)})
+        return specs
+    # N-participant chain (SME<->VOF<->SME, ...): mesh Mesh<i>, write [x]_<i>,
+    # read each neighbour's [x]_<j>.
+    specs = []
+    for i in range(n):
+        neigh = [j for j in (i - 1, i + 1) if 0 <= j < n]
+        specs.append({"name": names[i], "mesh": f"Mesh{i}",
+                      "write": prof(str(i)),
+                      "read": [x for j in neigh for x in prof(str(j))]})
+    return specs
+
+
+def _set_controldict_key(txt, key, value):
+    """Set a top-level ``key value;`` in an OF controlDict string, replacing an
+    existing entry or appending one if absent (robust when the template lacks it,
+    e.g. a wall/wall case with no precice* keys at all)."""
+    line = f"{key} {value};"
+    pat = re.compile(rf'^\s*{re.escape(key)}\s+.*?;\s*$', re.M)
+    if pat.search(txt):
+        return pat.sub(line, txt, count=1)
+    return txt.rstrip() + "\n" + line + "\n"
+
+
+def inject_precice_controlDict(case_dir, name, mesh, write, read, config_path,
+                               zsamples=40, ghost="characteristic", hifi="yes"):
+    """Write the zoomyFoam preCICE coupling keys into ``system/controlDict`` from
+    the config-derived spec, ADDING them if the template lacks them. This is the
+    load-bearing fix: it makes the participant a coupled preCICE participant on
+    ``mesh`` regardless of what its (round-tripped, possibly wall/wall) model BC
+    says. Preserves an existing preciceZSamples/Ghost/CoupleHiFi (solver tuning);
+    always (re)writes participant/config/meshes/write/read (the model-BC-derived
+    part that a wall/wall round-trip drops)."""
+    cd = os.path.join(case_dir, "system", "controlDict")
+    txt = open(cd).read()
+    txt = _set_controldict_key(txt, "preciceParticipant", name)
+    txt = _set_controldict_key(txt, "preciceConfig", f'"{config_path}"')
+    txt = _set_controldict_key(txt, "preciceMeshes", "( " + " ".join([mesh]) + " )")
+    txt = _set_controldict_key(txt, "preciceWriteData", "( " + " ".join(write) + " )")
+    txt = _set_controldict_key(txt, "preciceReadData", "( " + " ".join(read) + " )")
+    if not re.search(r'^\s*preciceGhost\s', txt, re.M):
+        txt = _set_controldict_key(txt, "preciceGhost", ghost)
+    if not re.search(r'^\s*preciceZSamples\s', txt, re.M):
+        txt = _set_controldict_key(txt, "preciceZSamples", str(zsamples))
+    if not re.search(r'^\s*preciceCoupleHiFi\s', txt, re.M):
+        txt = _set_controldict_key(txt, "preciceCoupleHiFi", hifi)
+    open(cd, "w").write(txt)
+
+
 def build_participant_case(dest, template_case, participant_name, config_path,
-                           end_time=None):
+                           end_time=None, coupling=None):
     """Expand one participant OF case from a template (copy 0/ constant/ system/),
     rewiring its controlDict to this coupling's participant name + shared config.
 
     ``template_case`` is a ready OF participant case (the thesis
-    sme0_sme1/part1 or sme_vof/run/swe_case) — the emitters in the thesis
-    generate.py already produce exactly this (mesh + 0/ fields + controlDict with
-    precice* keys). Copying keeps the geometry/IC/ZSamples; only the participant
-    identity + config path (+ optional end_time) are rewritten."""
+    sme0_sme1/part1 or sme_vof/run/swe_case). Copying keeps the geometry/IC/
+    ZSamples. When ``coupling`` is given (a
+    :func:`participant_coupling_spec` entry) the preCICE coupling keys are
+    INJECTED from the config contract — so the case couples on ``coupling["mesh"]``
+    even if its model round-tripped to wall/wall and carries no coupling BC."""
     os.makedirs(dest, exist_ok=True)
     for sub in ("0", "constant", "system"):
         src = os.path.join(template_case, sub)
@@ -176,6 +261,9 @@ def build_participant_case(dest, template_case, participant_name, config_path,
     if end_time is not None:
         txt = re.sub(r'endTime\s+[0-9.]+;', f'endTime {end_time};', txt)
     open(cd, "w").write(txt)
+    if coupling is not None and coupling.get("mesh"):
+        inject_precice_controlDict(dest, participant_name, coupling["mesh"],
+                                   coupling["write"], coupling["read"], config_path)
     return dest
 
 
@@ -194,6 +282,7 @@ def build_coupled_bundle(coupling_dir, participants, exchange_directory=None,
     same expand + foamToVTK + vtk_to_hdf5 path, just without a peer."""
     os.makedirs(coupling_dir, exist_ok=True)
     config_path = None
+    specs = [None] * len(participants)
     if len(participants) >= 2:
         exch = exchange_directory or coupling_dir
         cfg = make_coupled_precice_config(
@@ -201,10 +290,19 @@ def build_coupled_bundle(coupling_dir, participants, exchange_directory=None,
             max_time=(end_time if end_time is not None else 30.0), **cfg_kw)
         config_path = os.path.join(coupling_dir, "precice-config.xml")
         open(config_path, "w").write(cfg)
+        # Coupling identity per participant, derived from the SAME contract as the
+        # config — injected into each OF case so coupling survives a wall/wall
+        # model round-trip (the config, not the model BC, is the source of truth).
+        specs = participant_coupling_spec(participants)
     cases = []
-    for p in participants:
+    interfaces = []
+    for p, spec in zip(participants, specs):
         case_dir = os.path.join(coupling_dir, p.get("case_name", p["name"] + "_case"))
         build_participant_case(case_dir, p["template"], p["name"], config_path or "",
-                               end_time=end_time)
+                               end_time=end_time, coupling=spec)
         cases.append((p["name"], case_dir))
-    return {"config": config_path, "cases": cases}
+        if spec and spec.get("mesh"):
+            interfaces.append({"name": p["name"], "type": p.get("type", "sme"),
+                               "mesh": spec["mesh"], "patch": "coupled",
+                               "write": spec["write"], "read": spec["read"]})
+    return {"config": config_path, "cases": cases, "interfaces": interfaces}

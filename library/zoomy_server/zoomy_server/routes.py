@@ -202,21 +202,56 @@ def create_coupling_job(req: CouplingRequest):
     import tempfile
     from zoomy_prepost.coupling import build_coupled_bundle
 
+    # The GUI "Run coupled" sends only {name,type} per participant — it has no OF
+    # template/binary. Resolve a per-TYPE compiled participant case + zoomyFoam
+    # binary from the environment (the coupling comes from the config, injected
+    # by build_coupled_bundle, so the resolved template may be a plain wall/wall
+    # case). Explicit template/binary on the participant always win.
+    participants = [dict(p) for p in req.participants]
+    for p in participants:
+        t = str(p.get("type", "sme")).upper()
+        if not p.get("template"):
+            env = os.environ.get(f"ZOOMY_COUPLING_TEMPLATE_{t}")
+            if not env:
+                raise HTTPException(
+                    400, f"participant {p.get('name')!r} has no 'template' and "
+                    f"ZOOMY_COUPLING_TEMPLATE_{t} is not set")
+            p["template"] = env
+        if not p.get("binary"):
+            p["binary"] = os.environ.get(f"ZOOMY_COUPLING_BINARY_{t}", "")
+
     coupling_dir = os.path.join(tempfile.mkdtemp(prefix="zoomy_couple_"), req.coupling_id)
     try:
-        bundle = build_coupled_bundle(coupling_dir, req.participants,
+        bundle = build_coupled_bundle(coupling_dir, participants,
                                       end_time=req.end_time, scheme=req.scheme)
     except Exception as e:
         raise HTTPException(400, f"Invalid coupling: {e}")
+
+    # Record the injected coupling interfaces (mesh + patch + exchanged profile
+    # per participant) so the run is self-describing and the coupling is explicit,
+    # not implied by a (dropped) model BC.
+    try:
+        import yaml  # optional
+        _dump = lambda d: yaml.safe_dump(d, sort_keys=False)
+    except Exception:
+        import json as _json
+        _dump = lambda d: _json.dumps(d, indent=2)
+    try:
+        with open(os.path.join(coupling_dir, "coupling.yml"), "w") as f:
+            f.write(_dump({"coupling_id": req.coupling_id, "scheme": req.scheme,
+                           "interfaces": bundle.get("interfaces", [])}))
+    except Exception:
+        pass
+
     sif = req.sif or os.environ.get("ZOOMY_OPENFOAM_SIF", "")
     out = []
-    for p, (name, case_dir) in zip(req.participants, bundle["cases"]):
+    for p, (name, case_dir) in zip(participants, bundle["cases"]):
         _write_participant_runsh(case_dir, coupling_dir, p.get("binary", ""), sif)
         out.append({"name": name, "job": jobs.submit(_adapter, case_dir),
                     "case_dir": case_dir})
     return {"coupling_id": req.coupling_id, "dir": coupling_dir,
-            "config": bundle["config"], "participants": out,
-            "jobs": [o["job"] for o in out]}
+            "config": bundle["config"], "interfaces": bundle.get("interfaces", []),
+            "participants": out, "jobs": [o["job"] for o in out]}
 
 
 @router.post("/postprocess")
