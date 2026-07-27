@@ -38,13 +38,14 @@ def header(title, desc):
             f'"description":{json.dumps(desc)}}}\n# # {title}\n#\n# {desc}\n\n')
 
 
-def sme_model_cell():
-    # PLAIN SME — card-representable (class_path + init select the SME card), so it
-    # survives the GUI load->save round-trip unchanged. Deliberately NO hand-written
-    # preCICE `Coupled` BC: the GUI regenerates the model from the card on save/submit
-    # (wall/wall), which would DROP such a BC. The coupling is instead injected into the
-    # participant's OF case from the preserved precice-config.xml + coupling.yml at run
-    # time (see zoomy_prepost.coupling.inject_precice_controlDict).
+def sme_model_cell(mesh_name):
+    # COUPLED SME arm: the preCICE `Coupled` BC on the 'coupled' patch names this
+    # participant's provide-mesh (from precice-config.xml / coupling.yml). This is
+    # FREE-FORM code relative to the SME card template, so the GUI's code<->card store
+    # (codeByCard) preserves it verbatim across save->reload — no longer regenerated
+    # wall/wall. The Coupled BC also drives create_model.py codegen
+    # (precice_patch_names{"coupled"}); the per-participant mesh/write/read keys still
+    # come from the config injection at run time (a single shared binary can't bake them).
     meta = {"role": "model", "class_path": "zoomy_core.model.models.SME",
             "init": {"level": 2, "dimension": 2}}
     return ('# %% [markdown] zoomy={"role":"heading","section":"model"}\n# ## Model\n\n'
@@ -55,34 +56,34 @@ def sme_model_cell():
             "import zoomy_core.model.initial_conditions as IC\n"
             "from zoomy_core.systemmodel import SystemModel\n"
             "\n"
-            "# Plain SME arm (wall boundaries). The coupling interface (the 'coupled'\n"
-            "# patch) gets its preCICE BC injected from the coupling config at run time,\n"
-            "# NOT from this model — a round-tripped card model is always wall/wall.\n"
-            "# A dam-break Riemann state (h: 2.0 -> 1.0 at x=5) gives the arm something to move.\n"
+            "# COUPLED SME arm. Wall on the outer boundary; a preCICE Coupled BC on the\n"
+            f'# shared interface (mesh_name "{mesh_name}" = this participant\'s provide-mesh).\n'
+            "# A dam-break Riemann state (h: 2.0 -> 1.0 at x=5) feeds the arm.\n"
             "model = SystemModel.from_model(SME(\n"
             "    level=2, dimension=2,\n"
             "    boundary_conditions=BC.BoundaryConditions([\n"
             '        BC.FromModel(tag="outer", definition="wall"),\n'
-            '        BC.FromModel(tag="coupled", definition="wall")]),\n'
+            f'        BC.Coupled(tag="coupled", mesh_name="{mesh_name}")]),\n'
             "    initial_conditions=IC.RP(\n"
             "        high=lambda n: np.array([0.0, 2.0] + [0.0] * (n - 2)),\n"
             "        low=lambda n: np.array([0.0, 1.0] + [0.0] * (n - 2)),\n"
             "        jump_position_x=5.0)))\n\n")
 
 
-def vof_model_cell():
-    # vof-openfoam card has class=None; carry an explicit card id so the GUI can
-    # still select it (applySpec falls back to spec.model.card when class_path is null).
-    # No Coupled BC here either — coupling is injected from the config at run time.
+def vof_model_cell(mesh_name):
+    # vof-openfoam card has class=None; carry an explicit card id so the GUI can still
+    # select it (applySpec falls back to spec.model.card when class_path is null). The
+    # Coupled BC is free-form code preserved by the code<->card store across round-trips.
     meta = {"role": "model", "class_path": None, "card": "vof-openfoam", "init": {}}
     return ('# %% [markdown] zoomy={"role":"heading","section":"model"}\n# ## Model\n\n'
             f'# %% zoomy={json.dumps(meta)}\n'
-            "# Incompressible Volume-of-Fluid participant (interFoam / incompressibleVoF).\n"
-            "# The VOF field + solver are configured on the OpenFOAM backend. Its coupling\n"
-            "# interface(s) to the SME neighbour(s) are injected into the OF case from the\n"
-            "# coupling config at run time (mesh/patch recorded in ../coupling.yml), so no\n"
-            "# preCICE BC is declared here (a round-tripped card model carries none).\n"
-            "vof_participant = True  # placeholder: VOF spec lives in the OpenFOAM case\n\n")
+            "import numpy as np\n"
+            "import zoomy_core.model.boundary_conditions as BC\n"
+            "\n"
+            "# COUPLED incompressible Volume-of-Fluid participant (interFoam / incompressibleVoF).\n"
+            f'# preCICE Coupled BC on the shared interface (mesh_name "{mesh_name}").\n'
+            "coupled_interfaces = BC.BoundaryConditions([\n"
+            f'    BC.Coupled(tag="coupled", mesh_name="{mesh_name}")])\n\n')
 
 
 def mesh_cell_1d():
@@ -114,50 +115,50 @@ def settings_cell(solver_id):
             f"settings = {json.dumps(st, indent=2)}\n\n")
 
 
-def sme_child(title, desc):
-    return (header(title, desc) + sme_model_cell() + mesh_cell_1d()
+def sme_child(title, desc, mesh_name):
+    return (header(title, desc) + sme_model_cell(mesh_name) + mesh_cell_1d()
             + settings_cell("solver-foam") + RUN_NOTE)
 
 
-def vof_child(title, desc):
-    return (header(title, desc) + vof_model_cell() + mesh_cell_2d()
+def vof_child(title, desc, mesh_name):
+    return (header(title, desc) + vof_model_cell(mesh_name) + mesh_cell_2d()
             + settings_cell("solver-foam-vof") + RUN_NOTE)
 
 
 # ---------------------------------------------------------------- assembly
-def build(cases_dir, name, kids):   # kids: [(child, type, py_text)]
+def build(cases_dir, name, kids):   # kids: [(child, type, title, desc)]
     import re
     from zoomy_prepost.coupling import participant_coupling_spec
     cdir = os.path.join(cases_dir, name)
-    for cn, _t, py in kids:
+    parts = [{"name": cn, "type": t} for cn, t, _ti, _de in kids]
+    specs = participant_coupling_spec(parts)          # per participant: mesh/write/read
+    cfg = make_coupled_precice_config(parts, exchange_directory=".", max_time=4.0)
+    meshes = set(re.findall(r'<mesh name="([^"]+)"', cfg))
+    # Each child's model cell carries a preCICE Coupled BC naming its provide-mesh —
+    # free-form code the GUI code<->card store preserves across save->reload.
+    for (cn, t, title, desc), s in zip(kids, specs):
+        assert s["mesh"] in meshes, f"{name}/{cn}: mesh {s['mesh']!r} not in config {sorted(meshes)}"
         d = os.path.join(cdir, cn)
         os.makedirs(d)
+        py = (sme_child if t == "sme" else vof_child)(title, desc, s["mesh"])
         with open(os.path.join(d, "case.py"), "w") as fh:
             fh.write(py)
-    parts = [{"name": cn, "type": t} for cn, t, _py in kids]
-    cfg = make_coupled_precice_config(parts, exchange_directory=".", max_time=4.0)
     with open(os.path.join(cdir, "precice-config.xml"), "w") as fh:
         fh.write(cfg)
-    # Enriched coupling.yml: record each participant's coupling INTERFACE (the
-    # mesh it provides + the 'coupled' patch + the exchanged profile) — set here at
-    # couple-time so the injection is explicit and survives a GUI load->save. The
-    # coupling comes from THIS, not from any model BC.
-    specs = participant_coupling_spec(parts)
+    # Enriched coupling.yml: record each participant's INTERFACE (provide-mesh + the
+    # 'coupled' patch + exchanged profile) so the per-participant controlDict injection
+    # (which a single shared binary can't bake) is explicit and survives a GUI round-trip.
     ym = ["# Zoomy coupling manifest", f"coupling_id: {name}",
           "scheme: parallel-explicit", f"canonical_output: {kids[0][0]}",
           "participants:"]
-    for (cn, t, _py), s in zip(kids, specs):
+    for (cn, t, _ti, _de), s in zip(kids, specs):
         ym += [f"  - name: {cn}", f"    type: {t}",
                f"    mesh: {s['mesh']}", "    patch: coupled",
                f"    write: [{', '.join(s['write'])}]",
                f"    read: [{', '.join(s['read'])}]"]
     with open(os.path.join(cdir, "coupling.yml"), "w") as fh:
         fh.write("\n".join(ym) + "\n")
-    # sanity: every participant's provide-mesh must be a mesh the config declares
-    meshes = set(re.findall(r'<mesh name="([^"]+)"', cfg))
-    for s in specs:
-        assert s["mesh"] in meshes, f"{name}/{s['name']}: mesh {s['mesh']!r} not in config {sorted(meshes)}"
-    print(f"  {name}: {[cn for cn, *_ in kids]}  meshes={sorted(meshes)}  interfaces={[(s['name'], s['mesh']) for s in specs]}")
+    print(f"  {name}: {[cn for cn, *_ in kids]}  interfaces={[(s['name'], s['mesh']) for s in specs]}")
 
 
 def main():
@@ -168,20 +169,19 @@ def main():
 
     # SME<->SME: sme_in provides Mesh0, sme_out provides Mesh1 (from the config).
     build(cases, "example_sme_sme", [
-        ("sme_in",  "sme", sme_child("sme_in (SME participant)",  "Coupled SME arm (inflow).")),
-        ("sme_out", "sme", sme_child("sme_out (SME participant)", "Coupled SME arm (outflow).")),
+        ("sme_in",  "sme", "sme_in (SME participant)",  "Coupled SME arm (inflow)."),
+        ("sme_out", "sme", "sme_out (SME participant)", "Coupled SME arm (outflow)."),
     ])
     # SME<->VOF: sme provides SweMesh, vof provides VofInletMesh.
     build(cases, "example_sme_vof", [
-        ("sme", "sme", sme_child("sme (SME participant)", "Coupled SME arm.")),
-        ("vof", "vof", vof_child("vof (VOF participant)", "Coupled incompressible VOF.")),
+        ("sme", "sme", "sme (SME participant)", "Coupled SME arm."),
+        ("vof", "vof", "vof (VOF participant)", "Coupled incompressible VOF."),
     ])
-    # SME<->VOF<->SME: sme_in->Mesh0, vof->Mesh1, sme_out->Mesh2; the middle VOF
-    # reads BOTH arms (Mesh0 + Mesh2) — recorded in coupling.yml + injected.
+    # SME<->VOF<->SME: sme_in->Mesh0, vof->Mesh1, sme_out->Mesh2 (each its provide-mesh).
     build(cases, "example_sme_vof_sme", [
-        ("sme_in",  "sme", sme_child("sme_in (SME inflow)",  "Coupled SME inflow arm.")),
-        ("vof",     "vof", vof_child("vof (VOF confluence)", "Coupled VOF, two SME interfaces.")),
-        ("sme_out", "sme", sme_child("sme_out (SME outflow)", "Coupled SME outflow arm.")),
+        ("sme_in",  "sme", "sme_in (SME inflow)",  "Coupled SME inflow arm."),
+        ("vof",     "vof", "vof (VOF confluence)", "Coupled VOF middle participant."),
+        ("sme_out", "sme", "sme_out (SME outflow)", "Coupled SME outflow arm."),
     ])
 
     with open(os.path.join(root, "project.json"), "w") as fh:

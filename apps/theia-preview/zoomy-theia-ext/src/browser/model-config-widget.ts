@@ -153,6 +153,16 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected activeParamDir: string | undefined;
     protected readonly schemas = new Map<string, any>();
     protected readonly edited = new Map<string, any>();
+    /** True code<->card map (like the old GUI): the ACTUAL code for a card, when it
+     *  differs from the card template+params (a free-form edit, e.g. a `Coupled` BC).
+     *  Populated from the parsed case.py on load/editor-edit; emitted VERBATIM by
+     *  gatherSpec so free-form code round-trips exactly instead of being regenerated
+     *  from `cardCode(template, params)`. Keyed by card id. */
+    protected readonly codeByCard = new Map<string, string>();
+    /** The case.py content we last wrote (persistCase) — the echo guard so the
+     *  active-case watcher only re-absorbs EXTERNAL (editor) edits, not our writes. */
+    protected lastWritten: string | undefined;
+    protected caseWatchStarted = false;
     // Derived governing equations per model card. We run the card's template
     // (which ends in `display(model.describe())`) and capture the display cells —
     // the same proven path as the card's Run button, so the $$-math renders as
@@ -254,6 +264,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 catch (e) { this.cardsByTab[t.dir] = []; }
             }
             this.loaded = true;
+            if (!this.caseWatchStarted) { this.caseWatchStarted = true; this.startActiveCaseWatch(); }
             await this.listCases();
             // URL-autoload: ?project=<url> ships a SET of cases (a ZIP artefact,
             // like the old GUI); ?case=<url> a single case; else restore last.
@@ -465,7 +476,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     async newCase(name: string, spec?: any): Promise<void> {
         const clean = (name || 'case').trim().replace(/[^a-zA-Z0-9_-]+/g, '_') || 'case';
         this.selected['models'] = ''; this.selected['meshes'] = ''; this.selected['solvers'] = ''; this.selected['visualizations'] = '';
-        this.edited.clear();
+        this.edited.clear(); this.codeByCard.clear();
         if (spec) { this.applySpec(spec); }
         else {
             for (const dir of ['models', 'meshes', 'solvers']) { const c = this.pickedCard(dir); if (c) { this.selected[dir] = c.id; } }
@@ -555,11 +566,6 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const content = await this.fileService.read(uri);
             this.applySpec(this.cli.parseCase(content.value));
             this.caseUri = uri; this.caseName = name;
-            // A coupling child's model + run cells are regenerated from the coupling
-            // config on export — persist on open so the on-disk case.py VISIBLY shows
-            // the Coupled BC (and Save picks it up), not the plain card model that
-            // parseCase just applied.
-            if (await this.couplingInfo(name)) { await this.persistCase(); }
             try { localStorage.setItem(CURRENT_CASE_KEY, name); } catch { /* ignore */ }
             // Single source of truth: broadcast so the left Zoomy panel highlights
             // THIS case (keeps left panel ⇄ config selection in sync after a refresh).
@@ -577,8 +583,54 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             if (!(await this.fileService.exists(dir))) { await this.fileService.createFolder(dir); }
             const spec = await this.gatherSpec();
             const py = this.cli.exportCase(spec, 'py');
+            this.lastWritten = py;   // echo guard: the watcher must ignore our own write
             await this.fileService.write(this.caseUri, py);
         } catch (e: any) { this.setNotice('Save failed: ' + (e?.message || e)); }
+    }
+
+    /** Watch the ACTIVE case.py: when it changes on disk from something OTHER than
+     *  our own persist (i.e. an editor edit), re-parse it so codeByCard absorbs the
+     *  new code — a free-form edit (e.g. adding a `Coupled` BC) then round-trips
+     *  through gatherSpec verbatim instead of being regenerated from the template. */
+    protected startActiveCaseWatch(): void {
+        this.fileService.onDidFilesChange(async event => {
+            if (!this.caseUri) { return; }
+            const target = this.caseUri.toString();
+            if (!event.changes.some(c => c.resource.toString() === target)) { return; }
+            let content: string;
+            try { content = (await this.fileService.read(this.caseUri)).value; } catch { return; }
+            if (content === this.lastWritten) { return; }   // our own persist write
+            this.applySpec(this.cli.parseCase(content));     // absorbs the edited code
+            this.update();
+        });
+    }
+
+    /** Capture each selected card's ACTUAL code as an override IN codeByCard when it
+     *  differs from the card's template+params output; drop the override when it
+     *  matches (a template-driven card whose params still drive it). Keeps free-form
+     *  code (the real code<->card map) while letting param forms regenerate. */
+    protected absorbCode(spec: any): void {
+        const pairs: Array<[string, any]> = [
+            ['models', spec?.model?.code], ['meshes', spec?.mesh?.code],
+            ['solvers', spec?.run?.code], ['visualizations', spec?.visualization?.code],
+        ];
+        const norm = (s: any) => String(s || '').replace(/\s+$/, '');
+        for (const [dir, code] of pairs) {
+            const cardId = this.selected[dir];
+            if (!cardId || code == null) { continue; }
+            const card = (this.cardsByTab[dir] || []).find(c => c.id === cardId);
+            if (!card) { continue; }
+            const template = cardCode(card, this.mergedInit(card)) || '';
+            if (norm(code) !== norm(template)) { this.codeByCard.set(cardId, String(code)); }
+            else { this.codeByCard.delete(cardId); }
+        }
+    }
+
+    /** The code emitted for a card: a stored free-form override wins; else the
+     *  card template filled with its current params. */
+    protected cardCodeFor(card: any): string {
+        if (card && this.codeByCard.has(card.id)) { return this.codeByCard.get(card.id) as string; }
+        return cardCode(card, this.mergedInit(card)) || '';
     }
     /** "Edit" on a model/mesh/solver card: flush pending edits, then open the
      *  case's case.py in the editor (auto-revealed in the Explorer). The case is
@@ -1239,12 +1291,14 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         const model = this.pickedCard('models'), mesh = this.pickedCard('meshes'), solver = this.pickedCard('solvers'), viz = this.pickedCard('visualizations');
         const spec: any = {
             meta: { title: (model?.title || 'Zoomy case'), description: 'Exported from the Zoomy model-config GUI.' },
-            model: { code: cardCode(model, this.mergedInit(model)) || '', class_path: model?.class || null, init: this.mergedInit(model), card: model?.id || null },
-            mesh: { code: cardCode(mesh, this.mergedInit(mesh)) || '', spec: this.mergedInit(mesh) },
+            model: { code: this.cardCodeFor(model), class_path: model?.class || null, init: this.mergedInit(model), card: model?.id || null },
+            mesh: { code: this.cardCodeFor(mesh), spec: this.mergedInit(mesh) },
             settings: {},
             solver: { tag: solver?.requires_tag || 'numpy', id: solver?.id || null, params: solver?.params ? this.mergedInit(solver) : {} },
         };
-        const solverCode = cardCode(solver, this.mergedInit(solver));
+        // Run cell = the solver card's stored/template code (a coupling child's coupled
+        // run note is stored here as a code override and round-trips verbatim).
+        const solverCode = this.cardCodeFor(solver);
         if (solverCode) { spec.run = { code: solverCode }; }
         // Compose EVERY checked viewer into the ## Visualization section (multi-
         // select → several plots of one run in the exported .py / .ipynb).
@@ -1258,31 +1312,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             } catch { /* skip viz */ }
         }
         if (this.postprocSteps.size) { spec.postproc = [...this.postprocSteps]; spec.postproc_nz = this.postprocNz; }
-        // Coupling child: attach the interface derived from the config so _caseCells
-        // regenerates the visible Coupled BC + coupled run note (survives round-trip).
-        const cinfo = await this.couplingInfo(this.caseName);
-        if (cinfo) { spec.coupling = cinfo; }
         return spec;
-    }
-    /** If `name` (a case relative path "<coupling>/<child>") is a coupling child,
-     *  return its coupling interface from the sibling precice-config.xml (the
-     *  participant's provide-mesh). The model's Coupled BC is ALWAYS rebuilt from
-     *  this on export, so it survives save->reload. Returns null for a flat case. */
-    protected async couplingInfo(name: string): Promise<{ mesh: string; participant: string; type: string } | null> {
-        if (!name || !name.includes('/')) { return null; }
-        const parent = name.split('/')[0];
-        const leaf = String(name.split('/').pop());
-        const cp = this.couplings.find(c => c.name === parent);
-        if (!cp || !cp.children.includes(name)) { return null; }
-        try {
-            const uri = new URI(PROJECT_ROOT + '/' + parent + '/precice-config.xml');
-            if (!(await this.fileService.exists(uri))) { return null; }
-            const xml = (await this.fileService.read(uri)).value;
-            const block = xml.match(new RegExp('<participant name="' + leaf + '">([\\s\\S]*?)</participant>'));
-            const pm = block && block[1].match(/<provide-mesh name="([^"]+)"/);
-            if (!pm) { return null; }
-            return { mesh: pm[1], participant: leaf, type: /vof/i.test(leaf) ? 'vof' : 'sme' };
-        } catch { return null; }
     }
     async exportCase(fmt: 'py' | 'ipynb'): Promise<void> {
         try {
@@ -1318,6 +1348,9 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     }
     /** Re-select the cards a spec refers to (by class_path / mesh spec / tag). */
     protected applySpec(spec: any): void {
+        // Fresh code<->card map for this case: the parsed cell code below repopulates
+        // it (a previous case's overrides must not leak into this one).
+        this.codeByCard.clear();
         const byClass = (dir: string, cls: string) => (this.cardsByTab[dir] || []).find(c => c.class === cls);
         if (spec?.model) {
             // Match by class_path (the usual case); fall back to an explicit card id
@@ -1344,6 +1377,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         this.postprocSteps.clear();
         if (Array.isArray(spec?.postproc)) { for (const s of spec.postproc) { this.postprocSteps.add(String(s)); } }
         if (spec?.postproc_nz) { this.postprocNz = Math.max(1, parseInt(String(spec.postproc_nz), 10) || 10); }
+        this.absorbCode(spec);   // capture each selected card's ACTUAL code (free-form overrides)
         this.jumpSubsToSelectedCategory();   // show each selected card's subtab
         this.update();
     }

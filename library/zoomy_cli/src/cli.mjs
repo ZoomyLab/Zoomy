@@ -601,11 +601,6 @@ export class ZoomyCLI {
         const settings = spec.settings || {}, solver = spec.solver || {};
         const viz = spec.visualization || {};
         const trim = (s) => String(s || "").replace(/\s+$/, "");
-        /* Coupling child: the participant's model + run cells are REGENERATED from
-           the coupling config (spec.coupling.mesh, derived from precice-config.xml)
-           on EVERY export, so the visible Coupled BC survives save->reload — a card
-           model always round-trips wall/wall and would otherwise drop it. */
-        const coupled = (spec.coupling && spec.coupling.mesh) ? spec.coupling : null;
         /* Option A: one merged "Solver settings" section — the backend tag is
            just an informational "backend" entry inside the settings. */
         const settingsOut = Object.assign({}, settings);
@@ -624,7 +619,7 @@ export class ZoomyCLI {
             H("model", "Model"),
             { type: "code",
               meta: { role: "model", class_path: model.class_path || null, init: model.init || {}, card: model.card || null },
-              source: coupled ? this._coupledModelCode(spec) : trim(model.code) },
+              source: trim(model.code) },
             H("mesh", "Mesh"),
             { type: "code",
               meta: { role: "mesh", spec: mesh.spec || null },
@@ -638,7 +633,7 @@ export class ZoomyCLI {
                (JupyterLite, container JupyterLab, local env). */
             H("run", "Run"),
             { type: "code", meta: { role: "run" },
-              source: coupled ? this._coupledRunNote() : ((spec.run && spec.run.code) || this._runCode()) },
+              source: (spec.run && spec.run.code) || this._runCode() },
         ];
         /* Visualization is ALWAYS attached: the selected viz card's code
            (with the notebook prelude) when provided, else the generated
@@ -737,65 +732,6 @@ export class ZoomyCLI {
     }
 
     /** Generated in-process runner (mirrors zoomy_prepost.case._run_code). */
-    /** Model cell for a COUPLING CHILD — regenerated from the coupling config so
-     *  the preCICE `Coupled` BC is VISIBLE and survives save->reload (a plain card
-     *  model always round-trips wall/wall). `spec.coupling` = {mesh, participant,
-     *  type}, derived from the sibling precice-config.xml by gatherSpec. */
-    _coupledModelCode(spec) {
-        const c = spec.coupling || {}, model = spec.model || {}, init = model.init || {};
-        const mesh = c.mesh;
-        const isVof = (c.type === "vof") || (!model.class_path && model.card === "vof-openfoam");
-        if (isVof) {
-            return [
-                "import numpy as np",
-                "import zoomy_core.model.boundary_conditions as BC",
-                "",
-                "# COUPLED incompressible VOF participant. The preCICE Coupled BC",
-                "# (mesh_name \"" + mesh + "\") is regenerated from the coupling config",
-                "# (../precice-config.xml) on EVERY export, so it survives save -> reload.",
-                "coupled_interfaces = BC.BoundaryConditions([",
-                "    BC.Coupled(tag=\"coupled\", mesh_name=\"" + mesh + "\")])",
-            ].join("\n");
-        }
-        const level = (init.level != null) ? init.level : 2;
-        const dim = (init.dimension != null) ? init.dimension : 2;
-        return [
-            "import numpy as np",
-            "from zoomy_core.model.models import SME",
-            "import zoomy_core.model.boundary_conditions as BC",
-            "import zoomy_core.model.initial_conditions as IC",
-            "from zoomy_core.systemmodel import SystemModel",
-            "",
-            "# COUPLED SME participant. The preCICE Coupled BC (mesh_name \"" + mesh + "\")",
-            "# is regenerated from the coupling config (../precice-config.xml) on EVERY",
-            "# export, so it survives save -> reload. Wall on the outer boundary; a",
-            "# dam-break Riemann state (h: 2.0 -> 1.0 at x=5) feeds the arm.",
-            "model = SystemModel.from_model(SME(",
-            "    level=" + level + ", dimension=" + dim + ",",
-            "    boundary_conditions=BC.BoundaryConditions([",
-            "        BC.FromModel(tag=\"outer\", definition=\"wall\"),",
-            "        BC.Coupled(tag=\"coupled\", mesh_name=\"" + mesh + "\")]),",
-            "    initial_conditions=IC.RP(",
-            "        high=lambda n: np.array([0.0, 2.0] + [0.0] * (n - 2)),",
-            "        low=lambda n: np.array([0.0, 1.0] + [0.0] * (n - 2)),",
-            "        jump_position_x=5.0)))",
-        ].join("\n");
-    }
-
-    /** Run cell for a COUPLED participant — a note, NOT the in-process numpy solver.
-     *  The whole coupling is launched from the parent folder's "Run coupled". */
-    _coupledRunNote() {
-        return [
-            "# COUPLED PARTICIPANT — do not run standalone. Launch the whole coupling",
-            "# from the parent folder's \"Run coupled\" (OpenFOAM backend + preCICE):",
-            "# every participant starts together, shares the coupling folder (the preCICE",
-            "# exchange-directory) and they find each other over sockets. Running this",
-            "# case alone is gated on a connected OpenFOAM backend (the selected solver is",
-            "# zoomyFoam / incompressibleVOF, not numpy) — it is NOT a local numpy run.",
-            "pass",
-        ].join("\n");
-    }
-
     _runCode() {
         return [
             "# Runs IN-PROCESS with the numpy solver (no server needed) — works in",
