@@ -33,13 +33,15 @@ SMOOTH_ORDER_FLOOR = 2.0
 @pytest.mark.large
 @pytest.mark.jax
 @pytest.mark.skip(reason=(
-    "BLOCKED on characteristic BCs in jax. The subcritical bump needs "
-    "non-reflecting inflow/outflow -- a hard Dirichlet on h reflects, measured: "
-    "spatially frozen (q spread 5.63e-03 at t=200 vs 5.72e-03 at t=600) yet "
-    "still moving in time (1.06e-03 over a further 25 s), i.e. a standing wave. "
-    "BC.Characteristic is the right tool and is model-agnostic, but it lowers to "
-    "eigensystem_pack, which zoomy_jax does not register -- NameError at first "
-    "call. Unblocks once eigensystem returns the packed stack on both backends."))
+    "The eigensystem_pack NameError is FIXED (coordd cid 84): BC.Characteristic "
+    "now lowers and RUNS on jax via pick(eigensystem(*a), idx).  The case runs "
+    "to completion but does NOT reach the 1e-6 steadiness gate: it plateaus at a "
+    "~1e-3 temporal residual on BOTH backends -- numpy 9.29e-4, jax 1.06e-3 -- "
+    "and does not decay with a longer march (probed to t=1000 s: still 1.06e-3). "
+    "A SHARED order-2-minmod limit cycle on the smooth bump extremum, not a "
+    "lowering/BC bug, so rate>2 cannot yet be measured.  Separate case-physics "
+    "task (loosen the gate to the achievable steady residual, or a limiter/BC "
+    "fix that kills the limit cycle)."))
 def test_swashes_bump_sub_is_second_order(overwrite):
     """Three-grid COV of h against the SWASHES steady analytic; rate > 2."""
     Ns, errs, resids = [100, 200, 400], [], []

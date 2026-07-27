@@ -18,7 +18,8 @@ import pytest
 pytest.importorskip("jax")
 import jax.numpy as jnp
 
-from zoomy_jax.fvm.userfunctions import jax_userfunctions, eigensystem, solve
+from zoomy_jax.fvm.userfunctions import (
+    jax_userfunctions, eigensystem, eigenvalues, solve, pick)
 from zoomy_jax.transformation.jax_runtime import _jax_module_base
 from zoomy_jax.transformation.to_jax import JaxRuntimeModel, JaxRuntimeSymbolic
 
@@ -54,53 +55,58 @@ def test_userfunctions_table_supplies_every_kernel(table, name):
 
 @pytest.mark.jax
 def test_eigensystem_matches_numpy_scalar_and_batched():
-    """eigensystem(idx, *A_flat) -> idx-th of [lambda(n), R(n*n), L(n*n)]."""
+    """eigensystem(*A_flat) -> the FULL packed [lambda(n), R(n*n), L(n*n)];
+    component access is pick(eigensystem(*a), idx)."""
     rng = np.random.default_rng(1)
     A = rng.standard_normal((3, 3))
-    lam = np.array([float(eigensystem(i, *[float(x) for x in A.reshape(-1)]))
-                    for i in range(3)])
+    stack = np.asarray(eigensystem(*[float(x) for x in A.reshape(-1)]))
+    assert stack.shape == (3 + 2 * 3 * 3,)
+    lam = stack[:3]
     assert np.allclose(np.sort(lam), np.sort(np.real(np.linalg.eigvals(A))), atol=1e-10)
+    # pick reads a component of the packed stack (== trailing-axis index)
+    assert np.allclose(float(pick(eigensystem(*[float(x) for x in A.reshape(-1)]), 0)),
+                       stack[0])
 
     Ab = rng.standard_normal((4, 2, 2))                      # batched over faces
     flat = [jnp.asarray(Ab[:, i, j]) for i in range(2) for j in range(2)]
-    lam_b = np.stack([np.asarray(eigensystem(i, *flat)) for i in range(2)], axis=-1)
+    lam_b = np.asarray(eigensystem(*flat))[..., :2]          # (4, 2) eigenvalues
     ref = np.sort(np.real(np.linalg.eigvals(Ab)), axis=-1)
     assert np.allclose(np.sort(lam_b, axis=-1), ref, atol=1e-10)
 
 
 @pytest.mark.jax
 def test_solve_matches_numpy_batched():
-    """solve(idx, *A_flat, *b) -> idx-th component of A^-1 b, batched (REQ-68)."""
+    """solve(*A_flat, *b) -> the whole A^-1 b vector, batched (REQ-68);
+    component access is pick(solve(*a), idx)."""
     rng = np.random.default_rng(2)
     nc, n = 5, 3
     A = rng.standard_normal((nc, n, n)) + n * np.eye(n)
     b = rng.standard_normal((nc, n))
     args = [jnp.asarray(A[:, i, j]) for i in range(n) for j in range(n)] + \
            [jnp.asarray(b[:, i]) for i in range(n)]
-    x = np.stack([np.asarray(solve(i, *args)) for i in range(n)], axis=-1)
+    x = np.asarray(solve(*args))                             # (nc, n)
     assert np.allclose(x, np.linalg.solve(A, b[..., None])[..., 0], atol=1e-10)
+    assert np.allclose(np.asarray(pick(solve(*args), 1)), x[..., 1], atol=1e-10)
 
 
 @pytest.mark.jax
 def test_eigenvalues_lambda_only_matches_numpy():
-    """REQ-168 GAP 1: the λ-only kernel — idx-th eigenvalue (real part).
+    """REQ-168 GAP 1: the λ-only kernel — the whole spectrum vector.
 
     Must agree with numpy's spectrum, scalar and batched.  Unlike `eigensystem`
     this lowers to `jnp.linalg.eigvals` directly (no pure_callback), so it stays
     inside the jit — the wave speed is evaluated every step inside the fused
     while_loop and a host round-trip there would collapse the fusion.
     """
-    from zoomy_jax.fvm.userfunctions import eigenvalues
     rng = np.random.default_rng(3)
 
     A = rng.standard_normal((3, 3))
-    lam = np.array([float(eigenvalues(i, *[float(x) for x in A.reshape(-1)]))
-                    for i in range(3)])
+    lam = np.asarray(eigenvalues(*[float(x) for x in A.reshape(-1)]))
     assert np.allclose(np.sort(lam), np.sort(np.real(np.linalg.eigvals(A))), atol=1e-10)
 
     Ab = rng.standard_normal((5, 2, 2))                    # batched over faces
     flat = [jnp.asarray(Ab[:, i, j]) for i in range(2) for j in range(2)]
-    lam_b = np.stack([np.asarray(eigenvalues(i, *flat)) for i in range(2)], axis=-1)
+    lam_b = np.asarray(eigenvalues(*flat))                 # (5, 2)
     ref = np.sort(np.real(np.linalg.eigvals(Ab)), axis=-1)
     assert np.allclose(np.sort(lam_b, axis=-1), ref, atol=1e-10)
 

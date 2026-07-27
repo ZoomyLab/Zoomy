@@ -14,12 +14,16 @@ Kernels
 the solver injects the mesh-bound impl (``lsq_gradient_per_field``) before the
 ``update_aux_variables`` slot is lambdified (mirrors numpy).
 
-``eigensystem(idx, *A_flat)`` — idx-th of the flat stack ``[λ(n), R(n·n),
-L=R⁻¹(n·n)]`` of the row-major matrix ``A``.  Consumed by ``NonconservativeRoe``
-and (once core lands REQ-168 GAP 1) by ``local_max_abs_eigenvalue``.
+``eigensystem(*A_flat)`` — the FULL packed stack ``[λ(n), R(n·n), L=R⁻¹(n·n)]``
+of the row-major matrix ``A``.  Component access is ``pick(eigensystem(*a),
+idx)`` — the canonical form the producers emit, cse-hoisted to ONE call per
+face.  Consumed by ``NonconservativeRoe`` and the characteristic BCs.
 
-``solve(idx, *args)`` — idx-th component of the per-cell linear solve ``A⁻¹b``
-(``args`` = row-major ``A`` (n·n) then ``b`` (n)); REQ-68.
+``solve(*args)`` — the per-cell linear solve ``A⁻¹b`` (whole vector; ``args`` =
+row-major ``A`` (n·n) then ``b`` (n)); component access ``pick(solve(*a),
+idx)``.  REQ-68.
+
+``pick(packed, idx)`` — trailing-axis index read of a packed kernel result.
 
 ⚠ PERFORMANCE / AD CAVEAT (REQ-168, jax): ``jnp.linalg.eig`` is CPU-only, so
 ``eigensystem`` here routes through ``jax.pure_callback`` — a HOST round-trip.
@@ -37,7 +41,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-__all__ = ["eigensystem", "eigenvalues", "solve", "newton_solve",
+__all__ = ["eigensystem", "eigenvalues", "solve", "pick", "newton_solve",
            "solve_steady_ode", "jax_userfunctions"]
 
 
@@ -87,8 +91,9 @@ def solve_steady_ode(slope, U0, ds, n_iter=8):
 
 
 # ── eigenvalues (λ-only; REQ-168 GAP 1) ──────────────────────────────────────
-def eigenvalues(idx, *a_flat):
-    """idx-th eigenvalue (real part) of the row-major ``n×n`` ``A_flat``.
+def eigenvalues(*a_flat):
+    """The λ-only spectrum vector ``(…, n)`` (real part) of the row-major
+    ``n×n`` ``A_flat``.  Component access is ``pick(eigenvalues(*a), idx)``.
 
     The λ-only companion of :func:`eigensystem`, for the wave-speed / CFL bound
     ``max|λ_i(A_n)|`` when the model has no closed-form spectrum (SME / VAM).
@@ -109,7 +114,7 @@ def eigenvalues(idx, *a_flat):
     n = int(round(len(a_flat) ** 0.5))
     cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
     A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
-    return jnp.real(jnp.linalg.eigvals(A))[..., idx]
+    return jnp.real(jnp.linalg.eigvals(A))
 
 
 # ── eigensystem ──────────────────────────────────────────────────────────────
@@ -129,8 +134,9 @@ def _eig_host(A):
     )
 
 
-def eigensystem(idx, *a_flat):
-    """idx-th component of ``[λ(n), R(n·n), L(n·n)]`` for row-major ``A``.
+def eigensystem(*a_flat):
+    """The FULL packed stack ``[λ(n), R(n·n), L(n·n)]`` (length ``n+2n²``) for
+    row-major ``A``.  Component access is ``pick(eigensystem(*a), idx)``.
 
     Batched: each arg may be a scalar or a ``(n_faces,)`` array (broadcast).
     Routes through ``pure_callback`` because ``jnp.linalg.eig`` is CPU-only —
@@ -139,25 +145,34 @@ def eigensystem(idx, *a_flat):
     cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
     A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
     out = jax.ShapeDtypeStruct(A.shape[:-2] + (n + 2 * n * n,), A.dtype)
-    stack = jax.pure_callback(_eig_host, out, A, vmap_method="broadcast_all")
-    return stack[..., idx]
+    return jax.pure_callback(_eig_host, out, A, vmap_method="broadcast_all")
 
 
 # ── solve (REQ-68) ───────────────────────────────────────────────────────────
-def solve(idx, *args):
-    """idx-th component of the per-cell linear solve ``A⁻¹b``.
+def solve(*args):
+    """The per-cell linear solve ``A⁻¹b`` (whole vector ``(…, n)``).
 
     ``args`` = row-major ``A`` (n·n) followed by ``b`` (n); ``n`` inferred from
     ``n·n + n``.  Batched over the grid (each arg scalar or ``(n_cells,)``), so
-    the NSM point-implicit source lowers to ONE batched solve.  On-device
-    (``jnp.linalg.solve``) — no callback, jit/vmap/AD-safe."""
+    the NSM point-implicit source lowers to ONE batched solve; component access
+    is ``pick(solve(*a), idx)``.  On-device (``jnp.linalg.solve``) — no
+    callback, jit/vmap/AD-safe."""
     m = len(args)
     n = int(round((-1.0 + (1.0 + 4.0 * m) ** 0.5) / 2.0))
     cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in args])
     batch = cols[0].shape
     A = jnp.stack(cols[: n * n], axis=-1).reshape(batch + (n, n))
     b = jnp.stack(cols[n * n:], axis=-1).reshape(batch + (n,))
-    return jnp.linalg.solve(A, b[..., None])[..., 0][..., idx]
+    return jnp.linalg.solve(A, b[..., None])[..., 0]
+
+
+# ── pick (component read of a packed kernel result) ──────────────────────────
+def pick(packed, idx):
+    """The ``idx``-th component of a packed opaque-kernel result
+    (:func:`eigensystem` / :func:`eigenvalues` / :func:`solve`).  Trailing-axis
+    index read — the producers emit ``pick(K(*a), idx)`` against ONE cse-hoisted
+    ``K(*a)`` node so each face runs ONE decomposition / solve."""
+    return packed[..., int(idx)]
 
 
 # ── the table ────────────────────────────────────────────────────────────────
@@ -177,6 +192,8 @@ def jax_userfunctions() -> dict:
         "eigensystem": eigensystem,
         "eigenvalues": eigenvalues,
         "solve": solve,
+        # component read of a packed kernel result (canonical pick(K(*a), idx))
+        "pick": pick,
         # higher-order root-find (reconstruction supplies the residual callable
         # — NOT a lambdify-lowered REQUIRED_KERNEL, like the numpy table's)
         "newton_solve": newton_solve,
