@@ -456,9 +456,9 @@ export class ZoomyCLI {
      *  exchange-directory). Returns the child job ids. */
     async submitCoupling(options) {
         options = options || {};
-        const a = this.httpFor(options.tag || "foam");
+        const a = this.httpFor(options.tag || "OpenFOAM");
         if (!a || !a.isConnected()) {
-            throw new Error("submitCoupling: backend '" + (options.tag || "foam") + "' not connected");
+            throw new Error("submitCoupling: backend '" + (options.tag || "OpenFOAM") + "' not connected");
         }
         return await a.runCoupling({
             coupling_id: options.coupling_id,
@@ -600,7 +600,7 @@ export class ZoomyCLI {
         const settingsOut = Object.assign({}, settings);
         if (solver.tag && settingsOut.backend === undefined) settingsOut.backend = solver.tag;
         // Carry the solver card id too: several solvers can share one backend tag
-        // (e.g. the coupled zoomyFoam + incompressibleVOF both run on "foam"), so
+        // (e.g. the coupled zoomyFoam + incompressibleVOF both run on "OpenFOAM"), so
         // the tag alone can't restore WHICH one a case selected.
         if (solver.id && settingsOut.solver_id === undefined) settingsOut.solver_id = solver.id;
         let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");

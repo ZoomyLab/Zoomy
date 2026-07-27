@@ -439,8 +439,8 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     async runCoupling(name: string): Promise<void> {
         const cp = this.couplings.find(c => c.name === name);
         if (!cp || cp.children.length < 2) { this.setNotice('Coupling "' + name + '" needs at least 2 participants.'); return; }
-        if (!this.connectedTags.includes('foam')) {
-            this.setNotice('Connect a "foam" backend to run the coupling "' + name + '" — all its participants run there (use the ↻ scan / Connect backend).');
+        if (!this.connectedTags.includes('OpenFOAM')) {
+            this.setNotice('Connect a "OpenFOAM" backend to run the coupling "' + name + '" — all its participants run there (use the ↻ scan / Connect backend).');
             return;
         }
         this.simPanel?.reveal();
@@ -450,7 +450,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                 const leaf = String(child.split('/').pop());
                 return { name: leaf, type: /vof/i.test(leaf) ? 'vof' : 'sme' };
             });
-            const res = await this.cli.submitCoupling({ tag: 'foam', coupling_id: name, scheme: 'parallel-explicit', participants,
+            const res = await this.cli.submitCoupling({ tag: 'OpenFOAM', coupling_id: name, scheme: 'parallel-explicit', participants,
                 onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
             emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Coupling "' + name + '" submitted — ' + ((res?.jobs || []).length) + ' participant job(s) on foam.' });
             this.setNotice('Coupling "' + name + '" running on the foam backend.');
@@ -1295,7 +1295,7 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         if (spec?.solver) {
             const solvers = this.cardsByTab['solvers'] || [];
             // Prefer the exact card id (several solvers can share a backend tag,
-            // e.g. coupled zoomyFoam + incompressibleVOF both on "foam"); fall
+            // e.g. coupled zoomyFoam + incompressibleVOF both on "OpenFOAM"); fall
             // back to the tag for older cases that only stored the backend.
             const c = (spec.solver.id && solvers.find(s => s.id === spec.solver.id))
                 || (spec.solver.tag && solvers.find(s => (s.requires_tag || 'numpy') === spec.solver.tag));

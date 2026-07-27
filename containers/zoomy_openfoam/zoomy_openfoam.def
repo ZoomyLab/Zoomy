@@ -23,7 +23,7 @@ From: ubuntu:24.04
 
     This image is ALSO a normal Zoomy backend (like zoomy_numpy): it bakes the
     python solver stack (zoomy_core/server/prepost/plotting/foam) and serves the
-    FastAPI job API with ZOOMY_ADAPTER=foam, so a coupled SME<->VOF case runs
+    FastAPI job API with ZOOMY_ADAPTER=OpenFOAM, so a coupled SME<->VOF case runs
     end-to-end INSIDE one container — it emits the model, wmakes zoomyFoam on
     demand, and runs both preCICE participants locally (no pre-baked binaries).
 
@@ -52,7 +52,7 @@ From: ubuntu:24.04
 %environment
     export LC_ALL=C
     # Normal-backend wiring (mirrors zoomy_numpy): default adapter + API port.
-    export ZOOMY_ADAPTER=foam
+    export ZOOMY_ADAPTER=OpenFOAM
     export ZOOMY_PORT=8080
     export ZOOMY_ROOT=/workspace
     # OpenFOAM 13 environment (Foundation). Sourced for every `apptainer exec/run`

@@ -220,7 +220,7 @@
     "id": "solver-foam",
     "title": "zoomyFoam (SME)",
     "description": "OpenFOAM+preCICE **SME participant** (zoomyFoam). Emits the SME(level) model, builds the zoomyFoam binary, and runs it as ONE preCICE participant. Put it in a case folder to be an SME side of a coupling: pair two zoomyFoam cases for **SME ↔ SME**, or one zoomyFoam + one incompressibleVOF for **SME ↔ VOF**. Runs on the foam backend (`oras://ghcr.io/zoomylab/zoomy_openfoam_sif:latest`).",
-    "requires_tag": "foam",
+    "requires_tag": "OpenFOAM",
     "params": {
       "time_end": 4
     },
@@ -230,7 +230,7 @@
     "id": "solver-foam-vof",
     "title": "incompressibleVOF (OpenFOAM)",
     "description": "OpenFOAM+preCICE **VOF participant** (`foamRun` solver `incompressibleVoF`). Runs a resolved incompressible Volume-of-Fluid case as ONE preCICE participant, coupled at the interface. Pair with a zoomyFoam case for an **SME ↔ VOF** run. Runs on the same foam backend (`oras://ghcr.io/zoomylab/zoomy_openfoam_sif:latest`).",
-    "requires_tag": "foam",
+    "requires_tag": "OpenFOAM",
     "params": {
       "time_end": 4
     },

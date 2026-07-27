@@ -34,7 +34,7 @@ def in_container():
 
 
 class FoamAdapter(SolverAdapter):
-    tag = "foam"
+    tag = "OpenFOAM"
 
     def solve(self, case_dir, output_dir, on_progress):
         # Generic runner: a composed case carries its own run.py — execute THAT.
