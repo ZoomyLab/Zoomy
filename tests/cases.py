@@ -39,7 +39,12 @@ SWASHES_T_END = 6.0
 BUMP_SUB_DOMAIN = (0.0, 25.0)
 BUMP_SUB_Q = 4.42          # m^2/s, imposed upstream (table q, constant)
 BUMP_SUB_H = 2.0           # m, imposed downstream (h + z = 2, z = 0 there)
-BUMP_SUB_T_END = 200.0
+#: March to genuine steady state.  With the ``venkatakrishnan`` limiter the
+#: temporal residual DECAYS (not a minmod limit cycle): measured at N=100,
+#: resid 1.63e-6 @ t=200, 5.80e-10 @ t=300, 1.58e-12 @ t=400 — so t=300
+#: settles it three orders below the 1e-6 gate while L1 is already frozen at
+#: 6.5555e-4.  Marching to steadiness, NOT loosening the gate (cid 154).
+BUMP_SUB_T_END = 300.0
 #: Extra march used to VERIFY steadiness: the state must not move over it.
 BUMP_SUB_T_SETTLE = 25.0
 

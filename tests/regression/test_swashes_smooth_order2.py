@@ -32,18 +32,20 @@ SMOOTH_ORDER_FLOOR = 2.0
 @pytest.mark.regression
 @pytest.mark.large
 @pytest.mark.jax
-@pytest.mark.skip(reason=(
-    "The eigensystem_pack NameError is FIXED (coordd cid 84): BC.Characteristic "
-    "now lowers and RUNS on jax via pick(eigensystem(*a), idx).  The case runs "
-    "to completion but does NOT reach the 1e-6 steadiness gate: it plateaus at a "
-    "~1e-3 temporal residual on BOTH backends -- numpy 9.29e-4, jax 1.06e-3 -- "
-    "and does not decay with a longer march (probed to t=1000 s: still 1.06e-3). "
-    "A SHARED order-2-minmod limit cycle on the smooth bump extremum, not a "
-    "lowering/BC bug, so rate>2 cannot yet be measured.  Separate case-physics "
-    "task (loosen the gate to the achievable steady residual, or a limiter/BC "
-    "fix that kills the limit cycle)."))
 def test_swashes_bump_sub_is_second_order(overwrite):
-    """Three-grid COV of h against the SWASHES steady analytic; rate > 2."""
+    """Three-grid COV of h against the SWASHES steady analytic; rate > 2.
+
+    THE LIMITER IS ``venkatakrishnan``, not ``minmod`` (cid 154).  minmod
+    clips the smooth bump EXTREMUM to first order, which set up a shared
+    order-2 limit cycle on it: the state never reached the 1e-6 steadiness
+    gate on either backend (numpy 9.29e-4, jax 1.06e-3, t_end-independent
+    even probed to t=1000 s), so no rate could be fitted.  The smooth,
+    differentiable ``venkatakrishnan`` limiter does not clip the extremum,
+    breaks the limit cycle, and the march settles below the steadiness gate
+    and delivers clean second order.  ``BC.Characteristic`` (the subcritical
+    pair: discharge imposed upstream, depth downstream) is unchanged — a full
+    far-field target is the wrong physics for a subcritical bump.
+    """
     Ns, errs, resids = [100, 200, 400], [], []
     t0 = time.perf_counter()
     for n in Ns:
@@ -51,7 +53,8 @@ def test_swashes_bump_sub_is_second_order(overwrite):
         sm = SystemModel.from_model(model)
         sm.initial_conditions = IC.UserFunction(function=bump_sub_ic)
         nsm = NumericalSystemModel.from_system_model(
-            sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+            sm, reconstruction=ReconstructionSpec(
+                order=2, limiter="venkatakrishnan"))
         if n == Ns[0]:
             print(describe(nsm))
         set_state_width(nsm)
