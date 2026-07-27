@@ -136,27 +136,56 @@ class CouplingRequest(BaseModel):
     participants: list                   # [{name,type,template,binary}, ...]
 
 
+#: post-solve OF -> zoomy HDF5: reuse zoomy_prepost.vtk_to_hdf5 on the foamToVTK
+#: internal-field series (skip the raw t=0 dump, whose field set differs). Writes
+#: <case>/simulation.h5, which _promote_foam_h5 then serves as the result store.
+_VTK_TO_H5 = (
+    "import sys, glob, os\n"
+    "from zoomy_prepost import vtk_to_hdf5\n"
+    "case = sys.argv[1]; name = os.path.basename(case)\n"
+    "vtks = sorted(glob.glob(os.path.join(case, 'VTK', name + '_*.vtk')),\n"
+    "              key=lambda p: int(p.rsplit('_', 1)[1].split('.')[0]))\n"
+    "frames = vtks[1:] if len(vtks) > 1 else vtks\n"
+    "if frames:\n"
+    "    vtk_to_hdf5(frames, os.path.join(case, 'simulation.h5'))\n"
+    "    print('wrote', os.path.join(case, 'simulation.h5'))\n"
+    "else:\n"
+    "    print('no VTK frames to convert')\n"
+)
+
+
 def _write_participant_runsh(case_dir, coupling_dir, binary, sif):
     """run.sh the foam adapter executes for this participant: launch its
     zoomyFoam/foamRun binary in-container (foamRun on PATH) or via apptainer,
-    sharing the coupling folder so preCICE participants find each other."""
+    sharing the coupling folder so preCICE participants find each other; then
+    foamToVTK -> zoomy_prepost.vtk_to_hdf5 to emit <case>/simulation.h5."""
     import os
+    # solve + foamToVTK in the SAME OF context (in-container or via apptainer).
     inner = (f"source /opt/openfoam13/etc/bashrc; unset FOAM_SIGFPE FOAM_SETNAN; "
-             f"'{binary}' -case '{case_dir}'")
+             f"'{binary}' -case '{case_dir}'; foamToVTK -case '{case_dir}'")
     lines = [
         "#!/bin/bash",
         "set +e; source /opt/openfoam13/etc/bashrc 2>/dev/null; set -e",
         "unset FOAM_SIGFPE FOAM_SETNAN",
         "if command -v foamRun >/dev/null 2>&1; then",
         f"  '{binary}' -case '{case_dir}'",
+        f"  foamToVTK -case '{case_dir}'",
         "else",
         f'  apptainer exec --bind "{coupling_dir}" "{sif}" bash -lc "{inner}"',
         "fi",
+        "# OF VTK -> zoomy HDF5 (host python has zoomy_prepost + meshio)",
+        f'"${{ZOOMY_PY:-python3}}" -c "$VTK_TO_H5" \'{case_dir}\' || true',
     ]
     p = os.path.join(case_dir, "run.sh")
     with open(p, "w") as f:
+        f.write("VTK_TO_H5=" + _shquote(_VTK_TO_H5) + "\n")
         f.write("\n".join(lines) + "\n")
     os.chmod(p, 0o755)
+
+
+def _shquote(s):
+    """Single-quote a string for safe embedding in the run.sh."""
+    return "'" + s.replace("'", "'\\''") + "'"
 
 
 @router.post("/couple")
