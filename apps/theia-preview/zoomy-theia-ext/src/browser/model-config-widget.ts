@@ -201,6 +201,10 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     protected caseUri: URI | undefined;
     caseName = '';
     cases: string[] = [];
+    /** Coupling folders: a parent (has coupling.yml) with its child cases, whose
+     *  names are relative paths "<parent>/<child>" (they appear in `cases` too). */
+    couplings: Array<{ name: string; children: string[] }> = [];
+    protected static readonly COUPLING_MANIFEST = 'coupling.yml';
     protected newCaseName = '';
     protected persistTimer: any;
     /** External hook so the module can reflect connected backends in the status bar. */
@@ -281,19 +285,101 @@ export class ZoomyModelConfigWidget extends ReactWidget {
     // === Case as the single source of truth =================================
     protected caseFileUri(name: string): URI { return new URI(PROJECT_ROOT + '/' + name + '/case.py'); }
 
-    /** List case folders under the project root (each has a case.py). */
+    /** List case folders under the project root. A leaf case has a case.py; a
+     *  coupling folder has coupling.yml and holds child cases one level down
+     *  (their names are the relative paths "<parent>/<child>", so caseFileUri
+     *  and openCaseByName keep working unchanged). */
     protected async listCases(): Promise<void> {
         try {
             const root = new URI(PROJECT_ROOT);
-            if (!(await this.fileService.exists(root))) { this.cases = []; return; }
+            if (!(await this.fileService.exists(root))) { this.cases = []; this.couplings = []; return; }
             const stat = await this.fileService.resolve(root);
-            const names: string[] = [];
+            const leaves: string[] = [];
+            const couplings: Array<{ name: string; children: string[] }> = [];
             for (const child of stat.children || []) {
-                if (child.isDirectory && await this.fileService.exists(child.resource.resolve('case.py'))) { names.push(child.resource.path.base); }
+                if (!child.isDirectory) { continue; }
+                const base = child.resource.path.base;
+                if (await this.fileService.exists(child.resource.resolve('case.py'))) {
+                    leaves.push(base);
+                } else if (await this.fileService.exists(child.resource.resolve(ZoomyModelConfigWidget.COUPLING_MANIFEST))) {
+                    const sub = await this.fileService.resolve(child.resource);
+                    const kids: string[] = [];
+                    for (const g of sub.children || []) {
+                        if (g.isDirectory && await this.fileService.exists(g.resource.resolve('case.py'))) { kids.push(base + '/' + g.resource.path.base); }
+                    }
+                    couplings.push({ name: base, children: kids.sort() });
+                    leaves.push(...kids);
+                }
             }
-            this.cases = names.sort();
-        } catch { this.cases = []; }
+            this.cases = leaves.sort();
+            this.couplings = couplings.sort((a, b) => a.name.localeCompare(b.name));
+        } catch { this.cases = []; this.couplings = []; }
         emitCasesChanged();
+    }
+
+    /** True when a case name is a coupled child (relative path "<parent>/<child>"). */
+    isCoupledChild(name: string): boolean { return name.includes('/'); }
+
+    /** Form a coupling from ≥2 top-level cases: create cases/<coupling>/, move each
+     *  selected case in as a child, and write the manifest + a placeholder
+     *  precice-config.xml one layer above the children (preCICE's expectation). */
+    async coupleCases(names: string[]): Promise<void> {
+        const kids = [...new Set(names)].filter(n => !this.isCoupledChild(n));
+        if (kids.length < 2) { return; }
+        const taken = new Set([...this.cases.map(c => c.split('/')[0]), ...this.couplings.map(c => c.name)]);
+        let cname = 'coupled'; let i = 2;
+        while (taken.has(cname)) { cname = 'coupled_' + i; i++; }
+        const root = new URI(PROJECT_ROOT);
+        const parent = root.resolve(cname);
+        try {
+            await this.fileService.createFolder(parent);
+            for (const n of kids) { await this.fileService.move(root.resolve(n), parent.resolve(n), { overwrite: false }); }
+            await this.fileService.createFile(parent.resolve(ZoomyModelConfigWidget.COUPLING_MANIFEST),
+                BinaryBuffer.fromString(this.couplingManifest(cname, kids)), { overwrite: true });
+            await this.fileService.createFile(parent.resolve('precice-config.xml'),
+                BinaryBuffer.fromString(this.placeholderPreciceConfig(kids)), { overwrite: true });
+            await this.listCases();
+            const first = cname + '/' + kids[0];
+            if (this.cases.includes(first)) { await this.openCaseByName(first); }
+            this.update();
+        } catch (e: any) { this.setNotice('Couple failed: ' + (e?.message || e)); }
+    }
+
+    /** Move a coupled child back to top level; dissolve the parent if <2 remain. */
+    async decoupleCase(childRel: string): Promise<void> {
+        if (!this.isCoupledChild(childRel)) { return; }
+        const parentName = childRel.split('/')[0];
+        const root = new URI(PROJECT_ROOT);
+        const uniq = (want: string): string => {
+            const taken = new Set([...this.cases.map(c => c.split('/')[0]), ...this.couplings.map(c => c.name)]);
+            let d = want; let j = 2; while (taken.has(d)) { d = want + '_' + j; j++; } return d;
+        };
+        try {
+            await this.fileService.move(root.resolve(childRel), root.resolve(uniq(childRel.split('/')[1])), { overwrite: false });
+            await this.listCases();
+            const cp = this.couplings.find(c => c.name === parentName);
+            if (cp && cp.children.length < 2) {
+                for (const rem of cp.children) { await this.fileService.move(root.resolve(rem), root.resolve(uniq(rem.split('/')[1])), { overwrite: false }); }
+                if (await this.fileService.exists(root.resolve(parentName))) { await this.fileService.delete(root.resolve(parentName), { recursive: true, useTrash: false }); }
+                await this.listCases();
+            }
+            this.update();
+        } catch (e: any) { this.setNotice('Disconnect failed: ' + (e?.message || e)); }
+    }
+
+    protected couplingManifest(name: string, children: string[]): string {
+        // Human-readable YAML (hand-written; the GUI only needs a few keys).
+        const lines = ['# Zoomy coupling manifest', 'coupling_id: ' + name, 'scheme: parallel-explicit',
+            'canonical_output: ' + children[0] + '   # participant whose store the GUI opens', 'participants:'];
+        for (const c of children) { lines.push('  - ' + c); }
+        return lines.join('\n') + '\n';
+    }
+    protected placeholderPreciceConfig(children: string[]): string {
+        // Placeholder — the generator (Slice 3) fills the real data/mesh/exchange.
+        return ['<?xml version="1.0" encoding="UTF-8" ?>', '<precice-configuration>',
+            '  <!-- Placeholder coupling contract for participants: ' + children.join(', ') + ' -->',
+            '  <!-- The coupled-case generator fills the meshes, exchanged data (b,h,u,v,w,p),', '       mapping and m2n:sockets exchange-directory at run time. -->',
+            '</precice-configuration>', ''].join('\n');
     }
 
     /** Create a new case folder with a case.py, then open it. If a spec is given

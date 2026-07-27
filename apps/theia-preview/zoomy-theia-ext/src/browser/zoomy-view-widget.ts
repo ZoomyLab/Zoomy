@@ -15,6 +15,8 @@ export class ZoomyViewWidget extends ReactWidget {
     @inject(CommandRegistry) protected readonly commands: CommandRegistry;
     @inject(WidgetManager) protected readonly widgetManager: WidgetManager;
     protected cases: string[] = [];
+    protected couplings: Array<{ name: string; children: string[] }> = [];
+    protected selected = new Set<string>();   // multi-select for couple/disconnect
     protected current = '';
     protected connected: string[] = [];
     protected commit = '';   // build commit hash from version.json (deploy-injected)
@@ -39,7 +41,7 @@ export class ZoomyViewWidget extends ReactWidget {
     protected async refresh(): Promise<void> {
         try {
             const w = (await this.widgetManager.getWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget | undefined;
-            if (w) { this.cases = w.cases || []; this.current = w.caseName || ''; this.connected = w.connectedTags || []; this.update(); }
+            if (w) { this.cases = w.cases || []; this.couplings = w.couplings || []; this.current = w.caseName || ''; this.connected = w.connectedTags || []; for (const s of [...this.selected]) { if (!this.cases.includes(s) && !this.couplings.some(c => c.name === s)) { this.selected.delete(s); } } this.update(); }
         } catch { /* ignore */ }
     }
 
@@ -67,28 +69,63 @@ export class ZoomyViewWidget extends ReactWidget {
             }, h('span', { className: 'codicon codicon-' + icon }), label)));
     }
 
+    /** Ctrl/Shift-click toggles multi-select; plain click opens + single-selects. */
+    protected selectClick(name: string, e: any, opts: { open?: boolean } = {}): void {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            if (this.selected.has(name)) { this.selected.delete(name); } else { this.selected.add(name); }
+        } else {
+            this.selected.clear(); this.selected.add(name);
+            if (opts.open !== false) { this.commands.executeCommand('zoomy.openNamedCase', name); }
+        }
+        this.update();
+    }
+
     protected renderCases(): React.ReactNode {
         const h = React.createElement;
-        // ONE selection style: the active case gets a blue outline + the
-        // folder-active icon (no solid-blue fill). `current` is the single source
-        // of truth (kept in sync with the config via onCasesChanged).
-        const item = (name: string): React.ReactNode => {
+        const sel = [...this.selected];
+        const anyChildSelected = sel.some(n => n.includes('/'));
+        const coupleReady = sel.length >= 2 && sel.every(n => !n.includes('/') && !this.couplings.some(c => c.name === n));
+        const topLeaves = this.cases.filter(n => !n.includes('/'));
+
+        const row = (name: string, opts: { child?: boolean; coupling?: boolean } = {}): React.ReactNode => {
             const active = name === this.current;
-            const s: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'transparent'), borderRadius: 4, background: 'transparent', color: 'var(--theia-foreground)', padding: '4px 8px', margin: '1px 0', fontSize: 13 };
-            return h('div', { key: name, style: s, onClick: () => this.commands.executeCommand('zoomy.openNamedCase', name),
-                onMouseEnter: (e: any) => { if (!active) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
-                onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; } },
-                h('span', { className: 'codicon codicon-' + (active ? 'folder-active' : 'folder'), style: { color: active ? 'var(--theia-button-background)' : undefined } }),
-                h('span', { style: { flex: 1 } }, name),
-                h('span', { title: 'Duplicate case', className: 'codicon codicon-copy', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.duplicateCase', name); } }),
-                h('span', { title: 'Remove case', className: 'codicon codicon-close', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.removeCase', name); } }));
+            const isSel = this.selected.has(name);
+            const label = opts.child ? name.split('/').slice(1).join('/') : name;
+            const s: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                border: '1px solid ' + (active ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'transparent'),
+                borderRadius: 4, background: isSel ? 'var(--theia-list-activeSelectionBackground)' : 'transparent',
+                color: isSel ? 'var(--theia-list-activeSelectionForeground)' : 'var(--theia-foreground)',
+                padding: '4px 8px', margin: '1px 0', marginLeft: opts.child ? 20 : 0, fontSize: 13 };
+            const icon = opts.coupling ? 'type-hierarchy-sub' : (opts.child ? 'file-submodule' : (active ? 'folder-active' : 'folder'));
+            return h('div', { key: name, style: s,
+                onClick: (e: any) => this.selectClick(name, e, { open: !opts.coupling }),
+                onMouseEnter: (e: any) => { if (!active && !isSel) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
+                onMouseLeave: (e: any) => { if (!isSel) { e.currentTarget.style.background = 'transparent'; } } },
+                h('span', { className: 'codicon codicon-' + icon, style: { color: active ? 'var(--theia-button-background)' : undefined } }),
+                h('span', { style: { flex: 1, fontWeight: opts.coupling ? 600 : 400 } }, label),
+                opts.coupling ? h('span', { style: { fontSize: 10, opacity: .6 } }, 'coupled') : null,
+                !opts.coupling ? h('span', { title: 'Duplicate case', className: 'codicon codicon-copy', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.duplicateCase', name); } }) : null,
+                !opts.coupling ? h('span', { title: 'Remove case', className: 'codicon codicon-close', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.removeCase', name); } }) : null);
         };
+
+        const iconBtn = (icon: string, title: string, on: boolean, click: () => void): React.ReactNode =>
+            h('button', { title, disabled: !on, style: { cursor: on ? 'pointer' : 'default', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', marginRight: 4, opacity: on ? 1 : 0.35 }, onClick: () => { if (on) { click(); } } }, h('span', { className: 'codicon codicon-' + icon }));
+
+        const coupleOrDisconnect = anyChildSelected
+            ? iconBtn('link-external', 'Disconnect the selected case(s) from their coupling', true, () => { sel.filter(n => n.includes('/')).forEach(n => this.commands.executeCommand('zoomy.decoupleCase', n)); this.selected.clear(); this.update(); })
+            : iconBtn('link', coupleReady ? 'Couple the selected cases' : 'Ctrl/Shift-click ≥2 cases to couple them', coupleReady, () => { this.commands.executeCommand('zoomy.coupleCases', sel); this.selected.clear(); this.update(); });
+
+        const items: React.ReactNode[] = [];
+        for (const cp of this.couplings) { items.push(row(cp.name, { coupling: true })); for (const ch of cp.children) { items.push(row(ch, { child: true })); } }
+        for (const n of topLeaves) { items.push(row(n)); }
+
         return h('div', { style: { marginBottom: 10 } },
             h('div', { style: { display: 'flex', alignItems: 'center', padding: '4px 8px' } },
                 h('div', { style: { flex: 1, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--theia-descriptionForeground)' } }, 'Cases'),
+                coupleOrDisconnect,
                 h('button', { title: 'Rescan cases (pick up Explorer changes)', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)', marginRight: 4 }, onClick: () => this.rescanCases() }, h('span', { className: 'codicon codicon-refresh' })),
                 h('button', { title: 'New case', style: { cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--theia-foreground)' }, onClick: () => this.commands.executeCommand('zoomy.newCase') }, h('span', { className: 'codicon codicon-new-folder' }))),
-            this.cases.length ? this.cases.map(item) : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '4px 10px' } }, 'No cases yet — create one.'));
+            items.length ? items : h('div', { style: { fontSize: 12, color: 'var(--theia-descriptionForeground)', padding: '4px 10px' } }, 'No cases yet — create one.'));
     }
 
     protected render(): React.ReactNode {
