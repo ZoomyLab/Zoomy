@@ -86,20 +86,67 @@ def make_sme_vof_config(names=("Swe", "Vof"), **kw):
                                    {"name": names[1], "mesh": "VofInletMesh", "suffix": "V"}, **kw)
 
 
+def make_chain_config(participants, exchange_directory=".", scheme="parallel-explicit",
+                      time_window=5e-4, max_time=30.0, dimensions=3):
+    """N-participant CHAIN p0<->p1<->...<->p(N-1): adjacent pairs do a symmetric
+    profile exchange (compositional bi-couplings, acyclic). Each participant
+    provides Mesh<i>, writes its own profile [x]_<i>, and reads each neighbor's
+    profile mapped nearest-neighbor onto its mesh. Used for SME<->VOF<->SME."""
+    names = [p["name"] for p in participants]
+    n = len(names)
+    data = [f"{f}_{i}" for i in range(n) for f in PROFILE]
+    dfor = lambda i: [f"{f}_{i}" for f in PROFILE]
+    body = ['<?xml version="1.0" encoding="UTF-8" ?>', '<precice-configuration>', '']
+    body += [f'  <data:scalar name="{d}"/>' for d in data] + ['']
+    for i in range(n):
+        neigh = [j for j in (i - 1, i + 1) if 0 <= j < n]
+        # A mesh carries ONLY its own + its neighbors' profiles — otherwise the
+        # middle participant's two read-mappings would both see the same data
+        # (b_0 on Mesh0 AND Mesh2) and preCICE rejects the ambiguous mapping.
+        used = dfor(i) + [d for j in neigh for d in dfor(j)]
+        body += [f'  <mesh name="Mesh{i}" dimensions="{dimensions}">',
+                 *[f'    <use-data name="{d}"/>' for d in used], '  </mesh>', '']
+    for i in range(n):
+        neigh = [j for j in (i - 1, i + 1) if 0 <= j < n]
+        lines = [f'  <participant name="{names[i]}">', f'    <provide-mesh name="Mesh{i}"/>']
+        lines += [f'    <receive-mesh name="Mesh{j}" from="{names[j]}"/>' for j in neigh]
+        lines += [f'    <write-data name="{d}" mesh="Mesh{i}"/>' for d in dfor(i)]
+        lines += [f'    <read-data name="{d}" mesh="Mesh{i}"/>' for j in neigh for d in dfor(j)]
+        lines += [f'    <mapping:nearest-neighbor direction="read" from="Mesh{j}" '
+                  f'to="Mesh{i}" constraint="consistent"/>' for j in neigh]
+        body += lines + ['  </participant>', '']
+    for i in range(n - 1):
+        body += [f'  <m2n:sockets acceptor="{names[i]}" connector="{names[i+1]}" '
+                 f'exchange-directory="{exchange_directory}"/>']
+    body += ['']
+    for i in range(n - 1):
+        body += [f'  <coupling-scheme:{scheme}>',
+                 f'    <participants first="{names[i]}" second="{names[i+1]}"/>',
+                 f'    <max-time value="{max_time}"/>',
+                 f'    <time-window-size value="{time_window}"/>',
+                 *[f'    <exchange data="{d}" mesh="Mesh{i}" from="{names[i]}" to="{names[i+1]}"/>' for d in dfor(i)],
+                 *[f'    <exchange data="{d}" mesh="Mesh{i+1}" from="{names[i+1]}" to="{names[i]}"/>' for d in dfor(i + 1)],
+                 f'  </coupling-scheme:{scheme}>', '']
+    body += ['</precice-configuration>', '']
+    return "\n".join(body)
+
+
 def make_coupled_precice_config(participants, **kw):
-    """Dispatch on participant types. ``participants`` is a list of
-    ``{"name": str, "type": "sme"|"vof"}`` (2 entries)."""
+    """Dispatch on participant count/types. Two participants use the named
+    SME<->SME / SME<->VOF contracts; three or more use the generic chain."""
     types = tuple(p.get("type", "sme") for p in participants)
     names = tuple(p["name"] for p in participants)
-    if len(participants) != 2:
-        raise NotImplementedError("only 2-participant couplings are generated so far")
-    if types == ("sme", "sme"):
-        return make_sme_sme_config(names=names, **kw)
-    if types == ("sme", "vof"):
-        return make_sme_vof_config(names=names, **kw)
-    if types == ("vof", "sme"):
-        return make_sme_vof_config(names=(names[1], names[0]), **kw)
-    raise NotImplementedError(f"coupled precice-config for types {types} not ported")
+    if len(participants) < 2:
+        raise NotImplementedError("a coupling needs at least 2 participants")
+    if len(participants) == 2:
+        if types == ("sme", "sme"):
+            return make_sme_sme_config(names=names, **kw)
+        if types == ("sme", "vof"):
+            return make_sme_vof_config(names=names, **kw)
+        if types == ("vof", "sme"):
+            return make_sme_vof_config(names=(names[1], names[0]), **kw)
+        raise NotImplementedError(f"coupled precice-config for types {types} not ported")
+    return make_chain_config(participants, **kw)
 
 
 # --------------------------------------------------------------------------- #
