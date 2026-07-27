@@ -152,6 +152,29 @@ export class HttpAdapter {
         });
     }
 
+    /** Launch a coupling: POST the participants to /couple (the server runs
+     *  build_coupled_bundle + submits one foam job per participant sharing the
+     *  coupling folder), then poll all child jobs to completion. */
+    async runCoupling(options) {
+        options = options || {};
+        const resp = await fetch(this.url + "/api/v1/couple", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                coupling_id: options.coupling_id || "coupled",
+                scheme: options.scheme || "parallel-explicit",
+                participants: options.participants || [],
+            }),
+        });
+        if (!resp.ok) throw new Error("couple failed: HTTP " + resp.status);
+        const body = await resp.json();
+        const jobs = body.jobs || [];
+        const statuses = await Promise.all(jobs.map((j) => this._pollUntilTerminal(j, options)));
+        const failed = statuses.filter((s) => s.status === "failed");
+        if (failed.length) throw new Error("coupling participant failed: " + (failed[0].error || "unknown"));
+        return { coupling_id: body.coupling_id, jobs, participants: body.participants || [], statuses };
+    }
+
     /**
      * Route the post-processing chain to this (postprocess) backend: upload a
      * result store + the enabled steps to POST /postprocess, poll to

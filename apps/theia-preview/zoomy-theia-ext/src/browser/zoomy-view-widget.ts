@@ -106,6 +106,7 @@ export class ZoomyViewWidget extends ReactWidget {
                 h('span', { className: 'codicon codicon-' + icon, style: { color: active ? 'var(--theia-button-background)' : undefined } }),
                 h('span', { style: { flex: 1, fontWeight: opts.coupling ? 600 : 400 } }, label),
                 opts.coupling ? h('span', { style: { fontSize: 10, opacity: .6 } }, 'coupled') : null,
+                opts.coupling ? rowBtn('Run coupled — launch all participants on the foam backend', 'run-all', 'zoomy.runCoupling') : null,
                 opts.coupling ? rowBtn('Uncouple all — dissolve this group', 'link-external', 'zoomy.dissolveCoupling') : null,
                 !opts.coupling ? rowBtn('Rename case', 'edit', 'zoomy.renameCase') : null,
                 !opts.coupling ? rowBtn('Duplicate case', 'copy', 'zoomy.duplicateCase') : null,

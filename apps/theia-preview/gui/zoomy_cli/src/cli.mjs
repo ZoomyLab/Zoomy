@@ -450,6 +450,24 @@ export class ZoomyCLI {
         return { mode: "pyodide", result };
     }
 
+    /** Run a coupling on a foam backend: POST the participants to /couple, where
+     *  build_coupled_bundle expands the participant OF-cases + the shared
+     *  precice-config and launches both (they share the coupling folder = the
+     *  exchange-directory). Returns the child job ids. */
+    async submitCoupling(options) {
+        options = options || {};
+        const a = this.httpFor(options.tag || "foam");
+        if (!a || !a.isConnected()) {
+            throw new Error("submitCoupling: backend '" + (options.tag || "foam") + "' not connected");
+        }
+        return await a.runCoupling({
+            coupling_id: options.coupling_id,
+            scheme: options.scheme || "parallel-explicit",
+            participants: options.participants || [],
+            onStatus: options.onStatus,
+        });
+    }
+
     /**
      * Route the enabled post-processing chain to a connected `postprocess`
      * backend (the chain's steps — lift3d / to_vtk — live in zoomy_prepost,

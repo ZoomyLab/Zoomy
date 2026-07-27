@@ -399,6 +399,7 @@ class ZoomyContribution implements FrontendApplicationContribution, CommandContr
         reg.registerCommand({ id: 'zoomy.decoupleCase' }, { execute: async (name: string) => { if (name) { await this.openModelConfig(); (await this.mc()).decoupleCase(name); } } });
         reg.registerCommand({ id: 'zoomy.openCoupling' }, { execute: async (name: string) => { if (name) { (await this.mc()).openCoupling(name); } } });
         reg.registerCommand({ id: 'zoomy.dissolveCoupling' }, { execute: async (name: string) => { if (name) { await this.openModelConfig(); (await this.mc()).dissolveCoupling(name); } } });
+        reg.registerCommand({ id: 'zoomy.runCoupling' }, { execute: async (name: string) => { if (name) { await this.openModelConfig(); (await this.mc()).runCoupling(name); } } });
         reg.registerCommand({ id: 'zoomy.renameCase' }, { execute: async (name: string) => { if (!name) { return; } const leaf = name.split('/').pop(); const next = await this.quickInput.input({ prompt: 'Rename case', value: leaf, placeHolder: leaf }); if (next && next.trim() && next.trim() !== leaf) { await this.openModelConfig(); (await this.mc()).renameCase(name, next); } } });
         reg.registerCommand({ id: CMD.run, label: 'Zoomy: Run simulation' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).runAssembly(); } });
         reg.registerCommand({ id: 'zoomy.openInNotebook', label: 'Zoomy: Open case in Notebook Mode' }, { execute: async () => { await this.openModelConfig(); (await this.mc()).openInNotebook(); } });

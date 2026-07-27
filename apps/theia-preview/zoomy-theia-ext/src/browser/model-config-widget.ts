@@ -432,6 +432,34 @@ export class ZoomyModelConfigWidget extends ReactWidget {
         } catch (e: any) { this.setNotice('Rename failed: ' + (e?.message || e)); }
     }
 
+    /** Run a coupling on the foam backend: POST the participants to /couple,
+     *  where build_coupled_bundle expands the OF-cases + shared precice-config
+     *  and launches both. Gated on a connected "foam" backend — all participants
+     *  run there. (Type is inferred from the child name/spec: vof vs sme.) */
+    async runCoupling(name: string): Promise<void> {
+        const cp = this.couplings.find(c => c.name === name);
+        if (!cp || cp.children.length < 2) { this.setNotice('Coupling "' + name + '" needs at least 2 participants.'); return; }
+        if (!this.connectedTags.includes('foam')) {
+            this.setNotice('Connect a "foam" backend to run the coupling "' + name + '" — all its participants run there (use the ↻ scan / Connect backend).');
+            return;
+        }
+        this.simPanel?.reveal();
+        emitSimOutput({ kind: 'line', level: 'info', text: '▶ Running coupling "' + name + '" (' + cp.children.length + ' participants) on the foam backend…' });
+        try {
+            const participants = cp.children.map(child => {
+                const leaf = String(child.split('/').pop());
+                return { name: leaf, type: /vof/i.test(leaf) ? 'vof' : 'sme' };
+            });
+            const res = await this.cli.submitCoupling({ tag: 'foam', coupling_id: name, scheme: 'parallel-explicit', participants,
+                onStatus: (s: any) => { const m = s?.message || s?.state || (typeof s === 'string' ? s : null); if (m) { emitSimOutput({ kind: 'line', level: 'stdout', text: String(m) }); } } });
+            emitSimOutput({ kind: 'line', level: 'ok', text: '✓ Coupling "' + name + '" submitted — ' + ((res?.jobs || []).length) + ' participant job(s) on foam.' });
+            this.setNotice('Coupling "' + name + '" running on the foam backend.');
+        } catch (e: any) {
+            emitSimOutput({ kind: 'line', level: 'error', text: '✗ Coupling run failed: ' + (e?.message || e) });
+            this.setNotice('Coupling run failed: ' + (e?.message || e));
+        }
+    }
+
     /** Create a new case folder with a case.py, then open it. If a spec is given
      *  (import), use it; otherwise start from the first runnable card in each tab. */
     async newCase(name: string, spec?: any): Promise<void> {
