@@ -41,7 +41,7 @@ export class ZoomyViewWidget extends ReactWidget {
     protected async refresh(): Promise<void> {
         try {
             const w = (await this.widgetManager.getWidget(ZoomyModelConfigWidget.ID)) as ZoomyModelConfigWidget | undefined;
-            if (w) { this.cases = w.cases || []; this.couplings = w.couplings || []; this.current = w.caseName || ''; this.connected = w.connectedTags || []; for (const s of [...this.selected]) { if (!this.cases.includes(s) && !this.couplings.some(c => c.name === s)) { this.selected.delete(s); } } this.update(); }
+            if (w) { this.cases = w.cases || []; this.couplings = w.couplings || []; this.current = w.caseName || ''; this.connected = w.connectedTags || []; for (const s of [...this.selected]) { if (!this.cases.includes(s) && !this.couplings.some(c => c.name === s)) { this.selected.delete(s); } } if (this.selected.size === 0 && this.current) { this.selected.add(this.current); } this.update(); }
         } catch { /* ignore */ }
     }
 
@@ -91,21 +91,25 @@ export class ZoomyViewWidget extends ReactWidget {
             const active = name === this.current;
             const isSel = this.selected.has(name);
             const label = opts.child ? name.split('/').slice(1).join('/') : name;
+            // Selection = thin blue OUTER BORDER only, no background fill (the fill
+            // is never used anywhere). Single highlight driven purely by `selected`.
             const s: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                border: '1px solid ' + (active ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'transparent'),
-                borderRadius: 4, background: isSel ? 'var(--theia-list-activeSelectionBackground)' : 'transparent',
-                color: isSel ? 'var(--theia-list-activeSelectionForeground)' : 'var(--theia-foreground)',
+                border: '1px solid ' + (isSel ? 'var(--theia-focusBorder, var(--theia-button-background))' : 'transparent'),
+                borderRadius: 4, background: 'transparent', color: 'var(--theia-foreground)',
                 padding: '4px 8px', margin: '1px 0', marginLeft: opts.child ? 20 : 0, fontSize: 13 };
             const icon = opts.coupling ? 'type-hierarchy-sub' : (opts.child ? 'file-submodule' : (active ? 'folder-active' : 'folder'));
+            const rowBtn = (title: string, ic: string, cmd: string): React.ReactNode => h('span', { title, className: 'codicon codicon-' + ic, style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand(cmd, name); } });
             return h('div', { key: name, style: s,
                 onClick: (e: any) => this.selectClick(name, e, { openCmd: opts.coupling ? 'zoomy.openCoupling' : 'zoomy.openNamedCase' }),
-                onMouseEnter: (e: any) => { if (!active && !isSel) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
-                onMouseLeave: (e: any) => { if (!isSel) { e.currentTarget.style.background = 'transparent'; } } },
+                onMouseEnter: (e: any) => { if (!isSel) { e.currentTarget.style.background = 'var(--theia-list-hoverBackground)'; } },
+                onMouseLeave: (e: any) => { e.currentTarget.style.background = 'transparent'; } },
                 h('span', { className: 'codicon codicon-' + icon, style: { color: active ? 'var(--theia-button-background)' : undefined } }),
                 h('span', { style: { flex: 1, fontWeight: opts.coupling ? 600 : 400 } }, label),
                 opts.coupling ? h('span', { style: { fontSize: 10, opacity: .6 } }, 'coupled') : null,
-                !opts.coupling ? h('span', { title: 'Duplicate case', className: 'codicon codicon-copy', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.duplicateCase', name); } }) : null,
-                !opts.coupling ? h('span', { title: 'Remove case', className: 'codicon codicon-close', style: { fontSize: 13, opacity: .55 }, onClick: (e: any) => { e.stopPropagation(); this.commands.executeCommand('zoomy.removeCase', name); } }) : null);
+                opts.coupling ? rowBtn('Uncouple all — dissolve this group', 'link-external', 'zoomy.dissolveCoupling') : null,
+                !opts.coupling ? rowBtn('Rename case', 'edit', 'zoomy.renameCase') : null,
+                !opts.coupling ? rowBtn('Duplicate case', 'copy', 'zoomy.duplicateCase') : null,
+                !opts.coupling ? rowBtn('Remove case', 'close', 'zoomy.removeCase') : null);
         };
 
         const iconBtn = (icon: string, title: string, on: boolean, click: () => void): React.ReactNode =>

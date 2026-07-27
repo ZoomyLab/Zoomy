@@ -311,8 +311,12 @@ export class ZoomyModelConfigWidget extends ReactWidget {
                     leaves.push(...kids);
                 }
             }
+            // Auto-clean coupling folders left empty (e.g. all children removed one by one).
+            for (const e of couplings.filter(c => c.children.length === 0)) {
+                try { await this.fileService.delete(root.resolve(e.name), { recursive: true, useTrash: false }); } catch { /* ignore */ }
+            }
             this.cases = leaves.sort();
-            this.couplings = couplings.sort((a, b) => a.name.localeCompare(b.name));
+            this.couplings = couplings.filter(c => c.children.length > 0).sort((a, b) => a.name.localeCompare(b.name));
         } catch { this.cases = []; this.couplings = []; }
         emitCasesChanged();
     }
@@ -389,6 +393,43 @@ export class ZoomyModelConfigWidget extends ReactWidget {
             const uri = new URI(PROJECT_ROOT + '/' + name + '/precice-config.xml');
             if (await this.fileService.exists(uri)) { await open(this.openerService, uri); }
         } catch (e: any) { this.setNotice('Open coupling failed: ' + (e?.message || e)); }
+    }
+
+    protected uniqueTopName(want: string): string {
+        const taken = new Set([...this.cases.map(c => c.split('/')[0]), ...this.couplings.map(c => c.name)]);
+        let d = want; let j = 2; while (taken.has(d)) { d = want + '_' + j; j++; } return d;
+    }
+
+    /** Uncouple-all: move every child of a coupling back to top level and delete
+     *  the now-empty parent folder (also the fix for a stray empty coupling). */
+    async dissolveCoupling(name: string): Promise<void> {
+        const cp = this.couplings.find(c => c.name === name);
+        const root = new URI(PROJECT_ROOT);
+        try {
+            if (cp) { for (const ch of cp.children) { await this.fileService.move(root.resolve(ch), root.resolve(this.uniqueTopName(ch.split('/')[1])), { overwrite: false }); } }
+            if (await this.fileService.exists(root.resolve(name))) { await this.fileService.delete(root.resolve(name), { recursive: true, useTrash: false }); }
+            await this.listCases(); this.update();
+        } catch (e: any) { this.setNotice('Uncouple failed: ' + (e?.message || e)); }
+    }
+
+    /** Rename a case folder (keeps a coupled child inside its parent). */
+    async renameCase(oldRel: string, newName: string): Promise<void> {
+        const clean = (newName || '').trim().replace(/[^\w.-]/g, '_');
+        if (!clean) { return; }
+        const parts = oldRel.split('/');
+        const prefix = parts.length > 1 ? parts.slice(0, -1).join('/') + '/' : '';
+        const newRel = prefix + clean;
+        if (newRel === oldRel) { return; }
+        const root = new URI(PROJECT_ROOT);
+        try {
+            if (this.cases.includes(newRel)) { this.setNotice('A case named "' + clean + '" already exists here.'); return; }
+            await this.fileService.move(root.resolve(oldRel), root.resolve(newRel), { overwrite: false });
+            try { if (localStorage.getItem(CURRENT_CASE_KEY) === oldRel) { localStorage.setItem(CURRENT_CASE_KEY, newRel); } } catch { /* ignore */ }
+            const wasActive = this.caseName === oldRel;
+            await this.listCases();
+            if (wasActive && this.cases.includes(newRel)) { await this.openCaseByName(newRel); }
+            this.update();
+        } catch (e: any) { this.setNotice('Rename failed: ' + (e?.message || e)); }
     }
 
     /** Create a new case folder with a case.py, then open it. If a spec is given
