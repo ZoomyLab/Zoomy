@@ -5,7 +5,12 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor
 
 JOBS = {}
-EXECUTOR = ProcessPoolExecutor(max_workers=2)
+# Concurrency must be >= the number of participants in a coupled run: each
+# preCICE participant is its own job that BLOCKS at the handshake until its
+# peers join, so an N-participant coupling needs N free workers or the last
+# participant queues behind ones already waiting for it -> deadlock. Generous
+# default; override with ZOOMY_MAX_JOBS.
+EXECUTOR = ProcessPoolExecutor(max_workers=int(os.environ.get("ZOOMY_MAX_JOBS", "8")))
 JOBS_DIR = os.path.join(tempfile.gettempdir(), "zoomy_jobs")
 
 

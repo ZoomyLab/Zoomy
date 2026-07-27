@@ -41,6 +41,11 @@ class FoamAdapter(SolverAdapter):
         if os.path.exists(os.path.join(case_dir, "run.py")):
             self._run_inplace(case_dir, output_dir, on_progress)
             return
+        # Coupled thesis cases (and the coupled-case generator) drive both
+        # participants from a run.sh instead — support it the same way.
+        if os.path.exists(os.path.join(case_dir, "run.sh")):
+            self._run_inplace(case_dir, output_dir, on_progress, entry=["bash", "run.sh"])
+            return
 
         # Legacy (no run.py): delegate to the foam backend's in-process entry.
         try:
@@ -60,8 +65,8 @@ class FoamAdapter(SolverAdapter):
         return run_case(model, settings, output_dir, on_progress=on_progress)
 
     # ── in-place run.py runner ───────────────────────────────────────────
-    def _run_inplace(self, case_dir, output_dir, on_progress):
-        """Run the case's ``run.py`` in the case folder (NOT a copy).
+    def _run_inplace(self, case_dir, output_dir, on_progress, entry=None):
+        """Run the case's ``run.py`` (or a given ``entry``) in the case folder.
 
         Unlike the base :meth:`run_case_script`, a foam case folder is a live,
         multi-GB OpenFOAM working tree that manages its OWN ``run/`` + ``outputs/``
@@ -70,14 +75,15 @@ class FoamAdapter(SolverAdapter):
         in place and promote the produced foam HDF5 into ``output_dir`` (the SME
         participant's ``swe_case.h5`` becomes the served ``simulation.h5``).
         """
-        logger.info("foam runner: executing case run.py in place (%s)", case_dir)
+        entry = entry or [sys.executable, "run.py"]
+        logger.info("foam runner: executing %s in place (%s)", entry, case_dir)
         env = dict(os.environ)
         # The case scripts pick up the container python (has zoomy_core/prepost);
         # in-container they also detect foamRun on PATH and skip apptainer.
         env.setdefault("ZOOMY_PY", sys.executable)
 
         proc = subprocess.Popen(
-            [sys.executable, "run.py"], cwd=case_dir,
+            entry, cwd=case_dir,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
         )
         out_lines = []
