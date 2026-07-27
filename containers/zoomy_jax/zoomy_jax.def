@@ -30,6 +30,13 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
 %post
     set -e
     export PATH=/opt/conda/envs/zoomy/bin:$PATH
+    # preCICE for coupling — makes this container a viable preCICE participant,
+    # WIRE-COMPATIBLE with the OpenFOAM participant (preCICE 3.4.x / pyprecice
+    # 3.4.0). conda-forge bundles libprecice + the Python bindings into the conda
+    # env (cleaner than the openfoam image's system apt-deb + pip source build).
+    ( /opt/conda/bin/mamba install -n zoomy -y -c conda-forge "pyprecice=3.4.0" \
+      || /opt/conda/bin/conda install -n zoomy -y -c conda-forge "pyprecice=3.4.0" )
+    /opt/conda/envs/zoomy/bin/python -c "import precice; print('pyprecice', precice.get_version_information())"
     /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
         h5py meshio jupyterlab jupyter-server ipykernel \
         /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost
