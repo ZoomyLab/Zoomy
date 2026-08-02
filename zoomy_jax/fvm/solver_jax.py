@@ -659,6 +659,19 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # ``solver_numpy`` step 3c.  Level-0 (SWE) 1-D only (v1): the streamline
         # head is not yet a depth-resolved velocity vector.
         _eqr = getattr(runtime.sm, "equilibrium_reconstruction", "none")
+        # 'audusse' is NOT implemented on this backend — only the moving-equilibrium
+        # modes below are.  Falling through silently made a run that requested
+        # at-rest WB produce results BIT-IDENTICAL to no WB, which reads as "the
+        # well-balancing ran and changed nothing" rather than "it never ran"; that
+        # cost a wrong conclusion (2026-08-01).  On the Chorin solver the same
+        # reconstruction is reached as ``riemann_solver='hr'``, so say that.
+        if _eqr == "audusse":
+            raise NotImplementedError(
+                "equilibrium_reconstruction='audusse' is not implemented on the "
+                "JAX backend (numpy wires it in solver_numpy.py; here only "
+                "'bernoulli'/'projected_bernoulli' are). For Audusse hydrostatic "
+                "reconstruction on the Chorin solver use riemann_solver='hr'; "
+                "for the plain hyperbolic solver use the numpy backend.")
         bern_enabled = _eqr in ("bernoulli", "projected_bernoulli")
         bern_recon = None
         bern_ode = False
