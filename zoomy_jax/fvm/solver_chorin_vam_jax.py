@@ -123,6 +123,17 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         2 = the paper's two-stage scheme.
     """
 
+    riemann_solver = param.Selector(
+        default="hr", objects=["hr", "ncp"],
+        doc=("Predictor Riemann route — MIRRORS the numpy ChorinSplitVAMSolver. "
+             "'hr': Audusse hydrostatic reconstruction "
+             "(PositiveNonconservativeRusanov).  'ncp': plain "
+             "NonconservativeRusanov with the lake-at-rest balance entry "
+             "Id[h, b] = 1 — NO Audusse face reconstruction, so the bed force "
+             "stays symbolically in the NCP path integral instead of splitting "
+             "into g*h^2/2 flux + g*h*d_x b.  Requires h and b in the state.  "
+             "Measured on the 2-layer Escalante bump: 'hr' collapses at t=4.07 "
+             "while 'ncp' runs past t=9 with a flat dt."))
     pressure_tol = param.Number(
         default=ELLIPTIC_RTOL, bounds=(0, None),
         doc=("Relative tolerance for the elliptic pressure block.  Defaults to "
@@ -239,7 +250,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     # ── Setup ─────────────────────────────────────────────────────
 
-    def setup_simulation(self, mesh, write_output=False):
+    def setup_simulation(self, mesh, write_output=True):
         t0 = _time.time()
 
         # 1. Pad SM_pred to square + wrap in NSM with the pressure +
@@ -254,7 +265,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         # bathymetry ``b`` (static).  Mirror NumPy: exclude h, b, and
         # every state index that the pressure splitter owns.
         from zoomy_core.fvm.riemann_solvers import (
-            PositiveNonconservativeRusanov,
+            PositiveNonconservativeRusanov, NonconservativeRusanov,
         )
         sm_pred_square = _pad_to_square(self.sm_pred)
         self._sm_pred_square = sm_pred_square
@@ -272,9 +283,34 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
             if i not in excluded
         ]
 
+        if self.riemann_solver == "hr":
+            riemann_cls = PositiveNonconservativeRusanov
+        else:
+            # "ncp": no Audusse reconstruction; the h*/h rescaling (and hence
+            # scaled_q_indices) is an HR-only concept.  Id[h, b] = 1 makes the
+            # h-row fluctuation dissipation cancel for dh = -db, so
+            # lake-at-rest survives without face-state reconstruction.
+            if "h" not in state_names or "b" not in state_names:
+                raise ValueError(
+                    "ChorinSplitVAMSolverJax(riemann_solver='ncp') requires "
+                    f"both 'h' and 'b' in the state — found {state_names}.")
+            _h_idx = state_names.index("h")
+            _b_idx = state_names.index("b")
+
+            class _NCPRusanovLARBalancedJax(NonconservativeRusanov):
+                name = param.String(default="NCPRusanovLARBalancedJax")
+
+                def get_viscosity_identity_fluctuations(self):
+                    Id = super().get_viscosity_identity_fluctuations()
+                    Id[_h_idx, _b_idx] = 1
+                    return Id
+
+            riemann_cls = _NCPRusanovLARBalancedJax
+            scaled_q_indices = None
+
         nsm_pred = NumericalSystemModel.from_system_model(
             sm_pred_square,
-            riemann=PositiveNonconservativeRusanov,
+            riemann=riemann_cls,
             reconstruction=self._reconstruction_spec,
             additional_systems=[self.sm_press, self.sm_corr],
             scaled_q_indices=scaled_q_indices,
@@ -638,7 +674,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         return Q
 
     def run_jit_steps(self, dt, n_steps, Q, Qaux_pred, Qaux_press,
-                      Qaux_corr, t_start=0.0):
+                      Qaux_corr, t_start=0.0, cfl=None, dt_max=None):
         """JIT'd time loop via ``jax.lax.scan``.  Calls
         :meth:`chorin_cycle` ``n_steps`` times.  Returns final
         ``(Q, Qaux_pred, Qaux_press, Qaux_corr, time)``.
@@ -649,16 +685,71 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         chunk stays a single resident XLA executable — no per-call recompile
         (the recompile-per-chunk was the ~1000× per-step floor, REQ-122).
         Drivers that step in chunks (one ``run_jit_steps`` per output snapshot)
-        therefore pay the compile ONCE, not every chunk."""
+        therefore pay the compile ONCE, not every chunk.
+
+        ``cfl`` — when given, the step is **ADAPTIVE**: ``dt`` is recomputed
+        from the state at every scan iteration instead of being closed over as
+        a constant, using the SAME local-CFL law as
+        ``zoomy_core.fvm.timestepping`` (:func:`adaptive`)::
+
+            dt = min_f( CFL · 2·inradius_f / (dim_fac · deg_fac · |λ|_f) )
+
+        paired per-face so each face is limited by its OWN size and its OWN
+        wave speed.  Wave-free faces have ``|λ| = 0`` → local limit ``+inf`` and
+        drop out of the min; if EVERY face is wave-free the result is capped to
+        ``dt_max`` rather than leaking ``inf`` (REQ-190).
+
+        Why this exists: without it the only way to drive the jit'd scan was a
+        hand-picked constant ``dt``, and a fixed step that is valid at one mesh
+        or one reconstruction order is silently invalid at another — the
+        drying-front trap, where a hand-rolled fixed step ran far over the CFL
+        limit and faked a model bug.  ``deg_fac = 2·degree+1`` is what makes the
+        order-2 step automatically ~3x smaller than the order-1 step, which is
+        exactly the factor a fixed ``dt`` gets wrong.
+
+        ``dt`` is still required and is used as the constant step when ``cfl``
+        is ``None``; when ``cfl`` is given it serves as the initial ``dt_max``
+        fallback if ``dt_max`` is not passed."""
         n_steps = int(n_steps)
-        run = self._run_step_cache.get(n_steps)
+        adaptive = cfl is not None
+        key = (n_steps, bool(adaptive))
+        run = self._run_step_cache.get(key)
         if run is None:
+            if adaptive:
+                # Mirror timestepping.adaptive's factors exactly.
+                deg = max(int(getattr(self.nsm.reconstruction, "order", 1)) - 1, 0)
+                deg_fac = float(2 * deg + 1)
+                dim_fac = float(self._rt_mesh.dimension)
+                _cfl = float(cfl)
+                _dtcap = float(dt_max if dt_max is not None else dt)
+
+                def _dt_of(Q, Qaux_pred):
+                    lam = self._rt_eigenvalue_op(
+                        Q, Qaux_pred, self._rt_parameters)
+                    h = 2.0 * self._rt_inradius_face
+                    local = _cfl * h / (dim_fac * deg_fac * lam)
+                    # lam == 0 (dry / wave-free face) imposes NO constraint.
+                    # NaN must NOT fall into that branch: ``nan > 0`` is False,
+                    # so a NaN wave speed would be read as "wave-free", replaced
+                    # by +inf, drop out of the min, and the step would SNAP BACK
+                    # to dt_max — masking a blow-up and then accelerating it
+                    # (observed: t frozen at 0.270 for 800 steps, then jumping
+                    # to 0.697 in one chunk).  Propagate the NaN instead so the
+                    # driver's finiteness check fires on the step it happens.
+                    local = jnp.where(
+                        jnp.isnan(lam), jnp.nan,
+                        jnp.where(lam > 0, local, jnp.inf))
+                    return jnp.minimum(jnp.min(local), _dtcap)
+            else:
+                _dt_of = None
+
             def _run(dt, Q, Qaux_pred, Qaux_press, Qaux_corr, t_start):
                 def _body(carry, _k):
                     Q, Qaux_pred, Qaux_press, Qaux_corr, t = carry
+                    dt_k = _dt_of(Q, Qaux_pred) if adaptive else dt
                     Q, Qaux_pred, Qaux_press, Qaux_corr = self.chorin_cycle(
-                        dt, t, Q, Qaux_pred, Qaux_press, Qaux_corr)
-                    return (Q, Qaux_pred, Qaux_press, Qaux_corr, t + dt), None
+                        dt_k, t, Q, Qaux_pred, Qaux_press, Qaux_corr)
+                    return (Q, Qaux_pred, Qaux_press, Qaux_corr, t + dt_k), None
 
                 init = (Q, Qaux_pred, Qaux_press, Qaux_corr,
                         jnp.asarray(t_start, dtype=Q.dtype))
@@ -666,7 +757,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
                     _body, init, jnp.arange(n_steps))
                 return Q, Qaux_pred, Qaux_press, Qaux_corr, t_final
 
-            run = self._run_step_cache[n_steps] = jax.jit(_run)
+            run = self._run_step_cache[key] = jax.jit(_run)
         return run(dt, Q, Qaux_pred, Qaux_press, Qaux_corr,
                    jnp.asarray(t_start, dtype=Q.dtype))
 
