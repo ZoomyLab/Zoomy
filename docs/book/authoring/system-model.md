@@ -5,9 +5,17 @@ matrices every solver and every code printer consumes, in one canonical balance
 law:
 
 $$
-M(Q)\,\partial_t Q \;+\; \nabla\!\cdot\!\big(F(Q) + P(Q)\big)
-\;+\; \sum_d B(Q)[:,:,d]\,\partial_d Q \;-\; S(Q) \;=\; 0.
+\mathsf M(Q)\,\partial_t Q
+\;+\; \nabla\!\cdot\!\big(F(Q) + F_H(Q)\big)
+\;+\; N(Q) : \nabla Q
+\;=\; \nabla\!\cdot\!\big(K(Q) : \nabla Q\big) \;+\; S(Q).
 $$
+
+The operator letters follow the thesis (user decision 2026-08-02): flux $F$,
+hydrostatic pressure $F_H$, non-conservative tensor $N$, diffusion tensor $K$,
+source $S$, mass matrix $\mathsf M$, quasi-linear tensor $A$. The thesis grades
+rank by underline count; these docs drop the underlines and carry the letters
+only. Python attribute names are unchanged.
 
 `SystemModel.from_model(m)` walks the model's operator methods once and freezes
 the result. From then on the derivation is history — what remains is a fixed
@@ -28,13 +36,13 @@ rows, `n_state` the number of state entries, `n_dim` the spatial dimension.
 
 | Slot | Shape | Meaning |
 | --- | --- | --- |
-| `mass_matrix` | `(n_eq, n_state)` | $M(Q)$ — canonically $I$ |
+| `mass_matrix` | `(n_eq, n_state)` | $\mathsf M(Q)$ — canonically $I$ |
 | `flux` | `(n_eq, n_dim)` | $F(Q)$, conservative |
-| `hydrostatic_pressure` | `(n_eq, n_dim)` | $P(Q)$, held separate from $F$ |
-| `nonconservative_matrix` | `(n_eq, n_state, n_dim)` | $B(Q)$ in $B\,\partial_x Q$ |
+| `hydrostatic_pressure` | `(n_eq, n_dim)` | $F_H(Q)$, held separate from $F$ |
+| `nonconservative_matrix` | `(n_eq, n_state, n_dim)` | $N(Q)$ in $N : \nabla Q$ |
 | `source`, `source_explicit` | `(n_eq, 1)` | $S$, implicit / explicit |
-| `diffusion_matrix[_explicit]` | `(n_eq, n_state, n_dim, n_dim)` | $A$ in $\nabla\!\cdot(A\!:\!\nabla Q)$ |
-| `quasilinear_matrix` *(derived)* | `(n_eq, n_state, n_dim)` | $\partial F/\partial Q + \partial P/\partial Q + B$ |
+| `diffusion_matrix[_explicit]` | `(n_eq, n_state, n_dim, n_dim)` | $K(Q)$ in $\nabla\!\cdot(K\!:\!\nabla Q)$ |
+| `quasilinear_matrix` *(derived)* | `(n_eq, n_state, n_dim)` | $A(Q) = \partial F/\partial Q + \partial F_H/\partial Q + N$ |
 | `source_jacobian_wrt_variables` *(derived)* | `(n_eq, n_state)` | $\partial S/\partial Q$ |
 | `source_jacobian_wrt_aux_variables` *(derived)* | `(n_eq, n_aux)` | $\partial S/\partial Q_\text{aux}$ |
 | `eigenvalues` *(derived)* | `(n_eq, 1)` or `None` | `None` ⇒ numerical wavespeed at runtime |
@@ -44,7 +52,7 @@ rows, `n_state` the number of state entries, `n_dim` the spatial dimension.
 | `interpolate_to_3d` | `(n_3d,)` | column profile `[b, h, u, v, w, p]` |
 | `project_from_3d` | `(n_state,)` | its Galerkin inverse |
 
-$P$ is kept out of $F$ so that well-balanced reconstruction can read it off
+$F_H$ is kept out of $F$ so that well-balanced reconstruction can read it off
 directly. The system is in general **rectangular**: `equation_to_state_index[r]`
 records which state entry row `r` updates (identity for square systems,
 non-identity for splitter sub-systems).
@@ -115,7 +123,8 @@ derivation. Three operations ship:
 - **`InvertMassMatrix`** — divide each evolution row by its diagonal `M_ii`, so
   `M = I`. Guarded by `assert_diagonal_mass_matrix()`.
 - **`RemoveNonDiagonalH`** — substitute the mass equation into rows with a
-  non-zero `M[:, h]` column, pushing the cross-term into `B` and `S`.
+  non-zero `M[:, h]` column, pushing the cross-term into `nonconservative_matrix`
+and `source`.
 - **`HydrostaticReconstruction`** — repackage chain-derived
   $g\,h\,\partial_x\eta$ into the standard $P = g h^2/2$ that Audusse-type
   Riemann solvers expect.
