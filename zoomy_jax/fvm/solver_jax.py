@@ -1319,8 +1319,32 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         Q = jax.device_put(Q)
         Qaux = jax.device_put(Qaux)
         self._rt_mesh = jax.device_put(jax_mesh)
+        self._build_mood_stencil(jax_mesh)
 
         return Q, Qaux
+
+    def _build_mood_stencil(self, mesh) -> None:
+        """Precompute the MOOD EPD_2 neighbour gather (cid 210).
+
+        ``cell_neighbors`` is ``(n_cells, K)`` and indexes ghosts past
+        ``n_inner_cells``, so store an index array CLIPPED into range plus the
+        validity mask, both device constants of static shape — the cascade then
+        grows its demoted set with one gather and no data-dependent indexing.
+
+        GATHER, not scatter: numpy's cascade demotes *the neighbours of* a
+        troubled cell, while this marks a cell whose *neighbour* is troubled.
+        Those coincide because face adjacency is symmetric (verified on the
+        LSQ meshes: ``S == S.T``), and the gather is the form XLA lowers
+        without a scatter."""
+        nb = np.asarray(mesh.cell_neighbors)
+        nc = int(mesh.n_inner_cells)
+        if nb.ndim != 2:
+            self._mood_nb = self._mood_nb_valid = None
+            return
+        nb = nb[:nc, :]
+        valid = (nb >= 0) & (nb < nc)
+        self._mood_nb = jax.device_put(jnp.asarray(np.where(valid, nb, 0)))
+        self._mood_nb_valid = jax.device_put(jnp.asarray(valid))
 
     def _explicit_hyperbolic_step(self, dt, time, Q, Qaux, parameters, flux, nc,
                                   *, time_euler=False, aux_of_q=None,
@@ -1423,23 +1447,40 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 #      relaxed-DMP — a DMP bound is invalid in the presence of a
                 #      source, and the physical admissibility set is exactly h≥0
                 #      + finite.)
-                #   3. Recompute the FLAGGED cells at O1 Audusse-HR: ``force_o1``
-                #      zeroes their reconstruction slope → the piecewise-constant
-                #      emitted-W reconstruction (Audusse η→h clip + emitted
-                #      inverse q=u·h), positivity-preserving by the XZS 1st-order
-                #      lemma and conservative through the shared face flux.  This
-                #      is the whole-CELL order drop — O2 is kept in the wet
-                #      interior (matters for Malpasset/Thacker), only front cells
-                #      fall to O1.
-                #   4. SAFETY NET (amrex whole-step O1 MOOD): if the whole-cell
-                #      redo STILL leaves an inadmissible cell — a capless draining
-                #      front where an O2 wet neighbour fluxes a denormal −h
-                #      (≈ −1e-142) into the demoted cell, which the NEXT step's
-                #      unguarded sqrt(g·h) eigenvalue would turn into a
-                #      domain-wide NaN (the cid-155 Ritter-O2 failure) — escalate
-                #      to a whole-STEP O1-HR redo (force_o1 everywhere).  That
-                #      matches the pure-O1 march (h ≥ 0 exactly) and is provably
-                #      admissible under the CFL.  No dt reduction anywhere.
+                #   3. Recompute the flagged STENCIL at O1 Audusse-HR — the
+                #      troubled cells AND their direct face neighbours (EPD_2),
+                #      iterating until admissible.  ``force_o1`` zeroes their
+                #      reconstruction slope → the piecewise-constant emitted-W
+                #      reconstruction (Audusse η→h clip + emitted inverse
+                #      q=u·h), positivity-preserving by the XZS 1st-order lemma
+                #      and conservative through the shared face flux.  O2 is
+                #      kept in the wet interior (matters for Malpasset/Thacker);
+                #      only the front stencil falls to O1.
+                #   4. SAFETY NET (amrex whole-step O1 MOOD): if the cascade
+                #      exhausts, escalate to a whole-STEP O1-HR redo (force_o1
+                #      everywhere).  That matches the pure-O1 march (h ≥ 0
+                #      exactly) and is provably admissible under the CFL — it is
+                #      the ``d = 0`` end of the Clain-Diot-Loubère cascade, not
+                #      an extra mechanism.  No dt reduction anywhere.
+                #
+                #      cid 210: step 3 USED to demote only the troubled cell,
+                #      which is Clain, Diot & Loubère (JCP 230(10):4028-4050,
+                #      2011) Table 1 EPD_0 — the one variant their Remark 11
+                #      rules out as "cannot be used since MOOD iterative
+                #      procedure may loop endlessly", because a troubled cell's
+                #      un-demoted neighbour still extrapolates its order-2 slope
+                #      into their shared face.  jax never looped only because
+                #      the blanket net behind it is upper-limiting.  MEASURED on
+                #      the 16x16 radial dry dam break (H=2, CFL 0.45): of 23
+                #      steps, 17 flagged a troubled cell and 2 escalated all the
+                #      way to the blanket redo — i.e. on those two steps the
+                #      WHOLE domain lost second order to repair a front.  EPD_2
+                #      is upper-limiting (their Definition 9 / Theorem 10), so
+                #      it reaches an admissible state by growing the demoted set
+                #      locally instead.  numpy RAISES where this falls through
+                #      to the blanket redo (``solver_numpy._mood_cascade``); jax
+                #      cannot raise from inside ``jit``, and the blanket O1 is
+                #      the honest admissible terminal state rather than a clamp.
                 #
                 # Smooth everywhere-wet cases never flag ⇒ ``jnp.any`` is False ⇒
                 # the pure-O2 candidate is returned, bit-identical: MOOD is a
@@ -1451,14 +1492,54 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     return ((Qc[h_idx, :nc] < 0.0)
                             | (~jnp.isfinite(Qc[:, :nc]).all(axis=0)))
 
+                nb, nb_ok = (getattr(self, "_mood_nb", None),
+                             getattr(self, "_mood_nb_valid", None))
+
+                def _grow(troubled):
+                    """EPD_2: troubled cells AND their direct face neighbours.
+
+                    One gather over the precomputed neighbour table (see
+                    ``_build_mood_stencil``); falls back to EPD_0 when the mesh
+                    exposed no neighbour table, which is the pre-cid-210
+                    behaviour and still safe behind the blanket net."""
+                    if nb is None:
+                        return troubled
+                    return troubled | jnp.any(
+                        jnp.where(nb_ok, troubled[nb], False), axis=1)
+
                 Q_cand = _advance(None)
 
                 def _repair():
-                    Q_wc = _advance(_troubled(Q_cand))          # whole-cell O1-HR
+                    # The cascade.  ``demoted`` grows STRICTLY on every pass —
+                    # that, not a trip count, is the termination argument
+                    # (Theorem 10); the loop stops as soon as the candidate is
+                    # admissible or the grown set stops growing.  A
+                    # data-dependent ``while`` will not trace under ``jit``, so
+                    # this is ``lax.while_loop`` (whose JVP jax does define, so
+                    # the forward-AD path is unaffected).
+                    def _cond(state):
+                        _dem, Qc, growing = state
+                        return growing & jnp.any(_troubled(Qc))
+
+                    def _body(state):
+                        dem, Qc, _ = state
+                        grown = dem | _grow(_troubled(Qc))
+                        growing = jnp.any(grown & ~dem)
+                        # Only re-advance when the demoted set actually grew;
+                        # otherwise the parachute is reached and re-running
+                        # would repeat the same state forever.
+                        Qn = jax.lax.cond(growing, lambda: _advance(grown),
+                                          lambda: Qc)
+                        return (jnp.where(growing, grown, dem), Qn, growing)
+
+                    _dem, Q_casc, _ = jax.lax.while_loop(
+                        _cond, _body,
+                        (jnp.zeros((nc,), dtype=bool), Q_cand, jnp.bool_(True)))
+                    # Parachute: d = 0 everywhere.
                     return jax.lax.cond(
-                        jnp.any(_troubled(Q_wc)),
-                        lambda: _advance(jnp.ones((nc,), dtype=bool)),  # whole-step
-                        lambda: Q_wc)
+                        jnp.any(_troubled(Q_casc)),
+                        lambda: _advance(jnp.ones((nc,), dtype=bool)),
+                        lambda: Q_casc)
 
                 return jax.lax.cond(
                     jnp.any(_troubled(Q_cand)), _repair, lambda: Q_cand)
