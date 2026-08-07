@@ -126,6 +126,14 @@ _build
 notebooks/*.md
 thesis
 
+# Simulation output and one-off debug probes at the superrepo root.  `/outputs`
+# is 2.9 GB of run artefacts (mp4/gif/pvd/npz/png) and `face_probe.json` is a
+# leftover face-trace dump referenced by no code -- neither is source, and the
+# standing rule is that gigabytes of sim output never enter git.  Ignored, not
+# deleted: the files stay on disk.
+/outputs
+/face_probe.json
+
 # Committed test fixtures (small, versioned with the tests that read them) are
 # NOT simulation output — exempt them from the output-oriented ignores above.
 !library/zoomy_prepost/tests/fixtures/**
