@@ -670,25 +670,40 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # ``solver_numpy`` step 3c.  Level-0 (SWE) 1-D only (v1): the streamline
         # head is not yet a depth-resolved velocity vector.
         _eqr = getattr(runtime.sm, "equilibrium_reconstruction", "none")
-        # 'audusse' is NOT implemented on this backend — only the moving-equilibrium
-        # modes below are.  Falling through silently made a run that requested
-        # at-rest WB produce results BIT-IDENTICAL to no WB, which reads as "the
-        # well-balancing ran and changed nothing" rather than "it never ran"; that
-        # cost a wrong conclusion (2026-08-01).  On the Chorin solver the same
-        # reconstruction is reached as ``riemann_solver='hr'``, so say that.
-        if _eqr == "audusse":
-            raise NotImplementedError(
-                "equilibrium_reconstruction='audusse' is not implemented on the "
-                "JAX backend (numpy wires it in solver_numpy.py; here only "
-                "'bernoulli'/'projected_bernoulli' are). For Audusse hydrostatic "
-                "reconstruction on the Chorin solver use riemann_solver='hr'; "
-                "for the plain hyperbolic solver use the numpy backend.")
-        bern_enabled = _eqr in ("bernoulli", "projected_bernoulli")
+        # cid 214: 'audusse' is the CORE lake-at-rest hydrostatic reconstruction
+        # (``bernoulli_wb._reconstruct_audusse``, selected by the model's
+        # ``equilibrium_reconstruction``).  This backend used to REFUSE it and
+        # tell the caller to use numpy, while carrying its own Audusse-style
+        # clip inside the reconstruction — i.e. reimplementing a scheme core
+        # already owned.  A backend supplies the LOOP; core supplies the SCHEME.
+        # It now routes to the same kernel numpy uses, which is backend-agnostic
+        # (``xp``) for exactly this reason.
+        bern_enabled = _eqr in ("audusse", "bernoulli", "projected_bernoulli")
         bern_recon = None
         bern_ode = False
         _bb = _bh = _bndim = None
         rt_flux = rt_press = None
-        if bern_enabled:
+        if _eqr == "audusse":
+            # Lake-at-rest hydrostatic reconstruction — CORE's kernel, reached
+            # FIRST because it is dimension- and level-agnostic and so takes
+            # none of the 1-D / level-0 restrictions the moving-equilibrium
+            # modes below carry (those would raise on a 2-D friction case
+            # before ever reaching the reconstruction).
+            from zoomy_core.fvm.bernoulli_wb import (
+                build_bernoulli_config as _build_wb_cfg,
+                reconstruct as _core_reconstruct)
+            _bstate = [str(x) for x in runtime.sm.state]
+            _bh = _bstate.index("h")
+            _bb = _bstate.index("b")
+            _bndim = int(runtime.sm.flux.shape[1])
+            rt_flux = runtime.flux
+            rt_press = runtime.hydrostatic_pressure
+            _aud_cfg = _build_wb_cfg(runtime.sm, mode="audusse")
+
+            def bern_recon(Qf, bstar):
+                return _core_reconstruct(Qf, bstar, _aud_cfg, jnp)
+
+        elif bern_enabled:
             import sympy as _sp
             from zoomy_core.fvm.bernoulli_wb import (
                 reconstruct_bernoulli_level0, make_steady_ode_slope,
