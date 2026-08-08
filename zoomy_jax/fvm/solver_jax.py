@@ -457,7 +457,18 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         scalar) so the CFL couples each face's wave speed to its LOCAL cell
         size; ``compute_dt`` takes the min over faces -> ``min_f(h/λ)``, instead
         of the over-conservative ``global_min(h)/global_max(λ)``."""
-        rt_eig = runtime.eigenvalues
+        # cid 210: the dt spectrum is an NSM OUTPUT, not a backend decision.
+        # ``eigenvalues_cfl`` is what ``gate_eigenvalues_dry`` publishes — dry
+        # cells zeroed for the timestep, with the Rusanov dissipation left
+        # physical on ``eigenvalues`` — and it is an NSM default for
+        # depth-carrying transport systems.  Read it when present, else fall
+        # back, exactly as the numpy consumer does.  This backend applies NO dry
+        # threshold of its own: it evaluates the operator it is handed.  Before
+        # this, jax read the RAW spectrum and gated nothing, so a near-dry
+        # cell's u = q/h drove the CFL: on a 96x96 radial dry dam break that
+        # collapsed dt to ~1.5e-08 and the run took 1,353,670 steps instead of
+        # ~40.
+        rt_eig = getattr(runtime, "eigenvalues_cfl", None) or runtime.eigenvalues
 
         @jax.jit
         @partial(jax.named_call, name="max_abs_eigenvalue")

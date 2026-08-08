@@ -537,6 +537,16 @@ class JaxRuntime:
         eig_def = sm.eigenvalues
         eig_arr = _to_array_of_exprs(eig_def)
         eig_shape_cell = _shape(eig_arr)
+        # ``eigenvalues_cfl`` — the TIMESTEP-ONLY spectrum published by
+        # ``gate_eigenvalues_dry`` (cid 209/210).  Registered exactly like
+        # ``eigenvalues`` and against the same declared signature; ``None`` when
+        # the model carries no gate, in which case the solver's dt path falls
+        # back to ``eigenvalues``.  The dissipation always reads ``eigenvalues``.
+        cfl_def = getattr(sm, "eigenvalues_cfl", None)
+        cfl_shape = _shape(_to_array_of_exprs(cfl_def))
+        self.eigenvalues_cfl = (
+            self._build_slot_operator("eigenvalues_cfl", cfl_def)
+            if cfl_shape and all(s > 0 for s in cfl_shape) else None)
         if eig_shape_cell and all(s > 0 for s in eig_shape_cell):
             self.eigenvalues = self._build_slot_operator(
                 "eigenvalues", eig_def)
