@@ -17,7 +17,7 @@ tabs — is hidden until you edit code). First load is a large download (the she
 is heavy) and the in-browser kernel warms `zoomy-core` in the background — give
 it a moment.
 
-![Zoomy GUI](images/theia-preview.png)
+![The Zoomy GUI: the selected model card open on its governing equations.](images/gui.png)
 
 ## What it is
 
