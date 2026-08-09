@@ -717,38 +717,21 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             _bh = _bstate.index("h")
             _bb = _bstate.index("b")
             _bq = [i for i, nm in enumerate(_bstate) if nm not in ("h", "b")]
-            _blevel = len(_bq) - 1
             _bg = float(runtime.sm.parameter_values["g"])
             _bndim = int(runtime.sm.flux.shape[1])
             rt_flux = runtime.flux
             rt_press = runtime.hydrostatic_pressure
-            # The FULLY well-balanced ODE path (Pimentel-García) is needed
-            # whenever there is friction (nonzero source) or higher moments
-            # (level ≥ 1) — neither has a closed-form moving equilibrium.  The
-            # frictionless SWE (level-0, zero source) keeps the closed-form
-            # specific-energy reconstruction so its numbers are unchanged.
-            # Substitute the PARAMETER VALUES first: the symbolic source carries
-            # free parameters (e_x, n) that are non-zero as symbols but vanish at
-            # their configured values (n=0 frictionless, e_x=0 no tilt) — testing
-            # the raw symbolic form would misroute every model to the ODE path.
-            # Match by symbol NAME (assumptions on the source symbols need not
-            # equal a freshly minted Symbol, so xreplace/subs-by-object misses).
-            _pv = dict(runtime.sm.parameter_values)
-
-            def _numify(_e):
-                _e = _sp.sympify(_e)
-                return _e.subs({_s: _pv[_s.name] for _s in _e.free_symbols
-                                if _s.name in _pv})
-            _has_source = any(_sp.simplify(_numify(_e)) != 0
-                              for _e in _sp.flatten(runtime.sm.source))
-            # ``force_steady_ode_wb`` (cid 157): route a FRICTIONLESS level-0 SWE
-            # — which otherwise takes the closed-form Bernoulli fast path —
-            # through the fully-WB steady-ODE moving-equilibrium reconstruction.
-            # With R=0 the ODE integrates to the SAME equilibrium as the closed
-            # form, so this only enables the head-to-head WB comparison; default
-            # off leaves every golden on the closed-form path.
-            bern_ode = bool(_blevel >= 1 or _has_source
-                            or self.force_steady_ode_wb)
+            # WHICH well-balanced kernel to run is MODEL knowledge, resolved by
+            # the system model (resolve_equilibrium_kernel).  This backend used
+            # to rebuild that decision itself: it reconstructed the moment level
+            # by counting non-h/b state fields and ran sympy.simplify over the
+            # source to sniff for friction.  A solver has no business knowing
+            # what a "level" is -- that is the model's story -- so it now just
+            # reads the answer.  Plain Python at trace time: nothing about level
+            # or source reaches generated jax code.
+            _wb_kernel = runtime.sm.resolve_equilibrium_kernel(
+                force_steady_ode=bool(self.force_steady_ode_wb))
+            bern_ode = (_wb_kernel == "steady_ode")
             if runtime.sm.flux.shape[1] != 1 and bern_ode:
                 raise NotImplementedError(
                     "moving-equilibrium ODE WB (friction / level ≥ 1) is 1-D "
