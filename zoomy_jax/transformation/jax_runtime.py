@@ -427,6 +427,21 @@ class JaxRuntime:
                 "source_jacobian_wrt_aux_variables", sja)
         else:
             self.source_jacobian_wrt_aux_variables = None
+        # ── flux_jacobian_wrt_aux_variables: (n_eq, n_aux, n_dim) — ∂F/∂aux.
+        # The flux twin, lowered on the SAME terms.  Needed wherever a TOTAL
+        # d/dx of the flux is formed and the flux depends on aux, since
+        # d/dx F(Q,aux) = ∂F/∂Q·dQ/dx + ∂F/∂aux·daux/dx and the quasilinear
+        # matrix carries only the first term.  NOTE the second term closes into
+        # a first-order system only for ALGEBRAIC aux (daux/dx = ∂aux/∂Q·dQ/dx);
+        # for GRADIENT aux it is a second derivative and belongs to the
+        # diffusion leg, so a consumer must not fold those into a transport
+        # matrix.
+        fja = getattr(sm, "flux_jacobian_wrt_aux_variables", None)
+        if fja is not None and _shape(_to_array_of_exprs(fja)):
+            self.flux_jacobian_wrt_aux_variables = self._build_slot_operator(
+                "flux_jacobian_wrt_aux_variables", fja)
+        else:
+            self.flux_jacobian_wrt_aux_variables = None
         # ── update_variables: (n_eq, 1) per-cell state hygiene
         # transform — squeeze the trailing 1 so callers get
         # ``(n_eq, n_cells)``.  Optional; ``None`` means identity, in
