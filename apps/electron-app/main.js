@@ -5,7 +5,7 @@
 // electron-builder packages this for Windows, macOS and Linux.
 const { app, BrowserWindow, session } = require('electron');
 
-const GUI_URL = process.env.ZOOMY_GUI_URL || 'https://zoomylab.github.io/Zoomy/theia-preview/';
+const GUI_URL = process.env.ZOOMY_GUI_URL || 'https://zoomylab.github.io/Zoomy/gui/';
 
 // Enable SharedArrayBuffer (used by the kernel's cooperative interrupt) by
 // making the renderer cross-origin isolated: inject COOP/COEP on responses.

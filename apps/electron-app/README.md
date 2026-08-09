@@ -32,5 +32,5 @@ next step for the release pipeline.
 - The app injects COOP/COEP response headers so the renderer is cross-origin
   isolated → `SharedArrayBuffer` is available → the kernel's cooperative
   interrupt (Stop) works.
-- Offline: bundle the `theia-preview` static build into `files` and `loadFile`
+- Offline: bundle the `gui` static build into `files` and `loadFile`
   it instead of `loadURL` — a follow-up with #10.

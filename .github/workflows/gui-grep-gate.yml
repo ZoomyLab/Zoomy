@@ -1,12 +1,21 @@
 name: GUI grep-gate
 
-# Phase-3 exit criterion: the GUI must talk to backends only through
-# the ZoomyCLI façade. This job fails if app.js regresses to any of:
+# The GUI must talk to backends only through the ZoomyCLI façade. This job
+# fails if a UI module regresses to any of:
 #   - direct Pyodide Worker access  (_pyWorker, postMessage(cmd:...))
 #   - the legacy ZoomyBackend helper (we deleted backend.js)
 #   - inline fetch() calls against backend URLs
 # Keeps the refactor honest when future PRs are tempted to "just
 # use fetch() this one time".
+#
+# Scope moved with the GUI. It used to guard `library/zoomy_gui/app.js`, the
+# hand-written GUI that Theia replaced in place (tag `pre-theia-gui-migration`
+# is the last commit that had it). The equivalent surface is now the Theia
+# extension's browser modules.
+#
+# `pyodide-runtime.ts` is EXEMPT: it is the sanctioned owner of the kernel
+# worker — the façade itself — exactly as core.js was for the old app.js. The
+# contract is that nothing ELSE boots or messages a worker.
 
 on:
   pull_request:
@@ -27,22 +36,19 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Forbidden symbols in library/zoomy_gui/app.js
+      - name: Forbidden symbols in the GUI's browser modules
         run: |
           set -e
-          # Strip JS comments before grepping. Preserves newlines so
-          # the grep -n line numbers still point at the original file.
-          # Handles /* ... */ blocks (multi-line, including continuation
-          # lines without a `*` prefix) and // line comments.
-          python3 - <<'PY' > /tmp/app-nocomments.js
-          import re, pathlib
-          src = pathlib.Path("library/zoomy_gui/app.js").read_text()
-          src = re.sub(r"/\*.*?\*/",
-                       lambda m: "\n" * m.group(0).count("\n"),
-                       src, flags=re.S)
-          src = re.sub(r"//[^\n]*", "", src)
-          print(src, end="")
-          PY
+          SRC=library/zoomy_gui/zoomy-theia-ext/src
+          if [ ! -d "$SRC" ]; then
+            echo "::error ::$SRC is missing — the GUI moved again and this gate is now blind."
+            exit 1
+          fi
+          # Strip JS/TS comments before grepping. Preserves newlines so the
+          # grep -n line numbers still point at the original file. Handles
+          # /* ... */ blocks (multi-line, including continuation lines without
+          # a `*` prefix) and // line comments.
+          FAIL=0
           FORBIDDEN=(
             'ZoomyBackend'
             '_pyWorker\.postMessage'
@@ -52,23 +58,43 @@ jobs:
             'new Worker\('
             'fetch\("https'
           )
-          FAIL=0
-          for pat in "${FORBIDDEN[@]}"; do
-            MATCHES=$(grep -nE "$pat" /tmp/app-nocomments.js || true)
-            if [ -n "$MATCHES" ]; then
-              echo "::error ::Forbidden pattern /$pat/ found in app.js:"
-              echo "$MATCHES"
-              FAIL=1
-            fi
+          # pyodide-runtime.ts owns the kernel worker by design — skip it.
+          # NUL-delimited: a bare `for f in $(find ...)` splits on whitespace,
+          # so it breaks on any path with a space and depends on the shell's
+          # word-splitting rules.
+          mapfile -d '' FILES < <(find "$SRC" -name '*.ts' ! -name 'pyodide-runtime.ts' -print0 | sort -z)
+          echo "Scanning ${#FILES[@]} module(s)."
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::error ::No .ts modules found under $SRC — this gate would pass vacuously."
+            exit 1
+          fi
+          for f in "${FILES[@]}"; do
+            python3 - "$f" <<'PY' > /tmp/nocomments.ts
+          import re, sys, pathlib
+          src = pathlib.Path(sys.argv[1]).read_text()
+          src = re.sub(r"/\*.*?\*/",
+                       lambda m: "\n" * m.group(0).count("\n"),
+                       src, flags=re.S)
+          src = re.sub(r"//[^\n]*", "", src)
+          print(src, end="")
+          PY
+            for pat in "${FORBIDDEN[@]}"; do
+              MATCHES=$(grep -nE "$pat" /tmp/nocomments.ts || true)
+              if [ -n "$MATCHES" ]; then
+                echo "::error ::Forbidden pattern /$pat/ found in $f:"
+                echo "$MATCHES"
+                FAIL=1
+              fi
+            done
           done
           if [ "$FAIL" -ne 0 ]; then
             echo ""
-            echo "Phase 3 migration contract: every backend interaction"
-            echo "must go through the CLI. See library/zoomy_cli/ and"
-            echo "plan curious-yawning-wilkes.md for the rationale."
+            echo "Migration contract: every backend interaction must go"
+            echo "through the CLI. See library/zoomy_cli/. If a module"
+            echo "genuinely needs the kernel, route it via pyodide-runtime.ts."
             exit 1
           fi
-          echo "OK: app.js is clean."
+          echo "OK: the GUI's browser modules are clean."
 
       - name: backend.js must not return
         run: |
@@ -77,3 +103,15 @@ jobs:
             exit 1
           fi
           echo "OK: backend.js stays deleted."
+
+      - name: the retired GUI must not return
+        run: |
+          # index.html/app.js were the pre-Theia GUI. Re-adding either means two
+          # GUIs are live again, which is the state this migration removed.
+          for f in index.html app.js shallowflow.js param_widgets.js; do
+            if [ -f "library/zoomy_gui/$f" ]; then
+              echo "::error ::library/zoomy_gui/$f is back. The Theia GUI is the GUI; see tag pre-theia-gui-migration for the old one."
+              exit 1
+            fi
+          done
+          echo "OK: the retired GUI stays retired."

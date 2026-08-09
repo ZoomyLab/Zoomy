@@ -92,7 +92,7 @@ Switching sessions snapshots the departing session's state and restores the arri
 
 ### GitHub Pages
 
-The `render-webpage.yml` workflow copies `library/zoomy_gui/*` into the Jupyter Book build at `/gui/`. The GUI is accessible at `https://zoomylab.github.io/Zoomy/gui/`.
+The `render-webpage.yml` workflow builds the Theia GUI from `library/zoomy_gui/` into the Jupyter Book build at `/gui/`. The GUI is accessible at `https://zoomylab.github.io/Zoomy/gui/`.
 
 ### URL-based project loading
 

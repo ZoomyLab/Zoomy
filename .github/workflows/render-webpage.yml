@@ -20,7 +20,6 @@ on:
       - "library/zoomy_js/**"
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
-      - "apps/theia-preview/**"
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
       - ".github/workflows/render-webpage.yml"
@@ -112,24 +111,50 @@ jobs:
       # cells and exported notebooks use directly — the GUI deploy needs no
       # local .msh at all.
 
-      - name: Copy GUI into docs site
+      # THE GUI. `library/zoomy_gui` is a browser-only Eclipse Theia: `theia
+      # build --mode production` webpacks package.json into lib/frontend as a
+      # static site with no backend, and its assets are relative so it mounts
+      # fine under /Zoomy/gui/.
+      #
+      # This step used to `cp` a hand-written index.html/app.js GUI verbatim.
+      # That GUI is gone (tag `pre-theia-gui-migration` is the last commit that
+      # had it) and Theia replaced it in place, so this is now a real build.
+      # BLOCKING on purpose: the GUI is the primary product surface here, and a
+      # silently-skipped build would deploy a site whose /gui/ link 404s.
+      - name: Build GUI (Theia) into docs site
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
+          cd library/zoomy_gui
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          # Compile the Zoomy extension: Baukasten start page, code-editor
+          # route, and the native Theia notebook driven by an in-browser Pyodide
+          # kernel. @theia/* resolve from the app's node_modules (parent), so
+          # this only fetches typescript.
+          ( cd zoomy-theia-ext && npm install --no-audit --no-fund && npm run build )
+          npx theia build --mode production
+          cd ../..
           mkdir -p docs/book/_build/html/gui
-          # Copy the submodule GUI verbatim — cards/ (authored default.json)
-          # and previews/ ship as committed. (Mesh .msh files are NOT shipped
-          # here: the meshes-repo publishes them to its own Pages at
-          # zoomylab.github.io/meshes/, which the GUI's fetch-or-load mesh
-          # cells and exported notebooks use.)
-          cp -r library/zoomy_gui/* docs/book/_build/html/gui/
-          # Copy the isomorphic CLI package so the GUI can import it as
-          # ./zoomy_cli/browser.mjs (see app.js). Strip node-only and
-          # dev detritus to keep the deploy small.
-          mkdir -p docs/book/_build/html/gui/zoomy_cli
-          cp library/zoomy_cli/browser.mjs docs/book/_build/html/gui/zoomy_cli/
-          cp library/zoomy_cli/node.mjs docs/book/_build/html/gui/zoomy_cli/
-          cp library/zoomy_cli/package.json docs/book/_build/html/gui/zoomy_cli/
-          cp -r library/zoomy_cli/src docs/book/_build/html/gui/zoomy_cli/
+          cp -r library/zoomy_gui/lib/frontend/. docs/book/_build/html/gui/
+
+          # The GUI "brain" (card catalog + Pyodide worker + engine) is served
+          # as static assets under gui/ RELATIVE TO THE PAGE — the model-config
+          # widget and the worker fetch it that way — hence /gui/gui/. Copied by
+          # name rather than with a glob so the build tree (node_modules, lib,
+          # package.json) does not leak into the deploy.
+          mkdir -p docs/book/_build/html/gui/gui
+          for a in assets cards demo previews projects snippets tutorials \
+                   core.js engine.py param_extract.py pyodide-worker.js; do
+            cp -r "library/zoomy_gui/$a" docs/book/_build/html/gui/gui/
+          done
+          # #10 offline + cross-origin isolation service worker (COOP/COEP)
+          cp library/zoomy_gui/sw.js docs/book/_build/html/gui/sw.js
+          # The isomorphic CLI package, imported as ./zoomy_cli/browser.mjs.
+          # Node-only and dev detritus stripped to keep the deploy small.
+          mkdir -p docs/book/_build/html/gui/gui/zoomy_cli
+          cp library/zoomy_cli/browser.mjs docs/book/_build/html/gui/gui/zoomy_cli/
+          cp library/zoomy_cli/node.mjs docs/book/_build/html/gui/gui/zoomy_cli/
+          cp library/zoomy_cli/package.json docs/book/_build/html/gui/gui/zoomy_cli/
+          cp -r library/zoomy_cli/src docs/book/_build/html/gui/gui/zoomy_cli/
 
           # Write the real build version so users can see it in the footer
           GUI_COMMIT=$(git -C library/zoomy_gui rev-parse HEAD)
@@ -140,11 +165,10 @@ jobs:
           echo "Built GUI version: ${GUI_COMMIT:0:7} at ${BUILT}"
 
           # Cleanup
-          rm -f docs/book/_build/html/gui/.git
-          rm -f docs/book/_build/html/gui/.gitignore
-          rm -rf docs/book/_build/html/gui/__pycache__
-          rm -f docs/book/_build/html/gui/generate_mesh_previews.py
-          rm -f docs/book/_build/html/gui/generate_previews.py
+          rm -f docs/book/_build/html/gui/.git docs/book/_build/html/gui/.gitignore
+          rm -rf docs/book/_build/html/gui/gui/__pycache__
+          # source maps are large and dev-only — drop them from the deploy
+          rm -f docs/book/_build/html/gui/*.map
 
       - name: Copy SWE game into docs site
         run: |
@@ -180,37 +204,25 @@ jobs:
           echo "Copied Baukasten preview to /baukasten-preview/"
           ls docs/book/_build/html/baukasten-preview/ | head
 
-      # WIP: a backend-less (browser-only) Eclipse Theia, deployed to
-      # /theia-preview/. `theia build --mode production` webpacks the app from
-      # package.json into lib/frontend as a static site (no backend). Assets are
-      # relative, so it mounts fine under /Zoomy/theia-preview/. NON-BLOCKING —
-      # a failure must never break the site deploy.
-      - name: Build Theia preview (WIP, backend-less, non-blocking)
-        continue-on-error: true
+      # /theia-preview/ was where the Theia GUI lived while it was an experiment
+      # alongside the old GUI. It is now THE GUI and ships at /gui/ (above), so
+      # this path only exists to keep already-published links alive: the desktop
+      # wrappers (apps/electron-app, apps/vscode-ext) and any bookmark still
+      # point here. Redirect rather than delete — a 404 is a worse answer than a
+      # hop. Safe to drop once the wrappers have shipped a version using /gui/.
+      - name: Redirect legacy /theia-preview/ to /gui/
         run: |
-          cd apps/theia-preview
-          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-          # Compile the vendored Zoomy extension: Baukasten start page, code-editor
-          # route, and the native Theia notebook driven by an in-browser Pyodide
-          # kernel. @theia/* resolve from the app's node_modules (parent), so this
-          # only fetches typescript.
-          ( cd zoomy-theia-ext && npm install --no-audit --no-fund && npm run build )
-          npx theia build --mode production
-          cd ../..
           mkdir -p docs/book/_build/html/theia-preview
-          cp -r apps/theia-preview/lib/frontend/. docs/book/_build/html/theia-preview/
-          # The vendored Zoomy GUI "brain" (zoomy_cli + pyodide-worker.js + engine.py
-          # + card catalog) is served as static assets under gui/; the model-config
-          # widget + worker fetch them relative to the page.
-          cp -r apps/theia-preview/gui docs/book/_build/html/theia-preview/gui
-          # #10 offline + cross-origin isolation service worker (COOP/COEP + caching)
-          cp apps/theia-preview/sw.js docs/book/_build/html/theia-preview/sw.js
-          # Build stamp: the GUI footer fetches version.json and shows the commit.
-          printf '{"commit":"%s"}\n' "$(git rev-parse HEAD)" > docs/book/_build/html/theia-preview/version.json
-          # source maps are large and dev-only — drop them from the deploy
-          rm -f docs/book/_build/html/theia-preview/*.map
-          echo "Copied Theia preview to /theia-preview/ (version $(git rev-parse --short HEAD))"
-          ls -la docs/book/_build/html/theia-preview/ | head
+          cat > docs/book/_build/html/theia-preview/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Moved to /gui/</title>
+          <meta http-equiv="refresh" content="0; url=../gui/">
+          <link rel="canonical" href="../gui/">
+          <p>The Theia preview is now the Zoomy GUI and has moved to
+             <a href="../gui/">/gui/</a>.</p>
+          EOF
+          echo "Wrote /theia-preview/ -> /gui/ redirect"
 
       - name: Build JupyterLite Pyodide deployment
         run: |

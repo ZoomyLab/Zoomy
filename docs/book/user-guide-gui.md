@@ -1,8 +1,6 @@
 # Using the GUI
 
-## Opening the GUI
-
-The Zoomy GUI is a static web application:
+The Zoomy GUI is a static web application — no install, no server.
 
 ::::{grid} 2
 :gutter: 3
@@ -12,165 +10,75 @@ The Zoomy GUI is a static web application:
 :link-type: url
 Launch the Zoomy GUI in your browser.
 :::
-
-:::{grid-item-card} Open with Tutorial
-:link: gui/index.html?project=tutorials/getting-started.zip
-:link-type: url
-Load the Getting Started project with three pre-configured test cases.
-:::
-
 ::::
 
-**Run locally** (from the repository):
-```bash
-cd library/zoomy_gui
-python -m http.server 8000
-# Open http://localhost:8000
-```
+It opens on a clean, full-window GUI (the VS Code chrome — menus, activity bar,
+tabs — is hidden until you edit code). First load is a large download (the shell
+is heavy) and the in-browser kernel warms `zoomy-core` in the background — give
+it a moment.
 
-## The Workflow
+![Zoomy GUI](images/theia-preview.png)
 
-The simulation workflow consists of four steps:
+## What it is
 
-### 1. Select a Model
+A card-based GUI for composing and running a free-surface-flow case:
 
-Switch to the **Model** tab. Each card represents a mathematical model (e.g., Shallow Water Equations, Scalar Advection). Click a card to select it.
+- **Compose** — pick a **Model**, **Mesh**, **Solver** (and optionally a
+  **Volume of Fluid** participant and **Visualization** viewers) from cards
+  grouped into sub-tabs. A parameters panel edits each card's inputs, the model
+  equations render inline (KaTeX), and the mesh previews live.
+- **Run in the browser** — the built-in **NumPy** solver runs on an in-browser
+  **Pyodide kernel** (off the main thread, with jedi autocomplete). No install,
+  no server.
+- **Run on a backend** — connect an external `zoomy-server` (numpy / jax / amrex
+  / dmplex / foam) and the composed case is submitted and solved remotely; the
+  result store comes back for visualization. NumPy-in-browser is always
+  available; other tags light up when you connect a matching backend.
+- **It's just a case** — every GUI action edits one canonical `case.py`
+  (`## Model / ## Mesh / ## Solver settings / ## Run`), which round-trips to a
+  Jupyter notebook and exports as `.py` / `.ipynb`. *Edit* jumps to the right
+  section; edit mode adds or removes cards.
 
-Click the **gear icon** to view and edit model parameters (e.g., polynomial level, dimension). Click the **pencil icon** to edit the Python code directly.
+## Rich output in cells
 
-### 2. Select a Mesh
-
-Switch to the **Mesh** tab. Choose a mesh type:
-- **Create 1D** -- uniform 1D grid with configurable domain and cell count
-- **Create 2D** -- structured 2D grid with configurable bounds and resolution
-- **Create 3D** -- structured 3D grid
-
-Edit mesh parameters via the gear icon (domain bounds, cell counts).
-
-### 3. Select a Solver
-
-Switch to the **Solver** tab. Available solvers:
-- **NumPy** (Hyperbolic / IMEX / Split) -- run directly in the browser via
-  Pyodide, always available, **no backend needed**
-- **JAX**, **AMReX**, **DMPlex**, **OpenFOAM** -- require a connected backend
-  server (see [Connecting to Backends](#connecting-to-backends))
-
-Pick the solver that matches the model: hyperbolic models run on the plain
-hyperbolic solver, while the non-hydrostatic VAM family needs the split
-(Chorin) solver.
-
-### 4. Run the Simulation
-
-Click **Run simulation** in the sidebar. For the NumPy solvers the simulation
-executes in-browser via Pyodide — nothing to install. Results (plots, output)
-appear on the Dashboard tab.
-
-For backend solvers, connect to a backend first (enter URL, click Connect), then
-run. Job progress is polled automatically.
-
-## Sessions
-
-Sessions let you manage multiple configurations in one project. Each session stores its own card selections and parameter overrides.
-
-- **Create a session**: click "+ New session" in the sidebar
-- **Switch sessions**: click a session name in the sidebar -- selections and parameters are saved/restored automatically
-- **Edit session name**: select a session, edit its name on the Dashboard
-
-### Use case: comparison studies
-
-Create one session per test case (e.g., "1D Dam Break", "2D Dam Break", "Fine mesh"). Switch between them to run and compare results without losing configuration state.
-
-## The Code Editor and `display()`
-
-When you open a card's code editor (pencil icon), you get an Ace editor with the Python source and an **output panel** below it.
-
-### Manual execution
-
-Click the **Run** button in the output panel toolbar to execute the editor code and see results.
-
-### `display()` for rich output
-
-Inside the editor code, use `display()` to send rich output to individual cells in the output panel:
+Cells render rich output — text, matplotlib figures, LaTeX equations — through
+the host kernel's `display`. Case code should not hand-roll a fallback for this;
+call {func}`zoomy_core.misc.show.show`, which renders through whatever the host
+provides and degrades to plain text under a bare `python case.py`:
 
 ```python
-from zoomy_core.model.models import SME
+from zoomy_core.misc.show import show
 
-model = SME(level=0)
-
-# Text output
-display(model.describe())
-
-# Mermaid diagram
-display(mermaid="graph TD; A[Model] --> B[Mesh] --> C[Solver] --> D[Results]")
-
-# LaTeX equation
-display(latex=r"\frac{\partial h}{\partial t} + \nabla \cdot (h \mathbf{u}) = 0")
-
-# Matplotlib figure
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
-ax.plot([0, 1, 2], [0, 1, 0])
-display(fig)
+show(model.describe())                    # any object
+show(eq=(sympy.Symbol("h^*"), h_expr))    # a rendered equation
+show(fig)                                 # a matplotlib figure
 ```
 
-Each `display()` call creates its own output cell. Supported types:
-- **Text** -- plain strings, `model.describe()`, arrays
-- **Mermaid diagrams** -- `display(mermaid="graph TD; ...")`
-- **LaTeX math** -- `display(latex=r"\frac{a}{b}")`
-- **Matplotlib figures** -- `display(fig)` (rendered as SVG)
-- **Plotly figures** -- `display(fig)` (interactive)
-- **HTML** -- `display(html="<table>...</table>")`
+A local `display = lambda *a: None` shim is the failure mode to avoid: it
+silently swallows the figure while the run still looks successful.
 
-### Auto-run mode
+## How it's built
 
-Check the **auto** checkbox. When you finish typing a new `display()` call (balanced parentheses), the entire script re-runs automatically and all output cells refresh. This gives a notebook-like experience inside the code editor.
+Eclipse Theia's **`browser-only`** target builds the whole IDE frontend to
+**static files** — no Node backend, no plugin host. A small **native Theia
+extension** (`zoomy-theia-ext`) registers everything the standard way: the
+card GUI view, a native notebook + in-browser Pyodide `NotebookKernel`, and a
+DOM output surface for text, matplotlib and rich `describe()` output. The kernel
+reuses the Zoomy GUI "brain" (`zoomy_cli`) for the card catalog, case
+composition, param extraction and backend submission.
 
-### Portability
+The goal is **one GUI, three targets** — the same code on the **web** (this
+backend-less build), as a **VS Code / Theia extension** (local), and as a
+**Theia Electron app** (desktop), changing only the host and one stylesheet.
 
-`display()` is injected into the Pyodide scope automatically. When the same script runs in a normal Python environment (CLI, batch, server), `display` falls back to `print()` -- no code changes needed.
+## Connecting your own backend
 
-## Saving and Loading Projects
+The page is served over HTTPS, but browsers exempt `http://localhost` from
+mixed-content blocking, so a `zoomy-server` container on **your own machine**
+(`:8080`) can be connected with no tunnel or certificate — run the container and
+connect. For a backend on another machine, forward it to localhost
+(`ssh -L 8080:localhost:8080 …`) or expose it over HTTPS (e.g. Tailscale Serve).
 
-**Save**: click "Save project" in the sidebar. Downloads a `zoomy-project.zip` containing all sessions, card selections, parameters, and edited code.
-
-**Load**: click "Load project", select a `.zip` file. Sessions and card states are restored.
-
-## Loading Projects from URLs
-
-The GUI supports loading projects via URL parameters:
-
-| Source | URL format |
-|--------|-----------|
-| Same-origin (tutorials) | `?project=tutorials/getting-started.zip` |
-| GitHub release | `?project=https://github.com/org/repo/releases/download/v1/project.zip` |
-| Zenodo (with filename) | `?project=zenodo:12345/project.zip` |
-| Zenodo (auto-detect) | `?project=zenodo:12345` |
-
-Additional parameters:
-- `?session=1D+Dam+Break` -- auto-switch to a named session after loading
-- `#run` -- auto-execute the simulation after loading
-
-**Example:** share a reproducible simulation with a colleague:
-```
-https://mbd-rwth.github.io/Zoomy/gui/?project=zenodo:12345/dam-break.zip&session=1D+Dam+Break#run
-```
-
-## Connecting to Backends
-
-For solvers other than NumPy you need a running backend server. The simplest
-route is the prebuilt container for that backend — every image serves the solver
-API on `:8080` by default:
-
-```bash
-apptainer pull zoomy_jax.sif oras://ghcr.io/zoomylab/zoomy_jax_sif:latest
-apptainer run zoomy_jax.sif 8080
-# or: docker run --rm -p 8080:8080 ghcr.io/zoomylab/zoomy_jax:latest
-```
-
-From a source checkout instead: `zoomy-server --adapter jax --port 8080`.
-
-Then, in the GUI sidebar, enter `http://localhost:8080` and click **Connect**.
-Connected backends appear in the navbar, and solver cards that require them
-become selectable. Multiple backends can be connected simultaneously.
-
-See [Installation](installation.md) for the full container list.
+Source: `library/zoomy_gui/` — a `@theia/cli` browser-only app plus the
+`zoomy-theia-ext/` native extension and the `gui/` brain. CI builds it and
+serves it at `/gui/`.

@@ -14,8 +14,8 @@ Pyodide worker) runs entirely in the Webview — no VS Code backend, no server.
 ## Configuration
 
 - `zoomy.guiUrl` — which GUI build to embed. Defaults to the hosted
-  `https://zoomylab.github.io/Zoomy/theia-preview/`. Point it at a local build
-  (a `file://`/`http://localhost` path serving the `apps/theia-preview` output)
+  `https://zoomylab.github.io/Zoomy/gui/`. Point it at a local build
+  (a `file://`/`http://localhost` path serving the `library/zoomy_gui` build output)
   for **offline** use.
 
 ## Build / install
@@ -29,7 +29,7 @@ code --install-extension zoomy-gui.vsix
 ## Notes / follow-ups
 
 - This wraps the hosted GUI in a Webview (thin, always up to date). A fully
-  self-contained offline `.vsix` would bundle the `theia-preview` static build
+  self-contained offline `.vsix` would bundle the `gui` static build
   and the `gui/` assets and serve them from the extension via
   `asWebviewUri`/`localResourceRoots` — a follow-up once the offline build
   (roadmap #10) lands.

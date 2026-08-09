@@ -18,7 +18,7 @@
       "properties": {
         "zoomy.guiUrl": {
           "type": "string",
-          "default": "https://zoomylab.github.io/Zoomy/theia-preview/",
+          "default": "https://zoomylab.github.io/Zoomy/gui/",
           "description": "URL of the Zoomy GUI to embed. Point at a local build for offline use."
         }
       }

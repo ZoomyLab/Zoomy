@@ -60,7 +60,7 @@ See [GUI and CLI Architecture](dev-gui-cli.md) for details on the card system, `
 
 ### GitHub Pages
 
-The `render-webpage.yml` workflow copies `library/zoomy_gui/*` into the Jupyter Book build at `/gui/`:
+The `render-webpage.yml` workflow builds the Theia GUI from `library/zoomy_gui/` into the Jupyter Book build at `/gui/`:
 
 - Docs: `https://zoomylab.github.io/Zoomy/`
 - GUI: `https://zoomylab.github.io/Zoomy/gui/`

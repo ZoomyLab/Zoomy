@@ -5,7 +5,7 @@
 // one-GUI-everywhere plan: the same GUI that ships on the web, wrapped in VS Code.
 //
 // By default it embeds the hosted GUI (config `zoomy.guiUrl`); point that at a
-// local build (e.g. a file:// or http://localhost path serving the theia-preview
+// local build (e.g. a file:// or http://localhost path serving the gui
 // output) for offline use.
 const vscode = require('vscode');
 
@@ -17,7 +17,7 @@ function activate(context) {
                 { enableScripts: true, retainContextWhenHidden: true }
             );
             const url = vscode.workspace.getConfiguration('zoomy').get('guiUrl')
-                || 'https://zoomylab.github.io/Zoomy/theia-preview/';
+                || 'https://zoomylab.github.io/Zoomy/gui/';
             panel.webview.html = pageHtml(url);
         })
     );

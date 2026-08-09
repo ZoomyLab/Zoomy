@@ -43,7 +43,6 @@ parts:
       - file: api/amrex
   - caption: Work in progress
     chapters:
-      - file: theia-preview
       - file: dev-guide
         sections:
           - file: dev-architecture
