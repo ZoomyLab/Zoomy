@@ -13,6 +13,16 @@ on:
       - "library/zoomy_core/pyproject.toml"
       - "library/zoomy_jax/pyproject.toml"
       - "library/zoomy_firedrake/pyproject.toml"
+      # The containers COPY these packages in and pip-install them EDITABLE, so
+      # their SOURCE is part of the image, not just their pyproject. Watching
+      # only the pyproject meant a source fix could land on main while the
+      # published image kept the old code -- which is exactly what happened: a
+      # one-line CORS fix in zoomy_server (allowing Chrome's Private Network
+      # Access preflight, without which NO browser-served GUI can reach a local
+      # backend) matched nothing here and had to be dispatched by hand.
+      - "library/zoomy_server/**"
+      - "library/zoomy_prepost/**"
+      - "library/zoomy_foam/**"
       - ".github/workflows/build-containers.yml"
       - ".github/workflows/dockers.txt"
   workflow_dispatch:
