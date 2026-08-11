@@ -17,6 +17,14 @@ on:
       # `library/zoomy_gui`, which the `/**` glob (it needs a path segment
       # after the slash) never matches — so bumps would not trigger a deploy.
       - "library/zoomy_gui"
+      # The deploy VENDORS zoomy_cli into the site (it copies
+      # library/zoomy_cli/src into gui/gui/zoomy_cli/ below), so that package is
+      # part of what gets served -- but it was not a trigger. A CLI change could
+      # land on main while the deployed GUI kept the old bundle. That is not
+      # hypothetical: the coupling-folder payload lived in zoomy_cli and stayed
+      # undeployed, so "Run coupled" posted no files and /couple answered 400
+      # until this was dispatched by hand.
+      - "library/zoomy_cli/**"
       - "library/zoomy_js/**"
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
