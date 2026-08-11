@@ -152,21 +152,25 @@ export class HttpAdapter {
         });
     }
 
-    /** Launch a coupling: POST the participants to /couple (the server runs
-     *  build_coupled_bundle + submits one foam job per participant sharing the
-     *  coupling folder), then poll all child jobs to completion. */
+    /** Launch a coupling: POST it to /couple, then poll every returned job to
+     *  completion. `files` (the coupling folder as {relative path: text}) sends
+     *  the coupling's own definition, which the server materializes and runs
+     *  through the folder's run.py / run.sh as ONE job; without it the server
+     *  expands template OF-cases and returns one job per participant. */
     async runCoupling(options) {
         options = options || {};
+        const payload = {
+            coupling_id: options.coupling_id || "coupled",
+            scheme: options.scheme || "parallel-explicit",
+            participants: options.participants || [],
+        };
+        if (options.files && Object.keys(options.files).length) { payload.files = options.files; }
         const resp = await fetch(this.url + "/api/v1/couple", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                coupling_id: options.coupling_id || "coupled",
-                scheme: options.scheme || "parallel-explicit",
-                participants: options.participants || [],
-            }),
+            body: JSON.stringify(payload),
         });
-        if (!resp.ok) throw new Error("couple failed: HTTP " + resp.status);
+        if (!resp.ok) throw new Error("couple failed: HTTP " + resp.status + " " + (await resp.text()).slice(0, 300));
         const body = await resp.json();
         const jobs = body.jobs || [];
         const statuses = await Promise.all(jobs.map((j) => this._pollUntilTerminal(j, options)));

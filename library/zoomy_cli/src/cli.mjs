@@ -456,10 +456,14 @@ export class ZoomyCLI {
         return { mode: "pyodide", result };
     }
 
-    /** Run a coupling on a foam backend: POST the participants to /couple, where
-     *  build_coupled_bundle expands the participant OF-cases + the shared
-     *  precice-config and launches both (they share the coupling folder = the
-     *  exchange-directory). Returns the child job ids. */
+    /** Run a coupling on a foam backend: POST it to /couple and wait.
+     *
+     *  With `files` (the coupling FOLDER as {relative path: text}) the coupling
+     *  defines itself: the server writes it out and runs its own entry
+     *  (run.py / run.sh) as ONE job — preCICE participants have to be started
+     *  together in one exchange directory. Without it the server falls back to
+     *  expanding per-TYPE template OF-cases and launching one job per
+     *  participant. Returns the job ids either way. */
     async submitCoupling(options) {
         options = options || {};
         const a = this.httpFor(options.tag || "OpenFOAM");
@@ -470,6 +474,7 @@ export class ZoomyCLI {
             coupling_id: options.coupling_id,
             scheme: options.scheme || "parallel-explicit",
             participants: options.participants || [],
+            files: options.files || null,
             onStatus: options.onStatus,
         });
     }
