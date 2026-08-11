@@ -134,6 +134,14 @@ class CouplingRequest(BaseModel):
     end_time: Optional[float] = None
     sif: Optional[str] = None            # apptainer image (else ZOOMY_OPENFOAM_SIF)
     participants: list                   # [{name,type,template,binary}, ...]
+    #: The coupling FOLDER, {path relative to it: text}: coupling.yml,
+    #: precice-config.xml, <participant>/case.py, and the run entry (run.py /
+    #: run.sh). When it is sent, the coupling defines itself and this endpoint
+    #: materializes it and hands the folder to the adapter, which runs that
+    #: entry. Without it the legacy path expands per-TYPE template OF-cases
+    #: named by ZOOMY_COUPLING_TEMPLATE_<TYPE> -- server-side cases that have
+    #: nothing to do with the coupling the caller is looking at.
+    files: Optional[dict] = None
 
 
 #: post-solve OF -> zoomy HDF5: reuse zoomy_prepost.vtk_to_hdf5 on the foamToVTK
@@ -188,19 +196,68 @@ def _shquote(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
+def _materialize_coupling(coupling_dir, files):
+    """Write an uploaded coupling folder to disk under ``coupling_dir``.
+
+    Refuses absolute members and any path climbing out with "..": the payload
+    comes from a browser and must not be able to name a destination.
+    """
+    import os
+    for rel, text in files.items():
+        rel = str(rel).replace("\\", "/").lstrip("/")
+        if not rel or os.path.isabs(rel) or any(p == ".." for p in rel.split("/")):
+            raise ValueError(f"illegal member path {rel!r}")
+        dest = os.path.join(coupling_dir, *rel.split("/"))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "w") as f:
+            f.write(text if isinstance(text, str) else text.decode())
+    return coupling_dir
+
+
 @router.post("/couple")
 def create_coupling_job(req: CouplingRequest):
-    """Assemble + launch a preCICE coupling. build_coupled_bundle lays out the
-    participant OF-cases + the shared generated precice-config under ONE coupling
-    folder (= the exchange-directory); each participant is then submitted as its
-    own foam job (they share the folder, so they find each other over sockets).
-    Concurrency must be >= #participants (ZOOMY_MAX_JOBS). Returns the child
-    job ids; poll /jobs/<id> + fetch /jobs/<id>/results/hdf5 per participant."""
+    """Assemble + launch a preCICE coupling.
+
+    With ``files`` (the coupling folder), the coupling defines itself: it is
+    written out and submitted as ONE job on the folder, and the adapter runs its
+    own entry (``run.py``, else ``run.sh``). That is deliberately a single job --
+    preCICE participants have to be started together in one exchange directory,
+    and a coupling that ships a runner is the thing that knows how.
+
+    Without ``files``, the legacy template path: build_coupled_bundle lays out
+    per-TYPE template OF-cases + a generated precice-config under one coupling
+    folder and submits each participant as its own foam job (they share the
+    folder, so they find each other over sockets); concurrency must then be >=
+    #participants (ZOOMY_MAX_JOBS). Either way: poll /jobs/<id> and fetch
+    /jobs/<id>/results/hdf5."""
     if not _adapter:
         raise HTTPException(503, "No adapter configured")
     import os
     import tempfile
     from zoomy_prepost.coupling import build_coupled_bundle
+
+    if req.files:
+        coupling_dir = os.path.join(tempfile.mkdtemp(prefix="zoomy_couple_"),
+                                    req.coupling_id)
+        os.makedirs(coupling_dir, exist_ok=True)
+        try:
+            _materialize_coupling(coupling_dir, req.files)
+        except ValueError as e:
+            raise HTTPException(400, f"Invalid coupling: {e}")
+        entry = next((e for e in ("run.py", "run.sh")
+                      if os.path.exists(os.path.join(coupling_dir, e))), None)
+        if entry is None:
+            raise HTTPException(
+                400, f"coupling {req.coupling_id!r} carries no run.py or run.sh -- "
+                "a self-defining coupling must ship the runner that starts its "
+                "participants together")
+        job = jobs.submit(_adapter, coupling_dir)
+        names = [p.get("name") for p in req.participants]
+        return {"coupling_id": req.coupling_id, "dir": coupling_dir, "entry": entry,
+                "config": os.path.join(coupling_dir, "precice-config.xml"),
+                "interfaces": [], "jobs": [job],
+                "participants": [{"name": n, "job": job, "case_dir": coupling_dir}
+                                 for n in names]}
 
     # The GUI "Run coupled" sends only {name,type} per participant — it has no OF
     # template/binary. Resolve a per-TYPE compiled participant case + zoomyFoam

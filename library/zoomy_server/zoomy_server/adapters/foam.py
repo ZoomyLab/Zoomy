@@ -113,12 +113,33 @@ class FoamAdapter(SolverAdapter):
         on_progress(-1, time_end, 0.0)
 
     @staticmethod
+    def _canonical_name(case_dir):
+        """Which store the case DECLARES as its result.
+
+        A coupling writes one store per participant, and which of them is the
+        case's answer is a property of the coupling, not of alphabetical order —
+        so ``coupling.yml``'s ``canonical_output`` decides when it is there.
+        Without a declaration, the historical SME participant name.
+        """
+        manifest = os.path.join(case_dir, "coupling.yml")
+        if os.path.exists(manifest):
+            try:
+                import yaml
+                declared = (yaml.safe_load(open(manifest).read()) or {}).get(
+                    "canonical_output")
+                if declared:
+                    return f"{declared}.h5"
+            except Exception as e:
+                logger.warning("foam runner: unreadable coupling.yml (%s)", e)
+        return "swe_case.h5"
+
+    @staticmethod
     def _promote_foam_h5(case_dir, output_dir):
-        """Copy the foam h5 outputs (``run/outputs/{swe,vof}_case.h5``) into the
-        job output dir; the SME participant (``swe_case``) becomes the canonical
-        ``simulation.h5`` the server serves."""
+        """Copy the foam h5 outputs (``run/outputs/*.h5``) into the job output
+        dir; the store the case declares (see :meth:`_canonical_name`) becomes
+        the ``simulation.h5`` the server serves."""
         out = os.path.join(case_dir, "run", "outputs")
-        primary = os.path.join(out, "swe_case.h5")
+        primary = os.path.join(out, FoamAdapter._canonical_name(case_dir))
         found = []
         if os.path.exists(out):
             for name in sorted(os.listdir(out)):
