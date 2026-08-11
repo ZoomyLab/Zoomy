@@ -23,6 +23,19 @@ on:
       - "library/zoomy_server/**"
       - "library/zoomy_prepost/**"
       - "library/zoomy_foam/**"
+      # SUBMODULES: a pointer bump changes the GITLINK -- the bare path
+      # `library/zoomy_foam`, with no trailing slash -- so `library/<sub>/**`
+      # (which requires the `library/<sub>/` prefix) never matches it. The
+      # patterns above only work for the IN-TREE packages (zoomy_server,
+      # zoomy_prepost). zoomy_core/foam/jax/firedrake are submodules, so
+      # every pointer bump silently skipped the rebuild and the published
+      # image kept older code than main claimed: `bump zoomy_foam: --closure
+      # roughwall` built nothing, and a zoomy_core bump never matched its
+      # pyproject path either. Watch the gitlinks themselves.
+      - "library/zoomy_core"
+      - "library/zoomy_foam"
+      - "library/zoomy_jax"
+      - "library/zoomy_firedrake"
       - ".github/workflows/build-containers.yml"
       - ".github/workflows/dockers.txt"
   workflow_dispatch:
