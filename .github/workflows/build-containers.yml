@@ -124,6 +124,29 @@ jobs:
             if ! git diff --quiet "$base" "$head" -- library/zoomy_firedrake/pyproject.toml 2>/dev/null; then
               add_raw "zoomy_firedrake"
             fi
+
+            # A container that COPIES a library in and pip-installs it editable
+            # carries that library's SOURCE, so a source change must rebuild it.
+            # The checks above watch pyproject.toml only, which is how a real fix
+            # shipped to main while the published image kept the old code: a CORS
+            # fix in zoomy_server (without which no browser-served GUI can reach a
+            # local backend) selected NO container, so the workflow ran, built
+            # nothing, and reported success. Green, but a no-op.
+            # Derived from each recipe's own %files/COPY lines rather than a
+            # hand-kept map -- a map is the thing that goes stale next.
+            for pkg in $(git diff --name-only "$base" "$head" -- 'library/*' 2>/dev/null \
+                         | cut -d/ -f2 | sort -u); do
+              [ -d "library/$pkg" ] || continue
+              for c in $ALL; do
+                for recipe in "containers/$c/$c.def" "containers/$c/Dockerfile"; do
+                  [ -f "$recipe" ] || continue
+                  if grep -qE "(^|[[:space:]/])library/$pkg([[:space:]/]|$)" "$recipe"; then
+                    echo "Baked-in library changed: library/$pkg -> containers/$c"
+                    add_raw "$c"
+                  fi
+                done
+              done
+            done
           fi
 
           EXP=()
