@@ -9,6 +9,23 @@ class ZoomyServer:
     def __init__(self, adapter: SolverAdapter):
         self.adapter = adapter
         self.app = FastAPI(title=f"Zoomy Solver Server ({adapter.tag})", version="1.0")
+
+        # SECOND browser gate, independent of CORS and of Private Network Access.
+        # The GUI's service worker puts its page in Cross-Origin-Embedder-Policy
+        # ``require-corp`` (it needs cross-origin isolation for Pyodide).  In that
+        # mode a browser DISCARDS any cross-origin response that does not carry
+        # ``Cross-Origin-Resource-Policy: cross-origin`` -- and the service worker
+        # cannot paper over it, because it only rewrites headers on GETs it
+        # proxies, never on a response coming from another origin like
+        # http://localhost:8090.  Without this header the fetch fails in a way
+        # that is indistinguishable from "no server there", which is exactly how
+        # it presents: curl succeeds, the GUI reports "No healthy zoomy-server".
+        @self.app.middleware("http")
+        async def _corp(request, call_next):
+            response = await call_next(request)
+            response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+            return response
+
         # ``allow_private_network`` is what lets a browser-served GUI reach this
         # server at all.  A page served from a PUBLIC origin (the deployed GUI on
         # github.io) asking for a PRIVATE address (localhost / a LAN host) is
