@@ -14,9 +14,20 @@ EXECUTOR = ProcessPoolExecutor(max_workers=int(os.environ.get("ZOOMY_MAX_JOBS", 
 JOBS_DIR = os.path.join(tempfile.gettempdir(), "zoomy_jobs")
 
 
-def _write_progress(progress_file, iteration, time_val, dt):
+def _write_progress(progress_file, iteration, time_val, dt, message=None):
+    """Publish job progress, optionally with the solver's own latest log line.
+
+    ``message`` is what the GUI shows: its status callback already renders
+    ``s.message``, but nothing populated it, so a backend run was silent until
+    it either finished or raised — and a compiled-then-coupled foam run takes
+    minutes with nothing to look at. Forwarding the line makes a run
+    observable while it happens rather than only in its post-mortem.
+    """
+    payload = {"iteration": iteration, "time": time_val, "dt": dt}
+    if message:
+        payload["message"] = message
     with open(progress_file, "w") as f:
-        json.dump({"iteration": iteration, "time": time_val, "dt": dt}, f)
+        json.dump(payload, f)
 
 
 def _run_job(adapter_cls_path, case_dir, output_dir, progress_file):
@@ -31,8 +42,8 @@ def _run_job(adapter_cls_path, case_dir, output_dir, progress_file):
         mod = importlib.import_module(mod_path)
         adapter = getattr(mod, cls_name)()
 
-        def on_progress(iteration, time_val, dt):
-            _write_progress(progress_file, iteration, time_val, dt)
+        def on_progress(iteration, time_val, dt, message=None):
+            _write_progress(progress_file, iteration, time_val, dt, message)
 
         adapter.solve(case_dir, output_dir, on_progress)
 

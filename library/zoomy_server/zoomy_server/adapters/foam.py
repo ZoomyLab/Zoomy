@@ -86,15 +86,30 @@ class FoamAdapter(SolverAdapter):
             entry, cwd=case_dir,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
         )
+        # Stream the run's own output: forward every line to the GUI as the
+        # progress ``message`` and append it to run.log AS IT ARRIVES.  Both
+        # used to happen only at the end -- the raw line went to logger.debug
+        # (invisible) and run.log was written after proc.wait() -- so a foam
+        # coupling, which compiles two solvers and then marches, showed nothing
+        # at all until it finished or raised.  A build that dies at minute
+        # three should say so at minute three.
         out_lines = []
-        for line in proc.stdout:
-            s = line.rstrip()
-            out_lines.append(s)
-            self._parse_progress_line(s, on_progress)
-            logger.debug(s)
+        log_path = os.path.join(output_dir, "run.log")
+        with open(log_path, "w", buffering=1) as log:
+            for line in proc.stdout:
+                s = line.rstrip()
+                out_lines.append(s)
+                log.write(s + "\n")
+                self._parse_progress_line(s, on_progress)
+                if s:
+                    try:
+                        on_progress(-1, 0.0, 0.0, s)
+                    except TypeError:
+                        # Older server without the message parameter: the run
+                        # still proceeds, it is just silent again.
+                        pass
+                logger.info(s)
         proc.wait()
-        with open(os.path.join(output_dir, "run.log"), "w") as f:
-            f.write("\n".join(out_lines) + "\n")
         if proc.returncode != 0:
             tail = "\n".join(out_lines[-30:])
             raise RuntimeError(
