@@ -36,6 +36,157 @@ from zoomy_jax.mesh.mesh import convert_mesh_to_jax, lsq_gradient_per_field
 from zoomy_core.mesh import ensure_lsq_mesh
 
 
+# ── Inter-level coupling: THE PRODUCER of ``coupled_dm`` ────────────────────
+#
+# ``flux_operator`` below already CONSUMES a precomputed face contribution at
+# masked coupled boundary faces (``face_contrib_bnd`` is replaced wholesale by
+# ``coupled_dm``), threaded per window through ``step(..., coupled=(...))``.
+# Nothing produced it.  These two functions do.
+
+def interlevel_pad_low_state(q_low, n_high):
+    """Lift a LOW participant's interface state ``(n_low, n_faces)`` into the
+    HIGH space ``(n_high, n_faces)`` by zero-padding the missing moments.
+
+    The padding is a FORMALITY at run time: the emitted kernel already had
+    literal ``sp.Integer(0)`` substituted into rows ``[n_low, n_high)`` at
+    BUILD time (``Numerics._zero_padded_low_state``), so those inputs are dead
+    and CSE deleted every subtree they fed.  The array is padded anyway
+    because the emitted signature is sized from ``n_dof_q`` on every backend
+    (foam/amrex size ``Q_minus`` from it, and the C printers' argument
+    whitelists carry exactly six face keys) — so a short array is not
+    passable, while a padded one costs nothing.
+    """
+    q_low = jnp.asarray(q_low)
+    n_low = q_low.shape[0]
+    if n_low == n_high:
+        return q_low
+    if n_low > n_high:
+        raise ValueError(
+            f"interlevel_pad_low_state: low state has {n_low} rows, more than "
+            f"the high space's {n_high}.")
+    return jnp.concatenate(
+        [q_low, jnp.zeros((n_high - n_low,) + q_low.shape[1:], q_low.dtype)],
+        axis=0)
+
+
+def assert_interface_bed_is_flat(q_low, q_high, bed_index, *, tol=0.0):
+    """ASSERT ``Δb = 0`` across a coupling interface — the scope condition of
+    the discharge ledger, checked rather than assumed.
+
+    The ``q_0`` row telescopes across an inter-level face ONLY on a flat bed:
+    its nonconservative row carries the live bed column ``B[q_0][b] = g·h``,
+    so the two sides' contributions sum to ``-B[q_0][b]·Δb``, which is zero
+    iff ``Δb = 0``.  MEASURED on SME(0)↔SME(1): residual ``0.0`` exactly with
+    a flat bed, ``7.0e-01`` across a 0.4 m step, while ``h`` stays ``0.0`` in
+    both.  So this is not a formality — it is the difference between a
+    conservation claim that holds and one that is simply false.
+
+    Raises ``ValueError`` naming the worst face.  A no-op on traced (jit)
+    inputs, where a data-dependent check cannot be made; call it from the
+    window driver, which holds concrete arrays.
+    """
+    try:
+        db = np.asarray(jnp.asarray(q_high)[bed_index]
+                        - jnp.asarray(q_low)[bed_index], dtype=float)
+    except (jax.errors.TracerArrayConversionError, TypeError):
+        return                       # traced: not checkable here, by design
+    worst = float(np.abs(db).max()) if db.size else 0.0
+    if worst > tol:
+        face = int(np.argmax(np.abs(db)))
+        raise ValueError(
+            f"coupling interface is NOT flat: max|Δb| = {worst:.6e} at "
+            f"boundary face {face} (tol {tol:g}).  The inter-level face "
+            "operator conserves the DEPTH row across any bed, but the "
+            "discharge row q_0 telescopes only when Δb = 0 — its "
+            "nonconservative row carries the live bed column B[q_0][b] = g·h, "
+            "leaving a residual -B[q_0][b]·Δb.  Either flatten the bed at the "
+            "interface or drop q_0 from the conservation claim; do not assume "
+            "it.")
+
+
+def interlevel_face_contribution(rt_flux, rt_fluctuations, side, q_low, q_high,
+                                 aux_low, aux_high, parameters, normal,
+                                 *, n_low=None, flat_bed_row=None):
+    """THE SHARED INTERFACE FACE CONTRIBUTION, for ONE side of an inter-level
+    coupling — the ``coupled_dm`` that ``flux_operator`` consumes.
+
+    ``rt_flux`` / ``rt_fluctuations`` are the HIGH participant's registered
+    ``numerical_flux`` / ``numerical_fluctuations`` runtime kernels — BOTH arms
+    of the interface are evaluated with the HIGH model's operator, which is the
+    whole content of the fix.  ``side`` is ``"low"`` or ``"high"``.
+
+    Returns an array of shape ``(rows_of_this_participant, n_faces)``, aligned
+    to the boundary-face axis exactly as ``coupled_mask`` is — i.e. directly
+    the ``coupled_dm`` argument of ``step(..., coupled=(coupled_dm,
+    coupled_mask))``.
+
+    ONE EVALUATION, TWO PROJECTIONS — AND THIS IS THE WHOLE POINT.
+    The kernel is called ONCE, at the CANONICAL orientation ``normal = low →
+    high``.  Both sides are then read out of that single packed answer:
+
+        side="low"   ->  ( F + D_minus )[0 : n_low]
+        side="high"  ->  ( -F + D_plus )
+
+    which is precisely the interior-face convention this solver already uses
+    (``dQ[A] -= (F + Dm)``, ``dQ[B] -= (-F + Dp)``), so a coupled face is
+    discretised identically to an interior one.
+
+    DO NOT "let both participants build the identical pair with their own
+    outward normal".  That is the trap this function exists to close, and the
+    older comment on the consumer said exactly the wrong thing.  ``nHat`` is
+    normalised as ``n/(|n| + SMALL)``, so on an x-normal face ``nHat.x()`` is
+    ``1 - 2.2e-16`` rather than ``1.0``, and ``0.5·(a+b)·nx`` then differs from
+    ``0.5·(a·nx + b·nx)`` in the last bit — MEASURED to break bit-equality on
+    ~62% of states (``swePreciceCoupling.C``).  Two independent evaluations of
+    "the same" Riemann problem are not bit-identical; one evaluation and two
+    sign projections is.
+
+    THE TRUNCATION IS FREE.  The low participant reads rows ``0:n_low`` of the
+    high-space answer and nothing else: no second kernel, no restriction
+    operator, no projection matrix.  That is legitimate because of the
+    hierarchy identity (V&K eq 3.66) — the high model's flux at the zero-padded
+    low state restricted to the first ``n_L`` rows IS the low model's own flux.
+
+    NO NEW EMITTED KERNEL.  This calls the participant's ALREADY-REGISTERED
+    ``numerical_flux`` / ``numerical_fluctuations``, which take an explicit
+    face pair; the zero-padding is a pure caller-side action.  So the whole
+    construction needs no printer change, no new registered operator, and no
+    new SystemModel API.  Proved in
+    ``zoomy_core/tests/fvm/test_interlevel_telescoping.py`` over a state sweep.
+
+    CONSERVATION IS ROW-SCOPED — AND THE SCOPE IS CHECKED, NOT ASSUMED.
+    The two contributions sum to ``-(D_plus + D_minus) = -A_int·ΔQ``, which
+    vanishes exactly on the rows whose nonconservative row is identically zero.
+    For the K&T SME family that is ``h`` (and the stationary ``b``): ``h``
+    telescopes across ANY bed, but the discharge row ``q_0`` telescopes only
+    across a FLAT bed, because its nonconservative row carries the live bed
+    column ``B[q_0][b] = g·h``.  Pass ``flat_bed_row=<index of b>`` to have that
+    asserted here per window (see :func:`assert_interface_bed_is_flat`);
+    without it the mass ledger still holds and the discharge one is not
+    claimed.
+    """
+    if side not in ("low", "high"):
+        raise ValueError(f"side must be 'low' or 'high', got {side!r}")
+    if flat_bed_row is not None:
+        assert_interface_bed_is_flat(q_low, q_high, int(flat_bed_row))
+
+    q_high = jnp.asarray(q_high)
+    n_high = q_high.shape[0]
+    q_low_padded = interlevel_pad_low_state(q_low, n_high)
+
+    # THE single evaluation, at the canonical low->high orientation.
+    args = (q_low_padded, q_high, aux_low, aux_high, parameters, normal)
+    F = jnp.asarray(rt_flux(*args)).reshape(n_high, -1)
+    fluct = jnp.asarray(rt_fluctuations(*args))
+    Dp = jnp.asarray(fluct[0]).reshape(n_high, -1)
+    Dm = jnp.asarray(fluct[1]).reshape(n_high, -1)
+
+    if side == "low":
+        rows = n_low if n_low is not None else jnp.shape(q_low)[0]
+        return (F + Dm)[0:int(rows)]
+    return -F + Dp
+
+
 # ── Logging callbacks (used by io_callback inside JIT) ──────────────────────
 
 def log_callback_hyperbolic(iteration, time, dt, time_stamp, log_every=10):
@@ -1186,15 +1337,25 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 # Coupled-BC flux injection (conservative characteristic
                 # coupling, Dahm-Giesselmann-Helzel / PreciceManager.H
                 # applyCoupledFaceFlux).  At coupled boundary faces the face
-                # contribution is the SHARED high-fidelity Riemann flux
-                # ``F + D_minus`` computed on the projected (own, peer) pair in
-                # the agreed high-fidelity model space and passed in per window
-                # (``coupled_dm``, aligned to the boundary-face axis); both
-                # participants build the identical pair with their own outward
-                # normal, so the two contributions telescope -> conservative.
+                # contribution is the SHARED Riemann answer computed in the
+                # agreed high-fidelity model space and passed in per window
+                # (``coupled_dm``, aligned to the boundary-face axis).
                 # ``coupled_mask`` selects the coupled faces; normal faces keep
                 # the ghost flux.  Both static-None by default -> the branch is
                 # dropped at trace time and behaviour is unchanged.
+                #
+                # PRODUCED by ``interlevel_face_contribution`` (module top).
+                # This comment USED TO SAY "both participants build the
+                # identical pair with their own outward normal, so the two
+                # contributions telescope".  That is exactly the thing NOT to
+                # do: ``nHat`` is normalised as ``n/(|n| + SMALL)``, so an
+                # x-normal face carries ``nHat.x() = 1 - 2.2e-16`` and the two
+                # sides' algebraically-equal expressions differ in the last bit
+                # -- measured to break bit-equality on ~62% of states
+                # (``swePreciceCoupling.C``).  The producer instead evaluates
+                # the face ONCE at the canonical low->high orientation and
+                # hands each side a sign projection of that ONE answer
+                # (``F + D_minus`` low, ``-F + D_plus`` high).
                 face_contrib_bnd = F_num_bnd + Dm_bnd
                 if coupled_dm is not None:
                     face_contrib_bnd = jnp.where(
@@ -1624,7 +1785,12 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         dt = jnp.minimum(dt, time_end - time)
         dt = self._couple_dt(dt)                          # cap by partner dt
         Q = self._couple_pre_step(time, dt, Q, Qaux)      # read partner → BC
-        Q_stepped = self.step(dt, time, Q, Qaux, parameters)
+        # The shared interface face contribution for THIS window, if a coupled
+        # subclass produced one (see ``interlevel_face_contribution``).  None
+        # uncoupled -> ``step`` takes its existing ``coupled=None`` path and
+        # the flux operator drops the branch at trace time: bit-identical.
+        coupled = self._couple_face_contribution(time, dt, Q, Qaux)
+        Q_stepped = self.step(dt, time, Q, Qaux, parameters, coupled=coupled)
         Q, Qaux = self.post_step(
             time + dt, dt, Q_stepped, Qold, Qaux, parameters)
         self._couple_post_step(time + dt, dt, Q, Qaux)    # write partner + advance
@@ -1643,6 +1809,22 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         """Read partner data and inject it into the boundary state BEFORE the
         explicit step.  Returns Q unchanged uncoupled."""
         return Q
+
+    def _couple_face_contribution(self, time, dt, Q, Qaux):
+        """The ``(coupled_dm, coupled_mask)`` pair for THIS window, or ``None``.
+
+        A coupled subclass builds it with :func:`interlevel_face_contribution`
+        — ONE evaluation of the shared inter-level face at the canonical
+        low→high orientation, projected to this participant's side — and
+        returns ``(coupled_dm, coupled_mask)`` with shapes
+        ``(rows_of_this_participant, n_boundary_faces)`` and
+        ``(n_boundary_faces,)``.
+
+        ``None`` uncoupled, which is what every existing caller gets: ``step``
+        keeps its ``coupled=None`` path and ``flux_operator`` drops the whole
+        injection branch at trace time, so an uncoupled march is bit-identical
+        to before this hook existed."""
+        return None
 
     def _couple_post_step(self, time, dt, Q, Qaux):
         """Write this step's result to the partner + advance the coupling.
