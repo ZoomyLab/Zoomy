@@ -93,6 +93,26 @@ def _shape(arr: sp.Array) -> tuple:
     return tuple(int(s) for s in arr.shape)
 
 
+def _slot_is_structurally_zero(sm, flag: str) -> bool:
+    """Core's structural-zero verdict for one operator slot, or ``False`` when
+    this SystemModel cannot answer.
+
+    SHAPE IS NOT THE QUESTION.  ``_shape(_to_array_of_exprs(...))`` only asks
+    "does the slot have entries"; SWE's ``diffusion_matrix`` is a correctly
+    shaped ``(4, 4, 2, 2)`` tensor of literal ZEROS, so a shape gate lowers it,
+    the solver then builds a ``DenseDiffusionOperatorJAX``, and that walks
+    every face in Python — 2287 s of a 2539 s LowerTriangle catchment run
+    assembling an identically-zero operator.
+
+    The verdict is READ from ``zoomy_core`` (``NumericalSystemModel``'s
+    ``operator_is_zero`` family), never re-derived here: one criterion, one
+    implementation.  An SM that does not carry the property (an older core, a
+    duck-typed stand-in) answers ``False``, i.e. exactly today's shape-only
+    behaviour — the safe direction, since a spurious operator only costs time.
+    """
+    return getattr(sm, flag, None) is True
+
+
 def _flat_symbols(zstruct_like) -> List[sp.Symbol]:
     """Flatten a Zstruct (or list-of-Symbols) into a list of sympy
     Symbols, preserving order."""
@@ -478,14 +498,23 @@ class JaxRuntime:
         # ``None`` when the SystemModel carries no diffusion.  Solvers
         # that wire diffusion through the runtime use these; FV paths
         # that fold diffusion into the convective flux can ignore them.
+        #
+        # Gated on STRUCTURAL ZERO as well as shape: a tensor of literal zeros
+        # is "no diffusion", and leaving the slot lowered makes the solver
+        # assemble a dense TPFA operator for it (see
+        # ``_slot_is_structurally_zero`` for the measurement).
         dm = getattr(sm, "diffusion_matrix", None)
-        if dm is not None and _shape(_to_array_of_exprs(dm)):
+        if (dm is not None and _shape(_to_array_of_exprs(dm))
+                and not _slot_is_structurally_zero(
+                    sm, "diffusion_matrix_is_zero")):
             self.diffusion_matrix = self._build_slot_operator(
                 "diffusion_matrix", dm)
         else:
             self.diffusion_matrix = None
         dme = getattr(sm, "diffusion_matrix_explicit", None)
-        if dme is not None and _shape(_to_array_of_exprs(dme)):
+        if (dme is not None and _shape(_to_array_of_exprs(dme))
+                and not _slot_is_structurally_zero(
+                    sm, "diffusion_matrix_explicit_is_zero")):
             self.diffusion_matrix_explicit = self._build_slot_operator(
                 "diffusion_matrix_explicit", dme)
         else:
