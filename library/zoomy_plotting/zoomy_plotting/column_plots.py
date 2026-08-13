@@ -212,9 +212,15 @@ def read_zoomyfoam(case, model, n_cells, x, K=24, label=""):
     return ColumnField(t, np.asarray(x), zeta, fields, label)
 
 
-def read_vof_raw(case, nx, ny, lx, ly, stations=None, label=""):
+def read_vof_raw(case, nx, ny, lx, ly, stations=None, label="", x0=0.0):
     """Raw VoF reader: alpha frames (for plot_water_vof) + a ColumnField of
-    water-relative u(zeta) profiles resampled at the given x stations."""
+    water-relative u(zeta) profiles resampled at the given x stations.
+
+    ``x0``: the mesh's left edge in world coordinates (default 0).  A VoF tank
+    need not start at the origin — a monolithic reference spanning the whole
+    coupled domain starts to the LEFT of the interface — and ``stations`` are
+    given in world coordinates either way.
+    """
     dz, dy = lx / nx, ly / ny
     ycc = (np.arange(ny) + 0.5) * dy
     frames = _frame_dirs(case, "alpha.water")
@@ -222,10 +228,10 @@ def read_vof_raw(case, nx, ny, lx, ly, stations=None, label=""):
     alphas = np.zeros((len(t), ny, nx))
     for fi, (_, d) in enumerate(frames):
         alphas[fi] = _read_internal(d / "alpha.water", nx * ny).reshape(ny, nx)
-    raw = {"t": t, "alpha": alphas, "lx": lx, "ly": ly}
+    raw = {"t": t, "alpha": alphas, "lx": lx, "ly": ly, "x0": x0}
     if stations is None:
         return raw, None
-    cols = [int(np.clip(s / dz, 0, nx - 1)) for s in stations]
+    cols = [int(np.clip((s - x0) / dz, 0, nx - 1)) for s in stations]
     K = ny
     zeta = (np.arange(K) + 0.5) / K
     fields = {n: np.zeros((len(t), len(cols), K)) for n in CANONICAL}
@@ -242,7 +248,7 @@ def read_vof_raw(case, nx, ny, lx, ly, stations=None, label=""):
                     order = np.argsort(zw)
                     fields["u"][fi, si, :] = np.interp(zeta, zw[order],
                                                        Ux[wet, c][order])
-    cf = ColumnField(t, np.array([(c + 0.5) * dz for c in cols]), zeta,
+    cf = ColumnField(t, np.array([x0 + (c + 0.5) * dz for c in cols]), zeta,
                      fields, label)
     return raw, cf
 
@@ -346,18 +352,29 @@ def plot_water_vof(ax, raw, tq, smooth=True, extent=None, cmap="Blues",
     return ax
 
 
-def plot_profiles(ax, sources, xq, tq, colors=None, labels=None, **kw):
+def plot_profiles(ax, sources, xq, tq, colors=None, labels=None, styles=None,
+                  **kw):
     """u(zeta) at station xq: every source (ColumnField) overlaid.
-    A gap between curves at a coupling interface = interface mismatch."""
+    A gap between curves at a coupling interface = interface mismatch.
+
+    ``styles``: optional per-source line style — a linestyle string, or a dict
+    of line kwargs (``ls``, ``lw``, ...).  A reference source is dashed while
+    the computed ones stay solid (the house convention); a non-solid source is
+    drawn without markers, the dashes ARE its identity.
+    """
     from .plot import style as _st
     colors = colors or [f"C{i}" for i in range(len(sources))]
     for k, cf in enumerate(sources):
         i, s = cf.at(tq), cf.station(xq)
         lab = (labels[k] if labels else cf.label) or None
+        st = (styles[k] if styles else "-") or "-"
+        st = dict(st) if isinstance(st, dict) else {"ls": st}
+        ls = st.get("ls", "-")
         ax.plot(cf.fields["u"][i, s, :], cf.zeta, color=colors[k],
-                marker=kw.get("marker", _st.MARKERS[k % len(_st.MARKERS)]),
+                marker=("" if ls != "-" else
+                        kw.get("marker", _st.MARKERS[k % len(_st.MARKERS)])),
                 markevery=kw.get("markevery", _st.MARKEVERY),
-                label=lab,
+                label=lab, **st,
                 **{a: b for a, b in kw.items()
                    if a not in ("marker", "markevery")})
     ax.set_xlabel("u")
@@ -440,12 +457,22 @@ def plot_series(ax, curves, **kw):
 # ── layer 2: ready-made composed figures (built from the tools above) ──────
 
 def fig_coupling(fig, tq, reduced_cf, vof_raw, panels, interface_x=0.0,
-                 xlim=None, ylim=None, ulim=None, title=None):
+                 xlim=None, ylim=None, ulim=None, title=None,
+                 reference=(), ref_raw=None, ref_label="monolithic reference"):
     """The standard coupled-domain figure: top = joint water surface with
     interface + station markers; bottom = one u(zeta) panel per station,
     each panel's FRAME colored like its marker line in the top view.
 
     panels: list of (title, station_x, [ColumnField, ...], color)
+
+    ``ref_raw``: a monolithic run's raw VoF dict covering the WHOLE joined
+    domain — its column-integrated free surface is drawn dashed over both
+    participants, so height AND (via ``reference``) the velocity profile of
+    the fully resolved reference are visible against the coupled solution.
+    ``reference``: ColumnFields of that same reference at the panel stations;
+    any of them appearing in a panel's sources is drawn dashed.
+
+    Returns ``{"water": ax, "profiles": [ax, ...]}``.
     """
     from .plot import style as _st
     gs = fig.add_gridspec(2, max(len(panels), 1), height_ratios=[1.2, 1.0],
@@ -454,6 +481,15 @@ def fig_coupling(fig, tq, reduced_cf, vof_raw, panels, interface_x=0.0,
     plot_water_vof(ax, vof_raw, tq, color=_st.COLORS["water"])
     plot_water_columns(ax, reduced_cf, tq, style="fill",
                        color=_st.COLORS["water"])
+    if ref_raw is not None:
+        i = int(np.argmin(np.abs(ref_raw["t"] - tq)))
+        ny, nx = ref_raw["alpha"][i].shape
+        x0 = ref_raw.get("x0", 0.0)
+        dx, dy = ref_raw["lx"] / nx, ref_raw["ly"] / ny
+        ax.plot(x0 + (np.arange(nx) + 0.5) * dx,
+                ref_raw["alpha"][i].sum(axis=0) * dy,
+                color=_st.COLORS["reference"], ls="--", lw=1.6, marker="",
+                zorder=5, label=ref_label)
     ax.axvline(interface_x, color=_st.COLORS["interface"], lw=1.6)
     mark_stations(ax, [s for _, s, _, _ in panels],
                   [c for _, _, _, c in panels],
@@ -461,19 +497,29 @@ def fig_coupling(fig, tq, reduced_cf, vof_raw, panels, interface_x=0.0,
     if xlim: ax.set_xlim(*xlim)
     if ylim: ax.set_ylim(*ylim)
     ax.set_title(title or f"t = {tq:5.2f} s")
+    ref_ids = {id(cf) for cf in reference}
+    profs = []
     for k, (name, xq, sources, color) in enumerate(panels):
         a = fig.add_subplot(gs[1, k])
-        plot_profiles(a, sources, xq, tq,
-                      colors=[_st.COLORS["reduced"], _st.COLORS["resolved"],
-                              _st.COLORS["reference"]][:len(sources)])
+        cols, sty = [], []
+        j = 0
+        for s in sources:
+            if id(s) in ref_ids:
+                cols.append(_st.COLORS["reference"]); sty.append("--")
+            else:
+                cols.append([_st.COLORS["reduced"],
+                             _st.COLORS["resolved"]][min(j, 1)])
+                sty.append("-"); j += 1
+        plot_profiles(a, sources, xq, tq, colors=cols, styles=sty)
         a.set_title(name)
         if ulim: a.set_xlim(*ulim)
         frame_color(a, color)
+        profs.append(a)
     _st.figure_legend(fig, extra=[
         ("interface", _st.line("interface")),
         ("water", _st.line("water", lw=5)),
     ])
-    return fig
+    return {"water": ax, "profiles": profs}
 
 
 def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
@@ -483,7 +529,12 @@ def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
     (coupled solid + markers, reference dashed gray); bottom = one u(zeta)
     panel per station, frames colored like their marker lines.
 
-    coupled / reference: list of (ColumnField, label)
+    coupled: list of (ColumnField, label)
+    reference: list of (ColumnField, label) or (ColumnField, label, kw), where
+        ``kw`` overrides color/ls/lw — a reference the computed curve is meant
+        to LIE ON has to be drawn thick and light so it stays visible under
+        the solid computed line, while a reference that is only a yardstick
+        (a neighbouring model level) wants a contrasting dash.
     panels: list of (title, station_x, [ColumnField, ...], color)
 
     Returns ``{"water": ax, "profiles": [ax, ...]}`` so callers can overlay
@@ -494,14 +545,18 @@ def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
                           height_ratios=[1.2, 1.0] if panels else [1.0],
                           hspace=0.45, wspace=0.4)
     ax = fig.add_subplot(gs[0, :])
-    color_of = {}
+    color_of, style_of = {}, {}
     grays = ["0.55", "0.25", "0.7"]
-    for k, (cf, lab) in enumerate(reference):
+    for k, entry in enumerate(reference):
+        cf, lab = entry[0], entry[1]
+        kw = dict(entry[2]) if len(entry) > 2 else {}
         i = cf.at(tq)
-        color_of[id(cf)] = grays[k % len(grays)]
+        color_of[id(cf)] = kw.pop("color", grays[k % len(grays)])
+        kw.setdefault("ls", "--")
+        style_of[id(cf)] = kw
         ax.plot(cf.x, cf.fields["b"][i, :, 0] + cf.fields["h"][i, :, 0],
-                color=color_of[id(cf)], ls="--", marker="",
-                label=lab or cf.label)
+                color=color_of[id(cf)], marker="",
+                label=lab or cf.label, **kw)
     for k, (cf, lab) in enumerate(coupled):
         i = cf.at(tq)
         color_of[id(cf)] = _st.CYCLE[k % len(_st.CYCLE)]
@@ -524,7 +579,8 @@ def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
         a = fig.add_subplot(gs[1, k])
         plot_profiles(a, sources, xq, tq,
                       colors=[color_of.get(id(s), f"C{j}")
-                              for j, s in enumerate(sources)])
+                              for j, s in enumerate(sources)],
+                      styles=[style_of.get(id(s), "-") for s in sources])
         a.set_title(name)
         if ulim:
             a.set_xlim(*ulim)

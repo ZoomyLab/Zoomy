@@ -335,6 +335,46 @@ def _collect_handles_labels(axes, extra=None, remove_in_axes=True):
     return handles, labels
 
 
+#: Largest share of the figure height ``figure_legend`` will surrender to the
+#: legend strip.  Beyond this the figure is mostly legend, so the caller is
+#: warned rather than the axes being squeezed away.
+_LEGEND_MAX_BOTTOM = 0.75
+
+
+def label_panels(fig, axes=None, fmt="({}) ", start="a", upper=False):
+    """Prefix each subplot's TITLE with a panel letter: ``(a)``, ``(b)``, ...
+
+    A multi-panel figure has to be referable from the caption and the prose
+    ("panel (b) shows ...").  Putting the letter in the title rather than
+    floating it in the corner keeps it with the thing it names, survives
+    tight_layout, and cannot collide with the data.
+
+    Idempotent: an axes whose title already starts with the pattern is left
+    alone, so calling this twice (or on a figure built by a helper that
+    already labelled it) does not produce ``(a) (a) depth``.
+
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.set_title("depth"); ax2.set_title("velocity")
+        style.label_panels(fig)        # -> "(a) depth", "(b) velocity"
+    """
+    import re
+
+    axes = list(axes if axes is not None else fig.axes)
+    axes = [ax for ax in axes if ax.get_visible()]
+    if len(axes) < 2:
+        return axes                      # a single panel needs no letter
+    pat = re.compile(r"^\s*[\(\[]?[A-Za-z][\)\].]\s+")
+    for i, ax in enumerate(axes):
+        title = ax.get_title()
+        if pat.match(title):
+            continue                     # already labelled
+        letter = chr(ord(start) + i)
+        if upper:
+            letter = letter.upper()
+        ax.set_title(fmt.format(letter) + title)
+    return axes
+
+
 def _frame_legend(leg):
     """Apply the publication thin-gray legend frame (shared mechanics)."""
     leg.get_frame().set_edgecolor("#BBBBBB")
@@ -343,11 +383,23 @@ def _frame_legend(leg):
     return leg
 
 
-def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
+def figure_legend(fig, extra=None, ncol=None, reserve=0.12, pad=0.02):
     """ONE legend row underneath the whole figure (publication convention:
     thin light frame separating it from the caption).  Collects entries
     from all axes (de-duplicated, in-axes legends removed) plus ``extra``
-    [(label, handle), ...] proxies."""
+    [(label, handle), ...] proxies.
+
+    The reserved strip is MEASURED, not assumed.  ``reserve`` is only a
+    lower bound: after the legend is placed we render once and grow the
+    bottom margin to whatever the legend plus the axes' own decorations
+    actually occupy.  A fixed reserve silently fails as soon as the legend
+    needs a second row, the font grows (``use("presentation")``), or an
+    x-label carries a unit -- the legend then sits ON the x-label, which is
+    the one collision this layout exists to prevent.
+
+    ``pad`` is the clear gap left between the top of the legend and the
+    bottom of the lowest x-label, in figure fractions.
+    """
     handles, labels = _collect_handles_labels(fig.axes, extra)
     if not handles:
         return None
@@ -356,7 +408,57 @@ def figure_legend(fig, extra=None, ncol=None, reserve=0.12):
     leg = fig.legend(handles, labels, loc="lower center",
                      bbox_to_anchor=(0.5, 0.0), ncol=ncol,
                      frameon=True, fancybox=True, borderpad=0.6)
-    return _frame_legend(leg)
+    _frame_legend(leg)
+
+    # Measure the REAL clearance and grow the margin until the legend clears
+    # the lowest x-label by ``pad``.  Iterated rather than solved in one shot:
+    # moving the axes changes both the legend's wrapped height and the tight
+    # bbox, so a single analytic estimate is systematically short (measured:
+    # fine at thesis/publication sizes, ~0.011 of the figure INTO the x-label
+    # at presentation size).  Two or three passes converge.
+    try:
+        inv = fig.transFigure.inverted()
+        for _ in range(4):
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            top = leg.get_window_extent(renderer).transformed(inv).y1
+            lowest = None
+            for ax in fig.axes:
+                if not ax.get_visible():
+                    continue
+                tb = ax.get_tightbbox(renderer)
+                if tb is None:
+                    continue
+                y0 = tb.transformed(inv).y0
+                lowest = y0 if lowest is None else min(lowest, y0)
+            if lowest is None:
+                break
+            deficit = pad - (lowest - top)
+            if deficit <= 1e-4:
+                break
+            want = fig.subplotpars.bottom + deficit
+            if want > _LEGEND_MAX_BOTTOM:
+                # The legend needs more than this share of the figure -- at
+                # that point the plot is mostly legend and growing the margin
+                # further is not the right answer.  Say so instead of leaving
+                # a silent overlap: the caller wants fewer entries or more
+                # columns.
+                import warnings
+                warnings.warn(
+                    f"figure_legend: {len(handles)} entries in {ncol} column(s) "
+                    f"need {want:.0%} of the figure height; capped at "
+                    f"{_LEGEND_MAX_BOTTOM:.0%}, so the legend may overlap the "
+                    "x-label. Pass a larger ncol or use fewer entries.",
+                    stacklevel=2)
+                fig.subplots_adjust(bottom=_LEGEND_MAX_BOTTOM)
+                break
+            fig.subplots_adjust(bottom=want)
+    except Exception:
+        # A backend without a usable renderer keeps the historical fixed
+        # reserve rather than failing the plot -- the legend is cosmetic,
+        # the figure is not.
+        pass
+    return leg
 
 
 @contextmanager
