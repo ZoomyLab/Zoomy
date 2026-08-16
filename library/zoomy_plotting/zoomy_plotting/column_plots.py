@@ -522,8 +522,37 @@ def fig_coupling(fig, tq, reduced_cf, vof_raw, panels, interface_x=0.0,
     return {"water": ax, "profiles": profs}
 
 
+def _carry_to_face(x, y, xe):
+    """Carry the end cell of a coupled arm out to the interface FACE.
+
+    A finite-volume cell owns the space up to its face, but ``cf.x`` holds cell
+    CENTRES, so an arm ending at the seam stops half a cell short of it. With
+    two arms meeting there the curves stop short from both sides at once -- for
+    the SME|VOF seam the last moment centre is at x = -0.01 m and the first
+    resolved centre at x = +0.025 m, a 0.035 m hole with the interface line
+    drawn inside it. That reads as a break in the water surface which the
+    solution does not have.
+
+    The end value is held CONSTANT over the half cell rather than extrapolated:
+    a cell average is a constant over its own cell, and a linear extension would
+    invent a slope that no scheme computed. What remains visible at the face is
+    then the genuine jump BETWEEN the two arms, which is the quantity
+    `analysis.seam_jump` measures and not an artefact of where the centres sit.
+    """
+    x = np.asarray(x, float)
+    y = np.asarray(y, float)
+    if xe is None or x.size == 0:
+        return x, y
+    if xe > x[-1]:
+        return np.append(x, xe), np.append(y, y[-1])
+    if xe < x[0]:
+        return np.insert(x, 0, xe), np.insert(y, 0, y[0])
+    return x, y
+
+
 def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
-                         interface_x=None, ylim=None, ulim=None, title=None):
+                         interface_x=None, ylim=None, ulim=None, title=None,
+                         carry_to_interface=False):
     """Reduced<->reduced coupling figure (the SME|SME analogue of
     :func:`fig_coupling`): top = free surface b+h(x) of every source
     (coupled solid + markers, reference dashed gray); bottom = one u(zeta)
@@ -560,7 +589,10 @@ def fig_reduced_coupling(fig, tq, coupled, reference=(), panels=(),
     for k, (cf, lab) in enumerate(coupled):
         i = cf.at(tq)
         color_of[id(cf)] = _st.CYCLE[k % len(_st.CYCLE)]
-        ax.plot(cf.x, cf.fields["b"][i, :, 0] + cf.fields["h"][i, :, 0],
+        xs, ys = cf.x, cf.fields["b"][i, :, 0] + cf.fields["h"][i, :, 0]
+        if carry_to_interface:
+            xs, ys = _carry_to_face(xs, ys, interface_x)
+        ax.plot(xs, ys,
                 color=color_of[id(cf)], marker=_st.MARKERS[k % len(_st.MARKERS)],
                 markevery=_st.MARKEVERY, label=lab or cf.label)
     if interface_x is not None:
