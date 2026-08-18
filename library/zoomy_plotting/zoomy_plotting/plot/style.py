@@ -90,22 +90,33 @@ PROFILES = {
 #: sizes for a single-panel figure at that medium's ``1col`` / ``2col`` /
 #: ``full`` width. Switch the preset to reflow a case from journal to thesis
 #: to slides without touching its plotting code.
+#:
+#: ``text`` is the width a figure gets when it is placed NORMALLY, i.e. into the
+#: running text column, and it is the token to reach for unless the figure is
+#: explicitly marked full-width in the document. For ``thesis`` it is measured
+#: rather than guessed: ``tufte-book`` at ``b5paper`` (the thesis template)
+#: reports ``\textwidth = 292.096 pt = 4.042 in``, ``\marginparwidth = 1.443 in``
+#: and ``\marginparsep = 0.289 in``, so a full-width float spans 5.774 in.
+#: Authoring at ``full`` (5.5 in) and then placing the figure normally scales it
+#: by 0.735, which turns the 9 pt house font into 6.6 pt on the page. That is a
+#: silent defect: nothing errors, the labels just come out below the readable
+#: minimum. Match the token to the placement.
 SIZES = {
     "publication":  {"cell": (3.4, 2.6),
                      "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
-                                "full": (7.0, 3.4)}},
+                                "text": (3.4, 2.6), "full": (7.0, 3.4)}},
     "print":        {"cell": (3.4, 2.6),
                      "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
-                                "full": (7.0, 3.4)}},
+                                "text": (3.4, 2.6), "full": (7.0, 3.4)}},
     "thesis":       {"cell": (2.75, 2.4),
                      "widths": {"1col": (2.7, 2.2), "2col": (5.5, 3.4),
-                                "full": (5.5, 3.4)}},
+                                "text": (4.04, 3.0), "full": (5.5, 3.4)}},
     "screen":       {"cell": (5.0, 3.6),
                      "widths": {"1col": (6.0, 4.0), "2col": (11.0, 5.0),
-                                "full": (12.0, 6.0)}},
+                                "text": (6.0, 4.0), "full": (12.0, 6.0)}},
     "presentation": {"cell": (6.0, 4.2),
                      "widths": {"1col": (7.0, 4.5), "2col": (12.0, 6.0),
-                                "full": (13.3, 7.5)}},
+                                "text": (7.0, 4.5), "full": (13.3, 7.5)}},
 }
 
 
