@@ -101,6 +101,11 @@ PROFILES = {
 #: by 0.735, which turns the 9 pt house font into 6.6 pt on the page. That is a
 #: silent defect: nothing errors, the labels just come out below the readable
 #: minimum. Match the token to the placement.
+#:
+#: ``full`` is correspondingly the full-width float, ``\textwidth +
+#: \marginparsep + \marginparwidth = 5.774 in``, and a figure authored at it
+#: must carry ``:class: full-width`` in the document or it will be squeezed back
+#: into the 4.04 in column.
 SIZES = {
     "publication":  {"cell": (3.4, 2.6),
                      "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
@@ -109,8 +114,8 @@ SIZES = {
                      "widths": {"1col": (3.4, 2.6), "2col": (7.0, 3.4),
                                 "text": (3.4, 2.6), "full": (7.0, 3.4)}},
     "thesis":       {"cell": (2.75, 2.4),
-                     "widths": {"1col": (2.7, 2.2), "2col": (5.5, 3.4),
-                                "text": (4.04, 3.0), "full": (5.5, 3.4)}},
+                     "widths": {"1col": (2.7, 2.2), "2col": (5.77, 3.4),
+                                "text": (4.04, 3.0), "full": (5.77, 3.4)}},
     "screen":       {"cell": (5.0, 3.6),
                      "widths": {"1col": (6.0, 4.0), "2col": (11.0, 5.0),
                                 "text": (6.0, 4.0), "full": (12.0, 6.0)}},
