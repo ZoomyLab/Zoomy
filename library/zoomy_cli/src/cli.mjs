@@ -735,7 +735,8 @@ export class ZoomyCLI {
     /** Generated default visualization (mirrors zoomy_prepost.case._viz_code). */
     _vizCode() {
         return this.vizPrelude() + [
-            "field = next(iter(store.field.keys()))",
+            "names = list(store.field.keys())",
+            "field = next((n for n in (\"h\", \"height\", \"q1\") if n in names), names[0])",
             "with zp.apply_style():",
             "    fig, ax = plt.subplots()",
             "    zp.MatplotlibPlotter(store).plot(ax, time_step=time_step, field=field,",
