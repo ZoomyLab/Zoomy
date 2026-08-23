@@ -667,12 +667,20 @@ export class ZoomyCLI {
      *  simulation.h5 the Run section produced. */
     vizPrelude() {
         return [
+            "import os",
             "import matplotlib",
             "import matplotlib.pyplot as plt",
             "import zoomy_plotting as zp",
             "",
-            "store = zp.read_hdf5(\"simulation.h5\")",
-            "time_step = store.n_snapshots - 1        # last snapshot",
+            "# The Run section writes simulation.h5 for a case whose deliverable is a",
+            "# field. A case whose deliverable is not -- the code-printer session emits",
+            "# an AMReX header and its viz card reads flux_excerpt.txt, never the store",
+            "# -- writes no such file, and reading it unconditionally killed the whole",
+            "# notebook with FileNotFoundError before the viz card ran at all. Load it",
+            "# when it is there; a viz card that genuinely needs it still fails on its",
+            "# own terms, which is the error worth seeing.",
+            "store = zp.read_hdf5(\"simulation.h5\") if os.path.exists(\"simulation.h5\") else None",
+            "time_step = (store.n_snapshots - 1) if store is not None else 0",
             "field_name = None                        # None -> first field",
             "try:",
             "    display                              # provided by Jupyter",
