@@ -113,8 +113,9 @@ correctness check for a coupling change.
 
 ## Install
 
-Requires OpenFOAM 12+, preCICE 3, and the project apptainer image. See
-`zoomy_foam/install/` and the case `run.sh` for the apptainer invocation.
+Requires OpenFOAM 13 (openfoam.org), preCICE 3, and the project apptainer
+image — `zoomy_openfoam` on the [Installation](../installation.md#what-ships)
+page ships all three. A case `run.sh` shows the apptainer invocation.
 
 **Repository**: [`library/zoomy_foam`](https://github.com/ZoomyLab/zoomy-foam)
 **API reference**: see [zoomy_foam](https://github.com/ZoomyLab/zoomy-foam).

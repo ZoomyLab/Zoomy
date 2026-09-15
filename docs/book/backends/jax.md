@@ -135,10 +135,12 @@ backends is a bug in one of them.
 - Keep `compute_dt` a `timestepping` closure (JIT-safe); a Python callable that
   closes over NumPy arrays will not trace.
 
-**Install**
+**Install** — `zoomy_jax` is not on PyPI; it is installed from the clone or
+used through the `zoomy_jax` container (see [Installation](../installation.md)):
 
 ```bash
-pip install zoomy_core zoomy_jax
+pip install zoomy_core
+pip install -e library/zoomy_jax
 ```
 
 **Repository**: [`library/zoomy_jax`](https://github.com/ZoomyLab/zoomy-jax)
