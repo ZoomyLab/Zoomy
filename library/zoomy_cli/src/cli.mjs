@@ -627,7 +627,7 @@ export class ZoomyCLI {
               source: trim(model.code) },
             H("mesh", "Mesh"),
             { type: "code",
-              meta: { role: "mesh", spec: mesh.spec || null },
+              meta: { role: "mesh", spec: mesh.spec || null, card: mesh.card || null },
               source: trim(mesh.code) },
             H("settings", "Solver settings"),
             { type: "code",
@@ -656,8 +656,13 @@ export class ZoomyCLI {
             cells.push({ type: "code", meta: { role: "postproc", steps: spec.postproc, nz: spec.postproc_nz || 10 },
                          source: this.chainCode(spec.postproc, spec.postproc_nz) });
         }
+        // `card` names the viewer the section was composed for, so a re-open
+        // selects the same viewer and keeps the section's own code (a case's
+        // viz code is as much its own as its model code; without the id the
+        // GUI re-selected the first viewer and regenerated the cell from that
+        // viewer's snippet on every save).
         cells.push(H("visualization", "Visualization"));
-        cells.push({ type: "code", meta: { role: "visualization" },
+        cells.push({ type: "code", meta: { role: "visualization", card: viz.card || null },
                      source: trim(viz.code) || this._vizCode() });
         return cells;
     }
@@ -901,7 +906,7 @@ export class ZoomyCLI {
         }
         if (sources.mesh !== undefined) {
             const h = hints.mesh || {};
-            spec.mesh = { code: sources.mesh, spec: h.spec };
+            spec.mesh = { code: sources.mesh, spec: h.spec, card: h.card || null };
         }
         if (sources.settings !== undefined || (hints.settings && hints.settings.settings)) {
             let s = hints.settings && hints.settings.settings;
@@ -922,9 +927,9 @@ export class ZoomyCLI {
             }
         }
         if (tag) spec.solver = { tag, id: (spec.settings && spec.settings.solver_id) || (hints.solver && hints.solver.id) || null, params: (hints.solver && hints.solver.params) || {} };
-        if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization };
-        /* post-processing chain hint (round-trips the GUI strip toggles) */
         const vh = hints.visualization;
+        if (sources.visualization !== undefined) spec.visualization = { code: sources.visualization, card: (vh && vh.card) || null };
+        /* post-processing chain hint (round-trips the GUI strip toggles) */
         if (vh && Array.isArray(vh.postproc) && vh.postproc.length) spec.postproc = vh.postproc;
         if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
         if (sources.run !== undefined) spec.run = { code: sources.run };   // re-export fidelity
