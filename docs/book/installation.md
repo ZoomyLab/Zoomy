@@ -129,7 +129,12 @@ git submodule update --remote --merge --recursive
 
 `git pull` does not advance submodules — use `git pull --recurse-submodules`.
 The sub-repositories are listed under
-[ZoomyLab](https://github.com/ZoomyLab) on GitHub.
+[ZoomyLab](https://github.com/ZoomyLab) on GitHub. They are public and are
+cloned anonymously over HTTPS. To push over SSH from such a checkout, add once:
+
+```bash
+git config --global url."git@github.com:".pushInsteadOf https://github.com/
+```
 
 ## Conda / Mamba / Micromamba
 

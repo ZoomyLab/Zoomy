@@ -136,50 +136,57 @@ callables (`flux`, `nonconservative_flux`, `hydrostatic_pressure`, `source` /
 [`../authoring/system-model.md`](../authoring/system-model.md) and
 [`../authoring/numerics.md`](../authoring/numerics.md) for tag routing.
 
-## End-to-end example: SWE
+## End-to-end example: shallow water dam break
+
+Shallow water is `SME(level=0)`: the level-0 member of the shallow-moment
+hierarchy, derived by the same operators as every other level — no hand-written
+system anywhere. A 1-D case runs the `dimension=2` model on a 1-D mesh; the
+state is then `[b, h, q_0]`.
 
 ```python
-from zoomy_core.systemmodel import SystemModel
-from zoomy_core.numerics.numerical_system_model import (
-    NumericalSystemModel, ReconstructionSpec)
-from zoomy_core.fvm.solver_numpy import HyperbolicSolver
-from zoomy_core.fvm import timestepping
-from zoomy_core.mesh import BaseMesh
-import zoomy_core.model.boundary_conditions as BC
-import zoomy_core.model.initial_conditions as IC
 import numpy as np
 
-# Reference SWE model: thesis/notebooks/legacy/modeling/swe/simple_swe_v2.py
-# (add its directory to PYTHONPATH, or substitute any Model subclass)
-from simple_swe_v2 import SWEModelV2
+import zoomy_core.model.boundary_conditions as BC
+import zoomy_core.model.initial_conditions as IC
+from zoomy_core.fvm import timestepping
+from zoomy_core.fvm.solver_numpy import HyperbolicSolver
+from zoomy_core.mesh import LSQMesh
+from zoomy_core.model.models import SME
+from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
+from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.systemmodel import SystemModel
 
-def ic_func(x):
-    Q = np.zeros(2)
-    Q[0] = 1.0 + 0.1 * np.exp(-((x[0] - 5.0) ** 2) / 0.5)   # h
-    Q[1] = 0.0                                              # hu
-    return Q
-
-m = SWEModelV2(
+# Shallow water is the level-0 member of the shallow-moment hierarchy.
+model = SME(
+    level=0, dimension=2,
+    closures=[Newtonian(), ManningFriction(), StressFree()],
     boundary_conditions=BC.BoundaryConditions(
-        [BC.Extrapolation(tag="left"), BC.Extrapolation(tag="right")]
-    ),
-    initial_conditions=IC.UserFunction(ic_func),
+        [BC.Extrapolation(tag="left"), BC.Extrapolation(tag="right")]),
 )
+sm = SystemModel.from_model(model)                 # state [b, h, q_0]
+
+
+def ic(x):                                         # 2:1 dam break at x = 5
+    return np.array([0.0, 2.0 if x[0] < 5.0 else 1.0, 0.0])
+
+
+sm.initial_conditions = IC.UserFunction(function=ic)
+sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
 
 # Numerical knobs go on the NumericalSystemModel, not the solver:
-sm  = SystemModel.from_model(m)
 nsm = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter="venkatakrishnan"))
+    sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
 
-mesh   = BaseMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
+mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
 solver = HyperbolicSolver(time_end=0.5, compute_dt=timestepping.adaptive(CFL=0.9))
 Q, Qaux = solver.solve(mesh, nsm, write_output=False)
 ```
 
-`BaseMesh.create_1d` from `zoomy_core.mesh` is the in-package 1D constructor
-(`setup_simulation` upgrades it to an `LSQMesh` internally);
-richer unstructured 2D / 3D meshes come from `zoomy_mesh` (sibling subrepo at
-`library/zoomy_mesh/`).
+`LSQMesh.create_1d` from `zoomy_core.mesh` is the in-package 1-D constructor;
+richer unstructured 2-D / 3-D meshes come from `zoomy_mesh` (sibling subrepo at
+`library/zoomy_mesh/`). The snippet runs as-is in the
+[conda environment](../installation.md#conda--mamba--micromamba) or after
+`pip install zoomy_core`.
 
 ## Authoring checklist — what the solver expects
 
