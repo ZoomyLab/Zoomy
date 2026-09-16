@@ -602,6 +602,10 @@ export class ZoomyCLI {
      *  spec carries viz code (optional, keeps the figure reproducible). */
     _caseCells(spec) {
         spec = spec || {};
+        // `mesh: null` / `visualization: null` mean the case HAS no such
+        // section (a symbolic pipeline has no field to plot and no grid);
+        // `undefined` keeps the defaults.
+        const noMesh = spec.mesh === null, noViz = spec.visualization === null;
         const meta = spec.meta || {}, model = spec.model || {}, mesh = spec.mesh || {};
         const settings = spec.settings || {}, solver = spec.solver || {};
         const viz = spec.visualization || {};
@@ -630,10 +634,11 @@ export class ZoomyCLI {
             { type: "code",
               meta: { role: "model", class_path: model.class_path || null, init: model.init || {}, card: model.card || null },
               source: trim(model.code) },
-            H("mesh", "Mesh"),
-            { type: "code",
-              meta: { role: "mesh", spec: mesh.spec || null, card: mesh.card || null },
-              source: trim(mesh.code) },
+            ...(noMesh ? [] : [
+                H("mesh", "Mesh"),
+                { type: "code",
+                  meta: { role: "mesh", spec: mesh.spec || null, card: mesh.card || null },
+                  source: trim(mesh.code) }]),
             H("settings", "Solver settings"),
             { type: "code",
               meta: { role: "settings", settings: settingsOut },
@@ -666,9 +671,11 @@ export class ZoomyCLI {
         // viz code is as much its own as its model code; without the id the
         // GUI re-selected the first viewer and regenerated the cell from that
         // viewer's snippet on every save).
-        cells.push(H("visualization", "Visualization"));
-        cells.push({ type: "code", meta: { role: "visualization", card: viz.card || null },
-                     source: trim(viz.code) || this._vizCode() });
+        if (!noViz) {
+            cells.push(H("visualization", "Visualization"));
+            cells.push({ type: "code", meta: { role: "visualization", card: viz.card || null },
+                         source: trim(viz.code) || this._vizCode() });
+        }
         return cells;
     }
 
