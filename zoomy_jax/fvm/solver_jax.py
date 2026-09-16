@@ -27,6 +27,7 @@ from zoomy_core.misc.logger_config import logger
 import zoomy_core.misc.io as io
 import zoomy_core.misc.misc as _misc
 import zoomy_jax.misc.io as jax_io
+import h5py
 from zoomy_core.misc.misc import Zstruct, Settings
 import zoomy_core.fvm.timestepping as timestepping
 from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNumpy
@@ -34,6 +35,18 @@ from zoomy_core.fvm.solver_numpy import Solver as SolverNumpy
 from zoomy_jax.transformation.jax_runtime import JaxRuntime
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax, lsq_gradient_per_field
 from zoomy_core.mesh import ensure_lsq_mesh
+
+
+def _write_field_names(filepath, names):
+    """Stamp ``/fields@names`` (state names in ``Q`` row order) on the store at
+    ``filepath`` (absolute), byte-identical to what
+    ``zoomy_core.misc.io.write_mesh_to_hdf5(..., names=...)`` writes for the
+    numpy solvers -- the convention ``zoomy_plotting.read_hdf5`` resolves.
+    Written once at setup; the per-snapshot writer appends into the same
+    ``/fields`` group."""
+    with h5py.File(filepath, "a") as f:
+        f.require_group("fields").attrs["names"] = np.array(
+            [str(n) for n in names], dtype="S")
 
 
 # ── Inter-level coupling: THE PRODUCER of ``coupled_dm`` ────────────────────
@@ -1891,11 +1904,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             # LSQMesh stashed in setup_simulation.  init_output_directory
             # prepends main_dir; write_to_hdf5 expects an absolute path
             # (h5py.File doesn't auto-resolve relative-to-main_dir).
-            self._rt_mesh_np.write_to_hdf5(
-                os.path.join(
-                    _misc.get_main_directory(), output_hdf5_path
-                )
-            )
+            _abs_h5 = os.path.join(_misc.get_main_directory(), output_hdf5_path)
+            self._rt_mesh_np.write_to_hdf5(_abs_h5)
+            _write_field_names(_abs_h5, self.nsm.state)   # /fields@names
             io.save_settings(self.settings)
             save_fields = jax_io.get_save_fields(output_hdf5_path, write_all=False)
         else:
@@ -1905,6 +1916,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
         dt_snapshot = self.time_end / max(self.settings.output.snapshots - 1, 1)
         i_snapshot = save_fields(0.0, 0.0, 0.0, Q, Qaux)
+        last_written = 0.0
         time_end = self.time_end
 
         # Coupling bootstrap hook — no-op for an uncoupled run; a preCICE
@@ -1917,14 +1929,15 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
         @jax.jit
         @partial(jax.named_call, name="time_loop")
-        def time_loop(time, iteration, i_snapshot, Q, Qaux, parameters):
+        def time_loop(time, iteration, i_snapshot, last_written, Q, Qaux,
+                      parameters):
             """JIT-compiled time loop."""
-            loop_val = (time, iteration, i_snapshot, Q, Qaux)
+            loop_val = (time, iteration, i_snapshot, last_written, Q, Qaux)
 
             @partial(jax.named_call, name="time_step")
             def loop_body(init_value):
                 """Single iteration of the time loop."""
-                time, iteration, i_snapshot, Qnew, Qauxnew = init_value
+                time, iteration, i_snapshot, last_written, Qnew, Qauxnew = init_value
 
                 # One step of physics (dt → step → post_step), the shared
                 # building block.
@@ -1939,6 +1952,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 i_snapshot_new = save_fields(
                     time_new, time_stamp, i_snapshot, Q_final, Qaux_final
                 )
+                last_written_new = jnp.where(
+                    i_snapshot_new > i_snapshot, time_new, last_written)
 
                 # jax.debug.print is transparent under autodiff; the previous
                 # jax.experimental.io_callback has NO JVP rule and blocked
@@ -1952,20 +1967,39 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     lambda: None,
                 )
 
-                return (time_new, iteration_new, i_snapshot_new, Q_final, Qaux_final)
+                return (time_new, iteration_new, i_snapshot_new,
+                        last_written_new, Q_final, Qaux_final)
 
             def proceed(loop_val):
                 """Check if simulation should continue."""
-                time, iteration, i_snapshot, Qnew, Qaux = loop_val
+                time, iteration, i_snapshot, last_written, Qnew, Qaux = loop_val
                 return _couple_proceed(time, time_end)
 
-            (time, iteration, i_snapshot, Qnew, Qauxnew) = jax.lax.while_loop(
-                proceed, loop_body, loop_val
+            (time, iteration, i_snapshot, last_written, Qnew, Qauxnew) = (
+                jax.lax.while_loop(proceed, loop_body, loop_val)
+            )
+
+            # The end state.  The write stamps are ``i_snapshot * dt_snapshot``
+            # with ``dt_snapshot = time_end / (snapshots - 1)``, so the last
+            # stamp can land a roundoff ABOVE time_end (0.1 / 11 * 11 =
+            # 0.1 + 1.4e-17) and the loop ends with the final state unwritten
+            # (12 snapshots to 0.1 s stored 0.0918 s last).  Same fix as the
+            # numpy loop (zoomy_core 129327d): write the end state iff the
+            # last write is older than ``time``.  The gate is a ``lax.cond``
+            # on that predicate (not a sentinel stamp fed to ``save_fields``,
+            # whose ``time < stamp`` skip test is False for a NaN ``time``
+            # and would write a duplicate record after a blow-up); a NaN
+            # ``time`` compares False here, exactly as in the numpy loop.
+            i_snapshot = jax.lax.cond(
+                time > last_written,
+                lambda: save_fields(time, time, i_snapshot, Qnew, Qauxnew),
+                lambda: i_snapshot,
             )
 
             return Qnew, Qauxnew
 
-        Q, Qaux = time_loop(0.0, 0.0, i_snapshot, Q, Qaux, parameters)
+        Q, Qaux = time_loop(0.0, 0.0, i_snapshot, last_written, Q, Qaux,
+                            parameters)
         return Q, Qaux
 
     # ── solve (top-level entry point) ───────────────────────────────────
@@ -2039,11 +2073,9 @@ class PoissonSolver(SolverNumpy):
             # LSQMesh stashed in setup_simulation.  init_output_directory
             # prepends main_dir; write_to_hdf5 expects an absolute path
             # (h5py.File doesn't auto-resolve relative-to-main_dir).
-            self._rt_mesh_np.write_to_hdf5(
-                os.path.join(
-                    _misc.get_main_directory(), output_hdf5_path
-                )
-            )
+            _abs_h5 = os.path.join(_misc.get_main_directory(), output_hdf5_path)
+            self._rt_mesh_np.write_to_hdf5(_abs_h5)
+            _write_field_names(_abs_h5, self.nsm.state)   # /fields@names
             save_fields = jax_io.get_save_fields(output_hdf5_path, True)
         else:
 
