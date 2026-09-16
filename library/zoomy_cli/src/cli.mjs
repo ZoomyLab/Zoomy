@@ -607,8 +607,13 @@ export class ZoomyCLI {
         const viz = spec.visualization || {};
         const trim = (s) => String(s || "").replace(/\s+$/, "");
         /* Option A: one merged "Solver settings" section — the backend tag is
-           just an informational "backend" entry inside the settings. */
-        const settingsOut = Object.assign({}, settings);
+           just an informational "backend" entry inside the settings. The
+           solver card's parameters (time_end, ...) live here too: this cell
+           is the `settings` global the Run cell reads, so a packed session's
+           or the Parameters panel's values reach a notebook run. Before,
+           only backend/solver_id were written and every Run cell fell back
+           to the defaults baked into its own code. */
+        const settingsOut = Object.assign({}, settings, solver.params || {});
         if (solver.tag && settingsOut.backend === undefined) settingsOut.backend = solver.tag;
         // Carry the solver card id too: several solvers can share one backend tag
         // (e.g. the coupled zoomyFoam + incompressibleVOF both run on "OpenFOAM"), so
