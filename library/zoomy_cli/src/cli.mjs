@@ -606,6 +606,13 @@ export class ZoomyCLI {
         // section (a symbolic pipeline has no field to plot and no grid);
         // `undefined` keeps the defaults.
         const noMesh = spec.mesh === null, noViz = spec.visualization === null;
+        // `settings: null` / `run: null`: a case that runs no solver (a symbolic
+        // pipeline) has neither section. `steps`: named sections of the case's
+        // own between Model and Mesh — "System model", "Dispersion relation",
+        // "Code" — each a heading plus one code cell, round-tripped through the
+        // heading's zoomy metadata.
+        const noSettings = spec.settings === null, noRun = spec.run === null;
+        const steps = Array.isArray(spec.steps) ? spec.steps : [];
         const meta = spec.meta || {}, model = spec.model || {}, mesh = spec.mesh || {};
         const settings = spec.settings || {}, solver = spec.solver || {};
         const viz = spec.visualization || {};
@@ -626,6 +633,7 @@ export class ZoomyCLI {
         let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");
         if (meta.gui_url) head += "\n\n[← Back to the Zoomy GUI](" + meta.gui_url + ")";
         const H = (section, title) => ({ type: "markdown", meta: { role: "heading", section }, source: "## " + title });
+        const STEP = (title) => ({ type: "markdown", meta: { role: "heading", section: "step", title }, source: "## " + title });
         const cells = [
             { type: "markdown",
               meta: { role: "meta", title: meta.title || null, description: meta.description || null },
@@ -634,21 +642,26 @@ export class ZoomyCLI {
             { type: "code",
               meta: { role: "model", class_path: model.class_path || null, init: model.init || {}, card: model.card || null },
               source: trim(model.code) },
+            ...steps.flatMap((st) => [
+                STEP(st.title || "Step"),
+                { type: "code", meta: { role: "step", title: st.title || "Step" }, source: trim(st.code) }]),
             ...(noMesh ? [] : [
                 H("mesh", "Mesh"),
                 { type: "code",
                   meta: { role: "mesh", spec: mesh.spec || null, card: mesh.card || null },
                   source: trim(mesh.code) }]),
-            H("settings", "Solver settings"),
-            { type: "code",
-              meta: { role: "settings", settings: settingsOut },
-              source: "settings = " + JSON.stringify(settingsOut, null, 2) },
+            ...(noSettings ? [] : [
+                H("settings", "Solver settings"),
+                { type: "code",
+                  meta: { role: "settings", settings: settingsOut },
+                  source: "settings = " + JSON.stringify(settingsOut, null, 2) }]),
             /* Run: the exported file is FULLY runnable — `python case.py` or
                Run-All in Jupyter solves in-process wherever zoomy_core exists
                (JupyterLite, container JupyterLab, local env). */
-            H("run", "Run"),
-            { type: "code", meta: { role: "run" },
-              source: (spec.run && spec.run.code) || this._runCode() },
+            ...(noRun ? [] : [
+                H("run", "Run"),
+                { type: "code", meta: { role: "run" },
+                  source: (spec.run && spec.run.code) || this._runCode() }]),
         ];
         /* Visualization is ALWAYS attached: the selected viz card's code
            (with the notebook prelude) when provided, else the generated
@@ -887,11 +900,18 @@ export class ZoomyCLI {
         };
 
         const sources = {}, hints = {}, spec = {};
+        const steps = [];
         let current = null;
         for (const c of cells) {
             const src = c.source.join("\n").replace(/^\n+|\n+$/g, "");
             if (c.markdown) {
                 const md = src.replace(/^# ?/gm, "");   // strip the comment prefix
+                if (c.meta && c.meta.role === "heading" && c.meta.section === "step") {
+                    const title = c.meta.title || md.replace(/^#+\s*/, "").trim();
+                    steps.push({ title, code: "" });
+                    current = "step";
+                    continue;
+                }
                 const sec = sectionOf(md);
                 if (sec) { current = sec; continue; }
                 if (c.meta.role === "meta") {
@@ -900,6 +920,11 @@ export class ZoomyCLI {
                     const first = (md.trim().split("\n")[0] || "");
                     if (first.startsWith("#")) spec.meta = { title: first.replace(/^#+\s*/, "") };
                 }
+                continue;
+            }
+            if (current === "step" && steps.length) {
+                const st = steps[steps.length - 1];
+                st.code = st.code ? st.code + "\n\n" + src : src;
                 continue;
             }
             const sec = current || ({ model: "model", mesh: "mesh", settings: "settings",
@@ -945,6 +970,7 @@ export class ZoomyCLI {
         if (vh && Array.isArray(vh.postproc) && vh.postproc.length) spec.postproc = vh.postproc;
         if (sources.numerics !== undefined) spec.numerics = { code: sources.numerics };
         if (sources.run !== undefined) spec.run = { code: sources.run };   // re-export fidelity
+        if (steps.length) spec.steps = steps;
         return spec;
     }
 
