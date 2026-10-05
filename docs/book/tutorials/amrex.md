@@ -4,8 +4,9 @@
 as the [NumPy tutorial](swe.md), taken to generated C++ instead of a NumPy
 solve.
 
-**You need the AMReX container** to compile and run. The codegen itself runs
-anywhere `zoomy_core` is installed:
+**You need the AMReX container.** The page does not stop at the generated code:
+it compiles the headers, runs the case and plots the result, and the AMReX
+printer ships with `zoomy_amrex` rather than `zoomy_core`:
 
 ```bash
 apptainer pull zoomy_amrex.sif oras://ghcr.io/zoomylab/zoomy_amrex_sif:latest

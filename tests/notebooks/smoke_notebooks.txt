@@ -1,17 +1,20 @@
 # Notebooks executed by the weekly notebook job
 # (.github/workflows/notebooks.yml --execute-smoke).
 #
-# This list MUST match PUBLISHED_TUTORIALS in
-# docs/scripts/generate_ci_test_report.py — every notebook shipped on the site
-# is executed here, and nothing else is shipped. The file was previously empty,
-# so the weekly job resolved zero notebooks and passed vacuously while a stale
-# SWASHES traceback sat on the live docs.
-#
 # Each of these runs on plain zoomy_core (NumPy) with no external binary, no
 # data submodule and no compiler. They are executed end to end, so a broken
-# model, closure or solver surfaces here before it reaches the site.
+# model, closure or solver surfaces here before it reaches the site. The file
+# was previously empty, so the weekly job resolved zero notebooks and passed
+# vacuously while a stale SWASHES traceback sat on the live docs.
+#
+# NOT listed, and why:
+#   tutorials/amrex/minimal.ipynb — it is PUBLISHED (see PUBLISHED_TUTORIALS in
+#   docs/scripts/generate_ci_test_report.py) but it is no longer runnable here:
+#   it imports zoomy_amrex, compiles the generated headers with mpicxx against
+#   AMReX and runs the binary. Executing it needs the zoomy_amrex image, not a
+#   bare runner. It ships with its stored outputs instead; re-run it in the
+#   container when the model, the printer or run_case changes.
 
 tutorials/swe/simple_numpy.ipynb
 tutorials/sme/moments_2d.ipynb
-tutorials/amrex/minimal.ipynb
 tutorials/pyodide/pyodide.ipynb
