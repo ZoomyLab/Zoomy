@@ -59,8 +59,14 @@ RUN git clone --depth 1 --branch v3.23.3 \
     && rm -rf "$PETSC_DIR/.git" 2>/dev/null || true \
     && rm -rf "$PETSC_DIR/$PETSC_ARCH/externalpackages" 2>/dev/null || true
 
+# fastapi/uvicorn = the server; jupyterlab/jupyter-server/ipykernel back
+# zoomy-entry's `jupyter` mode, which execs `zoomy-jupyter` -> `jupyter lab`.
+# Without them the image prints Jupyter's help text and exits (the .def had
+# them, the Dockerfile did not, and the published .sif is converted from the
+# Docker image).
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
-        "fastapi>=0.100" "uvicorn[standard]>=0.20"
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
 
 COPY library/zoomy_core /tmp/src/zoomy_core
 COPY library/zoomy_server /tmp/src/zoomy_server

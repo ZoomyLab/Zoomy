@@ -22,6 +22,9 @@ RUN /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
       jupytext \
       nbformat \
       nbclient \
+      jupyterlab \
+      jupyter-server \
+      ipykernel \
     && rm -rf /tmp/zoomy_src
 
 # Server env + triple-purpose dispatch (parity with zoomy_jax.def): the GUI's

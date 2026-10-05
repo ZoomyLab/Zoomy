@@ -26,8 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
         numpy scipy sympy attrs meshio pytest rasterio h5py
 
+# fastapi/uvicorn = the server; jupyterlab/jupyter-server/ipykernel back
+# zoomy-entry's `jupyter` mode, which execs `zoomy-jupyter` -> `jupyter lab`.
+# Without them the image prints Jupyter's help text and exits (the .def had
+# them, the Dockerfile did not, and the published .sif is converted from the
+# Docker image).
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
-        "fastapi>=0.100" "uvicorn[standard]>=0.20"
+        "fastapi>=0.100" "uvicorn[standard]>=0.20" \
+        jupyterlab jupyter-server ipykernel
 
 RUN git clone --depth 1 --branch 25.02 \
         https://github.com/AMReX-Codes/amrex.git /opt/amrex \
