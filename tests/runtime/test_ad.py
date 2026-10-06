@@ -9,7 +9,9 @@ the derivative includes d(dt)/d(input).
 (a) forward jvp w.r.t. g == central FD;
 (b) reverse grad (checkpointed loop, few checkpoints => recomputation) == jvp;
 (c) <grad_Q0 J, v> == jvp(J, Q0; v), Qaux rebuilt from Q0 (Qaux=None);
-(d) switching ad_mode on one solver re-traces and both modes still work.
+(d) switching ad_mode on one solver re-traces and both modes still work;
+(e) bernoulli moving-equilibrium WB: forward jvp w.r.t. g == central FD
+    (g enters the reconstruction; a fwd-vs-rev check cannot see a baked g).
 """
 import numpy as np
 import pytest
@@ -117,3 +119,47 @@ def test_ad_mode_switch_retraces(setup):
     # forward mode has no transpose; reverse mode has no jvp
     with pytest.raises(Exception):
         jax.grad(J)(p0, Q0)
+
+
+def _bernoulli_solver(g):
+    """Fresh bernoulli-WB solver with ``g`` set in the MODEL, so every
+    setup-time consumer of ``g`` sees it too (the FD ground truth)."""
+    from zoomy_core.model.models import SME
+    from zoomy_core.model.models.closures import Newtonian, StressFree
+    from zoomy_jax.fvm.solver_jax import HyperbolicSolver
+    from cases import bcs_for
+    model = SME(level=0, dimension=2, closures=[Newtonian(), StressFree()],
+                boundary_conditions=bcs_for("extrapolation", 2),
+                equilibrium_reconstruction="bernoulli")
+    sm = SystemModel.from_model(model)
+    assert sm.resolve_equilibrium_kernel() == "bernoulli_closed_form"
+    sm.parameter_values.g = g
+    sm.initial_conditions = IC.UserFunction(function=smooth_bump_ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, reconstruction=ReconstructionSpec(order=1))
+    mesh = LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=N_CELLS)
+    solver = HyperbolicSolver(time_end=T_END, compute_dt=_adaptive(CFL, mesh),
+                              march_log_interval=0)
+    Q0, _ = solver.setup_simulation(mesh, nsm)
+    ig = list(nsm.parameter_values.as_dict()).index("g")
+    assert float(solver.parameters[ig]) == g
+    return solver, Q0, ig, models.state_index(nsm, "h")
+
+
+@pytest.mark.small
+@pytest.mark.jax
+def test_ad_bernoulli_wb_dg_matches_fd():
+    # FD from solvers BUILT at g +- eps: an FD through the same parameters
+    # vector would share any baked g with the jvp and agree with it anyway.
+    g0, eps = 9.81, 1e-5
+    solver, Q0, ig, ih = _bernoulli_solver(g0)
+    p0 = solver.parameters
+    e_g = jnp.zeros_like(p0).at[ig].set(1.0)
+    _, dJ = jax.jvp(lambda p: _J_of(solver, ih)(p, Q0), (p0,), (e_g,))
+
+    def J_at(g):
+        s, q0, _, _ = _bernoulli_solver(g)
+        return _J_of(s, ih)(s.parameters, q0)
+
+    fd = (J_at(g0 + eps) - J_at(g0 - eps)) / (2 * eps)
+    assert _rel(dJ, fd) < 1e-5, (float(dJ), float(fd))

@@ -919,7 +919,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             rt_press = runtime.hydrostatic_pressure
             _aud_cfg = _build_wb_cfg(runtime.sm, mode="audusse")
 
-            def bern_recon(Qf, bstar):
+            def bern_recon(Qf, bstar, parameters):
                 return _core_reconstruct(Qf, bstar, _aud_cfg, jnp)
 
         elif bern_enabled:
@@ -936,7 +936,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             _bh = _bstate.index("h")
             _bb = _bstate.index("b")
             _bq = [i for i, nm in enumerate(_bstate) if nm not in ("h", "b")]
-            _bg = float(runtime.sm.parameter_values["g"])
+            # ``g`` is read from the TRACED ``parameters`` vector at call time,
+            # never baked as a Python float: a baked value makes d/dg skip the
+            # reconstruction while the flux still sees it.
+            _bg_idx = [str(k) for k in
+                       runtime.sm.parameter_values.keys()].index("g")
             _bndim = int(runtime.sm.flux.shape[1])
             rt_flux = runtime.flux
             rt_press = runtime.hydrostatic_pressure
@@ -959,9 +963,10 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             if not bern_ode:
                 _bq0 = _bq[0]
 
-                def bern_recon(Qf, bstar):
+                def bern_recon(Qf, bstar, parameters):
                     return reconstruct_bernoulli_level0(
-                        Qf, bstar, _bh, _bb, _bq0, _bg, jnp, newton_solve)
+                        Qf, bstar, _bh, _bb, _bq0, parameters[_bg_idx], jnp,
+                        newton_solve)
             else:
                 # FULLY well-balanced moving-equilibrium reconstruction via the
                 # local stationary ODE U_x = -(J_F+B)^{-1}(S H_x + R) (friction R
@@ -1269,8 +1274,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                            if rt_uav is not None else qauxB)
             elif bern_enabled:
                 bstar_int = jnp.maximum(Q_L_int[_bb], Q_R_int[_bb])
-                QL_flux = bern_recon(Q_L_int, bstar_int)
-                QR_flux = bern_recon(Q_R_int, bstar_int)
+                QL_flux = bern_recon(Q_L_int, bstar_int, parameters)
+                QR_flux = bern_recon(Q_R_int, bstar_int, parameters)
                 sL_int = (_fc_proj(Q_L_int, qauxA, normals_int)
                           - _fc_proj(QL_flux, qauxA, normals_int))
                 sR_int = (_fc_proj(Q_R_int, qauxB, normals_int)
@@ -1394,8 +1399,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                                   if rt_uav is not None else qauxBnd)
                 elif bern_enabled:
                     bstar_bnd = jnp.maximum(Q_L_bnd[_bb], Q_R_bnd[_bb])
-                    QL_bnd_flux = bern_recon(Q_L_bnd, bstar_bnd)
-                    QR_bnd_flux = bern_recon(Q_R_bnd, bstar_bnd)
+                    QL_bnd_flux = bern_recon(Q_L_bnd, bstar_bnd, parameters)
+                    QR_bnd_flux = bern_recon(Q_R_bnd, bstar_bnd, parameters)
                     sL_bnd = (_fc_proj(Q_L_bnd, qauxBnd, normals_bnd)
                               - _fc_proj(QL_bnd_flux, qauxBnd, normals_bnd))
 
