@@ -53,6 +53,7 @@ __all__ = [
     "equilibrate_constraint_rows",
     "guard_eigenvalue_powers",
     "gate_eigenvalues_dry",
+    "regularize_fractional_powers",
 ]
 
 
@@ -1433,4 +1434,67 @@ def gate_eigenvalues_dry(eps=None):
     _op.name = "gate_eigenvalues_dry"
     _op.description = ("publish dt-only eigenvalues_cfl gated to 0 for dry "
                        "cells (h < eps); guard sqrt(h) args")
+    return _op
+
+
+# ── AD-safe fractional powers ───────────────────────────────────────────────
+
+def regularize_fractional_powers(eps, *, exclude=()):
+    """Operation: shift the base of every fractional power by ``eps**2`` —
+    ``b**r -> (b + eps**2)**r`` for every ``sp.Pow(b, r)`` with ``r`` a
+    non-integer Rational and ``b`` non-numeric — so the operators stay
+    differentiable at ``b = 0``.
+
+    WHY.  Forward and reverse AD through the time loop differentiate every
+    operator.  ``d/dx x**r = r*x**(r-1)`` is ``inf`` at ``x = 0`` for ``r < 1``,
+    and the chain rule multiplies it by the incoming tangent; where that tangent
+    is exactly zero the product is ``0*inf = NaN``, which then poisons the whole
+    gradient.  The standard trigger is a velocity norm
+    ``sqrt(q_x**2 + q_y**2)`` in a friction source (Manning, Chezy) evaluated
+    at rest: the value is a harmless 0, the derivative is NaN.  With the shift,
+    ``d/dx (x + eps**2)**r`` is finite at ``x = 0`` and the NaN never forms.
+
+    VALUE CHANGE.  ``(b + eps**2)**r - b**r = O(eps**2)`` wherever ``b`` is
+    bounded away from 0 (relative change ``r*eps**2/b``); at ``b = 0`` the value
+    becomes ``eps**(2r)`` (e.g. ``eps`` for a ``sqrt``).  Pick ``eps`` far below
+    the scales of the problem (``1e-6`` is a reasonable default for velocities
+    and depths in SI units).
+
+    USAGE.  Opt-in, never a default — the model stays analytic and the
+    regularization lives only in the numerical system::
+
+        NumericalSystemModel.from_system_model(
+            sm, extra_operations=[regularize_fractional_powers(1e-6)])
+
+    Coverage is the :data:`OPERATOR_SLOTS` registry via
+    :func:`map_operator_slots`; ``exclude`` names slots to leave untouched.
+
+    IDEMPOTENT: a power whose base is an ``Add`` already carrying the exact
+    ``Float(eps)**2`` term is skipped, so applying the op twice equals applying
+    it once.  (A base whose own numeric constant sympy merges with ``eps**2``
+    on construction loses that marker — such bases do not occur in the shipped
+    models, whose fractional-power bases are sums of squares and depths.)
+
+    ``eps`` is required and must be ``> 0`` (``ValueError`` otherwise).
+    """
+    if not eps > 0:
+        raise ValueError(
+            f"regularize_fractional_powers: eps must be > 0, got {eps!r}")
+    e2 = sp.Float(eps) ** 2
+
+    def _is_fractional_pow(x):
+        return (isinstance(x, sp.Pow) and x.exp.is_Rational
+                and not x.exp.is_integer and not x.base.is_number
+                and not (isinstance(x.base, sp.Add) and e2 in x.base.args))
+
+    def _rewrite(expr):
+        return sp.sympify(expr).replace(
+            _is_fractional_pow, lambda x: sp.Pow(x.base + e2, x.exp))
+
+    def _op(sm):
+        _op.coverage = map_operator_slots(sm, _rewrite, exclude=exclude)
+
+    _op.name = "regularize_fractional_powers"
+    _op.description = f"b**r -> (b + eps**2)**r for fractional r (eps={eps})"
+    _op.coverage = {}
     return _op
