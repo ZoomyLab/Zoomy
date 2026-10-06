@@ -415,6 +415,7 @@ class PreciceHyperbolicSolver(solver.HyperbolicSolver):
     def solve(self, mesh, model, write_output=True):
         # ----------------- initial state -----------------------------------
         """Solve."""
+        self._require_forward_ad("jax.lax.while_loop")
         Q, Qaux = self.initialize(mesh, model)
         model_orig = model
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
@@ -589,6 +590,7 @@ class PreciceHyperbolicSolverBidirectional(PreciceHyperbolicSolver):
     def solve(self, mesh, model, write_output=True):
         # ----------------- initial state -----------------------------------
         """Solve."""
+        self._require_forward_ad("jax.lax.while_loop")
         Q, Qaux = self.initialize(mesh, model)
         model_orig = model
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
@@ -776,6 +778,7 @@ class PreciceTestSolver(PreciceHyperbolicSolver):
     """PreciceTestSolver. (class)."""
     def solve(self, mesh, model, write_output=True):
         """Solve."""
+        self._require_forward_ad("jax.lax.while_loop")
         Q, Qaux = self.initialize(mesh, model)
         # Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
 
@@ -872,6 +875,7 @@ class PreciceHyperbolicSolverAUP(PreciceHyperbolicSolver):
     def solve(self, mesh, model, write_output=True):
         # ----------------- initial state -----------------------------------
         """Solve."""
+        self._require_forward_ad("jax.lax.while_loop")
         Q, Qaux = self.initialize(mesh, model)
         model_orig = model
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)
@@ -1119,6 +1123,7 @@ class PreciceHyperbolicSolverAUP_while(PreciceHyperbolicSolver):
     def solve(self, mesh, model, write_output=True):
         # ----------------- initial state -----------------------------------
         """Solve."""
+        self._require_forward_ad("jax.lax.while_loop")
         Q, Qaux = self.initialize(mesh, model)
         model_orig = model
         Q, Qaux, parameters, mesh, model = self.create_runtime(Q, Qaux, mesh, model)

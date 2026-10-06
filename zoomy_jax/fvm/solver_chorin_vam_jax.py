@@ -251,6 +251,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     # ── Setup ─────────────────────────────────────────────────────
 
     def setup_simulation(self, mesh, write_output=True):
+        self._require_forward_ad("jax.lax.scan (run_jit_steps)")
         t0 = _time.time()
 
         # 1. Pad SM_pred to square + wrap in NSM with the pressure +
@@ -710,6 +711,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         ``dt`` is still required and is used as the constant step when ``cfl``
         is ``None``; when ``cfl`` is given it serves as the initial ``dt_max``
         fallback if ``dt_max`` is not passed."""
+        self._require_forward_ad("jax.lax.scan (run_jit_steps)")
         n_steps = int(n_steps)
         adaptive = cfl is not None
         key = (n_steps, bool(adaptive))

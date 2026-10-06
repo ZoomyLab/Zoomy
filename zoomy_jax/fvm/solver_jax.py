@@ -1760,6 +1760,16 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
         return wrapped
 
+    def _require_forward_ad(self, loop):
+        """Refuse ``ad_mode != 'forward'`` in a subclass that drives its OWN
+        ``loop`` instead of :meth:`run_simulation`: the inherited ``ad_mode``
+        would otherwise be silently ignored."""
+        if self.ad_mode != "forward":
+            raise NotImplementedError(
+                f"{type(self).__name__} marches with its own {loop}, which "
+                f"supports forward-mode AD only; ad_mode={self.ad_mode!r} is "
+                "honoured by HyperbolicSolver.run_simulation alone.")
+
     def step(self, dt, time, Q, Qaux, parameters=None, coupled=None):
         """Perform a single explicit time step.
 
