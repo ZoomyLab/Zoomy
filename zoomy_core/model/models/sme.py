@@ -457,11 +457,13 @@ class SME(BaseModel):
 
         Gives a sharp Rusanov wavespeed / CFL bound without per-face numerical
         eigensolves (the JAX/CUDA blocker, ~90% of the numpy step cost); the bed
-        row carries λ = 0.  ``sympy`` factors the truncated char-poly in
-        radicals up to level 5; at level ≥ 6 the moment block is Abel-unsolvable
-        — we then splice in the spectrum of the highest radical-solvable twin
-        (:meth:`_truncated_spectrum`, level 5) and pad the remaining interior
-        slots with the central advection ``n·u_m`` (see that method)."""
+        row carries λ = 0.
+
+        VALID ONLY WHERE THE TRUNCATION IS EMPTY, i.e. level ≤ 1 — see the guard
+        below and :meth:`_wave_speed_cone`.  From level 2 up this method never
+        reaches the eigensolve, so the old level-≥6 Abel-wall splice (a level-5
+        twin's spectrum padded with ``n·u_m``) is gone with it: it described the
+        same truncated matrix and was subject to the same objection."""
         import re
         n_eq = sm.n_equations
         normal = list(sm.normal.values())
@@ -488,7 +490,49 @@ class SME(BaseModel):
             mtc = re.match(r"q(?:_[xy])?_(\d+)$", str(s_))
             if mtc and int(mtc.group(1)) >= 2:
                 drop[s_] = sp.S.Zero
-        A = sp.Matrix(A).subs(drop)
+        A = sp.Matrix(A)
+        # ── THE TRUNCATION MUST BE A NO-OP ON THE MARCHED MATRIX ──────────────
+        # ``A.subs(α_{≥2} → 0)`` returns the spectrum of a DIFFERENT matrix
+        # whenever an ``α_{≥2}`` actually appears in ``quasilinear_matrix`` —
+        # which it does from level 2 up.  The runtime marches the UNtruncated
+        # SWME, so publishing that closed form as ``sm.eigenvalues`` hands the
+        # CFL and the HLL Davis estimates a wave speed that is not even an UPPER
+        # bound: MEASURED on ``SME(level=2, dimension=3)`` (Malpasset
+        # mixing-length closure) against ``numpy.linalg.eigvals`` of the
+        # normal-projected matrix over 4000 states (h∈[1e-2,50], |u|≤8,
+        # |α₁|,|α₂|≤3|u|, oblique normals) — BELOW ρ(A·n) on 79% of them, down
+        # to 0.102× at worst, and 2.4% of the states are not hyperbolic at all
+        # (|Im λ|/ρ up to 0.036).  An HLL whose Davis speeds sit inside the true
+        # cone is ANTI-dissipative for the waves it missed, and the CFL it hands
+        # out is up to 10× too long: measured on the 26k-cell Malpasset march
+        # this took α₁/u from 2.5 (level 1) to 41, drove h to −34 m through the
+        # MOOD net at t = 6.4 s and NaN'd the field at t ≈ 9.3 s, while the SAME
+        # recipe at level 1 (where ``drop`` is empty and the closed form is
+        # EXACT — verified to 4 decimals) ran clean to t = 2000 s.
+        #
+        # This is the same statement the DELETED level-≥6 splice already made —
+        # "the gravity cone bounds the TRUNCATED matrix, not the FULL one … so
+        # it is not a usable CFL bound", measured there on SME(level=4,
+        # dimension=3) as BELOW ρ(A·n) on 192 of 288 wet states, worst 0.031× —
+        # it was simply never applied to the levels where the eigensolve DOES
+        # return, which is where it bites hardest (2 and 3 are the levels people
+        # actually run).
+        #
+        # So: publish the closed form only where the truncation changes nothing
+        # (level ≤ 1 — byte-identical to before).  Otherwise leave
+        # ``eigenvalues = None``, which every consumer already reads as "no
+        # closed-form spectrum" and routes to ``spectral_radius_bound`` (HLL →
+        # local Lax-Friedrichs on a STRICT bound), and publish that same bound
+        # as the dt-only :attr:`~zoomy_core.systemmodel.system_model.
+        # SystemModel.eigenvalues_cfl` cone so the timestep does not fall back
+        # to a per-face numerical eigensolve.
+        if any(A.has(s_) for s_ in drop):
+            self._wave_speed_cone(sm)
+            return
+        # ``drop`` is empty here (guard above), so this is the UNtruncated
+        # matrix: at level ≤ 1 the SWE/SME(1) char-poly always factors in
+        # radicals, and the spectrum is exact — verified numerically against
+        # ``numpy.linalg.eigvals`` (ratio 1.0000 on 4000 states).
         try:
             ev = A.eigenvals()
             lams = []
@@ -497,59 +541,69 @@ class SME(BaseModel):
             if len(lams) != n_eq:
                 raise ValueError(f"got {len(lams)} eigenvalues, need {n_eq}")
             sm.eigenvalues = sp.Matrix(n_eq, 1, lams)
-        except Exception as exc:                 # Abel wall (level ≥ 6) etc.
-            self._truncated_spectrum(sm, exc)
+        except Exception:
+            # No radical factorization even at level ≤ 1 (should not happen) —
+            # fall back to the bound, never to a spectrum of a different matrix.
+            self._wave_speed_cone(sm)
 
-    def _truncated_spectrum(self, sm, exc):
-        """Spectrum for level ≥ 6, where the truncated moment block is
-        Abel-unsolvable in radicals.
+    def _wave_speed_cone(self, sm):
+        """No closed-form spectrum, but a closed-form WAVE-SPEED CONE.
 
-        The β-HSWME gravity waves ``n·(u_m ± √(g h + α₁²))`` are
-        LEVEL-INDEPENDENT (byte-identical at every level — verified) and bound
-        the entire spectrum, so the spectral radius — all that Rusanov / HLL /
-        CFL need — is captured by the highest level we CAN solve in radicals.
-        Build that twin (``level=5``, same dimension), take its exact spectrum,
-        and pad the extra interior slots with the central advection ``n·u_m``
-        (provably inside the gravity cone).  Sharp wavespeed at any level, no
-        per-face eigensolve.  If even the twin has no symbolic spectrum, leave
-        ``eigenvalues = None`` → the runtime's numerical wave speed.
+        Used from level 2 up, where the β-HSWME closed form is the spectrum of
+        the truncated matrix and NOT of the one the solver marches (see
+        :meth:`_register_hswme_spectrum`).  Two slots, two different contracts:
 
-        **The gravity cone bounds the TRUNCATED matrix, not the FULL one.**
-        That distinction is easy to lose, because everything on this method
-        (and the level-5 splice above) is stated about the matrix with the
-        moment coefficients ``≥ 2`` zeroed — which is the only matrix the
-        β-HSWME spectrum describes.  The runtime quasilinear matrix is NOT
-        truncated, and it is not even hyperbolic everywhere.  MEASURED on
-        ``SME(level=4, dimension=3)`` (n = 12, the confluence closure stack),
-        ``|n·u_m| + √(g h + (n·α₁)²)`` against ``numpy.linalg.eigvals`` of the
-        FULL normal-projected matrix: BELOW the true spectral radius on 192 of
-        288 realistic wet states and 864 of 1400 across a near-dry / strong-
-        shear / bed-step sweep, down to 0.031× at worst — the moment waves ride
-        on ``α_{≥2}``, which the closed form does not see at all.  So it is not
-        a usable CFL bound for the ``eigenvalues is None`` path; that path uses
-        :attr:`~zoomy_core.systemmodel.system_model.SystemModel.
-        spectral_radius_bound`, which bounds the matrix the solver actually
-        marches."""
+        * ``eigenvalues = None`` — the honest statement.  Every consumer already
+          branches on it: :meth:`~zoomy_core.fvm.riemann_solvers.HLL.
+          wave_speed_bounds` degrades to local Lax-Friedrichs and
+          ``local_max_abs_eigenvalue`` supplies the dissipation coefficient, so
+          it becomes an UPPER bound on ρ(A·n) instead of an under-estimate.
+          Nothing here fabricates a spectrum: Roe / eigensystem consumers still
+          see ``None`` and take the numerical decomposition.
+        * ``eigenvalues_cfl = [−ρ̄, +ρ̄, 0, …]`` — the dt-only slot, whose single
+          consumer is ``max|λ|``.  ``ρ̄`` is that same ``spectral_radius_bound``:
+          a power-norm (``ρ(A)ᵏ ≤ ‖|A|ᵏ·1‖_∞``) bound, strict at every iteration,
+          so the CFL cannot go unsafe.  Published HERE rather than left to the
+          ``eigenvalues is None`` fallback because that fallback is a per-face
+          NUMERICAL eigensolve (``jnp.linalg.eigvals`` on the JAX backend, which
+          has no GPU implementation at all) — measured at ~19 s/step against
+          1.3 ms/step on the 26k-cell Malpasset march, i.e. not a runnable dt
+          path.  The bound is ONE expression (4053 ops at level 2, dimension 3)
+          and rides the ordinary operator sweep, so ``desingularize_hinv``
+          rewrites its ``1/h`` exactly as it does the matrix it came from.
+
+        Price of correctness: the bound is loose where the conservative
+        variables cancel signs — MEASURED ρ̄/ρ(A·n) at level 2, dimension 3,
+        median 3.2 / p95 4.2 over 2000 realistic states (|α| ≤ 1.5|u|) at the
+        default ``spectral_bound_iterations = 2``, falling to 2.1 / 2.9 at 4 —
+        so the timestep is a few times shorter than the sharp one.  That is the
+        cost of a wave speed that actually bounds the system; the sharp
+        alternative was wrong."""
+        import warnings
         n_eq = sm.n_equations
-        twin = SystemModel.from_model(SME(level=5, dimension=int(self.dimension),
-                   closures=self.closures,
-                   parameters=dict(self.parameter_values.items())))
-        if twin.eigenvalues is None:
-            sm.eigenvalues = None
-            import warnings
-            warnings.warn(
-                f"SME(level={self.level}): no radical-solvable HSWME spectrum "
-                f"even at the level-5 twin ({type(exc).__name__}); falling back "
-                f"to the opaque numeric eigensystem.")
-            return
-        # the twin's eigenvalues are expressions in h, q_0, q_1 (+ normal) — all
-        # present in this higher-level state, so they drop straight in.
-        lams = [twin.eigenvalues[i] for i in range(twin.n_equations)]
-        normal = list(sm.normal.values())
-        by = {str(s_): s_ for s_ in sm.state}
-        h_s = by["h"]
-        # central advection n·u_m — normal velocity, dimension-agnostic
-        u_m = sum(normal[k] * by[nm] for k, nm in enumerate(
-            (["q_0"] if self.dimension == 2 else ["q_x_0", "q_y_0"]))) / h_s
-        lams += [u_m] * (n_eq - len(lams))         # pad interior, inside the cone
-        sm.eigenvalues = sp.Matrix(n_eq, 1, lams)
+        sm.eigenvalues = None
+        # OPT IN to the bound for the DISSIPATION too (``use_spectral_radius_bound``
+        # defaults False, i.e. the exact ``numerical_eigenvalues``, because the
+        # bound is extra numerical diffusion — measured 1.4-1.5x depth / 2.7-3.5x
+        # velocity error on the Ritter dry dam break).  That default is right for
+        # a model that CAN afford a per-face eigensolve.  This one cannot: the
+        # JAX backend lowers ``numerical_eigenvalues`` to ``jnp.linalg.eigvals``,
+        # which has NO GPU implementation, and the whole reason this branch
+        # exists is a 26k-cell GPU march.  So the choice here is not
+        # "accuracy vs speed" but "diffusive vs not runnable" — and the extra
+        # diffusion is a KNOWN, bounded error, where the wave speed it replaces
+        # was simply wrong.  A backend that can afford the eigensolve should set
+        # this back to False on the built system.
+        sm.use_spectral_radius_bound = True
+        rho = sm.spectral_radius_bound
+        rho = rho[0] if hasattr(rho, "__len__") else rho
+        cone = [-rho, rho] + [sp.S.Zero] * (n_eq - 2)
+        sm.eigenvalues_cfl = sp.Matrix(n_eq, 1, cone)
+        warnings.warn(
+            f"SME(level={self.level}): symbolic_spectrum is not available — the "
+            f"β-HSWME closed form is the spectrum of the α≥2-TRUNCATED matrix, "
+            f"which is not the one the solver marches from level 2 up (measured "
+            f"below ρ(A·n) on 79% of states, worst 0.10×).  Publishing "
+            f"eigenvalues=None + the strict spectral_radius_bound cone in "
+            f"eigenvalues_cfl instead.")
+

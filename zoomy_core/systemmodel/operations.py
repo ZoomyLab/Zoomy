@@ -1309,6 +1309,14 @@ def guard_eigenvalue_powers():
     return _op
 
 
+def _is_dry_gated(e, h, eps) -> bool:
+    """``True`` when ``e`` is ALREADY ``conditional(h > eps, ·, 0)`` — the exact
+    wrapper :func:`gate_eigenvalues_dry` applies, so re-gating it is a no-op."""
+    return (isinstance(e, sp.Function) and e.func.__name__ == "conditional"
+            and len(e.args) == 3 and e.args[0] == (h > eps)
+            and e.args[2] == sp.S.Zero)
+
+
 def gate_eigenvalues_dry(eps=None):
     """Operation: publish a TIMESTEP-ONLY spectrum gated to 0 in dry cells
     (``h < eps``) into ``sm.eigenvalues_cfl``, leaving ``sm.eigenvalues``
@@ -1380,8 +1388,27 @@ def gate_eigenvalues_dry(eps=None):
             # to carry its own dry threshold.
             e_eps = _wet_dry_eps(sm, eps)
             cond = sp.Function("conditional")
-            num = sm.numerical_eigenvalues
-            gated = [cond(h > e_eps, e, sp.S.Zero) for e in sp.flatten(num)]
+            # The MODEL may already have published a dt spectrum of its own —
+            # SME(level>=2) puts its closed-form ``spectral_radius_bound`` cone
+            # here precisely because it has no valid closed-form ``eigenvalues``
+            # (``SME._wave_speed_cone``).  Gate THAT; only synthesise one from
+            # the opaque eigensolve when the model published nothing.  Before
+            # this the branch overwrote it unconditionally, which put a per-face
+            # numerical eigen-decomposition back on the dt path of exactly the
+            # models that had gone to the trouble of avoiding one.
+            published = getattr(sm, "eigenvalues_cfl", None)
+            num = published if published is not None else sm.numerical_eigenvalues
+            # IDEMPOTENT.  The closed-form branch below rebuilds the gated copy
+            # from ``sm.eigenvalues`` (which this op never zeroes), so applying
+            # it twice is harmless there.  This branch reads the slot it also
+            # WRITES — and the op is genuinely applied twice on the common path
+            # (``NumericalSystemModel.eigenvalue_guard`` defaults to ``"gate"``
+            # AND cases pass it in ``extra_operations``), so without this the
+            # cone comes out wrapped in ``conditional(h>eps, conditional(h>eps,
+            # …), 0)`` — same value, twice the tree.
+            gated = [e if _is_dry_gated(e, h, e_eps)
+                     else cond(h > e_eps, e, sp.S.Zero)
+                     for e in sp.flatten(num)]
             # ``numerical_eigenvalues`` is RANK-1 (length n), but the
             # eigenvalue slot contract is ``(n_eq, 1)`` — the same column shape
             # the closed-form branch writes.  Reshaping to the rank-1 source

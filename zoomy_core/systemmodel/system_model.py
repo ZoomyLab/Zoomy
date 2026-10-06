@@ -26,6 +26,7 @@ Solvers and analysis routines accept either a ``Model`` or a
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -682,6 +683,19 @@ class SystemModel:
     #: Consumers wanting the new aux-side jacobian call
     #: :meth:`ensure_jacobians` before the runtime is lowered.
     derive_jacobians: bool = False
+    #: Derive ``source_jacobian_wrt_{variables,aux_variables}`` symbolically.
+    #: MEASURED on QRKESME N_k=1: this is 600 s of a 661 s lowering stage, i.e.
+    #: 90 per cent of codegen and 71 per cent of the whole build, because it is
+    #: an (n_eq x n_state) matrix of ``sp.diff`` over a quadrature-unrolled
+    #: source, each entry then lambdified.  It is REQUIRED by the analytic
+    #: implicit path; it is DEAD WEIGHT for solvers that form the
+    #: Jacobian-vector product by AD or FD (``IMEXSourceSolverJax`` defaults to
+    #: ``jv_backend="ad"``).  Default stays True so existing consumers are
+    #: unaffected; set False when the solver does not read it.
+    #: Env override ZOOMY_SOURCE_JACOBIANS=0 turns it off process-wide, which is
+    #: how a case opts out without threading the flag through every builder.
+    derive_source_jacobians: bool = field(
+        default_factory=lambda: os.environ.get("ZOOMY_SOURCE_JACOBIANS", "1") != "0")
     normal: Optional[Zstruct] = None
     parameter_values: Optional[Zstruct] = None   # name -> numeric default
     equation_to_state_index: Optional[List[int]] = None
@@ -843,10 +857,12 @@ class SystemModel:
         # source jacobians unset — derive them once from ``source`` via
         # ``sp.diff``.  When ``from_model`` channeled the Model's matrices these
         # are already populated and we leave them untouched.
-        if self.source is not None and self.source_jacobian_wrt_variables is None:
+        if (self.derive_source_jacobians and self.source is not None
+                and self.source_jacobian_wrt_variables is None):
             self.source_jacobian_wrt_variables = _to_zarray(
                 self._compute_source_jacobian_wrt_variables())
-        if self.source is not None and self.source_jacobian_wrt_aux_variables is None:
+        if (self.derive_source_jacobians and self.source is not None
+                and self.source_jacobian_wrt_aux_variables is None):
             self.source_jacobian_wrt_aux_variables = _to_zarray(
                 self._compute_source_jacobian_wrt_aux_variables())
         if (self.derive_jacobians and self.flux is not None
@@ -1894,7 +1910,8 @@ class SystemModel:
 
     @classmethod
     def from_model(cls, model, Q=None, Qaux=None,
-                   canonical_source=None, dae=False) -> "SystemModel":
+                   canonical_source=None, dae=False,
+                   derive_source_jacobians=None) -> "SystemModel":
         """Build a SystemModel from a Model — the ONE entry point (REQ-143).
 
         A production model that carries a plain-string ``_system_model_kind``
