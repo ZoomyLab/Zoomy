@@ -43,9 +43,11 @@ are the same — `zoomy_jax` lowers them through its own printer instead of
   face axis).
 - `step(self, dt, time, Q, Qaux)` re-applies the boundary conditions at each
   RK stage.
-- `run_simulation` is a single `@jax.jit` `jax.lax.while_loop` over the time
-  step, with `io_callback` for logging and snapshots — the whole march compiles
-  into one XLA program. (It uses `while_loop`, not `lax.scan`.)
+- `run_simulation` is a single `@jax.jit` while loop over the time step
+  (`jax.lax.while_loop`, or the checkpointed equinox loop for
+  `ad_mode="reverse"`, see [below](#automatic-differentiation)), with
+  `io_callback` for snapshots — the whole march compiles into one XLA program.
+  (It uses `while_loop`, not `lax.scan`.)
 
 ## Multi-device (SPMD)
 
@@ -124,6 +126,57 @@ Because the model, the `SystemModel`, the specs, and the solver API are shared,
 a model verified on NumPy runs on JAX without change — which is exactly how the
 backends are cross-checked against each other: a result that diverges between
 backends is a bug in one of them.
+
+## Automatic differentiation
+
+The explicit `HyperbolicSolver` march is differentiable end to end — through the
+adaptive time step, w.r.t. the physical parameters and the initial state. The
+solver parameter `ad_mode` picks the loop primitive before tracing:
+
+| `ad_mode` | Loop | Use | Memory |
+| --- | --- | --- | --- |
+| `"forward"` (default) | `jax.lax.while_loop` | `jax.jvp`, `jax.jacfwd` | tangent carried, nothing extra |
+| `"reverse"` | `equinox.internal.while_loop(kind="checkpointed")` | `jax.grad`, `jax.vjp` | `ad_checkpoints` (default 64) copies of the loop state; steps between them are recomputed on the backward pass |
+
+Each mode supports only its own direction (`grad` through the forward loop, or
+`jvp` through the reverse loop, raises). Reverse mode needs equinox:
+`pip install -e "library/zoomy_jax[ad]"`.
+
+```python
+import jax, jax.numpy as jnp
+from zoomy_core.fvm import timestepping as ts
+from zoomy_jax.fvm.solver_jax import HyperbolicSolver
+
+solver = HyperbolicSolver(time_end=T, compute_dt=ts.adaptive(CFL=0.9, dimension=2),
+                          ad_mode="reverse", ad_checkpoints=64)
+Q0, _ = solver.setup_simulation(mesh, nsm)
+p0 = solver.parameters                        # runtime parameter vector
+
+def J(p, Q0):
+    Q, _ = solver.run_simulation(Q0, write_output=False, parameters=p)
+    return jnp.max(Q[ih])
+
+J_val, (dJ_dp, dJ_dQ0) = jax.value_and_grad(J, argnums=(0, 1))(p0, Q0)
+```
+
+`run_simulation(Q0)` without `Qaux` rebuilds the aux state from `Q0` inside the
+differentiated path, so `dJ_dQ0` includes `dQaux0/dQ0`. Switching `ad_mode` on
+the same solver re-traces (it is part of the compiled-loop cache key).
+
+- **Time grid.** With `timestepping.adaptive` the derivative includes
+  `d(dt)/d(input)`. For a frozen time grid use `timestepping.constant(dt)`.
+- **Fractional powers.** `d/dx x**r` is infinite at `x = 0` for `r < 1`; a
+  velocity norm `sqrt(q_x**2 + q_y**2)` in a friction source gives `0*inf = NaN`
+  at rest. Opt in to the NSM operation
+  `extra_operations=[regularize_fractional_powers(1e-6)]`
+  (`zoomy_core.systemmodel.operations`), which maps `b**r -> (b + eps**2)**r`.
+  The model itself stays analytic.
+- **Limiters.** `venkatakrishnan` is smooth enough: forward, reverse and finite
+  differences agree. `minmod` is not differentiable in practice (forward and
+  reverse gradients disagree by orders of magnitude).
+- **Dry cells.** Initially dry cells give large gradient spikes (no NaN with
+  order 2 + venkatakrishnan + MOOD); treat gradients at wet/dry fronts with
+  care.
 
 ## Authoring checklist
 
