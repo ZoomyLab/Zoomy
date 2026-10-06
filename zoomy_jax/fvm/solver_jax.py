@@ -4,7 +4,8 @@ Solver hierarchy (mirrors NumPy):
     HyperbolicSolver  (explicit flux + source)
       setup_simulation  — mesh/model → JAX operators (closures)
       step              — single explicit timestep
-      run_simulation    — jax.lax.while_loop over step
+      run_simulation    — while loop over step (lax.while_loop, or the
+                          checkpointed equinox loop for ad_mode="reverse")
       solve             — init + setup + run
 
 Inherits param definitions from NumPy ``HyperbolicSolverNumpy`` but
@@ -416,6 +417,26 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             "it is cheap (CPU debugging) and drops it where it is not.  The "
             "branch is resolved in PYTHON at trace time, so when it is off "
             "nothing is emitted into the jaxpr at all.")
+    ad_mode = param.Selector(objects=["forward", "reverse"], default="forward",
+        doc="Which automatic-differentiation mode the time loop supports.  "
+            "Resolved in PYTHON before tracing; part of the compiled-loop "
+            "cache key.\n\n"
+            "``forward`` (default): the march is a ``jax.lax.while_loop``.  "
+            "Differentiate with ``jax.jvp`` / ``jax.jacfwd``; the tangent is "
+            "carried alongside the state, so it costs no extra memory.  "
+            "``jax.grad`` / ``vjp`` are NOT available (a ``lax.while_loop`` "
+            "with a data-dependent trip count has no transpose).\n\n"
+            "``reverse``: the march is ``equinox.internal.while_loop(kind="
+            "'checkpointed', checkpoints=ad_checkpoints)``.  Differentiate with "
+            "``jax.grad`` / ``jax.vjp``; the loop keeps ``ad_checkpoints`` "
+            "copies of the loop state and recomputes the steps between them "
+            "on the backward pass.  Reverse-only: ``jvp`` through this loop is "
+            "not supported.  Needs the ``ad`` extra (equinox).")
+    ad_checkpoints = param.Integer(default=64, bounds=(1, None),
+        doc="Number of loop-state checkpoints kept by the reverse-mode "
+            "(``ad_mode='reverse'``) time loop.  Memory is "
+            "``ad_checkpoints`` x (Q, Qaux); fewer checkpoints means more "
+            "recomputation on the backward pass.  Ignored in forward mode.")
     force_steady_ode_wb = param.Boolean(default=False,
         doc="Force the fully-WB steady-ODE moving-equilibrium reconstruction "
             "even for a frictionless level-0 model that would otherwise take the "
@@ -651,11 +672,23 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # ~40.
         rt_eig = getattr(runtime, "eigenvalues_cfl", None) or runtime.eigenvalues
 
+        # Boundary faces: ``face_cells[1]`` is a GHOST index (>= n_inner_cells),
+        # but Q is ghost-free (``initialize`` allocates inner cells only), so
+        # gathering it clamped to cell nc-1 -- an arbitrary, usually distant,
+        # cell drove the boundary-face CFL.  Use the INNER cell
+        # (``face_cells[0]``) on both sides there, exactly as the numpy solver
+        # does (``solver_numpy.get_compute_max_abs_eigenvalue``: ``iInner_bnd``),
+        # so the two backends take the same dt.  The BC ghost state is not used
+        # for the CFL in either backend.
+        nc = int(mesh.n_inner_cells)
+        _iA = mesh.face_cells[0]
+        _iB = jnp.where(mesh.face_cells[1] < nc, mesh.face_cells[1], _iA)
+
         @jax.jit
         @partial(jax.named_call, name="max_abs_eigenvalue")
         def compute_max_abs_eigenvalue(Q, Qaux, parameters):
-            iA = mesh.face_cells[0]
-            iB = mesh.face_cells[1]
+            iA = _iA
+            iB = _iB
             normal = mesh.face_normals
             evA = jnp.abs(rt_eig(Q[:, iA], Qaux[:, iA], parameters, normal))
             evB = jnp.abs(rt_eig(Q[:, iB], Qaux[:, iB], parameters, normal))
@@ -1490,11 +1523,13 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         self._rt_mesh_np = mesh
         self._rt_model = runtime_model
         self._rt_parameters = parameters
+        # A compiled march closes over the operators built below; a re-setup
+        # (new mesh / model) must never reuse one traced against the old ones.
+        self._time_loop_cache = None
 
         # Build operators (closures over jax_mesh / runtime_model)
         self._rt_flux_op = self.get_flux_operator(jax_mesh, runtime_model)
         self._rt_source_op = self.get_compute_source(jax_mesh, runtime_model)
-        self._rt_bc_op = self.get_apply_boundary_conditions(jax_mesh, runtime_model)
         self._rt_eigenvalue_op = self.get_compute_max_abs_eigenvalue(
             jax_mesh, runtime_model
         )
@@ -1503,17 +1538,25 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # wave speed (per-face) to the smaller of its two adjacent cells'
         # inradii; compute_dt takes min over faces -> min_f(h/λ), NOT the
         # over-conservative global_min(inradius)/global_max(λ).
+        # Boundary faces take the INNER cell's inradius (numpy
+        # ``_compute_face_inradius``), not the ghost's.
         _ir = jax_mesh.cell_inradius
-        self._rt_inradius_face = jnp.minimum(
-            _ir[jax_mesh.face_cells[0]], _ir[jax_mesh.face_cells[1]])
+        _fA = jax_mesh.face_cells[0]
+        _fB = jnp.where(jax_mesh.face_cells[1] < int(jax_mesh.n_inner_cells),
+                        jax_mesh.face_cells[1], _fA)
+        self._rt_inradius_face = jnp.minimum(_ir[_fA], _ir[_fB])
 
-        # Initial aux update
-        Qaux = self.update_qaux(
-            Q, Qaux, Q, Qaux, jax_mesh, runtime_model, parameters, 0.0, 1.0
-        )
+        # Initial aux update.  The pre-update aux (the aux initial condition)
+        # is kept so ``run_simulation(Q0, Qaux=None)`` can rebuild Qaux0 from a
+        # (possibly traced) Q0 with this SAME update -- dJ/dQ0 then includes
+        # dQaux0/dQ0.
+        self._rt_qaux_ic = Qaux
+        Qaux = self._qaux_from_q(Q, parameters)
 
-        # Apply initial BCs
-        Q = self._rt_bc_op(jnp.asarray(0.0, dtype=Q.dtype), Q, Qaux, parameters)
+        # No initial BC application: Q is ghost-free and the BC kernel runs
+        # inside ``flux_operator`` every stage.  (A ghost-filling BC op called
+        # here scattered to ghost columns that do not exist -- dropped by JAX
+        # as out of bounds, i.e. a no-op.)
 
         # Move to device
         Q = jax.device_put(Q)
@@ -1521,6 +1564,22 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         self._rt_mesh = jax.device_put(jax_mesh)
 
         return Q, Qaux
+
+    def _qaux_from_q(self, Q, parameters):
+        """The initial aux state of ``Q``: ``update_qaux`` applied to the aux
+        initial condition stored at setup (``self._rt_qaux_ic``), at t = 0.
+        Traceable in ``Q`` and ``parameters``."""
+        return self.update_qaux(
+            Q, self._rt_qaux_ic, Q, self._rt_qaux_ic, self._rt_mesh,
+            self._rt_model, parameters, 0.0, 1.0)
+
+    @property
+    def parameters(self):
+        """The runtime physical-parameter vector (read-only), available after
+        ``setup_simulation``.  This is the default ``parameters`` of
+        ``step`` / ``run_simulation``; pass a modified or traced copy there to
+        differentiate with respect to it."""
+        return self._rt_parameters
 
     def _explicit_hyperbolic_step(self, dt, time, Q, Qaux, parameters, flux, nc,
                                   *, time_euler=False, aux_of_q=None,
@@ -1882,24 +1941,30 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             self._rt_inradius_face, self._rt_eigenvalue_op,
         )
 
-    def run_simulation(self, Q, Qaux, write_output=True, parameters=None):
-        """JIT-compiled time loop using jax.lax.while_loop.
+    def run_simulation(self, Q, Qaux=None, write_output=True, parameters=None):
+        """JIT-compiled time loop.
 
-        Calls ``compute_timestep`` -> ``step`` -> ``post_step`` in a
-        while_loop until ``time >= time_end``.
+        Calls ``compute_timestep`` -> ``step`` -> ``post_step`` in a while
+        loop until ``time >= time_end``.  The loop primitive follows
+        ``ad_mode``: ``jax.lax.while_loop`` (forward) or
+        ``equinox.internal.while_loop(kind="checkpointed")`` (reverse).
 
         Parameters
         ----------
-        Q, Qaux : jnp.ndarray
+        Q : jnp.ndarray
             Initial state (from ``setup_simulation``).
+        Qaux : jnp.ndarray, optional
+            Initial aux state.  ``None`` → rebuilt from ``Q`` with the same
+            aux update ``setup_simulation`` applies, INSIDE the
+            differentiable path, so a derivative w.r.t. ``Q`` includes
+            ``dQaux0/dQ0``.  Pass the ``Qaux`` from ``setup_simulation`` (or a
+            restart) to use it verbatim.
         write_output : bool
             Whether to write snapshots to HDF5.
         parameters : jnp.ndarray, optional
-            Physical-parameter vector.  ``None`` → the baked
-            ``self._rt_parameters`` (all existing callers).  Pass a traced
-            array to make the whole run differentiable w.r.t. parameters
-            (``jax.jvp``/``jacfwd``; forward mode works through the
-            ``while_loop``).
+            Physical-parameter vector.  ``None`` → :attr:`parameters` (the
+            runtime vector built at setup).  Pass a traced array to
+            differentiate the run w.r.t. the parameters.
 
         Returns
         -------
@@ -1909,6 +1974,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         parameters = (self._rt_parameters if parameters is None
                       else parameters)
         mesh = self._rt_mesh
+        if Qaux is None:
+            Qaux = self._qaux_from_q(Q, parameters)
 
         if write_output:
             output_hdf5_path = os.path.join(
@@ -1952,6 +2019,25 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             _log_every = 10 if jax.default_backend() == "cpu" else 0
         _log_every = int(_log_every)
 
+        # Loop primitive by ``ad_mode`` -- resolved in PYTHON, pre-trace.
+        _ad_mode = self.ad_mode
+        _ad_checkpoints = int(self.ad_checkpoints)
+        if _ad_mode == "reverse":
+            try:
+                import equinox.internal as eqxi
+            except ImportError as exc:
+                raise ImportError(
+                    "ad_mode='reverse' needs equinox (its checkpointed "
+                    "while_loop makes the adaptive time loop reverse-"
+                    "differentiable).  Install the 'ad' extra: "
+                    "pip install 'zoomy_jax[ad]'.") from exc
+
+            def _while_loop(cond, body, init):
+                return eqxi.while_loop(cond, body, init, kind="checkpointed",
+                                       checkpoints=_ad_checkpoints)
+        else:
+            _while_loop = jax.lax.while_loop
+
         # ── compile the march ONCE ───────────────────────────────────────
         # ``time_loop`` used to be defined (and ``jax.jit``-wrapped) fresh on
         # every ``run_simulation`` call.  jit caches on the FUNCTION OBJECT, so
@@ -1978,7 +2064,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # change the emitted code instead; the callables are functionally fixed
         # for a given solver + output configuration.
         _cache_key = (float(time_end), float(dt_snapshot), int(_log_every),
-                      bool(write_output))
+                      bool(write_output), _ad_mode, _ad_checkpoints)
         _cached = getattr(self, "_time_loop_cache", None)
         if _cached is not None and _cached[0] == _cache_key:
             return_cached = _cached[1]
@@ -2041,7 +2127,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 return _couple_proceed(time, time_end)
 
             (time, iteration, i_snapshot, last_written, Qnew, Qauxnew) = (
-                jax.lax.while_loop(proceed, loop_body, loop_val)
+                _while_loop(proceed, loop_body, loop_val)
             )
 
             # The end state.  The write stamps are ``i_snapshot * dt_snapshot``
@@ -2074,15 +2160,18 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
     # ── solve (top-level entry point) ───────────────────────────────────
 
-    def solve(self, mesh, model, write_output=True):
+    def solve(self, mesh, model, write_output=True, parameters=None):
         """Full solve: initialize -> setup -> run.
 
         This is the main entry point, compatible with the NumPy solver
-        interface. Calls ``setup_simulation`` then ``run_simulation``.
+        interface. Calls ``setup_simulation`` then ``run_simulation``;
+        ``parameters`` (``None`` → :attr:`parameters`) is passed through to
+        ``run_simulation``.
         """
         time_start = gettime()
         Q, Qaux = self.setup_simulation(mesh, model)
-        Q, Qaux = self.run_simulation(Q, Qaux, write_output=write_output)
+        Q, Qaux = self.run_simulation(Q, Qaux, write_output=write_output,
+                                      parameters=parameters)
         jax.experimental.io_callback(
             log_callback_execution_time, None, gettime() - time_start
         )

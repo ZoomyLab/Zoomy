@@ -32,6 +32,9 @@ dependencies = [
 
 [project.optional-dependencies]
 server = ["zoomy-server"]
+# Reverse-mode AD through the adaptive time loop (HyperbolicSolver
+# ad_mode="reverse" uses equinox.internal.while_loop(kind="checkpointed")).
+ad = ["equinox>=0.13"]
 
 [project.urls]
 Homepage = "https://github.com/mbd-rwth/Zoomy"
