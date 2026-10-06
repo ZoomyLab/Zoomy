@@ -173,9 +173,12 @@ the same solver re-traces (it is part of the compiled-loop cache key).
   `extra_operations=[regularize_fractional_powers(1e-6)]`
   (`zoomy_core.systemmodel.operations`), which maps `b**r -> (b + eps**2)**r`.
   The model itself stays analytic.
-- **Limiters.** `venkatakrishnan` is smooth enough: forward, reverse and finite
-  differences agree. `minmod` is not differentiable in practice (forward and
-  reverse gradients disagree by orders of magnitude).
+- **Limiters.** `minmod` and `barth_jespersen` make the discrete map piecewise
+  smooth. AD returns the exact derivative of the active branch; finite
+  differences cross switching branches and can disagree badly with it. Forward
+  and reverse can also differ where roundoff flips a branch at a tie. Use
+  `venkatakrishnan` for sensitivity work: forward, reverse and finite
+  differences agree.
 - **Dry cells.** Initially dry cells give large gradient spikes (no NaN with
   order 2 + venkatakrishnan + MOOD); treat gradients at wet/dry fronts with
   care.
