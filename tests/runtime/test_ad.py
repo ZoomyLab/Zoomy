@@ -2,7 +2,7 @@
 
 1-D SME(level=0), smooth wet IC over a bed bump with NONZERO velocity
 everywhere (the friction source carries sqrt(sum q^2), whose derivative is
-0*inf at u = 0), order 2 + venkatakrishnan (minmod gives unusable gradients),
+0*inf at u = 0), order 2 + venkatakrishnan (minmod is piecewise smooth: AD and FD disagree),
 adaptive CFL 0.9 to a short t_end (~25 steps).  The time grid is NOT frozen:
 the derivative includes d(dt)/d(input).
 
