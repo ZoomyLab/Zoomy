@@ -447,6 +447,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             "existing golden is unaffected.  1-D only (the ndim≠1 guard already "
             "raises for the ODE path).")
 
+    # The explicit ``step`` folds the source into the RK right-hand side.  The
+    # IMEX subclass sets this False and steps the source implicitly instead
+    # (the diffusion twin is ``_diffusion_in_flux``, inherited from numpy).
+    _source_in_explicit_step = True
+
     def __init__(self, **kwargs):
         # Riemann numerics are now owned by the NSM (nsm.riemann is the
         # symbolic class; nsm.build_numerics() instantiates it).  The
@@ -1055,9 +1060,13 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # models without diffusion.  Interior only (``bf_grads=None``); the
         # diffusive wall flux is left to a follow-up (the convective BC handles
         # boundaries, and A∝u ⇒ 0 at a no-slip wall / lake-at-rest anyway).
+        # ``_diffusion_in_flux`` (False on the IMEX solver, as in numpy) keeps
+        # the implicit-capable ``diffusion_matrix`` out of the flux when a
+        # subclass steps it implicitly; the explicit twin always stays here.
         rt_diff_expl = getattr(runtime, "diffusion_matrix_explicit", None)
         rt_diff = getattr(runtime, "diffusion_matrix", None)
-        rt_diff_fn = rt_diff_expl if rt_diff_expl is not None else rt_diff
+        rt_diff_fn = (rt_diff_expl if rt_diff_expl is not None
+                      else rt_diff if self._diffusion_in_flux else None)
         dense_diff_op = None
         if rt_diff_fn is not None:
             from zoomy_jax.fvm.reconstruction_jax import DenseDiffusionOperatorJAX
@@ -1804,9 +1813,10 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # The FULLY well-balanced ODE moving-equilibrium path carries the source
         # (friction) INSIDE the equilibrium reconstruction U* (paper eq 28,
         # midpoint quadrature → no additive source term), so no source is folded
-        # there to avoid double-counting.
-        source_op = (None if getattr(self, "_bern_ode", False)
-                     else self._rt_source_op)
+        # there to avoid double-counting.  An implicit-source subclass
+        # (``_source_in_explicit_step = False``) folds none either.
+        source_op = (self._rt_source_op if self._source_in_explicit_step
+                     and not getattr(self, "_bern_ode", False) else None)
         Q = self._explicit_hyperbolic_step(
             dt, time, Q, Qaux, parameters, flux,
             int(self._rt_mesh.n_inner_cells),

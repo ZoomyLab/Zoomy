@@ -21,6 +21,8 @@ import jax.numpy as jnp
 import numpy as np
 from functools import partial
 
+from zoomy_jax.fvm.implicit_ad import gmres, newton_root
+
 
 # ── Reconstruction classes ───────────────────────────────────────────────────
 
@@ -1705,11 +1707,11 @@ class DenseDiffusionOperatorJAX:
         ``𝒟_expl = interior(Q*) [+ boundary(Q*)]`` frozen.  ``A_fn(Q) ->
         diffusion_matrix`` closes over ``Qaux``/``p`` (inner cells).  Constant
         ``A`` ⇒ one linear ``jax_gmres`` solve; state-dependent ⇒ a Newton
-        loop (``lax.while_loop``) with an EXACT ``jax.jvp`` Jacobian action and
-        a ``jax_gmres`` inner solve.  ``Q_star`` is inner-cell ``(n_vars, nc)``.
+        loop with an EXACT ``jax.jvp`` Jacobian action and a GMRES inner solve,
+        differentiable through its root (implicit function theorem).
+        ``Q_star`` is inner-cell ``(n_vars, nc)``.
         """
         from jax.scipy.sparse.linalg import gmres as jax_gmres
-        from jax import lax
 
         Q_star = jnp.asarray(Q_star)
         shape = Q_star.shape
@@ -1731,32 +1733,22 @@ class DenseDiffusionOperatorJAX:
 
         # State-dependent: Newton on R(Q) = Q − Q* − dt/2 (𝒟_impl(Q) + 𝒟_expl),
         # A re-evaluated at each iterate (i.e. at Q^{n+1}).  Exact FD-free
-        # Jacobian action via jax.jvp; jax_gmres for the inner linear solve.
+        # Jacobian action via jax.jvp; GMRES for the inner linear solve.  The
+        # root is differentiated by the implicit function theorem
+        # (``newton_root`` = ``lax.custom_root``), not through the iterations.
         def residual(Q):
             D_impl = self._divergence(Q, self._as_cell_tensor(A_fn(Q)),
                                       bf_grads=None)
             return Q - Q_star - 0.5 * dt * (D_impl + D_expl)
 
-        def cond(carry):
-            Q, it = carry
-            return jnp.logical_and(
-                it < newton_maxiter,
-                jnp.linalg.norm(residual(Q)) > newton_tol)
+        def jvp(Q, V):
+            return jax.jvp(residual, (Q,), (V,))[1]
 
-        def body(carry):
-            Q, it = carry
-            R = residual(Q)
+        def linear_solve(matvec, b):
+            return gmres(matvec, b, tol=tol, maxiter=maxiter)
 
-            def jvp(v_flat):
-                V = v_flat.reshape(shape)
-                return jax.jvp(residual, (Q,), (V,))[1].reshape(-1)
-
-            delta, _ = jax_gmres(jvp, (-R).reshape(-1),
-                                 tol=tol, atol=0.0, maxiter=maxiter)
-            return (Q + delta.reshape(shape), it + 1)
-
-        Qf, _ = lax.while_loop(cond, body, (Q_star, jnp.array(0)))
-        return Qf
+        return newton_root(residual, Q_star, jvp, linear_solve,
+                           tol=newton_tol, maxiter=newton_maxiter)
 
     def residual_norm(self, Q_np1, Q_star, dt, A_fn, bf_grads=None):
         r"""Norm of the Crank–Nicolson residual the Newton solve drives to
