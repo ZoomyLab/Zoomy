@@ -8,6 +8,7 @@ solver owns the grid, the spaces, the time loop and the output.
     solver.run_simulation()
 """
 import os
+import shutil
 import xml.etree.ElementTree as ET
 
 import meshio
@@ -184,7 +185,6 @@ class HyperbolicSolver(param.Parameterized):
         )
         self._speed = self.Vscalar.interpolate(as_vector([self._wave_speed]),
                                                name="speed")
-        # |K| / perimeter, not sqrt(|K|): on stretched triangles the latter
         index_set = self.gridView.indexSet
         self._cell_size = np.empty(len(self._speed.as_numpy), dtype=float)
         for cell in self.gridView.elements:
@@ -232,10 +232,18 @@ class HyperbolicSolver(param.Parameterized):
 
     def _build_output(self):
         self.output_dir = self.settings.output.directory
+        if (self.settings.output.clean_directory and self.comm.rank == 0
+                and os.path.isdir(self.output_dir)):
+            shutil.rmtree(self.output_dir)
+        self.comm.barrier()
         os.makedirs(self.output_dir, exist_ok=True)
+        celldata = {str(name): self.Q[i]
+                    for i, name in enumerate(self.system_model.state)}
+        celldata.update({str(name): self.Qaux[i]
+                         for i, name in enumerate(self.system_model.aux_state)})
         self._write_vtk = self.gridView.sequencedVTK(
             os.path.join(self.output_dir, self.settings.output.filename),
-            celldata=[self.Q], number=0)
+            celldata=celldata, number=0)
 
     def write_snapshot(self):
         """A .vtu plus a .pvd carrying the real time (dune records none)."""
