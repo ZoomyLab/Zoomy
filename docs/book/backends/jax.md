@@ -9,7 +9,7 @@ vectorisation, autodiff, and GPU/TPU acceleration — against the **same** `Mode
 
 The JAX backend does **not** re-implement the solver; it *subclasses* the NumPy
 one and overrides only the compute methods with JAX kernels
-(`zoomy_jax/fvm/solver_jax.py:167`):
+(`zoomy_jax/fvm/solver_jax.py:331`):
 
 ```python
 from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNumpy
@@ -85,14 +85,16 @@ call); the full recipe + halo-exchange helpers live in
 
 | Class | File | What it adds |
 | --- | --- | --- |
-| `HyperbolicSolver` | `fvm/solver_jax.py:167` | JIT explicit RK1/SSP-RK2 + free-surface-aware reconstruction (`reconstruction_variables = conservative / eta / xz` — Audusse-Bouchut, Kurganov-Petrova, Xing-Zhang well-balanced recipes). |
-| `PoissonSolver` | `fvm/solver_jax.py:949` | JIT elliptic residual solve. |
-| `IMEXSourceSolverJax` | `fvm/solver_imex_jax.py:100` | Full IMEX compiled into one XLA program; CN implicit diffusion; local `fori_loop` Newton / global `while_loop` Newton-GMRES; `jv_backend="ad"` autodiff Jacobian-vector products. |
-| `ChorinSplitVAMSolverJax` | `fvm/solver_chorin_vam_jax.py:61` | JAX port of the Chorin VAM split (same 3-sub-system constructor as NumPy). |
+| `HyperbolicSolver` | `fvm/solver_jax.py:331` | JIT explicit RK1/SSP-RK2 + free-surface-aware reconstruction (`reconstruction_variables = conservative / eta / xz` — Audusse-Bouchut, Kurganov-Petrova, Xing-Zhang well-balanced recipes). |
+| `PoissonSolver` | `fvm/solver_jax.py:2193` | JIT elliptic residual solve. |
+| `IMEXSourceSolverJax` | `fvm/solver_imex_jax.py:31` | Base `HyperbolicSolver` time loop (adaptive CFL, output, `ad_mode`) with two implicit stages appended to the explicit flux step: Crank-Nicolson diffusion of `diffusion_matrix`, then implicit Euler on the source (`source_mode="local"` cell-wise Newton / `"global"` Newton-GMRES). Both are Newton roots under `jax.lax.custom_root` (`fvm/implicit_ad.py`), so the step is differentiable forward and reverse; `jv_backend="ad"/"fd"/"analytic"` picks the Newton Jacobian action. |
+| `ChorinSplitVAMSolverJax` | `fvm/solver_chorin_vam_jax.py:105` | JAX port of the Chorin VAM split (same 3-sub-system constructor as NumPy). |
 
 The `jv_backend="ad"` option is the JAX-specific win: where NumPy forms the
 source Jacobian-vector product analytically or by finite difference, JAX takes it
-by automatic differentiation.
+by automatic differentiation. Derivatives of the solution itself always use the
+exact AD linearization of the converged root (implicit function theorem),
+whatever `jv_backend` the Newton loop uses.
 
 ```{note}
 `zoomy_jax` also ships an optional preCICE integration
