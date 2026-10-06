@@ -25,29 +25,48 @@ LADDER: only ``nx = [40, 80]`` -- the two COARSEST levels of the case's own
 pairwise EOC below measures. Order 2 ONLY: order 1 is not what regressed
 (see the module note below) and is not guarded here.
 
-FLOORS come from the case's fresh 2026-08-09 re-run (``outputs/
-*_convergence.csv``, regenerated the same day this test was written), NOT
-from the stale ``run.py`` module docstrings (dated 2026-07-27, since shown to
-be stale). Do NOT raise these back to a hopeful 2.0: both cases are honestly
-front-limited (cid 152, O1-at-front accepted -- the moving wet/dry shoreline
-is only first-order-in-position, and via mass balance that error smears into
-a spatially-uniform depth offset that floors the interior EOC) and genuinely
+FLOORS come from this test's OWN measured numbers at ``wet_dry_eps=1e-5``
+(the value the case now uses -- see ``WET_DRY_EPS`` below), cross-checked
+against the case's fresh 2026-08-09 re-run (``outputs/*_convergence.csv``
+under ``thesis/cases/verification/2d_thacker_{planar,radial}``). This
+supersedes BOTH the original stale ``run.py`` docstring numbers (dated
+2026-07-27) AND this test's own first-cut floors (derived earlier the same
+day at the case's then-default ``wet_dry_eps=1e-3``: planar 0.60, radial
+0.90 -- since superseded when the case moved to ``1e-5``). Do NOT raise these
+back to a hopeful 2.0: both cases are honestly front-limited (cid 152,
+O1-at-front accepted -- the moving wet/dry shoreline is only
+first-order-in-position, and via mass balance that error smears into a
+spatially-uniform depth offset that floors the interior EOC) and genuinely
 land below clean second order at n=40->80.
 
-WHY THE PLANAR FLOOR DROPPED SINCE THE DOCSTRING (context, not asserted
-here): ``gate_eigenvalues_dry`` (zoomy_core, commit 1749ac2, 2026-08-07,
-cid 209) stopped a pre-existing bug where the dry-cell gate OVERWROTE the
-shared ``sm.eigenvalues`` -- the array the Rusanov face dissipation reads --
+WHY THE PLANAR FLOOR MOVED (context, not asserted here):
+``gate_eigenvalues_dry`` (zoomy_core, commit 1749ac2, 2026-08-07, cid 209)
+stopped a pre-existing bug where the dry-cell gate OVERWROTE the shared
+``sm.eigenvalues`` -- the array the Rusanov face dissipation reads --
 zeroing it near the wet/dry front and running that face as a pure central
 scheme. The fix publishes the gated copy to a separate ``eigenvalues_cfl``
 slot and leaves ``eigenvalues`` physical. That repaired positivity (this
-case's hmin: ~-3.5e-3..-4.4e-3 pre-fix -> ~+1.0e-8 now) but restored full
+case's hmin: ~-3.5e-3..-4.4e-3 pre-fix -> ~+1e-8 now) but restored full
 numerical dissipation at the moving shoreline, growing the front error that
-dominates this case's L1 budget -- which is exactly why the EOC floor here
-is lower than the pre-cid-209 docstring number while hmin is asserted
-POSITIVE instead of merely bounded. See the 2d_thacker_planar order-2
-regression investigation (2026-08-09) for the full A/B (limiter,
-wet_dry_eps, positivity_method, mood, gate on/off/old-style).
+dominates this case's L1 budget. At the case's THEN-default
+``wet_dry_eps=1e-3`` this dropped the measured coarse-pair EOC to 0.76
+(floor 0.60). A same-day wet_dry_eps sweep (1e-2/1e-3/1e-4/1e-5 ->
+coarse-pair O2 core EOC 0.345/0.764/1.238/1.288; hmin and mass unaffected)
+showed the rate recovering as eps shrinks, so the case adopted
+``wet_dry_eps=1e-5`` -- see ``thesis/cases/verification/2d_thacker_planar/
+run.py`` for the full A/B (limiter, wet_dry_eps, positivity_method, mood,
+gate on/off/old-style). The floor below is re-based on that configuration.
+
+RADIAL DOES NOT FOLLOW PLANAR (see the module note in
+``2d_thacker_radial/run.py``): under the SAME cid-209 fix, radial's
+coarse-pair O2 core EOC ROSE, not fell (pre-fix ~0.39-0.56 -> eps=1e-3 ~1.15
+-> eps=1e-5 ~0.98-1.22). It also exposed a run-to-run noise source that
+planar does not show: repeat GPU solves of radial's O2 nx=80 are NOT
+bit-reproducible (a ~0.24 spread measured across two independent runs of
+THIS test -- see the per-test docstring below). The radial floor is set with
+a wider margin than planar's for that reason, not out of doubt about the
+``wet_dry_eps=1e-5`` choice itself -- mass and positivity stay clean and
+every sampled EOC is at or above the eps=1e-3 baseline.
 """
 import numpy as np
 import pytest
@@ -68,7 +87,7 @@ G = 9.81
 H0 = 0.1
 L = 4.0
 XC = YC = 0.0
-WET_DRY_EPS = 1e-3
+WET_DRY_EPS = 1e-5
 DRY = 1e-8
 CORE_FLOOR = 0.05          # always-wet-core depth threshold [m] (case's own)
 NLEVELS = [40, 80]         # coarsest 2 levels of the case's own [40, 80, 160]
@@ -203,19 +222,23 @@ def _eoc_case(bed_fn, exact_fn, t_period):
 def test_thacker_planar_o2_eoc_mass_positivity():
     """2-D planar Thacker, order 2, nx 40 -> 80: EOC floor, mass, hmin.
 
-    EOC floor 0.60: the fresh 2026-08-09 run (``thesis/cases/verification/
-    2d_thacker_planar/outputs/thacker_planar_convergence.csv``) measures core
-    pairwise EOC 0.76 (n=40->80) and 0.51 (n=80->160), LS slope 0.64 over
-    n=40,80,160 -- well below the STALE run.py docstring's 1.08/1.27
-    (LS 1.18, dated 2026-07-27; see the module docstring above for why it
-    moved). 0.60 sits with real margin below the measured 0.76 without
-    re-asserting the old, now-disproven ~1.1-2.0 story.
+    EOC floor 1.00 (was 0.60 at the case's superseded wet_dry_eps=1e-3): the
+    case adopted wet_dry_eps=1e-5 on 2026-08-09 (user decision -- see
+    ``2d_thacker_planar/run.py`` for the full sweep). At 1e-5 the fresh
+    case re-run (``thesis/cases/verification/2d_thacker_planar/outputs/
+    thacker_planar_convergence.csv``) measures core pairwise EOC 1.29
+    (n=40->80) and 0.73 (n=80->160), LS slope 1.01 over n=40,80,160. This
+    test's OWN mirror reproduces the 40->80 pair to 3 decimal places across
+    two independent runs (1.288, 1.288) -- planar is NOT noise-sensitive
+    (contrast the radial test below). 1.00 sits ~22% below the
+    measured/reproduced 1.288, the same relative margin the old 0.60 floor
+    kept below its (lower) 0.76.
 
     Mass floor 1e-10: the same csv measures |mass_rel_err| ~ 1e-16 (machine
     zero) at every level.
 
-    hmin floor -1e-6: the same csv measures hmin ~ +1.0e-8 (POSITIVE) at
-    every level -- a real improvement on the pre-cid-209 docstring's
+    hmin floor -1e-6: the same csv measures hmin ~ +2e-9..+1.0e-8 (POSITIVE)
+    at every level -- a real improvement on the pre-cid-209 docstring's
     hmin ~ -3.5e-3..-4.4e-3. -1e-6 leaves ~2 orders of run-to-run float
     margin around the measured +1e-8 without re-accepting that old
     violation.
@@ -224,7 +247,7 @@ def test_thacker_planar_o2_eoc_mass_positivity():
                                          T_PERIOD_PLANAR)
     print(f"planar O2 core: EOC[{NLEVELS[0]}->{NLEVELS[1]}]={eoc:.3f} "
           f"L1={errs} hmin={hmins} mass={masses}")
-    assert eoc >= 0.60, (
+    assert eoc >= 1.00, (
         f"planar core O2 EOC dropped below the measured floor: {eoc:.3f}")
     for nx, mr, hm in zip(NLEVELS, masses, hmins):
         assert abs(mr) < 1e-10, f"nx={nx}: mass not conserved: {mr:.3e}"
@@ -238,27 +261,32 @@ def test_thacker_planar_o2_eoc_mass_positivity():
 def test_thacker_radial_o2_eoc_mass_positivity():
     """2-D radial Thacker, order 2, nx 40 -> 80: EOC floor, mass, hmin.
 
-    EOC floor 0.90: the fresh 2026-08-09 run (``thesis/cases/verification/
-    2d_thacker_radial/outputs/thacker_radial_convergence.csv``) measures core
-    pairwise EOC 1.15 (n=40->80) and 1.09 (n=80->160) -- actually HIGHER than
-    the STALE run.py docstring's 0.39/0.56 (LS 0.48, dated 2026-07-27): this
-    case moved the OPPOSITE direction from planar under the same library
-    changes (the always-wet core here is small and already front-influenced
-    -- "the shoreline sweeps almost the whole bowl" -- so the front-
-    dissipation change that cost planar an order shifted radial's balance
-    the other way). 0.90 sits below the measured 1.15 with margin; still far
-    below a clean-O2 2.0, honestly reflecting this case's strong
-    front-limiting (cid 152 accepted).
+    EOC floor 0.80 (was 0.90 at the case's superseded wet_dry_eps=1e-3): the
+    case adopted wet_dry_eps=1e-5 on 2026-08-09 (user decision -- see
+    ``2d_thacker_radial/run.py`` for the full story). Unlike planar, radial
+    is NOT reproducible run-to-run on this GPU: two independent runs of
+    THIS test measured core pairwise EOC[40->80] = 1.221 and 0.983 (a ~0.24
+    spread); two back-to-back direct solves at nx=80 alone (same process,
+    same code path) differ by ~3% in L1_core -- see ``2d_thacker_radial/
+    run.py``'s NOISE note for the full A/B (snapshot-timing and ``mood``
+    default both ruled out as the cause). The case's own fresh re-run
+    (``thacker_radial_convergence.csv``) landed at 1.00 (n=40->80) and 1.49
+    (n=80->160) -- inside the same band. 0.80 sits below EVERY sample
+    observed so far (min 0.983) with real margin: it prioritizes a
+    non-flaky floor over squeezing the tightest number out of a single run,
+    while remaining far above the pre-cid-209 values (0.39, 0.56) so it
+    still catches a real regression back to the old broken (h<0) behaviour.
 
     Mass floor 1e-10 / hmin floor -1e-6: same justification as the planar
-    test above -- the same csv measures |mass_rel_err| ~ 1e-16 and
-    hmin ~ +1.0e-8 at every level.
+    test above -- |mass_rel_err| ~ 1e-16 and hmin ~ +1.0e-8 at every level,
+    in every run collected (the noise above affects L1_core, not mass or
+    positivity).
     """
     eoc, errs, hmins, masses = _eoc_case(_bed_radial, _exact_radial,
                                          T_PERIOD_RADIAL)
     print(f"radial O2 core: EOC[{NLEVELS[0]}->{NLEVELS[1]}]={eoc:.3f} "
           f"L1={errs} hmin={hmins} mass={masses}")
-    assert eoc >= 0.90, (
+    assert eoc >= 0.80, (
         f"radial core O2 EOC dropped below the measured floor: {eoc:.3f}")
     for nx, mr, hm in zip(NLEVELS, masses, hmins):
         assert abs(mr) < 1e-10, f"nx={nx}: mass not conserved: {mr:.3e}"

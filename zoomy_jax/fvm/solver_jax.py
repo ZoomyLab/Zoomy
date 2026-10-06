@@ -399,6 +399,23 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             "pure-O1 march and is provably admissible.  Replaces the a-priori "
             "Xing-Zhang-Shu cap (``positivity_method='zhang_shu'`` + CFL≤1/(2k+1)) "
             "as the default — that code stays available but is no longer the gate.")
+    march_log_interval = param.Integer(default=None, allow_None=True,
+        bounds=(0, None),
+        doc="Steps between the in-loop progress prints, or 0 to silence them.  "
+            "``None`` (default) = AUTO: silent on an ACCELERATOR backend, every "
+            "10 steps on CPU.\n\n"
+            "The print sits inside the jitted ``lax.while_loop``, so every "
+            "firing is a device->host round trip that serialises the march.  On "
+            "a GPU that dominates: MEASURED on Malpasset (26k cells, order 1, "
+            "CFL 0.4, L40S) 5.95 -> 0.63 s of wall per simulated second, i.e. "
+            "9.4x, with ``nvidia-smi`` reading 0% utilisation while the print "
+            "was live and 99% once it was gone.  A whole 2500 s order-2 march "
+            "went 6.4 -> 1.14 s/sim-s (5.6x; smaller than the microbenchmark "
+            "because a larger dt fires the callback less often per simulated "
+            "second).  Auto-off on accelerators keeps the progress trace where "
+            "it is cheap (CPU debugging) and drops it where it is not.  The "
+            "branch is resolved in PYTHON at trace time, so when it is off "
+            "nothing is emitted into the jaxpr at all.")
     force_steady_ode_wb = param.Boolean(default=False,
         doc="Force the fully-WB steady-ODE moving-equilibrium reconstruction "
             "even for a frictionless level-0 model that would otherwise take the "
@@ -1926,6 +1943,47 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # Capture the per-step building block + loop predicate for the closure.
         _advance = self._advance
         _couple_proceed = self._couple_proceed
+        # Progress-print cadence, resolved HERE (python, pre-trace) so an
+        # accelerator march stages no host callback at all.  None => auto: the
+        # trace is worth its cost on CPU and is 9.4x on a GPU, so default it off
+        # wherever the backend is not the CPU.
+        _log_every = self.march_log_interval
+        if _log_every is None:
+            _log_every = 10 if jax.default_backend() == "cpu" else 0
+        _log_every = int(_log_every)
+
+        # ── compile the march ONCE ───────────────────────────────────────
+        # ``time_loop`` used to be defined (and ``jax.jit``-wrapped) fresh on
+        # every ``run_simulation`` call.  jit caches on the FUNCTION OBJECT, so
+        # a new closure per call meant a full XLA recompilation of the whole
+        # march every call -- invisible to a single-shot solve, brutal to any
+        # driver that calls run_simulation repeatedly (frame/window producers,
+        # restart chains, coupled sub-cycling).  MEASURED with JAX_LOG_COMPILES
+        # on Malpasset 26k: a 4-window run logged FOUR ``Compiling
+        # jit(time_loop)`` events at ~70 s each, and the same 400 s of
+        # simulation cost 400 s wall at 1 window against 968 s at 8 (2.4x, i.e.
+        # ~81 s per extra window -- all of it recompilation).
+        #
+        # Cache the compiled loop on the instance, keyed by everything the
+        # trace bakes in as a Python constant.  Anything that changes the
+        # generated code is in the key, so a genuine change still recompiles;
+        # repeat calls with the same configuration reuse the executable.
+        # ``parameters`` / Q / Qaux stay TRACED arguments, so adaptive dt --
+        # recomputed from the state every step inside the loop -- is unaffected.
+        # NB: do NOT key on ``id()`` of ``save_fields`` / ``_advance`` /
+        # ``_couple_proceed``.  All three are rebuilt per call -- ``self._advance``
+        # materialises a FRESH bound method on every attribute access -- so an
+        # id-based key never hits and the cache silently does nothing (measured:
+        # still 4 compiles for 4 windows).  Key on the values that actually
+        # change the emitted code instead; the callables are functionally fixed
+        # for a given solver + output configuration.
+        _cache_key = (float(time_end), float(dt_snapshot), int(_log_every),
+                      bool(write_output))
+        _cached = getattr(self, "_time_loop_cache", None)
+        if _cached is not None and _cached[0] == _cache_key:
+            return_cached = _cached[1]
+        else:
+            return_cached = None
 
         @jax.jit
         @partial(jax.named_call, name="time_loop")
@@ -1958,14 +2016,21 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 # jax.debug.print is transparent under autodiff; the previous
                 # jax.experimental.io_callback has NO JVP rule and blocked
                 # jax.jvp / jax.grad through the whole time loop (forward-mode
-                # sensitivity, segment-wise per write).  Logged every 10 steps.
-                jax.lax.cond(
-                    (iteration_new % 10) == 0,
-                    lambda: jax.debug.print(
-                        "iteration: {i}, time: {t:.6f}, dt: {d:.6f}",
-                        i=iteration_new, t=time_new, d=dt),
-                    lambda: None,
-                )
+                # sensitivity, segment-wise per write).
+                #
+                # It is still a HOST CALLBACK inside the jitted while_loop, so
+                # every firing round-trips to the host and serialises the march
+                # -- 9.4x on a GPU (see ``march_log_interval``).  ``_log_every``
+                # is a PYTHON int resolved before tracing: 0 => the callback is
+                # never staged into the jaxpr, not merely predicated off.
+                if _log_every:
+                    jax.lax.cond(
+                        (iteration_new % _log_every) == 0,
+                        lambda: jax.debug.print(
+                            "iteration: {i}, time: {t:.6f}, dt: {d:.6f}",
+                            i=iteration_new, t=time_new, d=dt),
+                        lambda: None,
+                    )
 
                 return (time_new, iteration_new, i_snapshot_new,
                         last_written_new, Q_final, Qaux_final)
@@ -1997,6 +2062,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             )
 
             return Qnew, Qauxnew
+
+        if return_cached is not None:
+            time_loop = return_cached
+        else:
+            self._time_loop_cache = (_cache_key, time_loop)
 
         Q, Qaux = time_loop(0.0, 0.0, i_snapshot, last_written, Q, Qaux,
                             parameters)
