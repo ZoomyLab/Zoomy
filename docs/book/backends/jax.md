@@ -86,9 +86,9 @@ call); the full recipe + halo-exchange helpers live in
 | Class | File | What it adds |
 | --- | --- | --- |
 | `HyperbolicSolver` | `fvm/solver_jax.py:333` | JIT explicit RK1/SSP-RK2 + free-surface-aware reconstruction (`reconstruction_variables = conservative / eta / xz` — Audusse-Bouchut, Kurganov-Petrova, Xing-Zhang well-balanced recipes). |
-| `PoissonSolver` | `fvm/solver_jax.py:2268` | JIT elliptic residual solve. |
+| `PoissonSolver` | `fvm/solver_jax.py:2279` | JIT elliptic residual solve. |
 | `IMEXSourceSolverJax` | `fvm/solver_imex_jax.py:31` | Base `HyperbolicSolver` time loop (adaptive CFL, output, `ad_mode`) with two implicit stages appended to the explicit flux step: Crank-Nicolson diffusion of `diffusion_matrix`, then implicit Euler on the source (`source_mode="local"` cell-wise Newton / `"global"` Newton-GMRES). Both are Newton roots under `jax.lax.custom_root` (`fvm/implicit_ad.py`), so the step is differentiable forward and reverse; `jv_backend="ad"/"fd"/"analytic"` picks the Newton Jacobian action. |
-| `ChorinSplitVAMSolverJax` | `fvm/solver_chorin_vam_jax.py:105` | JAX port of the Chorin VAM split (same 3-sub-system constructor as NumPy). |
+| `ChorinSplitVAMSolverJax` | `fvm/solver_chorin_vam_jax.py:105` | JAX port of the Chorin VAM split (same 3-sub-system constructor as NumPy) on the base time loop: `step` is one hyperbolic Euler, pressure (matrix-free GMRES), corrector cycle (SSP-RK2 over it for `time_order=2`), so `run_simulation`, `run_observed` and `ad_mode` work as for the base solver. See [below](#chorin-split-vam). |
 
 The `jv_backend="ad"` option is the JAX-specific win: where NumPy forms the
 source Jacobian-vector product analytically or by finite difference, JAX takes it
@@ -164,6 +164,12 @@ J_val, (dJ_dp, dJ_dQ0) = jax.value_and_grad(J, argnums=(0, 1))(p0, Q0)
 `run_simulation(Q0)` without `Qaux` rebuilds the aux state from `Q0` inside the
 differentiated path, so `dJ_dQ0` includes `dQaux0/dQ0`.
 
+`run_simulation(..., time0=t0)` (and `run_observed`) starts the march at `t0`;
+`time_end` stays absolute. A chunked driver continues a run with the previous
+chunk's end state, its `Qaux`, and `time0` = the previous `time_end`. `time0` is
+traced, not part of the compiled-loop cache key; snapshots are spread evenly
+over `[time0, time_end]`.
+
 The solver keeps one compiled loop per configuration (`ad_mode`,
 `ad_checkpoints`, `time_end`, output settings, observer). Switching `ad_mode`
 back and forth on one solver compiles each loop once and keeps both: on the
@@ -173,7 +179,7 @@ cache.
 
 ### Quantities of interest over the whole run
 
-`run_observed(Q0, observer, Qaux=None, parameters=None, write_output=False)`
+`run_observed(Q0, observer, Qaux=None, parameters=None, write_output=False, time0=0.0)`
 runs the same march and returns `(Q, Qaux, acc)`. An observer
 (`zoomy_jax.fvm.observers.Observer`) is two pure functions:
 `init(Q, Qaux, parameters) -> acc` on the initial state, and
@@ -235,6 +241,50 @@ functions. Reusing the same observer object reuses the compiled loop; every
   ...`), also under `jit`, `jvp` and the reverse loop, where the recomputation
   can log it again. Raise `implicit_maxiter` (or lower the CFL) until it is
   quiet.
+
+### Chorin split VAM
+
+`ChorinSplitVAMSolverJax` binds its three sub-models at construction, so
+`setup_simulation(mesh)` takes no model and returns the state `Q` only. The
+split sub-models carry no initial condition: write the initial state into that
+`Q`, then march it on the base loop. One step is `step(dt, time, Q, Qaux,
+parameters=None)` (pure, returns `Q`; `coupled` is not supported), and
+`post_step` rebuilds the predictor aux pool. `parameters` is the predictor
+parameter vector; the pressure and corrector vectors are built from it plus
+`dt` by name, so a derivative w.r.t. `g` reaches all three stages.
+
+```python
+from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
+
+solver = ChorinSplitVAMSolverJax(SM_pred, SM_press, SM_corr, time_end=T,
+                                 cfl=0.9, ad_mode="reverse")
+Q0 = setup_ic(solver.setup_simulation(mesh))      # write the IC into Q
+
+def J(p, Q0):
+    Q, _ = solver.run_simulation(Q0, write_output=False, parameters=p)
+    return jnp.sum(Q[ih] ** 2)
+
+dJ_dp, dJ_dQ0 = jax.grad(J, argnums=(0, 1))(solver.parameters, Q0)
+```
+
+Time step: `cfl` set gives the Chorin local-CFL law
+`dt = min_f cfl*2*r_f / (dim*(2*deg+1)*|lam|_f)` with `deg = order - 1`, the
+mesh dimension and the NSM `dt_max` cap. It equals
+`timestepping.adaptive(CFL=cfl, dimension=dim, degree=deg)` where every face has
+a wave; a NaN wave speed propagates into `dt` instead of being dropped, and the
+division runs on a safe denominator so the reverse cotangent of a wave-free
+face is 0, not NaN. `cfl=None` uses `compute_dt` (e.g.
+`timestepping.constant(dt)`).
+
+`run_jit_steps(dt, n_steps, Q, Qaux_pred=None, ..., t_start=0.0, cfl=None,
+dt_max=None, parameters=None)` stays as the forward-only fast path: exactly
+`n_steps` of the same `step` + `post_step` in one cached `lax.scan` (one compile
+per `(n_steps, adaptive)`), no `time_end` clamp; it refuses
+`ad_mode="reverse"`. On the 30-cell bump with constant `dt` it reproduces
+`run_simulation` bitwise (`tests/runtime/test_ad_chorin.py`), and the two cost
+the same per step (warm, CPU: 1.85 ms constant `dt`, 2.4 ms adaptive). Pass
+`Qaux` to `run_simulation`: `Qaux=None` rebuilds it eagerly before the loop,
+about 45 ms per call there.
 
 ## Authoring checklist
 
