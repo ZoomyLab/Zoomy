@@ -886,6 +886,112 @@ class JaxRuntime:
 
             self.numerical_cell_edge_source = numerical_cell_edge_source
 
+    # ── New-template slots: admissibility + D5/D6 ghost kernels ──────
+    #
+    # Lazy (built on first use): the old solvers never touch them.
+
+    def admissible(self, Q, Qaux, parameters):
+        """The admissibility list per cell, ``(n_constraints, n_cells)`` —
+        every row must stay ``>= 0`` (decision D1); ``(0, n_cells)`` for a
+        system that declares none."""
+        fn = getattr(self, "_admissible_fn", None)
+        if fn is None:
+            exprs = list(self.sm.admissible_constraints())
+            if not exprs:
+                def fn(Q, Qaux, p):
+                    return jnp.zeros((0,) + tuple(jnp.shape(Q)[1:]))
+            else:
+                fn = self._build_slot_operator("admissible", sp.Array(exprs))
+            self._admissible_fn = fn
+        return fn(Q, Qaux, parameters)
+
+    def _ghost_symbolic(self):
+        cached = getattr(self, "_ghost_sym_cache", None)
+        if cached is None:
+            fn, branches = self.sm.boundary_ghost_kernel()
+            a = fn.args
+            # The STATE group goes first: ``_lambdify_array`` anchors the
+            # rank of constant entries on the first group's first symbol.
+            keys = ["variables", "time", "position", "distance",
+                    "aux_variables", "parameters", "normal", "boundary_data"]
+            arg_lists = tuple(_group_symbols(a[k]) for k in keys)
+            cached = (fn, branches, a, keys, arg_lists)
+            self._ghost_sym_cache = cached
+        return cached
+
+    def boundary_ghost_state(self, bc_idx, time, position, distance, q, qaux,
+                             parameters, normal, bdata=None):
+        """The indexed D5 ghost kernel for ONE face (vmap it for many):
+        ``(n_state,)``.  ``bdata=None`` means the BC input state."""
+        fn = getattr(self, "_ghost_face_fn", None)
+        if fn is None:
+            sym, branches, a, keys, arg_lists = self._ghost_symbolic()
+            idx = a["idx"]
+            n = self.n_state
+            pieces = [sp.Piecewise(*[(br[k], sp.Eq(idx, i))
+                                     for i, br in enumerate(branches)])
+                      for k in range(n)]
+            per_face = _lambdify_array(
+                sp.Array(pieces), arg_lists[:1] + ([idx],) + arg_lists[1:],
+                self.module)
+
+            @jax.jit
+            def fn(bc_idx, time, position, distance, q, qaux, parameters,
+                   normal, bdata):
+                return per_face(q, bc_idx, time, position, distance, qaux,
+                                parameters, normal, bdata)
+            self._ghost_face_fn = fn
+        q = jnp.asarray(q)
+        return fn(bc_idx, time, position, distance, q, qaux, parameters,
+                  normal, q if bdata is None else bdata)
+
+    def boundary_ghost(self, bc_idx):
+        """BATCHED ghost kernel for a STATIC branch vector ``bc_idx`` (numpy
+        ints, one per boundary face, routed by tag NAME — see
+        :func:`zoomy_core.model.boundary_conditions.boundary_face_branches`).
+
+        Returns ``ghost(time, position, distance, Q_in, Qaux_in, parameters,
+        normal, bdata=None) -> (Q_ghost, Qaux_ghost)``; face arrays carry a
+        trailing face axis.  Every BC branch is ``vmap``-ed over ITS faces
+        only (static index groups — a branch is never evaluated on a foreign
+        face, so no NaN of an inactive branch can leak into a gradient).  The
+        ghost aux is the model's aux update rule applied to the ghost state
+        (D6).  Traceable: jit / grad / jvp go straight through."""
+        from zoomy_core.transformation.to_numpy import _branch_groups
+        sym, branches, a, keys, arg_lists = self._ghost_symbolic()
+        groups, inverse = _branch_groups(bc_idx)
+        n = self.n_state
+        per_branch = {}
+        for k, _sel in groups:
+            f = _lambdify_array(_to_array_of_exprs(branches[k]), arg_lists,
+                                self.module)
+            # (Q, time, position, distance, Qaux, p, normal, bdata)
+            per_branch[k] = jax.vmap(
+                f, in_axes=(1, None, 1, 0, 1, None, 1, 1), out_axes=1)
+        sels = [(k, jnp.asarray(sel)) for k, sel in groups]
+        inverse_j = jnp.asarray(inverse)
+        uav = self.update_aux_variables
+
+        def ghost(time, position, distance, Q, Qaux, parameters, normal,
+                  bdata=None):
+            Q = jnp.asarray(Q)
+            Qaux = jnp.asarray(Qaux)
+            bdata = Q if bdata is None else jnp.asarray(bdata)
+            time = jnp.asarray(time, dtype=Q.dtype)
+            parts = [per_branch[k](Q[:, sel], time, position[:, sel],
+                                   distance[sel], Qaux[:, sel], parameters,
+                                   normal[:, sel], bdata[:, sel])
+                     .reshape(n, -1)
+                     for k, sel in sels]
+            Qg = (jnp.concatenate(parts, axis=1)[:, inverse_j] if parts
+                  else jnp.zeros_like(Q))
+            if uav is None or Qaux.shape[0] == 0:
+                return Qg, Qaux
+            Ag = uav(Qg, Qaux, parameters, time=time, position=position)
+            return Qg, jnp.reshape(Ag, Qaux.shape)
+
+        return ghost
+
     # ── Boundary-condition kernels ───────────────────────────────
 
     def _build_bc(self):
