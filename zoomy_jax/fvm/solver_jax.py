@@ -1969,12 +1969,13 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             self._rt_inradius_face, self._rt_eigenvalue_op,
         )
 
-    def run_simulation(self, Q, Qaux=None, write_output=True, parameters=None):
+    def run_simulation(self, Q, Qaux=None, write_output=True, parameters=None,
+                       time0=0.0):
         """JIT-compiled time loop.
 
         Calls ``compute_timestep`` -> ``step`` -> ``post_step`` in a while
-        loop until ``time >= time_end``.  The loop primitive follows
-        ``ad_mode``: ``jax.lax.while_loop`` (forward) or
+        loop from ``time0`` until ``time >= time_end``.  The loop primitive
+        follows ``ad_mode``: ``jax.lax.while_loop`` (forward) or
         ``equinox.internal.while_loop(kind="checkpointed")`` (reverse).
 
         Parameters
@@ -1993,17 +1994,23 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             Physical-parameter vector.  ``None`` → :attr:`parameters` (the
             runtime vector built at setup).  Pass a traced array to
             differentiate the run w.r.t. the parameters.
+        time0 : float
+            Start time of the march; ``time_end`` stays absolute.  A chunked
+            driver continues a run with ``time0`` = the previous chunk's end
+            and a larger ``time_end``.  Traced (not part of the compiled-loop
+            cache key).  Output snapshots are spread evenly over
+            ``[time0, time_end]``.
 
         Returns
         -------
         Q, Qaux : jnp.ndarray
             Final state.
         """
-        Q, Qaux, _ = self._run(Q, Qaux, write_output, parameters, None)
+        Q, Qaux, _ = self._run(Q, Qaux, write_output, parameters, None, time0)
         return Q, Qaux
 
     def run_observed(self, Q, observer, Qaux=None, parameters=None,
-                     write_output=False):
+                     write_output=False, time0=0.0):
         """The :meth:`run_simulation` march, plus an observer accumulated
         over every step.
 
@@ -2021,8 +2028,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         loop; a fresh one (e.g. a new ``running_max(...)`` call) compiles a
         new loop.
 
-        Parameters are those of :meth:`run_simulation`; ``write_output``
-        defaults to False here.
+        Parameters are those of :meth:`run_simulation` (``time0`` included);
+        ``write_output`` defaults to False here.
 
         Returns
         -------
@@ -2031,12 +2038,13 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         acc : pytree
             The final accumulator.
         """
-        return self._run(Q, Qaux, write_output, parameters, observer)
+        return self._run(Q, Qaux, write_output, parameters, observer, time0)
 
-    def _run(self, Q, Qaux, write_output, parameters, observer):
+    def _run(self, Q, Qaux, write_output, parameters, observer, time0):
         """The time loop behind :meth:`run_simulation` and
-        :meth:`run_observed`.  ``observer=None`` carries the empty
-        accumulator ``()``.  Returns ``(Q, Qaux, acc)``."""
+        :meth:`run_observed`, from ``time0`` to ``time_end``.
+        ``observer=None`` carries the empty accumulator ``()``.  Returns
+        ``(Q, Qaux, acc)``."""
         parameters = (self._rt_parameters if parameters is None
                       else parameters)
         if Qaux is None:
@@ -2065,9 +2073,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 """Save field."""
                 return i_snapshot
 
-        dt_snapshot = self.time_end / max(self.settings.output.snapshots - 1, 1)
-        i_snapshot = save_fields(0.0, 0.0, 0.0, Q, Qaux)
-        last_written = 0.0
+        n_intervals = max(self.settings.output.snapshots - 1, 1)
+        i_snapshot = save_fields(time0, time0, 0.0, Q, Qaux)
+        last_written = time0
         time_end = self.time_end
 
         # Coupling bootstrap hook — no-op for an uncoupled run; a preCICE
@@ -2136,26 +2144,27 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # for a given solver + output configuration.  The observer is keyed by
         # the object itself (hash / equality), which also keeps it alive, so
         # a recycled ``id()`` can never hit a stale loop.
-        _cache_key = (float(time_end), float(dt_snapshot), int(_log_every),
+        _cache_key = (float(time_end), int(n_intervals), int(_log_every),
                       bool(write_output), output_hdf5_path, _ad_mode,
                       _ad_checkpoints, observer)
         time_loop = self._time_loop_cache.get(_cache_key)
         if time_loop is None:
             time_loop = self._compile_time_loop(
                 _advance, _couple_proceed, save_fields, _while_loop,
-                time_end=time_end, dt_snapshot=dt_snapshot,
+                time_end=time_end, n_intervals=n_intervals,
                 log_every=_log_every, observer=observer)
             self._time_loop_cache[_cache_key] = time_loop
 
-        return time_loop(0.0, 0.0, i_snapshot, last_written, Q, Qaux,
+        return time_loop(time0, 0.0, i_snapshot, last_written, Q, Qaux,
                          parameters)
 
     @staticmethod
     def _compile_time_loop(_advance, _couple_proceed, save_fields, _while_loop,
-                           *, time_end, dt_snapshot, log_every, observer):
-        """The jitted march ``(time, iteration, i_snapshot, last_written, Q,
+                           *, time_end, n_intervals, log_every, observer):
+        """The jitted march ``(time0, iteration, i_snapshot, last_written, Q,
         Qaux, parameters) -> (Q, Qaux, acc)``; ``acc = ()`` when ``observer``
-        is None."""
+        is None.  Snapshot stamps are ``time0 + i * (time_end - time0) /
+        n_intervals``."""
         _log_every = log_every
 
         @jax.jit
@@ -2163,6 +2172,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         def time_loop(time, iteration, i_snapshot, last_written, Q, Qaux,
                       parameters):
             """JIT-compiled time loop."""
+            time0 = time
+            dt_snapshot = (time_end - time0) / n_intervals
             acc = (() if observer is None
                    else observer.init(Q, Qaux, parameters))
             loop_val = (time, iteration, i_snapshot, last_written, Q, Qaux,
@@ -2185,7 +2196,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                                           Qaux_final, parameters)
 
                 iteration_new = iteration + 1
-                time_stamp = i_snapshot * dt_snapshot
+                time_stamp = time0 + i_snapshot * dt_snapshot
 
                 i_snapshot_new = save_fields(
                     time_new, time_stamp, i_snapshot, Q_final, Qaux_final
