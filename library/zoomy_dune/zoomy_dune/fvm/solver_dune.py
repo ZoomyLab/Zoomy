@@ -110,6 +110,7 @@ class HyperbolicSolver(param.Parameterized):
         nsm = NumericalSystemModel.from_system_model(
             self.system_model,
             reconstruction=ReconstructionSpec(order=self.dg_degree + 1))
+        self.nsm = nsm
         self.runtime = UFLRuntimeModel.from_nsm(nsm)
         # The indicator reads the spectrum once per adaptation over every cell.
         # Interpolating it as UFL cost more than a full operator application;

@@ -100,9 +100,6 @@ class FemDGSolver(HyperbolicSolver):
             def F_c(t, x, u):
                 return as_flux_matrix(runtime.flux(u, aux_of(u), p))
 
-            def S_e(t, x, u, du):
-                return vec(runtime.source(u, aux_of(u), p))
-
             def maxWaveSpeed(t, x, u, n):
                 return scalar(numerics.local_max_abs_eigenvalue(u, aux_of(u), p, n))
 
@@ -115,6 +112,14 @@ class FemDGSolver(HyperbolicSolver):
             def jump(t, x, u, w):
                 return (u[row_h] - w[row_h]) / (0.5 * (u[row_h] + w[row_h]))
 
+        def source(t, x, u, du):
+            return vec(runtime.source(u, aux_of(u), p))
+
+        # Explicit. The model reports implicit_mode == "local_source", but
+        # femDGOperator's implicit stage is a global solve, which on Malpasset
+        # managed one snapshot in 28 minutes. A cell-local friction update
+        # belongs in a split substep, not in S_i.
+        ZoomyModel.S_e = source
         return ZoomyModel
 
     def _set_initial_condition(self, initial_condition):
