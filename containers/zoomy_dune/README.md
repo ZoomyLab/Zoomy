@@ -74,3 +74,35 @@ to force a rebuild.
 `examples/euler.py` uses the first and exists to prove the image. Zoomy cases
 use the second — see the upstream `demos/discontinuousgalerkin.py` for the
 pattern (UFL residual → `molGalerkin` → your own explicit RK loop).
+
+## Adaptive refinement
+
+`HyperbolicSolver` marks on **η = b + h**, never on `h` alone: over varying
+bathymetry a lake at rest has constant η but strongly varying `h`, so an
+`h`-gradient refines the whole reservoir. Three regimes give a target level —
+any water at all (`wet_level`), the wet/dry front (`front_level`), a steep
+surface relative to the local depth (`shock_level`) — and `buffer_cells` rings
+of dilation keep the band ahead of the wave between adaptations. Hysteresis
+sits between `refine_tolerance` and `coarsen_tolerance`.
+
+**`max_level` defaults to 0, which means no AMR.** A case that never sets it
+runs on a uniform mesh; the solver now logs `uniform mesh` so this is visible.
+
+The per-cell level is written as the cell field `level`, so refinement is
+directly visible in ParaView. Do not infer it from cell size — the base mesh
+is strongly graded and cell size mostly shows that grading, not the AMR.
+
+## Running a case against the repo rather than the image
+
+The image ships an installed `zoomy_dune`, which **shadows the repo copy**.
+Editing `library/zoomy_dune/` changes nothing until the image is rebuilt,
+unless the repo is put ahead of it:
+
+```bash
+apptainer exec --bind "$ZOOMY" --pwd "$PWD" \
+    --env PYTHONPATH="$ZOOMY/library/zoomy_dune" \
+    --env OMP_NUM_THREADS=8 \
+    "$ZOOMY/containers/zoomy_dune/zoomy_dune.sif" python3 run.py
+```
+
+Without the `--env PYTHONPATH`, the installed copy wins silently.
