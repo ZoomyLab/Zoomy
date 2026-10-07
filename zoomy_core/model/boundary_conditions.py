@@ -1391,6 +1391,52 @@ class BoundaryConditions(param.Parameterized):
         )
 
 
+def boundary_face_branches(mesh, bcs):
+    """BC-kernel branch index of every boundary face of ``mesh``, matched BY
+    TAG NAME — the ``bc_idx`` every solver passes to the lowered
+    ``boundary_conditions`` / ``boundary_gradients`` kernels.
+
+    :class:`BoundaryConditions` sorts its BCs by tag, so kernel branch ``i``
+    serves tag ``bcs.list_sorted_function_names[i]``.  The mesh numbers its
+    tags on its own: ``mesh.boundary_face_function_numbers`` index
+    ``mesh.boundary_conditions_sorted_names``, ordered by position on
+    ``create_2d`` (left, right, bottom, top) and by gmsh physical id on
+    ``from_msh``.  The raw mesh number is therefore NOT a branch index — read
+    as one, ``create_2d`` sends ``bottom`` faces to the ``right`` BC.
+
+    ``bcs is None`` (a SystemModel built from a bare kernel, without its
+    ``BoundaryConditions`` source) carries no tag names; the mesh numbering is
+    then the kernel's only contract and is returned unchanged.  So is an EMPTY
+    container: its kernel has no branches (``ZArray(Q)``, extrapolation on
+    every face) and never reads ``bc_idx``.  A boundary face whose tag has no
+    BC, or a tag declared twice, raises."""
+    n_bf = int(mesh.n_boundary_faces)
+    numbers = np.asarray(mesh.boundary_face_function_numbers, dtype=int)[:n_bf]
+    tags = [] if bcs is None else list(bcs.list_sorted_function_names)
+    if not tags or n_bf == 0:
+        return numbers
+    branch = {}
+    for i, tag in enumerate(tags):
+        if tag in branch:
+            raise ValueError(
+                f"boundary tag {tag!r} is declared by more than one BC "
+                f"branch {tags}; give each tag one BoundaryCondition")
+        branch[tag] = i
+    names = list(mesh.boundary_conditions_sorted_names)
+    used = sorted(set(numbers.tolist()))
+    if used and used[-1] >= len(names):
+        raise ValueError(
+            f"mesh boundary faces use tag numbers {used} but the mesh names "
+            f"only {names}; cannot route them to BCs by name")
+    missing = [names[k] for k in used if names[k] not in branch]
+    if missing:
+        raise ValueError(
+            f"mesh boundary tags {missing} have no boundary condition "
+            f"(BCs are given for {tags})")
+    to_branch = np.array([branch.get(nm, -1) for nm in names], dtype=int)
+    return to_branch[numbers]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-field boundary conditions — the flat-list interface.
 #

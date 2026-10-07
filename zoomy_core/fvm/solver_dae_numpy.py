@@ -42,6 +42,7 @@ from zoomy_core.fvm.solver_numpy import Solver
 from zoomy_core.fvm.imex_ark import ars232, ars343, imex_ark_step
 from zoomy_core.fvm import timestepping
 from zoomy_core.mesh import ensure_lsq_mesh
+from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
 from zoomy_core.misc.logger_config import logger
@@ -416,14 +417,15 @@ class DAESolver(Solver):
         The runtime exposes the indexed BC kernel as
         ``self.rt.boundary_conditions(bc_idx, time, position, distance,
         Q_cell, Qaux_cell, parameters, normal) → q_face``.  Per face the
-        only state needed is ``bc_idx = mesh.boundary_face_function_
-        numbers[i]``; no Python BC-object list."""
+        only state needed is its kernel branch ``bc_idx``, matched to the
+        face's tag BY NAME (:func:`boundary_face_branches`); no Python
+        BC-object list."""
         n_bf = mesh.n_boundary_faces
         self._n_bf = n_bf
         self._bf_cells = mesh.boundary_face_cells
         self._bf_fidx = mesh.boundary_face_face_indices
-        self._bc_indices = np.asarray(
-            mesh.boundary_face_function_numbers[:n_bf], dtype=int)
+        self._bc_indices = boundary_face_branches(
+            mesh, getattr(model, "_bc_source", None))
         if n_bf > 0:
             dim = mesh.dimension
             self._d_face = np.array([
