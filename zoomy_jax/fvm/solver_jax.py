@@ -6,6 +6,8 @@ Solver hierarchy (mirrors NumPy):
       step              — single explicit timestep
       run_simulation    — while loop over step (lax.while_loop, or the
                           checkpointed equinox loop for ad_mode="reverse")
+      run_observed      — the same loop, plus an observer accumulated over
+                          every step (fvm/observers.py)
       solve             — init + setup + run
 
 Inherits param definitions from NumPy ``HyperbolicSolverNumpy`` but
@@ -1539,7 +1541,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         self._rt_parameters = parameters
         # A compiled march closes over the operators built below; a re-setup
         # (new mesh / model) must never reuse one traced against the old ones.
-        self._time_loop_cache = None
+        # One compiled loop per cache key (see ``_run``).
+        self._time_loop_cache = {}
 
         # Build operators (closures over jax_mesh / runtime_model)
         self._rt_flux_op = self.get_flux_operator(jax_mesh, runtime_model)
@@ -1996,9 +1999,46 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         Q, Qaux : jnp.ndarray
             Final state.
         """
+        Q, Qaux, _ = self._run(Q, Qaux, write_output, parameters, None)
+        return Q, Qaux
+
+    def run_observed(self, Q, observer, Qaux=None, parameters=None,
+                     write_output=False):
+        """The :meth:`run_simulation` march, plus an observer accumulated
+        over every step.
+
+        ``observer`` is an :class:`zoomy_jax.fvm.observers.Observer`:
+        ``observer.init(Q0, Qaux0, parameters)`` gives the initial
+        accumulator, and after every step
+        ``acc = observer.update(acc, time, dt, Q, Qaux, parameters)`` with the
+        post-step state at the new ``time``.  The accumulator rides in the loop
+        state, so it is differentiable like the final state, in either
+        ``ad_mode``.
+
+        The observer is part of the compiled-loop cache key (by its hash /
+        equality; an :class:`Observer` compares by the identity of its two
+        functions).  Reusing the SAME observer object reuses the compiled
+        loop; a fresh one (e.g. a new ``running_max(...)`` call) compiles a
+        new loop.
+
+        Parameters are those of :meth:`run_simulation`; ``write_output``
+        defaults to False here.
+
+        Returns
+        -------
+        Q, Qaux : jnp.ndarray
+            Final state, bitwise equal to :meth:`run_simulation`'s.
+        acc : pytree
+            The final accumulator.
+        """
+        return self._run(Q, Qaux, write_output, parameters, observer)
+
+    def _run(self, Q, Qaux, write_output, parameters, observer):
+        """The time loop behind :meth:`run_simulation` and
+        :meth:`run_observed`.  ``observer=None`` carries the empty
+        accumulator ``()``.  Returns ``(Q, Qaux, acc)``."""
         parameters = (self._rt_parameters if parameters is None
                       else parameters)
-        mesh = self._rt_mesh
         if Qaux is None:
             Qaux = self._qaux_from_q(Q, parameters)
 
@@ -2019,6 +2059,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             io.save_settings(self.settings)
             save_fields = jax_io.get_save_fields(output_hdf5_path, write_all=False)
         else:
+            output_hdf5_path = None
+
             def save_fields(time, time_stamp, i_snapshot, Q, Qaux):
                 """Save field."""
                 return i_snapshot
@@ -2063,7 +2105,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         else:
             _while_loop = jax.lax.while_loop
 
-        # ── compile the march ONCE ───────────────────────────────────────
+        # ── compile the march ONCE per configuration ─────────────────────
         # ``time_loop`` used to be defined (and ``jax.jit``-wrapped) fresh on
         # every ``run_simulation`` call.  jit caches on the FUNCTION OBJECT, so
         # a new closure per call meant a full XLA recompilation of the whole
@@ -2075,38 +2117,62 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         # simulation cost 400 s wall at 1 window against 968 s at 8 (2.4x, i.e.
         # ~81 s per extra window -- all of it recompilation).
         #
-        # Cache the compiled loop on the instance, keyed by everything the
-        # trace bakes in as a Python constant.  Anything that changes the
-        # generated code is in the key, so a genuine change still recompiles;
-        # repeat calls with the same configuration reuse the executable.
+        # Cache the compiled loops on the instance, ONE PER KEY, keyed by
+        # everything the trace bakes in as a Python constant: the loop
+        # primitive (ad_mode, ad_checkpoints), the march bounds and output
+        # cadence, the HDF5 path ``save_fields`` writes to, and the observer.
+        # A dict rather than a single slot, so alternating configurations
+        # (forward <-> reverse on one instance) compile each loop once.
         # ``parameters`` / Q / Qaux stay TRACED arguments, so adaptive dt --
         # recomputed from the state every step inside the loop -- is unaffected.
+        # The operators the step closes over are fixed between
+        # ``setup_simulation`` calls, which empties the dict.
         # NB: do NOT key on ``id()`` of ``save_fields`` / ``_advance`` /
         # ``_couple_proceed``.  All three are rebuilt per call -- ``self._advance``
         # materialises a FRESH bound method on every attribute access -- so an
         # id-based key never hits and the cache silently does nothing (measured:
         # still 4 compiles for 4 windows).  Key on the values that actually
         # change the emitted code instead; the callables are functionally fixed
-        # for a given solver + output configuration.
+        # for a given solver + output configuration.  The observer is keyed by
+        # the object itself (hash / equality), which also keeps it alive, so
+        # a recycled ``id()`` can never hit a stale loop.
         _cache_key = (float(time_end), float(dt_snapshot), int(_log_every),
-                      bool(write_output), _ad_mode, _ad_checkpoints)
-        _cached = getattr(self, "_time_loop_cache", None)
-        if _cached is not None and _cached[0] == _cache_key:
-            return_cached = _cached[1]
-        else:
-            return_cached = None
+                      bool(write_output), output_hdf5_path, _ad_mode,
+                      _ad_checkpoints, observer)
+        time_loop = self._time_loop_cache.get(_cache_key)
+        if time_loop is None:
+            time_loop = self._compile_time_loop(
+                _advance, _couple_proceed, save_fields, _while_loop,
+                time_end=time_end, dt_snapshot=dt_snapshot,
+                log_every=_log_every, observer=observer)
+            self._time_loop_cache[_cache_key] = time_loop
+
+        return time_loop(0.0, 0.0, i_snapshot, last_written, Q, Qaux,
+                         parameters)
+
+    @staticmethod
+    def _compile_time_loop(_advance, _couple_proceed, save_fields, _while_loop,
+                           *, time_end, dt_snapshot, log_every, observer):
+        """The jitted march ``(time, iteration, i_snapshot, last_written, Q,
+        Qaux, parameters) -> (Q, Qaux, acc)``; ``acc = ()`` when ``observer``
+        is None."""
+        _log_every = log_every
 
         @jax.jit
         @partial(jax.named_call, name="time_loop")
         def time_loop(time, iteration, i_snapshot, last_written, Q, Qaux,
                       parameters):
             """JIT-compiled time loop."""
-            loop_val = (time, iteration, i_snapshot, last_written, Q, Qaux)
+            acc = (() if observer is None
+                   else observer.init(Q, Qaux, parameters))
+            loop_val = (time, iteration, i_snapshot, last_written, Q, Qaux,
+                        acc)
 
             @partial(jax.named_call, name="time_step")
             def loop_body(init_value):
                 """Single iteration of the time loop."""
-                time, iteration, i_snapshot, last_written, Qnew, Qauxnew = init_value
+                (time, iteration, i_snapshot, last_written, Qnew, Qauxnew,
+                 acc) = init_value
 
                 # One step of physics (dt → step → post_step), the shared
                 # building block.
@@ -2114,6 +2180,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     time, Qnew, Qauxnew, time_end=time_end,
                     parameters=parameters,
                 )
+                if observer is not None:
+                    acc = observer.update(acc, time_new, dt, Q_final,
+                                          Qaux_final, parameters)
 
                 iteration_new = iteration + 1
                 time_stamp = i_snapshot * dt_snapshot
@@ -2144,16 +2213,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                     )
 
                 return (time_new, iteration_new, i_snapshot_new,
-                        last_written_new, Q_final, Qaux_final)
+                        last_written_new, Q_final, Qaux_final, acc)
 
             def proceed(loop_val):
                 """Check if simulation should continue."""
-                time, iteration, i_snapshot, last_written, Qnew, Qaux = loop_val
-                return _couple_proceed(time, time_end)
+                return _couple_proceed(loop_val[0], time_end)
 
-            (time, iteration, i_snapshot, last_written, Qnew, Qauxnew) = (
-                _while_loop(proceed, loop_body, loop_val)
-            )
+            (time, iteration, i_snapshot, last_written, Qnew, Qauxnew,
+             acc) = _while_loop(proceed, loop_body, loop_val)
 
             # The end state.  The write stamps are ``i_snapshot * dt_snapshot``
             # with ``dt_snapshot = time_end / (snapshots - 1)``, so the last
@@ -2172,16 +2239,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 lambda: i_snapshot,
             )
 
-            return Qnew, Qauxnew
+            return Qnew, Qauxnew, acc
 
-        if return_cached is not None:
-            time_loop = return_cached
-        else:
-            self._time_loop_cache = (_cache_key, time_loop)
-
-        Q, Qaux = time_loop(0.0, 0.0, i_snapshot, last_written, Q, Qaux,
-                            parameters)
-        return Q, Qaux
+        return time_loop
 
     # ── solve (top-level entry point) ───────────────────────────────────
 

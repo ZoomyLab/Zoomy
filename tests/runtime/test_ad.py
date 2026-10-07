@@ -9,7 +9,8 @@ the derivative includes d(dt)/d(input).
 (a) forward jvp w.r.t. g == central FD;
 (b) reverse grad (checkpointed loop, few checkpoints => recomputation) == jvp;
 (c) <grad_Q0 J, v> == jvp(J, Q0; v), Qaux rebuilt from Q0 (Qaux=None);
-(d) switching ad_mode on one solver re-traces and both modes still work;
+(d) switching ad_mode on one solver keeps one compiled loop per mode and
+    both modes still work;
 (e) bernoulli moving-equilibrium WB: forward jvp w.r.t. g == central FD
     (g enters the reconstruction; a fwd-vs-rev check cannot see a baked g).
 """
@@ -101,20 +102,30 @@ def test_ad_forward_reverse_and_field(setup):
 
 @pytest.mark.small
 @pytest.mark.jax
-def test_ad_mode_switch_retraces(setup):
+def test_ad_mode_switch_keeps_both_loops(setup):
     solver, Q0, ig, ih = setup
     J = _J_of(solver, ih)
     p0 = solver.parameters
     e_g = jnp.zeros_like(p0).at[ig].set(1.0)
 
+    def modes():
+        return sorted(k[5:7] for k in solver._time_loop_cache)
+
     solver.ad_mode = "reverse"
     g_rev = jax.grad(J)(p0, Q0)[ig]
-    assert solver._time_loop_cache[0][-2:] == ("reverse", CHECKPOINTS)
+    assert ("reverse", CHECKPOINTS) in modes()
 
     solver.ad_mode = "forward"
     _, d_fwd = jax.jvp(lambda p: J(p, Q0), (p0,), (e_g,))
-    assert solver._time_loop_cache[0][-2:] == ("forward", CHECKPOINTS)
+    assert modes() == [("forward", CHECKPOINTS), ("reverse", CHECKPOINTS)]
     assert _rel(g_rev, d_fwd) < 1e-8
+
+    # switching back reuses the compiled reverse loop, it does not add one
+    loops = dict(solver._time_loop_cache)
+    solver.ad_mode = "reverse"
+    assert float(jax.grad(J)(p0, Q0)[ig]) == float(g_rev)
+    assert solver._time_loop_cache == loops
+    solver.ad_mode = "forward"
 
     # forward mode has no transpose; reverse mode has no jvp
     with pytest.raises(Exception):
