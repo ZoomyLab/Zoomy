@@ -31,11 +31,12 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel import SystemModel
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall, Dirichlet
 from zoomy_core.model.models import VAM
+from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
 
 
 def _split():
-    m = VAM(level=1, dimension=3)
+    m = VAM(level=1, dimension=3, closures=[Newtonian(), StressFree()])
     sm = SystemModel.from_model(m)
     names = [str(s) for s in sm.state]
     ih = names.index("h")

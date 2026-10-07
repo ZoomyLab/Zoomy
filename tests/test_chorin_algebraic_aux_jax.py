@@ -5,7 +5,7 @@ aux rule, not only derivative-kind aux.
 (`u = hu*hinv`).  `_refresh_aux_for_sm` historically walked only
 `kinds=("derivative","limited_derivative")`, so `hinv` was never evaluated: it
 sat at its init value 0 and silently zeroed every velocity — a WRONG-ANSWER
-bug, not a crash.  This test pins the fix: after `update_aux_variables()`,
+bug, not a crash.  This test pins the fix: in the predictor aux pool of the setup state,
 `hinv` must equal `1/h` (to KP desingularisation), not 0.
 
 ⚠ Requires the CORE half too: `_pad_to_square`
@@ -34,12 +34,13 @@ from zoomy_core.systemmodel import SystemModel
 from zoomy_core.systemmodel.operations import desingularize_hinv
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall, Dirichlet
 from zoomy_core.model.models import VAM
+from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
 
 
 def _build():
     """2-D VAM(1,3) that ACTUALLY emits `hinv` (a plain VAM does not)."""
-    m = VAM(level=1, dimension=3)
+    m = VAM(level=1, dimension=3, closures=[Newtonian(), StressFree()])
     sm = SystemModel.from_model(m)
     sm.apply(desingularize_hinv())                 # registers the `hinv` aux
     names = [str(s) for s in sm.state]
@@ -71,13 +72,13 @@ def _build():
     mesh = LSQMesh.create_2d(domain=(0.0, 1.0, 0.0, 0.25), nx=16, ny=4)
     solver = ChorinSplitVAMSolverJax(split.SM_pred, split.SM_press, split.SM_corr,
                                      pressure_tol=1e-9, pressure_maxit=60)
-    solver.setup_simulation(mesh)
-    return solver, ih, ihinv
+    Q0 = solver.setup_simulation(mesh)
+    return solver, Q0, ih, ihinv
 
 
 @pytest.mark.jax
 def test_chorin_recomputes_plain_symbol_aux_hinv():
-    solver, ih, ihinv = _build()
+    solver, Q0, ih, ihinv = _build()
 
     rt = solver._runtime_for_sm(solver.sm_pred)
     if getattr(rt, "update_aux_variables", None) is None:
@@ -86,10 +87,9 @@ def test_chorin_recomputes_plain_symbol_aux_hinv():
             "update_aux_variables, so the predictor runtime never lowers the "
             "rule. jax applies it as soon as core carries it across.")
 
-    solver.update_aux_variables()
     nc = solver.nc
-    qaux = np.asarray(solver._sim_Qaux)
-    h = np.asarray(solver._sim_Q)[ih, :nc]
+    qaux = np.asarray(solver._qaux_from_q(Q0, solver.parameters))
+    h = np.asarray(Q0)[ih, :nc]
     hinv = qaux[ihinv, :nc]
 
     assert hinv.max() > 0, (

@@ -486,10 +486,10 @@ def chorin_split_for(model, sm):
     """``model.chorin_split`` -> the ``(SM_pred, SM_press, SM_corr)`` triple.
 
     DEVIATION FROM THE PROPOSAL (API, forced): the proposal writes
-    ``solver.solve(mesh, split)``, but ``ChorinSplitVAMSolverJax`` has NO
-    ``solve`` method — its API is ``__init__(sm_pred, sm_press, sm_corr)`` +
-    ``setup_simulation(mesh)`` + ``step(dt, t, Q, Qaux)`` (verified in
-    ``zoomy_jax/fvm/solver_chorin_vam_jax.py:87,158,411``).  ``chorin_split``
+    ``solver.solve(mesh, split)``, but ``ChorinSplitVAMSolverJax`` binds the
+    sub-models at construction — ``__init__(sm_pred, sm_press, sm_corr)`` +
+    ``setup_simulation(mesh)`` + ``run_simulation`` / ``run_jit_steps``, with
+    the initial state injected by the caller.  ``chorin_split``
     returns a ``SplitForPressureResult`` dataclass (``.SM_pred`` / ``.SM_press``
     / ``.SM_corr``), NOT a subscriptable tuple.  So the stages are unpacked
     here and :func:`chorin_march` drives the step loop.
@@ -503,24 +503,20 @@ def chorin_march(triple, mesh, cfl, ic, t_end=None, n_steps=None,
                  h_scale=1.0, **solver_kw):
     """March the jax Chorin split VAM solver; return the inner (Q, Qaux).
 
-    Fixed dt at the 1-D CFL law from the still depth ``h_scale`` — the split
-    solver has no adaptive controller.  Exactly one of ``t_end`` / ``n_steps``.
+    Fixed dt at the 1-D CFL law from the still depth ``h_scale`` (kept fixed
+    so the stored references stay valid).  Exactly one of ``t_end`` /
+    ``n_steps``.
 
-    ``ic`` is the initial-condition CALLABLE and is MANDATORY.  It is applied
-    to the solver state HERE, explicitly, because
-    ``ChorinSplitVAMSolverJax.setup_simulation`` **ignores initial conditions
-    entirely** — the string ``initial_conditions`` does not occur anywhere in
-    ``zoomy_jax/fvm/solver_chorin_vam_jax.py``.  Assigning
-    ``sm.initial_conditions`` (what the first cut of these tests did) is a
-    silent no-op: the march then ran from h == 0 in every cell, the elliptic
-    pressure block's bare 1/h went singular, GMRES burned its whole restart
-    budget every step, and the "reference" was a null state.  The thesis case
-    ``thesis/cases/escalante_vam_bump/run_jax.py:39-46`` injects the state by
-    hand for exactly this reason; this mirrors that proven pattern.
+    ``ic`` is the initial-condition CALLABLE and is MANDATORY.  It is written
+    into the state ``setup_simulation`` returns, explicitly, because the split
+    sub-models carry no initial condition: assigning ``sm.initial_conditions``
+    (what the first cut of these tests did) is a silent no-op — the march then
+    ran from h == 0 in every cell, the elliptic pressure block's bare 1/h went
+    singular, GMRES burned its whole restart budget every step, and the
+    "reference" was a null state.
 
-    Time loop: ``run_jit_steps`` (jit + ``lax.scan``), NOT the ``step()``
-    wrapper.  ``step()`` drives ``chorin_cycle`` EAGERLY — measured 2.66 s per
-    step against 3.4 ms through the scan, bit-identical output (max|diff| = 0).
+    Time loop: ``run_jit_steps`` (jit + ``lax.scan``, fixed step count, the
+    predictor aux rebuilt from the injected state).
     """
     import jax.numpy as jnp
     from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
@@ -543,8 +539,6 @@ def chorin_march(triple, mesh, cfl, ic, t_end=None, n_steps=None,
         "chorin_march: initial depth is zero in EVERY cell — the IC did not "
         "reach the solver state. ChorinSplitVAMSolverJax ignores "
         "sm.initial_conditions; the IC must be injected here.")
-    solver._sim_Q = jnp.asarray(Q0)
-    solver.update_aux_variables()
 
     dx = float(np.asarray(solver._rt_mesh.cell_volumes)[0])
     dt = cfl * dx / (np.sqrt(G * h_scale) + 1.0)
@@ -557,8 +551,7 @@ def chorin_march(triple, mesh, cfl, ic, t_end=None, n_steps=None,
         n_steps = max(1, int(np.ceil(t_end / dt)))
         dt = t_end / n_steps
     Q, Qaux, _, _, _ = solver.run_jit_steps(
-        jnp.asarray(dt), n_steps, solver._sim_Q, solver._sim_Qaux,
-        solver.Qaux_press, solver.Qaux_corr, t_start=0.0)
+        jnp.asarray(dt), n_steps, jnp.asarray(Q0))
     return np.asarray(Q)[:, :nc], np.asarray(Qaux)[:, :nc]
 
 

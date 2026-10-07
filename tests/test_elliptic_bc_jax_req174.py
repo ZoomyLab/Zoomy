@@ -44,6 +44,7 @@ from zoomy_core.systemmodel import SystemModel
 from zoomy_core.systemmodel.operations import desingularize_hinv
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall, Dirichlet
 from zoomy_core.model.models import VAM
+from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
 
 PIN_P0 = 0.037
@@ -51,7 +52,7 @@ PIN_P1 = 0.0
 
 
 def _build(with_pin):
-    m = VAM(level=1, dimension=3)
+    m = VAM(level=1, dimension=3, closures=[Newtonian(), StressFree()])
     sm = SystemModel.from_model(m)
     sm.apply(desingularize_hinv())
     names = [str(s) for s in sm.state]
@@ -76,13 +77,14 @@ def _build(with_pin):
     mesh = LSQMesh.create_2d(domain=(0.0, 1.0, 0.0, 0.25), nx=16, ny=4)
     s = ChorinSplitVAMSolverJax(split.SM_pred, split.SM_press, split.SM_corr,
                                 pressure_tol=1e-12, pressure_maxit=20000)
-    s.setup_simulation(mesh)
-    s.Qaux_press = s._refresh_aux_for_sm(s.Qaux_press, s.sm_press, s._sim_Q)
+    s.Q0 = s.setup_simulation(mesh)
     return s
 
 
 def _solve(s, dt=1e-3):
-    Q_new, _ = s._step_pressure_pure(s._sim_Q, s.Qaux_press, dt)
+    p = s._sub_parameters(s._press_param_src, s.parameters, dt)
+    Qaux = s._refresh_aux_for_sm(s._qaux_press0, s.sm_press, s.Q0, p)
+    Q_new = s._step_pressure_pure(s.Q0, Qaux, dt, 0.0, p)
     return np.array(Q_new[s._press_state_idx, :], dtype=float)
 
 
