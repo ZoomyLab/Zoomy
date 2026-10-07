@@ -15,3 +15,6 @@ Homepage = "https://github.com/mbd-rwth/Zoomy"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["zoomy_dune*"]
+
+[tool.setuptools.package-data]
+zoomy_dune = ["femdg/*.hh"]

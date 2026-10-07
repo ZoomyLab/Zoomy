@@ -16,11 +16,9 @@ import param
 import ufl
 from ufl import as_matrix, as_vector, conditional, dot, grad, sqrt
 
-from dune.femdg import advectionNumericalFlux, femDGModels, femDGOperator
+from dune.femdg import femDGModels, femDGOperator
 from dune.femdg.boundary import BndValue
 from dune.femdg.rk import femdgStepper
-from dune.generator import path
-from dune.typeregistry import generateTypeName
 
 from zoomy_core.misc.misc import Settings, Zstruct
 from zoomy_core.transformation.to_c import CppModel, CppNumerics
@@ -93,6 +91,7 @@ class FemDGSolver(HyperbolicSolver):
         class ZoomyModel:
             dimRange = n_var
             U0 = u0
+            userFluxIncludes = [os.path.join(self._c_dir, "zoomy_flux.hh")]
             boundary = {range(1, 1000): BndValue(
                 lambda t, x, u, n: vec(runtime.boundary_conditions(
                     0, t, as_vector([x[0], x[1], 0.0]), x[0], u,
@@ -123,17 +122,22 @@ class FemDGSolver(HyperbolicSolver):
         self._initial_condition = initial_condition
 
     def _build_form(self):
-        """femDGOperator in place of the hand-written UFL residual."""
+        """femDGOperator in place of the hand-written UFL residual.
+
+        The flux goes in as the userdefined enum rather than as a constructed
+        object: zoomy_flux.hh declares that slot over any model, so the
+        operator instantiates it with its own wrapper. Handing over an object
+        instead would mean naming that wrapper from Python, which is not
+        possible before femDGOperator has chosen it.
+        """
         models = femDGModels(self._model_class(self._initial_condition), self.V)
-        cls_name, includes = generateTypeName("ZoomyFlux", models[1])
-        flux = advectionNumericalFlux(
-            cls_name, [os.path.join(self._c_dir, "zoomy_flux.hh")] + includes,
-            models[1])
-        self.operator = femDGOperator(models, self.V, limiter=self.limiter,
-                                      advectionFlux=flux,
-                                      threading=self.threads > 1)
-        self.stepper = femdgStepper(order=self.rk_order,
-                                    cfl=self.CFL)(self.operator)
+        self.operator = femDGOperator(
+            models, self.V, limiter=self.limiter,
+            advectionFlux="Dune::Fem::AdvectionFlux::Enum::userdefined",
+            threading=self.threads > 1, codegen=False)
+        # femdgStepper's own `cfl` argument is dead -- the factory ignores it
+        # and reads the one passed to the returned callable.
+        self.stepper = femdgStepper(order=self.rk_order)(self.operator, self.CFL)
         self._residual = self.Q.copy()
         self._previous = self.Q.copy()
 

@@ -6,6 +6,7 @@ From: ubuntu:24.04
     Description DUNE-FEM (UFL / DG, unstructured AMR) + Zoomy
 
 %files
+    containers/zoomy_dune/patches /opt/patches
     library/zoomy_core     /opt/src/zoomy_core
     library/zoomy_server   /opt/src/zoomy_server
     library/zoomy_prepost  /opt/src/zoomy_prepost
@@ -57,6 +58,11 @@ From: ubuntu:24.04
         dune-istl==2.12.0.2 dune-localfunctions==2.12.0.2 \
         dune-alugrid==2.12.0.2 dune-fem==2.12.0.2 dune-fem-dg==2.12.0.2 \
         dune-polygongrid==2.12.0.2
+
+    # dune-fem-dg 2.12.0.2 cannot instantiate a user-defined advection flux;
+    # see patches/apply.sh. Upstream's own pydemo fails the same way.
+    sh /opt/patches/apply.sh
+    rm -rf /opt/patches
 
     mkdir -p /workspace
 

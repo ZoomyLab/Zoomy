@@ -1,7 +1,9 @@
 #pragma once
 
 #include <algorithm>
-#include <dune/fem-dg/operator/fluxes/advection/python.hh>
+#include <utility>
+#include <dune/fem-dg/operator/fluxes/advection/fluxbase.hh>
+#include <dune/fem-dg/operator/fluxes/advection/fluxes.hh>
 
 #include "Numerics.H"
 #include "ZoomyParameters.H"
@@ -13,6 +15,11 @@
  * into two output states. Nothing here is model-specific -- every size and
  * every expression comes from the generated headers -- so this file is the
  * same for every model and is not itself generated.
+ *
+ * ModelImp here is the operator's own ModelWrapper, not the raw UFL model --
+ * see the DGOperator patch in containers/zoomy_dune/patches. Upstream binds
+ * the user flux to the raw model and then asks it for the wrapper, which
+ * cannot be satisfied from the user side.
  *
  * Sign convention, read off dune/fem-dg/pass/dgpass.hh:904,
  *
@@ -29,9 +36,11 @@
  * numerical_fluctuations and Dm the second.
  */
 template <class ModelImp>
-struct ZoomyFlux : public Dune::Fem::DGAdvectionFluxPythonUserDefine< ModelImp >
+struct ZoomyFlux : public Dune::Fem::DGAdvectionFluxBase< ModelImp,
+                                                          Dune::Fem::AdvectionFluxParameters >
 {
-  typedef Dune::Fem::DGAdvectionFluxPythonUserDefine< ModelImp > BaseType;
+  typedef Dune::Fem::DGAdvectionFluxBase< ModelImp,
+                                          Dune::Fem::AdvectionFluxParameters > BaseType;
   typedef typename BaseType::RangeType          RangeType;
   typedef typename BaseType::JacobianRangeType  JacobianRangeType;
   typedef typename BaseType::DomainType         DomainType;
@@ -46,7 +55,8 @@ struct ZoomyFlux : public Dune::Fem::DGAdvectionFluxPythonUserDefine< ModelImp >
   static_assert( nvar == int(RangeType::dimension),
                  "UFL Model dimRange does not match the printed n_dof_q" );
 
-  ZoomyFlux ( const ModelImp& model ) : BaseType( model ) {}
+  template< class... Args >
+  ZoomyFlux ( Args&&... args ) : BaseType( std::forward< Args >( args )... ) {}
 
   std::string name () const { return "zoomy"; }
 
@@ -107,3 +117,22 @@ struct ZoomyFlux : public Dune::Fem::DGAdvectionFluxPythonUserDefine< ModelImp >
 
   using BaseType::model;
 };
+
+
+namespace Dune
+{
+  namespace Fem
+  {
+    /* The userdefined slot. Declared over any model rather than one concrete
+     * type, so the operator can instantiate it with its own wrapper. */
+    template< class ModelImp >
+    class DGAdvectionFlux< ModelImp, AdvectionFlux::Enum::userdefined >
+      : public ZoomyFlux< ModelImp >
+    {
+      typedef ZoomyFlux< ModelImp > BaseType;
+    public:
+      template< class... Args >
+      DGAdvectionFlux ( Args&&... args ) : BaseType( std::forward< Args >( args )... ) {}
+    };
+  }
+}
