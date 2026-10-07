@@ -56,8 +56,8 @@ class HyperbolicSolver(param.Parameterized):
                                          doc="Symbolic Riemann solver class")
     max_level = param.Integer(0, bounds=(0, None), doc="AMR refinement cap; 0 disables")
     min_level = param.Integer(0, bounds=(0, None), doc="Level the dry region relaxes to")
-    wet_level = param.Integer(1, bounds=(0, None), doc="Level held wherever there is water")
     front_level = param.Integer(2, bounds=(0, None), doc="Level held at the wet/dry front")
+    froude_tolerance = param.Number(0.10, bounds=(0.0, None), doc="Froude number: refine above")
     shock_level = param.Integer(2, bounds=(0, None), doc="Level held on a steep surface")
     adapt_interval = param.Integer(3, bounds=(1, None), doc="Steps between adaptations")
     buffer_cells = param.Integer(2, bounds=(0, None), doc="Lookahead rings around a target")
@@ -124,11 +124,13 @@ class HyperbolicSolver(param.Parameterized):
             self.V = finiteVolume(gv, dimRange=self.n_var)
             self.Vaux = finiteVolume(gv, dimRange=self.n_aux)
             self.Vscalar = finiteVolume(gv, dimRange=1)
+            self.Vspectrum = finiteVolume(gv, dimRange=4)
         else:
             from dune.fem.space import dgonb
             self.V = dgonb(gv, dimRange=self.n_var, order=self.dg_degree)
             self.Vaux = dgonb(gv, dimRange=self.n_aux, order=self.dg_degree)
             self.Vscalar = finiteVolume(gv, dimRange=1)
+            self.Vspectrum = finiteVolume(gv, dimRange=4)
 
     def nodal_fields(self, names):
         """P1 grid functions from the gmsh ``$NodeData`` arrays. DUNE ignores
@@ -139,11 +141,14 @@ class HyperbolicSolver(param.Parameterized):
             key = lambda x, y: (np.float64(x).tobytes(), np.float64(y).tobytes())
             lookup = {key(x, y): i for i, (x, y) in enumerate(mesh.points[:, :2])}
             self._V1 = lagrange(self.gridView, order=1)
-            index_set = self.gridView.indexSet
-            coords = np.empty((self._V1.size, 2), dtype=float)
-            for vertex in self.gridView.vertices:
-                c = vertex.geometry.center
-                coords[index_set.index(vertex)] = (c[0], c[1])
+            # Interpolating the coordinate field gives one point per degree of
+            # freedom in the space's own numbering. Walking gridView.vertices
+            # instead leaves the ghost rows of a parallel run untouched, and the
+            # uninitialised memory then misses the lookup.
+            V1vec = lagrange(self.gridView, order=1, dimRange=2)
+            positions = V1vec.interpolate(ufl.SpatialCoordinate(V1vec),
+                                          name="positions")
+            coords = positions.as_numpy.reshape(-1, 2)
             self._perm = np.fromiter((lookup[key(x, y)] for x, y in coords),
                                      dtype=np.int64, count=len(coords))
             self._point_data = mesh.point_data
@@ -212,10 +217,35 @@ class HyperbolicSolver(param.Parameterized):
                                                name="speed")
         self._indicator = self.Vscalar.interpolate(as_vector([0.0]), name="indicator")
         self._refinement = self.Vscalar.interpolate(as_vector([0.0]), name="level")
+        self._build_froude()
         self._adaptive_functions = [self.Q, self.Qaux, self._residual,
                                     self._previous, self._speed, self._indicator,
-                                    self._refinement]
+                                    self._refinement, self._spectrum]
         self._build_grid_cache()
+
+    def _build_froude(self):
+        """Advective and acoustic speeds per axis, as the half-sum and
+        half-difference of the extreme eigenvalues. Reading them off the
+        model's spectrum rather than a momentum row keeps the indicator usable
+        for any hyperbolic system.
+
+        All four go into one field: each costs a full pass over the spectrum,
+        and interpolating them separately evaluated it four times.
+        """
+        rows = []
+        for axis in range(2):
+            normal = as_vector([1.0 if axis == 0 else 0.0,
+                                1.0 if axis == 1 else 0.0])
+            spectrum = vec(self.runtime.eigenvalues(self.Q, self.Qaux,
+                                                    self.parameters, normal))
+            high = low = spectrum[0]
+            for k in range(1, self.n_var):
+                high = ufl.max_value(high, spectrum[k])
+                low = ufl.min_value(low, spectrum[k])
+            rows += [0.5 * (high + low), 0.5 * (high - low)]
+        self._spectrum_expr = as_vector(rows)
+        self._spectrum = self.Vspectrum.interpolate(self._spectrum_expr,
+                                                    name="spectrum")
 
     def _build_grid_cache(self):
         """Per-cell size, refinement level and the face adjacency the indicator
@@ -244,11 +274,22 @@ class HyperbolicSolver(param.Parameterized):
     def compute_indicator(self):
         """Target refinement level per cell, as a mark value for fem.mark.
 
-        eta = b + h, never h: over varying bathymetry a lake at rest has
-        constant eta but strongly varying h, so an h-gradient refines the whole
-        reservoir. Three regimes: water at all -> wet_level, wet/dry front ->
-        front_level, steep surface -> shock_level, everything else relaxes to
-        min_level.
+        Three indicators, none of which fires on a lake at rest, and no rule
+        that refines simply because a cell is wet:
+
+        surface deformation
+            ``|d eta|`` across a face over the water that carries it, with
+            eta = b + h and never h alone -- over varying bathymetry a lake at
+            rest has constant eta but strongly varying h, so an h-gradient
+            refines the whole reservoir.
+        flow activity
+            the Froude number, read off the model's own eigenvalues rather
+            than a momentum row, so it carries over to any hyperbolic system:
+            the acoustic and advective speeds are the half-difference and
+            half-sum of the extreme eigenvalues.
+        wet/dry front
+            a wet cell beside a dry one, held at ``front_level`` whatever the
+            flow is doing -- that is where positivity and mass are lost.
         """
         i, j = self._faces[:, 0], self._faces[:, 1]
         n_cell = len(self._cell_size)
@@ -272,14 +313,17 @@ class HyperbolicSolver(param.Parameterized):
         front[i[mismatch]] = True
         front[j[mismatch]] = True
 
-        steep = wet & (jump_K > self.surface_tolerance)
-        shock = steep & (slope_K > self.refine_tolerance)
-        hold = steep & (slope_K > self.coarsen_tolerance)
+        froude = self.compute_froude()
+
+        deformed = wet & (jump_K > self.surface_tolerance)
+        active = wet & ((deformed & (slope_K > self.refine_tolerance))
+                        | (froude > self.froude_tolerance))
+        hold = wet & ((deformed & (slope_K > self.coarsen_tolerance))
+                      | (froude > 0.5 * self.froude_tolerance))
 
         target = np.full(n_cell, self.min_level, dtype=np.int32)
-        np.maximum(target, np.where(wet, self.wet_level, self.min_level), out=target)
         np.maximum(target, np.where(front, self.front_level, self.min_level), out=target)
-        np.maximum(target, np.where(shock, self.shock_level, self.min_level), out=target)
+        np.maximum(target, np.where(active, self.shock_level, self.min_level), out=target)
         np.clip(target, self.min_level, self.max_level, out=target)
 
         for _ in range(self.buffer_cells):
@@ -292,6 +336,16 @@ class HyperbolicSolver(param.Parameterized):
             self._level < target, 1.0,
             np.where((self._level == target) | hold, keep, 0.0))
         return self._indicator
+
+    def compute_froude(self):
+        """|u| / c per cell, from the model's eigenvalues in x and y."""
+        self._spectrum.interpolate(self._spectrum_expr)
+        speeds = self._spectrum.as_numpy.reshape(-1, 4)
+        froude = np.zeros(len(self._cell_size))
+        for axis in range(2):
+            acoustic = np.maximum(np.abs(speeds[:, 2 * axis + 1]), 1e-12)
+            froude += (speeds[:, 2 * axis] / acoustic) ** 2
+        return np.sqrt(froude)
 
     def adapt(self):
         """Mark on the indicator and adapt, carrying every discrete function."""
@@ -326,9 +380,7 @@ class HyperbolicSolver(param.Parameterized):
         for _ in range(self.max_level - self.min_level):
             if self.adapt() == (0, 0):
                 break
-        self.log(f"start mesh: {self.n_cell} cells, "
-                 f"levels {int(self.comm.min(int(self._level.min())))}"
-                 f"-{int(self.comm.max(int(self._level.max())))}")
+        self.log(f"start mesh: {self.n_cell} cells")
 
     def compute_dt(self):
         self._speed.interpolate(as_vector([self._wave_speed]))
