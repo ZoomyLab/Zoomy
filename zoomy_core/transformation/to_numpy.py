@@ -26,7 +26,156 @@ _eigenvalues_numpy = _uf.eigenvalues
 _solve_numpy = _uf.solve
 
 
-class NumpyRuntimeModel:
+def _broadcast_array(x, *args, **kwargs):
+    """``numpy.array`` that BROADCASTS its entries to a common shape: the
+    vectorised boundary kernels stack per-face rows next to scalar constants
+    (a Dirichlet value, a time-only expression), which plain ``np.array``
+    rejects as an inhomogeneous shape."""
+    if isinstance(x, (list, tuple)):
+        rows = [_broadcast_array(e) for e in x]
+        if not rows:
+            return np.array(rows, *args, **kwargs)
+        return np.array(np.broadcast_arrays(*rows), *args, **kwargs)
+    return np.asarray(x, *args, **kwargs)
+
+
+def _branch_groups(bc_idx):
+    """Static ``[(branch, face positions), …]`` of an integer branch vector,
+    plus the inverse permutation that restores face order after the groups
+    are concatenated."""
+    bc_idx = np.asarray(bc_idx, dtype=int).ravel()
+    groups = [(int(k), np.flatnonzero(bc_idx == k))
+              for k in np.unique(bc_idx)]
+    order = (np.concatenate([g for _k, g in groups]) if groups
+             else np.zeros(0, dtype=int))
+    inverse = np.empty_like(order)
+    inverse[order] = np.arange(order.size)
+    return groups, inverse
+
+
+class _TemplateSlotsMixin:
+    """New-template slots of the numpy runtime (lazy, built on first use so
+    the old solvers never pay for them): ``admissible`` and the D5/D6
+    boundary GHOST kernels."""
+
+    def _template_model(self):
+        sm = getattr(self, "model", None)
+        if sm is None or not hasattr(sm, "boundary_ghost_kernel"):
+            raise TypeError("the template slots need a runtime built from a "
+                            "SystemModel/NSM (NumpyRuntimeModel.from_system_model)")
+        return sm
+
+    def _template_modules(self, broadcast=False):
+        module = dict(self.module)
+        if broadcast:
+            module["array"] = _broadcast_array
+        mods = [module]
+        if self.printer:
+            mods.append(self.printer)
+        return mods
+
+    # ── admissibility ────────────────────────────────────────────────
+    def admissible(self, Q, Qaux, parameters):
+        """The admissibility list evaluated per cell: ``(n_constraints,
+        n_cells)`` — every row must stay ``>= 0`` (decision D1).  ``(0,
+        n_cells)`` for a system that declares none."""
+        fn = getattr(self, "_admissible_fn", None)
+        if fn is None:
+            sm = self._template_model()
+            exprs = list(sm.admissible_constraints())
+            if not exprs:
+                def fn(Q, Qaux, p):
+                    Q = np.asarray(Q)
+                    return np.zeros((0,) + Q.shape[1:])
+            else:
+                kernel = Function(name="admissible",
+                                  args=sm.operator_signature("admissible"),
+                                  definition=sp.Array(exprs))
+                lowered = self._lambdify_function(
+                    kernel, self._template_modules(broadcast=True))
+
+                def fn(Q, Qaux, p, _f=lowered, _n=len(exprs)):
+                    Q = np.asarray(Q, dtype=float)
+                    out = np.asarray(_f(Q, Qaux, p), dtype=float)
+                    return out.reshape((_n,) + Q.shape[1:])
+            self._admissible_fn = fn
+        return fn(Q, Qaux, parameters)
+
+    # ── boundary ghost state (D5) + ghost aux (D6) ───────────────────
+    def _ghost_lowered(self):
+        cached = getattr(self, "_ghost_cache", None)
+        if cached is not None:
+            return cached
+        sm = self._template_model()
+        fn, branches = sm.boundary_ghost_kernel()
+        mods = self._template_modules(broadcast=True)
+        whole = self._lambdify_function(fn, mods)
+        a = fn.args
+        branch_args = Zstruct(**{k: a[k] for k in a.keys() if k != "idx"})
+        lowered = [self._lambdify_function(
+            Function(name=f"boundary_ghost_state__branch{i}",
+                     args=branch_args, definition=br), mods)
+            for i, br in enumerate(branches)]
+        self._ghost_cache = (whole, lowered, len(sm.state))
+        return self._ghost_cache
+
+    def boundary_ghost_state(self, bc_idx, time, position, distance, Q, Qaux,
+                             parameters, normal, bdata=None):
+        """The indexed D5 ghost kernel, evaluated as ONE vectorised Piecewise:
+        works per face (scalar ``bc_idx``, ``(n,)`` state) and batched over
+        faces (``bc_idx`` ``(n_f,)``, state ``(n, n_f)``).  ``bdata=None``
+        means the BC input state (extrapolation fallback of coupled faces)."""
+        whole, _br, n = self._ghost_lowered()
+        Q = np.asarray(Q, dtype=float)
+        bdata = Q if bdata is None else np.asarray(bdata, dtype=float)
+        out = np.asarray(whole(bc_idx, time, position, distance, Q, Qaux,
+                               parameters, normal, bdata), dtype=float)
+        return out.reshape(Q.shape)
+
+    def boundary_ghost(self, bc_idx):
+        """BATCHED ghost kernel for a STATIC branch vector ``bc_idx`` (one
+        entry per boundary face, routed by tag name — see
+        :func:`zoomy_core.model.boundary_conditions.boundary_face_branches`).
+
+        Returns ``ghost(time, position, distance, Q_in, Qaux_in, parameters,
+        normal, bdata=None) -> (Q_ghost, Qaux_ghost)`` with every face array
+        carrying a trailing face axis (``position`` ``(3, n_f)``, ``distance``
+        ``(n_f,)``, ``Q_in`` ``(n, n_f)``, ``normal`` ``(≥dim, n_f)``).  Each
+        BC branch is evaluated ONCE on its own faces (no Python loop over
+        faces, no evaluation of a branch on foreign faces).  The ghost aux is
+        the model's own aux update rule applied to the ghost state (D6); aux
+        rows that rule does not define keep the input value."""
+        _whole, lowered, n = self._ghost_lowered()
+        groups, inverse = _branch_groups(bc_idx)
+        uav = getattr(self, "update_aux_variables", None)
+
+        def ghost(time, position, distance, Q, Qaux, parameters, normal,
+                  bdata=None):
+            Q = np.asarray(Q, dtype=float)
+            Qaux = np.asarray(Qaux, dtype=float)
+            position = np.asarray(position, dtype=float)
+            normal = np.asarray(normal, dtype=float)
+            distance = np.asarray(distance, dtype=float)
+            bdata = Q if bdata is None else np.asarray(bdata, dtype=float)
+            parts = []
+            for k, sel in groups:
+                out = lowered[k](time, position[:, sel], distance[sel],
+                                 Q[:, sel], Qaux[:, sel], parameters,
+                                 normal[:, sel], bdata[:, sel])
+                parts.append(np.asarray(_broadcast_array(list(out)),
+                                        dtype=float).reshape(n, sel.size))
+            Qg = (np.concatenate(parts, axis=1)[:, inverse] if parts
+                  else np.zeros_like(Q))
+            if uav is None or Qaux.shape[0] == 0:
+                return Qg, Qaux
+            Ag = np.asarray(uav(Qg, Qaux, parameters, time, position),
+                            dtype=float).reshape(Qaux.shape)
+            return Qg, Ag
+
+        return ghost
+
+
+class NumpyRuntimeModel(_TemplateSlotsMixin):
     """Runtime model generated from a symbolic Model.
 
     Instead of assuming hardcoded attributes (e.g. ``_flux``), this class
@@ -156,7 +305,14 @@ class NumpyRuntimeModel:
                 for step_type, step_key, step_idx in path:
                     if isinstance(val, np.ndarray):
                         val = val[step_idx]
-                    elif step_type == "key" and _safe_hasattr(val, step_key):
+                    # ARRAYS INDEX POSITIONALLY, never by attribute: a state
+                    # field named like an array attribute (``T``, ``real``,
+                    # ``at``, ``size`` …) would otherwise pick ``Q.T`` off a
+                    # jax array instead of ``Q[i]`` (the jax BC-kernel crash
+                    # for a state named ``T``).  Keyed access is for
+                    # struct-like containers (Zstruct) only.
+                    elif (step_type == "key" and not hasattr(val, "shape")
+                          and _safe_hasattr(val, step_key)):
                         val = getattr(val, step_key)
                     else:
                         try:

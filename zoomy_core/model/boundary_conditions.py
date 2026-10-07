@@ -28,6 +28,7 @@ from zoomy_core.model.basefunction import Function
 _BC_ON_METHODS = {
     "compute_boundary_condition": (3, False, True),
     "compute_boundary_gradient":  (3, True,  True),
+    "compute_ghost_state":        (3, False, True),
     "face_value":                 (0, False, False),
     "face_state":                 (0, False, False),
     "face_gradient":              (0, True,  False),
@@ -101,6 +102,15 @@ class BoundaryCondition(param.Parameterized):
     # ``bind_on`` once the model state is known (see SystemModel.attach_*).
     _on_slots = None
 
+    #: How :meth:`compute_boundary_condition`'s value is to be read by the
+    #: GHOST convention (decision D5, :meth:`compute_ghost_state`):
+    #: ``"ghost"`` — the value IS the ghost state (extrapolation, reflection,
+    #: periodic partner, incoming-characteristic ghost, data ghost);
+    #: ``"face"`` — the value is the state ON the face, so the ghost is the
+    #: linear extrapolation through it, ``2·face − Q_inner`` (Dirichlet,
+    #: inflow/outflow, user lambdas).
+    boundary_value_kind = "ghost"
+
     def __init_subclass__(cls, **kw):
         """Apply the ``on=`` mask to EVERY subclass automatically: each
         value/gradient producer defined on the subclass is wrapped so it only
@@ -150,6 +160,24 @@ class BoundaryCondition(param.Parameterized):
         gradient is part of the BC (e.g. prescribed-flux Robin BCs)."""
         n_vars = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         return ZArray.zeros(n_vars)
+
+    def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
+                            bdata=None):
+        """Symbolic GHOST state of this BC (decision D5) — the ONE value the
+        new solver template's gradient, limiter bounds and Riemann right state
+        all consume.  The ghost sits at the mirror point ``x_c + 2(x_f − x_c)``
+        of the inner cell, so a BC that prescribes a FACE value ``v`` has the
+        ghost ``2v − Q_inner`` (exact for a linear field); a BC whose value is
+        already a ghost (reflection, extrapolation, periodic partner) returns
+        it unchanged — see :attr:`boundary_value_kind`.  ``bdata`` is the
+        per-face boundary-data vector (coupling); ignored unless a subclass
+        reads it.  Non-owned slots (``on=``) are the interior value."""
+        v = ZArray(self.compute_boundary_condition(
+            time, X, dX, Q, Qaux, parameters, normal))
+        if self.boundary_value_kind == "face":
+            q = ZArray(Q)
+            return ZArray([2 * v[i] - q[i] for i in range(len(q))])
+        return v
 
     def face_state(self, Q_face, Qaux_face, normal, parameters):
         """Compute the boundary-side Riemann state from the reconstructed face value.
@@ -267,6 +295,7 @@ class Dirichlet(BoundaryCondition):
     this BC's slots).  Example: ``Dirichlet("left", on="h", value=1.5)``."""
 
     value = param.Number(default=0.0)
+    boundary_value_kind = "face"
 
     def __init__(self, tag=None, on=None, value=None, **params):
         if value is not None:
@@ -343,6 +372,16 @@ class Flux(BoundaryCondition):
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         return ZArray(Q)                      # value extrapolates
 
+    def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
+                            bdata=None):
+        """Ghost of a prescribed normal gradient ``g``: ``Q + 2·dX·g`` (the
+        mirror point lies ``2·dX`` along the outward normal), exact for a
+        linear field with ``∂_n u = g`` on an orthogonal face."""
+        q = ZArray(Q)
+        g = ZArray(self.compute_boundary_gradient(
+            time, X, dX, Q, Qaux, parameters, normal))
+        return ZArray([q[i] + 2 * dX * g[i] for i in range(len(q))])
+
     def compute_boundary_gradient(self, time, X, dX, Q, Qaux, parameters, normal):
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         out = ZArray.zeros(n)
@@ -400,6 +439,15 @@ class Coupled(BoundaryCondition):
         """Fallback (extrapolation) — overwritten by preCICE at runtime."""
         return ZArray(Q)
 
+    def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
+                            bdata=None):
+        """Coupled ghost = the per-face boundary DATA supplied by the coupling
+        (``bdata``, filled by the coupling plugin; the template default is the
+        BC input state, i.e. extrapolation before the peer delivers)."""
+        if bdata is None:
+            return ZArray(Q)
+        return ZArray(list(bdata))
+
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
         """Fallback face value = interior cell (extrapolation)."""
         return np.asarray(Q_inner, dtype=float).copy()
@@ -434,6 +482,7 @@ class InflowOutflow(BoundaryCondition):
     """
 
     prescribe_fields = param.Dict(default={})
+    boundary_value_kind = "face"
 
     @staticmethod
     def _coerce(v):
@@ -499,8 +548,10 @@ class InflowOutflow(BoundaryCondition):
 
 
 class Lambda(BoundaryCondition):
-    """Lambda. (class)."""
+    """User-function FACE values: ``prescribe_fields`` maps a slot to
+    ``f(time, X, dX, Q, Qaux, p, n)`` evaluated at the face centre ``X``."""
     prescribe_fields = param.Dict(default={})
+    boundary_value_kind = "face"
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Compute boundary condition."""
@@ -1001,6 +1052,18 @@ class WindStress(BoundaryCondition):
             out[k] = self._coerce(spec)
         return out
 
+    def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
+                            bdata=None):
+        """Dirichlet rows ``2v − Q``, Neumann rows ``Q + 2·dX·g``, the rest
+        extrapolate."""
+        out = ZArray(Q)
+        q = ZArray(Q)
+        for k, spec in self.prescribe_values.items():
+            out[k] = 2 * self._coerce(spec) - q[k]
+        for k, spec in self.prescribe_gradients.items():
+            out[k] = q[k] + 2 * dX * self._coerce(spec)
+        return out
+
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
         """Numpy: Dirichlet rows get the prescribed value, others extrapolate.
         Only numeric specs work here; symbolic specs need to flow through
@@ -1391,6 +1454,91 @@ class BoundaryConditions(param.Parameterized):
         )
 
 
+    def ghost_state_branches(self, time, X, dX, Q, Qaux, parameters, normal,
+                             bdata):
+        """Per-branch symbolic GHOST states (decision D5): one ``ZArray`` per
+        sorted BC (branch ``i`` serves tag ``list_sorted_function_names[i]``).
+        An empty container yields the single extrapolation branch."""
+        args = (time, X.get_list(), dX, Q.get_list(), Qaux.get_list(),
+                parameters.get_list(), normal.get_list(), bdata.get_list())
+        if not self.boundary_conditions_list:
+            return [ZArray(Q.get_list())]
+        return [ZArray(bc.compute_ghost_state(*args))
+                for bc in self.boundary_conditions_list]
+
+    def get_boundary_ghost_function(self, time, X, dX, Q, Qaux, parameters,
+                                    normal, bdata,
+                                    function_name="boundary_ghost_state"):
+        """Indexed symbolic GHOST-state kernel — same contract as
+        :meth:`get_boundary_condition_function` plus the per-face boundary
+        data group ``boundary_data`` (coupling), returning the D5 ghost of the
+        BC branch ``idx``."""
+        bc_idx = sympy.Symbol("bc_idx", integer=True)
+        branches = self.ghost_state_branches(time, X, dX, Q, Qaux, parameters,
+                                             normal, bdata)
+        if len(branches) == 1 and not self.boundary_conditions_list:
+            expr = branches[0]
+        else:
+            expr = sympy.Piecewise(*[(res, sympy.Eq(bc_idx, i))
+                                     for i, res in enumerate(branches)])
+        return Function(
+            name=function_name,
+            args=Zstruct(idx=bc_idx, time=time, position=X, distance=dX,
+                         variables=Q, aux_variables=Qaux,
+                         parameters=parameters, normal=normal,
+                         boundary_data=bdata),
+            definition=expr,
+        )
+
+
+def boundary_data_symbols(n_state):
+    """The per-face boundary-data group ``bdata_0 … bdata_{n-1}`` of the
+    ghost-state kernel (coupling data, one entry per state row)."""
+    z = Zstruct(**{f"bdata_{i}": sympy.Symbol(f"bdata_{i}", real=True)
+                   for i in range(int(n_state))})
+    z._symbolic_name = "bdata"
+    return z
+
+
+def build_boundary_ghost_kernel(sm):
+    """The D5 GHOST-state kernel of ``sm`` as ``(function, branches)``.
+
+    ``function`` is the indexed ``boundary_ghost_state(idx, time, position,
+    distance, variables, aux_variables, parameters, normal, boundary_data)``
+    kernel; ``branches[i]`` is the ghost ``ZArray`` of BC branch ``i`` (the
+    sorted-tag order :func:`boundary_face_branches` routes to), over the SAME
+    argument symbols (``function.args``).
+
+    Built from the system's own ``BoundaryConditions`` container
+    (``sm._bc_source``) in the system's CURRENT symbols, so an NSM gets its
+    assumption-free state and its registered aux.  A system carrying a bare
+    kernel without its container falls back to that kernel's branches,
+    read as ghosts."""
+    bcs = getattr(sm, "_bc_source", None)
+    bdata = boundary_data_symbols(sm.n_state)
+    if isinstance(bcs, BoundaryConditions):
+        X = sm.position_struct()
+        dX = sympy.Symbol("distance", real=True)
+        args = (sm.time, X, dX, sm.variables, sm.aux_variables, sm.parameters,
+                sm.normal, bdata)
+        fn = bcs.get_boundary_ghost_function(*args)
+        branches = bcs.ghost_state_branches(*args)
+        return fn, branches
+    kernel = getattr(sm, "boundary_conditions", None)
+    if kernel is None:
+        raise ValueError("build_boundary_ghost_kernel: the system carries no "
+                         "boundary conditions")
+    definition = kernel.definition
+    if isinstance(definition, sympy.Piecewise):
+        branches = [ZArray(list(sympy.flatten(e))) for e, _c in definition.args]
+    else:
+        branches = [ZArray(list(sympy.flatten(definition)))]
+    a = kernel.args
+    fargs = Zstruct(**{k: a[k] for k in a.keys()}, boundary_data=bdata)
+    return Function(name="boundary_ghost_state", args=fargs,
+                    definition=definition), branches
+
+
 def boundary_face_branches(mesh, bcs):
     """BC-kernel branch index of every boundary face of ``mesh``, matched BY
     TAG NAME — the ``bc_idx`` every solver passes to the lowered
@@ -1519,6 +1667,11 @@ class PerFieldBoundary(BoundaryCondition):
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         return self._per_slot("compute_boundary_gradient", ZArray.zeros(n),
                               time, X, dX, Q, Qaux, parameters, normal)
+
+    def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
+                            bdata=None):
+        return self._per_slot("compute_ghost_state", ZArray(Q),
+                              time, X, dX, Q, Qaux, parameters, normal, bdata)
 
     # numeric kernels (numpy path)
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
