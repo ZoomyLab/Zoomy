@@ -17,4 +17,4 @@ where = ["."]
 include = ["zoomy_dune*"]
 
 [tool.setuptools.package-data]
-zoomy_dune = ["femdg/*.hh"]
+zoomy_dune = ["femdg/*.hh", "fvm/*.hh"]
