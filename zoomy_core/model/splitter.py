@@ -799,6 +799,23 @@ def _inherit_equilibrium_reconstruction(sm_pred, sm_parent):
         sm_pred.equilibrium_reconstruction = eqr
 
 
+def _inherit_roles(sm, sm_parent):
+    """Carry the parent's DECLARED state roles (depth / bed / stationary /
+    positive / momentum / gravity) onto a split stage — the stages share the
+    parent's state vector, so the declaration applies verbatim.  Without it a
+    stage would lose its free-surface identity (and the role-gated NSM
+    default operations) at the split."""
+    from zoomy_core.systemmodel.roles import (
+        declared_role_record, declare_roles)
+    rec = declared_role_record(sm_parent)
+    if rec:
+        declare_roles(sm, description="roles inherited from the split parent",
+                      **rec)
+    if getattr(sm_parent, "admissible", None) is not None \
+            and getattr(sm, "admissible", None) is None:
+        sm.admissible = sm_parent.admissible
+
+
 def _build_subsystem(*, eq_names, eq_residuals, sm_parent, state,
                      equation_to_state_index, history_entry,
                      source_only=False):
@@ -1081,6 +1098,7 @@ def _build_subsystem(*, eq_names, eq_residuals, sm_parent, state,
     sm._bc_source = getattr(sm_parent, "_bc_source", None)
     sm._aux_bc_source = getattr(sm_parent, "_aux_bc_source", None)
     sm.history.append(history_entry)
+    _inherit_roles(sm, sm_parent)
     return sm
 
 
@@ -1269,6 +1287,7 @@ def split_for_pressure(sm, pressure_vars, dt, *, bottom=None):
     _inherit_equilibrium_reconstruction(SM_pred, sm)
     SM_corr._bc_source = getattr(sm, "_bc_source", None)
     SM_corr._aux_bc_source = getattr(sm, "_aux_bc_source", None)
+    _inherit_roles(SM_corr, sm)
     SM_corr.history.append({
         "name": "split_for_pressure[corr]",
         "description": (
@@ -1486,6 +1505,7 @@ def split_for_pressure_structural(sm, pressure_vars, dt):
     _inherit_equilibrium_reconstruction(SM_pred, sm)
     SM_corr._bc_source = getattr(sm, "_bc_source", None)
     SM_corr._aux_bc_source = getattr(sm, "_aux_bc_source", None)
+    _inherit_roles(SM_corr, sm)
     SM_corr.history.append({
         "name": "split_for_pressure_structural[corr]",
         "description": f"corrector: explicit update on "

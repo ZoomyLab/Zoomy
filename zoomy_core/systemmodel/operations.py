@@ -145,6 +145,8 @@ OPERATOR_SLOTS = (
     "boundary_conditions",
     "aux_boundary_conditions",
     "boundary_gradients",
+    # admissibility list (expressions that must stay >= 0)
+    "admissible",
 )
 
 
@@ -741,11 +743,21 @@ def _wet_dry_eps(sm, override=None):
 
 
 def _depth_state(sm, what):
-    """Return the state Symbol named ``"h"`` or raise a descriptive error."""
-    h = next((s for s in sm.state if str(s) == "h"), None)
+    """Return the DEPTH state Symbol — the row the model declared as its
+    ``depth`` role (:mod:`zoomy_core.systemmodel.roles`) — or raise.
+
+    LEGACY fallback, for a hand-built system that never declared a depth role
+    at all: the state named ``"h"``.  A system that declared "no depth" (or a
+    different one) is never matched by name."""
+    roles = getattr(sm, "roles", None)
+    if roles is not None and roles.depth is not None:
+        return sm.state[roles.depth]
+    h = None
+    if roles is None or not roles.depth_declared:
+        h = next((s for s in sm.state if str(s) == "h"), None)
     if h is None:
         raise ValueError(
-            f"{what}: no depth state 'h' found "
+            f"{what}: the system declares no depth role "
             f"(state = {[str(s) for s in sm.state]}).")
     return h
 

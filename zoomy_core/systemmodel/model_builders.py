@@ -23,6 +23,21 @@ from zoomy_core.coords import t, x, y
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_core.model.derivation.system_extract import HydrostaticPressure
 from zoomy_core.model.boundary_conditions import resolve_and_attach, Extrapolation
+from zoomy_core.systemmodel.roles import declare_free_surface_roles
+
+
+def _free_surface(sm, depth, bed, kind):
+    """Every builder below is a FREE-SURFACE family: declare its roles from
+    the fields the builder itself put into Q (depth / bed Functions, the
+    model's gravity parameter ``g``), momentum derived from the model's own
+    ``interpolate_to_3d`` lift.  Generic code reads these roles only."""
+    def _name(f):
+        return getattr(getattr(f, "func", None), "__name__", None) or str(f)
+    declare_free_surface_roles(
+        sm, depth=_name(depth), bed=None if bed is None else _name(bed),
+        gravity="g" if sm.parameters.contains("g") else None,
+        description=f"{kind} free-surface roles")
+    return sm
 
 
 # ── SWE ─────────────────────────────────────────────────────────────────────
@@ -30,6 +45,7 @@ def build_swe(model) -> SystemModel:
     # ``SystemModel.from_model`` parses the model's function groups AND attaches
     # its ``_coupling_bcs`` on raw promotion (REQ-87), so every backend adapter /
     # FVM solver that builds from the model inherits it.
+    # Roles: ``SWE.declare_system_roles`` runs inside ``_from_model_impl``.
     return SystemModel._from_model_impl(model)
 
 
@@ -63,6 +79,7 @@ def build_sme(model) -> SystemModel:
     # a first-class path (it is what hand-built models like VAM always used).
     if getattr(model, "symbolic_spectrum", False):
         model._register_hswme_spectrum(sm)
+    _free_surface(sm, h, bed, "SME")
     resolve_and_attach(sm, model.boundary_conditions,
                        aux_bcs=model.aux_boundary_conditions)
     return sm
@@ -86,6 +103,7 @@ def build_vam(model) -> SystemModel:
     m.apply({pf: HydrostaticPressure(pf)})
     sm = SystemModel.from_model(m, Q=[*qs, *P_modes], canonical_source=model)
     m.apply({HydrostaticPressure(pf): pf})   # un-tag: leave derivation clean
+    _free_surface(sm, h, bed, "VAM")
     resolve_and_attach(sm, model.boundary_conditions,
                        aux_bcs=model.aux_boundary_conditions)
     return sm
@@ -96,6 +114,7 @@ def build_mlswe(model) -> SystemModel:
     m = model.derivation
     sm = SystemModel.from_model(
         m, Q=[m.bed, m.ht, *m.q_l])
+    _free_surface(sm, m.ht, m.bed, "MLSWE")
     resolve_and_attach(sm, model.boundary_conditions,
                        aux_bcs=model.aux_boundary_conditions)
     return sm
@@ -111,6 +130,7 @@ def build_mlsme(model) -> SystemModel:
     m = model.derivation
     sm = SystemModel.from_model(
         m, Q=[m.bed, m.ht, *m.q_flat], canonical_source=model)
+    _free_surface(sm, m.ht, m.bed, "MLSME")
     resolve_and_attach(sm, model.boundary_conditions,
                        aux_bcs=model.aux_boundary_conditions)
     return sm
@@ -124,6 +144,7 @@ def build_mlvam(model) -> SystemModel:
     sm = SystemModel.from_model(
         m, Q=[m.bed, m.ht, *m.q_flat, *m.r_flat, *m.P_flat],
         canonical_source=model)
+    _free_surface(sm, m.ht, m.bed, "MLVAM")
     resolve_and_attach(sm, model.boundary_conditions,
                        aux_bcs=model.aux_boundary_conditions)
     return sm
@@ -142,6 +163,7 @@ def build_sigma3d(model) -> SystemModel:
     m.apply({pf: HydrostaticPressure(pf)})
     sm = SystemModel.from_model(m, Q=qs, canonical_source=model)
     m.apply({HydrostaticPressure(pf): pf})   # un-tag: leave derivation clean
+    _free_surface(sm, h, bed, "Sigma3D")
     # CLOSURE → ζ-FACE-BC REDUCTION: the user states the bed/surface conditions
     # as physical closures; here the reduction emits them as ordinary solver BCs
     # on the ζ-faces (combined with the user's horizontal BCs).

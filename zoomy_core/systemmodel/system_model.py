@@ -104,6 +104,9 @@ OPERATOR_ARG_SLOTS = {
     "update_variables": (_V, _A, _P, _DT),
     "update_aux_variables": (_V, _A, _P, _T, _X),
     "update_aux_variables_jacobian_wrt_variables": (_V, _A, _P, _T, _X),
+    # The admissibility list: expressions that must stay >= 0 (free surface:
+    # [depth]; Euler: [rho, p(Q)]).  Read by MOOD and positivity scaling.
+    "admissible": (_V, _A, _P),
 }
 
 # The canonical time-step symbol (matches ``to_numpy.DT_SYMBOL`` and the
@@ -821,6 +824,12 @@ class SystemModel:
     # it; hand-built production models leave it empty.
     unclassified_terms: List = field(default_factory=list)
     history: List[Dict[str, str]] = field(default_factory=list)
+    # ADMISSIBILITY: expressions in (Q, Qaux, p) that must stay >= 0 for the
+    # state to be physical (free surface: [depth]; Euler: [rho, p(Q)]).  The
+    # model DECLARES it (``declare_admissible``); ``None`` means "not declared",
+    # and :meth:`admissible_constraints` then derives the default from the
+    # declared roles ([depth] for a free-surface model, [] otherwise).
+    admissible: Optional[ZArray] = None
 
     def __post_init__(self):
         # Lazy derived-operator cache — filled on first ``quasilinear_matrix``
@@ -851,6 +860,7 @@ class SystemModel:
             self.source_jacobian_wrt_aux_variables)
         self.flux_jacobian_wrt_aux_variables = _to_zarray(
             self.flux_jacobian_wrt_aux_variables)
+        self.admissible = _to_zarray(self.admissible)
 
         # FALLBACK only: a SystemModel built without a Model channel (standalone
         # analysis, or the structural derivation path) arrives here with the
@@ -932,6 +942,11 @@ class SystemModel:
         rows; a model that carries either in ``aux_state`` has nothing to
         exclude here.
         """
+        roles = self.roles
+        if roles.depth_declared:
+            skip = {roles.depth, roles.bed}
+            return [i for i in range(len(self.state)) if i not in skip]
+        # LEGACY (undeclared hand-built systems only): the conventional names.
         return [i for i, s in enumerate(self.state)
                 if str(s) not in ("h", "b")]
 
@@ -959,10 +974,15 @@ class SystemModel:
         depth-averaged bed source is not defined for it.  Consumers must
         check, not assume.
         """
-        names = [str(s) for s in self.state]
-        if "h" not in names:
+        roles = self.roles
+        if roles.depth_declared:
+            i_h = roles.depth
+        else:
+            # LEGACY (undeclared hand-built systems only): the conventional name.
+            names = [str(s) for s in self.state]
+            i_h = names.index("h") if "h" in names else None
+        if i_h is None:
             return [-1] * self.n_dim
-        i_h = names.index("h")
         e2s = list(self.equation_to_state_index)
         if i_h not in e2s:            # h is carried but not evolved here
             return [-1] * self.n_dim
@@ -1181,6 +1201,49 @@ class SystemModel:
         self._bc_source = bcs
         self._aux_bc_source = aux_bcs
         return self
+
+    # ── Declared roles + admissibility (general PDE core) ─────────────
+
+    @property
+    def roles(self):
+        """The declared state roles resolved against the current state
+        (:class:`zoomy_core.systemmodel.roles.Roles`).  Generic code reads
+        these — never field names."""
+        from zoomy_core.systemmodel.roles import resolve_roles
+        return resolve_roles(self)
+
+    def declare_roles(self, **roles):
+        """Record a role declaration (see
+        :func:`zoomy_core.systemmodel.roles.declare_roles`).  Returns self."""
+        from zoomy_core.systemmodel.roles import declare_roles
+        return declare_roles(self, **roles)
+
+    def declare_admissible(self, constraints):
+        """Declare the admissibility list: expressions in this system's
+        ``(Q, Qaux, p)`` symbols that must stay ``>= 0``.  An empty list
+        declares "every state is admissible".  Returns self."""
+        exprs = [sp.sympify(e) for e in sp.flatten(constraints)] \
+            if constraints is not None else None
+        self.admissible = None if exprs is None else ZArray(exprs)
+        self.history.append({"name": "declare_admissible",
+                             "description": f"{len(exprs or [])} constraint(s)"})
+        return self
+
+    def boundary_ghost_kernel(self):
+        """The D5 ghost-state boundary kernel ``(function, branches)`` — see
+        :func:`zoomy_core.model.boundary_conditions.build_boundary_ghost_kernel`.
+        Built on demand (only the new solver template consumes it)."""
+        from zoomy_core.model.boundary_conditions import (
+            build_boundary_ghost_kernel)
+        return build_boundary_ghost_kernel(self)
+
+    def admissible_constraints(self) -> list:
+        """The admissibility list as plain sympy expressions: the declared
+        one, else ``[depth]`` for a free-surface system, else ``[]``."""
+        if self.admissible is not None:
+            return [sp.sympify(e) for e in sp.flatten(self.admissible)]
+        depth = self.roles.depth
+        return [] if depth is None else [self.state[depth]]
 
     @property
     def is_square(self) -> bool:
@@ -1834,6 +1897,12 @@ class SystemModel:
         # SystemModel slots; runtime gradient aux (∂_x h, ∂_x q_i) land in Qaux.
         _attach_function_groups(sm, model,
                                 canonical_source=canonical_source)
+        # ROLES: a sigma-mapped (z = b + h*zeta) derivation IS a free-surface
+        # model — its depth and bed are read off the coordinate relation, not
+        # guessed from field names.  Builders refine (gravity, layers).
+        from zoomy_core.systemmodel.roles import infer_sigma_map_roles
+        infer_sigma_map_roles(sm, model)
+        _declare_model_hooks(sm, canonical_source)
         # Carry the WB reconstruction choice from the declarative Model so the
         # solver can pick the numerics (e.g. SME(equilibrium_reconstruction=...)).
         sm.equilibrium_reconstruction = getattr(
@@ -2217,6 +2286,7 @@ class SystemModel:
             # the function groups above), so ``FromModel`` BCs resolve; aux BCs
             # default to per-tag extrapolation (mirrors the old property).
             resolve_and_attach(sm, coupling)
+        _declare_model_hooks(sm, model)
         return sm
 
     # ── reconstruct_residuals ─────────────────────────────────────────
@@ -4095,6 +4165,24 @@ def allow_unclosed():
         yield
     finally:
         _ALLOW_UNCLOSED = prev
+
+
+def _declare_model_hooks(sm, model) -> None:
+    """Apply the model's own role / admissibility declarations, if it makes
+    any: ``model.declare_system_roles(sm)`` (declares on the built system, so
+    it can read the final state layout) and ``model.admissible_constraints()``
+    (expressions in the model's state/aux/parameter symbols that must stay
+    ``>= 0``)."""
+    if model is None:
+        return
+    hook = getattr(model, "declare_system_roles", None)
+    if callable(hook):
+        hook(sm)
+    adm = getattr(model, "admissible_constraints", None)
+    if callable(adm):
+        constraints = adm()
+        if constraints is not None:
+            sm.declare_admissible(constraints)
 
 
 def _declared_aux_definitions(model) -> dict:

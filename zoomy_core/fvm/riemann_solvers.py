@@ -140,14 +140,35 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         self.flux_plus = self._create_v("flux_plus", self.n_variables)
         self.source_term = self._create_v("source_term", self.n_variables)
 
-        # Auto-locate the standard named fields (``h``, ``b``, ``hinv``)
-        # if present.  Subclasses can call ``find_field`` to register
-        # additional handles.
+        # The free-surface handles ``h`` (depth) and ``b`` (bed) come from the
+        # model's DECLARED ROLES (``SystemModel.roles``) — the handle keys keep
+        # their historical names so the free-surface-only solvers below
+        # (Audusse HR, HLLC, WB-NC-Rusanov) read them unchanged.  Only a system
+        # that never declared a depth role falls back to the conventional
+        # names (legacy hand-built systems).  ``hinv`` is the aux the core
+        # depth operation itself registers under that name.
         self._field_handles = {}
-        for name in ("h", "b", "hinv"):
+        roles = getattr(self.model, "roles", None)
+        if roles is not None and roles.depth_declared:
+            for key, row in (("h", roles.depth), ("b", roles.bed)):
+                if row is not None:
+                    self._field_handles[key] = FieldHandle(
+                        key, "q", row, minus=self.variables_minus[row],
+                        plus=self.variables_plus[row],
+                        state=self.variables[row])
+            legacy = ("hinv",)
+        else:
+            legacy = ("h", "b", "hinv")
+        for name in legacy:
             h = self.find_field(name, required=False)
             if h is not None:
                 self._field_handles[name] = h
+        # Rows no dissipation may act on: the declared ``stationary`` role, or
+        # (undeclared) the STRUCTURALLY stationary rows — never "the row named
+        # b" (a transported tracer named ``b`` keeps its dissipation).
+        self._stationary_rows = (
+            tuple(r for r in roles.stationary if r < self.n_variables)
+            if roles is not None else ())
         self._scaled_q_indices = self._resolve_scaled_q_indices(
             self.scaled_q_indices)
 
@@ -201,6 +222,14 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def has_field(self, name):
         return self.find_field(name, required=False) is not None
+
+    def _declared_depth_handle(self):
+        """The depth handle ONLY when the model declares a depth role — the
+        generic (all-model) kernels never fall back to a field name."""
+        roles = getattr(self.model, "roles", None)
+        if roles is None or roles.depth is None:
+            return None
+        return self._field_handles.get("h")
 
     def _create_v(self, name, size):
         """Internal helper `_create_v`."""
@@ -654,7 +683,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         depth row to project — such models get a star state with no
         positivity claim attached, which is stated on ``star_state``).
         """
-        h = self.find_field("h", required=False)
+        h = self._declared_depth_handle()
         if h is None or h.container != "q":
             return ZArray(q_star)
         zero = sp.Float(0.0)
@@ -781,7 +810,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         # h* and the upper bound survives.
         den = sp.Max(sR - sL, sp.Float(1e-14), evaluate=False)
         q_star = (sR * ZArray(qR) - sL * ZArray(qL) - (FRn - FLn)) * (1 / den)
-        h = self.find_field("h", required=False)
+        h = self._declared_depth_handle()
         if h is not None:
             q_star = self._clamp_star_depth(
                 q_star, h.access(qL, auxL), h.access(qR, auxR))
@@ -856,11 +885,10 @@ class Rusanov(Numerics):
         Id = ZArray.zeros(n, n)
         for i in range(n):
             Id[i, i] = 1
-        # Exclude bottom-topography from Rusanov dissipation when b is part of
-        # the conservative state. This preserves the stationary bed variable.
-        b = self._field_handles.get("b")
-        if b is not None and b.container == "q":
-            Id[b.index, b.index] = 0
+        # Exclude STATIONARY rows (declared role, e.g. the bed; else the
+        # structurally zero rows) from the Rusanov dissipation.
+        for r in self._stationary_rows:
+            Id[r, r] = 0
         return Id
 
     def get_viscosity_identity_fluctuations(self):
@@ -941,9 +969,8 @@ class HLL(Numerics):
     def _state_jump(self, qL, qR):
         """``qR - qL`` with stationary fields (bed in conservative state) zeroed."""
         dq = ZArray(qR) - ZArray(qL)
-        b = self._field_handles.get("b")
-        if b is not None and b.container == "q":
-            dq[b.index] = sp.Integer(0)
+        for r in self._stationary_rows:
+            dq[r] = sp.Integer(0)
         return dq
 
     def _compute_flux(self, qL, qR, auxL, auxR, p, n):
@@ -1326,10 +1353,10 @@ class NonconservativeRusanov(Rusanov):
         Id = ZArray.zeros(n, n)
         for i in range(n):
             Id[i, i] = 1
-        # Preserve stationary bed variable when b is part of conservative state.
-        b = self._field_handles.get("b")
-        if b is not None and b.container == "q":
-            Id[b.index, b.index] = 0
+        # Preserve STATIONARY rows (declared role, e.g. the bed; else the
+        # structurally zero rows).
+        for r in self._stationary_rows:
+            Id[r, r] = 0
         return Id
 
     def numerical_fluctuations(self):

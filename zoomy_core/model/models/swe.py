@@ -255,6 +255,17 @@ class SWE(StructuredDerivativeModel):
             groups["boundary:inflow"][hv] = sp.S.Zero
         return groups
 
+    # ── declared roles (free-surface specialisation) ─────────────────
+    def declare_system_roles(self, sm):
+        """Declare the free-surface roles on the built system: depth ``h``,
+        bed ``b`` (stationary), gravity ``g``, momentum ``hu`` (``hv``).
+        Generic solver code reads these roles, never the field names."""
+        from zoomy_core.systemmodel.roles import declare_free_surface_roles
+        momentum = [["hu"]] + ([["hv"]] if int(self.dimension) == 2 else [])
+        declare_free_surface_roles(sm, depth="h", bed="b", gravity="g",
+                                   momentum=momentum,
+                                   description="SWE free-surface roles")
+
     # ── runtime form ──────────────────────────────────────────────────
     # Build via ``SystemModel.from_model(SWE(...))`` (REQ-143); the builder in
     # ``zoomy_core.systemmodel.model_builders`` runs the low-level path.

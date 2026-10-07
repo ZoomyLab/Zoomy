@@ -1160,8 +1160,11 @@ class NumericalSystemModel(SystemModel):
         #    transport (no flux/NCP); they must stay clean, and
         #  * the presence of a depth state ``h`` — non-shallow-water systems
         #    (no ``h``) get nothing.
+        # ROLE-gated (never name-gated): only a system that DECLARES a depth
+        # role is free-surface.  A tracer that happens to be called ``h`` gets
+        # neither the KP reciprocal nor the dry CFL gate.
         depth = (self._is_transport_system()
-                 and any(str(s) == "h" for s in self.state))
+                 and self.roles.depth is not None)
         if depth:
             ops.extend(self._depth_regularization_operations(
                 desingularize_hinv, regularize_depth_aux,
@@ -1177,12 +1180,15 @@ class NumericalSystemModel(SystemModel):
             return [legacy()]
         if choice == "none":
             return []
+        depth_name = str(self.state[self.roles.depth])
         if choice == "aux":
             return [aux(self.regularization_eps,
-                        eigenvalues=self.eigenvalue_treatment)]
+                        eigenvalues=self.eigenvalue_treatment,
+                        field=depth_name)]
         if choice == "direct":
             return [direct(self.regularization_eps,
-                           eigenvalues=self.eigenvalue_treatment)]
+                           eigenvalues=self.eigenvalue_treatment,
+                           field=depth_name)]
         raise ValueError(
             f"depth_regularization={choice!r} is not a legal path; expected "
             "None (legacy desingularize_hinv), 'aux', 'direct' or 'none'.")
@@ -1348,7 +1354,18 @@ class NumericalSystemModel(SystemModel):
         # state/aux symbols carry no assumptions.  The caller's SystemModel is
         # left untouched and still carries its declared facts, which is what the
         # analytic layer needs.  See :func:`construct_numerical`.
+        from zoomy_core.systemmodel.roles import (
+            declared_role_record, assumption_positive_names, declare_roles)
+        # ROLES: the analytic sign assumptions seed the ``positive`` role HERE,
+        # on the SystemModel side of the boundary — the numerical twin below is
+        # assumption-free by construction and could no longer tell.
+        seed_positive = (None if "positive" in declared_role_record(sm)
+                         else assumption_positive_names(sm))
         sm = construct_numerical(sm)
+        if seed_positive:
+            declare_roles(sm, positive=seed_positive,
+                          description="positive role seeded from the "
+                                      "analytic sign assumptions")
         additional_systems = [construct_numerical(sub)
                               if isinstance(sub, SystemModel) else sub
                               for sub in (additional_systems or [])] or None
