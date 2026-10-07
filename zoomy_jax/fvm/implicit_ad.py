@@ -19,8 +19,12 @@ their own and accept any ``matvec``, including a finite-difference Jacobian
 action that jax cannot transpose.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
+
+from zoomy_core.misc.logger_config import logger
 
 
 def gmres(matvec, b, *, tol, maxiter, restart=20):
@@ -92,6 +96,13 @@ def cellwise_solve(matvec, b):
     return x.T
 
 
+def _warn_unconverged(rnorm, iterations, *, tol, maxiter):
+    logger.warning(
+        f"newton_root: not converged after {int(iterations)} of {maxiter} "
+        f"Newton updates: ||R||_2 = {float(rnorm):.3e} > tol = {tol:.3e}; "
+        "the root and its derivative are inconsistent.")
+
+
 def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
     """Root of ``residual`` by Newton, differentiable by the implicit function
     theorem.
@@ -108,8 +119,15 @@ def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
         bound, or :func:`cellwise_solve`), used for the Newton updates and
         for the tangent (and transposed tangent) systems.
     tol, maxiter : the iteration stops when ``||R||_2 <= tol`` or after
-        ``maxiter`` updates.
+        ``maxiter`` updates.  Stopping at ``maxiter`` with ``||R||_2 > tol``
+        logs a warning (a ``jax.debug.callback``, so also under ``jit``,
+        ``jvp`` and the checkpointed reverse loop, where the recomputation
+        may log it again).  The result is the last iterate either way, but
+        its derivative is then the implicit-function derivative of the EXACT
+        root, taken at a point that is not one.
     """
+
+    warn = partial(_warn_unconverged, tol=tol, maxiter=maxiter)
 
     def newton(f, x_init):
         def cond(carry):
@@ -121,7 +139,13 @@ def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
             x = x + solve(lambda v: jvp(x, v), -r)
             return x, f(x), i + 1
 
-        return jax.lax.while_loop(cond, body, (x_init, f(x_init), 0))[0]
+        x, r, i = jax.lax.while_loop(cond, body, (x_init, f(x_init), 0))
+        rnorm = jnp.linalg.norm(r)
+        # ``not <=`` so a NaN residual warns too.
+        jax.lax.cond(jnp.logical_not(rnorm <= tol),
+                     lambda: jax.debug.callback(warn, rnorm, i),
+                     lambda: None)
+        return x
 
     def tangent_solve(g, y):
         return jax.lax.custom_linear_solve(g, y, solve=solve,
