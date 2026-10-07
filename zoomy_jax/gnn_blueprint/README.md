@@ -92,67 +92,10 @@ conda run -n zoomy python library/zoomy_jax/zoomy_jax/gnn_blueprint/benchmark_gm
 
 ### Note on IMEX coupling
 
-This first loop is intentionally lightweight and standalone. The next step is wiring the same `deltaQ` model into `IMEXSourceSolverJax` so `Q_init = Q_old + deltaQ_pred` is used as GMRES initial guess inside the implicit stage, and benchmarked on Green-Naghdi test cases.
-
-
-## Child IMEX solver benchmark (no base solver edits)
-
-A child class `IMEXSourceSolverJaxGNNGuess` overrides only the global implicit GMRES path and injects an `x0` strategy.
-
-Benchmark on Green-Naghdi 1D (guess modes: `zero`, `explicit`, `learned_deltaq`; default compares all three):
-
-```bash
-conda run -n zoomy python library/zoomy_jax/zoomy_jax/gnn_blueprint/benchmark_imex_child_solver.py --n-cells 120 --repeats 2
-```
-
-- **`--gmres-backend scipy`** (default): `IMEXSourceSolverJaxGNNGuessScipyGmres` — Python time loop + **SciPy** GMRES so you get **matvec** and **pr_norm** totals (same idea as the Poisson CI script). No outer XLA compile on the time integrator; `integrate` time is a fairer runtime slice.
-- **`--gmres-backend jax`**: original fully JIT’d path (`jax.scipy.sparse.linalg.gmres` inside the loop) — faster for production experiments, fewer diagnostics.
-
-`learned_deltaq` uses **one fixed** `weights_deltaq.npz` (no online retraining). It is the **delta-Q** model from `train_deltaq.py`, not the Poisson V-cycle GNN.
-
-On some GN setups the implicit residual is already below `implicit_tol` at the explicit predictor, so **Newton (and GMRES) may never run** (`matvec=0`). Tighten with `--implicit-tol` or use a harder case if you need nonzero Krylov work.
-
-This prints base vs child wall times, `l2` drift vs base, and (SciPy backend) Krylov counters.
-
-
-## IMEX sweep (variance across meshes + topography)
-
-Runs both classical GN and beach-topography GN cases over multiple mesh sizes and CFL values,
-and reports runtime-only variance plus iteration metrics.
-
-```bash
-conda run -n zoomy python library/zoomy_jax/zoomy_jax/gnn_blueprint/benchmark_imex_sweep.py --guess-mode explicit --repeats 2
-```
-
-
-## Policy-driven solver usage
-
-`IMEXSourceSolverJaxGNNGuess` supports simple modes:
-- `policy_mode="off"`: baseline solver behavior.
-- `policy_mode="use"`: use GNN guess strategy for GMRES `x0`.
-- `policy_mode="collect"`: use GNN guess and save run artifacts for customization.
-
-This lets users enable preconditioning with a single option while keeping fallback to baseline behavior.
-
-
-Sweep now also includes explicit non-hydrostatic topography stress cases:
-- `gn_topo_sine`
-- `gn_topo_bump`
-
-
-## Adaptive option benchmark (CPU)
-
-Compares:
-1. IMEX without GNN guess,
-2. GNN preconditioner customized on bump, used on sine (static),
-3. bump-customized + adaptive adjustment from sine collect, then rerun.
-
-```bash
-JAX_PLATFORMS=cpu conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/benchmark_adaptive_precond.py   --n-cells 80 --cfl 0.5
-```
-
-
-`guess_mode` now supports `learned_deltaq`, which predicts per-node/per-field `deltaQ` from `(Q, Qaux, boundary class)` and uses it as GMRES `x0`.
+The child IMEX solver that injected the learned `deltaQ` as a GMRES initial guess, and its
+benchmarks, were removed when `IMEXSourceSolverJax` moved onto the base time loop with
+`custom_root` implicit stages. Re-wiring the predictor needs an initial-guess hook on
+`implicit_ad.newton_root`.
 
 
 ## Standalone predictor quality + auto architecture search
@@ -189,26 +132,6 @@ conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/multigrid_
 This is a blueprint for multilevel propagation to improve long-range information flow.
 
 
-## Message-depth / multilevel benchmark
-
-Shared-weights multilevel predictor path is controlled by `message_steps`.
-Run a sweep to test propagation depth impact:
-
-```bash
-JAX_PLATFORMS=cpu conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/benchmark_message_steps.py   --topo-mode sine --steps-list 1 2 4 6
-```
-
-
-## Pressure-capture diagnostic
-
-Checks whether predicted momentum increment aligns with pressure-gradient forcing
-and reports coarse-context injection strength.
-
-```bash
-JAX_PLATFORMS=cpu conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/eval_pressure_capture.py   --topo-mode sine --message-steps 2
-```
-
-
 ## Hybrid pressure+residual loss training
 
 Adds a pressure-alignment term (momentum correction vs `-dpdx`) on top of supervised and residual terms.
@@ -233,24 +156,7 @@ Example:
 JAX_PLATFORMS=cpu conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/train_autosearch_deltaq.py   --dataset outputs/gnn_blueprint/dataset_deltaq_small.npz   --out-root outputs/gnn_blueprint/model_search_large   --variants multilevel_flow linear_msg_edge   --message-steps-list 2 3 4 6   --inner-iters-list 1 2 3   --coarsen-levels-list 2 3 4   --flow-modes tb bt bidir alternating
 ```
 
-The resulting `weights_deltaq.npz` includes architecture knobs and is consumed by
-`IMEXSourceSolverJaxGNNGuess` when `guess_mode=learned_deltaq` (or `learned_deltaq_fp`).
-
-
-## Search And Rank By Iterations
-
-Use this script to train candidate architectures and rank them by solver impact:
-1. lowest warm `avg_newton_iters_per_step`
-2. then lowest warm `runtime_only_s`
-3. then lowest predictor `test_loss`
-
-```bash
-JAX_PLATFORMS=cpu conda run -n zoomy python   library/zoomy_jax/zoomy_jax/gnn_blueprint/search_rank_iterations.py   --dataset outputs/gnn_blueprint/dataset_deltaq_small.npz   --out-root outputs/gnn_blueprint/search_rank_iterations   --eval-topo sine   --n-cells 128   --warm-repeats 3   --max-trials 16
-```
-
-Outputs:
-- `search_rank_iterations.csv` with all candidates and baseline deltas
-- `best_by_iterations.txt` with top-ranked candidate
+The resulting `weights_deltaq.npz` includes the architecture knobs.
 
 
 ## Global coupling (architecture choice)
@@ -288,7 +194,7 @@ JAX_PLATFORMS=cpu conda run -n zoomy python \
   --no-fft --out-dir outputs/gnn_blueprint/model_multilevel_pois_only
 ```
 
-Load the resulting `weights_deltaq.npz` in `IMEXSourceSolverJaxGNNGuess` (`guess_mode=learned_deltaq`). When `global_coupling_mode=1`, the solver applies the spectral mix inside `predictor_learned_multilevel.py`.
+When `global_coupling_mode=1`, the spectral mix is applied inside `predictor_learned_multilevel.py`.
 
 ### FFT sanity demo
 

@@ -1,7 +1,6 @@
 """Shared multilevel learned ``deltaQ`` predictor (optional 1D FFT global coupling).
 
-Used by :class:`IMEXSourceSolverJaxGNNGuess` and training scripts so solver and
-training share one implementation.
+Shared by the training scripts.
 """
 
 from __future__ import annotations

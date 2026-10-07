@@ -3,7 +3,7 @@
 Loss = supervised MSE + ``beta_impl`` * implicit residual proxy + ``beta_pois`` *
 discrete Laplacian penalty on a pressure proxy (depth channel ``index 1``).
 
-Writes ``weights_deltaq.npz`` compatible with :class:`IMEXSourceSolverJaxGNNGuess`
+Writes ``weights_deltaq.npz`` for the learned predictor
 when ``global_coupling_mode=FFT_1D`` (see :mod:`zoomy_jax.gnn_blueprint.global_coupling`).
 """
 
