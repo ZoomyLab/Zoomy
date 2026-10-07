@@ -609,19 +609,6 @@ class LSQMUSCLReconstructionJAX:
         dA_int, dB_int = self._face_deltas_interior(grad_v)
         dA_bnd = self._face_deltas_boundary(grad_v)
 
-        def _vk_per_face(uc, dm_pos, dm_neg, deltas):
-            num_p = dm_pos ** 2 + ev2[None] + 2 * deltas * dm_pos
-            den_p = dm_pos ** 2 + 2 * deltas ** 2 + deltas * dm_pos + ev2[None]
-            cand_p = jnp.clip(num_p / jnp.maximum(den_p, eps), 0.0, 1.0)
-            num_n = dm_neg ** 2 + ev2[None] + 2 * deltas * dm_neg
-            den_n = dm_neg ** 2 + 2 * deltas ** 2 + deltas * dm_neg + ev2[None]
-            cand_n = jnp.clip(num_n / jnp.minimum(den_n, -eps) * -1.0,
-                              0.0, 1.0)
-            return jnp.where(
-                deltas > eps, cand_p,
-                jnp.where(deltas < -eps, cand_n, 1.0),
-            )
-
         # Apply face-by-face: φ_cell = min over all face contributions.
         def _apply(cell_ids, deltas):
             uc = u[cell_ids]
@@ -632,7 +619,7 @@ class LSQMUSCLReconstructionJAX:
             cand_p = jnp.clip(num_p / jnp.maximum(den_p, eps), 0.0, 1.0)
             num_n = dm_neg ** 2 + ev2[cell_ids] + 2 * deltas * dm_neg
             den_n = dm_neg ** 2 + 2 * deltas ** 2 + deltas * dm_neg + ev2[cell_ids]
-            cand_n = jnp.clip(-num_n / jnp.minimum(den_n, -eps), 0.0, 1.0)
+            cand_n = jnp.clip(num_n / jnp.maximum(den_n, eps), 0.0, 1.0)
             cand = jnp.where(
                 deltas > eps, cand_p,
                 jnp.where(deltas < -eps, cand_n, 1.0),
