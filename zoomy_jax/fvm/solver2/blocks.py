@@ -149,7 +149,7 @@ def halo_bc(Q, Qaux, p, MeshRT, t, Ops):
         cell = MeshRT.boundary_face_cells[i]
         fidx = MeshRT.boundary_faces[i]
         return Ops.bc_face(
-            MeshRT.bf_function_numbers[i], t,
+            MeshRT.bf_branch[i], t,
             MeshRT.face_centers[fidx, :], MeshRT.bf_distance[i],
             Q[:, cell], Qaux[:, cell], p, MeshRT.face_normals[:, fidx])
 
@@ -217,7 +217,7 @@ def flux_pass(Q, Qaux, p, MeshRT, Ops, t_stage, faces):
             cell = MeshRT.boundary_face_cells[i]
             fidx = bfj[i]
             return Ops.bc_face(
-                MeshRT.bf_function_numbers[i], t_stage,
+                MeshRT.bf_branch[i], t_stage,
                 MeshRT.face_centers[fidx, :], MeshRT.bf_distance[i],
                 Q_L_bnd[:, i], Qaux[:, cell], p, normals[:, fidx])
 

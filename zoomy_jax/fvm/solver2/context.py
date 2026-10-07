@@ -28,6 +28,8 @@ from typing import Any, Optional
 import jax.numpy as jnp
 import numpy as np
 
+from zoomy_core.model.boundary_conditions import boundary_face_branches
+
 
 # ── Shu-Osher stage tableaus (core data; §2 "tableau") ──────────────────────
 # Q^(k) = alpha_k * Q^n + (1 - alpha_k) * (Q^(k-1) + beta_k * dt * L(Q^(k-1)))
@@ -64,7 +66,7 @@ class MeshRT:
 
     # boundary bookkeeping
     boundary_face_cells: Any
-    bf_function_numbers: Any
+    bf_branch: Any           # BC-kernel branch of each boundary face (by tag name)
     bf_distance: Any
     periodic_mask: Any
     has_periodic: bool
@@ -153,8 +155,9 @@ def prepare_mesh(mesh, nsm, mesh_np=None) -> MeshRT:
         inradius_f=jnp.asarray(inradius_f),
         boundary_face_cells=jnp.asarray(mesh.boundary_face_cells,
                                         dtype=jnp.int32),
-        bf_function_numbers=jnp.asarray(mesh.boundary_face_function_numbers,
-                                        dtype=jnp.int32),
+        bf_branch=jnp.asarray(
+            boundary_face_branches(mesh, getattr(nsm.sm, "_bc_source", None)),
+            dtype=jnp.int32),
         bf_distance=jnp.asarray(d_face),
         periodic_mask=jnp.asarray(periodic_np),
         has_periodic=bool(periodic_np.any()),

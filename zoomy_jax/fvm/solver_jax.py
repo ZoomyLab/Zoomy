@@ -38,6 +38,7 @@ from zoomy_core.fvm.solver_numpy import Solver as SolverNumpy
 from zoomy_jax.transformation.jax_runtime import JaxRuntime
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax, lsq_gradient_per_field
 from zoomy_core.mesh import ensure_lsq_mesh
+from zoomy_core.model.boundary_conditions import boundary_face_branches
 
 
 def _write_field_names(filepath, names):
@@ -636,13 +637,16 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             # over a size-0 boundary_face array would otherwise gather OOB.
             return lambda time, Q, Qaux, parameters: Q
 
+        bf_branch = jnp.asarray(boundary_face_branches(
+            mesh, getattr(runtime.sm, "_bc_source", None)), dtype=jnp.int32)
+
         @jax.jit
         @partial(jax.named_call, name="apply_boundary_conditions")
         def apply_boundary_conditions(time, Q, Qaux, parameters):
             def loop_body(i, Q):
                 i = jnp.asarray(i, dtype=jnp.int32)
                 i_face = mesh.boundary_face_face_indices[i]
-                i_bc_func = mesh.boundary_face_function_numbers[i]
+                i_bc_func = bf_branch[i]
                 q_cell = Q[:, mesh.boundary_face_cells[i]]
                 qaux_cell = Qaux[:, mesh.boundary_face_cells[i]]
                 normal = mesh.face_normals[:, i_face]
@@ -1085,7 +1089,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         fc0 = np.asarray(mesh.face_cells[0])
         fc1 = np.asarray(mesh.face_cells[1])
         bf_face_idx = np.asarray(mesh.boundary_face_face_indices)
-        bf_func_no = np.asarray(mesh.boundary_face_function_numbers)
+        # Kernel branch of each boundary face, matched to its tag BY NAME —
+        # the raw mesh tag number is not a branch index (create_2d numbers
+        # left,right,bottom,top; the BC kernel branches bottom,left,right,top).
+        bf_func_no = boundary_face_branches(
+            mesh, getattr(runtime.sm, "_bc_source", None))
         n_bf = int(mesh.n_boundary_faces)
         n_faces = int(mesh.n_faces)
         bf_set = set(int(f) for f in bf_face_idx)
