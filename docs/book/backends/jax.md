@@ -85,8 +85,8 @@ call); the full recipe + halo-exchange helpers live in
 
 | Class | File | What it adds |
 | --- | --- | --- |
-| `HyperbolicSolver` | `fvm/solver_jax.py:331` | JIT explicit RK1/SSP-RK2 + free-surface-aware reconstruction (`reconstruction_variables = conservative / eta / xz` — Audusse-Bouchut, Kurganov-Petrova, Xing-Zhang well-balanced recipes). |
-| `PoissonSolver` | `fvm/solver_jax.py:2193` | JIT elliptic residual solve. |
+| `HyperbolicSolver` | `fvm/solver_jax.py:333` | JIT explicit RK1/SSP-RK2 + free-surface-aware reconstruction (`reconstruction_variables = conservative / eta / xz` — Audusse-Bouchut, Kurganov-Petrova, Xing-Zhang well-balanced recipes). |
+| `PoissonSolver` | `fvm/solver_jax.py:2268` | JIT elliptic residual solve. |
 | `IMEXSourceSolverJax` | `fvm/solver_imex_jax.py:31` | Base `HyperbolicSolver` time loop (adaptive CFL, output, `ad_mode`) with two implicit stages appended to the explicit flux step: Crank-Nicolson diffusion of `diffusion_matrix`, then implicit Euler on the source (`source_mode="local"` cell-wise Newton / `"global"` Newton-GMRES). Both are Newton roots under `jax.lax.custom_root` (`fvm/implicit_ad.py`), so the step is differentiable forward and reverse; `jv_backend="ad"/"fd"/"analytic"` picks the Newton Jacobian action. |
 | `ChorinSplitVAMSolverJax` | `fvm/solver_chorin_vam_jax.py:105` | JAX port of the Chorin VAM split (same 3-sub-system constructor as NumPy). |
 
@@ -162,8 +162,53 @@ J_val, (dJ_dp, dJ_dQ0) = jax.value_and_grad(J, argnums=(0, 1))(p0, Q0)
 ```
 
 `run_simulation(Q0)` without `Qaux` rebuilds the aux state from `Q0` inside the
-differentiated path, so `dJ_dQ0` includes `dQaux0/dQ0`. Switching `ad_mode` on
-the same solver re-traces (it is part of the compiled-loop cache key).
+differentiated path, so `dJ_dQ0` includes `dQaux0/dQ0`.
+
+The solver keeps one compiled loop per configuration (`ad_mode`,
+`ad_checkpoints`, `time_end`, output settings, observer). Switching `ad_mode`
+back and forth on one solver compiles each loop once and keeps both: on the
+40-cell bump of `tests/runtime/test_ad.py` a second reverse `grad` after a
+forward `jvp` takes 0.28 s instead of 4.2 s. `setup_simulation` empties the
+cache.
+
+### Quantities of interest over the whole run
+
+`run_observed(Q0, observer, Qaux=None, parameters=None, write_output=False)`
+runs the same march and returns `(Q, Qaux, acc)`. An observer
+(`zoomy_jax.fvm.observers.Observer`) is two pure functions:
+`init(Q, Qaux, parameters) -> acc` on the initial state, and
+`update(acc, time, dt, Q, Qaux, parameters) -> acc` after every step, on the
+post-step state at the new `time`. `acc` is any pytree of fixed shapes. It is
+carried in the loop state, so it is differentiable in both modes, including the
+checkpointed reverse loop. The final `Q, Qaux` are bitwise those of
+`run_simulation`.
+
+Two observers ship ready-made:
+
+- `running_max(row)`: maximum of a state row over all cells and all time
+  levels; `acc` is a scalar.
+- `gauge_series(row, cells, times)`: a state row at `cells`, sampled at
+  `times`. The value at `t_k` interpolates linearly in time between the two
+  levels of the step that crosses it, so it moves continuously with the
+  adaptive time grid. `acc.values` has shape `(len(times), len(cells))`; a time
+  the run did not reach stays NaN.
+
+```python
+from zoomy_jax.fvm.observers import running_max, gauge_series
+
+hmax = running_max(ih)                         # build ONCE, reuse
+def J(p):
+    return solver.run_observed(Q0, hmax, parameters=p)[2]
+dJ_dp = jax.grad(J)(p0)                        # ad_mode="reverse"
+
+gauges = gauge_series(iq, cells=[5, 20, 33], times=np.linspace(0.0, T, 7))
+Q, Qaux, acc = solver.run_observed(Q0, gauges)
+series = acc.values                            # (7, 3)
+```
+
+The observer is part of the cache key, compared by the identity of its two
+functions. Reusing the same observer object reuses the compiled loop; every
+`running_max(...)` call builds a new one and compiles again.
 
 - **Time grid.** With `timestepping.adaptive` the derivative includes
   `d(dt)/d(input)`. For a frozen time grid use `timestepping.constant(dt)`.
@@ -182,6 +227,14 @@ the same solver re-traces (it is part of the compiled-loop cache key).
 - **Dry cells.** Initially dry cells give large gradient spikes (no NaN with
   order 2 + venkatakrishnan + MOOD); treat gradients at wet/dry fronts with
   care.
+- **Unconverged Newton (IMEX).** The implicit stages differentiate the EXACT
+  root by the implicit function theorem. If Newton stops at `implicit_maxiter`
+  with `||R||_2 > implicit_tol`, the result is the last iterate and its
+  derivative belongs to a different map. `newton_root` then logs a warning
+  naming the residual norm and the tolerance (`newton_root: not converged
+  ...`), also under `jit`, `jvp` and the reverse loop, where the recomputation
+  can log it again. Raise `implicit_maxiter` (or lower the CFL) until it is
+  quiet.
 
 ## Authoring checklist
 
