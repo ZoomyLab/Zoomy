@@ -1,0 +1,37 @@
+In file included from tu2_o1_plain_variadic.cpp:3:
+../raw/o1_plain.inc: In function ‘void solver_should_write(double, double, int, double)’:
+../raw/o1_plain.inc:30:24: error: assignment of read-only parameter ‘i_snapshot’
+   30 |             i_snapshot = i_snapshot + 1;
+      |             ~~~~~~~~~~~^~~~~~~~~~~~~~~~
+../raw/o1_plain.inc: In function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’:
+../raw/o1_plain.inc:55:15: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   55 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |             ~~^~~~~~~~~~
+      |             |  |
+      |             |  double
+      |             double [8]
+../raw/o1_plain.inc:55:34: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   55 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |                            ~~~~~~^~~~~~~~~~~~~~~~
+      |                            |         |
+      |                            |         double
+      |                            double [8]
+../raw/o1_plain.inc:56:14: error: assignment of read-only parameter ‘time’
+   56 |         time = dt + time;
+      |         ~~~~~^~~~~~~~~~~
+../raw/o1_plain.inc:57:19: error: assignment of read-only parameter ‘iteration’
+   57 |         iteration = iteration + 1;
+      |         ~~~~~~~~~~^~~~~~~~~~~~~~~
+../raw/o1_plain.inc: In function ‘void solver_march(double*, double*, const double*, double, int, int, double, double, double, const double*, int)’:
+../raw/o1_plain.inc:86:35: error: too many arguments to function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’
+   86 |             solver_hyperbolic_step(Q, Qaux, p, time, iteration, dt, Q, Qaux, time, iteration, troubled);
+      |             ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_plain.inc:35:36: note: declared here
+   35 |     PORTABLE_FN static inline void solver_hyperbolic_step(
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_plain.inc:88:32: error: too many arguments to function ‘void solver_should_write(double, double, int, double)’
+   88 |             solver_should_write(time, dt, i_snapshot, write_interval, do_write, i_snapshot);
+      |             ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_plain.inc:16:36: note: declared here
+   16 |     PORTABLE_FN static inline void solver_should_write(
+      |                                    ^~~~~~~~~~~~~~~~~~~

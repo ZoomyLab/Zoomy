@@ -1,0 +1,14 @@
+[1dbed N=400] nc=400 dt=1.129e-04 setup 0.5s
+  ref numpy solver: 34.8 ms/step, peak 0.2 MiB
+  1 flux eval vs reference: add.at bitwise=True (0.0e+00); bincount bitwise=True (0.0e+00)
+  shared numpy [add.at]: 2.4 ms/step, max|dQ| vs ref 0.00e+00 (bitwise True), peak 0.2 MiB
+  shared numpy [bincount]: 2.4 ms/step, max|dQ| vs ref 0.00e+00 (bitwise True), peak 0.2 MiB
+  shared jax.jit: compile+1st 1.1s, 1.14 ms/step, max|dQ| vs ref 3.59e-15, vs shared-numpy 3.59e-15
+  jxsolver_fixedVK: 2.60 ms/step (1st 1.8s), max|dQ| vs ref 3.48e-03, vs shared-jax 3.48e-03
+  jxsolver_HEADbuggyVK: 2.34 ms/step (1st 1.5s), max|dQ| vs ref 1.21e-01, vs shared-jax 1.21e-01
+  VK-bug effect inside the jax solver (buggy - fixed): 1.25e-01
+  shared-jax[vkbug]: vs shared-jax 1.23e-01  vs jxsolver_fixedVK 1.27e-01  vs jxsolver_HEADbuggyVK 3.54e-03
+  shared-jax[lift]: vs shared-jax 0.00e+00  vs jxsolver_fixedVK 3.48e-03  vs jxsolver_HEADbuggyVK 1.21e-01
+  shared-jax[stage2aux]: vs shared-jax 3.48e-03  vs jxsolver_fixedVK 2.31e-15  vs jxsolver_HEADbuggyVK 1.25e-01
+  shared-jax[lift+stage2aux]: vs shared-jax 3.48e-03  vs jxsolver_fixedVK 2.31e-15  vs jxsolver_HEADbuggyVK 1.25e-01
+  shared-jax[vkbug+lift+stage2aux]: vs shared-jax 1.21e-01  vs jxsolver_fixedVK 1.25e-01  vs jxsolver_HEADbuggyVK 2.25e-15

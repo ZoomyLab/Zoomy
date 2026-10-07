@@ -1,0 +1,13 @@
+[2d N=200] nc=40000 dt=2.258e-04 setup 11.6s
+  ref numpy solver: 3053.5 ms/step, peak 42.9 MiB
+Traceback (most recent call last):
+  File "/tmp/claude-765404697/-mnt-userdrive-Users-home-adam-obbpb5az1dhsjzf-git-zotero-rag/b5667895-053e-413b-8d69-8137a92fc71c/scratchpad/feas_np/f1_run.py", line 73, in <module>
+    fs = flux_n(0.0, Q0, A0)
+         ^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-765404697/-mnt-userdrive-Users-home-adam-obbpb5az1dhsjzf-git-zotero-rag/b5667895-053e-413b-8d69-8137a92fc71c/scratchpad/feas_np/shared_body.py", line 169, in flux_rhs
+    dQ = dQ - ops.matmul(Bk, xp.transpose(lgrad[:, k, :])[:, :, None])[:, :, 0].T
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-765404697/-mnt-userdrive-Users-home-adam-obbpb5az1dhsjzf-git-zotero-rag/b5667895-053e-413b-8d69-8137a92fc71c/scratchpad/feas_np/shared_body.py", line 85, in matmul
+    def matmul(a, b): return np.matmul(a, b)
+                             ^^^^^^^^^^^^^^^
+ValueError: operands could not be broadcast together with remapped shapes [original->remapped]: (2,4,4)->(2,newaxis,newaxis) (40000,4,1)->(40000,newaxis,newaxis)  and requested shape (4,1)

@@ -1,0 +1,5 @@
+F6 vs CORE declarations: 3 call-site errors
+  - solver_halo_bc: call passes 5 (Q, Qaux, p, time_stage, bf_values) but the declaration takes 3 (Q, Qaux, time)
+  - solver_mood_resolve: call passes 9 (troubled, Q0, Q, Qaux, p, time, dt, c_mood_h_bound, c_mood_require_finite) but the declaration takes 7 (troubled, Q0, Q_cand, Qaux, p, time, dt)
+  - solver_write_fields: call passes 5 (Q, Qaux, time, i_snapshot, do_write) but the declaration takes 4 (Q, Qaux, time, i_snapshot)
+F4 with nsm.dt_max=None: solver_march: constant 'c_dt_max' is referenced but never assigned (its MarchConstants value is None, so consts.assigns() skipped it)

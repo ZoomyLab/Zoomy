@@ -1,0 +1,68 @@
+In file included from tu_o1_mood_strict.cpp:2:
+../raw/o1_mood.inc: In function ‘void solver_should_write(double, double, int, double)’:
+../raw/o1_mood.inc:30:24: error: assignment of read-only parameter ‘i_snapshot’
+   30 |             i_snapshot = i_snapshot + 1;
+      |             ~~~~~~~~~~~^~~~~~~~~~~~~~~~
+../raw/o1_mood.inc: In function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’:
+../raw/o1_mood.inc:43:30: error: ‘Q0’ was not declared in this scope; did you mean ‘Q’?
+   43 |         solver_stage_base(Q, Q0);
+      |                              ^~
+      |                              Q
+../raw/o1_mood.inc:44:34: error: ‘troubled’ was not declared in this scope; did you mean ‘double’?
+   44 |         solver_clear_troubled(Q, troubled);
+      |                                  ^~~~~~~~
+      |                                  double
+../raw/o1_mood.inc:49:57: error: ‘bf_values’ was not declared in this scope
+   49 |         solver_halo_bc(Q, Qaux, p, time_stage, Q, Qaux, bf_values);
+      |                                                         ^~~~~~~~~
+../raw/o1_mood.inc:50:52: error: ‘Q_L’ was not declared in this scope
+   50 |         solver_reconstruct(Q, Qaux, bf_values, o1, Q_L, Q_R, lim_grad);
+      |                                                    ^~~
+../raw/o1_mood.inc:50:57: error: ‘Q_R’ was not declared in this scope
+   50 |         solver_reconstruct(Q, Qaux, bf_values, o1, Q_L, Q_R, lim_grad);
+      |                                                         ^~~
+../raw/o1_mood.inc:50:62: error: ‘lim_grad’ was not declared in this scope
+   50 |         solver_reconstruct(Q, Qaux, bf_values, o1, Q_L, Q_R, lim_grad);
+      |                                                              ^~~~~~~~
+../raw/o1_mood.inc:51:32: error: ‘cell_term’ was not declared in this scope
+   51 |         solver_no_cell_term(Q, cell_term);
+      |                                ^~~~~~~~~
+../raw/o1_mood.inc:52:60: error: ‘Fface’ was not declared in this scope
+   52 |         solver_flux_pass(Q, Qaux, p, time_stage, Q_L, Q_R, Fface, Dp, Dm);
+      |                                                            ^~~~~
+../raw/o1_mood.inc:52:67: error: ‘Dp’ was not declared in this scope; did you mean ‘p’?
+   52 |         solver_flux_pass(Q, Qaux, p, time_stage, Q_L, Q_R, Fface, Dp, Dm);
+      |                                                                   ^~
+      |                                                                   p
+../raw/o1_mood.inc:52:71: error: ‘Dm’ was not declared in this scope
+   52 |         solver_flux_pass(Q, Qaux, p, time_stage, Q_L, Q_R, Fface, Dp, Dm);
+      |                                                                       ^~
+../raw/o1_mood.inc:53:94: error: ‘Q_cand’ was not declared in this scope
+   53 |         solver_gather_update(Q, Fface, Dp, Dm, dt, c_beta_0, cell_term, Qaux, p, time_stage, Q_cand, troubled_stage);
+      |                                                                                              ^~~~~~
+../raw/o1_mood.inc:53:102: error: ‘troubled_stage’ was not declared in this scope
+   53 |         solver_gather_update(Q, Fface, Dp, Dm, dt, c_beta_0, cell_term, Qaux, p, time_stage, Q_cand, troubled_stage);
+      |                                                                                                      ^~~~~~~~~~~~~~
+../raw/o1_mood.inc:59:14: error: assignment of read-only parameter ‘time’
+   59 |         time = dt + time;
+      |         ~~~~~^~~~~~~~~~~
+../raw/o1_mood.inc:60:19: error: assignment of read-only parameter ‘iteration’
+   60 |         iteration = iteration + 1;
+      |         ~~~~~~~~~~^~~~~~~~~~~~~~~
+../raw/o1_mood.inc: In function ‘void solver_march(double*, double*, const double*, double, int, int, double, double, double, const double*, int)’:
+../raw/o1_mood.inc:81:49: error: ‘lam_lo_f’ was not declared in this scope
+   81 |             solver_dt_pass(Q, Qaux, p, c_eps_h, lam_lo_f, lam_hi_f);
+      |                                                 ^~~~~~~~
+../raw/o1_mood.inc:81:59: error: ‘lam_hi_f’ was not declared in this scope
+   81 |             solver_dt_pass(Q, Qaux, p, c_eps_h, lam_lo_f, lam_hi_f);
+      |                                                           ^~~~~~~~
+../raw/o1_mood.inc:87:139: error: ‘dt’ was not declared in this scope
+   87 |             solver_reduce_dt(lam_lo_f, lam_hi_f, inradius_f, n_faces, c_cfl, c_cfl_dimension, c_cfl_degree_factor, c_dt_max, t_remaining, dt);
+      |                                                                                                                                           ^~
+../raw/o1_mood.inc:89:95: error: ‘troubled’ was not declared in this scope; did you mean ‘double’?
+   89 |             solver_hyperbolic_step(Q, Qaux, p, time, iteration, dt, Q, Qaux, time, iteration, troubled);
+      |                                                                                               ^~~~~~~~
+      |                                                                                               double
+../raw/o1_mood.inc:91:71: error: ‘do_write’ was not declared in this scope
+   91 |             solver_should_write(time, dt, i_snapshot, write_interval, do_write, i_snapshot);
+      |                                                                       ^~~~~~~~

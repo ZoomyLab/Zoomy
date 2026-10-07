@@ -1,0 +1,36 @@
+
+--- create_1d n=20: exact grad = [0.7]; boundary cells = 2 ---
+backend                    bf conv  max|grad-b| bnd  max|grad-b| int  min phi bnd  min phi int
+numpy                      FACE          5.833e-02        2.109e-15     0.935046     1.000000
+numpy                      GHOST         1.554e-15        2.109e-15     1.000000     1.000000
+jax(fixed VK, on disk)     FACE          5.833e-02        2.109e-15     1.000000     1.000000
+jax(fixed VK, on disk)     GHOST         1.554e-15        2.109e-15     1.000000     1.000000
+jax(HEAD buggy VK)         FACE          5.833e-02        2.109e-15     1.000000     1.000000
+jax(HEAD buggy VK)         GHOST         1.554e-15        2.109e-15     1.000000     1.000000
+
+--- create_1d n=80: exact grad = [0.7]; boundary cells = 2 ---
+backend                    bf conv  max|grad-b| bnd  max|grad-b| int  min phi bnd  min phi int
+numpy                      FACE          5.833e-02        6.439e-15     0.935046     1.000000
+numpy                      GHOST         5.551e-15        6.439e-15     1.000000     1.000000
+jax(fixed VK, on disk)     FACE          5.833e-02        6.439e-15     1.000000     1.000000
+jax(fixed VK, on disk)     GHOST         5.551e-15        6.439e-15     1.000000     1.000000
+jax(HEAD buggy VK)         FACE          5.833e-02        6.439e-15     1.000000     1.000000
+jax(HEAD buggy VK)         GHOST         5.551e-15        6.439e-15     1.000000     1.000000
+
+--- create_2d n=10: exact grad = [ 0.7 -0.4]; boundary cells = 36 ---
+backend                    bf conv  max|grad-b| bnd  max|grad-b| int  min phi bnd  min phi int
+numpy                      FACE          1.400e-01        1.110e-15     0.955732     1.000000
+numpy                      GHOST         1.221e-15        1.110e-15     1.000000     1.000000
+jax(fixed VK, on disk)     FACE          1.400e-01        9.992e-16     1.000000     1.000000
+jax(fixed VK, on disk)     GHOST         1.221e-15        9.992e-16     1.000000     1.000000
+jax(HEAD buggy VK)         FACE          1.400e-01        9.992e-16     1.000000     1.000000
+jax(HEAD buggy VK)         GHOST         1.221e-15        9.992e-16     1.000000     1.000000
+
+--- create_2d n=40: exact grad = [ 0.7 -0.4]; boundary cells = 156 ---
+backend                    bf conv  max|grad-b| bnd  max|grad-b| int  min phi bnd  min phi int
+numpy                      FACE          1.400e-01        3.997e-15     0.955732     1.000000
+numpy                      GHOST         5.773e-15        3.997e-15     1.000000     1.000000
+jax(fixed VK, on disk)     FACE          1.400e-01        3.997e-15     1.000000     1.000000
+jax(fixed VK, on disk)     GHOST         5.773e-15        3.997e-15     1.000000     1.000000
+jax(HEAD buggy VK)         FACE          1.400e-01        3.997e-15     1.000000     1.000000
+jax(HEAD buggy VK)         GHOST         5.773e-15        3.997e-15     1.000000     1.000000

@@ -1,0 +1,55 @@
+In file included from tu2_o2_all_variadic.cpp:3:
+../raw/o2_all.inc: In function ‘void solver_should_write(double, double, int, double)’:
+../raw/o2_all.inc:30:24: error: assignment of read-only parameter ‘i_snapshot’
+   30 |             i_snapshot = i_snapshot + 1;
+      |             ~~~~~~~~~~~^~~~~~~~~~~~~~~~
+../raw/o2_all.inc: In function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’:
+../raw/o2_all.inc:56:15: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   56 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |             ~~^~~~~~~~~~
+      |             |  |
+      |             |  double
+      |             double [8]
+../raw/o2_all.inc:56:34: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   56 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |                            ~~~~~~^~~~~~~~~~~~~~~~
+      |                            |         |
+      |                            |         double
+      |                            double [8]
+../raw/o2_all.inc:59:16: error: redeclaration of ‘double time_stage’
+   59 |         double time_stage = dt + time;
+      |                ^~~~~~~~~~
+../raw/o2_all.inc:48:16: note: ‘double time_stage’ previously declared here
+   48 |         double time_stage = time;
+      |                ^~~~~~~~~~
+../raw/o2_all.inc:67:15: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   67 |         Q = Q0*c_alpha_1 + Q_cand*(1 - c_alpha_1);
+      |             ~~^~~~~~~~~~
+      |             |  |
+      |             |  double
+      |             double [8]
+../raw/o2_all.inc:67:34: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   67 |         Q = Q0*c_alpha_1 + Q_cand*(1 - c_alpha_1);
+      |                            ~~~~~~^~~~~~~~~~~~~~~~
+      |                            |         |
+      |                            |         double
+      |                            double [8]
+../raw/o2_all.inc:73:14: error: assignment of read-only parameter ‘time’
+   73 |         time = dt + time;
+      |         ~~~~~^~~~~~~~~~~
+../raw/o2_all.inc:74:19: error: assignment of read-only parameter ‘iteration’
+   74 |         iteration = iteration + 1;
+      |         ~~~~~~~~~~^~~~~~~~~~~~~~~
+../raw/o2_all.inc: In function ‘void solver_march(double*, double*, const double*, double, int, int, double, double, double, const double*, int)’:
+../raw/o2_all.inc:102:35: error: too many arguments to function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’
+  102 |             solver_hyperbolic_step(Q, Qaux, p, time, iteration, dt, Q, Qaux, time, iteration, troubled);
+      |             ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o2_all.inc:35:36: note: declared here
+   35 |     PORTABLE_FN static inline void solver_hyperbolic_step(
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+../raw/o2_all.inc:104:32: error: too many arguments to function ‘void solver_should_write(double, double, int, double)’
+  104 |             solver_should_write(time, dt, i_snapshot, write_interval, do_write, i_snapshot);
+      |             ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o2_all.inc:16:36: note: declared here
+   16 |     PORTABLE_FN static inline void solver_should_write(
+      |                                    ^~~~~~~~~~~~~~~~~~~

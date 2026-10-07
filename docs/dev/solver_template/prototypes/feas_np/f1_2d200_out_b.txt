@@ -1,0 +1,14 @@
+[2d N=200] nc=40000 dt=2.258e-04 setup 14.9s
+  1 flux eval vs reference: add.at bitwise=True (0.0e+00); bincount bitwise=False (1.1e-13)
+  shared numpy [add.at]: 232.9 ms/step, max|dQ| vs ref 0.00e+00 (bitwise True), peak 47.8 MiB
+  shared numpy [bincount]: 221.4 ms/step, max|dQ| vs ref 2.92e-15 (bitwise False), peak 47.8 MiB
+An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+  shared jax.jit: compile+1st 2.4s, 31.87 ms/step, max|dQ| vs ref 3.29e-15, vs shared-numpy 3.29e-15
+  jxsolver_fixedVK: 57.98 ms/step (1st 14.1s), max|dQ| vs ref 3.61e-03, vs shared-jax 3.61e-03
+  jxsolver_HEADbuggyVK: 58.70 ms/step (1st 15.0s), max|dQ| vs ref 1.45e-01, vs shared-jax 1.45e-01
+  VK-bug effect inside the jax solver (buggy - fixed): 1.48e-01
+  shared-jax[vkbug]: vs shared-jax 1.47e-01  vs jxsolver_fixedVK 1.51e-01  vs jxsolver_HEADbuggyVK 5.89e-03
+  shared-jax[lift]: vs shared-jax 0.00e+00  vs jxsolver_fixedVK 3.61e-03  vs jxsolver_HEADbuggyVK 1.45e-01
+  shared-jax[stage2aux]: vs shared-jax 3.61e-03  vs jxsolver_fixedVK 4.18e-15  vs jxsolver_HEADbuggyVK 1.48e-01
+  shared-jax[lift+stage2aux]: vs shared-jax 3.61e-03  vs jxsolver_fixedVK 4.18e-15  vs jxsolver_HEADbuggyVK 1.48e-01
+  shared-jax[vkbug+lift+stage2aux]: vs shared-jax 1.45e-01  vs jxsolver_fixedVK 1.48e-01  vs jxsolver_HEADbuggyVK 2.43e-15

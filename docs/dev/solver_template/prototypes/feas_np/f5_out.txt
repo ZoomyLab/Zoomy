@@ -1,0 +1,18 @@
+SWE 1-D          PositiveNonconservativeRusanov             supports_batched_faces=False
+      numerical_flux           bitwise vs scalar loop=False nonfinite=0/0 differing=121/9000 max|d|=5.7e-14 max rel=5.4e-16 (max|val|=2.6e+02); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=True nonfinite=0/0 differing=0/18000 max|d|=0.0e+00 max rel=0.0e+00 (max|val|=3.6e+14); bitwise vs loop of (nv,1)-column calls=True
+SWE 1-D          NonconservativeRusanov(batched-validated)  supports_batched_faces=True
+      numerical_flux           bitwise vs scalar loop=False nonfinite=0/0 differing=2/9000 max|d|=5.3e-23 max rel=3.0e-16 (max|val|=2.1e+02); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=True nonfinite=0/0 differing=0/18000 max|d|=0.0e+00 max rel=0.0e+00 (max|val|=3.8e+14); bitwise vs loop of (nv,1)-column calls=True
+SWE 2-D          PositiveNonconservativeRusanov             supports_batched_faces=False
+      numerical_flux           bitwise vs scalar loop=False nonfinite=0/0 differing=245/12000 max|d|=5.7e-14 max rel=3.1e-14 (max|val|=2.4e+02); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=False nonfinite=0/0 differing=12/24000 max|d|=7.1e-15 max rel=3.6e-16 (max|val|=3.8e+14); bitwise vs loop of (nv,1)-column calls=True
+SWE 2-D          NonconservativeRusanov(batched-validated)  supports_batched_faces=True
+      numerical_flux           bitwise vs scalar loop=False nonfinite=0/0 differing=2/12000 max|d|=8.9e-16 max rel=1.0e-14 (max|val|=3.1e+02); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=True nonfinite=0/0 differing=0/24000 max|d|=0.0e+00 max rel=0.0e+00 (max|val|=4.4e+14); bitwise vs loop of (nv,1)-column calls=True
+SME(level=1) 1-D PositiveNonconservativeRusanov             supports_batched_faces=False
+      numerical_flux           bitwise vs scalar loop=False nonfinite=0/0 differing=285/12000 max|d|=1.9e-06 max rel=1.2e-14 (max|val|=5.3e+12); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=False nonfinite=0/0 differing=265/24000 max|d|=2.4e-04 max rel=2.1e-13 (max|val|=7.9e+12); bitwise vs loop of (nv,1)-column calls=True
+SME(level=1) 1-D NonconservativeRusanov(batched-validated)  supports_batched_faces=True
+      numerical_flux           bitwise vs scalar loop=True nonfinite=0/0 differing=0/12000 max|d|=0.0e+00 max rel=0.0e+00 (max|val|=3.6e+08); bitwise vs loop of (nv,1)-column calls=True
+      numerical_fluctuations   bitwise vs scalar loop=False nonfinite=0/0 differing=6/24000 max|d|=3.6e-15 max rel=8.5e-16 (max|val|=6.3e+08); bitwise vs loop of (nv,1)-column calls=True

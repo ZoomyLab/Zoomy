@@ -1,0 +1,26 @@
+callee                        caller                  raw dedup  core-decl    ARG_SLOTS verdict
+solver_apply_dt_floor         solver_march              3     2  doc:2->1             - OK
+solver_assert_dt_admissible   solver_march              7     6  doc:6->1             - OK
+solver_assert_march_progress  solver_march              4     4  doc:4->0             - OK
+solver_cell_ncp               solver_hyperbolic_step    5     5  doc:4->1             - OK
+solver_clear_troubled         solver_hyperbolic_step    2     2  doc:1->1             - OK
+solver_coupling_face_fixup    solver_hyperbolic_step    7     4  args:4+0             - OK
+solver_dt_pass                solver_march              6     6  doc:4->2             8 OK
+solver_flux_pass              solver_hyperbolic_step    9     9  doc:6->3            11 OK
+solver_gather_update          solver_hyperbolic_step   12    12  doc:10->2           13 OK
+solver_gather_update          solver_hyperbolic_step   12    12  doc:10->2           13 OK
+solver_halo_bc                solver_hyperbolic_step    7     5  args:3+0             - MISMATCH (3 vs 5)
+solver_hyperbolic_step        solver_march             11     7  Procedure            - -
+solver_implicit_diffusion     solver_hyperbolic_step    5     4  args:4+0             - OK
+solver_implicit_source        solver_hyperbolic_step    5     4  args:4+0             - OK
+solver_merge_troubled         solver_hyperbolic_step    3     2  doc:2->1             - OK
+solver_mood_resolve           solver_hyperbolic_step   10     9  args:7+0             - MISMATCH (7 vs 9)
+solver_no_cell_term           solver_hyperbolic_step    2     2  doc:1->1             - OK
+solver_reconstruct            solver_hyperbolic_step    7     7  doc:4->3             - OK
+solver_reduce_dt              solver_march             10    10  doc:9->1             6 OK
+solver_reduce_dt              solver_march             10    10  doc:9->1             6 OK
+solver_should_write           solver_march              6     5  Procedure            - -
+solver_stage_base             solver_hyperbolic_step    2     2  doc:1->1             - OK
+solver_update_aux             solver_hyperbolic_step    6     5  doc:5->1             - OK
+solver_update_variables       solver_hyperbolic_step    6     5  doc:5->1             - OK
+solver_write_fields           solver_march              5     5  args:4+0             - MISMATCH (4 vs 5)

@@ -1,0 +1,58 @@
+In file included from tu2_o1_mood_strict.cpp:3:
+../raw/o1_mood.inc: In function ‘void solver_should_write(double, double, int, double)’:
+../raw/o1_mood.inc:30:24: error: assignment of read-only parameter ‘i_snapshot’
+   30 |             i_snapshot = i_snapshot + 1;
+      |             ~~~~~~~~~~~^~~~~~~~~~~~~~~~
+../raw/o1_mood.inc: In function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’:
+../raw/o1_mood.inc:49:33: error: cannot convert ‘const double*’ to ‘double’
+   49 |         solver_halo_bc(Q, Qaux, p, time_stage, Q, Qaux, bf_values);
+      |                                 ^
+      |                                 |
+      |                                 const double*
+In file included from tu2_o1_mood_strict.cpp:1:
+stubs_strict.hpp:13:65: note:   initializing argument 3 of ‘void solver_halo_bc(const double*, const double*, double)’
+   13 | void solver_halo_bc(const double* Q, const double* Qaux, double time);
+      |                                                          ~~~~~~~^~~~
+../raw/o1_mood.inc:55:15: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   55 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |             ~~^~~~~~~~~~
+      |             |  |
+      |             |  double
+      |             double [8]
+../raw/o1_mood.inc:55:34: error: invalid operands of types ‘double [8]’ and ‘double’ to binary ‘operator*’
+   55 |         Q = Q0*c_alpha_0 + Q_cand*(1 - c_alpha_0);
+      |                            ~~~~~~^~~~~~~~~~~~~~~~
+      |                            |         |
+      |                            |         double
+      |                            double [8]
+../raw/o1_mood.inc:58:28: error: too many arguments to function ‘void solver_mood_resolve(int*, const double*, double*, const double*, const double*, double, double)’
+   58 |         solver_mood_resolve(troubled, Q0, Q, Qaux, p, time, dt, c_mood_h_bound, c_mood_require_finite, Q);
+      |         ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+stubs_strict.hpp:14:6: note: declared here
+   14 | void solver_mood_resolve(int* troubled, const double* Q0, double* Q_cand,
+      |      ^~~~~~~~~~~~~~~~~~~
+../raw/o1_mood.inc:59:14: error: assignment of read-only parameter ‘time’
+   59 |         time = dt + time;
+      |         ~~~~~^~~~~~~~~~~
+../raw/o1_mood.inc:60:19: error: assignment of read-only parameter ‘iteration’
+   60 |         iteration = iteration + 1;
+      |         ~~~~~~~~~~^~~~~~~~~~~~~~~
+../raw/o1_mood.inc: In function ‘void solver_march(double*, double*, const double*, double, int, int, double, double, double, const double*, int)’:
+../raw/o1_mood.inc:89:35: error: too many arguments to function ‘void solver_hyperbolic_step(double*, double*, const double*, double, int, double)’
+   89 |             solver_hyperbolic_step(Q, Qaux, p, time, iteration, dt, Q, Qaux, time, iteration, troubled);
+      |             ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_mood.inc:35:36: note: declared here
+   35 |     PORTABLE_FN static inline void solver_hyperbolic_step(
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_mood.inc:91:32: error: too many arguments to function ‘void solver_should_write(double, double, int, double)’
+   91 |             solver_should_write(time, dt, i_snapshot, write_interval, do_write, i_snapshot);
+      |             ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../raw/o1_mood.inc:16:36: note: declared here
+   16 |     PORTABLE_FN static inline void solver_should_write(
+      |                                    ^~~~~~~~~~~~~~~~~~~
+../raw/o1_mood.inc:92:32: error: too many arguments to function ‘void solver_write_fields(const double*, const double*, double, int)’
+   92 |             solver_write_fields(Q, Qaux, time, i_snapshot, do_write);
+      |             ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+stubs_strict.hpp:18:6: note: declared here
+   18 | void solver_write_fields(const double* Q, const double* Qaux, double time, int i_snapshot);
+      |      ^~~~~~~~~~~~~~~~~~~

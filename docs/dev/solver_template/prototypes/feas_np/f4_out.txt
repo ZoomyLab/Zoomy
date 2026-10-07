@@ -1,0 +1,18 @@
+SME0 2-D F11 set (Dirichlet-perfield/Extrap/Wall/Wall) N=8 [as-shipped]: batched FAILED ValueError: setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. T
+SME0 2-D F11 set (Dirichlet-perfield/Extrap/Wall/Wall) N=8 n_bf=32 [broadcasting-array]: out (4, 32); bitwise=True; max|d|=0.0e+00; loop 0.89 ms vs batched 0.074 ms (12x)
+    per-face eval with broadcasting module == shipped: True
+SME0 2-D F11 set (Dirichlet-perfield/Extrap/Wall/Wall) N=200 [as-shipped]: batched FAILED ValueError: setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. T
+SME0 2-D F11 set (Dirichlet-perfield/Extrap/Wall/Wall) N=200 n_bf=800 [broadcasting-array]: out (4, 800); bitwise=True; max|d|=0.0e+00; loop 31.93 ms vs batched 0.174 ms (183x)
+    per-face eval with broadcasting module == shipped: True
+SWE 2-D Lambda(X,t)/InflowOutflow/RoughWall/FromModel N=8 [as-shipped]: batched FAILED ValueError: setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. T
+SWE 2-D Lambda(X,t)/InflowOutflow/RoughWall/FromModel N=8 n_bf=32 [broadcasting-array]: out (4, 32); bitwise=True; max|d|=0.0e+00; loop 1.59 ms vs batched 0.151 ms (11x)
+    per-face eval with broadcasting module == shipped: True
+SWE 2-D Lambda(X,t)/InflowOutflow/RoughWall/FromModel N=200 [as-shipped]: batched FAILED ValueError: setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. T
+SWE 2-D Lambda(X,t)/InflowOutflow/RoughWall/FromModel N=200 n_bf=800 [broadcasting-array]: out (4, 800); bitwise=True; max|d|=0.0e+00; loop 19.40 ms vs batched 0.121 ms (160x)
+    per-face eval with broadcasting module == shipped: True
+SWE 1-D Characteristic(opaque eig)/CharacteristicWall N=50 n_bf=2 [as-shipped]: out (3, 2); bitwise=True; max|d|=0.0e+00; loop 0.47 ms vs batched 0.222 ms (2x)
+SWE 1-D Characteristic(opaque eig)/CharacteristicWall N=50 n_bf=2 [broadcasting-array]: out (3, 2); bitwise=True; max|d|=0.0e+00; loop 0.47 ms vs batched 0.225 ms (2x)
+    per-face eval with broadcasting module == shipped: True
+SWE 1-D Dirichlet(h)/FromData N=50 [as-shipped]: batched FAILED ValueError: setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. T
+SWE 1-D Dirichlet(h)/FromData N=50 n_bf=2 [broadcasting-array]: out (3, 2); bitwise=True; max|d|=0.0e+00; loop 0.12 ms vs batched 0.066 ms (2x)
+    per-face eval with broadcasting module == shipped: True

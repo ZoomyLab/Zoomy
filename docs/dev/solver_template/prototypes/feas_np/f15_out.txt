@@ -1,0 +1,28 @@
+
+=== create_1d  (slots tested; |out-u_face|, |out-u_ghost|, |out-u_cell| maxed over left/right faces) ===
+Extrapolation                                        left: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)  right: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Periodic                                             left: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)  right: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Coupled                                              left: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)  right: f=3.50e-02 g=7.00e-02 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Dirichlet(on=h)                                      left: f=0.00e+00 g=2.00e-02 c=2.00e-02 -> FACE  right: f=0.00e+00 g=2.00e-02 c=2.00e-02 -> FACE   numpy==jax: True
+InflowOutflow                                        left: f=0.00e+00 g=3.50e-02 c=3.50e-02 -> FACE  right: f=0.00e+00 g=3.50e-02 c=3.50e-02 -> FACE   numpy==jax: True
+Lambda(a+b*X0)                                       left: f=0.00e+00 g=3.50e-02 c=3.50e-02 -> FACE  right: f=0.00e+00 g=3.50e-02 c=3.50e-02 -> FACE   numpy==jax: True
+FromData                                             left: f=3.50e-02 g=0.00e+00 c=7.00e-02 -> GHOST  right: f=3.50e-02 g=0.00e+00 c=7.00e-02 -> GHOST   numpy==jax: True
+Characteristic(target=lin, supercrit in at left)     left: f=0.00e+00 g=3.50e-02 c=3.50e-02 -> FACE  right: f=2.25e-02 g=5.75e-02 c=2.33e-02 -> MIXED   numpy==jax: True
+Wall                                                 left: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST  right: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST   numpy==jax: True
+RoughWall                                            left: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST  right: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST   numpy==jax: True
+FromModel(wall)                                      left: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST  right: f=1.00e-01 g=0.00e+00 c=2.00e-01 -> GHOST   numpy==jax: True
+CharacteristicWall                                   left: f=1.16e-02 g=9.69e-02 c=1.03e-01 -> MIXED  right: f=4.72e-02 g=9.80e-02 c=1.02e-01 -> MIXED   numpy==jax: True
+
+=== create_2d  (slots tested; |out-u_face|, |out-u_ghost|, |out-u_cell| maxed over left/right faces) ===
+Extrapolation                                        left: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)  right: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Periodic                                             left: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)  right: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Coupled                                              left: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)  right: f=5.83e-02 g=1.17e-01 c=0.00e+00 -> IDENTITY(=cell)   numpy==jax: True
+Dirichlet(on=h)                                      left: f=0.00e+00 g=3.33e-02 c=3.33e-02 -> FACE  right: f=0.00e+00 g=3.33e-02 c=3.33e-02 -> FACE   numpy==jax: True
+InflowOutflow                                        left: f=0.00e+00 g=5.83e-02 c=5.83e-02 -> FACE  right: f=0.00e+00 g=5.83e-02 c=5.83e-02 -> FACE   numpy==jax: True
+Lambda(a+b*X0)                                       left: f=0.00e+00 g=5.83e-02 c=5.83e-02 -> FACE  right: f=0.00e+00 g=5.83e-02 c=5.83e-02 -> FACE   numpy==jax: True
+FromData                                             left: f=5.83e-02 g=0.00e+00 c=1.17e-01 -> GHOST  right: f=5.83e-02 g=0.00e+00 c=1.17e-01 -> GHOST   numpy==jax: True
+Characteristic(target=lin, supercrit in at left)     left: f=0.00e+00 g=5.83e-02 c=5.83e-02 -> FACE  right: f=3.98e-02 g=9.82e-02 c=3.91e-02 -> MIXED   numpy==jax: True
+Wall                                                 left: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST  right: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST   numpy==jax: True
+RoughWall                                            left: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST  right: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST   numpy==jax: True
+FromModel(wall)                                      left: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST  right: f=1.67e-01 g=0.00e+00 c=3.33e-01 -> GHOST   numpy==jax: True
+CharacteristicWall                                   left: f=1.90e-02 g=1.58e-01 c=1.75e-01 -> MIXED  right: f=7.89e-02 g=1.61e-01 c=1.72e-01 -> MIXED   numpy==jax: True
