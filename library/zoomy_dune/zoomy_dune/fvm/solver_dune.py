@@ -269,7 +269,8 @@ class HyperbolicSolver(param.Parameterized):
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "grid_cache.hh"),
                 self.gridView)
-        size, level, a, b = self._grid_cache(self.gridView)
+        size, level, a, b, n_interior = self._grid_cache(self.gridView)
+        self._n_interior = int(n_interior)
         self._cell_size = np.asarray(size, dtype=float)
         self._level = np.asarray(level, dtype=np.int32)
         self._faces = np.column_stack((np.asarray(a, dtype=np.int64),
@@ -388,7 +389,14 @@ class HyperbolicSolver(param.Parameterized):
 
     @property
     def n_cell(self):
-        return int(self.comm.sum(self.gridView.size(0)))
+        """Cells in the GLOBAL mesh.
+
+        ``gridView.size(0)`` counts this rank's ghosts too, so summing it over
+        ranks double-counts every cell on a partition boundary -- it reported
+        28746 for the 26000-cell mesh on 16 ranks. The compiled grid cache
+        returns the owned count instead.
+        """
+        return int(self.comm.sum(self._n_interior))
 
     @property
     def adaptive(self):
@@ -406,8 +414,20 @@ class HyperbolicSolver(param.Parameterized):
         self.log(f"start mesh: {self.n_cell} cells")
 
     def compute_dt(self):
+        """CFL over every cell this rank sees, then the global minimum.
+
+        Guarded against a zero cell size: a single unwritten row makes the
+        division nan, `.max()` propagates it, and `comm.max` then hands the nan
+        to every rank -- which is exactly what a ghost row did before the grid
+        cache covered Partitions::all.
+        """
         self._speed.interpolate(as_vector([self._wave_speed]))
-        local = float((np.abs(self._speed.as_numpy) / self._cell_size).max())
+        size = np.maximum(self._cell_size, 1e-12)
+        local = float((np.abs(self._speed.as_numpy) / size).max())
+        if not np.isfinite(local):
+            raise FloatingPointError(
+                "compute_dt: non-finite CFL ratio. Either the state carries "
+                "NaN or a cell size is unset (see grid_cache.hh).")
         return self.CFL / max(self.comm.max(local), 1e-12)
 
     def update_aux(self):

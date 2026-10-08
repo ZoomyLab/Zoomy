@@ -12,6 +12,8 @@ already prints, bound through ``zoomy_flux.hh``.
 import os
 import shutil
 
+import numpy as np
+
 import param
 import ufl
 from ufl import as_matrix, as_vector, conditional, dot, grad, sqrt
@@ -156,7 +158,22 @@ class FemDGSolver(HyperbolicSolver):
         self._previous = self.Q.copy()
 
     def step(self, dt=None):
-        self.time += self.stepper(self.Q, dt)
+        """One stepper call at OUR time step, not the stepper's own estimate.
+
+        femdgStepper reuses the time-step bound left by the previous operator
+        application, which was measured on the PRE-ADAPTATION grid. Under AMR
+        that bound is stale for every step until the next adaptation -- one
+        refinement level is a factor two in cell size, so at adapt_interval=20
+        it is a sustained 2x CFL violation. It showed as dt RISING (6.1e-3 ->
+        7.05e-3) while the mesh quadrupled 59k -> 160k cells, and then NaN at
+        t = 150 s with the volume still conserved to 3e-8 right up to it.
+
+        ``compute_dt`` reads the cell sizes the compiled grid cache rebuilds
+        inside ``adapt``, so it cannot go stale. It is also the rule
+        ``HyperbolicSolver`` marches on, which is what makes the two solvers
+        comparable at all.
+        """
+        self.time += self.stepper(self.Q, self.compute_dt() if dt is None else dt)
 
     def run_simulation(self):
         interval = self.time_end / self.settings.output.snapshots
@@ -167,8 +184,14 @@ class FemDGSolver(HyperbolicSolver):
         while self.time < self.time_end:
             if self.adaptive and n_step % self.adapt_interval == 0:
                 self.adapt()
-            self.step()
+            self.step(min(self.compute_dt(), self.time_end - self.time))
             n_step += 1
+            if not np.isfinite(self.stepper.deltaT):
+                raise FloatingPointError(
+                    f"t = {self.time:.3f}: stepper returned dt = "
+                    f"{self.stepper.deltaT}. A non-finite step means the state "
+                    "carries NaN -- the run is over, and marching on would "
+                    "silently 'reach' time_end in one step.")
             if self.time >= next_output:
                 self.write_snapshot()
                 next_output += interval
