@@ -424,11 +424,16 @@ class HyperbolicSolver(param.Parameterized):
         self._speed.interpolate(as_vector([self._wave_speed]))
         size = np.maximum(self._cell_size, 1e-12)
         local = float((np.abs(self._speed.as_numpy) / size).max())
-        if not np.isfinite(local):
+        # Reduce FIRST, raise after. A rank-local raise in front of a
+        # collective hangs the job: the failing rank leaves while the others
+        # block in comm.max forever. NaN is mapped to inf so MPI_MAX carries it
+        # deterministically, and then every rank raises on the same value.
+        glob = float(self.comm.max(local if np.isfinite(local) else np.inf))
+        if not np.isfinite(glob):
             raise FloatingPointError(
-                "compute_dt: non-finite CFL ratio. Either the state carries "
-                "NaN or a cell size is unset (see grid_cache.hh).")
-        return self.CFL / max(self.comm.max(local), 1e-12)
+                "compute_dt: non-finite CFL ratio on some rank. Either the "
+                "state carries NaN or a cell size is unset (grid_cache.hh).")
+        return self.CFL / max(glob, 1e-12)
 
     def update_aux(self):
         self.Qaux.interpolate(
