@@ -102,7 +102,15 @@ class FemDGSolver(HyperbolicSolver):
                 return as_vector([u[row_h + 1 + d] * hinv for d in range(dim)])
 
             def physical(t, x, u):
-                return conditional(u[row_h] > 0, 1, 0)
+                # h >= 0, not h > 0. The admissible set of wetting/drying SWE
+                # includes the dry state: a cell at [b, 0, 0, 0] is ordinary,
+                # and most of the Malpasset mesh is exactly that. With the
+                # strict test the limiter called every dry cell troubled and
+                # femDG aborted on the first one -- "Average Value 68.007 0 0 0
+                # in point 7036.8 3636.84 is Unphysical!" -- which is why every
+                # case ran with limiter="none" and therefore with no positivity
+                # safeguard at all.
+                return conditional(u[row_h] >= 0, 1, 0)
 
             def jump(t, x, u, w):
                 # Relative depth jump across a face. Two dry cells give 0/0,
