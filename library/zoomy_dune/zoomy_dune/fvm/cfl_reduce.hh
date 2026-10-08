@@ -27,7 +27,13 @@
  * grid is silently a wrong dt rather than an error. Recomputing the perimeter
  * is a handful of flops against the state evaluation already done per cell.
  *
- * Non-finite is returned, not skipped. std::max( a, NaN ) is a < NaN ? NaN : a,
+ * Non-finite is returned, not skipped, and it is tested at EVERY max on the
+ * way -- on the state, on each eigenvalue, and on the ratio. Guarding only the
+ * last one is not enough: a NaN state gave lambda = NaN, which
+ * `std::max( 0.0, NaN )` turned back into 0.0, so the ratio was a clean zero
+ * and the run sailed past the guard into an all-NaN field.
+ *
+ * std::max( a, NaN ) is a < NaN ? NaN : a,
  * which is `a` -- so a NaN cell reduces to nothing and the dt comes back
  * SMALLER than the truth, the marker de-refines around the hole and the run
  * marches to time_end reporting success. That cost a 160 s AMR run that
@@ -68,7 +74,14 @@ double cflReduce ( const GridView &gridView, const DiscreteFunction &Q )
 
     double state[ nvar ];
     for( int i = 0; i < nvar; ++i )
+    {
       state[ i ] = value[ i ];
+      // Checked HERE, on the state, not only on the ratio further down: every
+      // std::max between the two swallows a NaN silently, so by the time the
+      // ratio is formed the evidence is gone.
+      if( !std::isfinite( state[ i ] ) )
+        return std::numeric_limits< double >::infinity();
+    }
 
     const auto global = geometry.center();
     double X[ GridView::dimensionworld ];
@@ -82,7 +95,10 @@ double cflReduce ( const GridView &gridView, const DiscreteFunction &Q )
     {
       auto s = ZoomyNumerics::local_max_abs_eigenvalue(
           state, aux.begin(), zoomy_parameters, normals[ axis ] );
-      speed = std::max( speed, std::abs( s[ 0 ] ) );
+      const double lambda = std::abs( s[ 0 ] );
+      if( !std::isfinite( lambda ) )
+        return std::numeric_limits< double >::infinity();
+      speed = std::max( speed, lambda );
     }
 
     double perimeter = 0.0;
