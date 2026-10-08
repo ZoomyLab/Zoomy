@@ -7,6 +7,8 @@ solver owns the grid, the spaces, the time loop and the output.
     solver.setup_simulation(mesh_path, model, initial_condition)
     solver.run_simulation()
 """
+import hashlib
+import io
 import os
 import shutil
 import xml.etree.ElementTree as ET
@@ -25,11 +27,13 @@ from dune.fem.view import adaptiveLeafGridView
 from dune.generator import algorithm
 from dune.grid import reader
 
+from zoomy_core.solver.constants import kp_eps
 from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeHLL
 from zoomy_core.misc.misc import Settings, Zstruct
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
 from zoomy_core.transformation.to_numpy import NumpyRuntimeModel
+from zoomy_core.transformation.to_c import CppModel, CppNumerics
 from zoomy_core.transformation.to_ufl import UFLRuntimeModel
 
 
@@ -53,6 +57,7 @@ class HyperbolicSolver(param.Parameterized):
     CFL = param.Number(0.9, bounds=(0.0, 1.0), doc="Courant number")
     dg_degree = param.Integer(0, bounds=(0, 2), doc="DG polynomial degree")
     threads = param.Integer(4, bounds=(1, None), doc="OpenMP threads")
+    c_directory = param.String(".zoomy_c", doc="Where the printed headers land")
     settings = param.Parameter(default=None, doc="Settings (output directory, snapshots)")
     riemann_solver_cls = param.Parameter(default=PositiveNonconservativeHLL,
                                          doc="Symbolic Riemann solver class")
@@ -82,6 +87,7 @@ class HyperbolicSolver(param.Parameterized):
         self._times = []
         self._perm = None
         self._grid_cache = None
+        self._cfl_reduce = None
 
 
     def setup_simulation(self, mesh_path, model, initial_condition=None):
@@ -126,7 +132,42 @@ class HyperbolicSolver(param.Parameterized):
         self._row_b, self._row_h = names.index("b"), names.index("h")
         self.n_var = len(self.system_model.state)
         self.n_aux = len(self.system_model.aux_state)
+        # The model's OWN desingularised 1/h, not a backend 1/max(h, eps).
+        # MalpassetSWE carries the Kurganov-Petrova hinv as aux precisely so
+        # that every backend divides by depth the same way; reconstructing it
+        # here would be a second, disagreeing regularisation.
+        aux_names = [str(a) for a in self.system_model.aux_state]
+        self._row_hinv = aux_names.index("hinv") if "hinv" in aux_names else None
+        self._kp_eps = kp_eps(self.system_model)[0]
         self._report_boundary(model)
+        self._emit_headers()
+
+    def _emit_headers(self):
+        """Print Model.H / Numerics.H / ZoomyParameters.H and the kernels that
+        include them.
+
+        Both solvers need these now: the CFL reduction runs on the printed
+        eigenvalues rather than on a UFL interpolation of them. The parameters
+        go in as a header rather than as a call argument because dune infers
+        the C++ argument types from the Python values, and a list of floats has
+        no unambiguous reading.
+        """
+        root = os.path.abspath(self.c_directory)
+        settings = Settings(name="zoomy_c",
+                            output=Zstruct(directory=root, filename="c"))
+        CppModel.write_code(self.system_model, settings, filename="Model.H")
+        CppNumerics.write_code(self.riemann_solver_cls(self.system_model),
+                               settings, filename="Numerics.H")
+        self._c_dir = os.path.join(root, ".c_interface")
+        values = [float(v) for v in self.parameters]
+        with open(os.path.join(self._c_dir, "ZoomyParameters.H"), "w") as out:
+            out.write("#pragma once\nstatic constexpr double zoomy_parameters[] = {\n")
+            out.write(",\n".join(f"    {v!r}" for v in values))
+            out.write("\n};\n")
+        shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "cfl_reduce.hh"), self._c_dir)
+        self.log(f"printed Model.H, Numerics.H, {len(values)} parameters "
+                 f"-> {self._c_dir}")
 
     def _report_boundary(self, model):
         """Name the boundary treatment in the log, every run.
@@ -413,6 +454,33 @@ class HyperbolicSolver(param.Parameterized):
                 break
         self.log(f"start mesh: {self.n_cell} cells")
 
+    #: The headers a compiled kernel sees; their contents name the module.
+    KERNEL_HEADERS = ("Model.H", "Numerics.H", "ZoomyParameters.H")
+
+    def _kernel_source(self, kernel):
+        """A one-line translation unit that includes `kernel` by absolute path.
+
+        `algorithm.load` INLINES the source it is handed into
+        `.dune-py/.../generated`, so a `#include "Model.H"` written inside the
+        kernel would be looked up next to the generated file and not next to
+        the kernel -- a `No such file or directory` at the first dt. Including
+        the kernel by absolute path instead puts it back in its own directory,
+        where the quoted includes resolve.
+
+        dune names the module after a hash of the source it is given, which
+        here is one invariant line. The digest over the kernel and the printed
+        headers goes in so that a different model, or an edited kernel, is a
+        different module rather than a stale hit in the dune-py cache.
+        """
+        paths = [os.path.join(self._c_dir, name)
+                 for name in (kernel,) + self.KERNEL_HEADERS]
+        digest = hashlib.sha256()
+        for path in paths:
+            with open(path, "rb") as header:
+                digest.update(header.read())
+        return io.StringIO(f'// zoomy {digest.hexdigest()[:16]}\n'
+                           f'#include "{paths[0]}"\n')
+
     def compute_dt(self):
         """CFL over every cell this rank sees, then the global minimum.
 
@@ -421,9 +489,11 @@ class HyperbolicSolver(param.Parameterized):
         to every rank -- which is exactly what a ghost row did before the grid
         cache covered Partitions::all.
         """
-        self._speed.interpolate(as_vector([self._wave_speed]))
-        size = np.maximum(self._cell_size, 1e-12)
-        local = float((np.abs(self._speed.as_numpy) / size).max())
+        if self._cfl_reduce is None:
+            self._cfl_reduce = algorithm.load(
+                "cflReduce", self._kernel_source("cfl_reduce.hh"),
+                self.gridView, self.Q)
+        local = float(self._cfl_reduce(self.gridView, self.Q))
         # Reduce FIRST, raise after. A rank-local raise in front of a
         # collective hangs the job: the failing rank leaves while the others
         # block in comm.max forever. NaN is mapped to inf so MPI_MAX carries it

@@ -22,8 +22,6 @@ from dune.femdg import femDGModels, femDGOperator
 from dune.femdg.boundary import BndValue
 from dune.femdg.rk import femdgStepper
 
-from zoomy_core.misc.misc import Settings, Zstruct
-from zoomy_core.transformation.to_c import CppModel, CppNumerics
 from zoomy_dune.fvm.solver_dune import HyperbolicSolver, scalar, vec
 
 
@@ -37,36 +35,12 @@ class FemDGSolver(HyperbolicSolver):
 
     limiter = param.Parameter(default="none", doc="femDG limiter; 'none' at DG0")
     rk_order = param.Integer(2, bounds=(1, 4), doc="Explicit Runge-Kutta order")
-    c_directory = param.String(".zoomy_c", doc="Where the printed headers land")
-
-    def _lower_model(self, model):
-        super()._lower_model(model)
-        self._emit_headers()
 
     def _emit_headers(self):
-        """Print Model.H / Numerics.H and park the fixed adapter beside them.
-
-        The parameter values are written as a header rather than passed to the
-        flux constructor: dune infers the C++ argument types from the Python
-        values, and a list of floats has no unambiguous reading.
-        """
-        root = os.path.abspath(self.c_directory)
-        settings = Settings(name="zoomy_c",
-                            output=Zstruct(directory=root, filename="c"))
-        CppModel.write_code(self.system_model, settings, filename="Model.H")
-        CppNumerics.write_code(self.riemann_solver_cls(self.system_model),
-                               settings, filename="Numerics.H")
-        self._c_dir = os.path.join(root, ".c_interface")
-
-        values = [float(v) for v in self.parameters]
-        with open(os.path.join(self._c_dir, "ZoomyParameters.H"), "w") as out:
-            out.write("#pragma once\nstatic constexpr double zoomy_parameters[] = {\n")
-            out.write(",\n".join(f"    {v!r}" for v in values))
-            out.write("\n};\n")
+        """The base class's headers plus this backend's own flux adapter."""
+        super()._emit_headers()
         shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  "zoomy_flux.hh"), self._c_dir)
-        self.log(f"printed Model.H, Numerics.H, {len(values)} parameters "
-                 f"-> {self._c_dir}")
 
     def _aux_of(self, u):
         """Aux from the state, not from a stored field: femDGOperator runs its
@@ -79,6 +53,12 @@ class FemDGSolver(HyperbolicSolver):
         runtime, numerics, p = self.runtime, self.numerics, self.parameters
         n_var, dim = self.n_var, self.gridView.dimension
         aux_of, row_h = self._aux_of, self._row_h
+        row_hinv, kp_eps = self._row_hinv, self._kp_eps
+        if row_hinv is None:
+            raise NotImplementedError(
+                "the femDG limiter hooks divide by depth and need the model's "
+                "desingularised 'hinv' aux row; this model declares "
+                f"{[str(a) for a in self.system_model.aux_state]}")
         u0 = initial_condition(self)
 
         def as_flux_matrix(expr):
@@ -115,13 +95,21 @@ class FemDGSolver(HyperbolicSolver):
                 return scalar(numerics.local_max_abs_eigenvalue(u, aux_of(u), p, n))
 
             def velocity(t, x, u):
-                return as_vector([u[row_h + 1 + d] / u[row_h] for d in range(dim)])
+                # hu * hinv, never hu / h: h is zero over the dry floodplain,
+                # which is most of the Malpasset mesh, and femDG asks for the
+                # velocity on every cell including those.
+                hinv = aux_of(u)[row_hinv]
+                return as_vector([u[row_h + 1 + d] * hinv for d in range(dim)])
 
             def physical(t, x, u):
                 return conditional(u[row_h] > 0, 1, 0)
 
             def jump(t, x, u, w):
-                return (u[row_h] - w[row_h]) / (0.5 * (u[row_h] + w[row_h]))
+                # Relative depth jump across a face. Two dry cells give 0/0,
+                # so the mean depth is floored at the model's own wet/dry
+                # threshold -- the same scale below which it reports no waves.
+                mean = 0.5 * (u[row_h] + w[row_h])
+                return (u[row_h] - w[row_h]) / ufl.max_value(mean, kp_eps)
 
         def source(t, x, u, du):
             return vec(runtime.source(u, aux_of(u), p))
@@ -168,8 +156,8 @@ class FemDGSolver(HyperbolicSolver):
         7.05e-3) while the mesh quadrupled 59k -> 160k cells, and then NaN at
         t = 150 s with the volume still conserved to 3e-8 right up to it.
 
-        ``compute_dt`` reads the cell sizes the compiled grid cache rebuilds
-        inside ``adapt``, so it cannot go stale. It is also the rule
+        ``compute_dt`` measures the cell size from the grid it is handed, so
+        it cannot go stale across an adapt. It is also the rule
         ``HyperbolicSolver`` marches on, which is what makes the two solvers
         comparable at all.
         """
