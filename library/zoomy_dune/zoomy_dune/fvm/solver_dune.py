@@ -126,6 +126,26 @@ class HyperbolicSolver(param.Parameterized):
         self._row_b, self._row_h = names.index("b"), names.index("h")
         self.n_var = len(self.system_model.state)
         self.n_aux = len(self.system_model.aux_state)
+        self._report_boundary(model)
+
+    def _report_boundary(self, model):
+        """Name the boundary treatment in the log, every run.
+
+        A model carrying no boundary conditions is not boundary-free: the
+        lowered kernel then returns Q itself, so every exterior facet is a free
+        in/outflow against an infinite reservoir. That is invisible at a lake
+        at rest -- the transmissive ghost equals a wall's while u = 0 -- and on
+        a closed basin it grows without bound once water reaches the edge. It
+        cost one 600 s Malpasset run, which tripled its water volume.
+        """
+        bcs = getattr(model, "boundary_conditions", None)
+        tags = list(getattr(bcs, "list_sorted_function_names", []) or [])
+        if tags:
+            self.log(f"boundary: {len(tags)} condition(s) [{', '.join(tags)}]")
+        else:
+            self.log("boundary: TRANSMISSIVE -- the model carries no "
+                     "boundary_conditions, so the ghost state is the interior "
+                     "state and mass crosses the exterior freely")
 
     def _build_spaces(self):
         gv = self.gridView
@@ -177,6 +197,12 @@ class HyperbolicSolver(param.Parameterized):
 
 
     def _build_form(self):
+        if self.dg_degree > 0:
+            raise NotImplementedError(
+                f"dg_degree={self.dg_degree}: this residual carries face terms "
+                "and the source only -- there is no volume flux term, so every "
+                "degree above 0 would silently drop div(F). Use FemDGSolver, "
+                "whose F_c supplies it.")
         v = TestFunction(self.V)
         u = TrialFunction(self.V)
         n = FacetNormal(self.V)

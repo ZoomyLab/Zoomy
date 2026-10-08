@@ -98,7 +98,16 @@ class FemDGSolver(HyperbolicSolver):
                     aux_of(u), p, n)))}
 
             def F_c(t, x, u):
-                return as_flux_matrix(runtime.flux(u, aux_of(u), p))
+                # flux + hydrostatic_pressure, because that sum is what
+                # numerical_flux is built from (riemann_solvers._compute_flux:
+                # `(FL + PL) @ n`). The model keeps the 1/2 g h^2 pressure as a
+                # separate operator so the Audusse reconstruction can correct
+                # it, so `flux` ALONE is not the physical flux, and a volume
+                # term that disagrees with the face term is inconsistent.
+                # Inert at DG0, where grad(v) == 0.
+                aux = aux_of(u)
+                return (as_flux_matrix(runtime.flux(u, aux, p))
+                        + as_flux_matrix(runtime.hydrostatic_pressure(u, aux, p)))
 
             def maxWaveSpeed(t, x, u, n):
                 return scalar(numerics.local_max_abs_eigenvalue(u, aux_of(u), p, n))
