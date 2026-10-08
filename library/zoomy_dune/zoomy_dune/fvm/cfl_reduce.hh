@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <dune/grid/common/partitionset.hh>
 #include <dune/geometry/referenceelements.hh>
@@ -25,6 +26,13 @@
  * that cache being rebuilt after every adapt, and a size indexed for the old
  * grid is silently a wrong dt rather than an error. Recomputing the perimeter
  * is a handful of flops against the state evaluation already done per cell.
+ *
+ * Non-finite is returned, not skipped. std::max( a, NaN ) is a < NaN ? NaN : a,
+ * which is `a` -- so a NaN cell reduces to nothing and the dt comes back
+ * SMALLER than the truth, the marker de-refines around the hole and the run
+ * marches to time_end reporting success. That cost a 160 s AMR run that
+ * announced it had survived with an all-NaN field. Python raises on the
+ * reduced value, after its collective.
  *
  * Interior cells only: a ghost is some other rank's to limit, and its own rank
  * reduces it. The caller still has to comm.max across ranks.
@@ -81,8 +89,11 @@ double cflReduce ( const GridView &gridView, const DiscreteFunction &Q )
     for( const auto &face : intersections( gridView, element ) )
       perimeter += face.geometry().volume();
     const double size = geometry.volume() / std::max( perimeter, 1e-300 );
+    const double ratio = speed / std::max( size, 1e-12 );
 
-    worst = std::max( worst, speed / std::max( size, 1e-12 ) );
+    if( !std::isfinite( ratio ) )
+      return std::numeric_limits< double >::infinity();
+    worst = std::max( worst, ratio );
   }
   return worst;
 }
