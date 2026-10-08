@@ -106,3 +106,38 @@ apptainer exec --bind "$ZOOMY" --pwd "$PWD" \
 ```
 
 Without the `--env PYTHONPATH`, the installed copy wins silently.
+
+## A model with no boundary conditions is not boundary-free
+
+`BoundaryConditions([])` lowers to a kernel that returns `Q` itself, so every
+exterior facet becomes a **free in/outflow against an infinite reservoir**. On
+a closed basin that is a mass source, and it is invisible in every short test:
+while `u = 0` the transmissive ghost and a reflective wall's ghost are *the
+same state*, so a lake at rest, a well-balancing check and a 10 s dam break all
+pass. The leak only switches on once water moves at the edge.
+
+On Malpasset (1027 of 1080 exterior facets wet) it bled 2.5e5 m^3/s and
+tripled the water volume by t = 600 s, growing inward from the wet boundary
+band. Attach the wall the other backends use:
+
+```python
+from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall
+model = MalpassetSWE(boundary_conditions=BoundaryConditions([
+    Wall(tag="wall", momentum_field_indices=[[2, 3]],
+         permeability=0.0, wall_slip=1.0)]))
+```
+
+Every run now logs its treatment — `boundary: 1 condition(s) [wall]` or
+`boundary: TRANSMISSIVE`. **Read that line.**
+`thesis/cases/malpasset_dune/probe_boundary.py` measures the leak directly in
+one residual evaluation: for a conservative scheme the interior telescopes, so
+`d/dt ∫h == -(flux through ∂Ω)`, which must be zero on a closed basin.
+
+## What the dune solvers do not discretise
+
+* `diffusion_matrix_explicit` — no viscous path in either solver (`F_v` is
+  unset on the femDG model). The explicit jax solver drops it too; the
+  Firedrake reference and amrex do not. Set `nu=0` so it is not declared and
+  then ignored.
+* `HyperbolicSolver` has no volume flux term, so it is DG0-only and now
+  refuses `dg_degree > 0`. `FemDGSolver` supplies the volume term via `F_c`.
