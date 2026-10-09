@@ -17,6 +17,10 @@ launch_buttons:
   binderhub_url: "https://mybinder.org"
   notebook_interface: "jupyterlab"
 
+# The third-party bibliography, rendered on acknowledgements.md
+bibtex_bibfiles:
+  - references/third_party.bib
+
 sphinx:
   extra_extensions:
     - sphinx.ext.autodoc
