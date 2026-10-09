@@ -322,3 +322,18 @@ See `AMG.md`.  `gates/gate14_amgx.py`, Chorin VAM(1) bump, L40S:
 - Scalar AMG: stalls (rel. residual 0.17) on the indefinite 2x2 block.
 - Dense LU / plain FGMRES through AmgX: 3e-15 / 6e-12 -> assembly correct.
 - Block AMG (block_dim 2, aggregation + block-Jacobi): converges.
+
+2-D VAM(1) (`gates/gate15_vam2d_amgx.py`, t = 0.02, one solver per process):
+
+| mesh (unknowns) | GMRES | AmgX | max diff |
+|---|---|---|---|
+| 16^2 (512) | 0.48 s | 0.43 s | 2.0e-11 |
+| 32^2 (2048) | 2.13 s | 1.68 s | 3.8e-11 |
+| 64^2 (8192) | 16.8 s | 16.5 s | 1.9e-10 |
+
+- Pattern: one LSQ ring (exact; the two-ring superset gave 163 colours).
+- Cost: assembling by colouring = one operator evaluation per colour, every
+  solve; that eats the AMG gain.  Next: build the AMG hierarchy once and
+  reuse it as a frozen preconditioner for the matrix-free JAX GMRES.
+- GMRES then AmgX in ONE process hangs (JAX/AmgX interplay, not chased).
+- Default `pressure_linear_solver="auto"`: amgx on a GPU with jaxamg.
