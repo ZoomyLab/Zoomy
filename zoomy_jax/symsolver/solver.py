@@ -38,6 +38,10 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
     dt = param.Number(default=None, allow_None=True,
                       doc="Constant time step; None = adaptive CFL step.  A "
                           "constant step above the CFL step warns once.")
+    cfl_check_every = param.Integer(default=10, bounds=(0, None),
+                                    doc="Constant dt: test it against the CFL "
+                                        "step every this many steps (1: each "
+                                        "step, 0: never).")
     reconstruction_variables = param.Selector(
         default="conservative", objects=["conservative", "eta"],
         doc="'eta': wet/dry free-surface reconstruction (enables MOOD).")
@@ -129,6 +133,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
             "Q Qaux p time time_end mesh")
         kw = dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
                   mood=self.mood_active, imex=self.imex,
+                  cfl_check_every=self.cfl_check_every,
                   dt_constant=None if self.dt is None else sp.Float(self.dt))
         if self.couple:
             return "hyperbolic_precice", PyPrinter().procedure(
@@ -205,6 +210,13 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     pressure_restart = param.Integer(default=None, allow_None=True,
                                      bounds=(1, None),
                                      doc="None: from the block size.")
+    pressure_solve = param.Selector(
+        default="linear", objects=["linear", "newton"],
+        doc="'linear': the constraint is affine in the pressure, one linear "
+            "solve.  'newton': a nonlinear constraint, Newton iterations.")
+    pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
+                                       doc="Newton: stop at max|R| <= tol.")
+    pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
 
     def setup(self, mesh, pred, press, corr):
         if self.couple:
@@ -238,6 +250,10 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol)))
 
+    def _newton(self):
+        return (None if self.pressure_solve == "linear" else
+                (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
+
     def _print(self):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
@@ -247,5 +263,6 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                 self.nsm, self.press, self.corr, *a, cfl=self.cfl,
                 dimension=int(self.mesh_np.dimension), mood=self.mood_active,
                 imex=self.imex, time_order=self.time_order,
-                dt_write=self.dt_write,
+                dt_write=self.dt_write, cfl_check_every=self.cfl_check_every,
+                pressure_newton=self._newton(),
                 dt_constant=None if self.dt is None else sp.Float(self.dt)))
