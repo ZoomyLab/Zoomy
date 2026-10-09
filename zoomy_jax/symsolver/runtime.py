@@ -417,17 +417,18 @@ def _jaxamg():
     return jaxamg
 
 
-def _amgx_coloring(n, nc, nbrs):
+def _amgx_coloring(n, nc, nbrs, rings=1):
     """Column colouring of a cell operator on ``k = n / nc`` unknowns per cell,
     cell-major (index ``c k + r``): every unknown of cell c may couple to every
-    unknown of the cells within two LSQ rings of c (a superset of the stencil;
-    extra entries are stored zeros).  Static mesh topology, so AmgX can
+    unknown of the cells in its LSQ stencil (``rings`` = 1: the derivative aux
+    are LSQ fits of the unknowns; boundary ghosts depend on the inner cell).  Static mesh topology, so AmgX can
     assemble the operator inside the jitted loop."""
     from jaxamg.sparsity import get_column_coloring
     k = n // nc
     ring = [set(int(j) for j in row if 0 <= j < nc) | {c}
             for c, row in enumerate(nbrs[:nc])]
-    two = [set().union(*(ring[j] for j in ring[c])) for c in range(nc)]
+    two = ring if rings == 1 else [set().union(*(ring[j] for j in ring[c]))
+                                   for c in range(nc)]
     rows, cols = [], []
     for c in range(nc):
         for d in two[c]:

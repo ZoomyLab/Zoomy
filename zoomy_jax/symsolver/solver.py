@@ -223,12 +223,13 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                                        doc="Newton: stop at max|R| <= tol.")
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
     pressure_linear_solver = param.Selector(
-        default="gmres", objects=["gmres", "amgx"],
-        doc="'gmres': matrix-free restarted GMRES (jax.scipy).  'amgx': "
-            "NVIDIA AmgX through the optional JAX-AMG package (GPU only; "
-            "AMG-preconditioned Krylov on the traced pressure operator).")
+        default="auto", objects=["auto", "gmres", "amgx"],
+        doc="'amgx': NVIDIA AmgX through the optional JAX-AMG package (GPU "
+            "only; block-AMG-preconditioned FGMRES).  'gmres': matrix-free "
+            "restarted GMRES (jax.scipy).  'auto': amgx when JAX runs on a "
+            "GPU and jaxamg imports, else gmres.")
     pressure_amgx = param.Dict(
-        default=dict(solver="FGMRES", gmres_n_restart=30,
+        default=dict(solver="FGMRES", gmres_n_restart=30, max_iters=500,
                      preconditioner={"solver": "AMG"}),
         doc="'amgx': AmgX solver configuration passed to jaxamg.solve.")
 
@@ -263,7 +264,18 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
         return self._setup(mesh, pred, systems, linsolve=dict(
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
-            backend=self.pressure_linear_solver, amgx=self.pressure_amgx))
+            backend=self._pressure_backend(), amgx=self.pressure_amgx))
+
+    def _pressure_backend(self):
+        if self.pressure_linear_solver != "auto":
+            return self.pressure_linear_solver
+        if jax.default_backend() != "gpu":
+            return "gmres"
+        try:
+            import jaxamg  # noqa: F401
+        except ImportError:
+            return "gmres"
+        return "amgx"
 
     def _newton(self):
         return (None if self.pressure_solve == "linear" else
