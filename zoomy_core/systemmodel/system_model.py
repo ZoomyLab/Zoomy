@@ -1115,8 +1115,11 @@ class SystemModel:
         the signature and only translate syntax — they never route arguments."""
         from zoomy_core.model.basefunction import Function
         defn = getattr(self, name, None)
+        if name == "admissible" and defn is None:      # declared, else [depth]
+            rows = self.admissible_constraints()
+            defn = ZArray(rows) if rows else None
         return Function(name=name, args=self.operator_signature(name),
-                        definition=defn if defn is not None else ZArray([0]))
+                        definition=defn)
 
     @property
     def eigenvalue_mode(self) -> str:

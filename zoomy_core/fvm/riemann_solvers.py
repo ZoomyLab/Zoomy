@@ -319,6 +319,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         self.register_symbolic_function(
             "numerical_face", lambda: self.pack_face(flux, fluctuations), sig
         )
+        self.register_symbolic_function(
+            "numerical_face_sides", lambda: self.face_sides(flux, fluctuations),
+            sig
+        )
         # Same SHAPE of signature as the face kernels (two states + aux +
         # parameters + normal), so no printer or contract change is needed —
         # but the pair is reinterpreted as (cell, edge) rather than the two
@@ -346,6 +350,29 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         # block at its existing position and the emitted header gains a
         # trailing function rather than a reshuffle.
         self.register_symbolic_function("star_state", self.star_state, sig)
+
+    def face_sides(self, flux, fluctuations):
+        """The face's contribution to each adjacent cell, shape ``(2, n)``:
+
+            row 0 = ``F + D_minus``  (into the owner,     with +|f|/|V|)
+            row 1 = ``-F + D_plus``  (into the neighbour, with +|f|/|V|)
+
+        so a finite-volume update is one face loop scattering two rows,
+        ``dQ_owner -= row0 |f|/|V_o|``, ``dQ_neighbour -= row1 |f|/|V_n|``.  A
+        conservative scheme is the special case ``D_plus = D_minus = 0``.  Built
+        from the same expression objects as :meth:`numerical_flux` /
+        :meth:`numerical_fluctuations` (row 0 of ``fluctuations`` is
+        ``D_plus``, row 1 ``D_minus``), so it is an exact recombination; one
+        printed silo shares the Riemann problem (wave speeds, eigenvalues)."""
+        F = list(sp.flatten(flux))
+        D = list(sp.flatten(fluctuations))
+        n = self.n_variables
+        if len(F) != n or len(D) != 2 * n:
+            raise ValueError(
+                f"face_sides: expected {n} flux and {2 * n} fluctuation rows, "
+                f"got {len(F)} and {len(D)}")
+        return ZArray([[F[i] + D[n + i] for i in range(n)],
+                       [-F[i] + D[i] for i in range(n)]])
 
     def pack_face(self, flux, fluctuations):
         """Pack one face's COMPLETE Riemann answer into the flat layout

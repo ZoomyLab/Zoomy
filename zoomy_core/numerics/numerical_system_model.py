@@ -1524,6 +1524,38 @@ class NumericalSystemModel(SystemModel):
         refs.append(weakref.ref(numerics))
         return numerics
 
+    @property
+    def call(self):
+        """This NSM's registrar ``call`` namespace -- the same mechanism as
+        ``Model.call`` and ``Numerics.call``: one ``KernelCall`` per kernel the
+        NSM carries (its operators, its boundary conditions, its numerics'
+        functions), ``None`` where the kernel is empty.  ``aux_derivatives``
+        is the derivative-aux spec (:attr:`aux_derivatives`).  Printed as
+        ``<_symbolic_name>.<slot>`` (default ``nsm``).  Built once per name."""
+        owner = getattr(self, "_symbolic_name", None) or "nsm"
+        if getattr(self, "_call", None) is None or self._call_owner != owner:
+            from zoomy_core.misc.misc import Zstruct
+            from zoomy_core.model.basefunction import KernelCall, KernelRef
+            from zoomy_core.systemmodel.system_model import OPERATOR_ARG_SLOTS
+            kernels = [self.operator(name) for name in OPERATOR_ARG_SLOTS]
+            kernels += [self.boundary_conditions,
+                        *self.build_numerics().functions.values()]
+            kernels = [f for f in kernels if f is not None]
+            functions = Zstruct(**{f.name: f for f in kernels})
+            call = {f.name: None if f.is_empty else KernelCall(owner, functions, f.name)
+                    for f in kernels}
+            call["aux_derivatives"] = (KernelRef(owner, "aux_derivatives")
+                                       if self.aux_derivatives else None)
+            self._call, self._call_owner = Zstruct(**call), owner
+        return self._call
+
+    @property
+    def aux_derivatives(self):
+        """The aux rows filled from mesh derivatives: ``aux_registry`` plus
+        ``aux_input_registry`` (a split sub-system's frozen inputs)."""
+        return (list(getattr(self, "aux_registry", None) or [])
+                + list(getattr(self, "aux_input_registry", None) or []))
+
     def build_runtime_numpy(self):
         """Lambdify ``sm`` into a runtime model the NumPy solvers
         consume (callable ``.flux`` / ``.source`` / ``.eigenvalues`` /
