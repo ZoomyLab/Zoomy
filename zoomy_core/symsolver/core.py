@@ -381,6 +381,9 @@ class PyPrinter(_Common, PythonCodePrinter):
     def _print_Get(self, e):
         return f"{self._print(e.args[0])}[{e.args[1]}]"
 
+    def _print_And(self, e):          # traced booleans: no Python ``and``
+        return self._fold("logical_and", e.args)
+
     def _print_Tuple(self, e):
         return "(" + "".join(self._print(a) + ", " for a in e.args) + ")"
 

@@ -136,27 +136,27 @@ def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):
     return dt if nsm.dt_max is None else sp.Min(dt, nsm.dt_max)
 
 
-# A constant step is checked against the CFL step every this many steps (the
-# wave speeds can be costly, e.g. a numerical spectrum).
-CFL_CHECK_EVERY = 10
-
-
-def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time):
+def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
+              check_every=10):
     """Adaptive CFL step, or a constant step that warns when above it."""
     if dt_constant is None:
         return cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension)
-    return checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time)
+    return checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
+                   check_every)
 
 
-def checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt, time):
+def checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt, time, every):
     """``dt``, warning (once) if it exceeds the CFL step; tested every
-    ``CFL_CHECK_EVERY`` steps of size ``dt``."""
+    ``every`` steps of size ``dt`` (1: each step, 0: never)."""
     def check_now():
         check.cfl(cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension), dt)
         return sp.S.Zero
 
-    step = sp.floor(time / dt + sp.S.Half)
-    Cond(sp.Eq(sp.Mod(step, CFL_CHECK_EVERY), 0), check_now, lambda: sp.S.Zero)
+    if every == 1:
+        check_now()
+    elif every > 1:
+        step = sp.floor(time / dt + sp.S.Half)
+        Cond(sp.Eq(sp.Mod(step, every), 0), check_now, lambda: sp.S.Zero)
     return dt
 
 
@@ -187,13 +187,15 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def hyperbolic(nsm, Q, Qaux, p, time, time_end, mesh, *, cfl, dimension,
-               mood=False, dt_constant=None, dt_write=None, imex=False):
+               mood=False, dt_constant=None, dt_write=None, imex=False,
+               cfl_check_every=10):
     """March from ``time`` to ``time_end``."""
     order = nsm.reconstruction.order
     return march(
         Q, Qaux, time, time_end, dt_write,
         lambda Q, Qaux, time: step_size(nsm, Q, Qaux, p, mesh, cfl,
-                                        dimension, dt_constant, time),
+                                        dimension, dt_constant, time,
+                                        cfl_check_every),
         lambda Q, Qaux, time, dt: advance(nsm, Q, Qaux, p, time, dt, mesh,
                                           order, mood, imex=imex))
 
@@ -222,7 +224,7 @@ def march(Q, Qaux, time, time_end, dt_write, step_size, step):
 
 def hyperbolic_precice(nsm, Q, Qaux, p, time, mesh, *, cfl, dimension, side,
                        subcycling=False, mood=False, dt_constant=None,
-                       dt_write=None, imex=False):
+                       dt_write=None, imex=False, cfl_check_every=10):
     """The same march as one preCICE participant: preCICE ends the loop, the
     coupled faces carry the shared interface answer on (own, peer).
 
@@ -237,13 +239,13 @@ def hyperbolic_precice(nsm, Q, Qaux, p, time, mesh, *, cfl, dimension, side,
     def body(time, Q, Qaux, going, n_write):
         if subcycling:
             dt = step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant,
-                           time)
+                           time, cfl_check_every)
             dt = sp.Min(dt, couple.max_dt())
             if dt_write is not None:                # land on write instants
                 dt = sp.Min(dt, n_write * dt_write - time)
         else:                                       # one step per window
             dt = checked(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                         couple.max_dt(), time)
+                         couple.max_dt(), time, cfl_check_every)
         peer = couple.read()
         Wc = interface_flux(nsm.call.numerical_face_sides,
                             nsm.call.update_aux_variables or sp.S.false,

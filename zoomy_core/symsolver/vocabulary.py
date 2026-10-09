@@ -85,6 +85,10 @@ class put(Block):
     """``(Q, rows, values)`` -> Q with state rows ``rows`` (static) replaced."""
 
 
+class take(Block):
+    """``(Q, rows)`` -> the state rows ``rows`` (static) of ``Q``."""
+
+
 class zeros(Block):
     """``(n, mesh)`` -> an ``(n, cells)`` array of zeros."""
 
@@ -106,6 +110,10 @@ class inadmissible(Block):
 
 class reduce_min(Block):
     """Global minimum (all ranks)."""
+
+
+class reduce_max(Block):
+    """``(X)`` -> the largest entry (NaN propagates)."""
 
 
 class reduce_any(Block):
