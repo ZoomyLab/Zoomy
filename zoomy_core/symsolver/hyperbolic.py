@@ -81,7 +81,8 @@ def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
     """One SSP-RK step of the method of lines (RK order ``rk``, default the
     reconstruction order).  With ``dt_rule`` the first stage picks ``dt``
     from its own face wave speeds; returns ``(Q, dt)``."""
-    Q0, Qaux_stage, rows = Q, Qaux, nonnegative_rows(nsm)
+    Q0, Qaux_stage = Q, Qaux
+    depth, tol = getattr(nsm.roles, "depth", None), getattr(nsm, "depth_round_off", None)
     for i, (a, c) in enumerate(SSP_RK[rk or order]):
         if i > 0:
             Qaux_stage = stage_aux(nsm, Q, Qaux, p, time + c * dt, dt, mesh)
@@ -92,19 +93,10 @@ def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
             L = residual(nsm, Q, Qaux_stage, p, time + c * dt, dt, mesh, order,
                          demote, coupled, implicit_terms)
         Q = a * Q0 + (1 - a) * (Q + dt * L)
-        if rows:                    # round-off below 0 is 0 (MOOD, next stage)
-            Q = clean_round_off(Q, rows)
+        if depth is not None and tol is not None:   # round-off below 0 is 0
+            Q = clean_round_off(Q, (depth,), tol)
     return Q if dt_rule is None else (Q, dt)
 
-
-def nonnegative_rows(nsm):
-    """State rows the model requires >= 0: the entries of its admissibility
-    kernel that are a bare state (e.g. ``h``)."""
-    adm = nsm.operator("admissible")
-    if adm is None:
-        return ()
-    names = [str(q) for q in nsm.state]
-    return tuple(names.index(str(a)) for a in adm.definition if str(a) in names)
 
 
 def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
@@ -241,10 +233,11 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
 
 def hyperbolic(nsm, Q, Qaux, p, time, time_end, mesh, *, cfl, dimension,
                mood=False, dt_constant=None, dt_write=None, imex=False,
-               cfl_check_every=10, wave_speed="cells"):
+               cfl_check_every=10, wave_speed="faces"):
     """March from ``time`` to ``time_end``.  ``wave_speed``: the CFL wave
-    speeds from the cell states of each face ("cells"), or from the first
-    stage's Riemann problem ("faces", no eigensolve of its own)."""
+    speeds from the first stage's Riemann problem ("faces": the speeds of the
+    interface states, Audusse et al. 2004 (2.34); no eigensolve of its own),
+    or from the cell states of each face ("cells")."""
     order = nsm.reconstruction.order
 
     def step(Q, Qaux, time, cap):
@@ -286,7 +279,7 @@ def march(Q, Qaux, time, time_end, dt_write, step):
 def hyperbolic_precice(nsm, Q, Qaux, p, time, mesh, *, cfl, dimension, side,
                        subcycling=False, mood=False, dt_constant=None,
                        dt_write=None, imex=False, cfl_check_every=10,
-                       wave_speed="cells"):
+                       wave_speed="faces"):
     """The same march as one preCICE participant: preCICE ends the loop, the
     coupled faces carry the shared interface answer on (own, peer).
 

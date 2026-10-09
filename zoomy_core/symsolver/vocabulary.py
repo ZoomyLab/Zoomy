@@ -140,15 +140,17 @@ class inadmissible(Block):
 
 
 class clean_round_off(Block):
-    """``(Q, rows)`` -> ``Q`` with the entries of the static ``rows`` that are
-    negative only by round-off -- in ``[-eps * max|Q_row|, 0)``, ``eps`` the
-    machine epsilon -- set to 0.  For quantities the model requires >= 0."""
+    """``(Q, rows, tol)`` -> ``Q`` with the entries of the static ``rows`` in
+    ``[-tol, 0)`` set to 0: round-off below zero of a quantity the model
+    declares non-negative (its depth role)."""
 
 
 class minimum(Block):
     """``(a, b)`` -> elementwise minimum, NaN propagating.  For graph-valued
     arguments: ``sp.Min`` sorts its arguments by node count, which walks a
-    shared graph as a tree."""
+    shared graph as a tree.  Real (a time step compares with it)."""
+    is_commutative = True
+    is_extended_real = True
 
 
 class reduce_min(Block):

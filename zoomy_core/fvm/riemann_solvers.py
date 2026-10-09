@@ -395,7 +395,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                                         self.normal)
         if sL + sR == 0:                           # the Rusanov pair (-a, a)
             return sR
-        return sp.Max(-sL, sR, evaluate=False)     # = max(|s_L|, |s_R|), s_L <= s_R
+        # max(|s_L|, |s_R|) from the clamped pair the HLL flux itself builds
+        # (min(s_L, 0), max(s_R, 0)), so the printed silo shares it
+        return sp.Max(-sp.Min(sL, sp.Integer(0)), sp.Max(sR, sp.Integer(0)),
+                      evaluate=False)
 
     def face_sides_speed(self, flux, fluctuations):
         """:meth:`face_sides` plus a third row carrying

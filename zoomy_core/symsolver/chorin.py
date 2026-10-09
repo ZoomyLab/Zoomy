@@ -117,7 +117,7 @@ def chorin_step(pred, press, corr, Q, Qaux, p, time, dt, mesh, order, mood,
 def chorin(pred, press, corr, Q, Qaux, p, time, time_end, mesh, *, cfl,
            dimension, mood=False, dt_constant=None, dt_write=None, imex=False,
            time_order=1, cfl_check_every=10, pressure_newton=None,
-           wave_speed="cells"):
+           wave_speed="faces"):
     """March from ``time`` to ``time_end``.  The CFL step carries the
     reference's per-degree factor 1 / (2 order - 1); ``wave_speed`` as in
     :func:`hyperbolic`."""

@@ -748,6 +748,10 @@ class NumericalSystemModel(SystemModel):
     # Every printer emits it alongside the other numerical parameters; the numpy
     # timestepper reads it off the NSM when the caller passed no explicit cap.
     dt_max: float = 5.0
+    # Round-off of the declared depth (symbolic solvers): a depth in
+    # [-depth_round_off, 0) after an update is round-off and is set to 0, so
+    # MOOD and the next stage see h >= 0.  Absolute; None disables it.
+    depth_round_off: Optional[float] = 1e-12
     # Opt-in system operations run on this NSM by :meth:`derive`, in addition to
     # :meth:`default_operations`.  Each entry is a reusable ``op(sm)`` callable
     # from :mod:`zoomy_core.systemmodel.operations` (e.g.
@@ -1303,6 +1307,7 @@ class NumericalSystemModel(SystemModel):
         diffusion: Optional[DiffusionSpec] = None,
         eigenvalue_eps: float = 1e-8,
         dt_max: float = 5.0,
+        depth_round_off: Optional[float] = 1e-12,
         extra_operations: Optional[list] = None,
         additional_systems: Optional[list] = None,
         scaled_q_indices: Optional[list] = None,
@@ -1452,6 +1457,7 @@ class NumericalSystemModel(SystemModel):
         sm.diffusion = diffusion
         sm.eigenvalue_eps = eigenvalue_eps
         sm.dt_max = dt_max
+        sm.depth_round_off = depth_round_off
         sm.extra_operations = list(extra_operations or [])
         sm.source_derivative_specs = (
             list(source_specs) if source_specs else None)
