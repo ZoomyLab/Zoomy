@@ -39,7 +39,6 @@ def build():
 def symbolic():
     mesh, b = build()
     s = SymbolicHyperbolicSolverJax(time_end=T_END, cfl=0.4, mood=True,
-                                    reconstruction_variables="eta",
                                     dt_write=T_END / 4, output=OUT)
     Q, Qaux = s.setup(mesh, b["nsm"])
     t0 = wall.perf_counter()

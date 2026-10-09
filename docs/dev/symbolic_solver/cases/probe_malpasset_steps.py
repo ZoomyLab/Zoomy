@@ -8,7 +8,7 @@ DT = 0.01
 names = None
 for n in (1, 2, 5, 20):
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, reconstruction_variables="eta")
+    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4)
     Q, A = s.setup(mesh, b["nsm"])
     _, Qn, _ = s.run(Q, A); Qn = np.asarray(Qn)
     names = [str(v) for v in s.nsm.state]

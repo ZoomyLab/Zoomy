@@ -6,7 +6,7 @@ import zoomy_core.fvm.timestepping as ts
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 mesh, b = MP.build()
-s = SymbolicHyperbolicSolverJax(time_end=2.0, cfl=0.4, reconstruction_variables="eta")
+s = SymbolicHyperbolicSolverJax(time_end=2.0, cfl=0.4)
 Q, A = s.setup(mesh, b["nsm"])
 m, g = s.module, s.mesh
 lam = m["face_wavespeed"](s.rt.eigenvalues_cfl if s.rt.eigenvalues_cfl is not None else s.rt.eigenvalues, Q, A, s.parameters, g)

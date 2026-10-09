@@ -213,3 +213,93 @@ Setup:
   - `geometry_xp` batched LSQ
   - JaxRuntime admissible slot + batched ghost kernels
   - diffusion classification
+
+## 11. Reconstruction as template blocks (2026-10-09)
+
+`zoomy_core/symsolver/reconstruction.py`; blocks in `vocabulary.py`, bodies in
+`zoomy_jax/symsolver/runtime.py` and `zoomy_foam/symsolver/rt.H`.
+
+```
+W, Wb   = pointwise(W(Q), Q, Qaux, p), pointwise(W(Q), Qb, aux(Qb), p)
+O1      : (WL, WR) = cell_traces(W, Wb)
+O2      : G = gradient(W, Wb);  phi = <limiter>(rows, W, Wb, G)  [ties: put/take/minimum]
+          phi = select(demote, 0, phi)                           [MOOD]
+          (WL, WR) = extrapolate(W, Wb, G, phi)
+QL, QR  = pointwise(Q(W), WL, AL, p), pointwise(Q(W), WR, AR, p)
+```
+
+NSM `ReconstructionSpec` (the user interface):
+
+| field | default | meaning |
+|---|---|---|
+| `variables` | `"model"` | the model's W(Q) and inverse; `"conservative"`: Q |
+| `limiter` | venkatakrishnan | every row; `"none"`: unlimited |
+| `limiters` | `{}` | per-row override by state name, e.g. `{"b": "none"}` |
+| `ties` | `{}` | `{row: lead}`: phi_row <= phi_lead (old eta path: b, q -> h) |
+
+- Order 1 is constant in W (Q(W(Q)) at the faces), as the old eta path.
+- No face clamp `eta_f >= b_f` (the old JAX eta path had one).
+- Machine-precision negatives of the model's admissibility rows (`h`) are
+  set to 0 after every RK stage (`clean_round_off`, tol = eps max|h|).
+
+Parity:
+
+| gate | result |
+|---|---|
+| SWE bump O1/O2, SME(1) O2 vs `solver_jax` | 2e-16, 1.7e-13, 9.9e-13 |
+| one reconstruction, dry state, vs `EmittedWLSQMUSCLJAX` | 0 (bitwise) |
+| foam vs JAX: conservative O2, 2-D O2, model-W O2 | 7.2e-13, 4.5e-16, 6.6e-13 |
+| foam vs JAX: dry eta + MOOD | 1.5e-9 (3.6e-2 before the round-off cleanup) |
+
+Dry dam break, why the old solver and the template differ:
+
+- Both use MOOD with the strict test h < 0.
+- Without cleanup MOOD fired in EVERY step; flagged h in [-1e-155, -1e-18].
+- Pure round-off: O1 HR keeps h >= 0 exactly (56 steps, min h = 0).
+- Repairs still flagged -> whole-step O1 in ~14 of 22 steps.
+- With cleanup: 0 MOOD triggers in 26 steps, O2 throughout, mass exact.
+- Runtime 2.41 s -> 1.31 s (old solver 2.37 s).
+
+Audusse et al. 2004 (Zotero PTMTF2TS): Thm 2.1 / (2.34) positivity at O1;
+Sec. 3: O2 reconstructs h and h + z, b from the difference. Our model map
+reconstructs b and h + z. Probe with (h + z, h, u): same MOOD counts.
+
+## 12. CFL wave speed: cells vs faces
+
+`wave_speed="cells"` (default): eigenvalues of the cell states of each face
+(own eigensolve).  `"faces"`: `max(|s_L|, |s_R|)` of the Riemann solver's own
+`wave_speed_bounds` at the states its dissipation uses, from the first RK
+stage (`numerical_face_sides_speed`, rows F + D-, -F + D+, s).
+
+| case (CPU, one process, min of 3) | cells/faces per step | steps |
+|---|---|---|
+| SME(1) 1-D O2 | 1.10x | 80 / 80 |
+| SWE bump O2 80^2 | 1.33x | 21 / 21 |
+| dry dam break eta + MOOD | 1.28x | 26 / 41 (0.81x total) |
+| IMEX SME(1) 1-D | 1.14x | 40 / 40 |
+| Chorin, const dt, check every step | 1.53x | same |
+| Chorin, adaptive | 1.16x | 296 / 297 |
+| Malpasset O1 (HLL, analytic CFL) | 0.69x | 31 / 31 |
+| Malpasset IMEX | 0.92x | 13 / 13 |
+
+- faces: free when the flux already needs a numerical eigensolve.
+- faces: larger speeds at wet/dry fronts (reconstructed states) -> more steps.
+- faces: loses where the CFL kernel is analytic and the flux is not cheaper.
+- Default stays "cells".
+
+## 13. CFL check cost (Chorin bump, const dt)
+
+| config | ms/step |
+|---|---|
+| never | 1.99 |
+| every step, cells | 2.96 |
+| every step, faces | 2.05 |
+| every 10th, cells | 2.38 |
+| every 10th, faces | 2.02 |
+
+- Profile (256 steps): every-step cells adds eig ops 0.51 ms/step of 1.0.
+- Rest: assembly of the 8x8 matrices and gathers of both cell states.
+- Same configuration: 2.0 - 5.5 ms/step between runs on gaia (96 cores,
+  60-cell problem); pinned to 4 cores (`taskset -c 0-3`) 2.44 - 2.52.
+- Cause: XLA's CPU thread pool spreading tiny per-step work over many
+  threads.  Small cases: benchmark pinned, compare within one process.

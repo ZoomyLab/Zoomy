@@ -48,11 +48,13 @@ t_z = float(open(os.path.join(info["case"], "solver_wall.txt")).read())
 sm = SystemModel.from_model(model)
 nsm = NumericalSystemModel.from_system_model(
     sm, riemann=PositiveNonconservativeRusanov,
-    reconstruction=ReconstructionSpec(order=ORDER, limiter="minmod"))
+    reconstruction=ReconstructionSpec(          # as zoomyFoam: cell values at O1,
+        order=ORDER, limiter="minmod",           # the model's W at O2
+        variables="conservative" if ORDER == 1 else "model"))
 mesh = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N)
 cc = np.asarray(mesh.cell_centers)[:, :N]
 Q0 = model.initial_conditions.apply(cc, np.zeros((len(sm.state), N)))
-sf = SymbolicHyperbolicSolverFoam(time_end=T_END, cfl=CFL)
+sf = SymbolicHyperbolicSolverFoam(time_end=T_END, cfl=CFL, mood=False)   # zoomyFoam: none
 case = f"{WORK}/symfoam_{N}_{ORDER}"
 sf.build(nsm, 1)                                       # compile outside the timing
 tf, Qf = sf.run(mesh, nsm, Q0, case)

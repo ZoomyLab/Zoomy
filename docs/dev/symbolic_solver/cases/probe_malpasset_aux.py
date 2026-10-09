@@ -6,7 +6,7 @@ from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 import zoomy_core.fvm.timestepping as ts
 mesh, b = MP.build()
-s = SymbolicHyperbolicSolverJax(time_end=2.0, cfl=0.4, reconstruction_variables="eta")
+s = SymbolicHyperbolicSolverJax(time_end=2.0, cfl=0.4)
 Q, A = s.setup(mesh, b["nsm"])
 print("topo monomials", s.topo.lsq_monomial_multi_index, "| mesh monomials", np.asarray(s.mesh_np.lsq_monomial_multi_index).tolist())
 print("lsq_gradQ traced vs mesh max|diff|:", float(np.abs(np.asarray(s.mesh.lsq_gradQ)[:Q.shape[1]] - np.asarray(s.mesh_np.lsq_gradQ)[:Q.shape[1]]).max()))

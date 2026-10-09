@@ -7,7 +7,7 @@ from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 res = {}
 for mood in (True, False):
     mesh, nsm = C.dry_dambreak_2d()
-    s = SymbolicHyperbolicSolverJax(time_end=0.02, cfl=0.45, reconstruction_variables="eta", mood=mood)
+    s = SymbolicHyperbolicSolverJax(time_end=0.02, cfl=0.45, mood=mood)
     Q0, A0 = s.setup(mesh, nsm)
     _, Q, _ = s.run(Q0, A0)
     res[mood] = np.asarray(Q)

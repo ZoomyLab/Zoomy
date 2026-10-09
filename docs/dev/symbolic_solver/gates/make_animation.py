@@ -100,7 +100,7 @@ plt.close(fig)
 # ── 2-D radial dry dam break ───────────────────────────────────────────────
 frames2 = []
 mesh, nsm = C.dry_dambreak_2d()
-s2 = SymbolicHyperbolicSolverJax(time_end=0.06, cfl=0.45, reconstruction_variables="eta", mood=True,
+s2 = SymbolicHyperbolicSolverJax(time_end=0.06, cfl=0.45, mood=True,
                                  dt_write=0.003,
                                  on_write=lambda t, Q, A: frames2.append((float(t), np.asarray(Q))))
 Q0, A0 = s2.setup(mesh, nsm)

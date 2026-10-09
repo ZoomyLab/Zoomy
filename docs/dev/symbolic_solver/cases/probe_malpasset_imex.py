@@ -7,7 +7,7 @@ from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 DT = 0.01
 for n in (5, 20, 50):
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, reconstruction_variables="eta", imex=True)
+    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, imex=True)
     Q, A = s.setup(mesh, b["nsm"]); _, Qn, _ = s.run(Q, A); Qn = np.asarray(Qn)
     mesh2, b2 = MP.build()
     o = IMEXSourceSolverJax(time_end=n * DT, compute_dt=ts.constant(DT), march_log_interval=0, **b2["fs_kwargs"])

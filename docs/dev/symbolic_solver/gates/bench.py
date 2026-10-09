@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+N_CHORIN, T_MALP = 1280, 0.5          # every case < 5 min (compile + 2 x 4 runs)
 sys.path.insert(0, os.path.join(HERE, "..", "cases"))
 
 
@@ -52,7 +53,8 @@ def hyperbolic(make, t_end, cfl, old_kw=None, new_kw=None, imex=False):
     Qo, Ao = o.setup_simulation(mesh, nsm)
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, nsm = make()
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=imex, **(new_kw or {}))
+    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=imex,
+                                    **{"mood": False, **(new_kw or {})})   # old: no MOOD off eta
     Q, A = s.setup(mesh, nsm)
     new, nc, nt = timed(lambda: s.run(Q, A))
     Qold = np.asarray(old[0] if isinstance(old, tuple) else old)[:, :Q.shape[1]]
@@ -71,12 +73,12 @@ def chorin():
     Q0 = np.array(o.setup_simulation(LSQMesh.create_1d(domain=EB.DOMAIN, n_inner_cells=EB.NCELLS)))
     xc = np.asarray(o._rt_mesh.cell_centers)[0, :o.nc]
     Q0[:, :o.nc] = EB.initial_state(xc, Q0.shape[0])
-    n = int(round(EB.T_END / EB.DT))
+    n = N_CHORIN
     old, oc, ot = timed(lambda: o.run_jit_steps(jnp.asarray(EB.DT), n, jnp.asarray(Q0)))
     from zoomy_core.systemmodel.system_model import _DT_SYMBOL
     from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
     pred, press, corr = EB.split(_DT_SYMBOL)
-    s = SymbolicChorinSolverJax(time_end=EB.T_END, dt=EB.DT, cfl=0.9,
+    s = SymbolicChorinSolverJax(time_end=n * EB.DT, dt=EB.DT, cfl=0.9,
                                 pressure_tol=1e-9, pressure_maxit=200)
     Q, A = s.setup(LSQMesh.create_1d(domain=EB.DOMAIN, n_inner_cells=EB.NCELLS),
                    g7.pred_nsm(pred, press, corr), press, corr)
@@ -88,6 +90,7 @@ def chorin():
 
 
 def malpasset(imex):
+    sys.modules.pop("run", None)          # the bump case's run.py shadows it
     import malpasset as MP
     from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
     from zoomy_jax.fvm.solver_jax import HyperbolicSolver
@@ -95,14 +98,14 @@ def malpasset(imex):
     import zoomy_core.fvm.timestepping as ts
     mesh, b = MP.build()
     Old = IMEXSourceSolverJax if imex else HyperbolicSolver
-    o = Old(time_end=2.0, compute_dt=ts.adaptive(CFL=0.4), march_log_interval=0,
+    o = Old(time_end=T_MALP, compute_dt=ts.adaptive(CFL=0.4), march_log_interval=0,
             **b["fs_kwargs"])
     if imex:
         object.__setattr__(o, "source_mode", "local")
     Qo, Ao = o.setup_simulation(mesh, b["nsm"])
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=2.0, cfl=0.4, reconstruction_variables="eta",
+    s = SymbolicHyperbolicSolverJax(time_end=T_MALP, cfl=0.4, 
                                     imex=imex)
     Q, A = s.setup(mesh, b["nsm"])
     new, nc, nt = timed(lambda: s.run(Q, A))
@@ -125,17 +128,17 @@ CASES = {
     "dry": ("radial dry dam break O2 eta+MOOD, 48x48, t=0.02",
             lambda: hyperbolic(C.dry_dambreak_2d, 0.02, 0.45,
                                __import__("gate1_vs_solver_jax").eta_kw(C.dry_dambreak_2d),
-                               dict(reconstruction_variables="eta", mood=True))),
+                               dict(mood=True))),
     "imex": ("IMEX SME(1) 1-D dam break O2, 100 cells, t=0.1",
              lambda: hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex=True)),
-    "chorin": ("Chorin VAM(1) bump, 60 cells, 5120 steps", chorin),
-    "malpasset": ("Malpasset SME(1) O1, 26k cells, t=2, explicit", lambda: malpasset(False)),
-    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=2, IMEX", lambda: malpasset(True)),
+    "chorin": ("Chorin VAM(1) bump, 60 cells, 1280 steps", chorin),
+    "malpasset": ("Malpasset SME(1) O1, 26k cells, t=0.5, explicit", lambda: malpasset(False)),
+    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=0.5, IMEX", lambda: malpasset(True)),
 }
 
 if __name__ == "__main__":
     print(f"device {jax.devices()[0].platform}")
-    for key in sys.argv[1:] or list(CASES):
+    for key in sys.argv[1:] or [k for k in CASES if not k.endswith("_big")]:
         name, f = CASES[key]
         d, oc, ot, nc, nt = f()
         load = os.getloadavg()[0]

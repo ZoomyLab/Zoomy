@@ -19,7 +19,7 @@ for order in (1, 2):
     open(os.path.join(run, "precice-config.xml"), "w").write(cfg)
     env = {**os.environ, "PYTHONPATH": HERE + os.pathsep + os.environ["PYTHONPATH"]}
     procs = [subprocess.Popen([sys.executable, os.path.join(HERE, "participant.py"), n,
-                               str(order), f"{n}.npy", "adaptive"], cwd=run, env=env,
+                               str(order), f"{n}.npy", "subcycle"], cwd=run, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
              for n in ("Left", "Right")]
     outs = [p.communicate(timeout=1200)[0] for p in procs]

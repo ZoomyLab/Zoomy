@@ -11,7 +11,7 @@ print("update_variables:", nsm.call.update_variables is not None, "| source:", n
       "| source_explicit:", nsm.call.source_explicit is not None)
 for n in (3, 4, 5, 8, 12):
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, reconstruction_variables="eta")
+    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4)
     Q, A = s.setup(mesh, b["nsm"]); _, Qn, _ = s.run(Q, A); Qn = np.asarray(Qn)
     mesh2, b2 = MP.build()
     o = HyperbolicSolver(time_end=n * DT, compute_dt=ts.constant(DT), march_log_interval=0, **b2["fs_kwargs"])

@@ -26,7 +26,7 @@ order_x = np.argsort(cc[0][cut])
 
 # (b) radial dry dam break, eta + MOOD
 mesh_b, nsm_b = C.dry_dambreak_2d()
-sb = SymbolicHyperbolicSolverJax(time_end=0.02, cfl=0.45, reconstruction_variables="eta", mood=True)
+sb = SymbolicHyperbolicSolverJax(time_end=0.02, cfl=0.45, mood=True)
 Qb0, Ab0 = sb.setup(mesh_b, nsm_b)
 _, Qb, _ = sb.run(Qb0, Ab0)
 nx = 48
