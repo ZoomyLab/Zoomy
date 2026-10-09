@@ -106,6 +106,8 @@ The Zoomy source code is free open-source software, licensed under version 3 or 
 
 ## Acknowledgements
 
+The full list of third-party software, numerical methods and models Zoomy builds on, with how to cite each, is on the [Acknowledgements page](https://zoomylab.github.io/Zoomy/acknowledgements.html) of the documentation. The BibTeX for all of them is in [`docs/book/references/third_party.bib`](docs/book/references/third_party.bib).
+
 Zoomy builds on, integrates with, or uses logos from the following open-source projects. We gratefully acknowledge their authors and the licenses under which we use their work:
 
 | Project | Role in Zoomy | License | Notes |

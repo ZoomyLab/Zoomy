@@ -57,3 +57,4 @@ parts:
       - file: documentation
       - file: research
       - file: publications
+      - file: acknowledgements
