@@ -25,7 +25,7 @@ from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNump
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
-    ConstantReconstruction, DenseDiffusionOperatorJAX, EmittedWLSQMUSCLJAX,
+    ConstantReconstruction, DenseDiffusionOperatorJAX,
     LSQMUSCLReconstructionJAX)
 from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
@@ -69,41 +69,7 @@ def _with_geometry(R, g, mesh_np, nc):
     return R
 
 
-def _reconstructions(nsm, rt, mesh_j, recon, fs):
-    """One reconstruction object per order, as ``solver_jax`` builds it."""
-    dim = int(mesh_j.dimension)
-    limiter = nsm.reconstruction.limiter
-    out = {}
-    for order in (1, 2):
-        if recon == "eta":
-            eps = None
-            pv = getattr(nsm, "parameter_values", None)
-            if pv is not None and pv.contains("wet_dry_eps"):
-                eps = float(pv.wet_dry_eps)
-            out[order] = EmittedWLSQMUSCLJAX(
-                mesh_j, dim, rt.reconstruction_variables,
-                rt.state_from_reconstruction,
-                aux_of_q=rt.update_aux_variables, eps_wet=eps,
-                b_index=fs["b"], h_index=fs["h"],
-                momentum_indices=fs["momentum"],
-                piecewise_constant=(order < 2), limiter=limiter)
-        elif order >= 2:
-            out[order] = LSQMUSCLReconstructionJAX(mesh_j, dim, limiter=limiter)
-        else:
-            out[order] = ConstantReconstruction(mesh_j, dim)
-    return out
-
-
-def free_surface_indices(sm):
-    """b / h / momentum rows, resolved by state NAME."""
-    names = [str(s) for s in sm.state]
-    return dict(b=names.index("b"), h=names.index("h"),
-                momentum=[i for i, s in enumerate(names)
-                          if s.startswith("q_") or s.startswith("hu")])
-
-
-def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
-            ad_mode="forward", checkpoints=64, on_write=None, couple=None,
+def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
             implicit=None, systems=None):
     """The name table the printed solver runs against.  ``systems``: further
     ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``."""
@@ -126,9 +92,10 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
     periodic = bf_cells != inner
     has_periodic = bool(periodic.any())
     j = jnp.asarray
-    fs = free_surface_indices(sm) if recon == "eta" else None
-    recon_by_order = _reconstructions(nsm, rt, mesh_j, recon, fs)
-    uav = rt.update_aux_variables
+    dim = int(mesh_j.dimension)
+    order1 = ConstantReconstruction(mesh_j, dim)
+    lsq = (LSQMUSCLReconstructionJAX(mesh_j, dim, limiter="none")
+           if nsm.reconstruction.order >= 2 else None)
     if (getattr(rt, "source_explicit", None) is None
             and sm.source_explicit is not None
             and 0 not in tuple(sm.source_explicit.shape)):
@@ -136,6 +103,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
             "source_explicit", sm.source_explicit, squeeze_trailing=True)
 
     _face_kernel(rt, "numerical_face_sides")
+    _face_kernel(rt, "numerical_face_sides_speed")
 
     # ── kernels on cells and faces ─────────────────────────────────────────
     def cells(k, Q, Qaux, p, time, dt, mesh):
@@ -179,10 +147,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
     def boundary_states(bc, Q, Qaux, p, time, mesh):
         if n_bf == 0:
             return (jnp.zeros((Q.shape[0], 1)), jnp.zeros((Qaux.shape[0], 1)))
-        Qb = _bc_at(bc, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
-        Ab = (uav(Qb, Qaux[:, j(inner)], p) if uav is not None
-              else Qaux[:, j(inner)])
-        return Qb, Ab
+        return (_bc_at(bc, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells),
+                Qaux[:, j(inner)])
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
         if n_bf == 0:
@@ -193,16 +159,33 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
         return QR.at[:, j(bf_face)].set(QRb)
 
     # ── reconstruction and assembly ────────────────────────────────────────
-    def reconstruct(Q, Qaux, Qb, Qauxb, p, order, demote, mesh):
-        R = _with_geometry(recon_by_order[int(order)], mesh, mesh_np, nc)
-        kw = {}
-        if getattr(R, "supports_force_o1", False):
-            kw["force_o1"] = (None if demote is False else
-                              jnp.ones((nc,), dtype=bool) if demote is True
-                              else demote)
-        if isinstance(R, EmittedWLSQMUSCLJAX):
-            kw.update(Qaux=Qaux, parameters=p, bf_aux=Qauxb)
-        return R(Q, Qb, **kw)
+    def pointwise(k, X, Xaux, p):
+        return k(X, Xaux, p)
+
+    def cell_traces(Q, Qb, mesh):
+        return order1(Q, Qb)
+
+    def gradient(W, Wb, mesh):
+        R = _with_geometry(lsq, mesh, mesh_np, nc)
+        return R._compute_gradients(W, W.shape[0], Wb)
+
+    def limiter(name):
+        def factors(rows, W, Wb, G, mesh):
+            R = _with_geometry(lsq, mesh, mesh_np, nc)
+            fn = getattr(R, name)
+            phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
+            for v in rows:
+                lo, hi = R._neighbor_bounds(W[v], Wb[v])
+                phi = phi.at[v].set(fn(W[v], G[v], lo, hi))
+            return phi
+        return factors
+
+    def extrapolate(W, Wb, G, phi, mesh):
+        R = _with_geometry(lsq, mesh, mesh_np, nc)
+        phi = jnp.asarray(phi, dtype=W.dtype)
+        phi = jnp.broadcast_to(phi if phi.ndim != 1 else phi[None, :],
+                               (W.shape[0], nc))
+        return R._reconstruct(W, G, phi, Wb)
 
     # owner of every face; neighbour, or nc (dropped) on a boundary face
     nbr = np.where(is_bnd, nc, fc1)
@@ -246,6 +229,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
                                           multi_index=e["multi_index"])
             Qaux = Qaux.at[e["row"], :grad.shape[0]].set(grad)
         return Qaux
+
+    def clean_round_off(Q, rows):
+        r = jnp.asarray(rows)
+        X = Q[r]
+        tol = jnp.finfo(Q.dtype).eps * jnp.max(jnp.abs(X), axis=1, keepdims=True)
+        return Q.at[r].set(jnp.where((X < 0) & (X >= -tol), 0.0, X))
 
     def put(Q, rows, values):
         return Q.at[jnp.asarray(rows), :].set(values)
@@ -374,10 +363,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, recon="conservative",
         face_wavespeed=face_wavespeed, face_inradius=face_inradius,
         boundary_states=boundary_states, boundary_traces=boundary_traces,
         boundary_ghosts=boundary_ghosts,
-        reconstruct=reconstruct, divergence=divergence,
+        pointwise=pointwise, cell_traces=cell_traces, gradient=gradient,
+        minmod=limiter("_limit_minmod"),
+        venkatakrishnan=limiter("_limit_vk"),
+        barth_jespersen=limiter("_limit_bj"),
+        extrapolate=extrapolate, divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=jnp.min, reduce_any=jnp.any,
-        put=put, zeros=zeros, take=lambda Q, rows: Q[jnp.asarray(rows)],
+        put=put, zeros=zeros, clean_round_off=clean_round_off, take=lambda Q, rows: Q[jnp.asarray(rows)],
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
         root=root, linsolve=linsolve, implicit_diffusion=implicit_diffusion,

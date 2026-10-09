@@ -42,11 +42,16 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                                     doc="Constant dt: test it against the CFL "
                                         "step every this many steps (1: each "
                                         "step, 0: never).")
-    reconstruction_variables = param.Selector(
-        default="conservative", objects=["conservative", "eta"],
-        doc="'eta': wet/dry free-surface reconstruction (enables MOOD).")
+    cfl_wave_speed = param.Selector(
+        default="cells", objects=["cells", "faces"],
+        doc="CFL wave speeds: 'cells' from the cell states of each face (an "
+            "eigensolve of its own), 'faces' from the first RK stage's "
+            "Riemann problem (no extra eigensolve).")
     mood = param.Boolean(default=True,
-                         doc="A-posteriori MOOD on the 'eta' reconstruction.")
+                         doc="A-posteriori MOOD at order >= 2 (cells failing "
+                             "the model's admissibility redo at order 1).  "
+                             "What is reconstructed, and how it is limited, "
+                             "is the NSM's ReconstructionSpec.")
     dt_write = param.Number(default=None, allow_None=True,
                             doc="Output interval; None = no output.")
     on_write = param.Callable(default=None, allow_None=True,
@@ -100,9 +105,8 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
-                                and self.reconstruction_variables == "eta")
+                                and nsm.call.admissible is not None)
         self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j,
-                                recon=self.reconstruction_variables,
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
                                 on_write=self._writer(), couple=self.couple,
@@ -134,6 +138,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         kw = dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
                   mood=self.mood_active, imex=self.imex,
                   cfl_check_every=self.cfl_check_every,
+                  wave_speed=self.cfl_wave_speed,
                   dt_constant=None if self.dt is None else sp.Float(self.dt))
         if self.couple:
             return "hyperbolic_precice", PyPrinter().procedure(
@@ -264,5 +269,5 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                 dimension=int(self.mesh_np.dimension), mood=self.mood_active,
                 imex=self.imex, time_order=self.time_order,
                 dt_write=self.dt_write, cfl_check_every=self.cfl_check_every,
-                pressure_newton=self._newton(),
+                wave_speed=self.cfl_wave_speed, pressure_newton=self._newton(),
                 dt_constant=None if self.dt is None else sp.Float(self.dt)))
