@@ -230,10 +230,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             Qaux = Qaux.at[e["row"], :grad.shape[0]].set(grad)
         return Qaux
 
-    def clean_round_off(Q, rows):
+    def clean_round_off(Q, rows, tol):
         r = jnp.asarray(rows)
         X = Q[r]
-        tol = jnp.finfo(Q.dtype).eps * jnp.max(jnp.abs(X), axis=1, keepdims=True)
         return Q.at[r].set(jnp.where((X < 0) & (X >= -tol), 0.0, X))
 
     def put(Q, rows, values):
@@ -289,18 +288,36 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
                 f"{ls['accept']:.1e} (target {ls['tol']:.1e}, restart "
                 f"{ls['restart']} x maxiter {ls['maxiter']})")
 
+    amgx = _jaxamg() if ls.get("backend") == "amgx" else None
+    amgx_colorings = {}
+    lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors) if amgx is not None else None)
+
     def linsolve(A, b):
         """Matrix-free restarted GMRES on the linear map A (linearized once at
         0, so an affine A is fine); differentiable (custom_linear_solve).
-        Above the accept gate the run aborts."""
+        backend 'amgx': AmgX on the operator's traced sparsity (JAX-AMG,
+        differentiable itself).  Above the accept gate the run aborts."""
         _, lin = jax.linearize(A, jnp.zeros_like(b))     # primal once per solve
-        shape = b.shape                                  # GMRES on flat vectors
+        shape = b.shape                                  # Krylov on flat vectors
         mv = lambda x: lin(x.reshape(shape)).reshape(-1)
         b = b.reshape(-1)
-        # the transposed solve is only traced when a reverse pass needs it
-        x = lax.custom_linear_solve(
-            mv, b, solve=_ls_gmres,
-            transpose_solve=_ls_gmres if ad_mode == "reverse" else None)
+        if amgx is not None:   # cell-major unknowns, one k x k block per cell
+            n, k = int(b.shape[0]), shape[0]
+            to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
+            to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
+            if n not in amgx_colorings:
+                amgx_colorings[n] = _amgx_coloring(n, nc, lsq_nbrs)
+            op = amgx.with_cache(
+                lambda x: to_cell(mv(to_row(x.astype(b.dtype)))),   # probes: f32
+                coloring=amgx_colorings[n])
+            x, _ = amgx.solve(op, to_cell(b), **{
+                "tolerance": ls["tol"], "max_iters": ls["restart"] * ls["maxiter"],
+                "block_dim": k, **ls["amgx"]})
+            x = to_row(x)
+        else:   # the transposed solve is only traced when a reverse pass needs it
+            x = lax.custom_linear_solve(
+                mv, b, solve=_ls_gmres,
+                transpose_solve=_ls_gmres if ad_mode == "reverse" else None)
         if ls["accept"] is not None:
             xs, bs = lax.stop_gradient(x), lax.stop_gradient(b)
             nb = jnp.linalg.norm(bs)
@@ -382,6 +399,51 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     return m
 
 
+def _jaxamg():
+    """The optional JAX-AMG package (Liu, Fan, Wang 2026, SoftwareX 35:102966;
+    https://github.com/jx-wang-s-group/JAX-AMG), imported only when asked."""
+    try:
+        import jaxamg
+    except ImportError as e:
+        raise ImportError(
+            "linear solver 'amgx' needs the optional JAX-AMG package (CUDA GPU "
+            "only): build NVIDIA AmgX >= 2.5 from source, set AMGX_ROOT and "
+            "CUDA_HOME, then pip install 'jaxamg[cuda12]' -- see "
+            "docs/dev/symbolic_solver/AMG.md.  Or use 'gmres'.") from e
+    import jax as _jax
+    if _jax.default_backend() != "gpu":
+        raise RuntimeError("linear solver 'amgx' (AmgX) runs on a CUDA GPU "
+                           f"only; JAX uses {_jax.default_backend()!r}")
+    return jaxamg
+
+
+def _amgx_coloring(n, nc, nbrs):
+    """Column colouring of a cell operator on ``k = n / nc`` unknowns per cell,
+    cell-major (index ``c k + r``): every unknown of cell c may couple to every
+    unknown of the cells within two LSQ rings of c (a superset of the stencil;
+    extra entries are stored zeros).  Static mesh topology, so AmgX can
+    assemble the operator inside the jitted loop."""
+    from jaxamg.sparsity import get_column_coloring
+    k = n // nc
+    ring = [set(int(j) for j in row if 0 <= j < nc) | {c}
+            for c, row in enumerate(nbrs[:nc])]
+    two = [set().union(*(ring[j] for j in ring[c])) for c in range(nc)]
+    rows, cols = [], []
+    for c in range(nc):
+        for d in two[c]:
+            for r in range(k):
+                for q in range(k):
+                    rows.append(c * k + r)
+                    cols.append(d * k + q)
+    rows, cols = np.asarray(rows, np.int32), np.asarray(cols, np.int32)
+    order = np.lexsort((cols, rows))
+    rows, cols = rows[order], cols[order]
+    with jax.ensure_compile_time_eval():          # concrete, inside a trace
+        colors, n_colors = get_column_coloring(rows, cols, (n, n))
+    colors = np.asarray(colors)
+    return rows, cols, colors, int(n_colors), (n, n)
+
+
 def _face_kernel(rt, name):
     """``rt.<name>`` for a Numerics face function JaxRuntime does not build,
     lambdified the same way as its ``numerical_flux`` (one CSE silo, vmapped
@@ -400,10 +462,14 @@ def _face_kernel(rt, name):
     per_face = _lambdify_array(_to_array_of_exprs(num.functions[name].definition),
                                sig, rt.module)
 
+    speed = name.endswith("_speed")   # rows (F + D-, -F + D+, s ... s)
+
     @jax.jit
     def kernel(qL, qR, qauxL, qauxR, parameters, normal):
-        return jax.vmap(lambda a, b, c, d, n: per_face(a, b, c, d, parameters, n),
-                        in_axes=(1, 1, 1, 1, 1), out_axes=-1)(
+        def one(a, b, c, d, n):
+            out = per_face(a, b, c, d, parameters, n)
+            return (out[0], out[1], out[2, 0]) if speed else out
+        return jax.vmap(one, in_axes=(1, 1, 1, 1, 1), out_axes=-1)(
             qL, qR, qauxL, qauxR, normal)
     setattr(rt, name, kernel)
 

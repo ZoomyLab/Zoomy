@@ -43,10 +43,10 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                                         "step every this many steps (1: each "
                                         "step, 0: never).")
     cfl_wave_speed = param.Selector(
-        default="cells", objects=["cells", "faces"],
-        doc="CFL wave speeds: 'cells' from the cell states of each face (an "
-            "eigensolve of its own), 'faces' from the first RK stage's "
-            "Riemann problem (no extra eigensolve).")
+        default="faces", objects=["faces", "cells"],
+        doc="CFL wave speeds: 'faces' from the first RK stage's Riemann "
+            "problem (the interface states; no extra eigensolve), 'cells' "
+            "from the cell states of each face (an eigensolve of its own).")
     mood = param.Boolean(default=True,
                          doc="A-posteriori MOOD at order >= 2 (cells failing "
                              "the model's admissibility redo at order 1).  "
@@ -222,6 +222,15 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
                                        doc="Newton: stop at max|R| <= tol.")
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
+    pressure_linear_solver = param.Selector(
+        default="gmres", objects=["gmres", "amgx"],
+        doc="'gmres': matrix-free restarted GMRES (jax.scipy).  'amgx': "
+            "NVIDIA AmgX through the optional JAX-AMG package (GPU only; "
+            "AMG-preconditioned Krylov on the traced pressure operator).")
+    pressure_amgx = param.Dict(
+        default=dict(solver="FGMRES", gmres_n_restart=30,
+                     preconditioner={"solver": "AMG"}),
+        doc="'amgx': AmgX solver configuration passed to jaxamg.solve.")
 
     def setup(self, mesh, pred, press, corr):
         if self.couple:
@@ -253,7 +262,8 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
         tol = float(ell["c_elliptic_tol"])
         return self._setup(mesh, pred, systems, linsolve=dict(
             tol=tol, restart=int(ell["c_elliptic_restart"]),
-            maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol)))
+            maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
+            backend=self.pressure_linear_solver, amgx=self.pressure_amgx))
 
     def _newton(self):
         return (None if self.pressure_solve == "linear" else
