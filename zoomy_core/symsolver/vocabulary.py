@@ -41,7 +41,7 @@ class face_inradius(Block):
 # ── boundary ────────────────────────────────────────────────────────────────
 class boundary_states(Block):
     """``(bc, Q, Qaux, p, time, mesh)`` -> ``(Qb, Qauxb)``: the BC kernel's
-    ghost state per boundary face (branch by tag) and its aux."""
+    ghost state per boundary face (branch by tag) and the inner cell's aux."""
 
 
 class boundary_ghosts(Block):
@@ -55,10 +55,41 @@ class boundary_traces(Block):
 
 
 # ── reconstruction and assembly ─────────────────────────────────────────────
-class reconstruct(Block):
-    """``(Q, Qaux, Qb, Qauxb, p, order, demote, mesh)`` -> ``(QL, QR)`` face
-    traces.  ``demote``: ``False`` none, ``True`` all cells, or a cell mask --
-    demoted cells reconstruct at first order (MOOD)."""
+class pointwise(Block):
+    """``(kernel, X, Xaux, p)`` -> the kernel in every column of ``X`` (cells,
+    faces or boundary faces); no time, step or position."""
+
+
+class cell_traces(Block):
+    """``(Q, Qb, mesh)`` -> ``(QL, QR)``: the owner's and the neighbour's cell
+    value per face; ``QR`` on a boundary face is ``Qb``."""
+
+
+class gradient(Block):
+    """``(W, Wb, mesh)`` -> the LSQ gradient of every row of ``W`` per cell
+    (backend layout).  A boundary face adds the sample ``Wb`` at the ghost
+    position, twice the cell-to-face offset."""
+
+
+class minmod(Block):
+    """``(rows, W, Wb, G, mesh)`` -> ``(rows of W, cells)`` limiter factors
+    in [0, 1], 1 off ``rows`` (static): the largest that keeps every face
+    extrapolation within the neighbours' and boundary ghosts' (``2 Wb - W``)
+    bounds."""
+
+
+class venkatakrishnan(Block):
+    """As :class:`minmod`, the smooth Venkatakrishnan factor (eps^2 = h^2)."""
+
+
+class barth_jespersen(Block):
+    """As :class:`minmod`, the Barth-Jespersen factor."""
+
+
+class extrapolate(Block):
+    """``(W, Wb, G, phi, mesh)`` -> ``(WL, WR)``: each cell's ``W`` moved to
+    the face centre by ``phi * G`` (``phi`` per row and cell, per cell, or a
+    number); ``WR`` on a boundary face is ``Wb``."""
 
 
 class divergence(Block):
@@ -106,6 +137,18 @@ class implicit_diffusion(Block):
 class inadmissible(Block):
     """``(kernel, Q, Qaux, p)`` -> cell mask: an admissibility row < 0 or a
     non-finite value."""
+
+
+class clean_round_off(Block):
+    """``(Q, rows)`` -> ``Q`` with the entries of the static ``rows`` that are
+    negative only by round-off -- in ``[-eps * max|Q_row|, 0)``, ``eps`` the
+    machine epsilon -- set to 0.  For quantities the model requires >= 0."""
+
+
+class minimum(Block):
+    """``(a, b)`` -> elementwise minimum, NaN propagating.  For graph-valued
+    arguments: ``sp.Min`` sorts its arguments by node count, which walks a
+    shared graph as a tree."""
 
 
 class reduce_min(Block):

@@ -13,32 +13,41 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import Cond, Root, While, unpack
 from zoomy_core.symsolver.vocabulary import (
-    boundary_states, boundary_traces, cells, check, couple, coupled_faces,
+    boundary_states, boundary_traces, cells, check, clean_round_off, couple,
+    coupled_faces,
     derivative_aux, diffusion, divergence, edge_source, face_aux, face_inradius,
     face_wavespeed, faces, implicit_diffusion, inadmissible, interface_flux,
-    interface_states, io,
-    reconstruct, reduce_any, reduce_min, select)
+    interface_states, io, minimum, reduce_any, reduce_min, select)
+from zoomy_core.symsolver.reconstruction import reconstruct
 
 # Shu-Osher form: Q <- a*Q0 + (1 - a)*(Q + dt*L(Q, t + c*dt)), per stage (a, c)
 SSP_RK = {1: ((0, 0),), 2: ((0, 0), (sp.S.Half, 1))}
 
 
 def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
-             coupled=None, implicit_terms=True):
+             coupled=None, implicit_terms=True, dt_rule=None):
     """Semi-discrete right-hand side: -div(face terms) - interior NCP, plus the
     explicit source/diffusion slots, plus the implicit ones unless an implicit
     stage takes them (``implicit_terms=False``).  Which term is stiff is the
-    SystemModel's classification, never the solver's."""
+    SystemModel's classification, never the solver's.
+
+    ``dt_rule``: ``dt`` is not known yet -- the face kernel also returns the
+    scheme's wave speed ``S`` and ``dt = dt_rule(S)``; returns ``(dQ, dt)``."""
     Qb, Qauxb = unpack(boundary_states(nsm.call.boundary_conditions, Q, Qaux, p,
                                        time, mesh), 2)
-    QL, QR = unpack(reconstruct(Q, Qaux, Qb, Qauxb, p, order, demote, mesh), 2)
+    QL, QR = reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh)
     if order >= 2:              # at first order QL is the cell value: QR is Qb
         QR = boundary_traces(nsm.call.boundary_conditions, Q, QL, QR, Qaux, p,
                              time, mesh)
     AL, AR = unpack(face_aux(Qaux, mesh), 2)
     # one Riemann problem per face, its contribution to each side
-    Wm, Wp = unpack(faces(nsm.call.numerical_face_sides, QL, QR, AL, AR, p,
-                          mesh), 2)
+    if dt_rule is None:
+        Wm, Wp = unpack(faces(nsm.call.numerical_face_sides, QL, QR, AL, AR, p,
+                              mesh), 2)
+    else:                            # ... and its wave speed sets the step
+        Wm, Wp, S = unpack(faces(nsm.call.numerical_face_sides_speed, QL, QR,
+                                 AL, AR, p, mesh), 3)
+        dt = dt_rule(S)
     if coupled is not None:          # coupled faces carry the shared answer
         mask, Wc = coupled
         Wm = select(mask, Wc, Wm)
@@ -57,7 +66,7 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
     for k in diffusions:
         if k is not None:
             dQ = dQ + diffusion(k, Q, Qaux, p, mesh)
-    return dQ
+    return dQ if dt_rule is None else (dQ, dt)
 
 
 def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
@@ -68,35 +77,60 @@ def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
-                  coupled=None, implicit_terms=True, rk=None):
+                  coupled=None, implicit_terms=True, rk=None, dt_rule=None):
     """One SSP-RK step of the method of lines (RK order ``rk``, default the
-    reconstruction order)."""
-    Q0, Qaux_stage = Q, Qaux
+    reconstruction order).  With ``dt_rule`` the first stage picks ``dt``
+    from its own face wave speeds; returns ``(Q, dt)``."""
+    Q0, Qaux_stage, rows = Q, Qaux, nonnegative_rows(nsm)
     for i, (a, c) in enumerate(SSP_RK[rk or order]):
         if i > 0:
             Qaux_stage = stage_aux(nsm, Q, Qaux, p, time + c * dt, dt, mesh)
-        L = residual(nsm, Q, Qaux_stage, p, time + c * dt, dt, mesh, order,
-                     demote, coupled, implicit_terms)
+        if i == 0 and dt_rule is not None:
+            L, dt = residual(nsm, Q, Qaux_stage, p, time, None, mesh, order,
+                             demote, coupled, implicit_terms, dt_rule)
+        else:
+            L = residual(nsm, Q, Qaux_stage, p, time + c * dt, dt, mesh, order,
+                         demote, coupled, implicit_terms)
         Q = a * Q0 + (1 - a) * (Q + dt * L)
-    return Q
+        if rows:                    # round-off below 0 is 0 (MOOD, next stage)
+            Q = clean_round_off(Q, rows)
+    return Q if dt_rule is None else (Q, dt)
+
+
+def nonnegative_rows(nsm):
+    """State rows the model requires >= 0: the entries of its admissibility
+    kernel that are a bare state (e.g. ``h``)."""
+    adm = nsm.operator("admissible")
+    if adm is None:
+        return ()
+    names = [str(q) for q in nsm.state]
+    return tuple(names.index(str(a)) for a in adm.definition if str(a) in names)
 
 
 def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
-              implicit_terms=True, rk=None):
+              implicit_terms=True, rk=None, dt_rule=None):
     """A-posteriori MOOD: order-2 candidate; inadmissible cells redo at first
-    order; if that still fails, the whole step redoes at first order."""
-    def step(demote):
+    order; if that still fails, the whole step redoes at first order.  The
+    repairs keep the candidate's ``dt``."""
+    def step(demote, dt):
         return explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote,
                              coupled, implicit_terms, rk)
 
     def repair():
-        Q_cells = step(bad)
+        Q_cells = step(bad, dt)
         still = inadmissible(nsm.call.admissible, Q_cells, Qaux, p)
-        return Cond(reduce_any(still), lambda: step(sp.S.true), lambda: Q_cells)
+        return Cond(reduce_any(still), lambda: step(sp.S.true, dt),
+                    lambda: Q_cells)
 
-    Q_cand = step(sp.S.false)
+    if dt_rule is None:
+        Q_cand = step(sp.S.false, dt)
+    else:
+        Q_cand, dt = explicit_step(nsm, Q, Qaux, p, time, None, mesh, order,
+                                   sp.S.false, coupled, implicit_terms, rk,
+                                   dt_rule)
     bad = inadmissible(nsm.call.admissible, Q_cand, Qaux, p)
-    return Cond(reduce_any(bad), repair, lambda: Q_cand)
+    Q = Cond(reduce_any(bad), repair, lambda: Q_cand)
+    return Q if dt_rule is None else (Q, dt)
 
 
 def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
@@ -128,12 +162,18 @@ def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):
-    """dt <= CFL * 2 r_f / (d |lambda|_f), min over faces, capped by dt_max."""
+    """dt <= CFL * 2 r_f / (d |lambda|_f), min over faces, capped by dt_max;
+    the wave speeds from the cell states of each face."""
     speed = (nsm.call.eigenvalues_cfl if nsm.call.eigenvalues_cfl is not None
              else nsm.call.eigenvalues)
-    lam = face_wavespeed(speed, Q, Qaux, p, mesh)
-    dt = reduce_min(cfl * 2 * face_inradius(mesh) / (dimension * lam))
-    return dt if nsm.dt_max is None else sp.Min(dt, nsm.dt_max)
+    return face_dt(nsm, face_wavespeed(speed, Q, Qaux, p, mesh), mesh, cfl,
+                   dimension)
+
+
+def face_dt(nsm, speed, mesh, cfl, dimension):
+    """The CFL step from face wave speeds."""
+    dt = reduce_min(cfl * 2 * face_inradius(mesh) / (dimension * speed))
+    return dt if nsm.dt_max is None else minimum(dt, nsm.dt_max)
 
 
 def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
@@ -141,15 +181,25 @@ def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
     """Adaptive CFL step, or a constant step that warns when above it."""
     if dt_constant is None:
         return cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension)
-    return checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
-                   check_every)
+    return checked(dt_constant, time, check_every,
+                   lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension))
 
 
-def checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt, time, every):
-    """``dt``, warning (once) if it exceeds the CFL step; tested every
-    ``every`` steps of size ``dt`` (1: each step, 0: never)."""
+def face_rule(nsm, mesh, cfl, dimension, dt_constant, time, cap, check_every=10):
+    """``dt_rule`` taking the step from the first stage's face wave speeds
+    (no eigensolve of its own); capped by ``cap``."""
+    if dt_constant is None:
+        return lambda S: minimum(face_dt(nsm, S, mesh, cfl, dimension), cap)
+    return lambda S: minimum(checked(dt_constant, time, check_every,
+                                     lambda: face_dt(nsm, S, mesh, cfl,
+                                                     dimension)), cap)
+
+
+def checked(dt, time, every, dt_cfl):
+    """``dt``, warning (once) if it exceeds the CFL step ``dt_cfl()``; tested
+    every ``every`` steps of size ``dt`` (1: each step, 0: never)."""
     def check_now():
-        check.cfl(cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension), dt)
+        check.cfl(dt_cfl(), dt)
         return sp.S.Zero
 
     if every == 1:
@@ -161,19 +211,22 @@ def checked(nsm, Q, Qaux, p, mesh, cfl, dimension, dt, time, every):
 
 
 def advance(nsm, Q, Qaux, p, time, dt, mesh, order, mood, coupled=None,
-            imex=False):
+            imex=False, dt_rule=None):
     """One time step.  Explicit: every term in the (MOOD-guarded) RK step.
     IMEX (Lie): the RK step without the SystemModel's implicit slots, then
     implicit diffusion and implicit Euler on the implicit source slot."""
     if mood:
         Q = mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled,
-                      implicit_terms=not imex)
+                      implicit_terms=not imex, dt_rule=dt_rule)
     else:
         Q = explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order,
-                          coupled=coupled, implicit_terms=not imex)
+                          coupled=coupled, implicit_terms=not imex,
+                          dt_rule=dt_rule)
+    if dt_rule is not None:
+        Q, dt = Q
     if imex:
         Q = implicit_step(nsm, Q, Qaux, p, time + dt, dt, mesh)
-    return post_step(nsm, Q, Qaux, p, time + dt, dt, mesh)
+    return (*post_step(nsm, Q, Qaux, p, time + dt, dt, mesh), dt)
 
 
 def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
@@ -188,26 +241,34 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
 
 def hyperbolic(nsm, Q, Qaux, p, time, time_end, mesh, *, cfl, dimension,
                mood=False, dt_constant=None, dt_write=None, imex=False,
-               cfl_check_every=10):
-    """March from ``time`` to ``time_end``."""
+               cfl_check_every=10, wave_speed="cells"):
+    """March from ``time`` to ``time_end``.  ``wave_speed``: the CFL wave
+    speeds from the cell states of each face ("cells"), or from the first
+    stage's Riemann problem ("faces", no eigensolve of its own)."""
     order = nsm.reconstruction.order
-    return march(
-        Q, Qaux, time, time_end, dt_write,
-        lambda Q, Qaux, time: step_size(nsm, Q, Qaux, p, mesh, cfl,
-                                        dimension, dt_constant, time,
-                                        cfl_check_every),
-        lambda Q, Qaux, time, dt: advance(nsm, Q, Qaux, p, time, dt, mesh,
-                                          order, mood, imex=imex))
+
+    def step(Q, Qaux, time, cap):
+        if wave_speed == "faces":
+            return advance(nsm, Q, Qaux, p, time, None, mesh, order, mood,
+                           imex=imex, dt_rule=face_rule(
+                               nsm, mesh, cfl, dimension, dt_constant, time,
+                               cap, cfl_check_every))
+        dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                              dt_constant, time, cfl_check_every), cap)
+        return advance(nsm, Q, Qaux, p, time, dt, mesh, order, mood, imex=imex)
+
+    return march(Q, Qaux, time, time_end, dt_write, step)
 
 
-def march(Q, Qaux, time, time_end, dt_write, step_size, step):
-    """The time loop: ``step_size(Q, Qaux, time)`` clamped to ``time_end`` and the
-    write instants, then ``step(Q, Qaux, time, dt) -> (Q, Qaux)``."""
+def march(Q, Qaux, time, time_end, dt_write, step):
+    """The time loop: ``step(Q, Qaux, time, cap) -> (Q, Qaux, dt)`` takes a
+    step ``dt <= cap``, ``cap`` the distance to ``time_end`` and to the next
+    write instant."""
     def body(time, Q, Qaux, n_write):
-        dt = sp.Min(step_size(Q, Qaux, time), time_end - time)
+        cap = time_end - time
         if dt_write is not None:                    # land on write instants
-            dt = sp.Min(dt, n_write * dt_write - time)
-        Q, Qaux = step(Q, Qaux, time, dt)
+            cap = sp.Min(cap, n_write * dt_write - time)
+        Q, Qaux, dt = step(Q, Qaux, time, cap)
         time = time + dt
         if dt_write is not None:
             n_write = Cond(time >= (n_write - sp.Rational(1, 10**9)) * dt_write,
@@ -224,7 +285,8 @@ def march(Q, Qaux, time, time_end, dt_write, step_size, step):
 
 def hyperbolic_precice(nsm, Q, Qaux, p, time, mesh, *, cfl, dimension, side,
                        subcycling=False, mood=False, dt_constant=None,
-                       dt_write=None, imex=False, cfl_check_every=10):
+                       dt_write=None, imex=False, cfl_check_every=10,
+                       wave_speed="cells"):
     """The same march as one preCICE participant: preCICE ends the loop, the
     coupled faces carry the shared interface answer on (own, peer).
 
@@ -237,21 +299,34 @@ def hyperbolic_precice(nsm, Q, Qaux, p, time, mesh, *, cfl, dimension, side,
     order = nsm.reconstruction.order
 
     def body(time, Q, Qaux, going, n_write):
-        if subcycling:
-            dt = step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant,
-                           time, cfl_check_every)
-            dt = sp.Min(dt, couple.max_dt())
-            if dt_write is not None:                # land on write instants
-                dt = sp.Min(dt, n_write * dt_write - time)
-        else:                                       # one step per window
-            dt = checked(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                         couple.max_dt(), time, cfl_check_every)
+        window = couple.max_dt()
+        if subcycling:                              # adaptive inside the window
+            cap = window if dt_write is None else sp.Min(
+                window, n_write * dt_write - time)
+            if wave_speed == "faces":
+                rule = face_rule(nsm, mesh, cfl, dimension, dt_constant, time,
+                                 cap, cfl_check_every)
+            else:
+                dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                                      dt_constant, time, cfl_check_every), cap)
+        elif wave_speed == "faces":                 # one step per window
+            rule = lambda S: checked(window, time, cfl_check_every,
+                                     lambda: face_dt(nsm, S, mesh, cfl,
+                                                     dimension))
+        else:
+            dt = checked(window, time, cfl_check_every,
+                         lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension))
         peer = couple.read()
         Wc = interface_flux(nsm.call.numerical_face_sides,
                             nsm.call.update_aux_variables or sp.S.false,
                             side, Q, Qaux, peer, p, mesh)
-        Q, Qaux = advance(nsm, Q, Qaux, p, time, dt, mesh, order, mood,
-                          coupled=(coupled_faces(mesh), Wc), imex=imex)
+        if wave_speed == "faces":
+            Q, Qaux, dt = advance(nsm, Q, Qaux, p, time, None, mesh, order,
+                                  mood, coupled=(coupled_faces(mesh), Wc),
+                                  imex=imex, dt_rule=rule)
+        else:
+            Q, Qaux, dt = advance(nsm, Q, Qaux, p, time, dt, mesh, order, mood,
+                                  coupled=(coupled_faces(mesh), Wc), imex=imex)
         couple.write(interface_states(Q, mesh))
         going = couple.advance(dt)
         time = time + dt

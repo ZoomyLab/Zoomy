@@ -323,6 +323,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             "numerical_face_sides", lambda: self.face_sides(flux, fluctuations),
             sig
         )
+        self.register_symbolic_function(
+            "numerical_face_sides_speed",
+            lambda: self.face_sides_speed(flux, fluctuations), sig
+        )
         # Same SHAPE of signature as the face kernels (two states + aux +
         # parameters + normal), so no printer or contract change is needed —
         # but the pair is reinterpreted as (cell, edge) rather than the two
@@ -373,6 +377,36 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                 f"got {len(F)} and {len(D)}")
         return ZArray([[F[i] + D[n + i] for i in range(n)],
                        [-F[i] + D[i] for i in range(n)]])
+
+    def face_wave_speed(self):
+        """The fastest signal speed of this scheme's own Riemann solver:
+        ``max(|s_L|, |s_R|)`` of its :meth:`wave_speed_bounds` (Davis for HLL,
+        ``+-a`` for the Rusanov family) at the states its dissipation is built
+        on -- the path-integral / hydrostatically reconstructed states where
+        the scheme has them, else the face states.  The same expressions the
+        flux builds, so a printed silo computes them once."""
+        vm, vp = self.variables_minus, self.variables_plus
+        am, ap = self.aux_variables_minus, self.aux_variables_plus
+        if hasattr(self, "get_path_integral_states"):
+            vm, vp, am, ap = self.get_path_integral_states()
+        elif hasattr(self, "hydrostatic_reconstruction"):
+            vm, vp, am, ap = self.hydrostatic_reconstruction(vm, vp, am, ap)
+        sL, sR = self.wave_speed_bounds(vm, vp, am, ap, self.parameters,
+                                        self.normal)
+        if sL + sR == 0:                           # the Rusanov pair (-a, a)
+            return sR
+        return sp.Max(-sL, sR, evaluate=False)     # = max(|s_L|, |s_R|), s_L <= s_R
+
+    def face_sides_speed(self, flux, fluctuations):
+        """:meth:`face_sides` plus a third row carrying
+        :meth:`face_wave_speed` (in every column), shape ``(3, n)``: a solver
+        can take its CFL step from the Riemann problem it already solves."""
+        sides = self.face_sides(flux, fluctuations)
+        s = self.face_wave_speed()
+        n = self.n_variables
+        return ZArray([[sides[0, i] for i in range(n)],
+                       [sides[1, i] for i in range(n)],
+                       [s] * n])
 
     def pack_face(self, flux, fluctuations):
         """Pack one face's COMPLETE Riemann answer into the flat layout

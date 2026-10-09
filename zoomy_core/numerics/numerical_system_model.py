@@ -597,6 +597,18 @@ class ReconstructionSpec:
     limiter: str = "venkatakrishnan"
     free_surface_aware: bool = False
     positivity: str = ""
+    # ── the symbolic solvers (zoomy_core.symsolver) ──
+    # ``variables``: what is reconstructed -- "model": the model's
+    # ``reconstruction_variables`` W(Q) and its inverse (identity unless the
+    # model declares a map, e.g. SWE/SME: eta = b + h, u = hinv q);
+    # "conservative": Q itself.
+    # ``limiters``: per-row override of ``limiter`` by state name (the row of
+    # W in that state's slot), e.g. {"b": "none"}.
+    # ``ties``: {row: lead} -- the row's limiter factor never exceeds the
+    # lead row's, phi_row <- min(phi_row, phi_lead).
+    variables: str = "model"
+    limiters: dict = field(default_factory=dict)
+    ties: dict = field(default_factory=dict)
 
 
 @dataclass
