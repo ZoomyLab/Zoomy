@@ -54,7 +54,8 @@ def hyperbolic(make, t_end, cfl, old_kw=None, new_kw=None, imex=False):
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, nsm = make()
     s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=imex,
-                                    **{"mood": False, **(new_kw or {})})   # old: no MOOD off eta
+                                    **{"mood": False, "cfl_wave_speed": "cells",
+                                       **(new_kw or {})})   # matched with the old
     Q, A = s.setup(mesh, nsm)
     new, nc, nt = timed(lambda: s.run(Q, A))
     Qold = np.asarray(old[0] if isinstance(old, tuple) else old)[:, :Q.shape[1]]
@@ -105,7 +106,7 @@ def malpasset(imex):
     Qo, Ao = o.setup_simulation(mesh, b["nsm"])
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=T_MALP, cfl=0.4, 
+    s = SymbolicHyperbolicSolverJax(time_end=T_MALP, cfl=0.4, cfl_wave_speed="cells", 
                                     imex=imex)
     Q, A = s.setup(mesh, b["nsm"])
     new, nc, nt = timed(lambda: s.run(Q, A))

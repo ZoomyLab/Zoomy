@@ -23,9 +23,17 @@ def couple(order, window, mode):
     env = {**os.environ, "PYTHONPATH": HERE + os.pathsep + os.environ["PYTHONPATH"]}
     procs = [subprocess.Popen([sys.executable, os.path.join(HERE, "participant.py"), n,
                                str(order), f"{n}.npy", mode], cwd=run, env=env,
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                              stdout=open(f"{run}/{n}.log", "w"), stderr=subprocess.STDOUT)
              for n in ("Left", "Right")]
-    outs = [p.communicate(timeout=1200)[0] for p in procs]
+    import time as _t
+    t0 = _t.time()        # one participant failing leaves its peer waiting
+    while any(p.poll() is None for p in procs) and _t.time() - t0 < 1200:
+        if any(p.poll() not in (None, 0) for p in procs):
+            for p in procs:
+                if p.poll() is None:
+                    p.kill()
+        _t.sleep(0.5)
+    outs = [open(f"{run}/{n}.log").read() for n in ("Left", "Right")]
     if any(p.returncode for p in procs):
         msg = [l for o in outs for l in o.splitlines() if "exceeds the CFL" in l]
         return None, (msg[0].strip()[-110:] if msg else "no CFL warning") + " / run failed"

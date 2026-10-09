@@ -40,7 +40,8 @@ if __name__ == "__main__":
             t, n = t + dt, n + 1
         Qo = np.asarray(Q)
         mesh, nsm = make()
-        sn = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=True)
+        sn = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=True,
+                                         cfl_wave_speed="cells")   # as the old
         Q0, A0 = sn.setup(mesh, nsm)
         _, Qn_, _ = sn.run(Q0, A0)
         Qn_ = np.asarray(Qn_)

@@ -1,0 +1,21 @@
+#!/bin/bash
+# All symbolic-solver gates, sequentially; one summary line per check.
+#   bash run_gates.sh [gate.py ...]   (default: all)
+cd "$(dirname "$0")"
+W=$(cd ../../../.. && pwd)
+export PYTHONNOUSERSITE=1 JAX_PLATFORMS=${JAX_PLATFORMS:-cpu}
+export PYTHONPATH=$W/library/zoomy_core:$W/library/zoomy_jax:$W/library/zoomy_plotting:$W/library/zoomy_foam
+GATES=("$@")
+[ ${#GATES[@]} -eq 0 ] && GATES=(
+  "gate1_vs_solver_jax.py" "gate4_mood_output.py" "gate6_imex.py" "gate7_chorin.py"
+  "gate2_ad.py" "gate5_mesh_ad.py" "gate8_chorin_ad.py" "gate13_pressure_newton.py"
+  "gate3_precice.py" "gate3b_subcycling.py"
+  "gate9_foam.py 0:1 1:2 2d:2 eta:2 dry:2" "gate11_foam_imex.py" "gate12_foam_chorin.py"
+  "gate10_xcouple.py jax" "gate10_xcouple.py foam" "probe_audusse_vars.py")
+for g in "${GATES[@]}"; do
+  echo "== $g"
+  timeout 3000 micromamba run -n zoomy python $g 2>&1 \
+    | grep -v "Warning\|warn\|cpu_aot\|pjrt\|^\s*$" \
+    | grep -E "max|MOOD|io.write|AD|Error|error|Traceback|File \"|t foam|mass|steps|dJ|checks|O[12] |^[A-C] " | head -30
+done
+echo GATES_DONE

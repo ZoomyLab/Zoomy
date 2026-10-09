@@ -239,8 +239,9 @@ NSM `ReconstructionSpec` (the user interface):
 
 - Order 1 is constant in W (Q(W(Q)) at the faces), as the old eta path.
 - No face clamp `eta_f >= b_f` (the old JAX eta path had one).
-- Machine-precision negatives of the model's admissibility rows (`h`) are
-  set to 0 after every RK stage (`clean_round_off`, tol = eps max|h|).
+- Round-off below zero of the model's declared depth role is set to 0
+  after every RK stage: h in [-tol, 0) -> 0, tol = `nsm.depth_round_off`
+  (absolute, default 1e-12; NSM regularization, the field from the model).
 
 Parity:
 
@@ -261,8 +262,9 @@ Dry dam break, why the old solver and the template differ:
 - Runtime 2.41 s -> 1.31 s (old solver 2.37 s).
 
 Audusse et al. 2004 (Zotero PTMTF2TS): Thm 2.1 / (2.34) positivity at O1;
-Sec. 3: O2 reconstructs h and h + z, b from the difference. Our model map
-reconstructs b and h + z. Probe with (h + z, h, u): same MOOD counts.
+Sec. 3, Fig. 1: of (z, h+z), (z, h), (h, h+z) only (h, h+z) keeps the lake
+at rest and h >= 0 at a dry shore; Thm 3.1.  Our SME map reconstructs
+(z, h+z).  Probe with (h + z, h, u): same MOOD counts (flat bed).
 
 ## 12. CFL wave speed: cells vs faces
 
@@ -284,8 +286,12 @@ stage (`numerical_face_sides_speed`, rows F + D-, -F + D+, s).
 
 - faces: free when the flux already needs a numerical eigensolve.
 - faces: larger speeds at wet/dry fronts (reconstructed states) -> more steps.
-- faces: loses where the CFL kernel is analytic and the flux is not cheaper.
-- Default stays "cells".
+- HLL: speed = max(-min(s_L,0), max(s_R,0)), the flux's own clamped pair.
+- JAX: speed returned as one row (not broadcast over n rows).
+- After both fixes (pinned, 16 cores): Malpasset 1.12x, IMEX 1.09x,
+  SWE 1.34x, SME 1-D 1.01x, Chorin 1.45-1.57x; dry 0.81x (41 vs 26 steps:
+  the cell CFL zeroes dry-cell speeds; the face speed is Audusse (2.34)).
+- Default: "faces" (2026-10-09); parity gates vs the old solvers: "cells".
 
 ## 13. CFL check cost (Chorin bump, const dt)
 
@@ -303,3 +309,16 @@ stage (`numerical_face_sides_speed`, rows F + D-, -F + D+, s).
   60-cell problem); pinned to 4 cores (`taskset -c 0-3`) 2.44 - 2.52.
 - Cause: XLA's CPU thread pool spreading tiny per-step work over many
   threads.  Small cases: benchmark pinned, compare within one process.
+
+## 14. AmgX pressure solves (optional, GPU)
+
+See `AMG.md`.  `gates/gate14_amgx.py`, Chorin VAM(1) bump, L40S:
+
+| cells (unknowns) | GMRES | AmgX block-AMG | max diff |
+|---|---|---|---|
+| 60 (120), t = 0.5 | 1.71 s | 1.46 s | 3.1e-15 |
+| 600 (1200), t = 0.05 | 29.3 s | 14.5 s | 1.4e-10 |
+
+- Scalar AMG: stalls (rel. residual 0.17) on the indefinite 2x2 block.
+- Dense LU / plain FGMRES through AmgX: 3e-15 / 6e-12 -> assembly correct.
+- Block AMG (block_dim 2, aggregation + block-Jacobi): converges.

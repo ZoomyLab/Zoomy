@@ -46,7 +46,9 @@ def eta_kw(make):
 
 if __name__ == "__main__":
     import sys
-    off = dict(mood=False)          # the old conservative path has no MOOD
+    # matched with the old solver: its CFL takes the cell states; the old
+    # conservative path has no MOOD
+    off = dict(mood=False, cfl_wave_speed="cells")
     dry_old = lambda: C.dry_dambreak_2d(ties="old")      # noqa: E731
     CASES = [
         ("SWE 2-D bump, walls, O1", lambda: C.bump_2d(1), 0.5, 0.9, {}, off),
@@ -56,7 +58,7 @@ if __name__ == "__main__":
         # of h to 0, so MOOD (strict h < 0) stops firing on them; the old
         # solver falls back to a whole O1 step in ~14 of its 22 steps
         ("radial DRY dam break, O2 eta + MOOD, old ties", dry_old, 0.02,
-         0.45, eta_kw(dry_old), {}),
+         0.45, eta_kw(dry_old), dict(cfl_wave_speed="cells")),
     ]
     CASES = [c for c in CASES if not sys.argv[1:] or any(a in c[0] for a in sys.argv[1:])]
 
