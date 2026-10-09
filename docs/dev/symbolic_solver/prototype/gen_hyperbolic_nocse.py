@@ -1,0 +1,19 @@
+def hyperbolic(Q, t, T, g, cf, nu, cfl, dx, hb, tok):
+    def f1(t_2, Q_2, tok_2):
+        return (t_2 < T)
+    def f2(t_3, Q_3, tok_3):
+        def f3():
+            return (select(cell_map(troubled, Q_3 - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))) - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[0], reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), hb), Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 1)[0], reconstruct(ghost(Q_3), 1)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), Q_3 - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))) - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[0], reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), tok_3, )
+        def f4():
+            return (Q_3 - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))) - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[0], reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), tok_3, )
+        x5 = cond(reduce_any(cell_map(troubled, Q_3 - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))) - 1/2*div(face_map(rusanov, reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[0], reconstruct(ghost(Q_3 - div(face_map(rusanov, reconstruct(ghost(Q_3), 2)[0], reconstruct(ghost(Q_3), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))), 2)[1], g), dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), hb)), f3, f4)
+        def f6(x):
+            return x - nu*lap(x, dx)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))
+        def f7(x_2):
+            return x_2*cf*abs(x_2)*minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g)))*comp(x5[0], 0)**(-2) + x_2 - comp(x5[0], 1)
+        x8 = root(f7, comp(x5[0], 1))
+        x9 = linsolve(f6, x8)
+        x10 = io_write(tok_3, t_3 + minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), assemble(comp(x5[0], 0), x9))
+        return (t_3 + minimum(-t_3 + T, cfl*dx/reduce_max(cell_map(wavespeed, Q_3, g))), assemble(comp(x5[0], 0), x9), x10[0], )
+    x11 = while_loop(f1, f2, (t, Q, tok, ))
+    return (x11[0], x11[1], x11[2], )

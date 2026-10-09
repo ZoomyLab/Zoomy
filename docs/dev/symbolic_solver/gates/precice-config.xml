@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<precice-configuration>
+  <data:scalar name="L0" />
+  <data:scalar name="L1" />
+  <data:scalar name="L2" />
+  <data:scalar name="R0" />
+  <data:scalar name="R1" />
+  <data:scalar name="R2" />
+  <mesh name="Left-Mesh" dimensions="2"><use-data name="L0" /><use-data name="L1" /><use-data name="L2" /><use-data name="R0" /><use-data name="R1" /><use-data name="R2" /></mesh>
+  <mesh name="Right-Mesh" dimensions="2"><use-data name="L0" /><use-data name="L1" /><use-data name="L2" /><use-data name="R0" /><use-data name="R1" /><use-data name="R2" /></mesh>
+  <participant name="Left">
+    <provide-mesh name="Left-Mesh" />
+    <receive-mesh name="Right-Mesh" from="Right" />
+    <write-data name="L0" mesh="Left-Mesh" /><write-data name="L1" mesh="Left-Mesh" /><write-data name="L2" mesh="Left-Mesh" />
+    <read-data name="R0" mesh="Left-Mesh" /><read-data name="R1" mesh="Left-Mesh" /><read-data name="R2" mesh="Left-Mesh" />
+    <mapping:nearest-neighbor direction="read" from="Right-Mesh" to="Left-Mesh" constraint="consistent" />
+  </participant>
+  <participant name="Right">
+    <provide-mesh name="Right-Mesh" />
+    <receive-mesh name="Left-Mesh" from="Left" />
+    <write-data name="R0" mesh="Right-Mesh" /><write-data name="R1" mesh="Right-Mesh" /><write-data name="R2" mesh="Right-Mesh" />
+    <read-data name="L0" mesh="Right-Mesh" /><read-data name="L1" mesh="Right-Mesh" /><read-data name="L2" mesh="Right-Mesh" />
+    <mapping:nearest-neighbor direction="read" from="Left-Mesh" to="Right-Mesh" constraint="consistent" />
+  </participant>
+  <m2n:sockets acceptor="Left" connector="Right" exchange-directory="." />
+  <coupling-scheme:parallel-explicit>
+    <participants first="Left" second="Right" />
+    <max-time value="0.05" />
+    <time-window-size value="0.001" />
+    <exchange data="L0" mesh="Left-Mesh" from="Left" to="Right" initialize="true" />
+    <exchange data="L1" mesh="Left-Mesh" from="Left" to="Right" initialize="true" />
+    <exchange data="L2" mesh="Left-Mesh" from="Left" to="Right" initialize="true" />
+    <exchange data="R0" mesh="Right-Mesh" from="Right" to="Left" initialize="true" />
+    <exchange data="R1" mesh="Right-Mesh" from="Right" to="Left" initialize="true" />
+    <exchange data="R2" mesh="Right-Mesh" from="Right" to="Left" initialize="true" />
+  </coupling-scheme:parallel-explicit>
+</precice-configuration>

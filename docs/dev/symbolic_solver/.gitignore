@@ -1,0 +1,3 @@
+gates/run_*/
+__pycache__/
+results/*.h5

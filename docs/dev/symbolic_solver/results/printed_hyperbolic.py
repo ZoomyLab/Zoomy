@@ -1,0 +1,43 @@
+def hyperbolic(Q, Qaux, p, time, time_end, mesh, tok):
+    def f1(time_2, Q_2, Qaux_2, n_write, tok_2):
+        return (time_2 < time_end)
+    def f2(time_3, Q_3, Qaux_3, n_write_2, tok_3):
+        lam = face_wavespeed(nsm.eigenvalues_cfl, Q_3, Qaux_3, p, mesh)
+        x3 = face_inradius(mesh)
+        dt = reduce_min(0.9*x3/lam)
+        dt_2 = minimum(minimum(5.0, -time_3 + time_end), dt)
+        time_4 = time_3 + dt_2
+        Qb, Qauxb = boundary_states(nsm.boundary_conditions, Q_3, Qaux_3, p, time_3, mesh)
+        QL, QR = reconstruct(Q_3, Qaux_3, Qb, Qauxb, p, 2, False, mesh)
+        QR_2 = boundary_traces(nsm.boundary_conditions, Q_3, QL, QR, Qaux_3, p, time_3, mesh)
+        AL, AR = face_aux(Qaux_3, mesh)
+        F = faces(nsm.numerical_flux, QL, QR_2, AL, AR, p, mesh)
+        Dp, Dm = faces(nsm.numerical_fluctuations, QL, QR_2, AL, AR, p, mesh)
+        x16 = divergence(F, Dp, Dm, mesh)
+        x17 = edge_source(nsm.numerical_cell_edge_source, Q_3, QL, QR_2, Qaux_3, p, mesh)
+        x18 = cells(nsm.source, Q_3, Qaux_3, p, time_3, dt_2, mesh)
+        x19 = dt_2*(x18 - x16 - x17)
+        Q_4 = Q_3 + x19
+        Qaux_stage = cells(nsm.update_aux_variables, Q_4, Qaux_3, p, time_4, dt_2, mesh)
+        Qb_2, Qauxb_2 = boundary_states(nsm.boundary_conditions, Q_4, Qaux_stage, p, time_4, mesh)
+        QL_2, QR_3 = reconstruct(Q_4, Qaux_stage, Qb_2, Qauxb_2, p, 2, False, mesh)
+        QR_4 = boundary_traces(nsm.boundary_conditions, Q_4, QL_2, QR_3, Qaux_stage, p, time_4, mesh)
+        AL_2, AR_2 = face_aux(Qaux_stage, mesh)
+        F_2 = faces(nsm.numerical_flux, QL_2, QR_4, AL_2, AR_2, p, mesh)
+        Dp_2, Dm_2 = faces(nsm.numerical_fluctuations, QL_2, QR_4, AL_2, AR_2, p, mesh)
+        x32 = divergence(F_2, Dp_2, Dm_2, mesh)
+        x33 = edge_source(nsm.numerical_cell_edge_source, Q_4, QL_2, QR_4, Qaux_stage, p, mesh)
+        x34 = cells(nsm.source, Q_4, Qaux_stage, p, time_4, dt_2, mesh)
+        Q_5 = (1/2)*Q_3 + (1/2)*(Q_3 + x19 + dt_2*(x34 - x32 - x33))
+        Qaux_4 = cells(nsm.update_aux_variables, Q_5, Qaux_3, p, time_4, dt_2, mesh)
+        Qaux_5 = derivative_aux(Q_5, Qaux_4, mesh)
+        def f35():
+            x37, = io_write(tok_3, time_4, Q_5, Qaux_5)
+            return (n_write_2 + 1, x37, )
+        def f38():
+            return (n_write_2, tok_3, )
+        n_write_3, x41 = cond((time_4 >= 0.1*n_write_2), f35, f38)
+        return (time_4, Q_5, Qaux_5, n_write_3, x41, )
+    x43, = io_write(tok, time, Q, Qaux)
+    time_5, Q_6, Qaux_6, _, x48 = while_loop(f1, f2, (time, Q, Qaux, 1, x43, ))
+    return (time_5, Q_6, Qaux_6, x48, )
