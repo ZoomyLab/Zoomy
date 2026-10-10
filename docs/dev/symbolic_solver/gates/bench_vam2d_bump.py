@@ -46,7 +46,7 @@ def counting(*a, **k):                    # one reduce_min per step (CFL)
 
 
 RT.runtime = counting
-_amg_t = {"setup": 0.0, "solve": 0.0, "iters": 0, "calls": 0}
+_amg_t = {"setup": 0.0, "solve": 0.0, "iters": 0, "calls": 0, "setups": 0}
 
 
 def _timed_pyamg():                       # where the host time goes
@@ -57,6 +57,7 @@ def _timed_pyamg():                       # where the host time goes
             t0 = wall.perf_counter()
             ml = pyamg.smoothed_aggregation_solver(A, **kw)
             _amg_t["setup"] += wall.perf_counter() - t0
+            _amg_t["setups"] += 1
             solve = ml.solve
 
             def timed_solve(b, **kw):
@@ -94,7 +95,9 @@ print(f"VAM(1) bump channel, CPU ({os.cpu_count()} cores visible: "
 for nx in NXS:
     ny = max(1, nx // 10)
     pred, press, corr = split()
-    s = SymbolicChorinSolverJax(time_end=T_RUN, cfl=0.9, pressure_linear_solver=SOLVER)
+    kw = {k: float(v) if "." in v or "e" in v else int(v) for k, v in
+          (a.split("=") for a in os.environ.get("PRESSURE", "").split(",") if a)}
+    s = SymbolicChorinSolverJax(time_end=T_RUN, cfl=0.9, pressure_linear_solver=SOLVER, **kw)
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=nx, ny=ny)
     Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
     names = [str(v) for v in s.nsm.state]
@@ -109,10 +112,17 @@ for nx in NXS:
     jax.block_until_ready(s.run(Q, A))
     first = wall.perf_counter() - t0
     _steps[0] = 0
-    _amg_t.update(setup=0.0, solve=0.0, iters=0, calls=0)
+    _amg_t.update(setup=0.0, solve=0.0, iters=0, calls=0, setups=0)
     t0 = wall.perf_counter()
     t, Qe, _ = s.run(Q, A)
     jax.block_until_ready(Qe)
+    if os.environ.get("SAVE"):
+        f = f"{os.environ['SAVE']}_{nx}.npy"
+        if os.path.exists(f):
+            ref = np.load(f)
+            print(f"      max|Q - first saved| {np.abs(np.asarray(Qe) - ref).max():.2e}")
+        else:
+            np.save(f, np.asarray(Qe))
     jax.effects_barrier()
     sec, n = wall.perf_counter() - t0, _steps[0]
     per_sim = sec / float(t)
@@ -122,6 +132,6 @@ for nx in NXS:
           f"finite {bool(np.isfinite(np.asarray(Qe)).all())}, pressure {s._pressure_backend()}",
           flush=True)
     if _amg_t["calls"]:
-        print(f"      pyamg: setup {_amg_t['setup']:.2f} s, solve {_amg_t['solve']:.2f} s, "
-              f"{_amg_t['calls']} solves, {_amg_t['iters'] / _amg_t['calls']:.1f} iterations/solve; "
+        print(f"      pyamg: {_amg_t['setups']} setups {_amg_t['setup']:.2f} s, "
+              f"{_amg_t['calls']} V-cycles {_amg_t['solve']:.2f} s ({_amg_t['calls'] / max(n, 1):.1f}/step); "
               f"rest {sec - _amg_t['setup'] - _amg_t['solve']:.2f} s", flush=True)

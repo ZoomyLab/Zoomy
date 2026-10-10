@@ -369,12 +369,12 @@ reconstruction) the same lake goes NaN at O1 already, old solver too.
 
 ## 16. Model tags -> numerics defaults
 
-`zoomy_core/systemmodel/tags.py`: `ModelTag` (enum; `FREE_SURFACE`).  A
-model states `tags`, a user calls `sm.declare_tags(...)`, free-surface roles
-imply `FREE_SURFACE`; stored in `sm.history`, inherited by Chorin splits.
+`zoomy_core/systemmodel/tags.py`: `ModelTag` str-enum (`ModelTag.free_surface` == `"free_surface"`).  A
+model states `tags`, a user calls `sm.declare_tags("...")`, free-surface roles
+imply `"free_surface"`; stored in `sm.history`, inherited by Chorin splits.
 `NumericalSystemModel.from_system_model(tag_rules=...)` / `register_tag_rule`
 map tags to defaults for what the caller left unset (square systems only):
-`FREE_SURFACE -> riemann = PositiveNonconservativeRusanov`.
+`"free_surface" -> riemann = PositiveNonconservativeRusanov`.
 
 ## 17. CPU scaling, 2-D flow over the bump (bench_vam2d_bump.py)
 
@@ -392,3 +392,20 @@ GMRES, all 96 cores:
 - Block scaling: V-cycles/solve 66 -> 14 (240), 480 converges (16).
 - At 480: pressure solve 49 of 63 s (PyAMG host GMRES).
 - 1 minute: T = 1 s -> ~2,200 cells; T = 5 s -> ~650 cells.
+
+## 18. AMG reuse, tolerance, CPU vs GPU (240x24, 20 steps)
+
+| pyamg option | time | setups | V-cycles/step |
+|---|---|---|---|
+| rebuild every solve | 9.16 s | 20 | 14.2 |
+| rebuild every 10 (default) | 7.87 s | 2 | 19.2 |
+| rebuild every 50 | 7.42 s | 0-1 | 18.6 |
+| tol 1e-8 / 1e-6 | 9.05 / 8.57 s | 20 | 12.7 / 10.3 |
+
+- Options: `pressure_amg_rebuild` (default 10), `pressure_amg_growth` (2),
+  `pressure_tol` (default 1e-10).  Results agree to <= 5e-8.
+- CPU 8 cores (taskset 0-7): 240x24 0.38 s/step, 480x48 1.43 s/step
+  (96 cores: 0.67 / 3.9 s/step).
+- GPU (L40S): 120x12 4.0 s/step; 240x24 > 5 min.  Cause, measured:
+  `jnp.linalg.eigvals` of 40,000 10x10 matrices 18.4 s on the GPU vs 1.5 s
+  on 8 CPU cores -- the VAM flux takes one per face side per stage.
