@@ -99,6 +99,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
 
     # ── setup ──────────────────────────────────────────────────────────────
     def setup(self, mesh, model):
+        if self.comm is not None and self.comm.Get_size() > 1:
+            from zoomy_jax.symsolver.parallel import bind_device
+            bind_device(self.comm)
         nsm = (model if isinstance(model, NumericalSystemModel)
                else NumericalSystemModel.from_system_model(model))
         return self._setup(mesh, nsm)

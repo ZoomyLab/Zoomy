@@ -43,6 +43,37 @@ def _mpi4jax():
     return mpi4jax
 
 
+def bind_device(comm):
+    """One GPU per rank: the node-local rank picks the GPU (round robin).
+    Before JAX starts, the rank sees only its GPU (``jax_cuda_visible_devices``);
+    after, its GPU becomes the default device.  No-op on the CPU, with one
+    GPU, or when ``CUDA_VISIBLE_DEVICES`` is set (the launcher chose)."""
+    import os
+    from mpi4py import MPI
+    from jax._src import xla_bridge
+    if os.environ.get("CUDA_VISIBLE_DEVICES") is not None:
+        return
+    node = comm.Split_type(MPI.COMM_TYPE_SHARED)
+    local, n_local = node.Get_rank(), node.Get_size()
+    node.Free()
+    if not xla_bridge.backends_are_initialized():
+        try:
+            n_gpu = len(os.listdir("/proc/driver/nvidia/gpus"))
+        except OSError:
+            return                                   # no NVIDIA driver
+        if n_gpu > 1 and "cpu" not in os.environ.get("JAX_PLATFORMS", ""):
+            jax.config.update("jax_cuda_visible_devices", str(local % n_gpu))
+        n = n_gpu
+    else:
+        gpus = [d for d in jax.local_devices() if d.platform == "gpu"]
+        n = len(gpus)
+        if n > 1:
+            jax.config.update("jax_default_device", gpus[local % n])
+    if n > 1 and n_local > n and local == 0:
+        import warnings
+        warnings.warn(f"{n_local} ranks on a node with {n} GPUs: ranks share GPUs")
+
+
 _AD_DONE = []
 
 
