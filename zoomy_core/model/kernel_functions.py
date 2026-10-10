@@ -36,6 +36,22 @@ class eigensystem(sp.Function):
         return None  # always keep unevaluated
 
 
+class spectral_radius(sp.Function):
+    """``spectral_radius(k, safety, *A_flat)`` -- an estimate of ``rho(A)``
+    for the row-major ``n*n`` ``A_flat``: ``safety * sqrt(rho(A^2))`` with
+    ``rho(A^2)`` from ``k`` power-iteration steps on ``A^2`` from ``x = 1``.
+    ``A^2`` because a hyperbolic spectrum comes in +- pairs (u +- c), on which
+    power iteration on ``A`` oscillates.  No eigen-decomposition, so it runs
+    on any device.  Opaque to SymPy; realised per backend."""
+
+    is_commutative = True
+    is_real = True
+
+    @classmethod
+    def eval(cls, *args):
+        return None  # always keep unevaluated (opaque)
+
+
 class eigenvalues(sp.Function):
     """``eigenvalues(*A_flat)`` — the λ-only spectrum vector ``(n)`` of the
     row-major ``n*n`` matrix ``A_flat`` (``n = round(√len)``).  Component ``idx``

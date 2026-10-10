@@ -73,6 +73,20 @@ def eigensystem(*a_flat):
         axis=-1).reshape(A.shape[:-2] + (n + 2 * n * n,))
 
 
+def spectral_radius(k, safety, *a_flat):
+    """``safety * sqrt(rho(A^2))`` by ``k`` power steps on ``A^2`` from
+    ``x = 1`` (see ``kernel_functions.spectral_radius``), batched."""
+    n = int(round(len(a_flat) ** 0.5))
+    A = _stack_square(a_flat, n)
+    x = np.ones(A.shape[:-1]) / np.sqrt(n)
+    lam = np.zeros(A.shape[:-2])
+    for _ in range(int(k)):
+        y = np.einsum("...ij,...j->...i", A, np.einsum("...ij,...j->...i", A, x))
+        lam = np.linalg.norm(y, axis=-1)
+        x = y / np.where(lam > 0, lam, 1.0)[..., None]
+    return float(safety) * np.sqrt(lam)
+
+
 def eigenvalues(*a_flat):
     """Opaque ``eigenvalues`` kernel (λ-only): the spectrum vector ``(n,)`` of
     the row-major ``n×n`` matrix ``a_flat`` (``n = round(√len)``), batched over
@@ -207,6 +221,7 @@ KERNELS = {
     "compute_derivative": None,
     "eigensystem": eigensystem,
     "eigenvalues": eigenvalues,
+    "spectral_radius": spectral_radius,
     "solve": solve,
     # Component read of a packed kernel result (numpy-internal, not a
     # cross-backend REQUIRED_KERNEL — the per-component C/UFL backends restore

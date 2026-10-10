@@ -1612,6 +1612,13 @@ class SystemModel:
     # per side per step.  So a large-level or coupled production run may well
     # want it; a verification or convergence study must not have it silently on.
     use_spectral_radius_bound = False
+    # Spectral radius of a model without a closed-form spectrum: "eig" (the
+    # numerical eigenvalues; CPU-only in JAX), "power" (power iteration on
+    # A^2, ``spectral_power_steps`` steps x ``spectral_power_safety``; any
+    # device), "bound" (the strict upper bound, = use_spectral_radius_bound).
+    spectral_radius_method = "eig"
+    spectral_power_steps = 10
+    spectral_power_safety = 1.06
 
     @property
     def spectral_radius_bound(self):

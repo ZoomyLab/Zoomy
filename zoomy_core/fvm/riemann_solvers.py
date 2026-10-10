@@ -539,9 +539,27 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # the CFL, and an upper bound is extra numerical diffusion there
             # (see SystemModel.use_spectral_radius_bound for the measured cost
             # on the Ritter dry dam break).  The cheap bound is opt-in.
-            if getattr(self.model, "use_spectral_radius_bound",
-                       SystemModel.use_spectral_radius_bound):
+            method = getattr(self.model, "spectral_radius_method",
+                             SystemModel.spectral_radius_method)
+            if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
+                                             SystemModel.use_spectral_radius_bound):
                 return self._spectral_radius_bound(Q, Qaux, p, n)
+            if method == "power":
+                from zoomy_core.model.kernel_functions import spectral_radius
+                A = self._model_eval("quasilinear_matrix", Q, Qaux, p)
+                nrm = list(n)
+                flat = [sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
+                        for i in range(self.n_variables)
+                        for j in range(self.n_variables)]
+                m = self.model
+                return spectral_radius(
+                    sp.Integer(getattr(m, "spectral_power_steps",
+                                       SystemModel.spectral_power_steps)),
+                    sp.Float(getattr(m, "spectral_power_safety",
+                                     SystemModel.spectral_power_safety)), *flat)
+            if method != "eig":
+                raise ValueError(f"spectral_radius_method {method!r}: "
+                                 "'eig', 'power' or 'bound'")
             src = list(sp.flatten(
                 self._model_eval("numerical_eigenvalues", Q, Qaux, p, n)))
             return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
