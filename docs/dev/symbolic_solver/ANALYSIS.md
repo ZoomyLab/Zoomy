@@ -449,3 +449,59 @@ Default safety 1.06 (>= rho everywhere measured, <= +6.5 %).  vs "eig" at
   `ZOOMY_XLA_CONSTANT_FOLDING=1`); step time unchanged (197 ms).
 - Pattern / colouring vectorised (Jones-Plassmann, smallest free colour):
   31-32 colours; 10 s at 184k unknowns.
+
+## 21. Distributed hyperbolic solver (MPI ranks, mpi4jax)
+
+Design (`zoomy_jax/symsolver/parallel.py`, guide: PARALLEL.md):
+
+- One MPI rank per device; each runs the serial runtime on its local mesh.
+- Local mesh: owned cells, then 2 halo layers (vertex rings: the LSQ stencil
+  and limiter of every cell across an owned face).  Built by
+  `BaseMesh.from_arrays` (factored out of `from_msh`); cut faces tagged
+  `halo` (no BC: the runtime copies the inner state).
+- Template: one block `halo(X, mesh)` (serial: identity, JAX and foam), two
+  lines -- after each RK stage (`explicit_step`) and after the derivative
+  aux (`full_aux`).  No other template change.
+- Reductions (`reduce_min/max/any`): every face and cell counted on one
+  rank; global by mpi4jax.  min/max: `custom_jvp`, tangent = mean over the
+  attaining entries (as `jnp.min`), summed over ranks by `alltoall`.
+- AD: alltoall jvp/transpose registered (linear; transpose = alltoall).
+  mpi4jax transposes allreduce(SUM) as the identity -- right only for a
+  cotangent equal on all ranks; the per-rank shares of dt are not (reverse
+  error 5e-2..3e0 before, 1e-14 after).
+- Output: snapshots gathered to rank 0 (host, mpi4py), written on the
+  global mesh; `on_write` sees each rank's local state.
+- Setup checks the local LSQ stencils of owned + first-layer cells against
+  the global mesh (raises if the halo is too thin).
+- Not yet: Chorin (pressure solve), IMEX, preCICE, periodic meshes, 1-D
+  (the legacy 1-D LSQ stencil width is a global max).
+
+Gates (CPU, mpiexec, vs serial):
+
+| gate | 2 ranks | 3 ranks | 4 ranks |
+|---|---|---|---|
+| 16: SWE bump O1 | 2.1e-16 | 3.1e-16 | 2.9e-16 |
+| 16: SWE bump O2 + MOOD | 5.8e-16 | 7.1e-16 | 7.1e-16 |
+| 16: dry dam break eta + MOOD | 2.4e-15 | 4.3e-15 | 3.3e-15 |
+| 16: SWE bump O2 + MOOD, triangles | 1.5e-15 | 1.1e-15 | 1.7e-15 |
+| 17: AD O1 adaptive: dJ/dg fwd / rev | 2.8e-15 / 8.0e-15 | | |
+| 17: AD O1 adaptive: dJ/dX.v fwd / rev | 3.7e-12 / 8.4e-13 | | |
+| 17: AD O2 + MOOD adaptive: dJ/dg fwd / rev | | 1.9e-16 / 1.3e-14 | |
+| 18: HDF5 output (6 snapshots) | | 1.3e-15 | |
+
+GPU (L40S, one rank per GPU, MPICH not CUDA-aware: exchange via host),
+SWE bump O2 + MOOD, constant dt (bench_parallel.py):
+
+| cells | GPUs | ms/step | speedup | setup | compile |
+|---|---|---|---|---|---|
+| 40k | 1 | 5.07 | | 32 s | 22 s |
+| 40k | 2 | 4.58 | 1.11x | 37 s | 19 s |
+| 160k | 1 | 12.34 | | 71 s | 29 s |
+| 160k | 4 | 4.18 | 2.95x | 74 s | 18 s |
+
+- Setup is serial Python on every rank (global mesh, geometry, LSQ
+  stencils): 45 s for the 160k mesh alone; extrapolated ~50 min at 10M.
+  Next bottleneck, before any larger run.
+- 1-D aside (pre-existing): `from_msh` 1-D meshes get 3-point asymmetric
+  LSQ stencils (e.g. cell 100 -> [99, 101, 98]; `create_1d`: [99, 101]):
+  ghost rows widen the legacy path's global max.
