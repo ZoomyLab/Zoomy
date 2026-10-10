@@ -145,6 +145,11 @@ class clean_round_off(Block):
     declares non-negative (its depth role)."""
 
 
+class halo(Block):
+    """``(X, mesh)`` -> ``X`` with the copies of other ranks' cells current
+    (a distributed run); serial: ``X``.  After every stencil update."""
+
+
 class minimum(Block):
     """``(a, b)`` -> elementwise minimum, NaN propagating.  For graph-valued
     arguments: ``sp.Min`` sorts its arguments by node count, which walks a

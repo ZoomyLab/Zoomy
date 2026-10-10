@@ -16,7 +16,7 @@ from zoomy_core.symsolver.vocabulary import (
     boundary_states, boundary_traces, cells, check, clean_round_off, couple,
     coupled_faces,
     derivative_aux, diffusion, divergence, edge_source, face_aux, face_inradius,
-    face_wavespeed, faces, implicit_diffusion, inadmissible, interface_flux,
+    face_wavespeed, faces, halo, implicit_diffusion, inadmissible, interface_flux,
     interface_states, io, minimum, reduce_any, reduce_min, select)
 from zoomy_core.symsolver.reconstruction import reconstruct
 
@@ -95,6 +95,7 @@ def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
         Q = a * Q0 + (1 - a) * (Q + dt * L)
         if depth is not None and tol is not None:   # round-off below 0 is 0
             Q = clean_round_off(Q, (depth,), tol)
+        Q = halo(Q, mesh)
     return Q if dt_rule is None else (Q, dt)
 
 
@@ -129,7 +130,7 @@ def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
     """Pointwise aux, then the derivative (mesh-gradient) aux."""
     Qaux = stage_aux(nsm, Q, Qaux, p, time, dt, mesh)
     if nsm.call.aux_derivatives is not None:
-        Qaux = derivative_aux(nsm.call.aux_derivatives, Q, Qaux, mesh)
+        Qaux = halo(derivative_aux(nsm.call.aux_derivatives, Q, Qaux, mesh), mesh)
     return Qaux
 
 

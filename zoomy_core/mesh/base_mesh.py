@@ -660,14 +660,41 @@ class BaseMesh(param.Parameterized):
             if k != "gmsh:physical" and primary_block_index < len(v)
         }
 
-        mesh_type = primary_type
-        n_faces_per_cell = _FACES_PER_CELL[mesh_type]
-        cell_data = primary_block.data  # (n_inner_cells, verts_per_cell)
-        n_inner_cells = cell_data.shape[0]
-        n_vertices = mio.points.shape[0]
+        # face_verts → physical tag from meshio boundary elements
+        face_verts_to_tag: dict[tuple, int] = {}
+        phys_data = mio.cell_data.get("gmsh:physical", [])
+        for i_block, cb in enumerate(mio.cells):
+            mtype = _MESHIO_TO_ZOOMY.get(cb.type)
+            if mtype is None or _DIM_OF_TYPE.get(mtype, 0) >= dim:
+                continue
+            if i_block < len(phys_data):
+                tags = phys_data[i_block]
+                for i_elem, elem in enumerate(cb.data):
+                    key = tuple(sorted(elem))
+                    face_verts_to_tag[key] = tags[i_elem]
 
-        vertex_coordinates = mio.points[:, :dim].T  # (dim, n_vertices)
-        cell_vertices_arr = cell_data.T  # (verts_per_cell, n_inner_cells)
+        return cls.from_arrays(
+            mio.points[:, :dim].T, primary_block.data.T, primary_type,
+            face_tags=face_verts_to_tag, tag_names=tag_to_name,
+            node_data=node_field_data, cell_data=cell_field_data)
+
+    @classmethod
+    def from_arrays(cls, vertex_coordinates, cell_vertices, mesh_type, *,
+                    face_tags=None, tag_names=None, default_tag=0,
+                    node_data=None, cell_data=None) -> "BaseMesh":
+        """A mesh from raw arrays: ``vertex_coordinates`` ``(dim, n_vertices)``,
+        ``cell_vertices`` ``(verts_per_cell, n_cells)`` of one cell type.
+        ``face_tags`` maps a boundary face (its sorted vertex tuple) to a
+        physical tag, ``default_tag`` where it has none; ``tag_names`` names
+        the tags (default ``tag_<t>``)."""
+        face_verts_to_tag = face_tags or {}
+        tag_to_name = tag_names or {}
+        dim = _DIM_OF_TYPE[mesh_type]
+        vertex_coordinates = np.asarray(vertex_coordinates)[:dim]
+        cell_vertices_arr = np.asarray(cell_vertices)
+        n_faces_per_cell = _FACES_PER_CELL[mesh_type]
+        n_inner_cells = cell_vertices_arr.shape[1]
+        n_vertices = vertex_coordinates.shape[1]
 
         # Build face topology
         cell_faces_arr, face_cells_arr, face_list = _build_face_topology(
@@ -689,19 +716,6 @@ class BaseMesh(param.Parameterized):
         boundary_face_physical_tags_arr = np.zeros(n_boundary_faces, dtype=int)
         boundary_face_function_numbers_arr = np.zeros(n_boundary_faces, dtype=int)
 
-        # Build face_verts → physical tag from meshio boundary elements
-        face_verts_to_tag: dict[tuple, int] = {}
-        phys_data = mio.cell_data.get("gmsh:physical", [])
-        for i_block, cb in enumerate(mio.cells):
-            mtype = _MESHIO_TO_ZOOMY.get(cb.type)
-            if mtype is None or _DIM_OF_TYPE.get(mtype, 0) >= dim:
-                continue
-            if i_block < len(phys_data):
-                tags = phys_data[i_block]
-                for i_elem, elem in enumerate(cb.data):
-                    key = tuple(sorted(elem))
-                    face_verts_to_tag[key] = tags[i_elem]
-
         # Assign ghosts and tags
         updated_face_cells = face_cells_arr.copy()
         for i_bf, fidx in enumerate(boundary_face_indices):
@@ -713,7 +727,7 @@ class BaseMesh(param.Parameterized):
 
             # Look up physical tag
             face_key = face_list[fidx]
-            tag = face_verts_to_tag.get(face_key, 0)
+            tag = face_verts_to_tag.get(face_key, default_tag)
             boundary_face_physical_tags_arr[i_bf] = tag
 
         # Build sorted tags and names
@@ -757,8 +771,8 @@ class BaseMesh(param.Parameterized):
             boundary_face_face_indices=boundary_face_face_indices_arr,
             boundary_conditions_sorted_physical_tags=sorted_tags,
             boundary_conditions_sorted_names=sorted_names,
-            node_data=node_field_data,
-            cell_data=cell_field_data,
+            node_data=node_data or {},
+            cell_data=cell_data or {},
         )
 
     @classmethod

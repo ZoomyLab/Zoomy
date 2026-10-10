@@ -1557,7 +1557,8 @@ def boundary_face_branches(mesh, bcs):
     then the kernel's only contract and is returned unchanged.  So is an EMPTY
     container: its kernel has no branches (``ZArray(Q)``, extrapolation on
     every face) and never reads ``bc_idx``.  A boundary face whose tag has no
-    BC, or a tag declared twice, raises."""
+    BC, or a tag declared twice, raises -- except the reserved tag ``halo``
+    (faces a distributed run's partition cuts, no BC): branch -1."""
     n_bf = int(mesh.n_boundary_faces)
     numbers = np.asarray(mesh.boundary_face_function_numbers, dtype=int)[:n_bf]
     tags = [] if bcs is None else list(bcs.list_sorted_function_names)
@@ -1576,7 +1577,8 @@ def boundary_face_branches(mesh, bcs):
         raise ValueError(
             f"mesh boundary faces use tag numbers {used} but the mesh names "
             f"only {names}; cannot route them to BCs by name")
-    missing = [names[k] for k in used if names[k] not in branch]
+    missing = [names[k] for k in used
+               if names[k] not in branch and names[k] != "halo"]
     if missing:
         raise ValueError(
             f"mesh boundary tags {missing} have no boundary condition "
