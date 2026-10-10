@@ -489,7 +489,10 @@ Gates (CPU, mpiexec, vs serial):
 | 17: AD O2 + MOOD adaptive: dJ/dg fwd / rev | | 1.9e-16 / 1.3e-14 | |
 | 18: HDF5 output (6 snapshots) | | 1.3e-15 | |
 
-GPU (L40S, one rank per GPU, MPICH not CUDA-aware: exchange via host),
+GPU (L40S, one rank per GPU bound automatically, MPICH not CUDA-aware:
+exchange staged through host memory; gate 16 on 4 GPUs <= 1.7e-15, gate 17
+on 2 GPUs: rev 8.9e-15 / mesh 1.9e-12; exchange switched off: 4.46 vs
+4.18 ms/step at 160k, i.e. no measurable exchange cost),
 SWE bump O2 + MOOD, constant dt (bench_parallel.py):
 
 | cells | GPUs | ms/step | speedup | setup | compile |

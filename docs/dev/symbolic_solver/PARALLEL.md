@@ -21,11 +21,16 @@ Q_all = solver.partition.gather(Q)              # global order, on rank 0
   initial halo states) sum their copies: `partition.sum_to_global(g, ids, n)`.
 - Output: `output=` writes one HDF5 file on rank 0, global mesh.
 
-Launch, one GPU per rank (MPICH sets `PMI_RANK`):
+Launch: `mpiexec -n 4 python run.py`.  On a GPU node each rank binds one GPU
+by its node-local rank (`parallel.bind_device`, called by `setup`); a
+launcher that sets `CUDA_VISIBLE_DEVICES` per rank takes precedence.
 
-```bash
-mpiexec -n 4 bash -c 'CUDA_VISIBLE_DEVICES=$PMI_RANK python run.py'
-```
+GPU transport: with a non-CUDA-aware MPI (conda-forge MPICH, here) mpi4jax
+stages every exchange through host memory (device -> host -> MPI -> host ->
+device).  A CUDA-aware MPI (OpenMPI + UCX) and `MPI4JAX_USE_CUDA_MPI=1` send
+from device memory (GPUDirect P2P / RDMA); no code change.  Measured cost of
+the staged exchange on 4 L40S (PCIe, no NVLink), 160k cells: within noise
+(4.18 vs 4.46 ms/step with the exchange switched off).
 
 Install (credits: mpi4jax, Hafner & Vicentini 2021, doi:10.21105/joss.03419;
 mpi4py, Dalcin & Fang 2021)
