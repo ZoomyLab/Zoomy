@@ -488,14 +488,17 @@ def _cell_pattern(n, nc, nbrs):
     every unknown of the cells in its LSQ stencil (the derivative aux are LSQ
     fits of the unknowns; boundary ghosts depend on the inner cell)."""
     k = n // nc
-    rows, cols = [], []
-    for c in range(nc):
-        for d in sorted(set(int(j) for j in nbrs[c] if 0 <= j < nc) | {c}):
-            for r in range(k):
-                for q in range(k):
-                    rows.append(c * k + r)
-                    cols.append(d * k + q)
-    return np.asarray(rows, np.int32), np.asarray(cols, np.int32)
+    nb = np.asarray(nbrs)[:nc]
+    cells = np.concatenate([np.arange(nc)[:, None], nb], axis=1)    # self + stencil
+    c_of = np.repeat(np.arange(nc), cells.shape[1])
+    d_of = cells.reshape(-1)
+    keep = (d_of >= 0) & (d_of < nc)
+    pairs = np.unique(np.stack([c_of[keep], d_of[keep]], 1), axis=0)
+    r, q = np.meshgrid(np.arange(k), np.arange(k), indexing="ij")
+    rows = (pairs[:, 0, None] * k + r.reshape(1, -1)).reshape(-1)
+    cols = (pairs[:, 1, None] * k + q.reshape(1, -1)).reshape(-1)
+    order = np.lexsort((cols, rows))
+    return rows[order].astype(np.int32), cols[order].astype(np.int32)
 
 
 def _amgx_coloring(n, nc, nbrs):
@@ -507,20 +510,36 @@ def _amgx_coloring(n, nc, nbrs):
     return rows, cols, np.asarray(colors), int(n_colors), (n, n)
 
 
-def _greedy_colors(rows, cols, n):
-    """Column colouring: two columns sharing a row get different colours."""
+def _greedy_colors(rows, cols, n, seed=0):
+    """Column colouring (two columns sharing a row get different colours):
+    Jones-Plassmann rounds, each colours an independent set of the column
+    conflict graph at once (vectorised)."""
     import scipy.sparse as sps
     P = sps.csr_matrix((np.ones(len(rows), np.int8), (rows, cols)), shape=(n, n))
-    conflict = (P.T @ P).tocsr()
-    colors = -np.ones(n, np.int32)
-    for j in range(n):
-        nb = conflict.indices[conflict.indptr[j]:conflict.indptr[j + 1]]
-        used = set(colors[nb][colors[nb] >= 0])
-        c = 0
-        while c in used:
-            c += 1
-        colors[j] = c
-    return colors
+    C = (P.T @ P).tocsr()
+    C.setdiag(0)
+    C.eliminate_zeros()
+    w = np.random.default_rng(seed).permutation(n).astype(np.int64)
+    colors = -np.ones(n, np.int64)
+    has = np.diff(C.indptr) > 0
+    starts = C.indptr[:-1][has]
+    while (colors < 0).any():
+        live = np.where(colors < 0, w, -1)
+        nbmax = np.full(n, -1, np.int64)
+        nbmax[has] = np.maximum.reduceat(live[C.indices], starts)
+        pick = (colors < 0) & (live > nbmax)          # an independent set
+        # each picked column takes the smallest colour its neighbours lack
+        nc_ = colors[C.indices]
+        bits = np.where(nc_ >= 0, np.left_shift(np.uint64(1), np.minimum(nc_, 63).astype(np.uint64)),
+                        np.uint64(0))
+        used = np.zeros(n, np.uint64)
+        used[has] = np.bitwise_or.reduceat(bits, starts)
+        free = ~used[pick]
+        low = free & (~free + np.uint64(1))           # lowest free bit
+        colors[pick] = np.log2(low.astype(np.float64)).round().astype(np.int64)
+        if (colors >= 63).any():
+            raise RuntimeError("colouring needs more than 63 colours")
+    return colors.astype(np.int32)
 
 
 def _pyamg():

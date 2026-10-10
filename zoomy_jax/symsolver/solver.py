@@ -47,6 +47,20 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         doc="CFL wave speeds: 'faces' from the first RK stage's Riemann "
             "problem (the interface states; no extra eigensolve), 'cells' "
             "from the cell states of each face (an eigensolve of its own).")
+    spectral_radius = param.Selector(
+        default="auto", objects=["auto", "eig", "power"],
+        doc="Wave speed of a model without closed-form eigenvalues: 'eig' "
+            "the numerical eigenvalues (CPU-only in JAX), 'power' power "
+            "iteration on A^2 (any device), 'auto' eig on the CPU, power on "
+            "a GPU.  An NSM that sets spectral_radius_method keeps it.")
+    spectral_power_safety = param.Number(default=1.1, bounds=(1, None),
+                                         doc="'power': factor on the estimate.")
+    spectral_power_steps = param.Integer(default=10, bounds=(1, None))
+    fold_geometry = param.Boolean(
+        default=False,
+        doc="Bake the mesh geometry into the compiled loop as constants "
+            "(XLA folds them; compile time grows with the mesh) instead of "
+            "passing it as an input.")
     mood = param.Boolean(default=True,
                          doc="A-posteriori MOOD at order >= 2 (cells failing "
                              "the model's admissibility redo at order 1).  "
@@ -102,6 +116,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.topo = build_topology(mesh, nsm=nsm)
         self.X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:mesh.dimension])
         self.mesh = R.geometry_of(self.topo, self.X)
+        self._choose_spectral_radius(nsm)
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
@@ -125,12 +140,29 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         # the mesh enters as vertex coordinates; geometry is computed inside
         self._jit = jax.jit(lambda *a: fn(*a[:-2], R.geometry_of(topo, a[-2]),
                                           a[-1]))
-        # no vertex-coordinate derivative: the geometry is a compile-time
-        # constant, which XLA folds into the loop
+        # no vertex-coordinate derivative: the geometry is an input, or with
+        # fold_geometry a compile-time constant XLA folds into the loop
         geometry = self.mesh
-        self._jit_fixed = jax.jit(lambda *a: fn(*a[:-1], geometry, a[-1]))
+        if self.fold_geometry:
+            self._jit_fixed = jax.jit(lambda *a: fn(*a[:-1], geometry, a[-1]))
+        else:
+            jit_g = jax.jit(lambda *a: fn(*a))
+            self._jit_fixed = lambda *a: jit_g(*a[:-1], geometry, a[-1])
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         return Q, self.initial_aux(Q, Qaux)
+
+    def _choose_spectral_radius(self, nsm):
+        """Set the NSM's spectral-radius method from ``spectral_radius``
+        (before its kernels are built)."""
+        if "spectral_radius_method" in vars(nsm):        # the NSM's own choice
+            return
+        method = self.spectral_radius
+        if method == "auto":
+            method = "power" if jax.default_backend() == "gpu" else "eig"
+        nsm.spectral_radius_method = method
+        nsm.spectral_power_safety = float(self.spectral_power_safety)
+        nsm.spectral_power_steps = int(self.spectral_power_steps)
+        nsm._call = None                                  # rebuild the table
 
     def _print(self):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
