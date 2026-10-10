@@ -56,6 +56,14 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 | firedrake | ✅ | ✅ 2D (REQ-95 fixed: source-integral domain pin + vtk-VTU fallback) |
 | foam | (openfoam sif; host adapter) | ✅ 1D (REQ-93 run_case + REQ-110 case-dir wiring) |
 
+## Distributed runs: `zoomy_jax_mpi`
+
+JAX + OpenMPI 5 + UCX (CUDA-aware) + mpi4jax: one MPI rank per GPU, halo
+exchange GPU -> GPU.  Same three modes; for a run:
+`apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python run.py` (one node),
+`srun --mpi=pmix apptainer exec --nv zoomy_jax_mpi.sif python run.py` (several).
+See `docs/dev/symbolic_solver/PARALLEL.md`.
+
 ## Pulling prebuilt images (no local build)
 
 The Containers pipeline publishes every backend to ghcr (public, anonymous

@@ -508,3 +508,13 @@ SWE bump O2 + MOOD, constant dt (bench_parallel.py):
 - 1-D aside (pre-existing): `from_msh` 1-D meshes get 3-point asymmetric
   LSQ stencils (e.g. cell 100 -> [99, 101, 98]; `create_1d`: [99, 101]):
   ghost rows widen the legacy path's global max.
+
+GPU transport (PARALLEL.md table): CUDA-aware OpenMPI 5 + UCX works
+(gate 16 on 4 GPUs <= 2.8e-15) once `opal_cuda_support`, `pml=ucx` and
+`UCX_MEMTYPE_CACHE=n` are set; exchange 52-74 us vs 78 us through host
+memory (63 KiB); step time unchanged on this PCIe node (6.72 vs 6.73 ms).
+Matched rerun of the 160k bench (400 steps): 7.00 ms MPICH, 6.73 ms OpenMPI
+staged -- the 4.18 ms above was 200 steps (cause of the gap not isolated).
+Container `containers/zoomy_jax_mpi` (OpenMPI 5 + UCX CUDA-aware, mpi4jax
+CUDA, JAX 0.9.2): `apptainer test` OK; gate 16 on 4 GPUs <= 1.3e-15; gate 17
+(2 GPUs) rev 4.0e-15, mesh 5.8e-13; 160k cells 7.06 ms/step (7.20 staged).
