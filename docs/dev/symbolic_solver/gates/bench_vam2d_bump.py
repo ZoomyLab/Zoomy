@@ -46,6 +46,8 @@ def counting(*a, **k):                    # one reduce_min per step (CFL)
 
 
 RT.runtime = counting
+if os.environ.get("SPECTRAL"):            # eig | power | bound
+    SystemModel.spectral_radius_method = os.environ["SPECTRAL"]
 _amg_t = {"setup": 0.0, "solve": 0.0, "iters": 0, "calls": 0, "setups": 0}
 
 
@@ -90,7 +92,8 @@ def split():
     return r.SM_pred, r.SM_press, r.SM_corr
 
 
-print(f"VAM(1) bump channel, CPU ({os.cpu_count()} cores visible: "
+print(f"VAM(1) bump channel, {jax.devices()[0].platform}, spectral radius "
+      f"{SystemModel.spectral_radius_method}, CPU ({os.cpu_count()} cores visible: "
       f"{len(os.sched_getaffinity(0))}), pressure solver {SOLVER}, run to t = {T_RUN}")
 for nx in NXS:
     ny = max(1, nx // 10)
@@ -120,7 +123,11 @@ for nx in NXS:
         f = f"{os.environ['SAVE']}_{nx}.npy"
         if os.path.exists(f):
             ref = np.load(f)
-            print(f"      max|Q - first saved| {np.abs(np.asarray(Qe) - ref).max():.2e}")
+            d = np.abs(np.asarray(Qe) - ref).max(axis=1)
+            print("      max|Q - first saved| per row: "
+                  + " ".join(f"{nm}={v:.1e}" for nm, v in zip(names, d)))
+            print("      max|Q| per row:            "
+                  + " ".join(f"{nm}={v:.1e}" for nm, v in zip(names, np.abs(ref).max(axis=1))))
         else:
             np.save(f, np.asarray(Qe))
     jax.effects_barrier()

@@ -409,3 +409,30 @@ GMRES, all 96 cores:
 - GPU (L40S): 120x12 4.0 s/step; 240x24 > 5 min.  Cause, measured:
   `jnp.linalg.eigvals` of 40,000 10x10 matrices 18.4 s on the GPU vs 1.5 s
   on 8 CPU cores -- the VAM flux takes one per face side per stage.
+
+## 19. Spectral radius by power iteration (GPU)
+
+`SystemModel.spectral_radius_method = "eig" | "power" | "bound"`; "power":
+opaque `spectral_radius(k, safety, *A)` = safety * sqrt(rho(A^2)), k power
+steps on A^2 from x = 1 (A^2: the +-c pairs of a hyperbolic spectrum).
+JAX (fori_loop, any device) and numpy; foam: not yet.
+
+Accuracy on 2880 VAM(1) 2-D A_n (bump, t = 0.1), estimate / exact rho:
+
+| method | min | median | max |
+|---|---|---|---|
+| Gershgorin (bound k=1) | 1.27 | 3.48 | 3.85 |
+| Perron bound k=8 | 1.05 | 1.09 | 1.31 |
+| power A^2, k=10 | 0.95 | 1.00 | 1.005 |
+
+Default safety 1.06 (>= rho everywhere measured, <= +6.5 %).  vs "eig" at
+120x12, t = 0.25: h 0.7 %, q 2 %, P 8 % (dissipation +6 %, dt).
+
+| bump channel | CPU 8 cores (power) | GPU L40S (power + AmgX) |
+|---|---|---|
+| 240x24 | 283 ms/step | 54 ms/step |
+| 480x48 | 1101 ms/step | 92 ms/step |
+| 960x96 | - | 196 ms/step (compile 135 s) |
+
+- eig on the GPU: 40,000 10x10 eigvals 18.4 s (CPU 1.5 s) -> unusable.
+- GPU compile grows with the mesh (geometry folded as constants).
