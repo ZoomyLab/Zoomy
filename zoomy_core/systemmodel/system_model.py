@@ -1217,12 +1217,12 @@ class SystemModel:
 
     @property
     def tags(self):
-        """The declared :class:`~zoomy_core.systemmodel.tags.ModelTag` s."""
+        """The declared model tags (strings, see ``systemmodel/tags.py``)."""
         from zoomy_core.systemmodel.tags import declared_tags
         return declared_tags(self)
 
     def declare_tags(self, *tags):
-        """Record model tags (ModelTag members).  Returns self."""
+        """Record model tags (strings).  Returns self."""
         from zoomy_core.systemmodel.tags import declare_tags
         return declare_tags(self, tags)
 

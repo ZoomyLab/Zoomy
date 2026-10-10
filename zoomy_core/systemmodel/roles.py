@@ -297,7 +297,7 @@ def declare_free_surface_roles(sm, *, depth, bed=None, gravity=None,
         kw["momentum"] = momentum
     declare_roles(sm, description=description or "free-surface roles", **kw)
     from zoomy_core.systemmodel.tags import ModelTag, declare_tags
-    declare_tags(sm, {ModelTag.FREE_SURFACE}, "implied by free-surface roles")
+    declare_tags(sm, {ModelTag.free_surface}, "implied by free-surface roles")
     return sm
 
 
