@@ -436,3 +436,16 @@ Default safety 1.06 (>= rho everywhere measured, <= +6.5 %).  vs "eig" at
 
 - eig on the GPU: 40,000 10x10 eigvals 18.4 s (CPU 1.5 s) -> unusable.
 - GPU compile grows with the mesh (geometry folded as constants).
+
+## 20. Device defaults, compile time
+
+- `spectral_radius="auto"` (JAX driver): eig on the CPU, power iteration on
+  a GPU, safety 1.1 (`spectral_power_safety`), 10 steps; an NSM that sets
+  `spectral_radius_method` keeps it.
+- Geometry passed as an input (`fold_geometry=False` default): CPU step
+  unchanged (379 vs 384 ms, 240x24); AD unchanged (gates 2/5/6/8).
+- GPU compile, 960x96: 135 s -> 128 s (geometry input) -> 45 s with XLA
+  constant folding off (set on `import zoomy_jax.symsolver`; opt-out
+  `ZOOMY_XLA_CONSTANT_FOLDING=1`); step time unchanged (197 ms).
+- Pattern / colouring vectorised (Jones-Plassmann, smallest free colour):
+  31-32 colours; 10 s at 184k unknowns.

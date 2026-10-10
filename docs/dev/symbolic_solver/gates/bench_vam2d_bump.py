@@ -46,8 +46,6 @@ def counting(*a, **k):                    # one reduce_min per step (CFL)
 
 
 RT.runtime = counting
-if os.environ.get("SPECTRAL"):            # eig | power | bound
-    SystemModel.spectral_radius_method = os.environ["SPECTRAL"]
 _amg_t = {"setup": 0.0, "solve": 0.0, "iters": 0, "calls": 0, "setups": 0}
 
 
@@ -93,13 +91,15 @@ def split():
 
 
 print(f"VAM(1) bump channel, {jax.devices()[0].platform}, spectral radius "
-      f"{SystemModel.spectral_radius_method}, CPU ({os.cpu_count()} cores visible: "
+      f"{os.environ.get('SPECTRAL', 'auto')}, fold geometry {os.environ.get('FOLD', '0')}, CPU ({os.cpu_count()} cores visible: "
       f"{len(os.sched_getaffinity(0))}), pressure solver {SOLVER}, run to t = {T_RUN}")
 for nx in NXS:
     ny = max(1, nx // 10)
     pred, press, corr = split()
     kw = {k: float(v) if "." in v or "e" in v else int(v) for k, v in
           (a.split("=") for a in os.environ.get("PRESSURE", "").split(",") if a)}
+    kw.update(spectral_radius=os.environ.get("SPECTRAL", "auto"),
+              fold_geometry=os.environ.get("FOLD", "0") == "1")
     s = SymbolicChorinSolverJax(time_end=T_RUN, cfl=0.9, pressure_linear_solver=SOLVER, **kw)
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=nx, ny=ny)
     Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
