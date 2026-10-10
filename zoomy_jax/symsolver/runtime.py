@@ -289,8 +289,33 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
                 f"{ls['restart']} x maxiter {ls['maxiter']})")
 
     amgx = _jaxamg() if ls.get("backend") == "amgx" else None
-    amgx_colorings = {}
-    lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors) if amgx is not None else None)
+    pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
+    amgx_colorings, patterns = {}, {}
+    lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
+                if amgx is not None or pyamg is not None else None)
+
+    def assembled(op, n):
+        """The operator's values on the cell pattern, by colouring: one
+        evaluation per colour (traced; the pattern is static)."""
+        if n not in patterns:
+            rows, cols = _cell_pattern(n, nc, lsq_nbrs)
+            colors = _greedy_colors(rows, cols, n)
+            patterns[n] = (rows, cols, colors)
+        rows, cols, colors = patterns[n]
+        probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
+        AV = jax.vmap(op)(jnp.asarray(probes, dtype=jnp.float64))  # one per colour
+        return AV[colors[cols], rows]
+
+    def host_amg(rows, cols, n, k, transpose):
+        def solve(vals, rhs):
+            import scipy.sparse as sps
+            A = sps.csr_matrix((np.asarray(vals), (rows, cols)), shape=(n, n))
+            A = (A.T if transpose else A).tocsr()
+            ml = pyamg.smoothed_aggregation_solver(A.tobsr(blocksize=(k, k)))
+            x = ml.solve(np.asarray(rhs), tol=ls["tol"], accel="gmres",
+                         maxiter=ls["restart"] * ls["maxiter"])
+            return np.asarray(x, dtype=np.asarray(rhs).dtype)
+        return solve
 
     def linsolve(A, b):
         """Matrix-free restarted GMRES on the linear map A (linearized once at
@@ -305,15 +330,30 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             n, k = int(b.shape[0]), shape[0]
             to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
-            if n not in amgx_colorings:
-                amgx_colorings[n] = _amgx_coloring(n, nc, lsq_nbrs)
-            op = amgx.with_cache(
-                lambda x: to_cell(mv(to_row(x.astype(b.dtype)))),   # probes: f32
-                coloring=amgx_colorings[n])
-            x, _ = amgx.solve(op, to_cell(b), **{
+            vals = assembled(lambda x: to_cell(mv(to_row(x))), n)
+            rows, cols, _ = patterns[n]
+            from jax.experimental import sparse as jsparse
+            A_sp = jsparse.BCOO((vals, jnp.asarray(np.stack([rows, cols], 1))),
+                                shape=(n, n))
+            x, _ = amgx.solve(A_sp, to_cell(b), **{
                 "tolerance": ls["tol"], "max_iters": ls["restart"] * ls["maxiter"],
                 "block_dim": k, **ls["amgx"]})
             x = to_row(x)
+        elif pyamg is not None:   # cell-major, AMG-preconditioned GMRES on host
+            n, k = int(b.shape[0]), shape[0]
+            to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
+            to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
+            op = lambda x: to_cell(mv(to_row(x)))                    # noqa: E731
+            vals = assembled(op, n)
+            rows, cols, _ = patterns[n]
+            out = jax.ShapeDtypeStruct(b.shape, b.dtype)
+
+            def amg(transpose):
+                f = host_amg(rows, cols, n, k, transpose)
+                return lambda _, rhs: to_row(jax.pure_callback(f, out, vals, to_cell(rhs)))
+            x = lax.custom_linear_solve(
+                mv, b, solve=amg(False),
+                transpose_solve=amg(True) if ad_mode == "reverse" else None)
         else:   # the transposed solve is only traced when a reverse pass needs it
             x = lax.custom_linear_solve(
                 mv, b, solve=_ls_gmres,
@@ -417,32 +457,55 @@ def _jaxamg():
     return jaxamg
 
 
-def _amgx_coloring(n, nc, nbrs, rings=1):
-    """Column colouring of a cell operator on ``k = n / nc`` unknowns per cell,
-    cell-major (index ``c k + r``): every unknown of cell c may couple to every
-    unknown of the cells in its LSQ stencil (``rings`` = 1: the derivative aux
-    are LSQ fits of the unknowns; boundary ghosts depend on the inner cell).  Static mesh topology, so AmgX can
-    assemble the operator inside the jitted loop."""
-    from jaxamg.sparsity import get_column_coloring
+def _cell_pattern(n, nc, nbrs):
+    """Sparsity of a cell operator on ``k = n / nc`` unknowns per cell,
+    cell-major (index ``c k + r``): every unknown of cell c may couple to
+    every unknown of the cells in its LSQ stencil (the derivative aux are LSQ
+    fits of the unknowns; boundary ghosts depend on the inner cell)."""
     k = n // nc
-    ring = [set(int(j) for j in row if 0 <= j < nc) | {c}
-            for c, row in enumerate(nbrs[:nc])]
-    two = ring if rings == 1 else [set().union(*(ring[j] for j in ring[c]))
-                                   for c in range(nc)]
     rows, cols = [], []
     for c in range(nc):
-        for d in two[c]:
+        for d in sorted(set(int(j) for j in nbrs[c] if 0 <= j < nc) | {c}):
             for r in range(k):
                 for q in range(k):
                     rows.append(c * k + r)
                     cols.append(d * k + q)
-    rows, cols = np.asarray(rows, np.int32), np.asarray(cols, np.int32)
-    order = np.lexsort((cols, rows))
-    rows, cols = rows[order], cols[order]
+    return np.asarray(rows, np.int32), np.asarray(cols, np.int32)
+
+
+def _amgx_coloring(n, nc, nbrs):
+    """The pattern with JAX-AMG's column colouring, for ``with_cache``."""
+    from jaxamg.sparsity import get_column_coloring
+    rows, cols = _cell_pattern(n, nc, nbrs)
     with jax.ensure_compile_time_eval():          # concrete, inside a trace
         colors, n_colors = get_column_coloring(rows, cols, (n, n))
-    colors = np.asarray(colors)
-    return rows, cols, colors, int(n_colors), (n, n)
+    return rows, cols, np.asarray(colors), int(n_colors), (n, n)
+
+
+def _greedy_colors(rows, cols, n):
+    """Column colouring: two columns sharing a row get different colours."""
+    import scipy.sparse as sps
+    P = sps.csr_matrix((np.ones(len(rows), np.int8), (rows, cols)), shape=(n, n))
+    conflict = (P.T @ P).tocsr()
+    colors = -np.ones(n, np.int32)
+    for j in range(n):
+        nb = conflict.indices[conflict.indptr[j]:conflict.indptr[j + 1]]
+        used = set(colors[nb][colors[nb] >= 0])
+        c = 0
+        while c in used:
+            c += 1
+        colors[j] = c
+    return colors
+
+
+def _pyamg():
+    """PyAMG (Bell, Olson, Schroder 2022, JOSS 7:4142), imported when asked."""
+    try:
+        import pyamg
+    except ImportError as e:
+        raise ImportError("linear solver 'pyamg' needs the optional PyAMG "
+                          "package: pip install pyamg.  Or use 'gmres'.") from e
+    return pyamg
 
 
 def _face_kernel(rt, name):

@@ -223,11 +223,12 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                                        doc="Newton: stop at max|R| <= tol.")
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
     pressure_linear_solver = param.Selector(
-        default="auto", objects=["auto", "gmres", "amgx"],
-        doc="'amgx': NVIDIA AmgX through the optional JAX-AMG package (GPU "
-            "only; block-AMG-preconditioned FGMRES).  'gmres': matrix-free "
-            "restarted GMRES (jax.scipy).  'auto': amgx when JAX runs on a "
-            "GPU and jaxamg imports, else gmres.")
+        default="auto", objects=["auto", "gmres", "amgx", "pyamg"],
+        doc="AMG-preconditioned GMRES: 'amgx' on a GPU (NVIDIA AmgX through "
+            "the optional JAX-AMG package), 'pyamg' on the CPU (the optional "
+            "PyAMG, smoothed aggregation on the host).  'gmres': matrix-free "
+            "restarted GMRES (jax.scipy), always available.  'auto': amgx on "
+            "a GPU, pyamg on the CPU, when installed; else gmres.")
     pressure_amgx = param.Dict(
         default=dict(solver="FGMRES", gmres_n_restart=30, max_iters=500,
                      preconditioner={"solver": "AMG"}),
@@ -269,13 +270,12 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     def _pressure_backend(self):
         if self.pressure_linear_solver != "auto":
             return self.pressure_linear_solver
-        if jax.default_backend() != "gpu":
-            return "gmres"
+        name = "amgx" if jax.default_backend() == "gpu" else "pyamg"
         try:
-            import jaxamg  # noqa: F401
+            __import__({"amgx": "jaxamg", "pyamg": "pyamg"}[name])
         except ImportError:
             return "gmres"
-        return "amgx"
+        return name
 
     def _newton(self):
         return (None if self.pressure_solve == "linear" else
