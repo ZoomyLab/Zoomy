@@ -176,6 +176,25 @@ def pick(packed, idx):
 
 
 # ── the table ────────────────────────────────────────────────────────────────
+def spectral_radius(k, safety, *a_flat):
+    """``safety * sqrt(rho(A^2))``, ``rho(A^2)`` by ``k`` power steps on
+    ``A^2`` from ``x = 1`` (see ``kernel_functions.spectral_radius``).
+    Matvecs only: runs on any device; batched over the leading axes."""
+    n = int(round(len(a_flat) ** 0.5))
+    cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
+    A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
+    mv = lambda x: jnp.einsum("...ij,...j->...i", A, x)       # noqa: E731
+
+    def step(_, carry):
+        x, _lam = carry
+        y = mv(mv(x))
+        ny = jnp.linalg.norm(y, axis=-1)
+        return y / jnp.where(ny > 0, ny, 1.0)[..., None], ny   # |x| = 1
+    x0 = jnp.ones(A.shape[:-1], dtype=A.dtype) / jnp.sqrt(n)
+    _, lam = jax.lax.fori_loop(0, int(k), step, (x0, jnp.zeros(A.shape[:-2], A.dtype)))
+    return safety * jnp.sqrt(lam)
+
+
 def jax_userfunctions() -> dict:
     """The complete jax UserFunctions table (a fresh dict per runtime, since
     runtimes inject per-instance entries such as ``compute_derivative``)."""
@@ -191,6 +210,7 @@ def jax_userfunctions() -> dict:
         # opaque numerical kernels
         "eigensystem": eigensystem,
         "eigenvalues": eigenvalues,
+        "spectral_radius": spectral_radius,
         "solve": solve,
         # component read of a packed kernel result (canonical pick(K(*a), idx))
         "pick": pick,
