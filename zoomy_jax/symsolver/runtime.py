@@ -310,9 +310,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         def solve(vals, rhs):
             import scipy.sparse as sps
             A = sps.csr_matrix((np.asarray(vals), (rows, cols)), shape=(n, n))
-            A = (A.T if transpose else A).tocsr()
-            ml = pyamg.smoothed_aggregation_solver(A.tobsr(blocksize=(k, k)))
-            x = ml.solve(np.asarray(rhs), tol=ls["tol"], accel="gmres",
+            A = (A.T if transpose else A).tobsr(blocksize=(k, k))
+            # left-scale by the inverse cell blocks: A ~ M (x) L with a k x k
+            # coupling M (indefinite for VAM) becomes ~ I (x) L, AMG-friendly
+            A.sort_indices()
+            row = np.repeat(np.arange(n // k), np.diff(A.indptr))
+            diag = A.data[A.indices == row]                      # (cells, k, k)
+            Dinv = sps.block_diag(np.linalg.inv(diag), format="bsr")
+            As, bs = (Dinv @ A).tobsr(blocksize=(k, k)), Dinv @ np.asarray(rhs)
+            ml = pyamg.smoothed_aggregation_solver(As)
+            x = ml.solve(bs, tol=ls["tol"], accel="gmres",
                          maxiter=ls["restart"] * ls["maxiter"])
             return np.asarray(x, dtype=np.asarray(rhs).dtype)
         return solve
