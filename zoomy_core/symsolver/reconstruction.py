@@ -28,7 +28,8 @@ LIMITERS = {"minmod": minmod, "venkatakrishnan": venkatakrishnan,
 def reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh):
     """Face traces ``(QL, QR)``; ``QR`` on a boundary face is ``Qb``.
     ``demote``: ``False`` none, ``True`` all cells, or a cell mask -- demoted
-    cells are constant in ``W`` (MOOD)."""
+    cells are constant in ``W`` (MOOD).  With the model's free-surface map the
+    pair is (h, eta) and b_f = eta_f - h_f (:func:`bed_rows`)."""
     demote = sp.S(demote)
     to_w, to_q = maps(nsm)
     W, Wb = Q, Qb
@@ -36,6 +37,10 @@ def reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh):
         if nsm.call.update_aux_variables is not None:   # the ghost's own aux
             Qauxb = pointwise(nsm.call.update_aux_variables, Qb, Qauxb, p)
         W, Wb = pointwise(to_w, Q, Qaux, p), pointwise(to_w, Qb, Qauxb, p)
+    rows = bed_rows(nsm) if to_w is not None else None
+    if rows is not None:               # reconstruct h in the bed's slot
+        bed, depth = rows
+        W, Wb = put(W, (bed,), take(Q, (depth,))), put(Wb, (bed,), take(Qb, (depth,)))
     if order == 1 or demote is sp.S.true:
         WL, WR = unpack(cell_traces(W, Wb, mesh), 2)
     else:
@@ -44,6 +49,8 @@ def reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh):
         if demote is not sp.S.false:
             phi = select(demote, 0, phi)
         WL, WR = unpack(extrapolate(W, Wb, G, phi, mesh), 2)
+    if rows is not None:               # b_f = eta_f - h_f
+        WL, WR = (put(X, (bed,), take(X, (depth,)) - take(X, (bed,))) for X in (WL, WR))
     if to_q is None:
         return WL, WR
     AL, AR = unpack(face_aux(Qaux, mesh), 2)
@@ -62,6 +69,29 @@ def maps(nsm):
     if W is None or [str(w) for w in W.definition] == [str(q) for q in nsm.state]:
         return None, None                       # the model's map is Q
     return nsm.call.reconstruction_variables, nsm.call.state_from_reconstruction
+
+
+def bed_rows(nsm):
+    """``(bed, depth)`` rows when the reconstruction is Audusse's pair
+    (h, eta = b + h) -- the NSM's ``bed="derived"`` with a model that declares
+    both roles and maps them to (b, b + h) -- else None."""
+    if nsm.reconstruction.bed == "reconstructed":
+        return None
+    if nsm.reconstruction.bed != "derived":
+        raise ValueError(f"reconstruction bed {nsm.reconstruction.bed!r}: "
+                         "'derived' or 'reconstructed'")
+    cached = nsm.__dict__.get("_bed_rows", False)
+    if cached is not False:
+        return cached
+    roles, rows = nsm.roles, None
+    if roles.depth is not None and roles.bed is not None:
+        W = nsm.operator("reconstruction_variables").definition
+        b, h = nsm.state[roles.bed], nsm.state[roles.depth]
+        if (sp.expand(W[roles.bed] - b) == 0
+                and sp.expand(W[roles.depth] - b - h) == 0):  # free-surface map
+            rows = (roles.bed, roles.depth)
+    nsm.__dict__["_bed_rows"] = rows
+    return rows
 
 
 def limited(nsm, W, Wb, G, mesh):

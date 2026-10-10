@@ -605,8 +605,14 @@ class ReconstructionSpec:
     # ``limiters``: per-row override of ``limiter`` by state name (the row of
     # W in that state's slot), e.g. {"b": "none"}.
     # ``ties``: {row: lead} -- the row's limiter factor never exceeds the
-    # lead row's, phi_row <- min(phi_row, phi_lead).
+    # lead row's, phi_row <- min(phi_row, phi_lead).  Default: none, every
+    # row limited on its own.
     variables: str = "model"
+    # ``bed``: with the model's free-surface map (bed b, eta = b + h):
+    # "derived" -- reconstruct h and eta, b_f = eta_f - h_f at the faces
+    # (Audusse et al. 2004, Sec. 3 / Fig. 1: the only pair that keeps the lake
+    # at rest and h_f >= 0 at a dry shore); "reconstructed" -- b and eta.
+    bed: str = "derived"
     limiters: dict = field(default_factory=dict)
     ties: dict = field(default_factory=dict)
 
