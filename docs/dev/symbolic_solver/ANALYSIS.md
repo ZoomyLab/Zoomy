@@ -366,3 +366,29 @@ reconstructs h in the bed's slot and sets b_f = eta_f - h_f (Audusse et al.
 PositiveNonconservativeRusanov: O1 / O2 both pairs max|q| <= 1.1e-15.
 With the NSM default flux NonconservativeRusanov (no hydrostatic
 reconstruction) the same lake goes NaN at O1 already, old solver too.
+
+## 16. Model tags -> numerics defaults
+
+`zoomy_core/systemmodel/tags.py`: `ModelTag` (enum; `FREE_SURFACE`).  A
+model states `tags`, a user calls `sm.declare_tags(...)`, free-surface roles
+imply `FREE_SURFACE`; stored in `sm.history`, inherited by Chorin splits.
+`NumericalSystemModel.from_system_model(tag_rules=...)` / `register_tag_rule`
+map tags to defaults for what the caller left unset (square systems only):
+`FREE_SURFACE -> riemann = PositiveNonconservativeRusanov`.
+
+## 17. CPU scaling, 2-D flow over the bump (bench_vam2d_bump.py)
+
+Escalante bump extruded to 3 m x 0.3 m, VAM(1) Chorin, CFL 0.9, PyAMG
+(smoothed aggregation on the block-diagonally scaled pressure matrix) +
+GMRES, all 96 cores:
+
+| mesh | cells | steps / sim-s | s / step | wall s / sim-s |
+|---|---|---|---|---|
+| 60x6 | 360 | ~100 | 0.06 | 6 |
+| 120x12 | 1440 | ~210 | 0.15 | 30 |
+| 240x24 | 5760 | ~400 | 0.67 | 270 |
+| 480x48 | 23040 | ~800 | 3.9 | 3100 |
+
+- Block scaling: V-cycles/solve 66 -> 14 (240), 480 converges (16).
+- At 480: pressure solve 49 of 63 s (PyAMG host GMRES).
+- 1 minute: T = 1 s -> ~2,200 cells; T = 5 s -> ~650 cells.
