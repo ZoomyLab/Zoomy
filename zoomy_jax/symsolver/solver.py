@@ -229,6 +229,15 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             "PyAMG, smoothed aggregation on the host).  'gmres': matrix-free "
             "restarted GMRES (jax.scipy), always available.  'auto': amgx on "
             "a GPU, pyamg on the CPU, when installed; else gmres.")
+    pressure_amg_rebuild = param.Integer(
+        default=10, bounds=(1, None),
+        doc="'pyamg': rebuild the AMG hierarchy at least every this many "
+            "pressure solves; in between it preconditions the current matrix "
+            "(a lagged preconditioner).")
+    pressure_amg_growth = param.Number(
+        default=2.0, bounds=(1, None),
+        doc="'pyamg': rebuild early once the GMRES iterations exceed this "
+            "factor times those right after the last rebuild.")
     pressure_amgx = param.Dict(
         default=dict(solver="FGMRES", gmres_n_restart=30, max_iters=500,
                      preconditioner={"solver": "AMG"}),
@@ -265,7 +274,8 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
         return self._setup(mesh, pred, systems, linsolve=dict(
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
-            backend=self._pressure_backend(), amgx=self.pressure_amgx))
+            backend=self._pressure_backend(), amgx=self.pressure_amgx,
+            amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):
         if self.pressure_linear_solver != "auto":

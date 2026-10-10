@@ -306,21 +306,39 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         AV = jax.vmap(op)(jnp.asarray(probes, dtype=jnp.float64))  # one per colour
         return AV[colors[cols], rows]
 
+    amg_cache = {}                   # (n, transpose) -> hierarchy and its age
+
     def host_amg(rows, cols, n, k, transpose):
+        """Host solve: GMRES preconditioned by a smoothed-aggregation AMG
+        hierarchy of the block-diagonally scaled matrix.  The hierarchy is
+        reused (a lagged preconditioner for the current matrix) and rebuilt
+        every ``amg_rebuild`` solves, or as soon as the iterations exceed
+        ``amg_growth`` x those right after the last rebuild."""
+        import scipy.sparse as sps
+        from scipy.sparse.linalg import gmres as sp_gmres
+        rebuild, growth = int(ls.get("amg_rebuild", 1)), float(ls.get("amg_growth", 2.0))
+
         def solve(vals, rhs):
-            import scipy.sparse as sps
             A = sps.csr_matrix((np.asarray(vals), (rows, cols)), shape=(n, n))
             A = (A.T if transpose else A).tobsr(blocksize=(k, k))
             # left-scale by the inverse cell blocks: A ~ M (x) L with a k x k
             # coupling M (indefinite for VAM) becomes ~ I (x) L, AMG-friendly
             A.sort_indices()
             row = np.repeat(np.arange(n // k), np.diff(A.indptr))
-            diag = A.data[A.indices == row]                      # (cells, k, k)
-            Dinv = sps.block_diag(np.linalg.inv(diag), format="bsr")
+            Dinv = sps.block_diag(np.linalg.inv(A.data[A.indices == row]), format="bsr")
             As, bs = (Dinv @ A).tobsr(blocksize=(k, k)), Dinv @ np.asarray(rhs)
-            ml = pyamg.smoothed_aggregation_solver(As)
-            x = ml.solve(bs, tol=ls["tol"], accel="gmres",
-                         maxiter=ls["restart"] * ls["maxiter"])
+            c = amg_cache.setdefault((n, transpose), {"ml": None, "age": 0, "it0": None, "it": 0})
+            if (c["ml"] is None or c["age"] >= rebuild
+                    or (c["it0"] is not None and c["it"] > growth * max(c["it0"], 1))):
+                c.update(ml=pyamg.smoothed_aggregation_solver(As), age=0, it0=None)
+            its = [0]
+            x, _ = sp_gmres(As, bs, M=c["ml"].aspreconditioner(), rtol=ls["tol"],
+                            atol=0.0, restart=ls["restart"], maxiter=ls["maxiter"],
+                            callback=lambda _: its.__setitem__(0, its[0] + 1),
+                            callback_type="pr_norm")
+            c["age"], c["it"] = c["age"] + 1, its[0]
+            if c["it0"] is None:
+                c["it0"] = its[0]
             return np.asarray(x, dtype=np.asarray(rhs).dtype)
         return solve
 
