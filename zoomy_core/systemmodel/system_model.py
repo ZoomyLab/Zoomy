@@ -1215,6 +1215,17 @@ class SystemModel:
         from zoomy_core.systemmodel.roles import resolve_roles
         return resolve_roles(self)
 
+    @property
+    def tags(self):
+        """The declared :class:`~zoomy_core.systemmodel.tags.ModelTag` s."""
+        from zoomy_core.systemmodel.tags import declared_tags
+        return declared_tags(self)
+
+    def declare_tags(self, *tags):
+        """Record model tags (ModelTag members).  Returns self."""
+        from zoomy_core.systemmodel.tags import declare_tags
+        return declare_tags(self, tags)
+
     def declare_roles(self, **roles):
         """Record a role declaration (see
         :func:`zoomy_core.systemmodel.roles.declare_roles`).  Returns self."""
@@ -4181,6 +4192,10 @@ def _declare_model_hooks(sm, model) -> None:
     hook = getattr(model, "declare_system_roles", None)
     if callable(hook):
         hook(sm)
+    tags = getattr(model, "tags", None)
+    if tags:
+        from zoomy_core.systemmodel.tags import declare_tags
+        declare_tags(sm, tags, f"{type(model).__name__}.tags")
     adm = getattr(model, "admissible_constraints", None)
     if callable(adm):
         constraints = adm()

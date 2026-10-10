@@ -807,10 +807,14 @@ def _inherit_roles(sm, sm_parent):
     default operations) at the split."""
     from zoomy_core.systemmodel.roles import (
         declared_role_record, declare_roles)
+    from zoomy_core.systemmodel.tags import declare_tags, declared_tags
     rec = declared_role_record(sm_parent)
     if rec:
         declare_roles(sm, description="roles inherited from the split parent",
                       **rec)
+    tags = declared_tags(sm_parent)
+    if tags:
+        declare_tags(sm, tags, "tags inherited from the split parent")
     if getattr(sm_parent, "admissible", None) is not None \
             and getattr(sm, "admissible", None) is None:
         sm.admissible = sm_parent.admissible

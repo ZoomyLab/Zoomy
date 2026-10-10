@@ -1314,6 +1314,7 @@ class NumericalSystemModel(SystemModel):
         eigenvalue_eps: float = 1e-8,
         dt_max: float = 5.0,
         depth_round_off: Optional[float] = 1e-12,
+        tag_rules: Optional[dict] = None,
         extra_operations: Optional[list] = None,
         additional_systems: Optional[list] = None,
         scaled_q_indices: Optional[list] = None,
@@ -1403,6 +1404,9 @@ class NumericalSystemModel(SystemModel):
         # sensible default (e.g. the free-surface positive Rusanov) must only
         # be overridden when the choice was explicit (REQ-157).
         riemann_explicit = riemann is not None
+        if riemann is None and sm.is_square:   # the model's tags may imply one
+            from zoomy_core.systemmodel.tags import tag_defaults
+            riemann = tag_defaults(sm, tag_rules).get("riemann")
         if riemann is None:
             # Imported lazily — fvm/riemann_solvers.py imports from
             # zoomy_core.transformation.to_numpy which transitively
