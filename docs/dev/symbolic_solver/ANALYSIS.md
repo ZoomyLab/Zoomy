@@ -337,3 +337,32 @@ See `AMG.md`.  `gates/gate14_amgx.py`, Chorin VAM(1) bump, L40S:
   reuse it as a frozen preconditioner for the matrix-free JAX GMRES.
 - GMRES then AmgX in ONE process hangs (JAX/AmgX interplay, not chased).
 - Default `pressure_linear_solver="auto"`: amgx on a GPU with jaxamg.
+
+CPU: PyAMG (smoothed aggregation, block 2x2) preconditioning GMRES on the
+host, the matrix assembled in JAX by colouring (one vmapped evaluation per
+colour, one-ring pattern), `custom_linear_solve` for AD.  2-D VAM(1),
+t = 0.02, 16 cores:
+
+| mesh | GMRES | PyAMG + GMRES | max diff |
+|---|---|---|---|
+| 16^2 | 0.30 s | 0.04 s | 3.8e-12 |
+| 32^2 | 2.54 s | 0.08 s | 3.6e-11 |
+| 64^2 | 12.1 s | 0.70 s | 2.8e-11 |
+
+- GPU: AmgX 17.1 s, PyAMG-on-host 16.7 s, GMRES 16.8 s at 64^2 -- the GPU
+  time is outside the linear solve (likely the VAM numerical eigensolve,
+  CPU-only in JAX); not profiled yet.
+- `pressure_linear_solver="auto"`: amgx on a GPU, pyamg on the CPU, when
+  installed; else jax.scipy GMRES.  Chorin gates 7/8/12/13 pass on pyamg
+  (vs old 8.7e-13, AD rev-jvp 4.8e-12, foam 1.0e-12).
+
+## 15. Reconstruction pair (h, eta)
+
+`ReconstructionSpec.bed = "derived"` (default): with the model's
+free-surface map (roles bed, depth; W = (b, b + h, u)) the template
+reconstructs h in the bed's slot and sets b_f = eta_f - h_f (Audusse et al.
+2004, Sec. 3); "reconstructed" keeps (b, eta).  Rows limited independently
+(no ties).  Lake at rest around a dry island (probe_lake_at_rest.py),
+PositiveNonconservativeRusanov: O1 / O2 both pairs max|q| <= 1.1e-15.
+With the NSM default flux NonconservativeRusanov (no hydrostatic
+reconstruction) the same lake goes NaN at O1 already, old solver too.

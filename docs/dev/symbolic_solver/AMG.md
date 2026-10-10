@@ -1,6 +1,11 @@
 # Optional: AmgX pressure solves (JAX-AMG)
 
-`SymbolicChorinSolverJax(pressure_linear_solver="amgx")` solves the Chorin
+CPU: `pressure_linear_solver="pyamg"` -- PyAMG (Bell, Olson, Schroder 2022,
+doi:10.21105/joss.04142; `pip install pyamg`) smoothed aggregation as the
+preconditioner of GMRES, on the host; default on the CPU when installed
+(`"auto"`).
+
+GPU: `SymbolicChorinSolverJax(pressure_linear_solver="amgx")` solves the Chorin
 pressure system with NVIDIA AmgX through JAX-AMG (Liu, Fan, Wang 2026,
 doi:10.1016/j.softx.2026.102966; AmgX: Naumov et al. 2015,
 doi:10.1137/140980260).  CUDA GPU only; optional (imported only when
@@ -9,9 +14,10 @@ selected, clear error otherwise).  Default stays `"gmres"`.
 How it is used
 
 - The pressure operator stays matrix-free in the template (`LinSolve`).
-- Pattern: every pressure row of a cell couples to the cells within two LSQ
-  rings (static mesh topology), cell-major, `block_dim = #pressure rows`.
-- AmgX assembles the matrix by graph colouring inside the jitted loop.
+- Pattern: every pressure row of a cell couples to the cells of its LSQ
+  stencil (static mesh topology), cell-major, `block_dim = #pressure rows`.
+- The matrix is assembled in JAX by colouring (one vmapped operator
+  evaluation per colour) and handed to AmgX / PyAMG as a sparse matrix.
 - Default config: FGMRES(30) + AMG; with `block_dim` JAX-AMG uses
   aggregation AMG + block-Jacobi.  The 2x2 VAM block is indefinite
   (sym(-M0) of the derived operator: eigenvalues -0.10, 1.10); scalar AMG stalls
