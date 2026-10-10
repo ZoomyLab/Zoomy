@@ -6,7 +6,9 @@
     time, Q, Qaux = solver.run(Q, Qaux)                     # parameters= for AD
 
 ``ad_mode="reverse"`` swaps the time loop for a checkpointed one (``jax.grad``);
-``couple=`` turns the march into one preCICE participant.
+``couple=`` turns the march into one preCICE participant; ``comm=`` (an mpi4py
+communicator) runs it distributed, one rank per device
+(:mod:`zoomy_jax.symsolver.parallel`).
 """
 from __future__ import annotations
 
@@ -86,6 +88,10 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
     implicit_maxiter = param.Integer(default=6, bounds=(1, None))
     gmres_tol = param.Number(default=1e-7, bounds=(0, None))
     gmres_maxiter = param.Integer(default=30, bounds=(1, None))
+    comm = param.Parameter(default=None, doc=(
+        "mpi4py communicator: a distributed run, each rank on its piece of "
+        "the mesh (owned cells + halo).  setup() takes the global mesh and "
+        "returns the local state; partition.gather() collects it."))
     subcycling = param.Boolean(default=False,
                                doc="preCICE: adaptive steps inside a window "
                                    "(not exactly conservative).  False = one "
@@ -102,6 +108,16 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         bcs = getattr(nsm.sm, "_bc_source", None)
         if hasattr(mesh, "resolve_periodic_bcs") and bcs is not None:
             mesh.resolve_periodic_bcs(bcs)
+        self.partition, self.global_mesh = None, mesh
+        if self.comm is not None and self.comm.Get_size() > 1:
+            if systems or self.couple or self.imex:
+                raise NotImplementedError(
+                    "distributed: the explicit hyperbolic solver only (no "
+                    "Chorin, preCICE or IMEX yet)")
+            from zoomy_jax.symsolver.parallel import split
+            local, self.partition = split(mesh, self.comm)
+            mesh = ensure_lsq_mesh(local, nsm)
+            self.partition.check_stencils(self.global_mesh, mesh)
         sm, nc = nsm.sm, int(mesh.n_inner_cells)
         Q = np.zeros((len(sm.state), nc))
         Qaux = np.zeros((len(sm.aux_state), nc))
@@ -125,7 +141,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
                                 on_write=self._writer(), couple=self.couple,
-                                systems=systems,
+                                systems=systems, partition=self.partition,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
                                               gmres_tol=self.gmres_tol,
@@ -183,17 +199,25 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
             lambda *a: T.hyperbolic(self.nsm, *a, dt_write=self.dt_write, **kw))
 
     def _writer(self):
-        """``on_write``, plus the HDF5 snapshots when ``output`` is set."""
+        """``on_write``, plus the HDF5 snapshots when ``output`` is set.
+        Distributed: ``on_write`` sees each rank's local state; the snapshot
+        is gathered and written by rank 0, on the global mesh."""
         if not self.output:
             return self.on_write
         from zoomy_core.misc.io import _save_fields_to_hdf5, write_mesh_to_hdf5
-        write_mesh_to_hdf5(self.output, self.mesh_np,
-                           names=[str(v) for v in self.nsm.state])
+        part = self.partition
+        root = part is None or part.rank == 0
+        if root:
+            write_mesh_to_hdf5(self.output, self.global_mesh,
+                               names=[str(v) for v in self.nsm.state])
         count, user = [0], self.on_write
 
         def write(time, Q, Qaux):
-            _save_fields_to_hdf5(self.output, count[0], float(time),
-                                 np.asarray(Q), np.asarray(Qaux))
+            Qg, Qauxg = ((Q, Qaux) if part is None
+                         else (part.gather(Q), part.gather(Qaux)))
+            if root:
+                _save_fields_to_hdf5(self.output, count[0], float(time),
+                                     np.asarray(Qg), np.asarray(Qauxg))
             count[0] += 1
             if user is not None:
                 user(time, Q, Qaux)

@@ -27,6 +27,7 @@ from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
     ConstantReconstruction, DenseDiffusionOperatorJAX,
     LSQMUSCLReconstructionJAX)
+from zoomy_jax.symsolver.parallel import HALO
 from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
 
@@ -70,9 +71,12 @@ def _with_geometry(R, g, mesh_np, nc):
 
 
 def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
-            implicit=None, systems=None):
+            implicit=None, systems=None, partition=None):
     """The name table the printed solver runs against.  ``systems``: further
-    ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``."""
+    ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``.
+    ``partition``: this rank's piece of a distributed run
+    (:mod:`zoomy_jax.symsolver.parallel`); its ``halo`` and global reductions
+    replace the serial ones."""
     sm = rt.sm
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
@@ -87,8 +91,13 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     iA, iB, inner = fc0[interior], fc1[interior], fc0[bf_face]
     fc_other = np.where(is_bnd, fc0, fc1)            # inner cell at boundary
     fc_cfl = np.where(fc1 < nc, fc1, fc0)
-    branch = jnp.asarray(boundary_face_branches(
-        mesh_np, getattr(sm, "_bc_source", None)), dtype=jnp.int32)
+    # faces a partition cut: the inner state, no BC (nothing owned reads it)
+    names = list(mesh_np.boundary_conditions_sorted_names)
+    numbers = np.asarray(mesh_np.boundary_face_function_numbers, dtype=int)[:n_bf]
+    cut = (numbers == names.index(HALO)) if HALO in names else np.zeros(n_bf, bool)
+    phys = np.flatnonzero(~cut)
+    branch = jnp.asarray(np.asarray(boundary_face_branches(
+        mesh_np, getattr(sm, "_bc_source", None)))[phys], dtype=jnp.int32)
     periodic = bf_cells != inner
     has_periodic = bool(periodic.any())
     j = jnp.asarray
@@ -135,11 +144,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         d_face = jnp.linalg.norm(fc[j(bf_face), :]
                                  - mesh.cell_centers[:, j(bf_cells)].T, axis=1)
 
-        def per_bf(i):
+        def per_bf(k, i):
             f = j(bf_face)[i]
-            return bc(branch[i], time, fc[f, :], d_face[i], states[:, i],
+            return bc(branch[k], time, fc[f, :], d_face[i], states[:, i],
                       Qaux[:, j(cells_of_face)[i]], p, n[:, f])
-        return jax.vmap(per_bf)(jnp.arange(n_bf)).T
+        if not cut.any():
+            return jax.vmap(per_bf)(jnp.arange(n_bf), jnp.arange(n_bf)).T
+        if not len(phys):                   # a piece inside the domain
+            return states
+        out = jax.vmap(per_bf)(jnp.arange(len(phys)), j(phys)).T
+        return states.at[:, j(phys)].set(out)
 
     def boundary_ghosts(bc, Q, Qaux, p, time, mesh):
         return _bc_at(bc, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
@@ -452,6 +466,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         extrapolate=extrapolate, divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=jnp.min, reduce_any=jnp.any,
+        halo=lambda X, mesh: X,
         put=put, zeros=zeros, clean_round_off=clean_round_off, take=lambda Q, rows: Q[jnp.asarray(rows)],
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
@@ -461,6 +476,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         minimum=jnp.minimum, maximum=jnp.maximum, abs=jnp.abs, floor=jnp.floor)
     if couple is not None:
         m.update(_coupling(couple, rt, mesh_np, fc0, bf_face, nf))
+    if partition is not None:
+        m.update(partition.blocks(mesh_np))
     return m
 
 
