@@ -198,11 +198,13 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
 
     def ghost_bounds(R, u, ub):
         # min/max over the face neighbours and the boundary ghosts ``ub``,
-        # which sit at the ghost position (as in ``gradient``): no lift
+        # which sit at the ghost position (as in ``gradient``): no lift.  A
+        # ghost bounds its face's OWNER (on a periodic seam ``_bf_cells`` is
+        # the partner cell)
         lo = hi = u
         for a, b in ((R._iA_int, R._iB_int), (R._iB_int, R._iA_int)):
             lo, hi = lo.at[a].min(u[b]), hi.at[a].max(u[b])
-        return lo.at[R._bf_cells].min(ub), hi.at[R._bf_cells].max(ub)
+        return lo.at[R._iInner_bnd].min(ub), hi.at[R._iInner_bnd].max(ub)
 
     def limiter(name):
         def factors(rows, W, Wb, G, mesh):
