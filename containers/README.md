@@ -59,7 +59,8 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 ## Distributed runs: `zoomy_jax_mpi`
 
 JAX + OpenMPI 5 + UCX (CUDA-aware) + mpi4jax: one MPI rank per GPU, halo
-exchange GPU -> GPU.  Same three modes; for a run:
+exchange through host memory by default (`--env MPI4JAX_USE_CUDA_MPI=1`:
+GPU -> GPU, for NVLink / GPUDirect nodes).  Same three modes; for a run:
 `apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python run.py` (one node),
 `srun --mpi=pmix apptainer exec --nv zoomy_jax_mpi.sif python run.py` (several).
 See `docs/dev/symbolic_solver/PARALLEL.md`.

@@ -152,6 +152,8 @@ elif mode == "run":
     A = s.initial_aux(Q, A)
     comm.Barrier()
     t1 = clock.perf_counter()
+    if comm.Get_rank() == 0:
+        print(f"  setup {t1-t0:.0f} s", flush=True)
     m, rt = s.module, s.rt
     speed_k = rt.eigenvalues_cfl if rt.eigenvalues_cfl is not None else rt.eigenvalues
 
@@ -164,6 +166,8 @@ elif mode == "run":
         s.run(Q, A)[1].block_until_ready()
     comm.Barrier()
     t2 = clock.perf_counter()
+    if comm.Get_rank() == 0:
+        print(f"  compile {t2-t1:.0f} s", flush=True)
     s.time_end, s.dt_write = T, dt_write
     tt, Q2, A2 = s.run(Q, A)
     Q2.block_until_ready()

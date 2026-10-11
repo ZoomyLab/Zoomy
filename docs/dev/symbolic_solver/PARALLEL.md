@@ -51,7 +51,11 @@ GPU transport (`bench_halo.py`: 1000 halo exchanges in one compiled loop,
 | container, `MPI4JAX_USE_CUDA_MPI=0` | through host memory | | | 7.20 ms |
 
 - On this node (PCIe, GPU pairs on two sockets, no NVLink) the transport
-  does not change the step time; the exchange is ~1-2 % of a step.
+  does not change the step time at 160k cells; at 14.8M cells (catchment,
+  messages up to 350 kB per peer) GPU -> GPU stalled: one simulated second
+  did not finish in 3 min, through host memory it takes 1.3 s.  The
+  container therefore exchanges through host memory by default
+  (`MPI4JAX_USE_CUDA_MPI=0`); opt in with `--env MPI4JAX_USE_CUDA_MPI=1`.
 - CUDA-aware needs all of: `OMPI_MCA_opal_cuda_support=true` (conda-forge
   ships it off), `OMPI_MCA_pml=ucx` (the default ob1 path is slower than
   staging), `UCX_MEMTYPE_CACHE=n` (else UCX copies small JAX device buffers

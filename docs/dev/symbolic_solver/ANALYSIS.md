@@ -627,3 +627,10 @@ CFL 0.5, dt_max 5 s, walls; `bench_catchment.py`):
   ~ 4 days.  Same case at 10 m on 1 GPU: 1 h in 5-7 s.
 - dt from the CFL estimate of the actual state at start and end (the
   template's loop has no step counter).
+
+Container `zoomy_jax_mpi` (rebuilt): the 14.8M-cell catchment, 10 s with 3
+snapshots on 4 GPUs: 17.5 s (env 17.1 s), water change = rain exactly;
+setup 90 s.  Two container fixes: the GPU MPI settings (UCX) only when
+`--nv` binds the driver (without a GPU, UCX cannot start); the halo
+exchange through host memory by default -- GPU -> GPU stalled at this size
+(halo messages up to 350 kB per peer, 13.6k-20.5k halo cells per rank).

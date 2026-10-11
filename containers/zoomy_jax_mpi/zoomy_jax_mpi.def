@@ -4,8 +4,8 @@ From: condaforge/miniforge3:24.11.3-0
 # JAX + Zoomy for distributed runs: one MPI rank per GPU (or per CPU core
 # group), halo exchange by mpi4jax inside the compiled loop.
 #   - JAX 0.9.2 with its CUDA 12 wheels (runs on the CPU without a GPU)
-#   - OpenMPI 5 + UCX (conda-forge), CUDA-aware: halo buffers go GPU -> GPU
-#     (UCX cuda_ipc / cuda_copy), no copy through host memory
+#   - OpenMPI 5 + UCX (conda-forge), CUDA-aware; the halo exchange goes
+#     through host memory by default (MPI4JAX_USE_CUDA_MPI=1: GPU -> GPU)
 #   - mpi4py, mpi4jax 0.9.1.post2 built against that OpenMPI, with CUDA
 # Same three modes as the other backend images (server / jupyter / shell).
 #
@@ -16,7 +16,7 @@ From: condaforge/miniforge3:24.11.3-0
 #   apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python run.py
 # Several nodes (host launcher, PMIx):
 #   srun --mpi=pmix apptainer exec --nv zoomy_jax_mpi.sif python run.py
-# Staged exchange instead (through host memory): MPI4JAX_USE_CUDA_MPI=0.
+# GPU -> GPU exchange (NVLink / GPUDirect nodes): --env MPI4JAX_USE_CUDA_MPI=1.
 #
 # NOTE: %files dest is /opt/src, NOT /tmp (Apptainer bind-mounts host /tmp).
 
@@ -38,13 +38,20 @@ From: condaforge/miniforge3:24.11.3-0
     export ZOOMY_ADAPTER=jax
     export ZOOMY_PORT=8080
     export ZOOMY_ROOT=/workspace
-    # CUDA-aware OpenMPI: conda-forge ships it with CUDA buffer support off;
-    # UCX carries the GPU buffers; its memtype cache misses JAX's allocator
-    # (small messages would be copied as host memory and crash).
-    export OMPI_MCA_opal_cuda_support=true
-    export OMPI_MCA_pml=ucx
-    export UCX_MEMTYPE_CACHE=n
-    export MPI4JAX_USE_CUDA_MPI=1
+    # With a GPU (--nv binds the driver): CUDA-aware OpenMPI.  conda-forge
+    # ships CUDA buffer support off; UCX carries the GPU buffers; its memtype
+    # cache misses JAX's allocator (small messages would be copied as host
+    # memory and crash).  Without a GPU, UCX cannot start: OpenMPI's default.
+    if ls /.singularity.d/libs/libcuda.so* >/dev/null 2>&1; then
+        export OMPI_MCA_opal_cuda_support=true
+        export OMPI_MCA_pml=ucx
+        export UCX_MEMTYPE_CACHE=n
+    fi
+    # Halo exchange through host memory by default: on the 4 x L40S node
+    # (PCIe, two sockets) GPU -> GPU was no faster at 160k cells and stalled
+    # at 14.8M cells (minutes per simulated second vs 1.3 s staged).  Opt in
+    # with --env MPI4JAX_USE_CUDA_MPI=1 where NVLink / GPUDirect RDMA exist.
+    export MPI4JAX_USE_CUDA_MPI=${MPI4JAX_USE_CUDA_MPI:-0}
     # mpiexec inside the container, as root under --fakeroot
     export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
