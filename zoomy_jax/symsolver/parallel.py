@@ -36,7 +36,7 @@ def _mpi4jax():
 
 def bind_device(comm):
     """One GPU per rank: the node-local rank picks the GPU (round robin).
-    Before JAX starts, the rank sees only its GPU (``jax_cuda_visible_devices``);
+    Before JAX starts, the rank sees only its GPU (``CUDA_VISIBLE_DEVICES``);
     after, its GPU becomes the default device.  No-op on the CPU, with one
     GPU, or when ``CUDA_VISIBLE_DEVICES`` is set (the launcher chose)."""
     import os
@@ -53,7 +53,16 @@ def bind_device(comm):
         except OSError:
             return                                   # no NVIDIA driver
         if n_gpu > 1 and "cpu" not in os.environ.get("JAX_PLATFORMS", ""):
-            jax.config.update("jax_cuda_visible_devices", str(local % n_gpu))
+            import warnings
+            warnings.warn("GPUs bound inside the run: libraries using the CUDA "
+                          "runtime directly (AmgX, mpi4jax's copies) still see "
+                          "GPU 0 -- launch with 'python -m zoomy_jax.gpurank'")
+            # JAX's config (JAX reads it, not the environment, from here on)
+            # and the environment (every other CUDA user in the process --
+            # AmgX would pick device 0)
+            gpu = str(local % n_gpu)
+            jax.config.update("jax_cuda_visible_devices", gpu)
+            os.environ["CUDA_VISIBLE_DEVICES"] = gpu
         n = n_gpu
     else:
         gpus = [d for d in jax.local_devices() if d.platform == "gpu"]
@@ -89,6 +98,31 @@ def _register_alltoall_ad():
 
 
 # ── partition ───────────────────────────────────────────────────────────────
+_LOCAL = [False]
+
+
+class no_halo:
+    """While tracing inside: ``halo`` is the identity -- the rank's own
+    block of an operator (a block-Jacobi preconditioner)."""
+
+    def __enter__(self):
+        self._was, _LOCAL[0] = _LOCAL[0], True
+
+    def __exit__(self, *exc):
+        _LOCAL[0] = self._was
+
+
+def krylov(part, nc):
+    """What a distributed Krylov solve needs: the owned-cell mask ``(nc,)``
+    and the global sum (allreduce; inside ``custom_linear_solve`` nothing
+    is differentiated through it)."""
+    mpi4jax = _mpi4jax()
+    from mpi4py import MPI
+    comm = part.comm.Clone()
+    return (jnp.asarray(np.arange(nc) < part.n_own),
+            lambda x: mpi4jax.allreduce(x, MPI.SUM, comm=comm))
+
+
 def blocks(part, mesh_np):
     """``halo`` and the global reductions of the runtime's name table for
     the rank's piece ``part`` (a :class:`zoomy_core.mesh.distributed.Partition`)."""
@@ -110,7 +144,7 @@ def blocks(part, mesh_np):
     send, recv = jnp.asarray(send), jnp.asarray(recv.reshape(-1))
 
     def halo(X, mesh):
-        if size == 1:
+        if size == 1 or jnp.ndim(X) == 0 or _LOCAL[0]:
             return X
         buf = jnp.moveaxis(X[:, send], 1, 0)            # (size, rows, m)
         got = mpi4jax.alltoall(buf, comm=comm)          # got[s]: from s

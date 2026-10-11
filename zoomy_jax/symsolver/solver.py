@@ -100,10 +100,14 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                                    "step per window, exactly conservative.")
 
     # ── setup ──────────────────────────────────────────────────────────────
-    def setup(self, mesh, model):
+    def _bind(self):
+        """Distributed: this rank's GPU, before anything touches JAX."""
         if self.comm is not None and self.comm.Get_size() > 1:
             from zoomy_jax.symsolver.parallel import bind_device
             bind_device(self.comm)
+
+    def setup(self, mesh, model):
+        self._bind()
         nsm = (model if isinstance(model, NumericalSystemModel)
                else NumericalSystemModel.from_system_model(model))
         return self._setup(mesh, nsm)
@@ -117,10 +121,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.partition, self.global_mesh = None, mesh
         self.mesh_file = mesh if isinstance(mesh, (str, os.PathLike)) else None
         if self.comm is not None and self.comm.Get_size() > 1:
-            if systems or self.couple or self.imex:
+            if self.couple or self.imex:
                 raise NotImplementedError(
-                    "distributed: the explicit hyperbolic solver only (no "
-                    "Chorin, preCICE or IMEX yet)")
+                    "distributed: no preCICE or IMEX yet")
             if bcs is not None and any(type(b) is Periodic
                                        for b in bcs.boundary_conditions_list):
                 raise NotImplementedError("distributed run with periodic BCs")
@@ -329,7 +332,22 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                      preconditioner={"solver": "AMG"}),
         doc="'amgx': AmgX solver configuration passed to jaxamg.solve.")
 
+    pressure_amgx_block = param.Dict(
+        default=dict(solver="AMG", algorithm="AGGREGATION", selector="SIZE_2",
+                     max_iters=1),
+        doc="Distributed 'amgx': the AmgX configuration of the rank's own "
+            "block (block-Jacobi preconditioner of the global FGMRES): one "
+            "aggregation-AMG V-cycle (classical AMG has no block matrices).")
+
+    pressure_coarse = param.Boolean(
+        default=True,
+        doc="Distributed AMG ('pyamg', 'amgx'): add a coarse correction to "
+            "the per-rank block preconditioner, one unknown per rank and "
+            "pressure row (two-level additive Schwarz); without it the "
+            "iterations grow with the number of ranks.")
+
     def setup(self, mesh, pred, press, corr):
+        self._bind()
         if self.couple:
             raise NotImplementedError("Chorin with preCICE coupling")
         if not isinstance(pred, NumericalSystemModel):
@@ -353,7 +371,10 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             systems[name] = (nsm, JaxRuntime.from_nsm(nsm))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
-        n = len(press.equation_to_state_index) * int(mesh.n_inner_cells)
+        from zoomy_core.mesh import distributed
+        n_cells = (distributed.source(mesh).n_cells
+                   if isinstance(mesh, (str, os.PathLike)) else int(mesh.n_inner_cells))
+        n = len(press.equation_to_state_index) * n_cells
         ell = elliptic_constants(n_unknowns=n, tol=self.pressure_tol,
                                  restart=self.pressure_restart).values
         tol = float(ell["c_elliptic_tol"])
@@ -361,6 +382,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
             backend=self._pressure_backend(), amgx=self.pressure_amgx,
+            amgx_block=self.pressure_amgx_block, coarse=self.pressure_coarse,
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):

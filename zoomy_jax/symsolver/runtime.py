@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import copy
+import os
 import dataclasses
 
 import jax
@@ -308,14 +309,15 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
                 if amgx is not None or pyamg is not None else None)
 
-    def assembled(op, n):
-        """The operator's values on the cell pattern, by colouring: one
-        evaluation per colour (traced; the pattern is static)."""
-        if n not in patterns:
-            rows, cols = _cell_pattern(n, nc, lsq_nbrs)
+    def assembled(op, n, ncells=nc):
+        """The operator's values on the cell pattern of the first ``ncells``
+        cells, by colouring: one evaluation per colour (traced; the pattern
+        is static)."""
+        if (n, ncells) not in patterns:
+            rows, cols = _cell_pattern(n, ncells, lsq_nbrs)
             colors = _greedy_colors(rows, cols, n)
-            patterns[n] = (rows, cols, colors)
-        rows, cols, colors = patterns[n]
+            patterns[(n, ncells)] = (rows, cols, colors)
+        rows, cols, colors = patterns[(n, ncells)]
         probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
         AV = jax.vmap(op)(jnp.asarray(probes, dtype=jnp.float64))  # one per colour
         return AV[colors[cols], rows]
@@ -356,11 +358,195 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             return np.asarray(x, dtype=np.asarray(rhs).dtype)
         return solve
 
+    def host_vcycle(rows, cols, n, k, transpose):
+        """Host preconditioner: one smoothed-aggregation V-cycle on the
+        block-diagonally scaled matrix (a lagged hierarchy, rebuilt once
+        ``amg_rebuild`` new matrices have been seen)."""
+        import scipy.sparse as sps
+        c = amg_cache.setdefault(("vcycle", n, transpose),
+                                 {"vals": None, "age": 0, "P": None, "Dinv": None})
+        rebuild = int(ls.get("amg_rebuild", 1))
+
+        def apply(vals, rhs):
+            vals = np.asarray(vals)
+            if c["vals"] is None or not np.array_equal(vals, c["vals"]):
+                c["vals"], c["age"] = vals.copy(), c["age"] + 1
+            if c["P"] is None or c["age"] >= rebuild:
+                A = sps.csr_matrix((vals, (rows, cols)), shape=(n, n))
+                A = (A.T if transpose else A).tobsr(blocksize=(k, k))
+                A.sort_indices()
+                row = np.repeat(np.arange(n // k), np.diff(A.indptr))
+                Dinv = sps.block_diag(np.linalg.inv(A.data[A.indices == row]),
+                                      format="bsr")
+                ml = pyamg.smoothed_aggregation_solver((Dinv @ A).tobsr(blocksize=(k, k)))
+                c.update(P=ml.aspreconditioner(cycle="V"), Dinv=Dinv, age=0)
+            return np.asarray(c["P"](c["Dinv"] @ np.asarray(rhs)), dtype=np.asarray(rhs).dtype)
+        return apply
+
+    if partition is not None:
+        from zoomy_jax.symsolver.parallel import krylov, no_halo
+        own_cell, gsum = krylov(partition, nc)
+        n_own = int(partition.n_own)
+        amgx_comm = partition.comm.Clone() if amgx is not None else None
+
+    def _amgx_mpi(A, b):
+        """Distributed 'amgx': ONE global AmgX solve across the ranks (AmgX's
+        MPI mode through JAX-AMG; the serial solver's FGMRES + AMG, its own
+        distributed transpose for AD).  Each rank hands its owned rows, the
+        columns numbered globally (halo cells by their owners' ids), the
+        values by colouring the operator with the halo off."""
+        from jax.experimental import sparse as jsparse
+        shape, k = b.shape, b.shape[0]
+        with no_halo():
+            _, lin_o = jax.linearize(A, jnp.zeros_like(b))
+        to_cell = lambda X: X.T.reshape(-1)                         # noqa: E731
+        to_row = lambda x: x.reshape(-1, k).T                       # noqa: E731
+        n_l, key = k * nc, ("mpi", k)
+        if key not in patterns:
+            rows, cols = _cell_pattern(n_l, nc, lsq_nbrs)
+            keep = rows < k * n_own
+            rows, cols = rows[keep], cols[keep]
+            colors = _greedy_colors(rows, cols, n_l)
+            gids = np.asarray(partition.gids, dtype=np.int64)
+            gcol = gids[cols // k] * k + cols % k
+            o = np.lexsort((gcol, rows))                # CSR order
+            rows, cols, gcol = rows[o], cols[o], gcol[o]
+            N = int(partition.n_global)
+            off = int(partition.offsets[partition.rank])
+            cfg = {"tolerance": ls["tol"], "max_iters": ls["restart"] * ls["maxiter"],
+                   **ls["amgx"]}
+            # the non-traceable MPI setup (exchange plans), once per pattern,
+            # from a concrete matrix of the same structure (all ranks trace
+            # together: its host collectives line up)
+            import scipy.sparse as sps            # numpy only: inside a trace
+            A0 = sps.csr_matrix((np.ones(len(rows)), (rows, gcol)),
+                                shape=(k * n_own, k * N))
+            meta = amgx.cache_mpi_metadata(cfg, amgx_comm, k * N,
+                                           (k * off, k * (off + n_own)), A0,
+                                           block_dim=k)
+            patterns[key] = (rows, cols, colors, gcol, meta, cfg)
+        rows, cols, colors, gcol, meta, cfg = patterns[key]
+        probes = jnp.asarray(np.arange(int(colors.max()) + 1)[:, None] == colors[None, :],
+                             dtype=b.dtype)
+        AV = jax.vmap(lambda x: to_cell(lin_o(to_row(x))))(probes)
+        vals = AV[colors[cols], rows]
+        N = int(partition.n_global)
+        A_sp = amgx.with_cache(jsparse.BCOO((vals, jnp.asarray(np.stack([rows, gcol], 1))),
+                                            shape=(k * n_own, k * N)), mpi=meta)
+        x_o, info = amgx.solve(A_sp, to_cell(b)[:k * n_own], config=cfg, block_dim=k)
+        if os.environ.get("ZOOMY_KRYLOV_LOG"):              # opt-in diagnostics
+            jax.debug.print("amgx mpi: {i} iterations, residual {r:.2e}",
+                            i=info["iterations"], r=info["residual"])
+        x = jnp.zeros(shape, b.dtype).at[:, :n_own].set(x_o.reshape(n_own, k).T)
+        if ls["accept"] is not None:            # the global relative residual
+            _, lin = jax.linearize(A, jnp.zeros_like(b))
+            mask = jnp.broadcast_to(own_cell, shape).astype(b.dtype)
+            xs, bs = lax.stop_gradient(x), lax.stop_gradient(b) * mask
+            res = mask * lin(xs) - bs
+            r = jnp.sqrt(gsum(jnp.sum(res ** 2)) / jnp.maximum(gsum(jnp.sum(bs ** 2)),
+                                                              jnp.finfo(b.dtype).tiny))
+            lax.cond(r > ls["accept"], lambda: jax.debug.callback(_ls_reject, r),
+                     lambda: None)
+        return x
+
+    def _dlinsolve(A, b):
+        """Distributed: flexible GMRES over the owned cells (global inner
+        products; the operator exchanges the halo itself), right
+        preconditioned by the rank's own block -- block Jacobi with AMG
+        V-cycles of the operator assembled with the halo off (AmgX on a GPU,
+        PyAMG on the host), or none ('gmres')."""
+        shape, k = b.shape, b.shape[0]
+        _, lin = jax.linearize(A, jnp.zeros_like(b))
+        mask = jnp.broadcast_to(own_cell, shape).reshape(-1).astype(b.dtype)
+        mv = lambda x: lin(x.reshape(shape)).reshape(-1)          # noqa: E731
+        dots = lambda V, w: gsum(V @ (w * mask))                   # noqa: E731
+        precond = (lambda transpose: lambda v: v)                  # noqa: E731
+        if amgx is not None or pyamg is not None:
+            with no_halo():                     # the rank's block A_oo
+                _, lin_o = jax.linearize(A, jnp.zeros_like(b))
+            n_o = k * n_own
+            emb = lambda xo: jnp.zeros(shape, b.dtype).at[:, :n_own].set(  # noqa: E731
+                xo.reshape(n_own, k).T)
+            own = lambda X: X[:, :n_own].T.reshape(-1)             # noqa: E731
+            vals = assembled(lambda xo: own(lin_o(emb(xo))), n_o, n_own)
+            rows, cols, _ = patterns[(n_o, n_own)]
+            if amgx is not None:
+                from jax.experimental import sparse as jsparse
+
+                def precond(transpose):
+                    rc = np.stack([cols, rows] if transpose else [rows, cols], 1)
+                    A_sp = jsparse.BCOO((vals, jnp.asarray(rc)), shape=(n_o, n_o))
+                    return lambda v: emb(amgx.solve(A_sp, own(v.reshape(shape)), **{
+                        "block_dim": k, **ls["amgx_block"]})[0]).reshape(-1)
+            else:
+                out = jax.ShapeDtypeStruct((n_o,), b.dtype)
+
+                def precond(transpose):
+                    f = host_vcycle(rows, cols, n_o, k, transpose)
+                    return lambda v: emb(jax.pure_callback(
+                        f, out, vals, own(v.reshape(shape)))).reshape(-1)
+
+        if (amgx is not None or pyamg is not None) and ls.get("coarse", True):
+            # two levels: + a coarse correction, one unknown per rank and
+            # row (constants on the rank's cells; Nicolaides), so the
+            # coupling the blocks ignore is solved once, globally
+            P = int(partition.size)
+            rank = int(partition.rank)
+            own_f = own_cell.astype(b.dtype)
+
+            def restrict(v):                    # (k * nc,) -> (P, k)
+                loc = jnp.sum(v.reshape(shape) * own_f, axis=1)        # (k,)
+                return gsum(jnp.zeros((P, k), b.dtype).at[rank].set(loc))
+
+            def coarse(transpose):
+                def column(c, _):
+                    q, i = c // k, c % k
+                    e = jnp.zeros(shape, b.dtype).at[i].set(
+                        jnp.where(rank == q, own_f, 0.0)).reshape(-1)
+                    y = mv(e) if not transpose else lin_t(e)
+                    return c + 1, restrict(mask * y).reshape(-1)
+                _, cols_c = lax.scan(column, 0, None, length=P * k)
+                Ac = cols_c.T                                           # (Pk, Pk)
+                return lambda v: (jnp.linalg.solve(Ac, restrict(v).reshape(-1))
+                                  .reshape(P, k)[rank][:, None] * own_f[None, :]
+                                  ).reshape(-1)
+            lt = (jax.linear_transpose(mv, b.reshape(-1)) if ad_mode == "reverse"
+                  else None)
+            lin_t = (lambda e: lt(e)[0]) if lt is not None else None   # noqa: E731
+            block = precond
+            precond = (lambda transpose: (lambda B, C: (lambda v: B(v) + C(v)))(  # noqa: E731
+                block(transpose), coarse(transpose)))
+
+        def solver(transpose):
+            M = precond(transpose)
+            # Krylov vectors cost memory per rank: a short restart, as many
+            # cycles as the serial budget (restart x maxiter iterations)
+            m = min(int(ls["restart"]), 60)
+            cycles = max(1, int(ls["restart"]) * int(ls["maxiter"]) // m)
+            return lambda matvec, rhs: _fgmres(
+                lambda v: mask * matvec(v), rhs * mask, dots, M, ls["tol"],
+                m, cycles)
+        bf = b.reshape(-1) * mask
+        x = lax.custom_linear_solve(
+            mv, bf, solve=solver(False),
+            transpose_solve=solver(True) if ad_mode == "reverse" else None)
+        if ls["accept"] is not None:
+            xs, bs = lax.stop_gradient(x), lax.stop_gradient(bf)
+            nb = jnp.sqrt(dots(bs[None], bs)[0])
+            res = mask * mv(xs) - bs
+            r = jnp.sqrt(dots(res[None], res)[0]) / jnp.where(nb > 0, nb, 1.0)
+            lax.cond(r > ls["accept"], lambda: jax.debug.callback(_ls_reject, r),
+                     lambda: None)
+        return x.reshape(shape)
+
     def linsolve(A, b):
         """Matrix-free restarted GMRES on the linear map A (linearized once at
         0, so an affine A is fine); differentiable (custom_linear_solve).
         backend 'amgx': AmgX on the operator's traced sparsity (JAX-AMG,
-        differentiable itself).  Above the accept gate the run aborts."""
+        differentiable itself).  Above the accept gate the run aborts.
+        Distributed: :func:`_dlinsolve`."""
+        if partition is not None:
+            return _amgx_mpi(A, b) if amgx is not None else _dlinsolve(A, b)
         _, lin = jax.linearize(A, jnp.zeros_like(b))     # primal once per solve
         shape = b.shape                                  # Krylov on flat vectors
         mv = lambda x: lin(x.reshape(shape)).reshape(-1)
@@ -370,13 +556,15 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
             vals = assembled(lambda x: to_cell(mv(to_row(x))), n)
-            rows, cols, _ = patterns[n]
+            rows, cols, _ = patterns[(n, nc)]
             from jax.experimental import sparse as jsparse
             A_sp = jsparse.BCOO((vals, jnp.asarray(np.stack([rows, cols], 1))),
                                 shape=(n, n))
-            x, _ = amgx.solve(A_sp, to_cell(b), **{
+            x, info = amgx.solve(A_sp, to_cell(b), **{
                 "tolerance": ls["tol"], "max_iters": ls["restart"] * ls["maxiter"],
                 "block_dim": k, **ls["amgx"]})
+            if os.environ.get("ZOOMY_KRYLOV_LOG"):          # opt-in diagnostics
+                jax.debug.print("amgx: {info}", info=info)
             x = to_row(x)
         elif pyamg is not None:   # cell-major, AMG-preconditioned GMRES on host
             n, k = int(b.shape[0]), shape[0]
@@ -384,7 +572,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
             op = lambda x: to_cell(mv(to_row(x)))                    # noqa: E731
             vals = assembled(op, n)
-            rows, cols, _ = patterns[n]
+            rows, cols, _ = patterns[(n, nc)]
             out = jax.ShapeDtypeStruct(b.shape, b.dtype)
 
             def amg(transpose):
@@ -480,6 +668,69 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         from zoomy_jax.symsolver.parallel import blocks
         m.update(blocks(partition, mesh_np))
     return m
+
+
+def _fgmres(A, b, dots, M, tol, restart, maxiter):
+    """Restarted flexible GMRES, right preconditioner ``M`` (may vary per
+    iteration), classical Gram-Schmidt twice; ``dots(V, w)``: the inner
+    products of every row of ``V`` with ``w`` in one reduction.  Givens
+    rotations track the residual: a cycle stops as soon as ``|r| <= tol |b|``
+    (or after ``restart`` iterations); at most ``maxiter`` cycles."""
+    from jax.scipy.linalg import solve_triangular
+    m, n, dt = int(restart), b.size, b.dtype
+    nrm = lambda v: jnp.sqrt(dots(v[None], v)[0])                  # noqa: E731
+    bn = nrm(b)
+    target = tol * jnp.where(bn > 0, bn, 1.0)
+
+    def cycle(c):
+        x, r, it, _ = c
+        beta = nrm(r)
+        V = jnp.zeros((m + 1, n), dt).at[0].set(r / jnp.where(beta > 0, beta, 1.0))
+        g = jnp.zeros(m + 1, dt).at[0].set(beta)
+
+        def arnoldi(st):
+            j, V, Z, H, cs, sn, g = st
+            z = M(V[j])
+            w = A(z)
+            act = (jnp.arange(m + 1) <= j).astype(dt)
+            h = dots(V, w) * act
+            w = w - h @ V
+            h2 = dots(V, w) * act
+            w = w - h2 @ V
+            hn = nrm(w)
+            h = (h + h2).at[j + 1].set(hn)
+
+            def rot(i, h):                       # the earlier rotations
+                a, b_ = h[i], h[i + 1]
+                return h.at[i].set(cs[i] * a + sn[i] * b_).at[i + 1].set(
+                    -sn[i] * a + cs[i] * b_)
+            h = lax.fori_loop(0, j, rot, h)
+            d = jnp.sqrt(h[j] ** 2 + h[j + 1] ** 2)
+            ci = jnp.where(d > 0, h[j] / jnp.where(d > 0, d, 1.0), 1.0)
+            si = jnp.where(d > 0, h[j + 1] / jnp.where(d > 0, d, 1.0), 0.0)
+            h = h.at[j].set(d).at[j + 1].set(0.0)
+            g = g.at[j + 1].set(-si * g[j]).at[j].set(ci * g[j])
+            return (j + 1, V.at[j + 1].set(w / jnp.where(hn > 0, hn, 1.0)),
+                    Z.at[j].set(z), H.at[:, j].set(h), cs.at[j].set(ci),
+                    sn.at[j].set(si), g)
+
+        st = (0, V, jnp.zeros((m, n), dt), jnp.zeros((m + 1, m), dt),
+              jnp.zeros(m, dt), jnp.zeros(m, dt), g)
+        k, V, Z, H, _, _, g = lax.while_loop(
+            lambda st: (st[0] < m) & (jnp.abs(st[6][st[0]]) > target), arnoldi, st)
+        live = jnp.arange(m) < k                  # the k columns built
+        R = jnp.where(live[:, None] & live[None, :], H[:m], jnp.eye(m, dtype=dt))
+        y = solve_triangular(R, jnp.where(live, g[:m], 0.0), lower=False)
+        x = x + y @ Z
+        return x, b - A(x), it + 1, k
+
+    x, r, it, k = lax.while_loop(lambda c: (nrm(c[1]) > target) & (c[2] < maxiter),
+                                 cycle, (jnp.zeros_like(b), b, 0, 0))
+    if os.environ.get("ZOOMY_KRYLOV_LOG"):              # opt-in diagnostics
+        jax.debug.print("fgmres: {c} cycles, last {k} of {m} iterations, "
+                        "|r|/|b| = {q:.2e}", c=it, k=k, m=m,
+                        q=nrm(r) / jnp.where(bn > 0, bn, 1.0))
+    return x
 
 
 def _jaxamg():
