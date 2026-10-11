@@ -793,3 +793,23 @@ rev = jvp to 1.2e-11).
 - IMEX in distributed runs: gate 29, 2/3/4 ranks vs serial <= 4.5e-13
   (1-D, Newton tolerance) and 4.2e-16 (2-D).  Implicit diffusion stays
   serial (its dense operator): refused in distributed runs.
+
+## 30. 3-D and the compressible Euler equations (a SystemModel written directly)
+
+- `zoomy_core/systemmodel/euler.py`: `compressible_euler(dimension, gamma,
+  ...)`, state (rho, rho u_d, E), built with the SystemModel constructor,
+  BCs, roles and admissibility (rho, p for MOOD): no new API.  Wall now reads
+  the declared momentum role (it derived the rows from the SWE layout).
+- 3-D: geometry_xp handles tetrahedra / hexahedra; the boundary stencils of
+  ANALYSIS 28 apply in 3-D.  Templates unchanged.  Two periodic-seam fixes
+  in the JAX runtime: the seam takes the partner face's trace (O2 was first
+  order there) and the limiter ghost bounds go to the face owner (matrix
+  C13 O2 shift 7.8e-3 -> 1.6e-15).
+- JAX 3-D (<= 24^3): Sod along x/y/z identical (1e-13) and = 1-D (1.6e-13);
+  smooth diagonal wave O1 0.85, O2 2.23 / 2.53; wall box mass / energy
+  1e-15 and mirror symmetry 1.8e-15; 4 ranks = serial 5.3e-16; AD d/dgamma
+  FD 4e-8, rev = jvp 7e-15.  2-D Euler: Sod x = y, wave O2 2.5.
+- foam 3-D (blockMesh hex): Sod = JAX (1.7e-14, same stencils); acoustic
+  pulse foam-JAX converging (order 2.1); 2/4 ranks = serial.  AMReX 3-D:
+  not done (~250-350 lines, an AMREX_SPACEDIM=3 build).
+- Gates gate3d_a..f (+ euler_common.py, gate3d_figure.py).

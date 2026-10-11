@@ -89,7 +89,7 @@ for label, make in cases.items():
     # 2-D boundary stencils (ANALYSIS 28): ghost samples at the mirror image
     # of the cell centre (skewed cells: deg 1 changes) and counted before a
     # ring is extended (deg 2: compact boundary rings)
-    two_d = label in ("create_2d", "jittered quads", "triangles", "from_msh quad")
+    two_d = label in ("create_2d", "jittered quads", "triangles", "from_msh quad", "create_3d")
     bnote = " (intended change: boundary ghosts, ANALYSIS 28)" if two_d else ""
     compare(f"LSQMesh deg 1 {label}{note}{bnote}", ln, lo)
     ln._build_lsq_stencil(2)
