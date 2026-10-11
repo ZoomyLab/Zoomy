@@ -288,6 +288,12 @@ class _Common:
     def _print_KernelRef(self, e):
         return self.kernel_prefix.get(e.owner, e.owner + ".") + e.slot
 
+    def _print_Float(self, e):
+        # the double itself (repr round-trips; sympy prints 15 digits): a
+        # constant dt printed short ended its run 4e-20 early -> one more
+        # step of 4e-20 and a singular pressure solve
+        return repr(float(e))
+
     def _print_Function(self, e):
         return f"{e.func.__name__}({', '.join(self._print(a) for a in e.args)})"
 
