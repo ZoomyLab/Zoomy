@@ -184,13 +184,21 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         R = _with_geometry(lsq, mesh, mesh_np, nc)
         return R._compute_gradients(W, W.shape[0], Wb)
 
+    def ghost_bounds(R, u, ub):
+        # min/max over the face neighbours and the boundary ghosts ``ub``,
+        # which sit at the ghost position (as in ``gradient``): no lift
+        lo = hi = u
+        for a, b in ((R._iA_int, R._iB_int), (R._iB_int, R._iA_int)):
+            lo, hi = lo.at[a].min(u[b]), hi.at[a].max(u[b])
+        return lo.at[R._bf_cells].min(ub), hi.at[R._bf_cells].max(ub)
+
     def limiter(name):
         def factors(rows, W, Wb, G, mesh):
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
             for v in rows:
-                lo, hi = R._neighbor_bounds(W[v], Wb[v])
+                lo, hi = ghost_bounds(R, W[v], Wb[v])
                 phi = phi.at[v].set(fn(W[v], G[v], lo, hi))
             return phi
         return factors
