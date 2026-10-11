@@ -103,7 +103,7 @@ def _warn_unconverged(rnorm, iterations, *, tol, maxiter):
         "the root and its derivative are inconsistent.")
 
 
-def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
+def newton_root(residual, x0, jvp, solve, *, tol, maxiter, norm=jnp.linalg.norm):
     """Root of ``residual`` by Newton, differentiable by the implicit function
     theorem.
 
@@ -118,13 +118,16 @@ def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
     solve : callable ``(matvec, b) -> x`` (:func:`gmres` with its tolerances
         bound, or :func:`cellwise_solve`), used for the Newton updates and
         for the tangent (and transposed tangent) systems.
-    tol, maxiter : the iteration stops when ``||R||_2 <= tol`` or after
+    tol, maxiter : the iteration stops when ``norm(R) <= tol`` or after
         ``maxiter`` updates.  Stopping at ``maxiter`` with ``||R||_2 > tol``
         logs a warning (a ``jax.debug.callback``, so also under ``jit``,
         ``jvp`` and the checkpointed reverse loop, where the recomputation
         may log it again).  The result is the last iterate either way, but
         its derivative is then the implicit-function derivative of the EXACT
         root, taken at a point that is not one.
+    norm : ``||.||_2`` of a residual; a distributed run passes the global
+        norm over the owned cells (every rank then takes the same number of
+        updates).
     """
 
     warn = partial(_warn_unconverged, tol=tol, maxiter=maxiter)
@@ -132,7 +135,7 @@ def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
     def newton(f, x_init):
         def cond(carry):
             _, r, i = carry
-            return jnp.logical_and(i < maxiter, jnp.linalg.norm(r) > tol)
+            return jnp.logical_and(i < maxiter, norm(r) > tol)
 
         def body(carry):
             x, r, i = carry
@@ -140,7 +143,7 @@ def newton_root(residual, x0, jvp, solve, *, tol, maxiter):
             return x, f(x), i + 1
 
         x, r, i = jax.lax.while_loop(cond, body, (x_init, f(x_init), 0))
-        rnorm = jnp.linalg.norm(r)
+        rnorm = norm(r)
         # ``not <=`` so a NaN residual warns too.
         jax.lax.cond(jnp.logical_not(rnorm <= tol),
                      lambda: jax.debug.callback(warn, rnorm, i),

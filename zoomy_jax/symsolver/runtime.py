@@ -22,7 +22,6 @@ from zoomy_core.misc.logger_config import logger
 from zoomy_core.mesh.geometry_xp import compute_geometry
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
-from zoomy_core.fvm.solver_numpy import HyperbolicSolver as HyperbolicSolverNumpy
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
@@ -406,11 +405,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             return np.asarray(c["P"](c["Dinv"] @ np.asarray(rhs)), dtype=np.asarray(rhs).dtype)
         return apply
 
+    par = {}                      # distributed: halo + global reductions
     if partition is not None:
-        from zoomy_jax.symsolver.parallel import krylov, no_halo
+        from zoomy_jax.symsolver.parallel import blocks, krylov, no_halo
         own_cell, gsum = krylov(partition, nc)
         n_own = int(partition.n_own)
         amgx_comm = partition.comm.Clone() if amgx is not None else None
+        par = blocks(partition, mesh_np)
+    halo = par.get("halo", lambda X, mesh: X)
 
     def _amgx_mpi(A, b):
         """Distributed 'amgx': ONE global AmgX solve across the ranks (AmgX's
@@ -604,32 +606,39 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
                      lambda: None)
         return x.reshape(shape)
 
-    explicit_op = []
+    tpfa = []                     # the TPFA geometry of div(A : grad Q)
+
+    def _div(k, X, Xa, Qaux, p):
+        """div(A(Xa) : grad X) per cell: the interior faces (no flux through
+        a boundary or a cut face)."""
+        if not tpfa:
+            tpfa.append(DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension,
+                                                  rt.n_state))
+        op = tpfa[0]
+        return op._divergence(X, op._as_cell_tensor(k(Xa, Qaux, p)), bf_grads=None)
 
     def diffusion(k, Q, Qaux, p, mesh):
-        if not explicit_op:
-            explicit_op.append(DenseDiffusionOperatorJAX(
-                mesh_np, mesh_np.dimension, rt.n_state, state_dependent=False))
-        op = explicit_op[0]
-        A = op._as_cell_tensor(k(Q, Qaux, p))
-        return op._divergence(Q, A, bf_grads=None)
+        return _div(k, Q, Q, Qaux, p)
 
-    diffusion_op = []
+    def _norm(r):
+        if partition is None:
+            return jnp.linalg.norm(r)
+        return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
 
     def implicit_diffusion(k, Q, Qaux, p, dt, mesh):
-        if partition is not None:   # the dense operator below is serial
-            raise NotImplementedError("implicit diffusion in a distributed run")
-        if not diffusion_op:
-            _, state_dep, _ = HyperbolicSolverNumpy._classify_diffusion(
-                sm.diffusion_matrix, sm)
-            diffusion_op.append(DenseDiffusionOperatorJAX(
-                mesh_np, mesh_np.dimension, rt.n_state, state_dependent=state_dep))
-        op = diffusion_op[0]
-        Q_new = op.implicit_solve(
-            Q[:, :op.nc], dt, lambda Qs: k(Qs, Qaux[:, :op.nc], p),
-            bf_grads=None, tol=imp["gmres_tol"], maxiter=imp["gmres_maxiter"],
-            newton_maxiter=imp["maxiter"], newton_tol=imp["tol"])
-        return Q.at[:, :op.nc].set(Q_new)
+        """Crank-Nicolson, A at the new state (``Qaux`` frozen):
+        R(X) = X - Q - dt/2 (D(X) + D(Q)) = 0, D(X) = div(A(X) : grad X), by
+        Newton (one update when A is constant), each update a ``linsolve``
+        (distributed: over the owned cells, the operator exchanging its
+        halo); differentiable through the root (implicit function theorem)."""
+        b = Q + 0.5 * dt * _div(k, Q, Q, Qaux, p)
+
+        def R(X):
+            X = halo(X, mesh)
+            return X - b - 0.5 * dt * _div(k, X, X, Qaux, p)
+        X = newton_root(R, Q, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
+                        tol=imp["tol"], maxiter=imp["maxiter"], norm=_norm)
+        return halo(X, mesh)
 
     # ── effects ────────────────────────────────────────────────────────────
     warned = []
@@ -667,7 +676,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         extrapolate=extrapolate, divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=jnp.min, reduce_any=jnp.any,
-        halo=lambda X, mesh: X,
+        halo=halo,
         put=put, zeros=zeros, clean_round_off=clean_round_off, take=lambda Q, rows: Q[jnp.asarray(rows)],
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
@@ -677,9 +686,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         minimum=jnp.minimum, maximum=jnp.maximum, abs=jnp.abs, floor=jnp.floor)
     if couple is not None:
         m.update(_coupling(couple, rt, mesh_np, fc0, nf, partition))
-    if partition is not None:
-        from zoomy_jax.symsolver.parallel import blocks
-        m.update(blocks(partition, mesh_np))
+    m.update(par)
     return m
 
 

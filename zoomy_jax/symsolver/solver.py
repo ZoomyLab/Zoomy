@@ -116,16 +116,15 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         """``mesh``: a mesh, or the path of a mesh file
         (:func:`zoomy_core.mesh.distributed.write_mesh`)."""
         from zoomy_core.mesh import distributed
-        from zoomy_core.model.boundary_conditions import Periodic
         bcs = getattr(nsm.sm, "_bc_source", None)
         self.partition, self.global_mesh = None, mesh
         self.mesh_file = mesh if isinstance(mesh, (str, os.PathLike)) else None
+        partners = None
         if self.comm is not None and self.comm.Get_size() > 1:
-            if bcs is not None and any(type(b) is Periodic
-                                       for b in bcs.boundary_conditions_list):
-                raise NotImplementedError("distributed run with periodic BCs")
-            local, self.partition = distributed.distribute(mesh, self.comm)
+            local, self.partition = distributed.distribute(mesh, self.comm, bcs)
             mesh = ensure_lsq_mesh(local, nsm)
+            self.partition.resolve_periodic(mesh)
+            partners = np.asarray(mesh.boundary_face_cells)
         else:
             if isinstance(mesh, (str, os.PathLike)):
                 mesh = distributed.read_mesh(mesh)
@@ -144,7 +143,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
 
         self.nsm, self.mesh_np = nsm, mesh
         self.mesh_j = convert_mesh_to_jax(mesh)
-        self.topo = build_topology(mesh, nsm=nsm)
+        self.topo = build_topology(mesh, nsm=nsm, partners=partners)
         self.X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:mesh.dimension])
         # the same vectorised geometry in numpy (JAX op by op is slow here)
         self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
