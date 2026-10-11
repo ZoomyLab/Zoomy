@@ -58,6 +58,7 @@ def from_file(make):
     return path, nsm, (order if rank == 0 else None)
 
 
+CASES += (("SME(1) 1-D dam break O2", lambda: C.dambreak_1d(1, 2, nx=200), 0.1),)
 CASES += (("SWE bump O2 + MOOD, from a mesh file", lambda: C.bump_2d(2, nx=40, flow=(0.1, 0.05)), 0.5),)
 for label, make, t_end in CASES:
     order = None

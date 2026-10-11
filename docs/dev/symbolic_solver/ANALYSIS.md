@@ -473,8 +473,8 @@ Design (`zoomy_jax/symsolver/parallel.py`, guide: PARALLEL.md):
   global mesh; `on_write` sees each rank's local state.
 - Setup checks the local LSQ stencils of owned + first-layer cells against
   the global mesh (raises if the halo is too thin).
-- Not yet: Chorin (pressure solve), IMEX, preCICE, periodic meshes, 1-D
-  (the legacy 1-D LSQ stencil width is a global max).
+- Not yet: Chorin (pressure solve), IMEX, preCICE, periodic meshes.
+  (1-D: enabled with the stencil fix of section 23.)
 
 Gates (CPU, mpiexec, vs serial):
 
@@ -573,3 +573,23 @@ GPU, 4 x L40S, SWE O2 + MOOD from a mesh file (bench_large.py):
 - Before: 1M setup 41 s; 4M setup 81 s, compile 64 s; 16M compile > 210 s.
 - Writing the 16M mesh file (serial, once) took minutes; per-rank setup
   is now ~20 s per million local cells.
+
+## 23. 1-D gmsh stencils (fix)
+
+- Bug: the 1-D (legacy) LSQ stencil width was the max over ALL rows; a
+  `from_msh` ghost row copies its inner cell's neighbours, its expansion
+  keeps the inner cell itself -> width 3 -> every interior stencil padded
+  one-sidedly (cell 100: [99, 101, 98]; `create_1d`: [99, 101]).
+- Fix: width over the inner cells (ghost rows cut to it), in both copies
+  of the 1-D loop (`geometry_xp`, `lsq_reconstruction`); the >= 2-D vertex
+  ring is untouched.
+- Gate 19: only "from_msh line" changes (width 3 -> 2); its inner stencils
+  and LSQ matrices now equal `create_1d`'s exactly.
+- Distributed 1-D enabled (the width is now local): SME(1) dam break O2,
+  2 and 4 ranks: 0 until the front reaches the cut, 4e-15 at t = 0.02,
+  1.7e-11 at t = 0.1; O1 7.8e-16.  Round-off amplification of the O2 run
+  itself: serial, one cell perturbed by 1e-15 -> 6.2e-12 at t = 0.1 (O1
+  6.7e-16).
+- `tests/unit/zoomy_core/test_mesh_snapshot.py`: 29 failures before and
+  after (its `.msh` inputs are not in the repo; `compute_derivatives` now
+  requires `u_boundary_face`).

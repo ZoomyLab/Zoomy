@@ -16,7 +16,7 @@ REV = sys.argv[1] if len(sys.argv) > 1 else "6b20967"
 CORE = os.path.join(os.path.dirname(__file__), "../../../../library/zoomy_core")
 MSH = os.path.join(os.path.dirname(__file__), "../../../../library/zoomy_dmplex")
 old_dir = tempfile.mkdtemp()
-for name in ("base_mesh", "fvm_mesh", "lsq_mesh"):
+for name in ("base_mesh", "fvm_mesh", "lsq_mesh", "lsq_reconstruction"):
     src = subprocess.run(["git", "-C", CORE, "show", f"{REV}:zoomy_core/mesh/{name}.py"],
                          capture_output=True, text=True, check=True).stdout
     open(os.path.join(old_dir, f"{name}.py"), "w").write(src)
@@ -30,6 +30,7 @@ def load(name):
 
 
 ob, of, ol = load("base_mesh"), load("fvm_mesh"), load("lsq_mesh")
+ol.least_squares_reconstruction_local = load("lsq_reconstruction").least_squares_reconstruction_local
 from zoomy_core.mesh import base_mesh as nb, LSQMesh, FVMMesh  # noqa: E402
 
 ATTR = ["vertex_coordinates", "cell_vertices", "cell_faces", "face_cells", "cell_neighbors",
@@ -83,7 +84,16 @@ for label, make in cases.items():
     compare(f"FVMMesh {label}", fn, fo, [("face_subvolumes",
             nb.BaseMesh.face_subvolumes_computed(fn), ob.BaseMesh.face_subvolumes_computed(fo))])
     ln, lo = LSQMesh.from_fvm(fn), ol.LSQMesh.from_fvm(fo)
-    compare(f"LSQMesh deg 1 {label}", ln, lo)
+    note = (" (intended change: 1-D from_msh stencils fixed, see below)"
+            if label == "from_msh line" else "")
+    compare(f"LSQMesh deg 1 {label}{note}", ln, lo)
     ln._build_lsq_stencil(2)
     lo._build_lsq_stencil(2)
-    compare(f"LSQMesh deg 2 {label}", ln, lo)
+    compare(f"LSQMesh deg 2 {label}{note}", ln, lo)
+
+# the 1-D fix: a gmsh 1-D mesh gets create_1d's stencils (uniform, same cells)
+m = LSQMesh.from_msh(os.path.join(MSH, "mesh_n240.msh"))
+c = LSQMesh.create_1d((-1.5, 1.5), 240)
+n = 240                     # inner cells; ghost rows and tag numbers differ by design
+compare("LSQMesh 1-D from_msh vs create_1d, inner cells", None, None, [
+    (k, getattr(m, k)[:n], getattr(c, k)[:n]) for k in ("_lsq_neighbors", "_lsq_gradQ")])
