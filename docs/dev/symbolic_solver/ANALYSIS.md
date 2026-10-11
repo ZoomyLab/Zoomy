@@ -761,3 +761,16 @@ solvers share the mesh, so they get the same stencils (gate 1 unchanged).
 Literature (Zotero): the half-distance boundary sample mechanism, Syrakos
 et al. 2017 (Phys. Fluids, GU9F3I5R) eq. 13; constrained LSQ with BC rows as
 the ghost-free alternative (Koellermeier thesis VCXBJ6RN p. 137).
+
+Addendum (degree 1, the MUSCL gradient): the vertex ring of a wall cell
+(three cells inside, one ghost outside) has no curvature term to absorb the
+imbalance, so a field constant along the wall got a wall-normal gradient
+6.0e-2 / 3.1e-2 / 1.6e-2 (NX 60/120/240): the q_y ~ 5.6e-4 of JAX and AMReX
+in the matrix's channel case C4 (foam 1e-15).  Boundary cells of degree-1
+stencils now use face neighbours + ghosts (mirror-symmetric; OpenFOAM's
+choice): leak 0; wall gradients on quads first -> third order (Neumann d/dn
+1.2e-1 -> 1.5e-3 at NX 60); triangles' boundary errors 2-3x smaller (first
+order, as their interior).  foam vs JAX: wall-shock bump L1 1.8e-3 ->
+6.5e-4; smooth bump nx 80 max 1.7e-4 -> 1.3e-4.  Gates 1, 9, 16, 19 OK;
+gate 5's O2 FD check stays loose (limiter kinks: |FD-jvp| 2.1e-5 on 1.5e-5;
+rev = jvp to 1.2e-11).
