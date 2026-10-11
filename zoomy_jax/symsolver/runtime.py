@@ -433,7 +433,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         N = int(partition.n_global)
         A_sp = amgx.with_cache(jsparse.BCOO((vals, jnp.asarray(np.stack([rows, gcol], 1))),
                                             shape=(k * n_own, k * N)), mpi=meta)
-        x_o, info = amgx.solve(A_sp, to_cell(b)[:k * n_own], config=cfg, block_dim=k)
+        x_o, info = amgx.solve(A_sp, to_cell(b)[:k * n_own], block_dim=k)  # cfg: in meta
         if os.environ.get("ZOOMY_KRYLOV_LOG"):              # opt-in diagnostics
             jax.debug.print("amgx mpi: {i} iterations, residual {r:.2e}",
                             i=info["iterations"], r=info["residual"])
@@ -450,18 +450,18 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         return x
 
     def _dlinsolve(A, b):
-        """Distributed: flexible GMRES over the owned cells (global inner
-        products; the operator exchanges the halo itself), right
-        preconditioned by the rank's own block -- block Jacobi with AMG
-        V-cycles of the operator assembled with the halo off (AmgX on a GPU,
-        PyAMG on the host), or none ('gmres')."""
+        """Distributed 'gmres' / 'pyamg': flexible GMRES over the owned cells
+        (global inner products; the operator exchanges the halo itself),
+        right preconditioned for 'pyamg' by the rank's own block -- a PyAMG
+        V-cycle of the operator assembled with the halo off -- plus a coarse
+        correction.  ('amgx': :func:`_amgx_mpi`.)"""
         shape, k = b.shape, b.shape[0]
         _, lin = jax.linearize(A, jnp.zeros_like(b))
         mask = jnp.broadcast_to(own_cell, shape).reshape(-1).astype(b.dtype)
         mv = lambda x: lin(x.reshape(shape)).reshape(-1)          # noqa: E731
         dots = lambda V, w: gsum(V @ (w * mask))                   # noqa: E731
         precond = (lambda transpose: lambda v: v)                  # noqa: E731
-        if amgx is not None or pyamg is not None:
+        if pyamg is not None:
             with no_halo():                     # the rank's block A_oo
                 _, lin_o = jax.linearize(A, jnp.zeros_like(b))
             n_o = k * n_own
@@ -470,23 +470,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             own = lambda X: X[:, :n_own].T.reshape(-1)             # noqa: E731
             vals = assembled(lambda xo: own(lin_o(emb(xo))), n_o, n_own)
             rows, cols, _ = patterns[(n_o, n_own)]
-            if amgx is not None:
-                from jax.experimental import sparse as jsparse
+            out = jax.ShapeDtypeStruct((n_o,), b.dtype)
 
-                def precond(transpose):
-                    rc = np.stack([cols, rows] if transpose else [rows, cols], 1)
-                    A_sp = jsparse.BCOO((vals, jnp.asarray(rc)), shape=(n_o, n_o))
-                    return lambda v: emb(amgx.solve(A_sp, own(v.reshape(shape)), **{
-                        "block_dim": k, **ls["amgx_block"]})[0]).reshape(-1)
-            else:
-                out = jax.ShapeDtypeStruct((n_o,), b.dtype)
+            def precond(transpose):
+                f = host_vcycle(rows, cols, n_o, k, transpose)
+                return lambda v: emb(jax.pure_callback(
+                    f, out, vals, own(v.reshape(shape)))).reshape(-1)
 
-                def precond(transpose):
-                    f = host_vcycle(rows, cols, n_o, k, transpose)
-                    return lambda v: emb(jax.pure_callback(
-                        f, out, vals, own(v.reshape(shape)))).reshape(-1)
-
-        if (amgx is not None or pyamg is not None) and ls.get("coarse", True):
+        if pyamg is not None and ls.get("coarse", True):
             # two levels: + a coarse correction, one unknown per rank and
             # row (constants on the rank's cells; Nicolaides), so the
             # coupling the blocks ignore is solved once, globally

@@ -332,16 +332,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
                      preconditioner={"solver": "AMG"}),
         doc="'amgx': AmgX solver configuration passed to jaxamg.solve.")
 
-    pressure_amgx_block = param.Dict(
-        default=dict(solver="AMG", algorithm="AGGREGATION", selector="SIZE_2",
-                     max_iters=1),
-        doc="Distributed 'amgx': the AmgX configuration of the rank's own "
-            "block (block-Jacobi preconditioner of the global FGMRES): one "
-            "aggregation-AMG V-cycle (classical AMG has no block matrices).")
-
     pressure_coarse = param.Boolean(
         default=True,
-        doc="Distributed AMG ('pyamg', 'amgx'): add a coarse correction to "
+        doc="Distributed 'pyamg': add a coarse correction to "
             "the per-rank block preconditioner, one unknown per rank and "
             "pressure row (two-level additive Schwarz); without it the "
             "iterations grow with the number of ranks.")
@@ -382,7 +375,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
             backend=self._pressure_backend(), amgx=self.pressure_amgx,
-            amgx_block=self.pressure_amgx_block, coarse=self.pressure_coarse,
+            coarse=self.pressure_coarse,
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):
