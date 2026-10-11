@@ -305,7 +305,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
 
     amgx = _jaxamg() if ls.get("backend") == "amgx" else None
     pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
-    amgx_colorings, patterns = {}, {}
+    patterns = {}
     lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
                 if amgx is not None or pyamg is not None else None)
 
@@ -314,9 +314,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         cells, by colouring: one evaluation per colour (traced; the pattern
         is static)."""
         if (n, ncells) not in patterns:
-            rows, cols = _cell_pattern(n, ncells, lsq_nbrs)
-            colors = _greedy_colors(rows, cols, n)
-            patterns[(n, ncells)] = (rows, cols, colors)
+            patterns[(n, ncells)] = _cell_pattern(n, ncells, lsq_nbrs)
         rows, cols, colors = patterns[(n, ncells)]
         probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
         AV = jax.vmap(op)(jnp.asarray(probes, dtype=jnp.float64))  # one per colour
@@ -403,10 +401,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         to_row = lambda x: x.reshape(-1, k).T                       # noqa: E731
         n_l, key = k * nc, ("mpi", k)
         if key not in patterns:
-            rows, cols = _cell_pattern(n_l, nc, lsq_nbrs)
-            keep = rows < k * n_own
-            rows, cols = rows[keep], cols[keep]
-            colors = _greedy_colors(rows, cols, n_l)
+            rows, cols, colors = _cell_pattern(n_l, nc, lsq_nbrs, n_own)
             gids = np.asarray(partition.gids, dtype=np.int64)
             gcol = gids[cols // k] * k + cols % k
             o = np.lexsort((gcol, rows))                # CSR order
@@ -742,64 +737,70 @@ def _jaxamg():
     return jaxamg
 
 
-def _cell_pattern(n, nc, nbrs):
+def _cell_pattern(n, nc, nbrs, n_rows=None):
     """Sparsity of a cell operator on ``k = n / nc`` unknowns per cell,
-    cell-major (index ``c k + r``): every unknown of cell c may couple to
-    every unknown of the cells in its LSQ stencil (the derivative aux are LSQ
-    fits of the unknowns; boundary ghosts depend on the inner cell)."""
-    k = n // nc
-    nb = np.asarray(nbrs)[:nc]
-    cells = np.concatenate([np.arange(nc)[:, None], nb], axis=1)    # self + stencil
-    c_of = np.repeat(np.arange(nc), cells.shape[1])
-    d_of = cells.reshape(-1)
+    cell-major (index ``c k + r``), rows of the first ``n_rows`` cells (all):
+    every unknown of cell c may couple to every unknown of the cells in its
+    LSQ stencil (the derivative aux are LSQ fits of the unknowns; boundary
+    ghosts depend on the inner cell).  Returns ``rows, cols`` in CSR order
+    and the colour of each of the ``n`` columns (two columns sharing a row
+    differ), from the cells': column ``d k + q`` takes ``k colour(d) + q``."""
+    k, n_rows = n // nc, nc if n_rows is None else n_rows
+    nb = np.asarray(nbrs)[:n_rows]
+    cells = np.concatenate([np.arange(n_rows)[:, None], nb], axis=1)  # self + stencil
+    c_of = np.repeat(np.arange(n_rows, dtype=np.int64), cells.shape[1])
+    d_of = cells.reshape(-1).astype(np.int64)
     keep = (d_of >= 0) & (d_of < nc)
-    pairs = np.unique(np.stack([c_of[keep], d_of[keep]], 1), axis=0)
-    r, q = np.meshgrid(np.arange(k), np.arange(k), indexing="ij")
-    rows = (pairs[:, 0, None] * k + r.reshape(1, -1)).reshape(-1)
-    cols = (pairs[:, 1, None] * k + q.reshape(1, -1)).reshape(-1)
-    order = np.lexsort((cols, rows))
-    return rows[order].astype(np.int32), cols[order].astype(np.int32)
+    code = np.unique(c_of[keep] * nc + d_of[keep])          # sorted (c, d) pairs
+    c, d = code // nc, code % nc
+    # entry (c, r, d, q) of row c k + r: CSR order without a sort
+    ptr = np.searchsorted(c, np.arange(n_rows + 1))
+    m = np.diff(ptr)[c]
+    base = (ptr[c] * k * k + (np.arange(len(c)) - ptr[c]) * k)[:, None, None]
+    r, q = np.arange(k)[None, :, None], np.arange(k)[None, None, :]
+    pos = (base + r * (m * k)[:, None, None] + q).reshape(-1)
+    shape, rows, cols = (len(c), k, k), np.empty(len(pos), np.int32), np.empty(len(pos), np.int32)
+    rows[pos] = np.broadcast_to(c[:, None, None] * k + r, shape).reshape(-1)
+    cols[pos] = np.broadcast_to(d[:, None, None] * k + q, shape).reshape(-1)
+    unknown = np.arange(n)
+    return rows, cols, (_cell_colors(c, d, nc)[unknown // k] * k
+                        + unknown % k).astype(np.int32)
 
 
-def _amgx_coloring(n, nc, nbrs):
-    """The pattern with JAX-AMG's column colouring, for ``with_cache``."""
-    from jaxamg.sparsity import get_column_coloring
-    rows, cols = _cell_pattern(n, nc, nbrs)
-    with jax.ensure_compile_time_eval():          # concrete, inside a trace
-        colors, n_colors = get_column_coloring(rows, cols, (n, n))
-    return rows, cols, np.asarray(colors), int(n_colors), (n, n)
-
-
-def _greedy_colors(rows, cols, n, seed=0):
-    """Column colouring (two columns sharing a row get different colours):
-    Jones-Plassmann rounds, each colours an independent set of the column
-    conflict graph at once (vectorised)."""
+def _cell_colors(c, d, nc, seed=0):
+    """Colour the cells of the stencil pairs ``(c, d)`` so that two cells in
+    one stencil differ (distance-2 on the stencil graph): speculative
+    parallel greedy -- every uncoloured cell takes the smallest colour free
+    among its coloured neighbours, a clash with a heavier (random weight)
+    neighbour retries next round.  O(edges) per round, rounds ~ colours,
+    each round only over the uncoloured cells."""
     import scipy.sparse as sps
-    P = sps.csr_matrix((np.ones(len(rows), np.int8), (rows, cols)), shape=(n, n))
+    P = sps.csr_matrix((np.ones(len(c), np.int8), (c, d)), shape=(int(c.max()) + 1, nc))
     C = (P.T @ P).tocsr()
     C.setdiag(0)
     C.eliminate_zeros()
-    w = np.random.default_rng(seed).permutation(n).astype(np.int64)
-    colors = -np.ones(n, np.int64)
-    has = np.diff(C.indptr) > 0
-    starts = C.indptr[:-1][has]
-    while (colors < 0).any():
-        live = np.where(colors < 0, w, -1)
-        nbmax = np.full(n, -1, np.int64)
-        nbmax[has] = np.maximum.reduceat(live[C.indices], starts)
-        pick = (colors < 0) & (live > nbmax)          # an independent set
-        # each picked column takes the smallest colour its neighbours lack
-        nc_ = colors[C.indices]
-        bits = np.where(nc_ >= 0, np.left_shift(np.uint64(1), np.minimum(nc_, 63).astype(np.uint64)),
-                        np.uint64(0))
-        used = np.zeros(n, np.uint64)
-        used[has] = np.bitwise_or.reduceat(bits, starts)
-        free = ~used[pick]
+    w = np.random.default_rng(seed).permutation(nc)
+    colors, A = np.full(nc, -1, np.int64), np.arange(nc)
+    while len(A):
+        S = C[A]                                       # rows of the uncoloured
+        deg = np.diff(S.indptr)
+        row, nb, has = np.repeat(np.arange(len(A)), deg), S.indices, deg > 0
+        used, nbc = np.zeros(len(A), np.uint64), colors[S.indices]
+        if has.any():
+            used[has] = np.bitwise_or.reduceat(np.where(nbc >= 0, np.left_shift(
+                np.uint64(1), np.maximum(nbc, 0).astype(np.uint64)), np.uint64(0)),
+                S.indptr[:-1][has])
+        free = ~used
         low = free & (~free + np.uint64(1))           # lowest free bit
-        colors[pick] = np.log2(low.astype(np.float64)).round().astype(np.int64)
-        if (colors >= 63).any():
+        cand = np.full(nc, -1, np.int64)
+        cand[A] = np.log2(low.astype(np.float64)).round().astype(np.int64)
+        if (low == 0).any() or (cand[A] >= 63).any():
             raise RuntimeError("colouring needs more than 63 colours")
-    return colors.astype(np.int32)
+        lose = (cand[nb] == cand[A][row]) & (w[nb] > w[A][row])
+        lost = np.bincount(row[lose], minlength=len(A)) > 0
+        colors[A[~lost]] = cand[A[~lost]]
+        A = A[lost]
+    return colors
 
 
 def _pyamg():
