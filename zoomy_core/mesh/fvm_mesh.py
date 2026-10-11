@@ -95,6 +95,17 @@ class FVMMesh(BaseMesh):
             z_ordering=base.z_ordering,
         )
 
+        from zoomy_core.mesh import geometry_xp
+        if str(base.type) in geometry_xp._SUPPORTED:   # vectorised
+            g = geometry_xp.cell_face_geometry(fvm)
+            fvm._face_centers = np.asarray(g["face_centers"])
+            fvm._face_normals = np.asarray(g["face_normals"])
+            fvm._cell_centers = np.asarray(g["cell_centers"])
+            fvm._face_volumes = np.asarray(g["face_volumes"])
+            fvm._cell_volumes = np.asarray(g["cell_volumes"])
+            fvm._cell_inradius = np.asarray(g["cell_inradius"])
+            return fvm
+
         # Compute geometry.  Order matters because of the
         # cell_centers ↔ face_normals dependency:
         #   * 2D+: cell_centers needs face_normals (for ghost-cell

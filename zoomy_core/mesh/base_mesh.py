@@ -86,7 +86,11 @@ def _local_faces_for_type(mesh_type: str):
 
 
 def _build_face_topology(cell_vertices: np.ndarray, mesh_type: str):
-    """Build face-cell connectivity from cell-vertex data.
+    """Build face-cell connectivity from cell-vertex data (vectorised).
+
+    Faces are numbered in order of first appearance, cells in order and their
+    local faces in ``_local_faces_for_type`` order; ``face_cells[0]`` is the
+    first cell visiting a face, ``face_cells[1]`` the last other one.
 
     Returns
     -------
@@ -95,40 +99,40 @@ def _build_face_topology(cell_vertices: np.ndarray, mesh_type: str):
     face_vertex_indices : list of tuple — global vertex indices per face (sorted)
     """
     local_faces = _local_faces_for_type(mesh_type)
-    n_faces_per_cell = len(local_faces)
-    n_cells = cell_vertices.shape[1]
-
-    # Map: sorted vertex tuple → (face_index, [cell0, cell1])
-    face_map: dict[tuple, list] = {}
-    face_list: list[tuple] = []  # ordered list of face keys
-    cell_faces = np.empty((n_faces_per_cell, n_cells), dtype=int)
-
-    for ic in range(n_cells):
-        verts = cell_vertices[:, ic]
-        for lf_idx, lf in enumerate(local_faces):
-            global_verts = tuple(sorted(verts[list(lf)]))
-            if global_verts not in face_map:
-                face_idx = len(face_list)
-                face_list.append(global_verts)
-                face_map[global_verts] = [face_idx, ic, -1]
-            else:
-                face_idx = face_map[global_verts][0]
-                face_map[global_verts][2] = ic
-            cell_faces[lf_idx, ic] = face_idx
-
-    n_faces = len(face_list)
+    nfpc = len(local_faces)
+    cv = np.asarray(cell_vertices)
+    n_cells = cv.shape[1]
+    width = max(len(lf) for lf in local_faces)
+    keys = -np.ones((n_cells, nfpc, width), dtype=np.int64)   # pad: -1 first
+    for l, lf in enumerate(local_faces):
+        keys[:, l, width - len(lf):] = np.sort(cv[list(lf)].T, axis=1)
+    keys = keys.reshape(n_cells * nfpc, width)                # order ic*nfpc + l
+    _, first, inverse = np.unique(keys, axis=0, return_index=True,
+                                  return_inverse=True)
+    inverse = inverse.reshape(-1)
+    order = np.argsort(first, kind="stable")                  # by first visit
+    number = np.empty(len(first), dtype=int)
+    number[order] = np.arange(len(first))
+    face = number[inverse]
+    n_faces = len(first)
+    cell_faces = face.reshape(n_cells, nfpc).T.copy()
+    visit = np.arange(n_cells * nfpc)
     face_cells = np.empty((2, n_faces), dtype=int)
-    for fkey in face_list:
-        fidx, c0, c1 = face_map[fkey]
-        face_cells[0, fidx] = c0
-        face_cells[1, fidx] = c1
-
+    face_cells[0] = first[order] // nfpc
+    last = np.full(n_faces, -1, dtype=np.int64)
+    np.maximum.at(last, face, visit)
+    face_cells[1] = np.where(last != first[order], last // nfpc, -1)
+    rows = keys[first[order]]
+    if all(len(lf) == width for lf in local_faces):
+        face_list = list(map(tuple, rows.tolist()))
+    else:
+        face_list = [tuple(v for v in r if v >= 0) for r in rows.tolist()]
     return cell_faces, face_cells, face_list
 
 
 def _build_cell_neighbors(face_cells: np.ndarray, cell_faces: np.ndarray,
                           n_cells: int, n_inner_cells: int):
-    """Build cell_neighbors from face_cells.
+    """Build cell_neighbors from face_cells (vectorised).
 
     Boundary cells get sentinel (n_cells+1) instead of ghost indices,
     so the LSQ stencil grows inward from interior data only.
@@ -137,17 +141,12 @@ def _build_cell_neighbors(face_cells: np.ndarray, cell_faces: np.ndarray,
     sentinel = n_cells + 1
     n_faces_per_cell = cell_faces.shape[0]
     cell_neighbors = sentinel * np.ones((n_cells, n_faces_per_cell), dtype=int)
-
-    for ic in range(n_inner_cells):
-        for lf in range(n_faces_per_cell):
-            fidx = cell_faces[lf, ic]
-            c0, c1 = face_cells[0, fidx], face_cells[1, fidx]
-            neighbor = c1 if c0 == ic else c0
-            # Ghost cells (>= n_inner_cells) → sentinel (no neighbor)
-            if neighbor >= n_inner_cells:
-                neighbor = sentinel
-            cell_neighbors[ic, lf] = neighbor
-
+    ic = np.arange(n_inner_cells)
+    f = cell_faces[:, :n_inner_cells]
+    c0, c1 = face_cells[0][f], face_cells[1][f]
+    neighbor = np.where(c0 == ic[None, :], c1, c0)
+    neighbor = np.where(neighbor >= n_inner_cells, sentinel, neighbor)
+    cell_neighbors[:n_inner_cells] = neighbor.T
     return cell_neighbors
 
 
@@ -483,50 +482,56 @@ class BaseMesh(param.Parameterized):
         return fcenters
 
     def face_subvolumes_computed(self) -> np.ndarray:
-        """Compute face subvolumes. Shape (n_faces, 2)."""
+        """Compute face subvolumes (vectorised): per face and side, the
+        simplex (2-D) / pyramid (3-D) between the face and the cell centre.
+        Shape (n_faces, 2); a boundary face carries its inner side twice."""
         dim = self.dimension
         n_faces = self.n_faces
         subvols = np.zeros((n_faces, 2), dtype=float)
+        fcells = np.asarray(self.face_cells)
 
         if dim == 1:
             # 1D: subvolume = half cell length on each side
             vols = self.cell_volumes_computed()
-            for fidx in range(n_faces):
-                c0, c1 = self.face_cells[:, fidx]
-                subvols[fidx, 0] = vols[c0] / 2
-                subvols[fidx, 1] = vols[c1] / 2
-            return subvols
+            return np.stack([vols[fcells[0]] / 2, vols[fcells[1]] / 2], axis=1)
 
-        coords_3d = np.zeros((self.n_vertices, 3), dtype=float)
-        coords_3d[:, :dim] = self.vertex_coordinates[:dim, :].T
-        local_faces = _local_faces_for_type(self.type)
+        coords = np.asarray(self.vertex_coordinates, dtype=float)[:dim]
         centers = self.cell_centers_computed()
+        nc = int(self.n_inner_cells)
+        cv = np.asarray(self.cell_vertices)[:, :nc]
+        cf = np.asarray(self.cell_faces)[:, :nc]
+        cc = centers[:dim, :nc]
+        ic = np.arange(nc)
 
-        for ic in range(self.n_inner_cells):
-            verts = self.cell_vertices[:, ic]
-            for lf_idx, lf in enumerate(local_faces):
-                fidx = self.cell_faces[lf_idx, ic]
-                face_vert_ids = verts[list(lf)]
-                face_verts_coords = coords_3d[face_vert_ids, :dim]
-                cell_center = centers[:dim, ic]
-                sv = compute_subvolume(face_verts_coords, cell_center, dim)
+        def cross(a, b):
+            return np.stack([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2],
+                             a[0] * b[1] - a[1] * b[0]])
 
-                c0, c1 = self.face_cells[:, fidx]
-                if ic == c0:
-                    subvols[fidx, 0] = sv
-                else:
-                    subvols[fidx, 1] = sv
+        def tet(v0, v1, v2):
+            return np.abs((cross(v1 - v0, v2 - v0) * (cc - v0)).sum(axis=0)) / 6.0
+
+        for lf_idx, lf in enumerate(_local_faces_for_type(self.type)):
+            V = [coords[:, cv[k]] for k in lf]                # (dim, nc) each
+            if dim == 2:
+                a, b = V[1] - V[0], cc - V[0]
+                sv = 0.5 * np.abs(a[0] * b[1] - a[1] * b[0])
+            elif len(lf) == 3:
+                sv = tet(V[0], V[1], V[2])
+            elif len(lf) == 4:                                  # two tetrahedra
+                sv = tet(V[0], V[1], V[2]) + tet(V[0], V[2], V[3])
+            else:
+                raise ValueError(f"face with {len(lf)} vertices")
+            f = cf[lf_idx]
+            side = np.where(fcells[0, f] == ic, 0, 1)
+            subvols[f, side] = sv
 
         # For boundary ghost cells, copy inner cell subvolume
-        for i_bf in range(self.n_boundary_faces):
-            fidx = self.boundary_face_face_indices[i_bf]
-            inner = self.boundary_face_cells[i_bf]
-            c0 = self.face_cells[0, fidx]
-            if inner == c0:
-                subvols[fidx, 1] = subvols[fidx, 0]
-            else:
-                subvols[fidx, 0] = subvols[fidx, 1]
-
+        n_bf = int(self.n_boundary_faces)
+        f = np.asarray(self.boundary_face_face_indices)[:n_bf]
+        inner = np.asarray(self.boundary_face_cells)[:n_bf]
+        first = inner == fcells[0, f]
+        subvols[f[first], 1] = subvols[f[first], 0]
+        subvols[f[~first], 0] = subvols[f[~first], 1]
         return subvols
 
     # ── internal helpers ────────────────────────────────────────────────
@@ -680,13 +685,16 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def from_arrays(cls, vertex_coordinates, cell_vertices, mesh_type, *,
-                    face_tags=None, tag_names=None, default_tag=0,
-                    node_data=None, cell_data=None) -> "BaseMesh":
+                    face_tags=None, cell_face_tags=None, tag_names=None,
+                    default_tag=0, node_data=None,
+                    cell_data=None) -> "BaseMesh":
         """A mesh from raw arrays: ``vertex_coordinates`` ``(dim, n_vertices)``,
         ``cell_vertices`` ``(verts_per_cell, n_cells)`` of one cell type.
-        ``face_tags`` maps a boundary face (its sorted vertex tuple) to a
-        physical tag, ``default_tag`` where it has none; ``tag_names`` names
-        the tags (default ``tag_<t>``)."""
+        Boundary tags: ``face_tags`` maps a boundary face (its sorted vertex
+        tuple) to a physical tag, or ``cell_face_tags``
+        ``(faces_per_cell, n_cells)`` gives the tag of each cell's local face
+        (< 0: none); ``default_tag`` where a boundary face has none;
+        ``tag_names`` names the tags (default ``tag_<t>``)."""
         face_verts_to_tag = face_tags or {}
         tag_to_name = tag_names or {}
         dim = _DIM_OF_TYPE[mesh_type]
@@ -725,10 +733,15 @@ class BaseMesh(param.Parameterized):
             boundary_face_face_indices_arr[i_bf] = fidx
             updated_face_cells[1, fidx] = ghost_idx
 
-            # Look up physical tag
-            face_key = face_list[fidx]
-            tag = face_verts_to_tag.get(face_key, default_tag)
-            boundary_face_physical_tags_arr[i_bf] = tag
+            if cell_face_tags is None:          # look up the physical tag
+                tag = face_verts_to_tag.get(face_list[fidx], default_tag)
+                boundary_face_physical_tags_arr[i_bf] = tag
+
+        if cell_face_tags is not None and n_boundary_faces:
+            c = face_cells_arr[0, boundary_face_indices]
+            lf = np.argmax(cell_faces_arr[:, c] == boundary_face_indices[None], axis=0)
+            tags = np.asarray(cell_face_tags)[lf, c]
+            boundary_face_physical_tags_arr[:] = np.where(tags >= 0, tags, default_tag)
 
         # Build sorted tags and names
         unique_tags = sorted(set(boundary_face_physical_tags_arr))
@@ -870,14 +883,10 @@ class BaseMesh(param.Parameterized):
             return ix * (ny + 1) + iy
 
         # ── cell-vertex connectivity: (4, n_inner_cells) ──
-        cell_vertices = np.empty((4, n_inner_cells), dtype=int)
-        for ix in range(nx):
-            for iy in range(ny):
-                ic = ix * ny + iy
-                cell_vertices[0, ic] = vid(ix, iy)
-                cell_vertices[1, ic] = vid(ix + 1, iy)
-                cell_vertices[2, ic] = vid(ix + 1, iy + 1)
-                cell_vertices[3, ic] = vid(ix, iy + 1)
+        ix, iy = (a.ravel() for a in np.meshgrid(np.arange(nx), np.arange(ny),
+                                                  indexing="ij"))  # ic = ix*ny + iy
+        cell_vertices = np.stack([vid(ix, iy), vid(ix + 1, iy),
+                                  vid(ix + 1, iy + 1), vid(ix, iy + 1)])
 
         # ── build face topology via _build_face_topology ──
         cell_faces, face_cells_raw, face_list = _build_face_topology(

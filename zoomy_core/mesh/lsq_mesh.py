@@ -22,25 +22,27 @@ from zoomy_core.mesh.lsq_reconstruction import (
 
 
 def _build_face_neighbors(face_cells, cell_neighbors, n_faces, n_faces_per_cell, n_cells):
-    """Build face neighbor stencil for flux reconstruction."""
+    """Build face neighbor stencil for flux reconstruction (vectorised):
+    per face its two cells, then the other neighbours of both, sorted."""
     polynomial_degree = 1
     n_face_neighbors = (2 * (n_faces_per_cell + 1) - 2) * polynomial_degree
-    face_neighbors = (n_cells + 1) * np.ones((n_faces, n_face_neighbors), dtype=int)
-
-    for i_f in range(n_faces):
-        c0, c1 = face_cells[:, i_f]
-        nbrs = set()
-        for c in [c0, c1]:
-            if c < len(cell_neighbors):
-                for n in cell_neighbors[c]:
-                    if n < n_cells:
-                        nbrs.add(n)
-        nbrs.discard(c0)
-        nbrs.discard(c1)
-        nbr_list = [c0, c1] + sorted(nbrs)
-        n_avail = min(len(nbr_list), n_face_neighbors)
-        face_neighbors[i_f, :n_avail] = nbr_list[:n_avail]
-
+    sentinel = n_cells + 1
+    c0, c1 = np.asarray(face_cells[0]), np.asarray(face_cells[1])
+    cn = np.asarray(cell_neighbors)
+    pad = np.full(cn.shape[1], sentinel)
+    nb = lambda c: np.where((c < len(cn))[:, None], cn[np.minimum(c, len(cn) - 1)], pad)
+    cand = np.concatenate([nb(c0), nb(c1)], axis=1)
+    cand = np.where((cand < n_cells) & (cand != c0[:, None]) & (cand != c1[:, None]),
+                    cand, sentinel)
+    cand = np.sort(cand, axis=1)
+    dup = np.zeros_like(cand, dtype=bool)
+    dup[:, 1:] = cand[:, 1:] == cand[:, :-1]
+    cand = np.sort(np.where(dup, sentinel, cand), axis=1)
+    face_neighbors = np.concatenate([c0[:, None], c1[:, None], cand], axis=1)
+    face_neighbors = face_neighbors[:, :n_face_neighbors]
+    if face_neighbors.shape[1] < n_face_neighbors:
+        face_neighbors = np.pad(face_neighbors, ((0, 0), (0, n_face_neighbors
+                                - face_neighbors.shape[1])), constant_values=sentinel)
     return face_neighbors
 
 
@@ -259,6 +261,19 @@ class LSQMesh(FVMMesh):
         The ``degree`` parameter is **internal**: user code never sets
         it.  The right entry point for solver setup is
         ``ensure_lsq_mesh(mesh, model)``."""
+        from zoomy_core.mesh import geometry_xp
+        if str(self.type) in geometry_xp._SUPPORTED:      # vectorised
+            topo = geometry_xp.build_topology(self, lsq_degree=degree)
+            g = geometry_xp.compute_geometry(
+                topo, np.asarray(self.vertex_coordinates)[:self.dimension])
+            self._lsq_gradQ = np.asarray(g["lsq_gradQ"])
+            self._lsq_neighbors = topo.lsq_neighbors
+            self._lsq_boundary_face_neighbors = topo.lsq_boundary_face_neighbors
+            self._lsq_monomial_multi_index = build_monomial_indices(
+                degree, self.dimension)
+            self._lsq_scale_factors = scale_lsq_derivative(
+                self._lsq_monomial_multi_index)
+            return
         dim = self.dimension
         centers = self.cell_centers_computed()
         face_centers = self.face_centers_computed()

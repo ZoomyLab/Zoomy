@@ -27,10 +27,12 @@ This module never imports jax.
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import scipy.sparse as sps
 
 from zoomy_core.mesh.base_mesh import _local_faces_for_type
 from zoomy_core.mesh.lsq_reconstruction import (
@@ -131,8 +133,88 @@ def _first_visitor(cell_faces):
 
 
 def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
-                  n_inner_cells, cell_boundary_faces, cell_vertices,
+                  n_inner_cells, boundary_owner, cell_vertices,
                   boundary_face_centers):
+    """The STENCIL SELECTION of
+    :func:`zoomy_core.mesh.lsq_reconstruction.least_squares_reconstruction_local`
+    (same neighbour order, same padding, same REQ-174b axis decisions) --
+    without the per-cell pseudo-inverse, which :func:`compute_geometry`
+    batches.  ``centers`` is ``(n_cells, dim)``; ``boundary_owner`` the inner
+    cell of every boundary face.  >= 2-D: the sorted vertex ring of every
+    inner cell from one sparse product; per-cell loops only for ghosts and
+    cells whose ring is too small (and in 1-D)."""
+    owner = np.asarray(boundary_owner, dtype=int)
+    if cell_vertices is None or dim < 2:
+        cell_bf = [[] for _ in range(n_cells)]
+        for i_bf, c in enumerate(owner):
+            cell_bf[int(c)].append(i_bf)
+        return _lsq_stencils_loop(n_cells, dim, neighbors_list, centers,
+                                  lsq_degree, n_inner_cells, cell_bf,
+                                  cell_vertices, boundary_face_centers)
+    mon = build_monomial_indices(lsq_degree, dim)
+    required = get_required_monomials_count(get_polynomial_degree(mon), dim)
+    cv = np.asarray(cell_vertices)[:, :n_inner_cells]
+    k, n = cv.shape
+    C = sps.csr_matrix((np.ones(k * n, dtype=np.int32),
+                        (np.repeat(np.arange(n), k), cv.T.reshape(-1))),
+                       shape=(n, int(cv.max()) + 1))
+    rows, cols = (C @ C.T).nonzero()
+    off = rows != cols
+    rows, cols = rows[off], cols[off]
+    o = np.lexsort((cols, rows))                     # each ring sorted
+    rows, cols = rows[o], cols[o]
+    lens = np.bincount(rows, minlength=n)
+    start = np.concatenate([[0], np.cumsum(lens)[:-1]])
+    special = {}                                     # cell -> stencil list
+    for i_c in np.flatnonzero(lens < required):      # degenerate corners
+        cur = cols[start[i_c]:start[i_c] + lens[i_c]].tolist()
+        fill = [m for m in neighbors_list[i_c]
+                if m < n_inner_cells and m != i_c and m not in cur]
+        cur = cur + fill
+        while len(cur) < required:
+            ext = expand_neighbors(neighbors_list, cur, n_valid=n_inner_cells)
+            new = [m for m in ext if m != i_c and m not in cur]
+            if not new:
+                break
+            cur.extend(new)
+        special[int(i_c)] = cur
+    for i_c in range(n_inner_cells, n_cells):        # ghosts: face neighbours
+        cur = [m for m in neighbors_list[i_c] if m < n_inner_cells]
+        while len(cur) < required:
+            new_nb = expand_neighbors(neighbors_list, cur, n_valid=n_inner_cells)
+            cur = list(set(new_nb) - {i_c})
+            if len(cur) == 0:
+                break
+        special[i_c] = cur
+    max_nbr = max([int(lens.max()) if n else 0]
+                  + [len(v) for v in special.values()])
+    neighbors = np.repeat(np.arange(n_cells)[:, None], max_nbr, axis=1)
+    neighbors[rows, np.arange(len(rows)) - start[rows]] = cols
+    for i_c, cur in special.items():
+        neighbors[i_c] = np.arange(max_nbr) * 0 + i_c
+        neighbors[i_c, :min(len(cur), max_nbr)] = cur[:max_nbr]
+    counts = np.bincount(owner, minlength=n_cells)
+    max_bdy = int(counts.max()) if owner.size else 0
+    bdy = -np.ones((n_cells, max_bdy), dtype=int)
+    n_axis = -np.ones((n_cells, max_bdy), dtype=int)
+    if owner.size:
+        o = np.argsort(owner, kind="stable")         # in boundary-face order
+        first = np.concatenate([[0], np.cumsum(counts)])[owner[o]]
+        slot = np.arange(len(o)) - first
+        bdy[owner[o], slot] = o
+        d = 2 * (np.asarray(boundary_face_centers)[o] - np.asarray(centers)[owner[o]])
+        n_axis[owner[o], slot] = np.argmax(np.abs(d), axis=1)
+    pure_axis_rows = {}
+    for kk, mi in enumerate(mon):
+        nz = [a for a in range(dim) if mi[a] != 0]
+        if len(nz) == 1:
+            pure_axis_rows.setdefault(nz[0], []).append(kk)
+    return mon, neighbors, bdy, n_axis, pure_axis_rows
+
+
+def _lsq_stencils_loop(n_cells, dim, neighbors_list, centers, lsq_degree,
+                       n_inner_cells, cell_boundary_faces, cell_vertices,
+                       boundary_face_centers):
     """The STENCIL SELECTION of
     :func:`zoomy_core.mesh.lsq_reconstruction.least_squares_reconstruction_local`
     (same neighbour order, same padding, same REQ-174b axis decisions) —
@@ -231,9 +313,8 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows):
     max_bdy = bdy.shape[1]
     M = len(mon)
     n_bdy_here = (bdy >= 0).sum(axis=1)
-    degenerate = np.array([
-        bool(np.all(neighbors[i] == i)) and n_bdy_here[i] == 0
-        for i in range(n_cells)])
+    degenerate = ((neighbors == np.arange(n_cells)[:, None]).all(axis=1)
+                  & (n_bdy_here == 0))
     coupled = (dim >= 2) & (n_bdy_here > 0) & ~degenerate
     plain = np.flatnonzero(~coupled & ~degenerate)
     bint = np.flatnonzero(coupled)
@@ -306,22 +387,15 @@ def _periodic_partners(mesh, bcs, centers):
     return out, periodic
 
 
-def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
-    """Build the STATIC topology of ``mesh`` (numpy, once).
-
-    ``nsm`` (optional) supplies the LSQ degree (``resolved_lsq_degree``) and
-    the ``BoundaryConditions`` container (routing by tag name, periodic
-    partners); ``lsq_degree`` / ``bcs`` override them."""
+def _base_topology(mesh):
+    """Cell/face topology of ``mesh`` (no stencils) and its geometry from the
+    current vertex coordinates (numpy): ``(topo_partial, g0)``."""
     mtype = str(mesh.type)
     if mtype not in _SUPPORTED:
         raise NotImplementedError(
             f"geometry_xp: cell type {mtype!r} is not supported (line, "
             "triangle, quad — the horizontal meshes of the solver template)")
     dim = int(mesh.dimension)
-    if lsq_degree is None:
-        lsq_degree = nsm.resolved_lsq_degree() if nsm is not None else 1
-    if bcs is None and nsm is not None:
-        bcs = getattr(nsm, "_bc_source", None)
     n_inner = int(mesh.n_inner_cells)
     n_cells = int(mesh.n_cells)
     n_faces = int(mesh.n_faces)
@@ -336,10 +410,7 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
     faces, ic, lf = _first_visitor(cf)
     if faces.size != n_faces or not np.array_equal(faces, np.arange(n_faces)):
         raise ValueError("geometry_xp: every face must belong to an inner cell")
-    fverts = np.empty((nvf, n_faces), dtype=int)
-    for k in range(nvf):
-        lv = np.array([local[l][k] for l in lf])
-        fverts[k] = cv[lv, ic]
+    fverts = cv[np.asarray(local)[lf].T, ic]               # (nvf, n_faces)
 
     bfaces = np.asarray(mesh.boundary_face_face_indices, dtype=int)[:n_bf]
     bowner = fcells[0, bfaces]
@@ -399,6 +470,34 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
         fallback = dist.min(axis=0) <= 0
     else:
         fallback = np.zeros(n_inner, dtype=bool)
+    if fallback.any():
+        g0 = _cell_face_geometry(
+            np, dataclasses.replace(pre, inradius_fallback=fallback), X0)
+    return topo_partial, g0, fallback
+
+
+def cell_face_geometry(mesh):
+    """The FVMMesh geometry of ``mesh`` (numpy, vectorised): cell centres
+    (incl. ghost mirrors), volumes, inradius; face normals, volumes, centres."""
+    return _base_topology(mesh)[1]
+
+
+def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
+    """Build the STATIC topology of ``mesh`` (numpy, once).
+
+    ``nsm`` (optional) supplies the LSQ degree (``resolved_lsq_degree``) and
+    the ``BoundaryConditions`` container (routing by tag name, periodic
+    partners); ``lsq_degree`` / ``bcs`` override them."""
+    if lsq_degree is None:
+        lsq_degree = nsm.resolved_lsq_degree() if nsm is not None else 1
+    if bcs is None and nsm is not None:
+        bcs = getattr(nsm, "_bc_source", None)
+    topo_partial, g0, fallback = _base_topology(mesh)
+    t = topo_partial
+    dim, n_inner, n_cells = t["dim"], t["n_inner_cells"], t["n_cells"]
+    n_bf, cf, fcells = t["n_boundary_faces"], t["cell_faces"], t["face_cells"]
+    bfaces, bowner, bghost = t["boundary_faces"], t["boundary_owner"], t["boundary_ghost"]
+    interior = t["interior_faces"]
 
     # LSQ stencil selection (reference order) + batched-pinv plan
     centers0 = g0["cell_centers"]
@@ -407,12 +506,9 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
     bfc0 = g0["face_centers"][bfaces, :dim]
     # boundary faces per cell by OWNER (face_cells[0]) — a periodic remap of
     # ``boundary_face_cells`` must not move a boundary sample to the partner.
-    cell_bf = [[] for _ in range(n_cells)]
-    for i_bf, c in enumerate(bowner):
-        cell_bf[int(c)].append(i_bf)
     mon, nbr, bdy, n_axis, pure_rows = _lsq_stencils(
         n_cells, dim, np.asarray(mesh.cell_neighbors), centers0[:dim].T,
-        lsq_degree, n_inner, cell_bf, np.asarray(mesh.cell_vertices), bfc0)
+        lsq_degree, n_inner, bowner, np.asarray(mesh.cell_vertices), bfc0)
     plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows)
     grad_cols = np.asarray(find_derivative_indices(
         mon, [tuple(1 if k == d else 0 for k in range(dim))
