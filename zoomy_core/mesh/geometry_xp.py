@@ -21,7 +21,7 @@ Two halves, split by what may change:
 (``cell_centers`` incl. ghosts, ``cell_volumes``, ``cell_inradius``,
 ``face_normals``, ``face_volumes``, ``face_centers``, ``lsq_gradQ``) to
 round-off.  Supported cell types: ``line`` (1-D), ``triangle`` and ``quad``
-(2-D) — the horizontal meshes the template targets.
+(2-D), ``tetra`` and ``hexahedron`` (3-D; planar faces).
 
 This module never imports jax.
 """
@@ -46,7 +46,7 @@ from zoomy_core.mesh.lsq_reconstruction import (
     vertex_one_ring,
 )
 
-_SUPPORTED = {"line": 1, "triangle": 2, "quad": 2}
+_SUPPORTED = {"line": 1, "triangle": 2, "quad": 2, "tetra": 3, "hexahedron": 3}
 
 #: Floor of the TPFA |n·e| obliquity factor (DiffusionOperatorV2 convention).
 _TPFA_MIN_COS = 0.1
@@ -412,8 +412,8 @@ def _base_topology(mesh):
     mtype = str(mesh.type)
     if mtype not in _SUPPORTED:
         raise NotImplementedError(
-            f"geometry_xp: cell type {mtype!r} is not supported (line, "
-            "triangle, quad — the horizontal meshes of the solver template)")
+            f"geometry_xp: cell type {mtype!r} is not supported "
+            f"({', '.join(_SUPPORTED)})")
     dim = int(mesh.dimension)
     n_inner = int(mesh.n_inner_cells)
     n_cells = int(mesh.n_cells)
@@ -448,10 +448,16 @@ def _base_topology(mesh):
         xc[bghost] = 2 * fcx[bfaces] - xc[bowner]
         sign = np.sign(xc[fcells[1]] - xc[fcells[0]])
     else:
-        a, b = fverts[0], fverts[1]
-        e = X0[:, b] - X0[:, a]
-        raw = np.stack([-e[1], e[0]])
-        fc = (X0[:, a] + X0[:, b]) / 2
+        if dim == 2:
+            a, b = fverts[0], fverts[1]
+            e = X0[:, b] - X0[:, a]
+            raw = np.stack([-e[1], e[0]])
+        else:
+            raw = _face_area_vector(np, X0, fverts)
+        fc = X0[:, fverts[0]]
+        for k in range(1, nvf):
+            fc = fc + X0[:, fverts[k]]
+        fc = fc / nvf
         cc = np.zeros((dim, n_inner))
         for k in range(cv.shape[0]):
             cc = cc + X0[:, cv[k]]
@@ -599,6 +605,38 @@ def _heron(xp, X, i, j, k):
     return xp.sqrt(s * (s - a) * (s - b) * (s - c))
 
 
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
+
+
+def _face_area_vector(xp, X, fv):
+    """Area vector (|a| = area) of the 3-D faces with vertices ``fv`` in
+    local order: triangle ½ (x1-x0)x(x2-x0); quad ½ (x2-x0)x(x3-x1) (exact for
+    planar quads)."""
+    if fv.shape[0] == 3:
+        a, b = X[:, fv[1]] - X[:, fv[0]], X[:, fv[2]] - X[:, fv[0]]
+    else:
+        a, b = X[:, fv[2]] - X[:, fv[0]], X[:, fv[3]] - X[:, fv[1]]
+    return xp.stack(_cross(a, b)) / 2
+
+
+def _cell_volume_3d(xp, X, cv, local, cc):
+    """Volume of convex 3-D cells: each face fanned into triangles from its
+    first vertex, one tetrahedron per triangle with the cell centre ``cc``
+    (the reference ``_volume_hex`` decomposition)."""
+    vol = None
+    for lf in local:
+        for k in range(1, len(lf) - 1):
+            a = X[:, cv[lf[0]]] - cc
+            b = X[:, cv[lf[k]]] - cc
+            c = X[:, cv[lf[k + 1]]] - cc
+            bc = _cross(b, c)
+            t = xp.abs(a[0] * bc[0] + a[1] * bc[1] + a[2] * bc[2]) / 6
+            vol = t if vol is None else vol + t
+    return vol
+
+
 def _cell_face_geometry(xp, topo, X):
     """Cell / face geometry (no LSQ): the FVMMesh fields."""
     dim = topo.dim
@@ -626,6 +664,12 @@ def _cell_face_geometry(xp, topo, X):
         fvol = xp.ones((topo.n_faces,), dtype=X.dtype)
         vol_in = _norm_rows(xp, X[:, cv[1]] - X[:, cv[0]])
         ghost_c = 2 * fc[:, bfaces] - cc_in[:, bowner]
+    elif dim == 3:
+        av = _face_area_vector(xp, X, fv)
+        fvol = _norm_rows(xp, av)
+        normals = av / fvol[None, :] * sign[None, :]
+        vol_in = _cell_volume_3d(xp, X, cv, _local_faces_for_type(topo.mesh_type),
+                                 cc_in)
     else:
         e = X[:, fv[1]] - X[:, fv[0]]
         length = _norm_rows(xp, e)
@@ -636,6 +680,7 @@ def _cell_face_geometry(xp, topo, X):
         else:   # quad = two Heron triangles (0,1,2) + (2,3,0)
             vol_in = (_heron(xp, X, cv[0], cv[1], cv[2])
                       + _heron(xp, X, cv[2], cv[3], cv[0]))
+    if dim >= 2:
         fn = normals[:, bfaces]
         fn = fn / _norm_rows(xp, fn)[None, :]
         inner_c = cc_in[:, bowner]
@@ -662,8 +707,10 @@ def _cell_face_geometry(xp, topo, X):
         dist = None
         for l in range(cf.shape[0]):
             f = cf[l]
-            d = xp.abs((fc[0, f] - cc_in[0]) * normals[0, f]
-                       + (fc[1, f] - cc_in[1]) * normals[1, f])
+            d = (fc[0, f] - cc_in[0]) * normals[0, f]
+            for k in range(1, dim):
+                d = d + (fc[k, f] - cc_in[k]) * normals[k, f]
+            d = xp.abs(d)
             dist = d if dist is None else xp.minimum(dist, d)
         ir_in = dist
         if np.any(topo.inradius_fallback):

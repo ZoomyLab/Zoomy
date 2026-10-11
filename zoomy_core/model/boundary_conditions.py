@@ -734,10 +734,19 @@ def derive_momentum_field_indices(sm):
     (``[[q_x_0, q_y_0], [q_x_1, q_y_1], …]``), i.e. the transpose of the
     per-direction lists.  A 1-D model yields singleton groups.
 
+    A system that DECLARES its momentum role (``sm.declare_roles(momentum=…)``,
+    e.g. the compressible Euler system, which has no lift) is read from that
+    declaration instead.
+
     Raises with the model's own state printed if the registry is missing or
     the per-direction lists are ragged — guessing an index layout is exactly
     the failure this function exists to remove.
     """
+    from zoomy_core.systemmodel.roles import declared_role_record
+    if declared_role_record(sm).get("momentum"):
+        declared = sm.roles.momentum
+        if declared:
+            return [list(t) for t in zip(*declared)]
     rows = getattr(sm, "interpolate_to_3d", None)
     if rows is None:
         raise RuntimeError(

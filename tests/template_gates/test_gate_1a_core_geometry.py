@@ -140,7 +140,28 @@ def test_periodic_partners_and_routing():
     assert all(srt[b] == t for b, t in zip(topo.bc_branch, tags))
 
 
+def test_geometry_3d_matches_cell_loops():
+    """Hexahedra (sheared: planar faces, non-orthogonal cells) vs the
+    per-cell loops of BaseMesh."""
+    from zoomy_core.mesh.base_mesh import BaseMesh
+    m = BaseMesh.create_3d((0.0, 1.0, 0.0, 2.0, 0.0, 0.5), 3, 4, 2)
+    X = np.asarray(m.vertex_coordinates, float)
+    X = np.array([X[0] + 0.3 * X[1], X[1] - 0.2 * X[2], X[2] + 0.1 * X[0]])
+    m.vertex_coordinates = X
+    g = compute_geometry(build_topology(m, lsq_degree=1), X, lsq=False)
+    nc = m.n_inner_cells
+    assert _rel(g["cell_volumes"][:nc], m.cell_volumes_computed()[:nc]) < 1e-14
+    assert _rel(g["cell_centers"][:, :nc], m.cell_centers_computed()[:, :nc]) < 1e-14
+    assert _rel(g["face_normals"], m.face_normals_computed()) < 1e-14
+    assert _rel(g["face_volumes"], m.face_volumes_computed()) < 1e-14
+    assert _rel(g["face_centers"], m.face_centers_computed()) < 1e-14
+    assert _rel(g["cell_inradius"][:nc], m.cell_inradius_computed()[:nc]) < 1e-14
+    assert abs(g["cell_volumes"][:nc].sum() - (1 - 0.3 * 0.02)) < 1e-14   # det of the shear
+
+
 def test_topology_rejects_unsupported_type():
-    m = LSQMesh.create_3d((0.0, 1.0, 0.0, 1.0, 0.0, 1.0), 2, 2, 2)
+    from zoomy_core.mesh.base_mesh import BaseMesh
+    m = BaseMesh.create_3d((0.0, 1.0, 0.0, 1.0, 0.0, 1.0), 2, 2, 2)
+    m.type = "wface"
     with pytest.raises(NotImplementedError):
         build_topology(m)

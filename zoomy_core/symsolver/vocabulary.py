@@ -51,7 +51,8 @@ class boundary_ghosts(Block):
 
 class boundary_traces(Block):
     """``(bc, Q, QL, QR, Qaux, p, time, mesh)`` -> ``QR`` whose boundary
-    faces hold ``BC(QL)`` (the partner cell on a periodic seam)."""
+    faces hold ``BC(QL)`` (on a periodic seam: the partner face's ``QL``,
+    the partner cell's trace at the seam)."""
 
 
 # ── reconstruction and assembly ─────────────────────────────────────────────
