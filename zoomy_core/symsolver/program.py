@@ -13,6 +13,19 @@ from zoomy_core.symsolver import hyperbolic as T
 from zoomy_core.symsolver.core import CxxPrinter
 
 
+def chorin_systems(pred, press, corr):
+    """The Chorin split as NSMs named the way the templates print them
+    (``pred.``, ``press.``, ``corr.``)."""
+    from zoomy_core.numerics import NumericalSystemModel
+    out = []
+    for name, sm in (("pred", pred), ("press", press), ("corr", corr)):
+        nsm = (sm if isinstance(sm, NumericalSystemModel)
+               else NumericalSystemModel.from_system_model(sm))
+        nsm._symbolic_name = name
+        out.append(nsm)
+    return out
+
+
 def _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every, wave_speed,
               dt_constant):
     return dict(cfl=cfl, dimension=dimension, mood=mood, dt_write=dt_write,
