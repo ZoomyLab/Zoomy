@@ -100,12 +100,10 @@ def cell_face_tags(mesh):
 
 def partitioned(mesh):
     """The arrays of ``mesh`` in the global numbering: cells along the curve,
-    vertices by first appearance.  Periodic meshes are refused."""
-    nc, n_bf = int(mesh.n_inner_cells), int(mesh.n_boundary_faces)
-    if n_bf and (np.asarray(mesh.boundary_face_cells)[:n_bf]
-                 != np.asarray(mesh.face_cells)[0][np.asarray(
-                     mesh.boundary_face_face_indices)[:n_bf]]).any():
-        raise NotImplementedError("distributed run on a periodic mesh")
+    vertices by first appearance.  Built from the cells' own faces
+    (``face_cells[0]``), so a periodic remap of ``boundary_face_cells`` does
+    not enter."""
+    nc = int(mesh.n_inner_cells)
     dim = int(mesh.dimension)
     X = np.asarray(mesh.vertex_coordinates, dtype=float)[:dim]
     cv = np.asarray(mesh.cell_vertices)[:, :nc]
@@ -197,6 +195,23 @@ class ArraySource:
     def vertices(self, ids):
         return self._X[:, ids]
 
+    def periodic_partners(self, bcs):
+        """The periodic faces of ``bcs`` (``Periodic`` BCs) in the global
+        numbering: ``(cell, slot, partner)``, the face ``slot`` of ``cell``
+        takes ``partner``'s state (the pairing of
+        :meth:`BaseMesh.resolve_periodic_bcs`)."""
+        from zoomy_core.mesh.geometry_xp import _periodic_partners
+        m = self.mesh
+        n_bf = int(m.n_boundary_faces)
+        f = np.asarray(m.boundary_face_face_indices)[:n_bf]
+        owner = np.asarray(m.face_cells)[0][f]
+        partner, periodic = _periodic_partners(m, bcs, m.cell_centers_computed())
+        slot = np.argmax(np.asarray(m.cell_faces)[:, owner] == f[None], axis=0)
+        gid = np.empty(self.n_cells, dtype=np.int64)
+        gid[self.cell_ids] = np.arange(self.n_cells)
+        return (gid[owner[periodic]], slot[periodic].astype(np.int64),
+                gid[np.asarray(partner)[periodic]])
+
 
 class FileSource:
     """A mesh file (``write_mesh``); each read touches only the rows asked
@@ -248,6 +263,11 @@ class FileSource:
 
     def vertices(self, ids):
         return self._read("vertex_coordinates", ids)
+
+    def periodic_partners(self, bcs):
+        raise NotImplementedError(
+            "periodic BCs in a distributed run from a mesh file: pass the "
+            "mesh object instead (its periodic faces are paired in memory)")
 
 
 def source(mesh):
@@ -483,8 +503,10 @@ class Partition:
     numbering (the mesh's own ids, or the file's)."""
 
     def __init__(self, comm, src, offsets, gids, n_own, n_ring, vids, send,
-                 recv):
+                 recv, periodic=None):
         self.comm, self.source, self.offsets = comm, src, offsets
+        # periodic faces held here: (local cell, face slot, local partner)
+        self.periodic = periodic
         self.rank, self.size = comm.Get_rank(), comm.Get_size()
         self.gids, self.n_own, self.n_ring = gids, n_own, n_ring
         self.cells = gids if src.cell_ids is None else src.cell_ids[gids]
@@ -522,6 +544,25 @@ class Partition:
         out = np.zeros(G.shape[:-1] + (n_global,), dtype=G.dtype)
         np.add.at(out, (..., np.asarray(ids)), G)
         return self._hcomm.allreduce(out, op=MPI.SUM)
+
+    def resolve_periodic(self, local_mesh):
+        """The piece's :meth:`BaseMesh.resolve_periodic_bcs`: every periodic
+        face whose partner cell the piece holds reads the partner (its halo
+        copy).  Owned and first-layer cells hold all of theirs."""
+        if self.periodic is None or not len(self.periodic[0]):
+            return
+        cells, slots, partners = self.periodic
+        n_bf = int(local_mesh.n_boundary_faces)
+        f = np.asarray(local_mesh.boundary_face_face_indices)[:n_bf]
+        owner = np.asarray(local_mesh.face_cells)[0][f]
+        slot = np.argmax(np.asarray(local_mesh.cell_faces)[:, owner] == f[None], axis=0)
+        nf = int(np.asarray(local_mesh.cell_faces).shape[0])
+        keys = cells * nf + slots
+        o = np.argsort(keys)
+        at = np.searchsorted(keys[o], owner * nf + slot)
+        at = np.minimum(at, len(o) - 1)
+        hit = keys[o][at] == owner * nf + slot
+        local_mesh.boundary_face_cells[:n_bf][hit] = partners[o][at][hit]
 
     def check(self, local_mesh):
         """Every cell whose stencil an owned face reads (owned + layer 1)
@@ -589,21 +630,43 @@ class Partition:
                 d[:, a:b] = X[:, :self.n_own]
 
 
-def distribute(src, comm):
+def distribute(src, comm, bcs=None):
     """This rank's local mesh (a BaseMesh: owned cells, then 2 halo layers;
     cut faces tagged ``halo``) and its :class:`Partition`.  ``src``: an
-    :class:`ArraySource` / :class:`FileSource` (or a mesh / path)."""
+    :class:`ArraySource` / :class:`FileSource` (or a mesh / path).
+
+    ``bcs`` with ``Periodic`` conditions: the periodic partners of the owned
+    cells join layer 1 (with their vertex rings in layer 2), those of layer
+    1 join layer 2; :meth:`Partition.resolve_periodic` points the piece's
+    periodic faces at them, the exchange keeps them current."""
+    from zoomy_core.model.boundary_conditions import Periodic
     if not isinstance(src, (ArraySource, FileSource)):
         src = source(src)
+    pairs = (src.periodic_partners(bcs) if bcs is not None and any(
+        type(b) is Periodic for b in bcs.boundary_conditions_list) else None)
     rank, P, N = comm.Get_rank(), comm.Get_size(), src.n_cells
     offsets = np.arange(P + 1, dtype=np.int64) * N // P
     own = np.arange(offsets[rank], offsets[rank + 1])
     cv_own = src.cells(own)
     directory = _Directory(comm, own, cv_own, src.n_vertices)
-    l1 = np.setdiff1d(directory.cells_around(cv_own), own)
+
+    def partners(cells):           # periodic partners of ``cells``
+        if pairs is None:
+            return np.zeros(0, dtype=np.int64)
+        return pairs[2][np.isin(pairs[0], cells)]
+    # layer 1: the vertex ring, and the periodic partners (an owned seam face
+    # reads its partner's reconstructed trace: the partner's whole stencil)
+    l1 = np.setdiff1d(np.union1d(directory.cells_around(cv_own), partners(own)), own)
     cv_l1 = src.cells(l1)
     new_v = np.setdiff1d(np.unique(cv_l1), np.unique(cv_own))
-    l2 = np.setdiff1d(directory.cells_around(new_v), np.concatenate([own, l1]))
+    near = np.concatenate([own, l1])
+    # layer 2: layer 1's vertex ring and the partners' values its ghosts
+    # read; a layer-1 cell on the physical boundary (a periodic partner) has
+    # a one-sided stencil that reaches a ring further (1-D: two cells in)
+    edge = src.cells(l1[(src.face_tags(l1) >= 0).any(axis=0)])
+    far = directory.cells_around(src.cells(directory.cells_around(edge)))
+    l2 = np.setdiff1d(np.union1d(np.union1d(directory.cells_around(new_v), far),
+                                 partners(near)), near)
     gids = np.concatenate([own, l1, l2])
     cv = np.concatenate([cv_own, cv_l1, src.cells(l2)], axis=1)
 
@@ -625,7 +688,13 @@ def distribute(src, comm):
     local = BaseMesh.from_arrays(src.vertices(vids), lcv.reshape(cv.shape),
                                  src.type, cell_face_tags=src.face_tags(gids),
                                  tag_names=names, default_tag=halo_tag)
+    periodic = None
+    if pairs is not None:          # the pairs this piece holds, local indices
+        o = np.argsort(gids)
+        loc = lambda g: o[np.searchsorted(gids[o], g)]            # noqa: E731
+        held = np.isin(pairs[0], gids) & np.isin(pairs[2], gids)
+        periodic = (loc(pairs[0][held]), pairs[1][held], loc(pairs[2][held]))
     part = Partition(comm, src, offsets, gids, len(own), len(own) + len(l1),
-                     vids, send, recv)
+                     vids, send, recv, periodic)
     part.check(local)
     return local, part

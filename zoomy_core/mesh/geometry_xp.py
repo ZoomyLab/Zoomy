@@ -267,9 +267,10 @@ def _lsq_stencils_loop(n_cells, dim, neighbors_list, centers, lsq_degree,
             while len(cur) < required:
                 new_nb = expand_neighbors(neighbors_list, cur,
                                           n_valid=n_inner_cells)
-                cur = list(set(new_nb) - {i_c})
-                if len(cur) == 0:
+                grown = list(set(new_nb) - {i_c})
+                if len(grown) <= len(cur):   # nothing more to reach
                     break
+                cur = grown
         nbrs_all.append(cur)
 
     # the width of the INNER stencils: a ghost row (its inner cell's
@@ -294,10 +295,10 @@ def _lsq_stencils_loop(n_cells, dim, neighbors_list, centers, lsq_degree,
                                        n_valid=n_inner_cells)
                 ext = list(set(ext) - {i_c})
                 new = [n for n in ext if n not in cur and n < n_inner_cells]
+                if not new:          # nothing more to reach (an isolated cell)
+                    break
                 cur.extend(new)
                 n_nbr = len(cur)
-                if n_nbr >= max_nbr:
-                    break
         if len(cur) >= max_nbr:
             trimmed = cur[:max_nbr]
         else:
@@ -507,12 +508,16 @@ def cell_face_geometry(mesh):
     return _base_topology(mesh)[1]
 
 
-def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
+def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
+                   partners=None):
     """Build the STATIC topology of ``mesh`` (numpy, once).
 
     ``nsm`` (optional) supplies the LSQ degree (``resolved_lsq_degree``) and
     the ``BoundaryConditions`` container (routing by tag name, periodic
-    partners); ``lsq_degree`` / ``bcs`` override them."""
+    partners); ``lsq_degree`` / ``bcs`` override them.  ``partners``: the
+    input cell of every boundary face, for a mesh that cannot pair its own
+    periodic faces (a distributed piece: ``Partition.resolve_periodic``);
+    default: paired here, from the whole mesh."""
     if lsq_degree is None:
         lsq_degree = nsm.resolved_lsq_degree() if nsm is not None else 1
     if bcs is None and nsm is not None:
@@ -554,7 +559,11 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None):
     tags = (list(bcs.list_sorted_function_names) if bcs is not None else None)
     branch = (np.asarray(boundary_face_branches(mesh, bcs), dtype=int)
               if n_bf else np.zeros(0, dtype=int))
-    inputs, periodic = _periodic_partners(mesh, bcs, centers0)
+    if partners is None:
+        inputs, periodic = _periodic_partners(mesh, bcs, centers0)
+    else:
+        inputs = np.asarray(partners)[:n_bf].copy()
+        periodic = inputs != bowner
 
     return MeshTopology(
         **topo_partial, inradius_fallback=fallback,
