@@ -52,3 +52,23 @@ Pixi: AmgX is not on conda-forge; Pixi could run the AmgX CMake build as a
 task (or a rattler-build recipe) and keep JAX-AMG an optional feature.
 
 Check: `gates/gate14_amgx.py` (GMRES vs AmgX, same template).
+
+Distributed runs (AmgX MPI mode, `SymbolicChorinSolverJax(comm=...)`): AmgX
+built with MPI (here against `zoomy-cuda`'s MPICH) and JAX-AMG with MPI:
+
+```bash
+M=$(micromamba run -n zoomy-cuda bash -c 'echo $CONDA_PREFIX')
+micromamba run -n amgx-build cmake -S . -B build-mpich -DCMAKE_BUILD_TYPE=Release \
+  -DCUDA_ARCH=89 -DCMAKE_CUDA_ARCHITECTURES=89 -DCMAKE_CUDA_COMPILER=$P/bin/nvcc \
+  -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++ -DMPI_CXX_COMPILER=$M/bin/mpicxx \
+  -DMPI_C_COMPILER=$M/bin/mpicc
+MPICH_CXX=/usr/bin/g++ micromamba run -n amgx-build cmake --build build-mpich -j 24
+# JAX-AMG asks the MPI wrapper OpenMPI's way (--showme:compile/link); for
+# MPICH a 3-line shim prints -I$M/include and -L$M/lib -lmpicxx -lmpi
+pip install pybind11
+PIP_CONSTRAINT=pin.txt CUDA_HOME=$C AMGX_ROOT=~/opt/src/AMGX \
+  AMGX_BUILD=~/opt/src/AMGX/build-mpich JAXAMG_ENABLE_MPI=1 MPICXX=<shim> \
+  pip install --no-deps --no-build-isolation ./jaxamg-0.1.4   # (sdist)
+```
+
+The serial path works with this build too.

@@ -33,9 +33,16 @@ Q_all = solver.partition.gather(Q)              # global order, on rank 0
   with MPI (`zoomy-cuda-ompi`, the container): every rank writes its own block;
   otherwise gathered on rank 0.  The file's `/mesh` is a mesh file again.
 
-Launch: `mpiexec -n 4 python run.py`.  On a GPU node each rank binds one GPU
-by its node-local rank (`parallel.bind_device`, called by `setup`); a
-launcher that sets `CUDA_VISIBLE_DEVICES` per rank takes precedence.
+Launch on GPUs: `mpiexec -n 4 python -m zoomy_jax.gpurank run.py` -- binds one
+GPU per rank (node-local rank) before CUDA loads, for every CUDA user in the
+process (JAX, AmgX, mpi4jax).  `setup` binds JAX's GPU as a fallback, too late
+for AmgX (it then runs on GPU 0).  A launcher that sets `CUDA_VISIBLE_DEVICES`
+per rank (`srun --gpus-per-task=1`) takes precedence.
+
+Chorin (pressure systems): `SymbolicChorinSolverJax(comm=...)`.  Pressure
+solves: 'gmres' (distributed FGMRES), 'pyamg' (FGMRES + per-rank AMG + coarse
+correction), 'amgx' (one global AmgX solve in AmgX's MPI mode; AmgX and
+JAX-AMG built with MPI, see AMG.md).  ANALYSIS.md section 25.
 
 GPU transport (`bench_halo.py`: 1000 halo exchanges in one compiled loop,
 4 L40S, 4 rows; `bench_parallel.py`: whole step, 160k cells, 400 steps):

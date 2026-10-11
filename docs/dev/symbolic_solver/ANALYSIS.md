@@ -634,3 +634,51 @@ setup 90 s.  Two container fixes: the GPU MPI settings (UCX) only when
 `--nv` binds the driver (without a GPU, UCX cannot start); the halo
 exchange through host memory by default -- GPU -> GPU stalled at this size
 (halo messages up to 350 kB per peer, 13.6k-20.5k halo cells per rank).
+
+## 25. Distributed Chorin (pressure solves)
+
+Template (`chorin.py`): `halo` on the pressure iterate inside R(P) (its
+derivative aux is a stencil), after the pressure solve and after the
+correction (+ after the predictor's explicit diffusion).  Serial: identity
+(foam: a template returning by value, also for the scalar 0 of R(0)).
+
+Runtime, distributed `linsolve`:
+
+| backend | solve | preconditioner |
+|---|---|---|
+| gmres | FGMRES, global inner products (one allreduce per CGS2 pass), Givens early exit, restart <= 60 | none |
+| pyamg | same FGMRES | block Jacobi: per-rank SA V-cycle (host, lagged, block-diagonal scaling) + coarse correction (one unknown per rank and row, Nicolaides) |
+| amgx | ONE global AmgX solve, AmgX MPI mode via JAX-AMG (FGMRES + AMG as serial) | AmgX's own, global |
+
+- amgx: each rank assembles its owned rows by colouring the operator with
+  the halo off (`parallel.no_halo`), halo columns numbered by their owners;
+  MPI plans from a scipy placeholder at trace time (`cache_mpi_metadata`).
+  Needs AmgX built with MPI and JAX-AMG with `JAXAMG_ENABLE_MPI=1` (AMG.md).
+- GPUs: `python -m zoomy_jax.gpurank` binds `CUDA_VISIBLE_DEVICES` before
+  CUDA loads; binding inside the run left AmgX / mpi4jax on GPU 0 (OOM).
+
+Gates (vs serial; agreement = the elliptic tolerance, not round-off):
+
+| gate | result |
+|---|---|
+| 21, VAM(1) 2-D bump, gmres, 2/3 ranks | 8.9e-12 / 3.8e-10 |
+| 21, pyamg, 2/3/4 ranks | 1.0e-10 / 1.3e-10 / 1.3e-10 |
+| 21, amgx (MPI mode), 2/4 GPUs | 4.1e-10 / 2.0e-10 |
+| 22, Chorin AD (1-D VAM, 3 ranks): J, dJ/dg fwd/rev, dJ/dX.v fwd/rev | 1.8e-13, 5.3e-12/6.0e-12, 9.6e-11/2.4e-11 |
+| 7, 8, 12, 13, 9 (serial, foam) | unchanged |
+
+Iterations per solve (VAM(1) bump, 960 x 96): serial AmgX ~128; 4 ranks
+AmgX MPI ~90; FGMRES + block Jacobi (1 AmgX V-cycle per rank) ~220 (~260
+without the coarse correction); `reuse_setup` (lagged hierarchy) does not
+converge (500).
+
+GPU timing (L40S, PCIe, MPICH -> exchanges through host memory):
+
+| cells | 1 GPU | 4 GPUs (AmgX MPI) |
+|---|---|---|
+| 92k | 208 ms/step | 828 ms/step |
+| 369k | 689 ms/step | 1057 ms/step |
+
+- The distributed AMG exchanges halos on every level of every V-cycle (~90
+  per solve): latency-bound at these sizes on this node.  The gap closes
+  with size (4x -> 1.5x); not measured beyond 369k here.
