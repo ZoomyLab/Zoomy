@@ -649,7 +649,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         check_cfl=check_cfl,
         minimum=jnp.minimum, maximum=jnp.maximum, abs=jnp.abs, floor=jnp.floor)
     if couple is not None:
-        m.update(_coupling(couple, rt, mesh_np, fc0, bf_face, nf))
+        m.update(_coupling(couple, rt, mesh_np, fc0, nf, partition))
     if partition is not None:
         from zoomy_jax.symsolver.parallel import blocks
         m.update(blocks(partition, mesh_np))
@@ -845,14 +845,29 @@ def _face_kernel(rt, name):
 
 # ── preCICE ─────────────────────────────────────────────────────────────────
 class PreciceAdapter:
-    """Host side of the ``couple_*`` effects: preCICE API calls only."""
+    """Host side of the ``couple_*`` effects: preCICE API calls only.
+    ``comm`` (mpi4py): a distributed participant, one preCICE process per
+    rank; the runtime registers each rank's own coupling vertices.  preCICE
+    runs it on MPI_COMM_WORLD (pyprecice 3.4 hands preCICE a wrong
+    communicator, of size 1, for an mpi4py one), so ``comm`` must span the
+    world -- one ``mpiexec`` per participant."""
 
-    def __init__(self, name, config, mesh_name, write, read, coords):
+    def __init__(self, name, config, mesh_name, write, read, comm=None):
         import petsc4py  # noqa: F401  (must precede precice)
         import precice
         self.mesh, self.wn, self.rn = mesh_name, list(write), list(read)
-        self.p = precice.Participant(name, config, 0, 1)
-        self.ids = self.p.set_mesh_vertices(mesh_name, np.asarray(coords))
+        rank, size = (0, 1) if comm is None else (comm.Get_rank(), comm.Get_size())
+        if size > 1:
+            from mpi4py import MPI
+            if MPI.Comm.Compare(comm, MPI.COMM_WORLD) not in (MPI.IDENT, MPI.CONGRUENT):
+                raise NotImplementedError("preCICE participant on a sub-communicator "
+                                          "(run it as its own mpiexec)")
+        self.p = precice.Participant(name, config, rank, size)
+
+    def set_vertices(self, coords):
+        """The coupling vertices ``(n, >= dim)``, in the order of the data."""
+        dim = self.p.get_mesh_dimensions(self.mesh)
+        self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(coords)[:, :dim])
 
     def _write(self, q):
         for i, n in enumerate(self.wn):
@@ -893,13 +908,27 @@ def coupled_face_indices(mesh_np, tag):
                      if names[nums[i]] == tag], dtype=int)
 
 
-def _coupling(cfg, rt, mesh_np, fc0, bf_face, nf):
+def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     """Coupling geometry blocks + the ``couple_*`` effects for one participant.
     Each host call consumes the previous token and returns the next one, so
-    XLA cannot reorder the preCICE calls."""
+    XLA cannot reorder the preCICE calls.  The coupling vertices are the
+    tagged faces of the owned cells (distributed: the rank's own), at the
+    face centres.  Distributed, a preCICE call is collective: the token
+    passes an MPI reduction before and after it, which puts the call in the
+    rank's ordered sequence of MPI collectives (halo exchanges, reductions)
+    -- every rank meets them in the same order, whatever data it couples."""
     from jax.experimental import io_callback
     a = cfg["adapter"]
+    if partition is None:
+        n_own, order = int(mesh_np.n_inner_cells), (lambda tok: tok)
+    else:
+        from mpi4py import MPI
+        from zoomy_jax.symsolver.parallel import _mpi4jax
+        mpi4jax, comm, n_own = _mpi4jax(), partition.comm.Clone(), int(partition.n_own)
+        order = lambda tok: mpi4jax.allreduce(tok, MPI.MAX, comm=comm)  # noqa: E731
     faces_c = coupled_face_indices(mesh_np, cfg["tag"])
+    faces_c = faces_c[fc0[faces_c] < n_own]
+    a.set_vertices(np.asarray(mesh_np.face_centers)[faces_c])
     cells_c = fc0[faces_c]
     mask = np.zeros(nf, dtype=bool)
     mask[faces_c] = True
@@ -937,7 +966,8 @@ def _coupling(cfg, rt, mesh_np, fc0, bf_face, nf):
                 r = host(*x)
                 r = r if isinstance(r, tuple) else (r,)
                 return (np.int64(k + 1), *r)
-            return io_callback(call, (T, *outs), tok, *args)
+            out = io_callback(call, (T, *outs), order(tok), *args)
+            return (order(out[0]), *out[1:])
         return body
 
     return dict(coupled_faces=coupled_faces, interface_states=interface_states,
