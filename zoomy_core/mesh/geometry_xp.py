@@ -166,7 +166,13 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     lens = np.bincount(rows, minlength=n)
     start = np.concatenate([[0], np.cumsum(lens)[:-1]])
     special = {}                                     # cell -> stencil list
-    for i_c in np.flatnonzero(lens < required):      # degenerate corners
+    # Extend a ring only when its samples cannot fix the fit: the fit is of
+    # differences to the cell (no constant), and every boundary face adds a
+    # ghost sample.  (Counting neither extended every wall and corner cell
+    # one-sidedly into the domain: wall-normal derivatives of fields constant
+    # along the wall.)
+    n_bf = np.bincount(owner, minlength=n)[:n] if owner.size else 0
+    for i_c in np.flatnonzero(lens + n_bf < required - 1):   # degenerate cells
         cur = cols[start[i_c]:start[i_c] + lens[i_c]].tolist()
         fill = [m for m in neighbors_list[i_c]
                 if m < n_inner_cells and m != i_c and m not in cur]
@@ -696,9 +702,11 @@ def _monomial_columns(xp, dX, powers):
     return xp.stack(cols, axis=-1)
 
 
-def _lsq_matrices(xp, topo, cc, fc):
+def _lsq_matrices(xp, topo, cc, fc, nrm):
     """Batched LSQ derivative operators ``(n_cells, R, n_mon)`` — the
-    ``LSQMesh.lsq_gradQ`` contract (``A_glob[i] = pinv(V_i).T``)."""
+    ``LSQMesh.lsq_gradQ`` contract (``A_glob[i] = pinv(V_i).T``).  A boundary
+    face's ghost sample sits at the mirror image of the cell centre (normal
+    offset ``2 (x_f - x_c).n``), where the BC kernels' ghost value belongs."""
     plan = topo.lsq_plan
     dim = topo.dim
     nbr = topo.lsq_neighbors
@@ -706,10 +714,14 @@ def _lsq_matrices(xp, topo, cc, fc):
     bmask = xp.asarray(plan["bdy_mask"], dtype=cc.dtype)
     ccT = xp.transpose(cc[:dim])                         # (n_cells, dim)
     bfc = fc[topo.boundary_faces, :dim]                  # (n_bf, dim)
+    bn = xp.transpose(nrm[:dim, topo.boundary_faces])    # (n_bf, dim)
+    bn = bn / xp.sqrt(xp.sum(bn * bn, axis=1))[:, None]
     dXc = ccT[nbr] - ccT[:, None, :]
     parts = [dXc]
     if bdy.shape[1]:
-        dXb = (2 * (bfc[bdy] - ccT[:, None, :])) * bmask[..., None]
+        r = bfc[bdy] - ccT[:, None, :]                   # cell -> face centre
+        nb = bn[bdy]
+        dXb = (2 * xp.sum(r * nb, axis=-1)[..., None] * nb) * bmask[..., None]
         parts.append(dXb)
     dX = xp.concatenate(parts, axis=1)                   # (n_cells, R, dim)
     V = _monomial_columns(xp, dX, plan["powers"])        # (n_cells, R, M)
@@ -824,7 +836,7 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
         g["tpfa_bnd_dist"] = xp.zeros((0,), dtype=X.dtype)
 
     if lsq:
-        g["lsq_gradQ"] = _lsq_matrices(xp, topo, cc, fcT)
+        g["lsq_gradQ"] = _lsq_matrices(xp, topo, cc, fcT, nrm)
     return g
 
 
