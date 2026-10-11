@@ -813,3 +813,27 @@ rev = jvp to 1.2e-11).
   pulse foam-JAX converging (order 2.1); 2/4 ranks = serial.  AMReX 3-D:
   not done (~250-350 lines, an AMREX_SPACEDIM=3 build).
 - Gates gate3d_a..f (+ euler_common.py, gate3d_figure.py).
+
+## 31. Distributed periodic BCs and implicit diffusion; the diffusion sign
+
+- Periodic in distributed runs: the owned cells' periodic partners (with
+  their stencils) join halo layer 1, layer 1's partners layer 2;
+  `Partition.resolve_periodic` points the piece's seam faces at the halo
+  copies, the halo exchange keeps them current (in-memory meshes; a mesh
+  file refuses).  Gate 32: 1-D O1/O2, 2-D x+y periodic O2+MOOD, 2/3/4 ranks
+  vs serial <= 7.9e-15, mass drift <= 2.2e-16.
+- Implicit diffusion: one runtime path for serial and distributed runs --
+  Crank-Nicolson residual, Newton (global norm: every rank takes the same
+  number of updates), each update a `linsolve` (distributed: `_dlinsolve`).
+  Gate 31: vs the legacy dense operator 9.3e-17, 3 ranks vs serial
+  7.1e-15; AD rev = jvp to 7.6e-14.
+- AD on one GPU = CPU (gates 2, 8) when both use the same spectral radius.
+- The diffusion SIGN: the contract (and the stability analysis, the MMS,
+  every runtime block, the hand-written Malpasset tensor) is RHS
+  +div(A : grad Q) with A > 0 for diffusion, but the extractor put the
+  RESIDUAL coefficient into A: every extracted viscosity (NewtonianInPlane,
+  sigma-3D) was anti-diffusive in every solver (A[q, q] = -2 nu).  Fixed in
+  `system_extract._route_diffusion`; goldens m07 / m14 / m16 updated (only
+  their diffusion lines).
+- Pre-existing, not touched: 8 model goldens fail on the base checkout too
+  (m01-m04, m06-m08, s01; m07 because `eigenvalues` is now None).
