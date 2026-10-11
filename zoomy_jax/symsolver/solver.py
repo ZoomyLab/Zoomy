@@ -121,8 +121,6 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.partition, self.global_mesh = None, mesh
         self.mesh_file = mesh if isinstance(mesh, (str, os.PathLike)) else None
         if self.comm is not None and self.comm.Get_size() > 1:
-            if self.imex:
-                raise NotImplementedError("distributed: no IMEX yet")
             if bcs is not None and any(type(b) is Periodic
                                        for b in bcs.boundary_conditions_list):
                 raise NotImplementedError("distributed run with periodic BCs")

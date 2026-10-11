@@ -603,6 +603,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     diffusion_op = []
 
     def implicit_diffusion(k, Q, Qaux, p, dt, mesh):
+        if partition is not None:   # the dense operator below is serial
+            raise NotImplementedError("implicit diffusion in a distributed run")
         if not diffusion_op:
             _, state_dep, _ = HyperbolicSolverNumpy._classify_diffusion(
                 sm.diffusion_matrix, sm)
