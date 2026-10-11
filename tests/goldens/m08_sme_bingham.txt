@@ -46,10 +46,7 @@ source: shape=(4, 1)
 source[2,0] = Add(Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))))
 source[3,0] = Add(Mul(Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(-1), Float('11.999999999999998', precision=53), Pow(Symbol('h'), Integer(-2)), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1)), Symbol('tau_y'), Pow(Add(Pow(Symbol('eps_reg'), Integer(2)), Mul(Integer(4), Pow(Symbol('h'), Integer(-4)), Pow(Symbol('q_1'), Integer(2)))), Rational(-1, 2))))
 source_explicit: None
-eigenvalues: shape=(4, 1)
-eigenvalues[1,0] = Mul(Pow(Symbol('h'), Integer(-1)), Symbol('n0'), Symbol('q_0'))
-eigenvalues[2,0] = Mul(Pow(Symbol('h'), Integer(-1)), Add(Mul(Symbol('n0'), Symbol('q_0')), Mul(Integer(-1), Symbol('n0'), Pow(Add(Mul(Symbol('g'), Pow(Symbol('h'), Integer(3))), Pow(Symbol('q_1'), Integer(2))), Rational(1, 2)))))
-eigenvalues[3,0] = Mul(Pow(Symbol('h'), Integer(-1)), Add(Mul(Symbol('n0'), Symbol('q_0')), Mul(Symbol('n0'), Pow(Add(Mul(Symbol('g'), Pow(Symbol('h'), Integer(3))), Pow(Symbol('q_1'), Integer(2))), Rational(1, 2)))))
+eigenvalues: None
 eigenvalues_cfl: None
 update_variables: None
 update_aux_variables: None
