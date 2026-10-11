@@ -518,3 +518,58 @@ staged -- the 4.18 ms above was 200 steps (cause of the gap not isolated).
 Container `containers/zoomy_jax_mpi` (OpenMPI 5 + UCX CUDA-aware, mpi4jax
 CUDA, JAX 0.9.2): `apptainer test` OK; gate 16 on 4 GPUs <= 1.3e-15; gate 17
 (2 GPUs) rev 4.0e-15, mesh 5.8e-13; 160k cells 7.06 ms/step (7.20 staged).
+
+## 22. Large meshes: vectorised setup, mesh files, parallel I/O
+
+Setup (serial, CPU), per stage:
+
+| stage | 160k before | 160k after | 1M after |
+|---|---|---|---|
+| `FVMMesh.from_base` (geometry) | 25.3 s | 0.1 s | 1.2 s |
+| `LSQMesh.from_fvm` (stencils, matrices) | 6.3 s | 0.6 s | 6.0 s |
+| `BaseMesh.create_2d` | 1.5 s | 0.3 s | 2.5 s |
+| local mesh of rank 0 (4 ranks) | 14.3 s | 0.3 s | 1.9 s |
+
+- One vectorised geometry: `FVMMesh` / `LSQMesh` call `geometry_xp`
+  (the solver's AD geometry) for line/triangle/quad; 3-D keeps the loops.
+- Vectorised: face topology (`np.unique` on face keys), cell and face
+  neighbours, the >= 2-D vertex-ring stencil (one sparse product; loops
+  only for ghosts and too-small rings), face subvolumes.
+- Gate 19: every builder equal to the replaced loops (zoomy_core 6b20967)
+  on quads, jittered quads, triangles, 1-D, gmsh, 3-D: integers exact,
+  floats <= 1e-14; LSQ degree 1 and 2.
+
+Distributed meshes (`zoomy_core.mesh.distributed`, backend-neutral):
+
+- Global numbering: cells along a Hilbert curve (2-D; Morton 3-D),
+  vertices by first appearance; rank r owns a contiguous block.
+- Mesh file (`write_mesh`): the output `/mesh` group + `cell_face_tags`
+  (format 3); output files are again inputs.
+- `distribute`: vertex directory (block of vertex ids per rank); layer 1 =
+  cells around the owned cells' vertices, layer 2 = around layer 1's new
+  vertices; each rank reads only its cells, vertices, tags (slices of
+  consecutive ids).  No rank holds the whole mesh.
+- Output: mesh file + h5py with MPI -> every rank writes its block (mesh
+  copied blockwise from the input); otherwise gathered on rank 0.
+- `setup(path_or_mesh, model)`; serial runs read a mesh file too.
+
+Compile time: the runtime's mesh index arrays were baked into the program
+(~800 B/cell: 51 MB at 62k cells, 198 MB at 250k).  `hoisted_jit` traces
+once and passes every captured constant as an argument: compile no longer
+grows with the mesh (CPU, trace + compile: 8.7 s at 62k, ~8 s at 250k).
+
+Gates: 16 (now Hilbert partition; + mesh-file case 9.4e-16, 3 ranks),
+18 (in-memory 1.6e-15; mesh file gathered 1.3e-15; per-rank blocks with
+h5py-MPI 1.1e-15), 17 (AD) unchanged.
+
+GPU, 4 x L40S, SWE O2 + MOOD from a mesh file (bench_large.py):
+
+| cells | per GPU | setup | compile | ms/step |
+|---|---|---|---|---|
+| 1M | 250k | 14 s | 4 s (cache) | 20-25 |
+| 4M | 1M | 26 s | 6 s (cache) | 101.5 |
+| 16M | 4M | 82 s | 19 s (cold) | 414.5 |
+
+- Before: 1M setup 41 s; 4M setup 81 s, compile 64 s; 16M compile > 210 s.
+- Writing the 16M mesh file (serial, once) took minutes; per-rank setup
+  is now ~20 s per million local cells.

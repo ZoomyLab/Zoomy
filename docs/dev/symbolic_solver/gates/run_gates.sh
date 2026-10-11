@@ -14,13 +14,13 @@ GATES=("$@")
   "gate9_foam.py 0:1 1:2 2d:2 eta:2 dry:2" "gate11_foam_imex.py" "gate12_foam_chorin.py"
   "gate10_xcouple.py jax" "gate10_xcouple.py foam" "probe_audusse_vars.py"
   "mpi:4 gate16_parallel.py" "mpi:2 gate17_parallel_ad.py o1"
-  "mpi:3 gate17_parallel_ad.py o2" "mpi:3 gate18_parallel_output.py")
+  "mpi:3 gate17_parallel_ad.py o2" "mpi:3 gate18_parallel_output.py" "gate19_mesh_builders.py")
 for g in "${GATES[@]}"; do
   echo "== $g"
   run="python"
   [[ $g == mpi:* ]] && { run="mpiexec -n ${g%% *}"; run="${run/mpi:/} python"; g=${g#* }; }
   timeout 3000 micromamba run -n zoomy $run $g 2>&1 \
     | grep -v "Warning\|warn\|cpu_aot\|pjrt\|^\s*$" \
-    | grep -E "max|MOOD|io.write|AD|Error|error|Traceback|File \"|t foam|mass|steps|dJ|checks|O[12] |^[A-C] |ranks" | head -30
+    | grep -E "max|MOOD|io.write|AD|Error|error|Traceback|File \"|t foam|mass|steps|dJ|checks|O[12] |^[A-C] |ranks|Mesh" | head -40
 done
 echo GATES_DONE

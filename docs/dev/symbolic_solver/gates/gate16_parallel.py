@@ -2,6 +2,7 @@
     mpiexec -n 4 python gate16_parallel.py
 Each case runs on all ranks (the mesh split by coordinate bisection), is
 gathered to rank 0 and compared with the serial run there."""
+import os
 import time as clock
 import numpy as np
 from mpi4py import MPI
@@ -41,8 +42,29 @@ CASES = (("SWE 2-D bump O1, background flow", lambda: C.bump_2d(1, nx=40, flow=(
          ("radial dry dam break O2 eta + MOOD", lambda: C.dry_dambreak_2d(nx=48), 0.02),
          ("SWE bump O2 + MOOD, triangles", lambda: tri_bump(2), 0.5))
 
-for label, make, t_end in CASES:
+def from_file(make):
+    """The same case read from a mesh file: each rank reads its own cells."""
+    import h5py
+    import tempfile
+    from zoomy_core.mesh.distributed import write_mesh
     mesh, nsm = make()
+    path = comm.bcast(os.path.join(tempfile.mkdtemp(), "mesh.h5")
+                      if rank == 0 else None)
+    if rank == 0:
+        write_mesh(mesh, path)
+        with h5py.File(path) as f:
+            order = f["mesh/cell_order"][()]
+    comm.Barrier()
+    return path, nsm, (order if rank == 0 else None)
+
+
+CASES += (("SWE bump O2 + MOOD, from a mesh file", lambda: C.bump_2d(2, nx=40, flow=(0.1, 0.05)), 0.5),)
+for label, make, t_end in CASES:
+    order = None
+    if "mesh file" in label:
+        mesh, nsm, order = from_file(make)
+    else:
+        mesh, nsm = make()
     s = SymbolicHyperbolicSolverJax(time_end=t_end, comm=comm)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
@@ -56,6 +78,8 @@ for label, make, t_end in CASES:
         Qs, As = r.setup(mesh, nsm)
         _, Qs, _ = r.run(Qs, As)
         Qs = np.asarray(Qs)
+        if order is not None:          # file rows -> the mesh's cells
+            Qs = Qs[:, order]
         err = np.abs(Qg - Qs).max() / max(np.abs(Qs).max(), 1e-300)
         own = s.partition.n_own if s.partition else Qs.shape[1]
         print(f"{label}: ranks {comm.Get_size()}  t={float(t):.4g}  "

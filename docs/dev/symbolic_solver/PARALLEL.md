@@ -7,19 +7,25 @@ forward and reverse AD work through them (gates 16-18, ANALYSIS.md section 21).
 
 ```python
 from mpi4py import MPI
+from zoomy_core.mesh.distributed import write_mesh
+write_mesh(mesh, "mesh.h5")                     # once, serial (large meshes)
 solver = SymbolicHyperbolicSolverJax(time_end=0.5, comm=MPI.COMM_WORLD)
-Q, Qaux = solver.setup(global_mesh, model)     # local state (owned + halo)
+Q, Qaux = solver.setup("mesh.h5", model)        # or a mesh object (small)
 time, Q, Qaux = solver.run(Q, Qaux)
 Q_all = solver.partition.gather(Q)              # global order, on rank 0
 ```
 
-- Partition: coordinate bisection (`parallel.bisection`); any owner array via
-  `parallel.split(mesh, comm, part=...)`.
+- Partition: cells along a space-filling curve (Hilbert 2-D, Morton 3-D),
+  rank r owns a contiguous block (`zoomy_core.mesh.distributed`).
+- A mesh file: every rank reads only its cells; a mesh object: every rank
+  holds it and renumbers (fine up to a few million cells).
 - AD: differentiate each rank's owned share `J_r` (e.g. a sum over
   `Q[:, :partition.n_own]`); the global derivative is the sum over ranks.
   Quantities every rank holds copies of (parameters, vertex coordinates,
   initial halo states) sum their copies: `partition.sum_to_global(g, ids, n)`.
-- Output: `output=` writes one HDF5 file on rank 0, global mesh.
+- Output: `output=` writes one HDF5 file.  From a mesh file with h5py built
+  with MPI (`zoomy-cuda-ompi`, the container): every rank writes its own block;
+  otherwise gathered on rank 0.  The file's `/mesh` is a mesh file again.
 
 Launch: `mpiexec -n 4 python run.py`.  On a GPU node each rank binds one GPU
 by its node-local rank (`parallel.bind_device`, called by `setup`); a
