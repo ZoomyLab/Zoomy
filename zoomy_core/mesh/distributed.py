@@ -62,18 +62,24 @@ def _morton(q, bits):
     return d
 
 
-def curve_order(centers):
-    """Cells sorted along a space-filling curve through their centres
-    ``(dim, n)``: Hilbert (2-D), Morton (3-D), x (1-D); stable."""
+def curve_keys(centers, lo, hi):
+    """Position along the space-filling curve of centres ``(dim, n)`` in the
+    box ``lo``..``hi`` ``(dim, 1)``: Hilbert (2-D), Morton (3-D), x (1-D)."""
     c = np.asarray(centers, dtype=float)
     dim = c.shape[0]
     if dim == 1:
-        return np.argsort(c[0], kind="stable")
+        return c[0]
     bits = 16 if dim == 2 else 20
-    lo, hi = c.min(axis=1, keepdims=True), c.max(axis=1, keepdims=True)
     q = np.floor((c - lo) / np.where(hi > lo, hi - lo, 1.0)
                  * ((1 << bits) - 1)).astype(np.int64)
-    key = _hilbert_2d(q[0], q[1], bits) if dim == 2 else _morton(q, bits)
+    return _hilbert_2d(q[0], q[1], bits) if dim == 2 else _morton(q, bits)
+
+
+def curve_order(centers):
+    """Cells sorted along the space-filling curve through their centres
+    ``(dim, n)``; ties by index."""
+    c = np.asarray(centers, dtype=float)
+    key = curve_keys(c, c.min(axis=1, keepdims=True), c.max(axis=1, keepdims=True))
     return np.argsort(key, kind="stable")
 
 
@@ -117,25 +123,45 @@ def partitioned(mesh):
                 order=order, vorder=vorder)
 
 
-def write_mesh(mesh, path):
-    """Write ``mesh`` as a partition-ready mesh file (serial, once)."""
+def _mesh_group(f, mesh_type, dim, n_cells, n_vertices, k, nfpc, names,
+                cell_data, x_dtype=float, i_dtype=np.int64):
+    """The ``/mesh`` group of a mesh file, datasets created (not filled)."""
+    g = f.create_group("mesh")
+    g.attrs["format_version"] = FORMAT_VERSION
+    g.create_dataset("dimension", data=dim)
+    # fixed-length string: parallel HDF5 cannot write variable-length ones
+    g.create_dataset("type", data=np.bytes_(mesh_type))
+    g.create_dataset("n_cells", data=n_cells)
+    g.create_dataset("n_inner_cells", data=n_cells)
+    g.create_dataset("boundary_tags", data=np.array(list(names), dtype=int))
+    g.create_dataset("boundary_names", data=np.array(
+        [str(v) for v in names.values()], dtype="S"))
+    g.create_dataset("vertex_coordinates", shape=(dim, n_vertices), dtype=x_dtype)
+    g.create_dataset("cell_vertices", shape=(k, n_cells), dtype=i_dtype)
+    g.create_dataset("cell_face_tags", shape=(nfpc, n_cells), dtype=np.int64)
+    g.create_dataset("cell_order", shape=(n_cells,), dtype=np.int64)
+    for name, dt in cell_data.items():
+        g.create_dataset(f"cell_data/{name}", shape=(n_cells,), dtype=dt)
+    return g
+
+
+def write_mesh(mesh, path, cell_data=None):
+    """Write ``mesh`` as a partition-ready mesh file (serial).  ``cell_data``:
+    ``{name: (n_cells,)}`` per-cell values (e.g. bathymetry), in the mesh's
+    cell order.  For large meshes: :func:`write_mesh_parallel`."""
     import h5py
     p = partitioned(mesh)
+    cell_data = {k: np.asarray(v) for k, v in (cell_data or {}).items()}
     with h5py.File(path, "w") as f:
-        g = f.create_group("mesh")
-        g.attrs["format_version"] = FORMAT_VERSION
-        g.create_dataset("dimension", data=p["dim"])
-        g.create_dataset("type", data=np.bytes_(p["type"]))  # fixed length:
-        # parallel HDF5 cannot write variable-length strings
-        g.create_dataset("n_cells", data=p["cv"].shape[1])
-        g.create_dataset("n_inner_cells", data=p["cv"].shape[1])
-        g.create_dataset("vertex_coordinates", data=p["X"])
-        g.create_dataset("cell_vertices", data=p["cv"])
-        g.create_dataset("cell_face_tags", data=p["tags"])
-        g.create_dataset("cell_order", data=p["order"])
-        g.create_dataset("boundary_tags", data=np.array(list(p["names"]), dtype=int))
-        g.create_dataset("boundary_names", data=np.array(
-            [str(v) for v in p["names"].values()], dtype="S"))
+        g = _mesh_group(f, p["type"], p["dim"], p["cv"].shape[1], p["X"].shape[1],
+                        p["cv"].shape[0], p["tags"].shape[0], p["names"],
+                        {k: v.dtype for k, v in cell_data.items()})
+        g["vertex_coordinates"][...] = p["X"]
+        g["cell_vertices"][...] = p["cv"]
+        g["cell_face_tags"][...] = p["tags"]
+        g["cell_order"][...] = p["order"]
+        for k, v in cell_data.items():
+            g[f"cell_data/{k}"][...] = v[p["order"]]
 
 
 def read_mesh(path):
@@ -199,7 +225,7 @@ class FileSource:
         """Columns ``ids`` (any order), read as slices of consecutive ids."""
         d = self._g[name]
         ids = np.asarray(ids, dtype=np.int64)
-        out = np.empty((d.shape[0], ids.size), dtype=d.dtype)
+        out = np.empty(d.shape[:-1] + (ids.size,), dtype=d.dtype)
         if ids.size == 0:
             return out
         o = np.argsort(ids, kind="stable")
@@ -207,8 +233,12 @@ class FileSource:
         breaks = np.flatnonzero(np.diff(s) != 1) + 1
         for a, b in zip(np.concatenate([[0], breaks]),
                         np.concatenate([breaks, [s.size]])):
-            out[:, o[a:b]] = d[:, s[a]:s[b - 1] + 1]
+            out[..., o[a:b]] = d[..., s[a]:s[b - 1] + 1]
         return out
+
+    def cell_data(self, name, ids):
+        """Per-cell values ``name`` of the cells ``ids``."""
+        return self._read(f"cell_data/{name}", ids)
 
     def cells(self, ids):
         return self._read("cell_vertices", ids)
@@ -228,18 +258,189 @@ def source(mesh):
 
 
 # ── communication ────────────────────────────────────────────────────────────
-def _alltoallv(comm, parts):
-    """Send ``parts[q]`` (int64) to rank q; returns what each rank sent here."""
+def _alltoallv(comm, parts, dtype=np.int64):
+    """Send ``parts[q]`` (1-D) to rank q; returns what each rank sent here."""
     from mpi4py import MPI
+    dtype = np.dtype(dtype)
+    parts = [np.ascontiguousarray(p, dtype=dtype).reshape(-1) for p in parts]
     counts = np.array([len(p) for p in parts], dtype=np.int64)
     rcounts = np.array(comm.alltoall(counts.tolist()), dtype=np.int64)
-    send = (np.concatenate(parts) if len(parts) else np.zeros(0)).astype(np.int64)
-    recv = np.empty(int(rcounts.sum()), dtype=np.int64)
+    send = np.concatenate(parts) if parts else np.zeros(0, dtype)
+    recv = np.empty(int(rcounts.sum()), dtype=dtype)
     sd = np.concatenate([[0], np.cumsum(counts)[:-1]])
     rd = np.concatenate([[0], np.cumsum(rcounts)[:-1]])
-    comm.Alltoallv([send, (counts, sd), MPI.INT64_T],
-                   [recv, (rcounts, rd), MPI.INT64_T])
+    t = MPI._typedict[dtype.char]
+    comm.Alltoallv([send, (counts, sd), t], [recv, (rcounts, rd), t])
     return np.split(recv, np.cumsum(rcounts)[:-1])
+
+
+def _route(comm, dest, *arrays):
+    """Move the columns of each ``(rows, n)`` (or ``(n,)``) array to rank
+    ``dest``; returns the arrays received, concatenated in source-rank order
+    (each source's columns in their original order)."""
+    P = comm.Get_size()
+    o = np.argsort(dest, kind="stable")
+    cut = np.searchsorted(dest[o], np.arange(1, P))
+    out = []
+    for A in arrays:
+        A = np.asarray(A)
+        rows = A.shape[:-1]
+        flat = int(np.prod(rows, dtype=int))
+        cols = A[..., o].reshape(flat, A.shape[-1]).T         # (n, rows)
+        got = _alltoallv(comm, list(np.split(cols, cut)), A.dtype)
+        m = np.concatenate([g.reshape(-1, flat) for g in got]).T
+        out.append(m.reshape(rows + (m.shape[-1],)))
+    return out
+
+
+def _ask(comm, ids, owner, answer, dtype):
+    """``answer(ids_q)`` evaluated on the rank ``owner`` names for each of
+    ``ids``; returns the answers aligned with ``ids``."""
+    P = comm.Get_size()
+    dest = owner(ids)
+    o = np.argsort(dest, kind="stable")
+    cut = np.searchsorted(dest[o], np.arange(1, P))
+    asked = _alltoallv(comm, list(np.split(ids[o], cut)))
+    replies = [np.asarray(answer(q), dtype=dtype) for q in asked]
+    rows = replies[0].shape[:-1] if replies else ()
+    flat = int(np.prod(rows, dtype=int))
+    back = _alltoallv(comm, [r.reshape(flat, r.shape[-1]).T.reshape(-1)
+                             for r in replies], dtype)
+    got = np.concatenate([b.reshape(-1, flat) for b in back]).T.reshape(rows + (-1,))
+    out = np.empty(rows + (ids.size,), dtype=dtype)
+    out[..., o] = got
+    return out
+
+
+def _sample_sort(comm, k1, k2, *payload):
+    """Globally sort by ``(k1, k2)`` (lexicographic, distinct pairs): each
+    rank ends with a contiguous range, in rank order.  Returns
+    ``(k1, k2, *payload)`` of this rank's range, sorted."""
+    P = comm.Get_size()
+    o = np.lexsort((k2, k1))
+    k1, k2 = k1[o], k2[o]
+    payload = [np.asarray(a)[..., o] for a in payload]
+    n = k1.size
+    s = (np.arange(1, P) * n // P) if n else np.zeros(0, dtype=int)
+    samples = comm.allgather((k1[s], k2[s]))
+    s1 = np.concatenate([a for a, _ in samples])
+    s2 = np.concatenate([b for _, b in samples])
+    so = np.lexsort((s2, s1))
+    pick = so[(np.arange(1, P) * so.size // P)] if so.size else np.zeros(0, dtype=int)
+    dest = np.zeros(n, dtype=np.int64)
+    for a, b in zip(s1[pick], s2[pick]):             # splitters, ascending
+        dest += (k1 > a) | ((k1 == a) & (k2 >= b))
+    got = _route(comm, dest, k1, k2, *payload)
+    o = np.lexsort((got[1], got[0]))
+    return [g[..., o] for g in got]
+
+
+def write_mesh_parallel(comm, path, mesh_type, X, v0, cv, c0, *, faces=None,
+                        face_tags=None, tag_names=None, default_tag=0,
+                        cell_data=None):
+    """Write a mesh file from pieces held by the ranks, no rank holding the
+    whole mesh; the same file as :func:`write_mesh` of the assembled mesh.
+
+    Each rank passes the vertices ``v0, v0 + 1, ...`` (``X`` ``(dim, n)``,
+    contiguous blocks in rank order), the cells ``c0, c0 + 1, ...`` (``cv``
+    ``(verts_per_cell, n)``, global vertex ids), boundary elements ``faces``
+    ``(verts_per_face, n)`` with ``face_tags`` (any rank; a boundary face
+    without one gets ``default_tag``), ``tag_names`` ``{tag: name}`` and
+    ``cell_data`` ``{name: (n,)}`` of its cells."""
+    from mpi4py import MPI
+    import h5py
+    P, rank = comm.Get_size(), comm.Get_rank()
+    X, cv = np.asarray(X, dtype=float), np.asarray(cv, dtype=np.int64)
+    dim, k = X.shape[0], cv.shape[0]
+    cell_data = {n: np.asarray(v) for n, v in (cell_data or {}).items()}
+    vstart = np.array(comm.allgather(int(v0)))
+    vend = np.array(comm.allgather(int(v0) + X.shape[1]))
+
+    def owner(v):                                    # vertex block of a rank
+        return np.searchsorted(vend, v, side="right")
+
+    # cells along the curve: centroids from the vertices' owners
+    used = np.unique(cv)
+    xyz = _ask(comm, used, owner, lambda q: X[:, q - v0], float)
+    cent = xyz[:, np.searchsorted(used, cv)].mean(axis=1)
+    lo, hi = np.empty(dim), np.empty(dim)
+    comm.Allreduce(cent.min(axis=1) if cent.size else np.full(dim, np.inf), lo, op=MPI.MIN)
+    comm.Allreduce(cent.max(axis=1) if cent.size else np.full(dim, -np.inf), hi, op=MPI.MAX)
+    key = curve_keys(cent, lo[:, None], hi[:, None])
+    ids = np.arange(c0, c0 + cv.shape[1], dtype=np.int64)
+    names_cd = list(cell_data)
+    key, ids, cv, *cds = _sample_sort(comm, key, ids, cv,
+                                      *[cell_data[n] for n in names_cd])
+    n_mine = ids.size
+    off = comm.exscan(n_mine) or 0
+    n_cells = comm.allreduce(n_mine)
+
+    # vertices by first appearance: min (cell position * k + slot) per vertex
+    pos = (off + np.arange(n_mine))[None, :] * k + np.arange(k)[:, None]
+    v_got, p_got = _route(comm, owner(cv.reshape(-1)), cv.reshape(-1), pos.reshape(-1))
+    o = np.lexsort((p_got, v_got))
+    v_got, p_got = v_got[o], p_got[o]
+    first = np.concatenate([[True], v_got[1:] != v_got[:-1]]) if v_got.size else v_got.astype(bool)
+    v_used, p_min = v_got[first], p_got[first]
+    p_min, v_used, xv = _sample_sort(comm, p_min, v_used, X[:, v_used - v0])
+    nv_mine = v_used.size
+    voff = comm.exscan(nv_mine) or 0
+    n_vertices = comm.allreduce(nv_mine)
+    new_of = np.full(X.shape[1], -1, dtype=np.int64)  # old -> new, my block
+    v_back, n_back = _route(comm, owner(v_used), v_used,
+                            voff + np.arange(nv_mine, dtype=np.int64))
+    new_of[v_back - v0] = n_back
+    uv = np.unique(cv)
+    cv_new = _ask(comm, uv, owner, lambda q: new_of[q - v0], np.int64)[
+        np.searchsorted(uv, cv)]
+
+    # boundary faces and their tags: faces hashed to their smallest vertex
+    local = _local_faces_for_type(mesh_type)
+    w = len(local[0])
+    if any(len(lf) != w for lf in local):
+        raise NotImplementedError(f"{mesh_type}: faces of different sizes")
+    fkeys = np.sort(np.stack([cv[list(lf)] for lf in local], axis=1), axis=0)  # (w, nf, n)
+    fkeys = fkeys.reshape(w, -1)
+    fpos = (off + np.arange(n_mine))[None, :] * len(local) + np.arange(len(local))[:, None]
+    fk, fp = _route(comm, owner(fkeys[0]), fkeys, fpos.reshape(-1))
+    faces = np.zeros((w, 0), np.int64) if faces is None else np.sort(np.asarray(faces, np.int64), axis=0)
+    ftags = np.zeros(0, np.int64) if face_tags is None else np.asarray(face_tags, np.int64)
+    bk, bt = _route(comm, owner(faces[0]), faces, ftags)
+    void = np.dtype((np.void, 8 * w))
+    kv = np.ascontiguousarray(fk.T).view(void).ravel()
+    uk, inv, cnt = np.unique(kv, return_inverse=True, return_counts=True)
+    bv = np.ascontiguousarray(bk.T).view(void).ravel()
+    tag_of = np.full(uk.size, default_tag, dtype=np.int64)
+    hit = np.searchsorted(uk, bv)
+    ok = (hit < uk.size) & (uk[np.minimum(hit, uk.size - 1)] == bv)
+    tag_of[hit[ok]] = bt[ok]
+    t = np.where(cnt[inv.ravel()] == 1, tag_of[inv.ravel()], -1)
+    starts = np.array(comm.allgather(off))
+    fp_back, t_back = _route(comm, np.searchsorted(starts, fp // len(local), side="right") - 1,
+                             fp, t)
+    cft = np.full((len(local), n_mine), -1, dtype=np.int64)
+    cft[fp_back % len(local), fp_back // len(local) - off] = t_back
+    present = sorted(set().union(*comm.allgather(set(np.unique(cft[cft >= 0]).tolist()))))
+    names = {tg: (tag_names or {}).get(tg, f"tag_{tg}") for tg in present}
+
+    blocks = dict(vertex_coordinates=(xv, voff), cell_vertices=(cv_new, off),
+                  cell_face_tags=(cft, off), cell_order=(ids, off),
+                  **{f"cell_data/{n}": (c, off) for n, c in zip(names_cd, cds)})
+    meta = (mesh_type, dim, n_cells, n_vertices, k, len(local), names,
+            {n: cell_data[n].dtype for n in names_cd})
+    if h5py.get_config().mpi:                        # every rank its block
+        with h5py.File(path, "w", driver="mpio", comm=comm) as f:
+            g = _mesh_group(f, *meta)
+            for name, (a, o0) in blocks.items():
+                if a.shape[-1]:
+                    g[name][..., o0:o0 + a.shape[-1]] = a
+        return
+    got = comm.gather(blocks, root=0)                # else: rank 0 writes
+    if rank == 0:
+        with h5py.File(path, "w") as f:
+            g = _mesh_group(f, *meta)
+            for name in blocks:
+                g[name][...] = np.concatenate([b[name][0] for b in got], axis=-1)
 
 
 class _Directory:
