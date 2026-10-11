@@ -11,7 +11,11 @@ GATES=("$@")
   "gate1_vs_solver_jax.py" "gate4_mood_output.py" "gate6_imex.py" "gate7_chorin.py"
   "gate2_ad.py" "gate5_mesh_ad.py" "gate8_chorin_ad.py" "gate13_pressure_newton.py"
   "gate3_precice.py" "gate3b_subcycling.py"
-  "gate9_foam.py 0:1 1:2 2d:2 eta:2 dry:2" "gate11_foam_imex.py" "gate12_foam_chorin.py"
+  "gate9_foam.py 0:1 1:2 2d:2 eta:2 dry:2 smooth:2" "gate11_foam_imex.py" "gate12_foam_chorin.py"
+  "gate23_foam_parallel.py bump1 2 4" "gate23_foam_parallel.py bump2 2 4" "gate23_foam_parallel.py tri2 2 4"
+  "gate23_foam_parallel.py dry 2 4" "gate23_foam_parallel.py chorin1 2 4" "gate23_foam_parallel.py chorin2 2 4"
+  "gate24_foam_chorin2d.py ref" "gate24_foam_chorin2d.py foam 1 2 4" "gate25_foam_newton.py 2 4"
+  "gate26_foam_couple_parallel.py 2 2"
   "gate10_xcouple.py jax" "gate10_xcouple.py foam" "probe_audusse_vars.py"
   "mpi:4 gate16_parallel.py" "mpi:2 gate17_parallel_ad.py o1"
   "mpi:3 gate17_parallel_ad.py o2" "mpi:3 gate18_parallel_output.py" "gate19_mesh_builders.py" "mpi:3 gate20_parallel_write.py" "mpi:3 gate22_parallel_chorin_ad.py")

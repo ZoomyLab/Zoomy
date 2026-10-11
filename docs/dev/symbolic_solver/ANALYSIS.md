@@ -704,3 +704,26 @@ GPU timing (L40S, PCIe, MPICH -> exchanges through host memory):
 - Gate 28 (`gate28_jax_couple_parallel.py`, `participant_mpi.py`): 1-D and
   2-D, O1/O2, windows and subcycling, up to 3 + 3 ranks vs 1 + 1:
   <= 1.4e-14.  Gate 3 unchanged (3.4e-15 O1, 1.8e-2 O2 coupled vs single).
+
+## 27. foam on OpenFOAM's own components (parallel, pressure)
+
+- Mesh: blockMesh (1-D, quads); unstructured 2-D through gmshToFoam (one
+  extruded layer).  Distribution: decomposePar (scotch), `-parallel`; the
+  halo is the processor patches (`correctBoundaryConditions`).
+- Stencils: `fvc::grad` (leastSquares), `cellLimited` limiters, compact
+  second derivatives (Gauss integral of the face gradient).  Reductions:
+  `returnReduce` with an explicit NaN check.  Host program: zoomy_core
+  `symsolver/program.py`, shared with AMReX.
+- Pressure: FGMRES on the full system (global dots); right preconditioner =
+  the probed compact operator, algebraic rows eliminated per cell, GAMG on
+  the elliptic rows' Schur complement (block Jacobi across ranks).  Same
+  solution (gamg vs none at tol 1e-12: <= 7e-13); iterations 1-D 7614 ->
+  1725, 2-D 973 -> 200.
+- foam no longer matches JAX to round-off at second order (different
+  stencils).  Smooth bump (flow 0, t 2.5): max |foam - JAX| 1.0e-3 / 1.7e-4
+  / 3.4e-5 at nx 40/80/160 (order ~2.5).  Wall-shock cases: L1 (1.8e-3);
+  their max does not converge between any two schemes (JAX vs JAX at another
+  CFL neither).  Gates 9/12/13 switched to these criteria; 1-D and O1 stay
+  at round-off.  Parallel = serial: hyperbolic <= 3.5e-15, Chorin <= 1e-10.
+- preCICE with `-parallel`: one participant per rank; gate 26 (2+2 ranks)
+  5.2e-15 vs single domain.  Gates 23-26.
