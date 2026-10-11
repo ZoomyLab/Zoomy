@@ -256,7 +256,10 @@ def _lsq_stencils_loop(n_cells, dim, neighbors_list, centers, lsq_degree,
                     break
         nbrs_all.append(cur)
 
-    max_nbr = max(len(n) for n in nbrs_all)
+    # the width of the INNER stencils: a ghost row (its inner cell's
+    # neighbours, the inner cell itself included) is cut to it, never widens
+    # the interior stencils one-sidedly
+    max_nbr = max(len(n) for n in nbrs_all[:n_inner_cells])
     neighbors = np.empty((n_cells, max_nbr), dtype=int)
     bdy = -np.ones((n_cells, max_bdy), dtype=int)
     pure_axis_rows = {}

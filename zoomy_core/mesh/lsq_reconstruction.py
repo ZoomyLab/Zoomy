@@ -261,7 +261,11 @@ def least_squares_reconstruction_local(
                     break
         neighbors_all.append(current_neighbors)
 
-    max_neighbors = max(len(nbrs) for nbrs in neighbors_all)
+    # legacy path: the width of the INNER stencils -- a ghost row (its inner
+    # cell's neighbours, the inner cell itself included) is cut to it, never
+    # widens the interior stencils one-sidedly
+    max_neighbors = max(len(nbrs) for nbrs in (
+        neighbors_all if use_vertex_ring else neighbors_all[:n_inner_cells]))
     A_glob = []
     neighbors_array = np.empty((n_cells, max_neighbors), dtype=int)
     bdy_neighbors_array = -np.ones((n_cells, max_bdy_per_cell), dtype=int)

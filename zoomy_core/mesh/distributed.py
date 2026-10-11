@@ -394,10 +394,6 @@ def distribute(src, comm):
     :class:`ArraySource` / :class:`FileSource` (or a mesh / path)."""
     if not isinstance(src, (ArraySource, FileSource)):
         src = source(src)
-    if src.dim < 2:
-        raise NotImplementedError(
-            "distributed 1-D runs: the 1-D LSQ stencil is sized by the widest "
-            "cell of the whole mesh, not locally")
     rank, P, N = comm.Get_rank(), comm.Get_size(), src.n_cells
     offsets = np.arange(P + 1, dtype=np.int64) * N // P
     own = np.arange(offsets[rank], offsets[rank + 1])
