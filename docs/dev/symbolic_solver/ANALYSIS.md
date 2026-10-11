@@ -447,8 +447,9 @@ Default safety 1.06 (>= rho everywhere measured, <= +6.5 %).  vs "eig" at
 - GPU compile, 960x96: 135 s -> 128 s (geometry input) -> 45 s with XLA
   constant folding off (set on `import zoomy_jax.symsolver`; opt-out
   `ZOOMY_XLA_CONSTANT_FOLDING=1`); step time unchanged (197 ms).
-- Pattern / colouring vectorised (Jones-Plassmann, smallest free colour):
-  31-32 colours; 10 s at 184k unknowns.
+- Pattern / colouring: cells coloured (k x k blocks: column d*k+q takes
+  k*colour(d)+q), speculative parallel greedy over the uncoloured cells;
+  CSR pattern without a sort.  Trace time flat in the mesh (section 26).
 
 ## 21. Distributed hyperbolic solver (MPI ranks, mpi4jax)
 
@@ -682,3 +683,24 @@ GPU timing (L40S, PCIe, MPICH -> exchanges through host memory):
 - The distributed AMG exchanges halos on every level of every V-cycle (~90
   per solve): latency-bound at these sizes on this node.  The gap closes
   with size (4x -> 1.5x); not measured beyond 369k here.
+
+## 26. Compile time flat in the mesh; distributed preCICE
+
+- The 1-GPU AmgX growth was the TRACE, not XLA (hoisted_jit already keeps
+  constants out): the unknown-level Jones-Plassmann colouring inside
+  `assembled` (90 rounds over P^T P, 10M entries at 100k cells).  Cell-level
+  colouring (above): trace 69 -> 5.8 s at 400k cells; XLA 20-30 s at every
+  size.  1 GPU, compile + 1 step: 0.73M cells 150 -> 43 s, 1.47M timeout ->
+  49 s.  Same pattern bitwise; 40 vs 36 colours (VAM(1)); ms/step unchanged.
+- Open: 2.95M cells on 1 GPU: OOM in the colour-probe vmap (33 GiB);
+  196k cells: the first AmgX solve misses the 1e-6 accept gate (old and new).
+- preCICE in distributed runs: one `Participant(name, cfg, rank, size)` per
+  rank; the runtime registers each rank's owned coupling faces.  Every preCICE
+  effect's token passes an MPI reduction before and after its callback, so the
+  call stays in the rank's ordered MPI chain (without: a rank with no coupling
+  vertices ran `advance` before its halo exchange -> deadlock).  pyprecice 3.4
+  passes preCICE a size-1 communicator for an mpi4py one: one `mpiexec` per
+  participant (COMM_WORLD), other communicators refused.
+- Gate 28 (`gate28_jax_couple_parallel.py`, `participant_mpi.py`): 1-D and
+  2-D, O1/O2, windows and subcycling, up to 3 + 3 ranks vs 1 + 1:
+  <= 1.4e-14.  Gate 3 unchanged (3.4e-15 O1, 1.8e-2 O2 coupled vs single).

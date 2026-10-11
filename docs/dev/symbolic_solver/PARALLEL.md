@@ -105,3 +105,17 @@ CUDA_ROOT=$HOME/opt/cuda-12.9 MPICH_CC=/usr/bin/gcc MPICH_CXX=/usr/bin/g++ \
 `jaxpin.txt` pins `jax==0.9.2`, `jaxlib==0.9.2` (pip must not move JAX).
 OpenMPI binds each rank to one core by default (MPICH does not); with
 `taskset` or few cores use `--bind-to none` or `--map-by numa`.
+
+## preCICE in distributed runs
+
+`couple=dict(adapter=PreciceAdapter(name, cfg, mesh, write, read, comm=comm), ...)`
+with `comm=MPI.COMM_WORLD`: each rank is a preCICE rank and registers its own
+coupling faces; preCICE distributes the data.  Run each participant as its own
+`mpiexec` (pyprecice 3.4 cannot take a sub-communicator):
+
+    mpiexec -n 3 python participant_mpi.py Left 1 L.npy window 2d &
+    mpiexec -n 2 python participant_mpi.py Right 1 R.npy window 2d
+
+Gate 28 (`gate28_jax_couple_parallel.py`) runs both and compares with 1 + 1
+ranks.  The foam participant runs with `-parallel` the same way
+(`Participant(name, cfg, myProcNo, nProcs)`).

@@ -13,11 +13,9 @@ mesh, nsm = C.dambreak_1d(0, order, domain=(0.0, 0.5) if left else (0.5, 1.0),
                           nx=100, x_dam=1.0 if left else 0.0)
 tag, side = ("right", 0) if left else ("left", 1)
 me, peer = ("L", "R") if left else ("R", "L")
-faces = R.coupled_face_indices(mesh, tag)
-coords = np.asarray(mesh.face_centers)[faces][:, :2]
 adapter = R.PreciceAdapter(name, "precice-config.xml", f"{name}-Mesh",
                            [f"{me}{i}" for i in range(3)],
-                           [f"{peer}{i}" for i in range(3)], coords)
+                           [f"{peer}{i}" for i in range(3)])
 frames = []
 s = SymbolicHyperbolicSolverJax(
     cfl=0.9, subcycling=(mode == "subcycle"), dt_write=dt_write,
