@@ -60,10 +60,19 @@ dmplex/firedrake read `mesh.msh` (both emitted by the shared case via
 
 JAX + OpenMPI 5 + UCX (CUDA-aware) + mpi4jax: one MPI rank per GPU, halo
 exchange through host memory by default (`--env MPI4JAX_USE_CUDA_MPI=1`:
-GPU -> GPU, for NVLink / GPUDirect nodes).  Same three modes; for a run:
-`apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python run.py` (one node),
-`srun --mpi=pmix apptainer exec --nv zoomy_jax_mpi.sif python run.py` (several).
-See `docs/dev/symbolic_solver/PARALLEL.md`.
+GPU -> GPU, for NVLink / GPUDirect nodes).  The image contains all pressure
+solvers of `SymbolicChorinSolverJax`: `gmres`, `pyamg` and `amgx` (NVIDIA AmgX
+v2.5.0 built with MPI against the image's OpenMPI, sm_80/86/89/90, through
+JAX-AMG 0.1.4 with MPI), each serial and distributed.  Same three modes; for a
+run on GPUs (`zoomy_jax.gpurank` binds one GPU per rank before CUDA loads,
+needed for AmgX):
+`apptainer exec --nv IMG mpiexec -n 4 python -m zoomy_jax.gpurank run.py`
+(one node; add `--bind-to none` when ranks need more than one core),
+`srun --mpi=pmix apptainer exec --nv IMG python run.py` (several nodes, the
+launcher sets `CUDA_VISIBLE_DEVICES` per rank).  On the CPU (no `--nv`):
+`apptainer exec --env JAX_PLATFORMS=cpu IMG mpiexec -n 4 python run.py`.
+See `docs/dev/symbolic_solver/PARALLEL.md` and `AMG.md` (credits: JAX-AMG,
+AmgX, PyAMG in `docs/book/references/third_party.bib`).
 
 ## Pulling prebuilt images (no local build)
 

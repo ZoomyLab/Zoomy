@@ -7,13 +7,17 @@ From: condaforge/miniforge3:24.11.3-0
 #   - OpenMPI 5 + UCX (conda-forge), CUDA-aware; the halo exchange goes
 #     through host memory by default (MPI4JAX_USE_CUDA_MPI=1: GPU -> GPU)
 #   - mpi4py, mpi4jax 0.9.1.post2 built against that OpenMPI, with CUDA
+#   - all pressure solvers of SymbolicChorinSolverJax: 'gmres', 'pyamg' and
+#     'amgx' (NVIDIA AmgX v2.5.0 built with MPI against that OpenMPI, sm_80/86/
+#     89/90, + JAX-AMG 0.1.4 with MPI), serial and distributed
 # Same three modes as the other backend images (server / jupyter / shell).
 #
 # Build from the Zoomy repo root:
 #   apptainer build --fakeroot containers/zoomy_jax_mpi/zoomy_jax_mpi.sif \
 #     containers/zoomy_jax_mpi/zoomy_jax_mpi.def
-# Run, one node (the container's own mpiexec; each rank binds one GPU):
-#   apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python run.py
+# Run, one node (the container's own mpiexec; zoomy_jax.gpurank binds one GPU
+# per rank before CUDA loads -- needed for AmgX):
+#   apptainer exec --nv zoomy_jax_mpi.sif mpiexec -n 4 python -m zoomy_jax.gpurank run.py
 # Several nodes (host launcher, PMIx):
 #   srun --mpi=pmix apptainer exec --nv zoomy_jax_mpi.sif python run.py
 # GPU -> GPU exchange (NVLink / GPUDirect nodes): --env MPI4JAX_USE_CUDA_MPI=1.
@@ -22,7 +26,7 @@ From: condaforge/miniforge3:24.11.3-0
 
 %labels
     Author ZoomyLab
-    Description JAX + Zoomy, distributed (OpenMPI 5 + UCX, CUDA-aware, mpi4jax)
+    Description JAX + Zoomy, distributed (OpenMPI 5 + UCX, CUDA-aware, mpi4jax, AmgX + JAX-AMG with MPI)
 
 %files
     library/zoomy_core     /opt/src/zoomy_core
@@ -38,6 +42,8 @@ From: condaforge/miniforge3:24.11.3-0
     export ZOOMY_ADAPTER=jax
     export ZOOMY_PORT=8080
     export ZOOMY_ROOT=/workspace
+    # AmgX (JAX-AMG's extension also carries it as rpath)
+    export LD_LIBRARY_PATH=/opt/amgx/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
     # With a GPU (--nv binds the driver): CUDA-aware OpenMPI.  conda-forge
     # ships CUDA buffer support off; UCX carries the GPU buffers; its memtype
     # cache misses JAX's allocator (small messages would be copied as host
@@ -77,6 +83,56 @@ From: condaforge/miniforge3:24.11.3-0
         /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server \
         /opt/src/zoomy_prepost /opt/src/zoomy_plotting
     rm -rf /opt/src
+
+    # --- NVIDIA AmgX v2.5.0 with MPI (this OpenMPI), CUDA 12.9 toolkit in its
+    # own env; OpenMPI's wrappers with the system compilers
+    mamba create -y -n cudatk -c conda-forge cuda-version=12.9 cuda-nvcc \
+        cuda-cudart-dev libcublas-dev libcusparse-dev libcusolver-dev \
+        libcurand-dev cuda-nvtx-dev cmake make git
+    mamba clean -afy
+    T=/opt/conda/envs/cudatk
+    Z=/opt/conda/envs/zoomy
+    # a conventional CUDA_HOME over the conda toolkit (JAX-AMG's build wants
+    # include/ and lib64/; its extension keeps lib64 as rpath)
+    C=/opt/cuda-12.9
+    mkdir -p $C
+    ln -s $T/targets/x86_64-linux/include $C/include
+    ln -s $T/targets/x86_64-linux/lib $C/lib64
+    ln -s $T/bin $C/bin
+    export OMPI_CC=/usr/bin/gcc OMPI_CXX=/usr/bin/g++
+    A=/opt/amgx
+    $T/bin/git clone --recursive https://github.com/NVIDIA/AMGX.git $A/src
+    $T/bin/git -C $A/src checkout v2.5.0
+    $T/bin/git -C $A/src submodule update --init --recursive
+    PATH=$T/bin:$PATH cmake -S $A/src -B $A/src/build -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+        -DCUDA_ARCH="80;86;89;90" -DCMAKE_CUDA_ARCHITECTURES="80;86;89;90" \
+        -DCMAKE_CUDA_COMPILER=$T/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++ \
+        -DMPI_CXX_COMPILER=$Z/bin/mpicxx -DMPI_C_COMPILER=$Z/bin/mpicc
+    PATH=$T/bin:$PATH cmake --build $A/src/build --target amgxsh \
+        -j "${AMGX_JOBS:-40}"
+    test "$(nm -D $A/src/build/libamgxsh.so | grep -c 'U MPI_')" -gt 0
+    mkdir -p $A/lib
+    cp $A/src/build/libamgxsh.so $A/lib/
+    cp -r $A/src/include $A/include
+    cp $A/src/LICENSE $A/LICENSE 2>/dev/null || true
+
+    # --- JAX-AMG 0.1.4 from its sdist, with MPI (setup.py asks mpicxx
+    # --showme:compile/link); JAX stays pinned
+    pip install --no-cache-dir pybind11
+    mkdir -p /opt/jaxamg-src
+    python -c "import urllib.request as u; u.urlretrieve('https://files.pythonhosted.org/packages/62/f2/ca38a37ea4272246f07c7a22f745d18d737f2b16711817c77bc52ea638ee/jaxamg-0.1.4.tar.gz', '/opt/jaxamg-src/jaxamg-0.1.4.tar.gz')"
+    echo "b9b5186a4f47ba4a8534b255788166232df5ea2e624d6ec8e6725babf9c9dfaf  /opt/jaxamg-src/jaxamg-0.1.4.tar.gz" | sha256sum -c -
+    tar -xzf /opt/jaxamg-src/jaxamg-0.1.4.tar.gz -C /opt/jaxamg-src
+    PIP_CONSTRAINT=/opt/jaxpin.txt CUDA_HOME=$C AMGX_ROOT=$A AMGX_BUILD=$A/lib \
+        JAXAMG_ENABLE_MPI=1 MPICXX=$Z/bin/mpicxx CC=/usr/bin/gcc CXX=/usr/bin/g++ \
+        $Z/bin/python -m pip install --no-cache-dir --no-deps --no-build-isolation \
+        /opt/jaxamg-src/jaxamg-0.1.4
+    rm -rf /opt/jaxamg-src $A/src
+    X=$(python -c "import jaxamg, glob, os; print(glob.glob(os.path.join(os.path.dirname(jaxamg.__file__), '_amgx*.so'))[0])")
+    ldd $X | grep -q libamgxsh.so
+    ldd $X | grep -q libmpi
+    ldd $X | grep -E 'amgx|mpi|not found' || true
     mkdir -p /workspace
 
 %runscript
@@ -95,3 +151,5 @@ From: condaforge/miniforge3:24.11.3-0
     python -c "import zoomy_core, zoomy_jax, zoomy_server, mpi4py, mpi4jax, jax; print('imports OK', jax.__version__)"
     python -c "from mpi4jax._src.utils import has_cuda_support as h; assert h(); print('mpi4jax CUDA OK')"
     ompi_info --parsable --all | grep -q 'mpi_built_with_cuda_support:value:true' && echo "OpenMPI CUDA-aware"
+    python -c "import jaxamg, pyamg; from jaxamg._ext import _amgx; assert _amgx.mpi_enabled, 'jaxamg built without MPI'; print('jaxamg', jaxamg.__version__, 'MPI OK; pyamg', pyamg.__version__)"
+    nm -D /opt/amgx/lib/libamgxsh.so | grep -q 'U MPI_' && echo "AmgX built with MPI"
