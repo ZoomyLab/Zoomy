@@ -101,6 +101,18 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         mesh_np, getattr(sm, "_bc_source", None)))[phys], dtype=jnp.int32)
     periodic = bf_cells != inner
     has_periodic = bool(periodic.any())
+    # a periodic face's outer trace is its partner face's inner trace (the
+    # partner cell reconstructed to the seam), not the partner's cell value
+    partner_face = bf_face.copy()
+    if has_periodic:
+        nrm = np.asarray(mesh_np.face_normals)
+        by_cell = {}
+        for k, c in enumerate(inner):
+            by_cell.setdefault(int(c), []).append(k)
+        for i in np.flatnonzero(periodic):
+            cand = by_cell[int(bf_cells[i])]
+            k = min(cand, key=lambda k: float(nrm[:, bf_face[k]] @ nrm[:, bf_face[i]]))
+            partner_face[i] = bf_face[k]
     j = jnp.asarray
     dim = int(mesh_j.dimension)
     order1 = ConstantReconstruction(mesh_j, dim)
@@ -170,7 +182,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             return QR
         QRb = _bc_at(bc, QL[:, j(bf_face)], Qaux, p, time, mesh, bf_cells)
         if has_periodic:
-            QRb = jnp.where(j(periodic)[None, :], Q[:, j(bf_cells)], QRb)
+            QRb = jnp.where(j(periodic)[None, :], QL[:, j(partner_face)], QRb)
         return QR.at[:, j(bf_face)].set(QRb)
 
     # ── reconstruction and assembly ────────────────────────────────────────
