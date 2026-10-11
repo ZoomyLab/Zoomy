@@ -171,7 +171,12 @@ def _children(e):
 class _Plan:
     """Which nodes become statements, and in which scope (closure) each one is
     placed: the innermost scope that contains every use, so nothing is hoisted
-    out of a ``Cond`` branch or a loop body it does not belong to."""
+    out of a ``Cond`` branch it does not belong to -- then out of every
+    function with parameters (a loop body, a ``Root`` residual, a ``LinSolve``
+    operator) whose parameters it does not depend on: computed once, not per
+    call.  (Placed inside, the derivative aux of an IMEX source ran -- with its
+    halo exchange -- in every Newton iteration: ranks iterating differently
+    deadlocked.)"""
 
     def __init__(self, outputs):
         self.post, seen, users = [], set(), {}
@@ -197,13 +202,26 @@ class _Plan:
             isinstance(e, (sp.Lambda, AppliedUndef, Block))
             or (cnt.get(e, 0) >= 2 and not isinstance(e, (sp.Tuple, Get))))]
         named = set(self.named)
+        # the lambda parameters each node depends on (bottom-up)
+        free = {}
+        for e in self.post:
+            if isinstance(e, sp.Dummy):
+                free[e] = frozenset((e,))
+            elif isinstance(e, sp.Lambda):
+                free[e] = free[e.expr] - set(e.variables)
+            else:
+                free[e] = frozenset().union(*(free[c] for c in _children(e)))
         self.parent, self.place, ctx = {None: None}, {}, {}
         for o in outputs:
             ctx.setdefault(o, set()).add(None)
         for e in reversed(self.post):
             sc = ctx.get(e, set())
             if e in named:
-                p = self.place[e] = self._lca(sc)
+                p = self._lca(sc)
+                while (isinstance(p, sp.Lambda) and p.variables
+                       and not free[e] & set(p.variables)):
+                    p = self.parent[p]
+                self.place[e] = p
                 if isinstance(e, sp.Lambda):
                     self.parent[e] = p
                 inner = {e} if isinstance(e, sp.Lambda) else {p}
