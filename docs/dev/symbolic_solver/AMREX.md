@@ -81,3 +81,14 @@ Catchment (526 x 555 @ 10 m, 1 h, 30 mm/h rain, O1 PositiveHLL, CFL 0.5):
   loaders, max_step / dtmin, global JFNK source, MLPoisson / block-MG Chorin
   preconditioners.
 - Not deleted (criterion: at least as capable and as fast).
+
+## Speed after lazy expressions (be19146, +277 / -129 lines, runtime only)
+
+| config, best box layout | old | new before | new after |
+|---|---|---|---|
+| CPU 8 ranks | 42.0 s | 53.4 s | 47.6 s (+13 %; per step +5 %) |
+| 1 GPU | 4.76 s | 8.94 s | 5.66 s (+19 %; per step +10 %) |
+| 4 GPUs | 2.92 s | 3.46 s | 2.73 s (-7 %) |
+
+Water = rain in every run.  The rest: +8.5 % steps (face wave speeds, as
+JAX) and on 1 GPU the dt reduction and three unfused cells() kernels.

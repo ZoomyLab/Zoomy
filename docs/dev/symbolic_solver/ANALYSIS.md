@@ -774,3 +774,22 @@ order, as their interior).  foam vs JAX: wall-shock bump L1 1.8e-3 ->
 6.5e-4; smooth bump nx 80 max 1.7e-4 -> 1.3e-4.  Gates 1, 9, 16, 19 OK;
 gate 5's O2 FD check stays loose (limiter kinks: |FD-jvp| 2.1e-5 on 1.5e-5;
 rev = jvp to 1.2e-11).
+
+## 29. Printed constants, loop-invariant code, distributed IMEX
+
+- Floats print as the exact double (`repr`); sympy's 15 digits made a
+  constant-dt run end 4e-20 early and take one more 4e-20 step whose
+  pressure operator is ~1e-13: AmgX ran 500 iterations and failed the
+  accept gate (196k cells: 641 -> 209 ms/step).  The old GPU Chorin scaling
+  numbers (ANALYSIS 25) include that step: re-measure.
+- The printer placed each statement in the innermost scope of its uses, so
+  the IMEX source's frozen derivative aux (with its halo exchange) landed
+  inside the Newton residual: computed per iteration, and on 3+ ranks
+  (different Newton counts) a deadlock (gdb: ranks in different
+  collectives; MPI4JAX_DEBUG: one extra alltoall).  Now a statement leaves
+  every function with parameters it does not depend on (loop bodies, Root
+  residuals, LinSolve operators; Cond branches keep theirs).  Gates 1, 2, 6,
+  7, 8, 9, 12, 13, 16, 27 unchanged.
+- IMEX in distributed runs: gate 29, 2/3/4 ranks vs serial <= 4.5e-13
+  (1-D, Newton tolerance) and 4.2e-16 (2-D).  Implicit diffusion stays
+  serial (its dense operator): refused in distributed runs.
