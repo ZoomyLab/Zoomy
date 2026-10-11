@@ -12,6 +12,8 @@ communicator) runs it distributed, one rank per device
 """
 from __future__ import annotations
 
+import os
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -107,20 +109,30 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         return self._setup(mesh, nsm)
 
     def _setup(self, mesh, nsm, systems=None, linsolve=None):
-        mesh = ensure_lsq_mesh(mesh, nsm)
+        """``mesh``: a mesh, or the path of a mesh file
+        (:func:`zoomy_core.mesh.distributed.write_mesh`)."""
+        from zoomy_core.mesh import distributed
+        from zoomy_core.model.boundary_conditions import Periodic
         bcs = getattr(nsm.sm, "_bc_source", None)
-        if hasattr(mesh, "resolve_periodic_bcs") and bcs is not None:
-            mesh.resolve_periodic_bcs(bcs)
         self.partition, self.global_mesh = None, mesh
+        self.mesh_file = mesh if isinstance(mesh, (str, os.PathLike)) else None
         if self.comm is not None and self.comm.Get_size() > 1:
             if systems or self.couple or self.imex:
                 raise NotImplementedError(
                     "distributed: the explicit hyperbolic solver only (no "
                     "Chorin, preCICE or IMEX yet)")
-            from zoomy_jax.symsolver.parallel import split
-            local, self.partition = split(mesh, self.comm)
+            if bcs is not None and any(type(b) is Periodic
+                                       for b in bcs.boundary_conditions_list):
+                raise NotImplementedError("distributed run with periodic BCs")
+            local, self.partition = distributed.distribute(mesh, self.comm)
             mesh = ensure_lsq_mesh(local, nsm)
-            self.partition.check_stencils(self.global_mesh, mesh)
+        else:
+            if isinstance(mesh, (str, os.PathLike)):
+                mesh = distributed.read_mesh(mesh)
+            mesh = ensure_lsq_mesh(mesh, nsm)
+            if hasattr(mesh, "resolve_periodic_bcs") and bcs is not None:
+                mesh.resolve_periodic_bcs(bcs)
+            self.global_mesh = mesh
         sm, nc = nsm.sm, int(mesh.n_inner_cells)
         Q = np.zeros((len(sm.state), nc))
         Qaux = np.zeros((len(sm.aux_state), nc))
@@ -134,7 +146,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.mesh_j = convert_mesh_to_jax(mesh)
         self.topo = build_topology(mesh, nsm=nsm)
         self.X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:mesh.dimension])
-        self.mesh = R.geometry_of(self.topo, self.X)
+        # the same vectorised geometry in numpy (JAX op by op is slow here)
+        self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
+            self.topo, np.asarray(mesh.vertex_coordinates)[:mesh.dimension])))
         self._choose_spectral_radius(nsm)
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
@@ -157,15 +171,15 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         name, self.source = self._print()
         fn, topo = R.build(self.source, name, self.module), self.topo
         # the mesh enters as vertex coordinates; geometry is computed inside
-        self._jit = jax.jit(lambda *a: fn(*a[:-2], R.geometry_of(topo, a[-2]),
-                                          a[-1]))
+        self._jit = R.hoisted_jit(lambda *a: fn(*a[:-2], R.geometry_of(topo, a[-2]),
+                                                a[-1]))
         # no vertex-coordinate derivative: the geometry is an input, or with
         # fold_geometry a compile-time constant XLA folds into the loop
         geometry = self.mesh
         if self.fold_geometry:
             self._jit_fixed = jax.jit(lambda *a: fn(*a[:-1], geometry, a[-1]))
         else:
-            jit_g = jax.jit(lambda *a: fn(*a))
+            jit_g = R.hoisted_jit(lambda *a: fn(*a))
             self._jit_fixed = lambda *a: jit_g(*a[:-1], geometry, a[-1])
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         return Q, self.initial_aux(Q, Qaux)
@@ -208,19 +222,32 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         if not self.output:
             return self.on_write
         from zoomy_core.misc.io import _save_fields_to_hdf5, write_mesh_to_hdf5
-        part = self.partition
+        from zoomy_core.misc import misc
+        part, names = self.partition, [str(v) for v in self.nsm.state]
+        path = os.path.join(misc.get_main_directory(), self.output)  # as io.py
         root = part is None or part.rank == 0
-        if root:
-            write_mesh_to_hdf5(self.output, self.global_mesh,
-                               names=[str(v) for v in self.nsm.state])
+        blocks = part is not None and part.parallel_io()
+        if blocks:                     # every rank writes its own block
+            part.write_mesh(path, names)
+        elif root and self.mesh_file is not None:
+            import h5py                # a mesh file: its /mesh as is
+            with h5py.File(self.mesh_file, "r") as src, \
+                    h5py.File(path, "w") as f:
+                src.copy(src["mesh"], f, "mesh")
+                f.create_group("fields").attrs["names"] = np.array(names, dtype="S")
+        elif root:
+            write_mesh_to_hdf5(self.output, self.global_mesh, names=names)
         count, user = [0], self.on_write
 
         def write(time, Q, Qaux):
-            Qg, Qauxg = ((Q, Qaux) if part is None
-                         else (part.gather(Q), part.gather(Qaux)))
-            if root:
-                _save_fields_to_hdf5(self.output, count[0], float(time),
-                                     np.asarray(Qg), np.asarray(Qauxg))
+            if blocks:
+                part.write_fields(path, count[0], time, Q, Qaux)
+            else:
+                Qg, Qauxg = ((Q, Qaux) if part is None
+                             else (part.gather(Q), part.gather(Qaux)))
+                if root:
+                    _save_fields_to_hdf5(self.output, count[0], float(time),
+                                         np.asarray(Qg), np.asarray(Qauxg))
             count[0] += 1
             if user is not None:
                 user(time, Q, Qaux)

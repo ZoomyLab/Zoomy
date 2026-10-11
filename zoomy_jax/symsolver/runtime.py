@@ -27,7 +27,7 @@ from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
     ConstantReconstruction, DenseDiffusionOperatorJAX,
     LSQMUSCLReconstructionJAX)
-from zoomy_jax.symsolver.parallel import HALO
+from zoomy_core.mesh.distributed import HALO
 from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
 
@@ -477,7 +477,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     if couple is not None:
         m.update(_coupling(couple, rt, mesh_np, fc0, bf_face, nf))
     if partition is not None:
-        m.update(partition.blocks(mesh_np))
+        from zoomy_jax.symsolver.parallel import blocks
+        m.update(blocks(partition, mesh_np))
     return m
 
 
@@ -701,6 +702,26 @@ def _coupling(cfg, rt, mesh_np, fc0, bf_face, nf):
                 couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
                 couple_read=eff(a.read, Qe), couple_write=eff(a.write),
                 couple_advance=eff(a.advance, B))
+
+
+def hoisted_jit(fn):
+    """``jax.jit(fn)`` with every constant ``fn`` captures (the mesh index
+    arrays of the runtime's closures) passed as an argument instead of baked
+    into the program: compile time and program size stay independent of the
+    mesh.  Traced once per argument shapes; differentiable like ``fn``."""
+    cache = {}
+
+    def run(*args):
+        flat, tree = jax.tree_util.tree_flatten(args)
+        key = (tree, tuple((jnp.shape(x), jnp.result_type(x)) for x in flat))
+        if key not in cache:
+            closed, out = jax.make_jaxpr(fn, return_shape=True)(*args)
+            consts = [jnp.asarray(c) for c in closed.consts]
+            body = jax.jit(lambda cs, *xs: jax.core.eval_jaxpr(closed.jaxpr, cs, *xs))
+            cache[key] = (body, consts, jax.tree_util.tree_structure(out))
+        body, consts, out_tree = cache[key]
+        return jax.tree_util.tree_unflatten(out_tree, body(consts, *flat))
+    return run
 
 
 def build(src, name, module):
