@@ -670,7 +670,11 @@ def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
     rank-4 diffusion tensor ``A[i, j, d, e]`` (the diffusive flux
     ``Fᵈ = A ∇Q``): the outer derivative sets the flux column ``d``, the inner
     derivative the gradient direction ``e``.  Single-horizontal models give
-    ``d = e = 0``, byte-identical to the legacy path."""
+    ``d = e = 0``.  The term sits on the residual side and the contract is
+    "the residual contributes ``-∇·(A:∇Q)``" (the RHS ``+∇·(A:∇Q)``), so
+    ``A`` takes MINUS its coefficient -- as the source takes ``S = -LHS``.
+    (It took the coefficient itself: every extracted viscosity was
+    anti-diffusive in every solver, ``A[q, q] = -2 nu``.)"""
     v = deriv.variables
     # Bare second derivative ``coeff · ∂_{x_d}∂_{x_e} Q_j``: identical to
     # ``∂_{x_d}(coeff · ∂_{x_e} Q_j)`` ONLY for a (t, spatial, state)-free coeff
@@ -682,7 +686,7 @@ def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
         if (q in state_funcs and not any(coeff.has(s) for s in space)
                 and not any(coeff.has(f) for f in state_funcs)):
             j = state_funcs.index(q)
-            A[i, j, d, e] = A[i, j, d, e] + coeff
+            A[i, j, d, e] = A[i, j, d, e] - coeff
             return
         raise ValueError(
             f"row {i}: cannot route bare second-derivative term {term} — "
@@ -701,7 +705,7 @@ def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
         c2, d2, e = _split_inner_x_derivative(sub, space)
         if d2 is not None and d2.args[0] in state_funcs:
             j = state_funcs.index(d2.args[0])
-            A[i, j, d, e] = A[i, j, d, e] + coeff * c2
+            A[i, j, d, e] = A[i, j, d, e] - coeff * c2
             continue
         raise ValueError(
             f"row {i}: diffusion-compound piece {sub} of ∂_x({inner}) has "
