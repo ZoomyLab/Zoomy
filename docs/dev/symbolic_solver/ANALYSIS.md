@@ -727,3 +727,37 @@ GPU timing (L40S, PCIe, MPICH -> exchanges through host memory):
   at round-off.  Parallel = serial: hyperbolic <= 3.5e-15, Chorin <= 1e-10.
 - preCICE with `-parallel`: one participant per rank; gate 26 (2+2 ranks)
   5.2e-15 vs single domain.  Gates 23-26.
+
+## 28. Boundary stencils of the LSQ derivatives
+
+Found by the debugger on the gate-21 channel (y-invariant, Extrapolation
+walls), where JAX grew a spurious q_y ~ 3e-3 that foam did not.
+
+- Cause 1: a degree-2 fit needs 5 samples (no constant), the ring check asked
+  for 6 and did not count the boundary ghosts.  Every wall cell (5 ring
+  cells + 1 ghost) and corner (3 + 2) was extended one-sidedly into the
+  domain (12 cells): d/dy of a y-invariant b(x) 1.06e-3 at the walls, and
+  d2h/dx2 at the inflow corners 0.4 off the row above.  Fix: count ghosts,
+  extend below 5 only (`geometry_xp._lsq_stencils`).
+- Cause 2: the ghost sample sat at x_c + 2(x_f - x_c), the point reflection,
+  not the mirror image x_c + 2((x_f - x_c).n) n where the ghost centres and
+  the BC kernels' ghost values (`d_normal`) live.  Same on Cartesian cells;
+  on triangles the boundary derivatives did not converge (first O(1), second
+  diverging).  Fix: mirror offset (`geometry_xp._lsq_matrices`).
+
+| check | before | after |
+|---|---|---|
+| channel q_y at t = 0.05 (gate-21 case) | 3.1e-3 | 1.9e-14 |
+| d/dy b(x), wall rows, NX 60/120/240 | 1.1e-3 / 1.4e-4 / 1.8e-5 | <= 1.7e-14 |
+| quads, Neumann field, wall rows: d/dy, d2/dy2 (NX 240) | 9.6e-5, 1.5e-2 | 5.8e-5, 7.3e-3 (same orders 3, 2) |
+| quads, corners, d2/dx2 (NX 80) | 4.8e-2 | 7.4e-3 (order 2) |
+| triangles, boundary cells: d/dx order, d2/dx2 order | 0.0, -1.0 | 2.0, 1.0 |
+
+One-sided limits stay: at a Dirichlet (odd ghost) wall, d2/dn2 is first
+order (0.98) before and after.  Gates: 1, 5, 7, 16 (4 ranks), 21 (3 ranks;
+q_y now at round-off, so its relative metric got a floor: abs 2.8e-13), 22
+unchanged or better; 19 marks the stencil change as intended.  The old
+solvers share the mesh, so they get the same stencils (gate 1 unchanged).
+Literature (Zotero): the half-distance boundary sample mechanism, Syrakos
+et al. 2017 (Phys. Fluids, GU9F3I5R) eq. 13; constrained LSQ with BC rows as
+the ghost-free alternative (Koellermeier thesis VCXBJ6RN p. 137).

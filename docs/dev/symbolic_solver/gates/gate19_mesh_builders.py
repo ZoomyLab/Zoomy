@@ -86,10 +86,15 @@ for label, make in cases.items():
     ln, lo = LSQMesh.from_fvm(fn), ol.LSQMesh.from_fvm(fo)
     note = (" (intended change: 1-D from_msh stencils fixed, see below)"
             if label == "from_msh line" else "")
-    compare(f"LSQMesh deg 1 {label}{note}", ln, lo)
+    # 2-D boundary stencils (ANALYSIS 28): ghost samples at the mirror image
+    # of the cell centre (skewed cells: deg 1 changes) and counted before a
+    # ring is extended (deg 2: compact boundary rings)
+    two_d = label in ("create_2d", "jittered quads", "triangles", "from_msh quad")
+    bnote = " (intended change: boundary ghosts, ANALYSIS 28)" if two_d else ""
+    compare(f"LSQMesh deg 1 {label}{note}{bnote}", ln, lo)
     ln._build_lsq_stencil(2)
     lo._build_lsq_stencil(2)
-    compare(f"LSQMesh deg 2 {label}{note}", ln, lo)
+    compare(f"LSQMesh deg 2 {label}{note}{bnote}", ln, lo)
 
 # the 1-D fix: a gmsh 1-D mesh gets create_1d's stencils (uniform, same cells)
 m = LSQMesh.from_msh(os.path.join(MSH, "mesh_n240.msh"))

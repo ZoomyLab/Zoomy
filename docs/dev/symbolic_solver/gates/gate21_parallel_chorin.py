@@ -80,9 +80,11 @@ if __name__ == "__main__":
         if comm.Get_rank() == 0:
             Qs = np.load(ref)
             scale = np.abs(Qs).max(axis=1)
-            d = np.abs(Qp - Qs).max(axis=1) / np.where(scale > 0, scale, 1)
+            # rows at round-off (q_y in this y-invariant channel) relative to
+            # the state's scale, not to their own
+            d = np.abs(Qp - Qs).max(axis=1) / np.maximum(scale, 1e-8 * scale.max())
             worst = names[int(np.argmax(d))]
             print(f"Chorin VAM(1) bump, {solver}: ranks {comm.Get_size()}  t={t:.3g}  "
-                  f"max rel |par-ser| per row {d.max():.1e} ({worst}), P rows "
+                  f"max rel |par-ser| per row {d.max():.1e} ({worst}, abs {np.abs(Qp - Qs).max(axis=1)[int(np.argmax(d))]:.1e}), P rows "
                   f"{max(d[i] for i, n in enumerate(names) if n.startswith('P')):.1e}  "
                   f"finite {bool(np.isfinite(Qp).all())}  [run {wall_p:.1f}s]", flush=True)
