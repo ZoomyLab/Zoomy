@@ -27,5 +27,5 @@ if __name__ == "__main__":
     check("foam newton vs linear max", d, 2e-12)
     l1 = np.abs(out["newton"] - Qn).sum() / np.abs(Qn).sum()
     print(f"foam newton vs JAX newton: max diff {np.abs(out['newton'] - Qn).max():.2e}, L1 rel {l1:.1e}")
-    check("foam vs JAX newton L1 rel", l1, 1e-2)
+    check("foam vs JAX newton L1 rel", l1, 1e-10)   # same derivative fit (1.9e-13)
     print("G13_DONE" if not FAILED else f"G13_FAILED {FAILED}")

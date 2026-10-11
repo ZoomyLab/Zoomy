@@ -20,7 +20,7 @@ from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
 # serial foam vs JAX (L1 rel; bump1: max rel), N ranks vs serial (max rel)
 BOUND = dict(bump1=(1e-15, 1e-15), bump2=(4e-3, 2e-15), tri2=(6e-3, 4e-15),
-             dry=(7e-2, 1e-14), chorin1=(1e-2, 1e-11), chorin2=(1e-2, 1e-11))
+             dry=(7e-2, 1e-14), chorin1=(1e-10, 1e-11), chorin2=(1e-10, 1e-11))   # chorin: same LSQ fit as JAX
 CLOSED = ("bump1", "bump2", "tri2", "dry")
 
 

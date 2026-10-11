@@ -1,8 +1,9 @@
 """Gate 12: the Chorin template on foam vs on JAX (gate 7 case: Escalante
-VAM(1) bump, 60 cells, dt = 2^-7 to t = 0.5).  foam takes OpenFOAM's
-derivatives (compact second derivatives, boundary face values), JAX its LSQ
-fits: they agree to the discretization (L1), and the gap shrinks with the
-mesh (time_order 1 at 120 cells, dt / 2)."""
+VAM(1) bump, 60 cells, dt = 2^-7 to t = 0.5).  Both take zoomy_core's LSQ
+fit on zoomy_core's stencil for the derivative aux (foam: the stencil from
+the driver, values gathered by a distributionMap), so they agree to the
+pressure tolerance (L1 2.8e-12; before, OpenFOAM's compact second
+derivatives: 5e-3)."""
 import numpy as np
 
 import gate7_chorin as g7
@@ -36,9 +37,9 @@ if __name__ == "__main__":
     l1 = {}
     for to in (1, 2):
         sf, l1[to] = compare(to)
-        check(f"time_order {to} L1 rel", l1[to], 1e-2)
+        check(f"time_order {to} L1 rel", l1[to], 1e-10)
         if to == 1:
             open(f"{WORK}/printed_foam_chorin.H", "w").write(sf.source)
     _, l1x2 = compare(1, 2)
-    check("time_order 1 L1 rel, 60 / 120 cells", l1[1] / l1x2, 1.3, at_least=True)
+    check("time_order 1 L1 rel, 120 cells", l1x2, 1e-10)
     print("G12_DONE" if not FAILED else f"G12_FAILED {FAILED}")

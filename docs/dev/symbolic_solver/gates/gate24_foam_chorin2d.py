@@ -1,6 +1,6 @@
 """Gate 24: the 2-D Chorin case of gate 21 (VAM(1) channel over a bump, 60 x 6,
-t = 0.05) on foam: serial vs JAX (discretization, L1), N ranks vs serial
-(the pressure tolerance).  The sympy split takes ~2 min, so the JAX
+t = 0.05) on foam: serial vs JAX, N ranks vs serial: the pressure tolerance
+(foam's derivative aux = zoomy_core's LSQ fit on its stencil, as JAX).  The sympy split takes ~2 min, so the JAX
 reference is its own run:
     python gate24_foam_chorin2d.py ref               -> WORK/c2d_ref.npy
     python gate24_foam_chorin2d.py foam N [N ...]    (N = 1: serial vs ref)
@@ -19,7 +19,7 @@ from gate7_chorin import pred_nsm
 from gate9_foam import FAILED, WORK, check
 from gate21_parallel_chorin import B, NX, T
 
-BOUND_JAX = 7e-2     # incl. q_y: JAX ~3e-3, foam round-off (uniform in y)
+BOUND_JAX = 1e-9     # same LSQ derivative fit as JAX: the pressure tolerance (4.6e-11)
 
 
 def setup():

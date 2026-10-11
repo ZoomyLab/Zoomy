@@ -839,3 +839,26 @@ rev = jvp to 1.2e-11).
   numerical eigenvalues by default"; found by git bisect): their only
   difference was the dropped analytic `eigenvalues` block.  Re-blessed;
   the golden suites pass (17/17).
+
+## 32. foam: periodic, IMEX in parallel, Chorin on triangles (8534d22)
+
+- Periodic -> OpenFOAM cyclic patches (blockMesh 1-D/2-D/3-D, gmshToFoam),
+  processorCyclic across ranks; seam halo centres = periodic images.
+  Gate 35: O1 = JAX to 1.6e-15 (1-D/2-D/3-D/tri), O2 converging, 2/4 ranks
+  = serial <= 3.7e-15.
+- Correction to section 27: foam's DERIVATIVE AUX (the Chorin pressure
+  operator's first/second derivatives) is now zoomy_core's LSQ fit on
+  zoomy_core's stencil (written by the driver, gathered by a
+  distributionMap), not fvc::grad + the compact Gauss second derivative:
+  the latter is inconsistent on triangles (|d2/dx2| error 1.84 at every h;
+  Chorin on triangles vs JAX L1 0.24).  Now: triangles L1 2.8e-6 (gate 36),
+  quads gate 12 / 24 at the pressure tolerance (2.8e-12 / 4.6e-11).  The
+  reconstruction for the fluxes stays OpenFOAM's (leastSquares,
+  cellLimited).  inradius as zoomy_core (O1 triangles 2.6e-3 -> 4e-16).
+- IMEX with -parallel: gate 11 reworked, 2/4 ranks = serial 3.5e-12 (Newton
+  tolerance).
+- preCICE + Chorin: needs a template change (couple the predictor ~60
+  lines; implicit pressure coupling with checkpoints ~100 per backend):
+  not done.
+- Open: a JAX periodic shift-invariance check (foam's gate 35) shows 8.3e-6
+  / 5.9e-5 / 8.5e-4 (1-D / 2-D / tri) where foam has 1e-15.
