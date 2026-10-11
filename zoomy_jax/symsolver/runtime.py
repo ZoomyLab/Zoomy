@@ -325,7 +325,10 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             patterns[(n, ncells)] = _cell_pattern(n, ncells, lsq_nbrs)
         rows, cols, colors = patterns[(n, ncells)]
         probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
-        AV = jax.vmap(op)(jnp.asarray(probes, dtype=jnp.float64))  # one per colour
+        # one evaluation per colour, a few at a time: all at once holds every
+        # probe's intermediates together (33 GiB at 2.95M cells)
+        batch = int(np.clip(4e7 // probes.shape[1], 1, len(probes)))
+        AV = jax.lax.map(op, jnp.asarray(probes, dtype=jnp.float64), batch_size=batch)
         return AV[colors[cols], rows]
 
     amg_cache = {}                   # (n, transpose) -> hierarchy and its age
