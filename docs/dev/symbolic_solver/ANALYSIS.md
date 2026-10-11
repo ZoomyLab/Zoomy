@@ -835,5 +835,7 @@ rev = jvp to 1.2e-11).
   sigma-3D) was anti-diffusive in every solver (A[q, q] = -2 nu).  Fixed in
   `system_extract._route_diffusion`; goldens m07 / m14 / m16 updated (only
   their diffusion lines).
-- Pre-existing, not touched: 8 model goldens fail on the base checkout too
-  (m01-m04, m06-m08, s01; m07 because `eigenvalues` is now None).
+- 8 model goldens (m01-m04, m06-m08, s01) were stale since 48ceef8 ("SME:
+  numerical eigenvalues by default"; found by git bisect): their only
+  difference was the dropped analytic `eigenvalues` block.  Re-blessed;
+  the golden suites pass (17/17).
