@@ -58,3 +58,26 @@ Open
   - Driver re-prints the kernels every run (VAM ~100 s of sympy) before the binary-cache lookup.
   - Gate number: named gate27_amrex.py (gate23 is taken by another agent's foam gate).
   - foam's SymbolicHyperbolicSolverFoam._print duplicates program.py; switch it over (foam owner).
+
+
+# Old hand-written path vs templated path (deletion evidence, 418e29a)
+
+Catchment (526 x 555 @ 10 m, 1 h, 30 mm/h rain, O1 PositiveHLL, CFL 0.5):
+
+| run | old: steps / march s / ms/step | new: steps / march s / ms/step | water - rain |
+|---|---|---|---|
+| CPU 8 ranks | 6835 / 54.9 / 8.04 | 7415 / 70.5 / 9.50 | 0 both |
+| 1 GPU | 6835 / 5.18 / 0.76 | 7415 / 8.94 / 1.21 | 0 both |
+| 4 GPUs | 6835 / 2.92 / 0.43 | 7415 / 3.46 / 0.47 | 0 both |
+
+- New h_max 4.156 = JAX (4.155); old 2.837: the old WB reconstruction / bed
+  source is a different scheme (mean |dh| 1.1 cm, max 3.7 m in a pit).
+- New is 1.18x (CPU 8) to 1.6x (1 GPU) slower per step, +8.5 % steps (face
+  wave speeds).  Profile: unfused per-block elementwise kernels, not the flux
+  (the new face kernel is cheaper than the old fused RHS); load imbalance
+  ~1/3 of CPU time on both.
+- Old-only capabilities: AMR (non-conservative: no reflux), explicit
+  diffusion, aux BC kernel, 1-D, VTK / 3-D extruded output, raster / gmsh IC
+  loaders, max_step / dtmin, global JFNK source, MLPoisson / block-MG Chorin
+  preconditioners.
+- Not deleted (criterion: at least as capable and as fast).
