@@ -92,3 +92,91 @@ Catchment (526 x 555 @ 10 m, 1 h, 30 mm/h rain, O1 PositiveHLL, CFL 0.5):
 
 Water = rain in every run.  The rest: +8.5 % steps (face wave speeds, as
 JAX) and on 1 GPU the dt reduction and three unfused cells() kernels.
+
+## Capability round 4 (40b82ed, 3370001, ee56d68)
+
+    1. Pressure solver (template-driven: wiring + gate)            gate27b_amrex.py
+       - pressure_solve="newton" wired through the driver (40b82ed, +9 lines); time_order 2 needed nothing.
+       | case | CPU 1 vs JAX | MPI 2 vs CPU 1 | GPU 1 vs JAX |
+       | VAM(1) Chorin, time_order 2     | 5.5e-11 | 2.6e-15 | 5.5e-11 |
+       | VAM(1) Chorin, Newton pressure  | 4.5e-12 | 2.1e-15 | 4.5e-12 |
+       (elliptic tolerance 1e-10; 2-D bump channel of gate 21, t = 0.05)
+    
+    2. IMEX (per-cell Newton root)                                  gate27b_amrex.py
+       | SWE bump O1 + Manning n = 0.05, IMEX | 7.0e-13 | 0.0 | 7.3e-13 (GPU vs CPU 6.9e-13) |
+       (FD Jacobian on AMReX, jvp on JAX: agreement = the Newton tolerance; 0 lines)
+    
+    3. preCICE (couple.*): NOT implemented -- cost above the 150-line bar, and a container change:
+       - The AMReX containers have no preCICE (no headers, no lib; the OF-built
+         ~/of_build/precice-3.4.0 lacks boost 1.83 runtime libs there).  Needs preCICE 3.4
+         (the Python peers' version) in zoomy_amrex.def and zoomy_amrex_gpu.def + rebuilds.
+       - Code: rt_amrex.H ~130 (Coupling: participant, mesh, data names, the coupled side's
+         faces per rank; coupled_faces mask; interface_states gather -> host; interface_flux
+         kernel over the coupled faces with the peer states uploaded; couple_init / max_dt /
+         read / write / advance as foam's rt.H), symAmrex.cpp ~40 (one participant per rank,
+         vertices = this rank's face centres on the coupled side, as symFoam.C:100), driver ~40
+         (couple dict -> inputs, -lprecice), gate ~60 (gate-3 dam break AMReX<->AMReX,
+         AMReX<->JAX, serial and 2+2).  Total ~210 + 60 lines + 2 container rebuilds.
+    
+    4. 1-D: done with 6. (an AMREX_SPACEDIM = 1 build of the same, now dimension-generic,
+       runtime): cheaper than an n x 1 2-D grid (that needed ~60 special cases for the inactive
+       y faces / sides / LSQ); 0 extra lines once 6. is generic.
+    
+    5. AMR: plan only -- see below.
+    
+    6. 3-D (and 1-D): rt_amrex.H made dimension-generic (IntVect cells, D = AMREX_SPACEDIM face
+       directions, LSQ classes per axis, periodic directions), symAmrex.cpp generic grid / IO,
+       driver: grids, sides, periodic flags, LSQ tables (create_1d/2d/3d proxies) and build trees
+       per dimension.  Templates unchanged.  (3370001 + periodic fix)
+       Periodic sides follow JAX: the seam is a boundary in the LSQ stencils (boundary class,
+       ghost sample = the partner cell), the faces see the partner cell (FillBoundary images).
+       Results: table_3d.txt (gate3d_amrex.py), all vs JAX at round-off:
+       Sod x/y/z O1 3.6-4.0e-16, O2 0.75-1.2e-15; wave periodic O1/O2 4.1e-16, 16^3 5.4e-16,
+       EOC 2.16 (= JAX); wall box 6.0e-16, mass/energy drift 0; Sod 1-D 1.2e-15; SME(1) 1-D
+       3.4e-11 (ANALYSIS 23 round-off amplification). MPI 2 = serial (0); GPU = CPU on sodx1/2,
+       wave2, wall2, sod1d2, sme1d2 (other cases share the binary path; not run on GPU).
+       Regression 2-D (table_27.txt, core b2717f6): SWE O1 4.4e-16, O2 8.1e-16, dry 1.1e-9,
+       VAM 8.1e-11; MPI 2 0/0/0/6.8e-15; GPU = JAX numbers.
+       Final gate27b: table_27b.txt (core b2717f6, GPU vs CPU 3.0e-15 / 1.8e-15 / 6.9e-13).
+    
+
+## AMR plan (not implemented)
+
+    AMR plan (no implementation)
+     What AMReX offers: AmrCore (level hierarchy, regrid, MakeNewLevelFromScratch/FromCoarse,
+     RemakeLevel, ClearLevel, ErrorEst tagging), FillPatchSingleLevel / FillPatchTwoLevels
+     (ghosts from the same level + space-time interpolation from the coarse one, with a
+     PhysBCFunct), FillCoarsePatch (new fine boxes), average_down, FluxRegister (CrseInit /
+     FineAdd / Reflux: the coarse-fine flux mismatch put back into the coarse cells), and either
+     subcycling (r time steps per coarse step, time-interpolated ghosts) or one dt for all
+     levels.  The old hand-written path uses AmrCore with subcycling and NO reflux
+     (ZoomyAmr.H:85 TODO): not conservative at coarse-fine faces.
+     Templates: nothing new.  The runtime level loop calls a printed single-level STEP instead
+     of the printed march: program.py prints, besides ``run``, a ``step`` procedure =
+     hyperbolic.advance(...) with a given dt (and ``dt_of`` = hyperbolic.cfl_dt / face_dt on
+     the cells' speeds) -- printing existing template functions, not changing them.
+     Runtime: (a) zs::Mesh per level (geometry, BoxArray, LSQ classes for that dx); (b) halo =
+     the level's FillPatch (FillBoundary on level 0, FillPatchTwoLevels on finer levels, time
+     interpolation between the coarse old/new states at the RK stage time); (c) divergence
+     records, when a FluxRegister is attached, the coarse-side face contribution (Wm on owned
+     faces, Wp on the others: for an NCP scheme the coarse cell's own side, not a symmetric
+     flux) into the register (coarse: CrseInit, fine: FineAdd x area x dt / dt_coarse);
+     (d) after the fine level's step: Reflux into the coarse level, average_down, full_aux.
+     Driver: per-level LSQ tables, AMR settings (max_level, ref_ratio, regrid_int, a tagging
+     criterion on a named state row or its gradient), multi-level plotfiles.
+     Conservation: reflux of the coarse-side contributions -> mass to round-off for closed
+     domains (the conservative part of Wm/Wp is antisymmetric); interpolation at C/F on the
+     model's reconstruction variables W (eta = b + h for SWE) so a lake at rest stays at rest.
+     Time stepping: start with one dt for all levels (min over levels; no time interpolation
+     inside a step except the RK stage), subcycling as a second step.
+     Lines: AmrCore driver ~250 (level data, the five AmrCore overrides, FillPatch wrappers,
+     the level loop with reflux / average_down / regrid, multi-level output), rt_amrex.H ~60
+     (per-level halo, divergence -> FluxRegister hook), program.py ~30 (step, dt_of), driver
+     ~60, gate ~80.  ~400 lines; subcycling +~100.
+     Tests: (1) 2 levels, fine level covering the domain == fine single level (round-off);
+     (2) a static fine patch vs fine single level: L1 difference -> 0 under refinement, and
+     the observed order of a smooth Euler / SWE wave crossing the patch (O2: ~2);
+     (3) mass (and energy for Euler) to round-off with reflux in a closed box, a measurable
+     drift without it (shows the register works); (4) lake at rest over a bump crossing the
+     C/F interface: |u| ~ 1e-15; (5) dynamic regrid on the dry dam break front: mass to
+     round-off, h >= 0; (6) MPI 2/4 ranks = serial, GPU = CPU, as gates 27 / 3d.
