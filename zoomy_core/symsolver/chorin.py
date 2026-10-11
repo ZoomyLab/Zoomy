@@ -21,8 +21,8 @@ from zoomy_core.symsolver.hyperbolic import (
     SSP_RK, explicit_step, face_rule, full_aux, implicit_step, march, mood_step,
     step_size)
 from zoomy_core.symsolver.vocabulary import (
-    boundary_ghosts, cells, derivative_aux, diffusion, put, reduce_max, take,
-    zeros)
+    boundary_ghosts, cells, derivative_aux, diffusion, halo, put, reduce_max,
+    take, zeros)
 
 
 def predictor(pred, Q, Qaux, p, time, dt, mesh, order, mood, imex,
@@ -40,7 +40,8 @@ def predictor(pred, Q, Qaux, p, time, dt, mesh, order, mood, imex,
     if pred.call.source is not None:
         Q = Q + dt * cells(pred.call.source, Q, Qaux, p, time, dt, mesh)
     if pred.call.diffusion_matrix is not None:
-        Q = Q + dt * diffusion(pred.call.diffusion_matrix, Q, Qaux, p, mesh)
+        Q = halo(Q + dt * diffusion(pred.call.diffusion_matrix, Q, Qaux, p,
+                                    mesh), mesh)
     return Q, dt
 
 
@@ -57,7 +58,7 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
                     mesh)
 
     def R(P):
-        Y = put(Q, rows, P)
+        Y = put(Q, rows, halo(P, mesh))
         Yb = boundary_ghosts(press.call.boundary_conditions, Y, Qaux, p, time,
                              mesh)
         Y_aux = derivative_aux(press.call.aux_derivatives, Y, Qaux, mesh, Yb,
@@ -66,7 +67,7 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
 
     if newton is None:
         b = R(sp.S.Zero)
-        return put(Q, rows, LinSolve(lambda P: R(P) - b, -b))
+        return put(Q, rows, halo(LinSolve(lambda P: R(P) - b, -b), mesh))
     tol, maxit = newton
 
     def newton_step(P, r, k):
@@ -76,15 +77,16 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
     P0 = take(Q, rows)
     P, _, _ = While(lambda P, r, k: sp.And(k < maxit, reduce_max(abs(r)) > tol),
                     newton_step, (P0, R(P0), 0))
-    return put(Q, rows, P)
+    return put(Q, rows, halo(P, mesh))
 
 
 def correct(corr, Q, p, time, dt, mesh):
     """Overwrite ``corr``'s rows by its update formula."""
     Qaux = full_aux(corr, Q, zeros(len(corr.aux_state), mesh), p, time, dt,
                     mesh)
-    return put(Q, tuple(corr.equation_to_state_index),
-               cells(corr.call.update_variables, Q, Qaux, p, time, dt, mesh))
+    return halo(put(Q, tuple(corr.equation_to_state_index),
+                    cells(corr.call.update_variables, Q, Qaux, p, time, dt,
+                          mesh)), mesh)
 
 
 def stage(pred, press, corr, Q, Qaux, p, time, dt, mesh, order, mood, imex,
