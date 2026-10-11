@@ -184,6 +184,16 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
                 break
             cur.extend(new)
         special[int(i_c)] = cur
+    # A linear fit has no curvature term: on a boundary cell the vertex ring
+    # (more cells inside than ghosts outside) turns curvature along the wall
+    # into a wall-normal gradient.  Face neighbours + ghosts are mirror-
+    # symmetric: the boundary stencil of a gradient.
+    if get_polynomial_degree(mon) == 1 and owner.size:
+        for i_c in np.flatnonzero(n_bf > 0):
+            face = [int(m) for m in neighbors_list[i_c]
+                    if 0 <= m < n_inner_cells and m != i_c]
+            if int(i_c) not in special and len(face) + n_bf[i_c] >= required - 1:
+                special[int(i_c)] = face
     for i_c in range(n_inner_cells, n_cells):        # ghosts: face neighbours
         cur = [m for m in neighbors_list[i_c] if m < n_inner_cells]
         while len(cur) < required:
