@@ -8,7 +8,7 @@ forward and reverse AD work through them (gates 16-18, ANALYSIS.md section 21).
 ```python
 from mpi4py import MPI
 from zoomy_core.mesh.distributed import write_mesh
-write_mesh(mesh, "mesh.h5")                     # once, serial (large meshes)
+write_mesh(mesh, "mesh.h5")                     # once (or write_mesh_parallel)
 solver = SymbolicHyperbolicSolverJax(time_end=0.5, comm=MPI.COMM_WORLD)
 Q, Qaux = solver.setup("mesh.h5", model)        # or a mesh object (small)
 time, Q, Qaux = solver.run(Q, Qaux)
@@ -19,6 +19,12 @@ Q_all = solver.partition.gather(Q)              # global order, on rank 0
   rank r owns a contiguous block (`zoomy_core.mesh.distributed`).
 - A mesh file: every rank reads only its cells; a mesh object: every rank
   holds it and renumbers (fine up to a few million cells).
+- Large meshes are written in parallel: `write_mesh_parallel(comm, path,
+  type, X, v0, cv, c0, faces=, face_tags=, cell_data=)`, each rank passing
+  its blocks of vertices, cells and boundary elements (example:
+  `gates/bench_catchment.py mesh`, a 14.8M-cell DEM catchment in 25 s on 4
+  ranks).  `cell_data` (bed, initial state) is read per rank with
+  `partition.source.cell_data(name, partition.gids)`.
 - AD: differentiate each rank's owned share `J_r` (e.g. a sum over
   `Q[:, :partition.n_own]`); the global derivative is the sum over ranks.
   Quantities every rank holds copies of (parameters, vertex coordinates,

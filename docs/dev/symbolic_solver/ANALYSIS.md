@@ -593,3 +593,37 @@ GPU, 4 x L40S, SWE O2 + MOOD from a mesh file (bench_large.py):
 - `tests/unit/zoomy_core/test_mesh_snapshot.py`: 29 failures before and
   after (its `.msh` inputs are not in the repo; `compute_derivatives` now
   requires `u_boundary_face`).
+
+## 24. Parallel mesh writing; a 14.8M-cell catchment
+
+`write_mesh_parallel(comm, path, type, X, v0, cv, c0, faces=, face_tags=,
+cell_data=)`: every rank passes its blocks of vertices, cells and boundary
+elements; no rank holds the mesh.  Distributed sample sort along the curve,
+vertices renumbered by first appearance (vertex directory), boundary faces
+and tags by face keys hashed to their smallest vertex, one block per rank
+written with MPI-IO (gathered without h5py-MPI).  `cell_data` (e.g. the
+bed) travels with the cells; `FileSource.cell_data` reads it per rank.
+
+- Gate 20: the parallel file equals the serial `write_mesh` file, every
+  dataset (quads, jittered quads, triangles, 1-D, hexahedra; 3 ranks; with
+  and without h5py-MPI).
+
+SERGHEI LowerTriangle catchment (thesis/cases/river/serghei; RainSWE: rain
+30 mm/h, Manning 0.03, first order, PositiveHLL, point-implicit friction,
+CFL 0.5, dt_max 5 s, walls; `bench_catchment.py`):
+
+| step | result |
+|---|---|
+| 10 m LowRes, 148k cells, 1 h, 1 GPU | 5-7 s; water 445017.0 m3 = r_o A t; h_max 4.155 m (old solver 4.1561) |
+| HighRes DEM 0.5 m -> 1 m (block mean) | 5604 x 5264, 14.77M catchment cells |
+| mesh file, 4 ranks in parallel | 24-30 s, 1.77 GB (b + mapped state as cell data) |
+| start state | the 10 m 1 h state mapped by depth + velocity (443082 m3) |
+| setup, 4 GPUs (3.69M owned/rank) | 66-77 s |
+| 10 s simulated | 13.3 s wall; water change 1230.553 m3 = rain 1230.553 m3 |
+| CFL dt | 0.022 s -> 0.021 s: ~470 steps, ~28 ms/step (7.6 ns/cell-step) |
+| output, 3 snapshots (MPI-IO blocks) | +3.8 s; 3.07 GB |
+
+- 1 h of the 1 m catchment ~ 1.3 h wall on 4 L40S; the SERGHEI 72 h run
+  ~ 4 days.  Same case at 10 m on 1 GPU: 1 h in 5-7 s.
+- dt from the CFL estimate of the actual state at start and end (the
+  template's loop has no step counter).
