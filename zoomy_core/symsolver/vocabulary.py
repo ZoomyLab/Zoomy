@@ -74,8 +74,8 @@ class gradient(Block):
 class minmod(Block):
     """``(rows, W, Wb, G, mesh)`` -> ``(rows of W, cells)`` limiter factors
     in [0, 1], 1 off ``rows`` (static): the largest that keeps every face
-    extrapolation within the neighbours' and boundary ghosts' (``2 Wb - W``)
-    bounds."""
+    extrapolation within the bounds of the face neighbours and the boundary
+    ghosts ``Wb`` (at the ghost position, as in :class:`gradient`)."""
 
 
 class venkatakrishnan(Block):
