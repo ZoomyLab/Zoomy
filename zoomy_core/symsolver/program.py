@@ -8,10 +8,11 @@ backend settings).  One text for every C++ runtime (foam ``rt.H``, AMReX
 """
 import sympy as sp
 
-from zoomy_core.symsolver import chorin as CH
-from zoomy_core.symsolver import hyperbolic as T
-from zoomy_core.symsolver import reconstruction as R
 from zoomy_core.symsolver.core import CxxPrinter
+from zoomy_core.symsolver.discretization import reconstruction as R
+from zoomy_core.symsolver.discretization.time import SSP_RK
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
 
 
@@ -28,21 +29,12 @@ def chorin_systems(pred, press, corr):
     return out
 
 
-def _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every, wave_speed,
-              dt_constant):
-    return dict(cfl=cfl, dimension=dimension, mood=mood, dt_write=dt_write,
-                imex=imex, cfl_check_every=cfl_check_every, wave_speed=wave_speed,
-                dt_constant=None if dt_constant is None else sp.Float(dt_constant))
-
-
-def _program(nsm, run, implicit, linsolve, lsq_degree):
+def _program(template, run, implicit, linsolve, lsq_degree):
     Q, Qaux, p, mesh = sp.symbols("Q Qaux p mesh")
     run += ("\n\ninline auto march = [](auto Q, auto Qaux, auto p, auto time_end, "
             "auto mesh) {\n    return run(Q, Qaux, p, 0.0, time_end, mesh, 0L);\n};")
-    aux = CxxPrinter().procedure(
-        "initial_aux", (Q, Qaux, p, mesh),
-        lambda Q, Qaux, p, mesh: (T.full_aux(nsm, Q, Qaux, p, sp.S.Zero, sp.S.One,
-                                             mesh),))
+    aux = CxxPrinter().procedure("initial_aux", (Q, Qaux, p, mesh),
+                                 template.initial_aux)
     return run + "\n\n" + aux + "\n\n" + configure(lsq_degree, implicit, linsolve) + "\n"
 
 
@@ -61,33 +53,35 @@ def configure(lsq_degree, implicit, linsolve):
 def hyperbolic_program(nsm, *, dimension, implicit, linsolve, cfl=0.9, mood=False,
                        dt_write=None, imex=False, cfl_check_every=10,
                        wave_speed="faces", dt_constant=None, amr=False):
-    """:func:`zoomy_core.symsolver.hyperbolic.hyperbolic` as a C++ program;
-    ``amr``: also the procedures an AMR level loop calls (:func:`amr_procedures`)."""
+    """:meth:`HyperbolicTemplate.march` as a C++ program; ``amr``: also the
+    procedures an AMR level loop calls (:func:`amr_procedures`)."""
     Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
-    kw = _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every,
-                   wave_speed, dt_constant)
+    template = HyperbolicTemplate(
+        nsm, cfl=cfl, dimension=dimension, mood=mood, dt_write=dt_write,
+        imex=imex, cfl_check_every=cfl_check_every, wave_speed=wave_speed,
+        dt_constant=dt_constant)
     run = CxxPrinter().procedure("run", (Q, Qaux, p, time, time_end, mesh),
-                                 lambda *a: T.hyperbolic(nsm, *a, **kw))
+                                 template.march)
     if amr:
-        run += "\n\n" + amr_procedures(nsm, dimension=dimension, cfl=cfl,
-                                        mood=kw["mood"], imex=imex)
-    return _program(nsm, run, implicit, linsolve, nsm.resolved_lsq_degree())
+        run += "\n\n" + amr_procedures(template)
+    return _program(template, run, implicit, linsolve, nsm.resolved_lsq_degree())
 
 
 def hyperbolic_precice_program(nsm, *, side, subcycling=False, dimension, implicit,
                                linsolve, cfl=0.9, mood=False, dt_write=None, imex=False,
                                cfl_check_every=10, wave_speed="faces", dt_constant=None):
-    """:func:`zoomy_core.symsolver.hyperbolic.hyperbolic_precice` (one preCICE
-    participant) as a C++ program; ``run`` ignores ``time_end`` (preCICE ends
-    the loop)."""
+    """:meth:`HyperbolicTemplate.precice_march` (one preCICE participant) as a
+    C++ program; ``run`` ignores ``time_end`` (preCICE ends the loop)."""
     Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
-    kw = _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every,
-                   wave_speed, dt_constant)
+    template = HyperbolicTemplate(
+        nsm, cfl=cfl, dimension=dimension, mood=mood, dt_write=dt_write,
+        imex=imex, cfl_check_every=cfl_check_every, wave_speed=wave_speed,
+        dt_constant=dt_constant)
     run = CxxPrinter().procedure(
         "run", (Q, Qaux, p, time, time_end, mesh),
-        lambda Q, Qaux, p, time, time_end, mesh: T.hyperbolic_precice(
-            nsm, Q, Qaux, p, time, mesh, side=side, subcycling=subcycling, **kw))
-    return _program(nsm, run, implicit, linsolve, nsm.resolved_lsq_degree())
+        lambda Q, Qaux, p, time, time_end, mesh: template.precice_march(
+            Q, Qaux, p, time, mesh, side=side, subcycling=subcycling))
+    return _program(template, run, implicit, linsolve, nsm.resolved_lsq_degree())
 
 
 def conservative_rows(nsm):
@@ -98,10 +92,10 @@ def conservative_rows(nsm):
             if all(sp.sympify(B[i, j, d]) == 0 for j in range(n) for d in range(B.shape[2]))]
 
 
-def amr_procedures(nsm, *, dimension, cfl, mood, imex):
+def amr_procedures(template):
     """The template pieces a level loop calls, printed as they are:
-    ``step`` = :func:`hyperbolic.advance` with a given ``dt``, ``dt_of`` =
-    :func:`hyperbolic.cfl_dt`, ``amr_w`` / ``amr_q`` = the reconstruction's
+    ``step`` = :meth:`HyperbolicTemplate.step` with a given ``dt``, ``dt_of`` =
+    :meth:`HyperbolicTemplate.dt`, ``amr_w`` / ``amr_q`` = the reconstruction's
     variables and their inverse (:func:`reconstruction.reconstruct`'s maps:
     coarse data is interpolated in them), ``amr_clean`` = a stage's
     round-off hygiene (for the refluxed state), ``rk_weights`` = the weight of each
@@ -111,7 +105,7 @@ def amr_procedures(nsm, *, dimension, cfl, mood, imex):
     a row with one has no conservation to restore, and the coarse cell keeps
     its own, balanced, face terms)."""
     Q, Qaux, p, time, dt, mesh, W = sp.symbols("Q Qaux p time dt mesh W")
-    order = nsm.reconstruction.order
+    nsm, order = template.nsm, template.order
     to_w, to_q = R.maps(nsm)
     rows = R.bed_rows(nsm) if to_w is not None else None
 
@@ -132,17 +126,13 @@ def amr_procedures(nsm, *, dimension, cfl, mood, imex):
         return (Q if depth is None or tol is None else clean_round_off(Q, (depth,), tol),)
 
     beta = []
-    for a, _c in T.SSP_RK[order]:
+    for a, _c in SSP_RK[order]:
         beta = [(1 - a) * b for b in beta] + [1 - a]
     procs = [
         "#define ZS_AMR_PROCEDURES 1",
         CxxPrinter().procedure("step", (Q, Qaux, p, time, dt, mesh),
-                               lambda Q, Qaux, p, time, dt, mesh: T.advance(
-                                   nsm, Q, Qaux, p, time, dt, mesh, order, mood,
-                                   imex=imex)),
-        CxxPrinter().procedure("dt_of", (Q, Qaux, p, mesh),
-                               lambda Q, Qaux, p, mesh: (T.cfl_dt(
-                                   nsm, Q, Qaux, p, mesh, cfl, dimension),)),
+                               template.step),
+        CxxPrinter().procedure("dt_of", (Q, Qaux, p, mesh), template.dt),
         CxxPrinter().procedure("amr_w", (Q, Qaux, p, mesh), w_of),
         CxxPrinter().procedure("amr_q", (W, Qaux, p, mesh), q_of),
         CxxPrinter().procedure("amr_clean", (Q, mesh), clean),
@@ -157,13 +147,15 @@ def chorin_program(pred, press, corr, *, dimension, implicit, linsolve, cfl=0.9,
                    mood=False, dt_write=None, imex=False, cfl_check_every=10,
                    wave_speed="faces", dt_constant=None, time_order=1,
                    pressure_newton=None):
-    """:func:`zoomy_core.symsolver.chorin.chorin` as a C++ program."""
+    """:meth:`ChorinTemplate.march` as a C++ program."""
     Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
-    kw = _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every,
-                   wave_speed, dt_constant)
-    run = CxxPrinter().procedure(
-        "run", (Q, Qaux, p, time, time_end, mesh),
-        lambda *a: CH.chorin(pred, press, corr, *a, time_order=time_order,
-                             pressure_newton=pressure_newton, **kw))
+    template = ChorinTemplate(
+        pred, press, corr, time_order=time_order,
+        pressure_newton=pressure_newton, cfl=cfl, dimension=dimension,
+        mood=mood, dt_write=dt_write, imex=imex,
+        cfl_check_every=cfl_check_every, wave_speed=wave_speed,
+        dt_constant=dt_constant)
+    run = CxxPrinter().procedure("run", (Q, Qaux, p, time, time_end, mesh),
+                                 template.march)
     degree = max(s.resolved_lsq_degree() for s in (pred, press, corr))
-    return _program(pred, run, implicit, linsolve, degree)
+    return _program(template, run, implicit, linsolve, degree)
