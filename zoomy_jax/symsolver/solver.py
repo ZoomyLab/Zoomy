@@ -71,6 +71,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                              "the model's admissibility redo at order 1).  "
                              "What is reconstructed, and how it is limited, "
                              "is the NSM's ReconstructionSpec.")
+    time_order = param.Integer(default=None, allow_None=True, bounds=(1, 3),
+                               doc="Order of the SSP-RK step (1, 2 or 3); "
+                                   "None = the reconstruction order.")
     dt_write = param.Number(default=None, allow_None=True,
                             doc="Output interval; None = no output.")
     on_write = param.Callable(default=None, allow_None=True,
@@ -209,7 +212,8 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         return dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
                     mood=self.mood_active, dt_write=self.dt_write,
                     imex=self.imex, cfl_check_every=self.cfl_check_every,
-                    wave_speed=self.cfl_wave_speed, dt_constant=self.dt)
+                    wave_speed=self.cfl_wave_speed, dt_constant=self.dt,
+                    time_order=self.time_order)
 
     def _print(self):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
@@ -301,9 +305,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     the full state; ``press`` / ``corr`` the pressure and corrector systems.
     The split must use zoomy's time-step symbol ``dt`` (positive).
     """
-    time_order = param.Integer(default=1, bounds=(1, 2),
-                               doc="Outer SSP-RK stages, each a full "
-                                   "projection stage.")
+    time_order = param.Integer(default=1, bounds=(1, 3),
+                               doc="Outer SSP-RK stages (1, 2 or 3), each a "
+                                   "full projection stage.")
     pressure_tol = param.Number(default=ELLIPTIC_RTOL, bounds=(0, None))
     pressure_maxit = param.Integer(default=100, bounds=(1, None),
                                    doc="GMRES restarts.")
@@ -402,7 +406,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
         template = ChorinTemplate(
-            self.nsm, self.press, self.corr, time_order=self.time_order,
-            pressure_newton=self._newton(), **self._config())
+            self.nsm, self.press, self.corr, pressure_newton=self._newton(),
+            **self._config())
         return "chorin", PyPrinter().procedure(
             "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
