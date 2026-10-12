@@ -36,6 +36,8 @@ solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 | diffusion blocks at boundaries: orders (gate 41, JAX); foam / AMReX = JAX (gate 43) | C28 | C28 | C28 (1-D, quads; triangles n/a: Cartesian) |
 | LSQ derivatives with the boundary closure (gate 44) | C29 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
+| in-plane viscosity with viscous walls vs an exact solution (no-slip / free-slip shear decay) | C32 | C32 | C32 |
+| vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
 | large tier (scaling, catchment, I/O; `--tier large`) | L1-L5 | L1, L2, L2P, L4 | L1, L2, L2P, L3, L4 |
 | multi-node / Slurm | untestable here | untestable here | untestable here |
 
@@ -47,7 +49,7 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex`; CASE `C1`..`C30`; CONFIG `serial` (default)
+BACKEND `jax foam amrex`; CASE `C1`..`C33`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
@@ -75,7 +77,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C3 well-balanced | lake at rest over b = 0.2 exp(-r^2/2), nx 24, dt 0.01 x 100 | max abs(u) <= 1e-12 (round-off) |
 | C4 boundaries | channel 25 x 1 (ny 2), smooth bump, frictionless, t 3 from the exact state, nx 25/50/100. `sub`: q by `Dirichlet`, h by `Dirichlet`; `trans`: q by `InflowOutflow`, outflow `Extrapolation`; sides `Wall` | L1(h) vs Bernoulli, order 50->100: O1 >= 0.45 / 0.55 (observed, pre-asymptotic), O2 >= 1.8 (theory); max abs(q_y) <= 1e-12 (1-D flow); max abs(q/q_in - 1) (information: the open-domain mass balance) |
 | C5 wet/dry | `common.dry_dambreak_2d`, nx 48, O2 eta + MOOD, CFL 0.45, t 0.02 | h_min >= 0; foam L1 vs JAX <= 3.5e-2 (observed); AMReX max rel <= 1e-9 (observed 6e-10, wet/dry eigenvalue cluster) |
-| C6 conservation | every run of the closed cases (C1-C3, C5, C11-C14, C20, C23) on every config | rel. mass change <= 1e-12 |
+| C6 conservation | every run of the closed cases (C1-C3, C5, C11-C14, C20, C23, C32, C33) on every config | rel. mass change <= 1e-12 |
 | C7 parallel | C1 O2 nx 40, C5, C13, C14, C21 on 2 and 4 ranks | max rel vs the same backend serial <= 1e-12 |
 | C8 pressure | VAM(1) Chorin, gate-21 channel (60 x 6), t 0.05: `vam` (linear), `vam_newton`, `vam_t2` (time_order 2), `vam_tri` (triangles) | foam L1 vs JAX <= 3e-2 (observed); AMReX max rel vs JAX <= 1e-9; Newton vs linear <= 1e-8; ranks / GPU vs serial <= 1e-9 (10 x the pressure rtol 1e-10, over the steps) |
 | C9 GPU | C1, C5, C8, C14 on gpu1 / gpu-mpi | max rel vs the same backend CPU serial (round-off; C8 pressure tolerance) |
@@ -99,6 +101,8 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C28 diffusion BCs | heat equation u_t = div(nu grad u) on [0,1]^d (gate 41's SystemModel), cases dir0 / neu / dirL / per / steady, explicit and implicit (IMEX), on 1-D, quads, triangles. `orders_*` (JAX): L_inf at nx 16 / 32 / 64 (gate 41); `{kind}_{path}_{case}` (foam, AMReX): nx 16 against JAX, the same Q0 (gate 43; AMReX has no triangles) | L_inf order 32->64 >= 1.8 (theory 2); steady max abs(u - L) <= 1e-12; foam / AMReX vs JAX: explicit <= 1e-12, implicit <= 1e-9 (gate 43's tolerances: round-off; Newton 1e-10, GMRES 1e-13) |
 | C29 LSQ boundary closure | gate 44 (JAX, quads, default set): `Lambda` (Dirichlet) and `Flux` (Neumann) BCs on SME(0), h = f(x, y), nx 12 / 24 / 48, fit degree p = 2, 3; max error of the derivatives of order k = 1..p over the boundary and interior cells, with the closure | order 24->48 >= p + 1 - k - 0.2 for every k, boundary and interior (the gate's criterion); the ghost-as-sample errors are in the notes |
 | C30 LSQ polynomials | gate 39 (subprocess): seeded random polynomials of degree p = 1..3 on 1-D, quads, jittered quads, triangles, hexahedra; interior, boundary with exact mirror ghost, Dirichlet / Neumann / zero-gradient ghosts through the closure | number of failing checks (PASS + FAIL = 72) = 0, each exact to 1e-9 |
+| C32 viscous shear decay | SME(0) + `NewtonianInPlane` (`diffusion_matrix` A[q_x, q_x, y, y] = nu, A[q_x, h, y, y] = -nu q_x / h, asserted in `cases.shear_decay`), nu 0.05, g 0.01, h = 1, v = 0, u = u(y); 8 x ny cells (dx = dy), periodic in x, walls at y = 0, 1; O2 without limiter, IMEX (Crank-Nicolson diffusion, Newton 1e-12), dt = dy/16, t 0.5. Then every x-derivative vanishes and the model is exactly u_t = nu u_yy. `noslip`: `Dirichlet(on="momentum", value=0)` (ghost -q), u0 = sin(pi y), exact sin(pi y) e^(-nu pi^2 t); `free`: `Wall` (tangential momentum kept: zero normal gradient), u0 = cos(pi y), exact cos(pi y) e^(-nu pi^2 t); ny 20 / 40 / 80 (JAX), ny 20 (foam, AMReX). Controls (JAX, ny 20): `ctrl` = the sin profile on `Wall`s, `inviscid` = nu 0 on the no-slip walls | L_inf(q_x) vs exact: order 40->80 >= 1.8 (theory 2; observed 1.87 / 1.94 for 20->40 / 40->80, both variants); ny 20 <= 7e-4 (observed 3.3e-4, JAX, foam, AMReX); h - 1, q_y, x-variation <= 1e-12 (theory: h stays 1, v stays 0, u = u(y)); AMReX max rel vs JAX <= 1e-8 (tolerance as C26; observed 3e-16); foam L_inf abs(foam - JAX) <= 0.5 x L_inf(JAX - exact) (observed 0.02 / 0.21); `ctrl` L_inf >= 0.1 (observed 0.42: the walls act); `inviscid` max abs(u - u0) <= 4e-4 (observed 1.7e-4, a regression bound: the numerical wall friction of the Dirichlet wall's Riemann state) |
+| C33 vertical viscosity | SME(2) + `Newtonian` + `NavierSlip` + `StressFree`, nu 0.05, lambda_s 0.5; 1-D, periodic (8 cells, dx 1), flat bed, uniform h = 1, q = (0.5, 0.2, -0.1): the flux divergence vanishes, only the source acts, and it is linear in q at fixed h, so q' = J q with J = d(source_q)/d(q_0..q_2) at h = 1 by sympy differentiation of the SystemModel's `source` (`cases.moment_jacobian`; linearity asserted, `hinv` = 1/h of the NSM substituted); exact q(T) = expm(T J) q0 (eigenvalues -6.68, -1.31, -0.10), T 1. Constant dt = 0.05 / 2^k, k = 0, 1, 2. `imex`: explicit flux step then an implicit-Euler source (the viscous / slip source is in the implicit slot `source`; order 1); `rk2`: explicit SSP-RK2, the source in the explicit step (order 2, the reconstruction order) | order dt/2 -> dt/4 vs expm: imex >= 0.8 (theory 1, observed 0.995), rk2 >= 1.8 (theory 2, observed 2.03); rel error at dt 0.0125 <= 1e-3 / 7e-6 (observed 5.1e-4 / 3.3e-6); q(T) = the integrator's own scheme (I - dt J)^-N resp. (1 + dt J + (dt J)^2 / 2)^N: rk2 <= 1e-12 (round-off), imex <= 1e-10 (Newton 1e-12; observed 3e-12 foam / AMReX, 4e-15 JAX); uniform state kept and h = 1 <= 1e-12; foam / AMReX = JAX: rk2 <= 1e-12, imex <= 1e-10 (observed 1e-16 / 1.3e-12) |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x
@@ -209,3 +213,32 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
   does not limit it here).
 - Runtime: a Chorin run costs ~2.5 min whatever the mesh (JAX: ~130 s setup
   of the pressure template; foam / AMReX: printing), so C8 / C10 / C15 dominate.
+- C32-C33 (viscosity with exact solutions, added after the full run; libraries core 44bc573,
+  jax f39b67f, foam e17026f, amrex ce3f72a; their 66 rows are merged into table.md from a
+  separate store): all PASS, 0 FAIL.  C32 L_inf(q_x) at ny 20 / 40 / 80, no-slip 3.33e-4 /
+  9.12e-5 / 2.38e-5, free-slip 3.32e-4 / 9.11e-5 / 2.38e-5 (orders 1.87, 1.94 for both);
+  at ny 20 foam 3.34e-4 / 3.33e-4, AMReX = JAX to 3e-16; control (sin profile on free-slip
+  walls) 0.42.  C33 time orders imex 0.99 / 0.995 (implicit Euler), rk2 2.07 / 2.03; foam and
+  AMReX = JAX to 1e-16 (rk2) and 1.3e-12 (imex).  Runtime: C32 JAX ~40 s per run (compile),
+  foam ~60 s, AMReX ~20 s (8 JAX runs, which need a second command: the 270 s budget; 2 foam, 2 AMReX);
+  C33 6-18 s per run.
+- C32 build notes.  (i) `NewtonianInPlane`'s `diffusion_matrix` is nu for the shear
+  (A[q_x, q_x, y, y]; 2 nu is the xx entry) and -nu q_x / h on h, so with h = 1, v = 0, u(y)
+  the model is exactly u_t = nu u_yy (asserted in `cases.shear_decay`).  (ii) No custom BC is
+  needed: free-slip = `Wall`, no-slip = `Dirichlet(on="momentum", value=0)` (ghost -q).  But
+  that BC also sets the Riemann outer state to zero momentum, so Rusanov damps the wall
+  cells: the nu = 0 control (`inviscid`) changes u by 1.7e-4 (g 0.01; 2.5e-3 at g 9.81).
+  Missing for a clean viscous wall: one BC with the reflecting wall as the Riemann state and
+  an odd ghost for the diffusion block.  (iii) g = 0.01: the exact solution does not depend on
+  it, but at g 9.81 the Rusanov error (~ sqrt(g h) dy^3) partly cancels the O(dy^2) error of
+  the viscous flux and the measured order is erratic (L_inf 1.56e-3 / 1.47e-4 / 6.1e-6 /
+  2.3e-6 at ny 20 / 40 / 80 / 160: 3.4, 4.6, 1.4); first order in space at g 9.81 gives 0.26
+  at ny 20 (numerical viscosity 0.5 s dy = 0.078 > nu).  (iv) `SystemModel.from_model` warns that 2
+  equation rows (the momenta) carry terms "classified into NO slot ... silently dropped"
+  for `NewtonianInPlane` (as for C26); the second-derivative terms listed there are -2x the
+  diffusion block's (2 nu q_xx + nu q_x,yy + nu q_y,xy), and the exact decay rate shows the block is applied once with the right
+  sign, so the warning looks like the extractor's residual bookkeeping.
+- C33 build notes.  The viscous / slip source of SME is in the implicit slot `source`, so
+  `imex` is Lie splitting with an implicit-Euler source (order 1) and `rk2` takes the same
+  source in the explicit SSP-RK2 step (the reconstruction order is the default time order).
+  The NSM source uses the aux `hinv` = 1/h; `cases.moment_jacobian` substitutes it.
