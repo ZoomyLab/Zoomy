@@ -1616,6 +1616,8 @@ class SystemModel:
     # numerical eigenvalues; CPU-only in JAX), "power" (power iteration on
     # A^2, ``spectral_power_steps`` steps x ``spectral_power_safety``; any
     # device), "bound" (the strict upper bound, = use_spectral_radius_bound).
+    # The symbolic solvers default to "power" on every backend
+    # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
     spectral_radius_method = "eig"
     spectral_power_steps = 10
     spectral_power_safety = 1.06

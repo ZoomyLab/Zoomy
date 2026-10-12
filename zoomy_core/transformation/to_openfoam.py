@@ -93,7 +93,7 @@ def _qualified_numerics_call(name):
 
 _NUMERICS_QUALIFIED = {
     name: _qualified_numerics_call(name)
-    for name in ("eigensystem", "eigenvalues", "solve")
+    for name in ("eigensystem", "eigenvalues", "spectral_radius", "solve")
 }
 
 # Canonical 3D-field profile exchanged across a preCICE interface (Phase 7).

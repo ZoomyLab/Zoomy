@@ -29,6 +29,7 @@ import sympy as sp
 
 from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.solver.constants import ELLIPTIC_RTOL, TPFA_COS_FLOOR, elliptic_constants
+from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
 from zoomy_core.symsolver.discretization.time import SSP_RK
@@ -99,8 +100,8 @@ class CxxBackend(param.Parameterized):
 
     def _prepare(self, mesh, model):
         """The NumericalSystemModel ``run`` marches (the template's NSM)."""
-        return (model if isinstance(model, NumericalSystemModel)
-                else NumericalSystemModel.from_system_model(model))
+        return default_wave_speed(model if isinstance(model, NumericalSystemModel)
+                                  else NumericalSystemModel.from_system_model(model))
 
     def _mood(self, nsm):
         return bool(self.mood and nsm.reconstruction.order >= 2
@@ -191,7 +192,7 @@ class CxxChorinBackend(CxxBackend):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            out.append(nsm)
+            out.append(default_wave_speed(nsm))
         pred, self.press, self.corr = out
         self._nc = int(mesh.n_inner_cells)
         return pred

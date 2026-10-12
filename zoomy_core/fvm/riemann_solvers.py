@@ -538,7 +538,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # this quantity sets the Rusanov / LF / HLL DISSIPATION as well as
             # the CFL, and an upper bound is extra numerical diffusion there
             # (see SystemModel.use_spectral_radius_bound for the measured cost
-            # on the Ritter dry dam break).  The cheap bound is opt-in.
+            # on the Ritter dry dam break).  The cheap bound is opt-in.  The
+            # symbolic solvers set "power" (zoomy_core.symsolver.WAVE_SPEED).
             method = getattr(self.model, "spectral_radius_method",
                              SystemModel.spectral_radius_method)
             if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
