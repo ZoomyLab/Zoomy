@@ -8,7 +8,8 @@ The model's pressure split gives three systems:
 * ``corr``: the correction of the remaining rows by the solved pressure.
 
 One projection stage is a hyperbolic Euler step, a pressure solve and a
-correction.  ``time_order=2`` wraps two stages in the outer SSP-RK2.
+correction.  ``time_order=2`` / ``3`` wraps two / three stages in the outer
+SSP-RK2 / RK3.
 
 Ground truth: ``zoomy_jax.fvm.solver_chorin_vam_jax.ChorinSplitVAMSolverJax``
 (``chorin_stage``, ``chorin_cycle``, ``_step_pressure_pure``,
@@ -38,10 +39,9 @@ class ChorinTemplate(HyperbolicTemplate):
     def __init__(self, pred, press, corr, *, cfl, time_order=1,
                  pressure_newton=None, **config):
         super().__init__(pred, cfl=cfl / (2 * pred.reconstruction.order - 1),
-                         **config)
+                         time_order=time_order, **config)
         self.press = press
         self.corr = corr
-        self.time_order = time_order
         self.pressure_newton = pressure_newton
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):

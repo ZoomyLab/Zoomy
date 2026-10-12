@@ -11,8 +11,12 @@ from zoomy_core.symsolver.core import Cond
 from zoomy_core.symsolver.vocabulary import (
     check, face_inradius, face_wavespeed, minimum, reduce_min)
 
-# Shu-Osher form: Q <- a*Q0 + (1 - a)*(Q + dt*L(Q, t + c*dt)), per stage (a, c)
-SSP_RK = {1: ((0, 0),), 2: ((0, 0), (sp.S.Half, 1))}
+# Shu-Osher form: Q <- a*Q0 + (1 - a)*(Q + dt*L(Q, t + c*dt)), per stage (a, c);
+# c is the time of the stage's input state (RK3: Q0 at t, Q1 at t + dt, Q2 at
+# t + dt/2), which time-dependent sources and boundary conditions see.
+SSP_RK = {1: ((0, 0),),
+          2: ((0, 0), (sp.S.Half, 1)),
+          3: ((0, 0), (sp.Rational(3, 4), 1), (sp.Rational(1, 3), sp.S.Half))}
 
 
 def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):

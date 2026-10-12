@@ -21,7 +21,7 @@ from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
-    cfl_dt, checked, face_dt, face_rule, step_size)
+    SSP_RK, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
     couple, coupled_faces, interface_flux, interface_states, io)
 
@@ -37,11 +37,16 @@ class HyperbolicTemplate:
     no eigensolve of its own), or from the cell states of each face ("cells").
     ``mood``: the a-posteriori MOOD guard of the RK step; ``imex``: the
     SystemModel's implicit slots by an implicit step (Lie) instead of in the
-    RK step; ``dt_write``: the output interval (``None``: no output)."""
+    RK step; ``dt_write``: the output interval (``None``: no output).
+    ``time_order``: the order of the SSP-RK step (``SSP_RK``); ``None``: the
+    reconstruction order."""
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
                  imex=False, cfl_check_every=10, wave_speed="faces",
-                 dt_constant=None):
+                 dt_constant=None, time_order=None):
+        if time_order is not None and time_order not in SSP_RK:
+            raise ValueError(f"time_order {time_order}: SSP-RK of order "
+                             f"{sorted(SSP_RK)} only")
         self.nsm = nsm
         self.cfl = cfl
         self.dimension = dimension
@@ -51,6 +56,7 @@ class HyperbolicTemplate:
         self.cfl_check_every = cfl_check_every
         self.wave_speed = wave_speed
         self.dt_constant = None if dt_constant is None else sp.Float(dt_constant)
+        self.time_order = self.order if time_order is None else time_order
 
     @property
     def order(self):
@@ -66,11 +72,12 @@ class HyperbolicTemplate:
         nsm, order, imex = self.nsm, self.order, self.imex
         if self.mood:
             Q = mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled,
-                          implicit_terms=not imex, dt_rule=dt_rule)
+                          implicit_terms=not imex, rk=self.time_order,
+                          dt_rule=dt_rule)
         else:
             Q = explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order,
                               coupled=coupled, implicit_terms=not imex,
-                              dt_rule=dt_rule)
+                              rk=self.time_order, dt_rule=dt_rule)
         if dt_rule is not None:
             Q, dt = Q
         if imex:
