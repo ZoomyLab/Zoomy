@@ -1021,3 +1021,30 @@ only (P_0 0.29 -> 0.064 at nx 60, toward the refined runs); C10 orders
 1.92 / 2.00 / 2.01.  Open: oblique-wall rows (frame rotation), foam /
 AMReX follow (CXX_NOTES), setup cost of the classification (gate 39 27 s
 -> 171 s; gate 44 > 5 min).
+
+## 42. Closure in foam / AMReX; conditioning of the decoupled wall fits
+
+- foam: the derivative aux reads zoomy_core's tables (base `lsq_gradQ`,
+  one `lsq_closure` table per active class) instead of its own Eigen pinv;
+  slots matched to foam's boundary faces by face centre.  Gate 24 serial
+  3.2e-3 -> 7.6e-11, gate 36 (triangles) 6.0e-2 -> 1.9e-10, gates 12 / 13 /
+  35 / 9 unchanged.  `gradient` (O2) stays OpenFOAM's `fv_gradient`.
+- AMReX: the proxy topology carries the closure kinds; per-class sample
+  lists, class per row in `gradient` / `aux_derivatives`.  Gate 27 vam
+  1.5e-2 -> 1.5e-10 (cpu1 = cpu2), O2 unchanged; a degree-2 O2 probe
+  6.7e-4 -> 9.8e-16.  Kernels.H now carries mesh-dependent class ids: a
+  precompile without `classes` has no closure (degree 2 recompiles).
+- Setup cost (section 41) was the gates, not the library: JAX op-by-op
+  geometry (gate 39: 171 -> 30 s) and a re-derivation per call (gate 44:
+  -> 87 s, quads by default; `tri` / `all` behind an argument).
+- Conditioning (bisect of gate 1a's geometry AD test to 93b52fa): a
+  one-deep wall ring of degree 2 tells y from y**2 only through jitter
+  (relative singular value 1e-4 .. 1e-6); `_rows_ok` counted that as
+  information (cut at 1e-7) and the pinv inverted it, leaking the
+  near-null vector into the tangential rows: wall operators 30-400x an
+  interior cell's (|A| h^deg).  Now directions below `_LSQ_COND` are null
+  in the check (such a wall cell is extended) and cut in the bint / bone
+  pinvs on radius-scaled offsets (`_pinv_cut`: pinv(V P V), the exact
+  derivative of the cut map).  Jittered quads: wall max 14-116 -> 1-22
+  (interior 0.3-0.45).  Gate 1a 30/30 (AD = FD again), 39 72/72, 41
+  orders 2.0, 42 18/18, 44 OK, 43 PASS as far as run.
