@@ -966,3 +966,22 @@ fit (was 5).  Unit test tests/template_gates/test_gate_1a_core_lsq_unisolvent.py
   specific.  A ~150-line shared header (preCICE sequence, configure()
   settings, writer / CFL check, NaN-safe min/max, Newton skeleton,
   elementwise ops) removes ~270 duplicates: planned for drift control.
+
+## 38. One ghost semantics (the D5 kernel) for every ghost consumer
+
+The gradient, limiter bounds, the Chorin pressure operator's derivative aux
+and the diffusion blocks all take `nsm.call.boundary_ghost_state` now
+(reconstruction.py, chorin.py; built only where used); the runtimes' own
+`2Qb - Q` lift is gone (runtime.py, rt.H, rt_amrex.H; foam / AMReX print
+the ghost kernel).  The Riemann outer state keeps the face kernel at the
+face centre (`boundary_traces`: a ghost there would add 2 d g for
+Neumann).  Gate 42 (real BC objects through the runtime blocks: 1-D /
+quads / triangles x Dirichlet const and position-dependent, Neumann,
+Extrapolation, Wall, Periodic): 18/18 exact to 1.9e-15 (old kernels 6e-2 -
+5e-1).  Gates 1, 7, 9, 12, 16, 32, 41 identical; 21 / 27 at the pressure
+tolerance.  Changed by design: Dirichlet + O2 (matrix C4/C11 sub O2: JAX
+moves 2.5e-4 -> 5.1e-6 at n 25 -> 100, order unchanged).  NOT the cause of
+the AMReX-vs-JAX C4 mismatch: that one is at O1 too, only on non-square
+cells -- AMReX's CFL size d|V|/|dV| (0.333) vs zoomy_core's inradius
+(0.25).  Open: full_aux's derivative aux ignores BCs (zero gradient);
+FromData builds its own 2v - Q.
