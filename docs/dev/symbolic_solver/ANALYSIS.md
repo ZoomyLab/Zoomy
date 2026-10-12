@@ -1091,3 +1091,31 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
   8e-8 at t 0.5, 1e-6 .. 2e-5 to t 6, error vs Bernoulli steady 5.6e-4 --
   limiter chattering in the near-steady state; the sensitivity tolerance
   (section 43) is the right check there.
+
+## 45. Night 2026-10-12: power wave speeds, IMEX-SSP2, viscosity tests, two viscous defects
+
+- **Wave speeds.** Profiling (AMReX TinyProfiler + perf, matched O2 bump 200^2): 76-87 % of the CPU
+  time was the per-face numerical 4x4 eigensolve (SME(0) from the derivation has no closed-form
+  spectrum).  The symbolic solvers now default to power iteration on every backend and device
+  (`zoomy_core.symsolver.WAVE_SPEED`; foam / AMReX gained `spectral_radius`).  us/cell/step eig ->
+  power -> closed form: AMReX 27.2 -> 6.7 -> 3.3, foam 28.9 -> 10.8 -> 7.9, JAX (8 cores) 10.0 ->
+  6.0 -> 1.8.  Matrix rerun: 538 rows PASS, 0 FAIL.
+- **IMEX-SSP2(2,2,2)** (Pareschi & Russo 2005) as `imex="ssp2"`: SWE + Manning time order 2.01-2.08
+  (Lie 1.06-1.22), foam / AMReX = JAX to 2e-14 (C31).  VAM(1): every scheme caps near 1 because the
+  discrete projection is not idempotent (P(P(U)) != P(U), 2.5 / 0.74 / 0.23 % of the correction at
+  nx 30 / 60 / 120); the predictor alone is order 2.02.
+- **Viscosity** (C32 shear decay between no-slip / free-slip walls, exact; C33 SME(2) vertical
+  viscosity vs expm): pass.  But both see only the diagonal-index diffusion entries.  Gate 45
+  (smooth periodic h, q_x, q_y varying in x and y; one step nu = 1 minus nu = 0) finds:
+  1. **Numerics:** the discrete in-plane operator equals the SystemModel operator with every
+     mixed-index entry `A[i, j, x, y]` dropped (second-order convergence to THAT: 4.95e-3 ->
+     1.24e-3 (q_x), 7.72e-3 -> 1.97e-3 (q_y)); against the full SystemModel operator the error
+     stays 16 % / 38 %.  The TPFA diffusion block has no tangential face gradient.  All backends
+     (C26: foam / AMReX = JAX).  Fix: face gradient = mean of the cell LSQ gradients + normal
+     correction, flux n.A.grad_f; mixed part explicit (deferred correction) in the implicit solve.
+  2. **Derivation / extraction (open):** the SystemModel operator (diffusion + nu-part of the
+     source, aux -> exact derivatives) matches neither div(nu h (grad u + grad u^T)) (5.6 % / 11 %)
+     nor h div(tau) (2.8 % / 7.5 %); `from_model` warns that the in-plane terms of both momentum
+     rows are "classified into NO slot".  To be checked against the paper equations before any fix.
+- **No-slip wall:** a `Dirichlet` momentum wall also zeroes the Riemann outer state, a small
+  numerical wall friction (C32 `inviscid`: 1.7e-4 at g = 0.01, 2.5e-3 at g = 9.81).
