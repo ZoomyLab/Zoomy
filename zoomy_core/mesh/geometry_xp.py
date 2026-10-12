@@ -54,8 +54,8 @@ _TPFA_MIN_DIST = 1e-30
 #: LSQ stencil selection (:func:`_lsq_stencils`).  A fit is UNISOLVENT when
 #: every coefficient c_r it reads is determined, and well: with V its
 #: monomial matrix (offsets scaled by the stencil radius), e_r lies in the
-#: row space of V (singular values below ``_LSQ_RCOND`` times the largest
-#: count as zero -- the Gram matrix resolves ~1e-8; residual <=
+#: well-conditioned row space of V (singular values below ``_LSQ_COND``
+#: times the largest count as zero, :func:`_rows_ok`; residual <=
 #: ``_LSQ_RESID``) and its relative singular value 1 / (|V| |row r of
 #: pinv(V)|) is >= ``_LSQ_COND``, |V|**2 = |V^T V|_F (sigma_max <= |V| <=
 #: M**(1/4) sigma_max).  Exact degeneracies (a 3x3x3 ring: x**3 = x) sit at
@@ -63,7 +63,6 @@ _TPFA_MIN_DIST = 1e-30
 #: and hexahedra (degrees 1-3) at >= 4e-3; an extension just past rank (as
 #: many samples as coefficients, jittered quads) down to 1e-6.
 _LSQ_COND = 1e-3
-_LSQ_RCOND = 1e-7
 _LSQ_RESID = 1e-8
 #: Extension candidates whose distances agree to this (relative) join the
 #: stencil together: equidistant cells extend it symmetrically.
@@ -374,10 +373,15 @@ def _rows_ok(V, rows):
     """The coefficients ``rows`` ``(n, M)`` (bool) of the fits ``V``
     ``(n, R, M)`` determined (see ``_LSQ_COND``) -- V may be rank deficient
     in the others: eigenpairs of the Gram matrix, eigenvalues below
-    ``_LSQ_RCOND**2`` times the largest are its null space."""
+    ``_LSQ_COND**2`` times the largest are its null space.  An ill-conditioned
+    direction counts as null, not as information: a one-deep wall ring on a
+    jittered mesh tells y from y**2 at ~1e-5, and inverting that leaks the
+    near-null vector (jitter-sized on x, x**2, xy) into the rows kept from
+    this fit, amplified ~1/sigma.  :func:`_lsq_matrices` truncates at the
+    same cut-off."""
     G = np.einsum("nri,nrj->nij", V, V)
     lam, Q = np.linalg.eigh(G)
-    live = lam > _LSQ_RCOND ** 2 * lam[:, -1:]
+    live = lam > _LSQ_COND ** 2 * lam[:, -1:]
     M = V.shape[2]
     Qn = Q * ~live[:, None, :]                       # null-space eigenvectors
     resid = np.sqrt((Qn * Qn).sum(axis=2))           # |null part of e_r|
@@ -1241,6 +1245,16 @@ def _monomial_columns(xp, dX, powers):
     return xp.stack(cols, axis=-1)
 
 
+def _pinv_cut(xp, V):
+    """``pinv(V)`` with the singular values below ``_LSQ_COND`` times the
+    largest cut, as ``pinv(V P V)``, ``P`` the cut pinv: ``V P V`` is the
+    rank-cut ``V`` itself, so the value is the same, but the pinv derivative
+    rule (exact only at constant rank) now sees a matrix OF that rank; on V
+    itself it is off by sigma_cut / sigma_kept."""
+    P = xp.linalg.pinv(V, rtol=_LSQ_COND)
+    return xp.linalg.pinv(V @ P @ V, rtol=_LSQ_COND)
+
+
 def _lsq_matrices(xp, topo, cc, fc, nrm):
     """Batched LSQ derivative operators ``(n_cells, R, n_mon)`` — the
     ``LSQMesh.lsq_gradQ`` contract (``A_glob[i] = pinv(V_i).T``).  A boundary
@@ -1280,16 +1294,27 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
         ghost_rows = np.zeros(R)
         ghost_rows[max_nbr:] = 1.0
         keep = xp.asarray(1.0 - ghost_rows, dtype=V.dtype)
-        Vb = V[plan["bint"]]
+        # The decoupled fits are rank deficient by design: pinv them with the
+        # null space :func:`_rows_ok` accepted them with -- offsets scaled by
+        # the stencil radius (as :class:`_FitCheck`), cut at ``_LSQ_COND``.
+        # Without the cut a null direction lifted by jitter or by moving
+        # nodes is inverted, and its 1/sigma leaks into the kept rows.
+        # ``_pinv_cut`` differentiates the cut map exactly (to sigma**2).
+        r2 = xp.max(xp.sum(dX[plan["bint"]] ** 2, axis=-1), axis=1)
+        r = xp.sqrt(xp.where(r2 > 0, r2, 1.0))
+        scale = r[:, None] ** xp.asarray(np.asarray(plan["powers"]).sum(axis=1),
+                                         dtype=V.dtype)[None, :]   # (n, M)
+        Vb = V[plan["bint"]] / scale[:, None, :]
         V_int = Vb * keep[None, :, None]
-        blocks.append(xp.linalg.pinv(V_int))
+        blocks.append(_pinv_cut(xp, V_int) / scale[:, :, None])
         if plan["bone_pos"].size:
             onehot = np.zeros((plan["bone_pos"].size, R))
             onehot[np.arange(onehot.shape[0]), plan["bone_row"]] = 1.0
             oh = xp.asarray(onehot, dtype=V.dtype)
             V_one = (V_int[plan["bone_pos"]]
                      + Vb[plan["bone_pos"]] * oh[:, :, None])
-            blocks.append(xp.linalg.pinv(V_one))
+            blocks.append(_pinv_cut(xp, V_one)
+                          / scale[plan["bone_pos"]][:, :, None])
     blocks.append(xp.zeros((1, M, R), dtype=V.dtype))
     S = xp.concatenate(blocks, axis=0).reshape(-1, R)
     A = S[plan["row_src"]]                               # (n_cells, M, R)
