@@ -694,9 +694,6 @@ class Chebyshevu_shifted(Basisfunction):
 
         Returns:
             Tuple ``(nodes, weights)`` of arrays.
-
-        References:
-            Golub, Welsch 1969, https://doi.org/10.1090/s0025-5718-69-99647-1
         """
         if n is None:
             n = 2 * (self.level + 1)
