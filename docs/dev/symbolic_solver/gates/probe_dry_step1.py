@@ -6,7 +6,8 @@ import sympy as sp
 import common as C
 import gate1_vs_solver_jax as G
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.discretization.residual import explicit_step, mood_step
+from zoomy_core.symsolver.discretization.time import cfl_dt
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -28,9 +29,9 @@ print("initial Q equal:", np.abs(np.asarray(Q) - np.asarray(Qo)[:, :nc]).max(),
 Qs, As, ps, ts, ms = sp.symbols("Q Qaux p time mesh")
 dim = int(s.mesh_np.dimension)
 src = PyPrinter().procedure("one", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: (
-    T.cfl_dt(nsm, Q, Qaux, p, mesh, 0.45, dim),
-    T.explicit_step(nsm, Q, Qaux, p, time, sp.Float(dto), mesh, 2),
-    T.mood_step(nsm, Q, Qaux, p, time, sp.Float(dto), mesh, 2)))
+    cfl_dt(nsm, Q, Qaux, p, mesh, 0.45, dim),
+    explicit_step(nsm, Q, Qaux, p, time, sp.Float(dto), mesh, 2),
+    mood_step(nsm, Q, Qaux, p, time, sp.Float(dto), mesh, 2)))
 one = R.build(src, "one", s.module)
 dtn, cand, step, _ = one(Q, A, s.parameters, 0.0, s.mesh, jnp.int64(0))
 print(f"dt old {dto:.15e} new {float(dtn):.15e}")

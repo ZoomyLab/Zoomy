@@ -7,7 +7,7 @@ import sympy as sp
 import common as C
 from zoomy_core.numerics import ReconstructionSpec
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
@@ -18,8 +18,9 @@ for variables in ("model", "conservative"):
     Q, A = s.setup(mesh, nsm)
     Qs, As, ps, ts, ms = sp.symbols("Q Qaux p time mesh")
     dim = int(s.mesh_np.dimension)
-    src = PyPrinter().procedure("one", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: T.advance(
-        s.nsm, Q, Qaux, p, time, T.cfl_dt(s.nsm, Q, Qaux, p, mesh, 0.45, dim), mesh, 1, False))
+    template = HyperbolicTemplate(s.nsm, cfl=0.45, dimension=dim)
+    src = PyPrinter().procedure("one", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: template.step(
+        Q, Qaux, p, time, template.dt(Q, Qaux, p, mesh), mesh))
     one = R.build(src, "one", s.module)
     h = [str(v) for v in nsm.state].index("h")
     t, worst, n = 0.0, np.inf, 0

@@ -3,7 +3,8 @@ import sys, time as wall
 import common as C
 import jax, jax.numpy as jnp, numpy as np, sympy as sp
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.discretization.time import step_size
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -22,8 +23,9 @@ mesh, nsm = make()
 s = SymbolicHyperbolicSolverJax(time_end=1.0, cfl=0.9)
 Q, A = s.setup(mesh, nsm)
 Qs, Qauxs, ps, time, mesh_s = sp.symbols("Q Qaux p time mesh")
-src = PyPrinter().procedure("one", (Qs, Qauxs, ps, time, mesh_s), lambda Q, Qaux, p, time, mesh: T.advance(
-    s.nsm, Q, Qaux, p, time, T.step_size(s.nsm, Q, Qaux, p, mesh, 0.9, 2, None, time), mesh, order, False))
+template = HyperbolicTemplate(s.nsm, cfl=0.9, dimension=2)
+src = PyPrinter().procedure("one", (Qs, Qauxs, ps, time, mesh_s), lambda Q, Qaux, p, time, mesh: template.step(
+    Q, Qaux, p, time, step_size(s.nsm, Q, Qaux, p, mesh, 0.9, 2, None, time), mesh))
 one = R.build(src, "one", s.module)
 geometry = s.mesh
 new_step = lambda Q, Qaux: one(Q, Qaux, s.parameters, 0.0, geometry, jnp.int64(0))[:2]

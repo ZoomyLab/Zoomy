@@ -6,7 +6,7 @@ import sympy as sp
 import common as C
 from zoomy_core.symsolver import PyPrinter
 from zoomy_core.symsolver.core import unpack
-from zoomy_core.symsolver.reconstruction import reconstruct
+from zoomy_core.symsolver.discretization.reconstruction import reconstruct
 from zoomy_core.symsolver.vocabulary import boundary_states
 from zoomy_jax.fvm.reconstruction_jax import EmittedWLSQMUSCLJAX
 from zoomy_jax.symsolver import runtime as R

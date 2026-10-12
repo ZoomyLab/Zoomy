@@ -5,7 +5,8 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.discretization.residual import residual
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -23,8 +24,9 @@ print("aux names", [str(a) for a in nsm.aux_state], "aux finite", bool(jnp.isfin
 bad = np.where(~np.isfinite(np.asarray(A)).all(axis=0))[0]
 print("nonfinite aux cells", bad[:10], np.asarray(A)[:, bad[:3]].T if len(bad) else "")
 Qs, As, ps, ts, ms = sp.symbols("Q Qaux p time mesh")
-src = PyPrinter().procedure("one", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: T.advance(
-    s.nsm, Q, Qaux, p, time, T.cfl_dt(s.nsm, Q, Qaux, p, mesh, 0.45, 1), mesh, 1, False))
+template = HyperbolicTemplate(s.nsm, cfl=0.45, dimension=1)
+src = PyPrinter().procedure("one", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: template.step(
+    Q, Qaux, p, time, template.dt(Q, Qaux, p, mesh), mesh))
 one = R.build(src, "one", s.module)
 t = 0.0
 for k in range(400):
@@ -43,7 +45,7 @@ else:
 # t = 0: residual of the exact lake at rest
 Q0, A0 = s.setup(LSQMesh.create_1d(domain=(-1, 1), n_inner_cells=200), nsm)
 src = PyPrinter().procedure("res", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: (
-    T.residual(s.nsm, Q, Qaux, p, time, sp.Float(1e-3), mesh, 1),))
+    residual(s.nsm, Q, Qaux, p, time, sp.Float(1e-3), mesh, 1),))
 res = R.build(src, "res", s.module)
 L, _ = res(Q0, A0, s.parameters, 0.0, s.mesh, jnp.int64(0))
 L, Q0 = np.asarray(L), np.asarray(Q0)

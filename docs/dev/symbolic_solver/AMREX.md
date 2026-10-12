@@ -153,7 +153,7 @@ JAX) and on 1 GPU the dt reduction and three unfused cells() kernels.
      (ZoomyAmr.H:85 TODO): not conservative at coarse-fine faces.
      Templates: nothing new.  The runtime level loop calls a printed single-level STEP instead
      of the printed march: program.py prints, besides ``run``, a ``step`` procedure =
-     hyperbolic.advance(...) with a given dt (and ``dt_of`` = hyperbolic.cfl_dt / face_dt on
+     HyperbolicTemplate.step(...) with a given dt (and ``dt_of`` = HyperbolicTemplate.dt / face_dt on
      the cells' speeds) -- printing existing template functions, not changing them.
      Runtime: (a) zs::Mesh per level (geometry, BoxArray, LSQ classes for that dx); (b) halo =
      the level's FillPatch (FillBoundary on level 0, FillPatchTwoLevels on finer levels, time

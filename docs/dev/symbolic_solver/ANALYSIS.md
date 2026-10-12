@@ -216,7 +216,7 @@ Setup:
 
 ## 11. Reconstruction as template blocks (2026-10-09)
 
-`zoomy_core/symsolver/reconstruction.py`; blocks in `vocabulary.py`, bodies in
+`zoomy_core/symsolver/discretization/reconstruction.py`; blocks in `vocabulary.py`, bodies in
 `zoomy_jax/symsolver/runtime.py` and `zoomy_foam/symsolver/rt.H`.
 
 ```
@@ -638,7 +638,7 @@ exchange through host memory by default -- GPU -> GPU stalled at this size
 
 ## 25. Distributed Chorin (pressure solves)
 
-Template (`chorin.py`): `halo` on the pressure iterate inside R(P) (its
+Template (`strategies/chorin.py`): `halo` on the pressure iterate inside R(P) (its
 derivative aux is a stencil), after the pressure solve and after the
 correction (+ after the predictor's explicit diffusion).  Serial: identity
 (foam: a template returning by value, also for the scalar 0 of R(0)).

@@ -1,8 +1,8 @@
 import sys
 import sympy as sp
-from zoomy_core.symsolver import chorin as CH
+from zoomy_core.symsolver.strategies import chorin as CH
 from zoomy_core.symsolver.core import LinSolve
-from zoomy_core.symsolver.hyperbolic import full_aux
+from zoomy_core.symsolver.discretization.residual import full_aux
 from zoomy_core.symsolver.vocabulary import cells, derivative_aux, put, zeros
 v = sys.argv[1]
 if v == "noghost":

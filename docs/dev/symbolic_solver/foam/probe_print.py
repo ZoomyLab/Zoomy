@@ -3,17 +3,17 @@ sys.path.insert(0, "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/docs/d
 import common as C
 import sympy as sp
 from zoomy_core.symsolver import CxxPrinter, PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 mesh, nsm = C.dambreak_1d(0, 1, nx=20)
+template = HyperbolicTemplate(nsm, cfl=0.9, dimension=1)
 from zoomy_core.numerics import NumericalSystemModel
 Q, Qaux, p, time, time_end, mesh_s = sp.symbols("Q Qaux p time time_end mesh")
 def pr(P, side):
     return P().procedure("run", (Q, Qaux, p, time, mesh_s),
-        lambda *a: T.hyperbolic_precice(nsm, *a, side=side, subcycling=False, cfl=0.9, dimension=1))
+        lambda *a: template.precice_march(*a, side=side, subcycling=False))
 mode = sys.argv[1]
 if mode == "jaxfirst":
-    PyPrinter().procedure("hyperbolic", (Q, Qaux, p, time, time_end, mesh_s),
-        lambda *a: T.hyperbolic(nsm, *a, cfl=0.9, dimension=1))
+    PyPrinter().procedure("hyperbolic", (Q, Qaux, p, time, time_end, mesh_s), template.march)
 outs = [pr(CxxPrinter, 1), pr(CxxPrinter, 0), pr(PyPrinter, 1)]
 for o in outs:
     first = o.splitlines()[:6]

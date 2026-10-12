@@ -7,7 +7,7 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.discretization.residual import residual
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -23,7 +23,7 @@ for spec in (dict(variables="conservative"), dict(bed="reconstructed"), dict(bed
     Q, A = s.setup(LSQMesh.create_1d(domain=(-1, 1), n_inner_cells=200), nsm)
     Qs, As, ps, ts, ms = sp.symbols("Q Qaux p time mesh")
     src = PyPrinter().procedure("res", (Qs, As, ps, ts, ms), lambda Q, Qaux, p, time, mesh: (
-        T.residual(s.nsm, Q, Qaux, p, time, sp.Float(1e-3), mesh, 1),))
+        residual(s.nsm, Q, Qaux, p, time, sp.Float(1e-3), mesh, 1),))
     L = np.asarray(R.build(src, "res", s.module)(Q, A, s.parameters, 0.0, s.mesh, jnp.int64(0))[0])
     print(spec, "max|dh/dt|", f"{np.abs(L[1]).max():.2e}", "max|dq/dt|", f"{np.abs(L[2]).max():.2e}",
           "riemann", type(nsm.build_numerics()).__name__, flush=True)

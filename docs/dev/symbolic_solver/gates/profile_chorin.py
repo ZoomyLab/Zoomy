@@ -6,7 +6,7 @@ import jax, jax.numpy as jnp, numpy as np, sympy as sp
 import escalante_bump as EB, gate7_chorin as g7
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.symsolver import PyPrinter
-from zoomy_core.symsolver import chorin as CH
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.fvm.solver_chorin_vam_jax import ChorinSplitVAMSolverJax
 from zoomy_jax.symsolver import runtime as R
@@ -26,8 +26,9 @@ s = SymbolicChorinSolverJax(time_end=EB.T_END, dt=EB.DT, cfl=0.9, pressure_tol=1
 Q, A = s.setup(LSQMesh.create_1d(domain=EB.DOMAIN, n_inner_cells=EB.NCELLS), g7.pred_nsm(pred, press, corr), press, corr)
 Q = jnp.asarray(EB.initial_state(xc, Q.shape[0])); A = s.initial_aux(Q, A)
 Qs, Qauxs, ps, time, mesh_s = sp.symbols("Q Qaux p time mesh")
-src = PyPrinter().procedure("one", (Qs, Qauxs, ps, time, mesh_s), lambda Q, Qaux, p, time, mesh: CH.chorin_step(
-    s.nsm, s.press, s.corr, Q, Qaux, p, time, sp.Float(EB.DT), mesh, 1, False, False, 1))
+template = ChorinTemplate(s.nsm, s.press, s.corr, cfl=0.9, dimension=int(s.mesh_np.dimension), time_order=1)
+src = PyPrinter().procedure("one", (Qs, Qauxs, ps, time, mesh_s), lambda Q, Qaux, p, time, mesh: template.step(
+    Q, Qaux, p, time, sp.Float(EB.DT), mesh))
 one = R.build(src, "one", s.module)
 geometry = s.mesh
 new_step = lambda Q, A: one(Q, A, s.parameters, 0.0, geometry, jnp.int64(0))[:2]
