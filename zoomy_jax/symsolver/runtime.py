@@ -617,35 +617,60 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         return x.reshape(shape)
 
     tpfa = []                     # the TPFA geometry of div(A : grad Q)
+    # a boundary face's outer value: the partner cell across a periodic seam
+    # (its own normal distance to the seam adds), else the ghost; cut faces
+    # (distributed) carry no flux
+    flux_bf = np.flatnonzero(~cut)
+    outer_face = np.where(periodic, partner_face, bf_face)
 
-    def _div(k, X, Xa, Qaux, p):
-        """div(A(Xa) : grad X) per cell: the interior faces (no flux through
-        a boundary or a cut face)."""
+    def _div(k, bc, X, Qaux, p, time, mesh):
+        """div(A(X) : grad X) per cell (the ``diffusion`` block): the
+        interior faces by the TPFA operator, then the boundary faces, each
+        n.A.n (X_out - X_in) / (d_in + d_out) with the mean tensor of the two
+        cells and the normal distances d to the face; X_out the ghost of the
+        BC kernel ``bc`` at ``time`` (d_out = d_in) or the periodic partner."""
         if not tpfa:
             tpfa.append(DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension,
                                                   rt.n_state))
         op = tpfa[0]
-        return op._divergence(X, op._as_cell_tensor(k(Xa, Qaux, p)), bf_grads=None)
+        A = op._as_cell_tensor(k(X, Qaux, p))          # (n_eq, n_st, nc, d, d)
+        D = op._divergence(X, A, bf_grads=None)
+        if not len(flux_bf):
+            return D
+        f, c, o = (j(a[flux_bf]) for a in (bf_face, inner, bf_cells))
+        Xout = _bc_at(bc, X[:, j(bf_cells)], Qaux, p, time, mesh,
+                      bf_cells)[:, j(flux_bf)]
+        fc, cc, nrm = mesh.face_centers, mesh.cell_centers, mesh.face_normals
 
-    def diffusion(k, Q, Qaux, p, mesh):
-        return _div(k, Q, Q, Qaux, p)
+        def dn(faces, cells):
+            return jnp.sum((fc[faces, :] - cc[:, cells].T) * nrm[:, faces].T, axis=1)
+        d = dn(f, c) + dn(j(outer_face[flux_bf]), o)
+        n = nrm[:dim, f]
+        T = jnp.einsum("ijbde,db,eb->ijb", 0.5 * (A[:, :, c] + A[:, :, o]), n, n)
+        w = mesh.face_volumes[f] / (mesh.cell_volumes[c] * d)
+        return D.at[:, c].add(jnp.einsum("ijb,jb->ib", T, Xout - X[:, c]) * w)
+
+    def diffusion(k, bc, Q, Qaux, p, time, mesh):
+        return _div(k, bc, Q, Qaux, p, time, mesh)
 
     def _norm(r):
         if partition is None:
             return jnp.linalg.norm(r)
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
 
-    def implicit_diffusion(k, Q, Qaux, p, dt, mesh):
-        """Crank-Nicolson, A at the new state (``Qaux`` frozen):
-        R(X) = X - Q - dt/2 (D(X) + D(Q)) = 0, D(X) = div(A(X) : grad X), by
-        Newton (one update when A is constant), each update a ``linsolve``
-        (distributed: over the owned cells, the operator exchanging its
-        halo); differentiable through the root (implicit function theorem)."""
-        b = Q + 0.5 * dt * _div(k, Q, Q, Qaux, p)
+    def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
+        """Crank-Nicolson from ``time`` to ``time + dt``, A at the new state
+        (``Qaux`` frozen): R(X) = X - Q - dt/2 (D(X) + D(Q)) = 0, D(X) =
+        div(A(X) : grad X) with the ghosts of X at ``time + dt`` (of Q at
+        ``time``), by Newton (one update when A and the BCs are affine), each
+        update a ``linsolve`` (distributed: over the owned cells, the
+        operator exchanging its halo); differentiable through the root
+        (implicit function theorem)."""
+        b = Q + 0.5 * dt * _div(k, bc, Q, Qaux, p, time, mesh)
 
         def R(X):
             X = halo(X, mesh)
-            return X - b - 0.5 * dt * _div(k, X, X, Qaux, p)
+            return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh)
         X = newton_root(R, Q, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
                         tol=imp["tol"], maxiter=imp["maxiter"], norm=_norm)
         return halo(X, mesh)
