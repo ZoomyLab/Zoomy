@@ -37,13 +37,11 @@ import scipy.sparse as sps
 from zoomy_core.mesh.base_mesh import _local_faces_for_type
 from zoomy_core.mesh.lsq_reconstruction import (
     build_monomial_indices,
-    build_vertex_to_cells,
     expand_neighbors,
     find_derivative_indices,
     get_polynomial_degree,
     get_required_monomials_count,
     scale_lsq_derivative,
-    vertex_one_ring,
 )
 
 _SUPPORTED = {"line": 1, "triangle": 2, "quad": 2, "tetra": 3, "hexahedron": 3}
@@ -57,15 +55,15 @@ _TPFA_MIN_DIST = 1e-30
 #: every coefficient c_r it reads is determined, and well: with V its
 #: monomial matrix (offsets scaled by the stencil radius), e_r lies in the
 #: row space of V (singular values below ``_LSQ_RCOND`` times the largest
-#: count as zero; residual <= ``_LSQ_RESID``) and its relative singular
-#: value 1 / (|V| |row r of pinv(V)|) is >= ``_LSQ_COND``, |V|**2 = |V^T V|_F
-#: (sigma_max <= |V| <= M**(1/4) sigma_max).  Exact degeneracies (a 3x3x3
-#: ring: x**3 = x) sit at 1e-16; the compact stencils of gate 39's quads,
-#: jittered quads, triangles and hexahedra (degrees 1-3) at >= 4e-3; an
-#: extension just past rank (as many samples as coefficients, jittered
-#: quads) down to 1e-6.
+#: count as zero -- the Gram matrix resolves ~1e-8; residual <=
+#: ``_LSQ_RESID``) and its relative singular value 1 / (|V| |row r of
+#: pinv(V)|) is >= ``_LSQ_COND``, |V|**2 = |V^T V|_F (sigma_max <= |V| <=
+#: M**(1/4) sigma_max).  Exact degeneracies (a 3x3x3 ring: x**3 = x) sit at
+#: 1e-16; the compact stencils of gate 39's quads, jittered quads, triangles
+#: and hexahedra (degrees 1-3) at >= 4e-3; an extension just past rank (as
+#: many samples as coefficients, jittered quads) down to 1e-6.
 _LSQ_COND = 1e-3
-_LSQ_RCOND = 1e-10
+_LSQ_RCOND = 1e-7
 _LSQ_RESID = 1e-8
 #: Extension candidates whose distances agree to this (relative) join the
 #: stencil together: equidistant cells extend it symmetrically.
@@ -298,17 +296,19 @@ def _full_rank_ok(C):
 def _rows_ok(V, rows):
     """The coefficients ``rows`` ``(n, M)`` (bool) of the fits ``V``
     ``(n, R, M)`` determined (see ``_LSQ_COND``) -- V may be rank deficient
-    in the others (SVD)."""
-    _, s, Vt = np.linalg.svd(V, full_matrices=False)
-    live = s > _LSQ_RCOND * s[:, :1]
-    Vk = Vt * live[..., None]
+    in the others: eigenpairs of the Gram matrix, eigenvalues below
+    ``_LSQ_RCOND**2`` times the largest are its null space."""
+    G = np.einsum("nri,nrj->nij", V, V)
+    lam, Q = np.linalg.eigh(G)
+    live = lam > _LSQ_RCOND ** 2 * lam[:, -1:]
     M = V.shape[2]
-    resid = np.linalg.norm(np.eye(M) - np.einsum("nki,nkj->nij", Vk, Vk), axis=1)
+    Qn = Q * ~live[:, None, :]                       # null-space eigenvectors
+    resid = np.sqrt((Qn * Qn).sum(axis=2))           # |null part of e_r|
     with np.errstate(divide="ignore", invalid="ignore"):
-        w = np.where(live, 1.0 / (s * s), 0.0)
-    amp2 = np.sqrt((s ** 4).sum(axis=1))[:, None] * np.einsum("nki,nk->ni", Vt * Vt, w)
+        w = np.where(live, 1.0 / lam, 0.0)
+    amp2 = np.sqrt((G * G).sum(axis=(1, 2)))[:, None] * np.einsum("nri,ni->nr", Q * Q, w)
     good = (resid <= _LSQ_RESID) & (amp2 <= _LSQ_COND ** -2)
-    return (good | ~rows).all(axis=1)
+    return (good | ~rows[:, :M]).all(axis=1)
 
 
 def _compact(S):
