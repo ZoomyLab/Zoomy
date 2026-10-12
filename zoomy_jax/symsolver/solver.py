@@ -24,7 +24,7 @@ import sympy as sp
 from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.symsolver import PyPrinter
+from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
@@ -52,15 +52,6 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         doc="CFL wave speeds: 'faces' from the first RK stage's Riemann "
             "problem (the interface states; no extra eigensolve), 'cells' "
             "from the cell states of each face (an eigensolve of its own).")
-    spectral_radius = param.Selector(
-        default="auto", objects=["auto", "eig", "power"],
-        doc="Wave speed of a model without closed-form eigenvalues: 'eig' "
-            "the numerical eigenvalues (CPU-only in JAX), 'power' power "
-            "iteration on A^2 (any device), 'auto' eig on the CPU, power on "
-            "a GPU.  An NSM that sets spectral_radius_method keeps it.")
-    spectral_power_safety = param.Number(default=1.1, bounds=(1, None),
-                                         doc="'power': factor on the estimate.")
-    spectral_power_steps = param.Integer(default=10, bounds=(1, None))
     fold_geometry = param.Boolean(
         default=False,
         doc="Bake the mesh geometry into the compiled loop as constants "
@@ -160,7 +151,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
             self.topo, np.asarray(mesh.vertex_coordinates)[:mesh.dimension])))
         self.mesh_j = dataclasses.replace(self.mesh_j, lsq_gradQ=self.mesh.lsq_gradQ)
-        self._choose_spectral_radius(nsm)
+        default_wave_speed(nsm)
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
@@ -194,19 +185,6 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
             self._jit_fixed = lambda *a: jit_g(*a[:-1], geometry, a[-1])
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         return Q, self.initial_aux(Q, Qaux)
-
-    def _choose_spectral_radius(self, nsm):
-        """Set the NSM's spectral-radius method from ``spectral_radius``
-        (before its kernels are built)."""
-        if "spectral_radius_method" in vars(nsm):        # the NSM's own choice
-            return
-        method = self.spectral_radius
-        if method == "auto":
-            method = "power" if jax.default_backend() == "gpu" else "eig"
-        nsm.spectral_radius_method = method
-        nsm.spectral_power_safety = float(self.spectral_power_safety)
-        nsm.spectral_power_steps = int(self.spectral_power_steps)
-        nsm._call = None                                  # rebuild the table
 
     def _config(self):
         """The configuration of the solver template."""
@@ -384,7 +362,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            systems[name] = (nsm, JaxRuntime.from_nsm(nsm))
+            systems[name] = (nsm, JaxRuntime.from_nsm(default_wave_speed(nsm)))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
         from zoomy_core.mesh import distributed
