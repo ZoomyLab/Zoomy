@@ -1,5 +1,5 @@
 # source env.sh: the environment of every matrix command (README.md)
-L=$HOME/git/Zoomy-solver-template/library
+L=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../../../library" && pwd)   # this checkout's libraries
 export PYTHONPATH=$L/zoomy_core:$L/zoomy_jax:$L/zoomy_foam:$L/zoomy_amrex
 export PYTHONNOUSERSITE=1 JAX_PLATFORMS=cpu JAX_ENABLE_X64=1
 export ZOOMY_AMREX_BUILD_CPUS=0-7 ZOOMY_AMREX_RUN_CPUS=0-7
