@@ -22,6 +22,8 @@ import numpy as np
 from scipy.sparse import lil_matrix, csr_matrix
 from scipy.sparse.linalg import LinearOperator, gmres
 
+from zoomy_core.solver.constants import TPFA_COS_FLOOR
+
 
 # ── Reconstruction classes ───────────────────────────────────────────────────
 
@@ -1175,7 +1177,7 @@ class FaceGradient:
         self.n_dot_e = np.zeros(n_faces)
         for f in range(n_faces):
             self.n_dot_e[f] = np.dot(normals[:, f], self.e_AB[:, f])
-            self.n_dot_e[f] = max(abs(self.n_dot_e[f]), 0.1) * np.sign(self.n_dot_e[f] + 1e-30)
+            self.n_dot_e[f] = max(abs(self.n_dot_e[f]), TPFA_COS_FLOOR) * np.sign(self.n_dot_e[f] + 1e-30)
 
     def compute_cell_gradients(self, u, cell_volumes, face_volumes, normals):
         """Green-Gauss cell-center gradients."""
@@ -1233,7 +1235,7 @@ class DiffusionOperator:
 
             n = normals[:, f]
             n_dot_e = np.dot(n, dx / dist)
-            n_dot_e = max(abs(n_dot_e), 0.1) * np.sign(n_dot_e + 1e-30)
+            n_dot_e = max(abs(n_dot_e), TPFA_COS_FLOOR) * np.sign(n_dot_e + 1e-30)
             coeff = nu * face_vol[f] / dist / abs(n_dot_e)
 
             if a < nc and b < nc:
@@ -1319,7 +1321,7 @@ class DiffusionOperatorV2:
                 continue
             n = normals[:, f]
             n_dot_e = np.dot(n, dx / dist)
-            n_dot_e = max(abs(n_dot_e), 0.1) * np.sign(n_dot_e + 1e-30)
+            n_dot_e = max(abs(n_dot_e), TPFA_COS_FLOOR) * np.sign(n_dot_e + 1e-30)
             g = face_vol[f] / dist / abs(n_dot_e)
             coeff = nu * g
             L[a, b] += coeff / cell_vol[a]
@@ -1351,7 +1353,7 @@ class DiffusionOperatorV2:
                 continue
             n = normals[:, fidx]
             n_dot_e = np.dot(n, dx / dist)
-            n_dot_e = max(abs(n_dot_e), 0.1) * np.sign(n_dot_e + 1e-30)
+            n_dot_e = max(abs(n_dot_e), TPFA_COS_FLOOR) * np.sign(n_dot_e + 1e-30)
             g = face_vol[fidx] / abs(n_dot_e) / cell_vol[inner]
             self._bf_data.append((inner, nu * g, dist))
             bf_inner.append(inner); bf_g.append(g)
@@ -1522,7 +1524,7 @@ class DenseDiffusionOperator:
                 continue
             n = normals[:, f]
             n_dot_e = np.dot(n, dx / dist)
-            n_dot_e = max(abs(n_dot_e), 0.1) * np.sign(n_dot_e + 1e-30)
+            n_dot_e = max(abs(n_dot_e), TPFA_COS_FLOOR) * np.sign(n_dot_e + 1e-30)
             g = face_vol[f] / dist / abs(n_dot_e)
             ia.append(a); ib.append(b)
             gA.append(g / cell_vol[a]); gB.append(g / cell_vol[b])
@@ -1549,7 +1551,7 @@ class DenseDiffusionOperator:
                 continue
             n = normals[:, fidx]
             n_dot_e = np.dot(n, dx / dist)
-            n_dot_e = max(abs(n_dot_e), 0.1) * np.sign(n_dot_e + 1e-30)
+            n_dot_e = max(abs(n_dot_e), TPFA_COS_FLOOR) * np.sign(n_dot_e + 1e-30)
             g = face_vol[fidx] / abs(n_dot_e) / cell_vol[inner]
             bf_inner.append(inner); bf_g.append(g)
             n_bf.append(n.copy())

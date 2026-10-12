@@ -21,7 +21,7 @@ import param
 import sympy as sp
 
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
+from zoomy_core.solver.constants import ELLIPTIC_RTOL, TPFA_COS_FLOOR, elliptic_constants
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
 from zoomy_core.symsolver.discretization.time import SSP_RK
@@ -142,10 +142,12 @@ class CxxBackend(param.Parameterized):
         return run + "\n\n" + aux + "\n\n" + self._configure(nsm) + "\n"
 
     def _configure(self, nsm):
-        """``configure()``: LSQ degree, the implicit-solve tolerances."""
+        """``configure()``: LSQ degree, the two-point flux floor, the
+        implicit-solve tolerances."""
         lin = self._linsolve(nsm)
         return ("inline void configure()\n{\n"
                 f"    settings().lsq_degree = {int(self._degree(nsm))};\n"
+                f"    settings().tpfa_cos_floor = {float(TPFA_COS_FLOOR)!r};\n"
                 f"    implicit().tol = {float(self.implicit_tol)!r};\n"
                 f"    implicit().maxiter = {int(self.implicit_maxiter)};\n"
                 f"    implicit().ls_tol = {float(lin['tol'])!r};\n"

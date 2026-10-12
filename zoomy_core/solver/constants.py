@@ -74,6 +74,12 @@ EPS_H_FALLBACK = 1e-14
 #: comparison guard on the snapshot stamp, not a physical scale.
 WRITE_EPS = 1e-14
 
+#: Two-point diffusion fluxes (``DenseDiffusionOperator``, the symbolic
+#: solvers' ``diffusion`` block): the face normal's cosine against the unit
+#: vector between the two cell centres, |n . e|, is raised to this floor, so a
+#: badly non-orthogonal face cannot blow the flux coefficient up.
+TPFA_COS_FLOOR = 0.1
+
 # ── elliptic (projection / pressure) solve constants ───────────────────────
 #
 # Same law as the march constants above: a backend must not carry its own
