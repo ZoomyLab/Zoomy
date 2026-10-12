@@ -9,6 +9,11 @@ its meaning.  :class:`CxxChorinBackend` prints the projection template.
 
     source = SymbolicHyperbolicSolverFoam(cfl=0.9, mood=True)._print(nsm, 2)
 
+Both runtimes include :data:`RUNTIME_HEADER` (``rt_common.H``), the part of a
+runtime that is the same on every backend: the elementwise functors, the
+``configure()`` settings, the effects, the Newton skeletons and the preCICE
+call sequence; the driver copies it into its build tree.
+
 A runtime driver supplies the rest: the kernels, the build tree, the case
 (mesh, fields, run-time inputs), the launch and the read-back (``build``,
 ``run``), and the AMR level loop (``_amr_loop``).  Drivers combine with a
@@ -17,6 +22,8 @@ strategy by inheritance, driver first::
     class SymbolicHyperbolicSolverFoam(FoamDriver, CxxBackend): ...
     class SymbolicChorinSolverFoam(FoamDriver, CxxChorinBackend): ...
 """
+from pathlib import Path
+
 import param
 import sympy as sp
 
@@ -28,6 +35,8 @@ from zoomy_core.symsolver.discretization.time import SSP_RK
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
+
+RUNTIME_HEADER = Path(__file__).with_name("rt_common.H")
 
 
 class CxxBackend(param.Parameterized):

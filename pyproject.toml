@@ -100,6 +100,7 @@ include = ["zoomy_core*"]
 
 [tool.setuptools.package-data]
 "zoomy_core.systemmodel" = ["_prebuilt/*.pkl"]
+"zoomy_core.symsolver" = ["*.H"]
 exclude = ["zoomy_core.model.legacy*", "zoomy_core.model.models.legacy*", "zoomy_core.fvm.legacy*"]
 
 
