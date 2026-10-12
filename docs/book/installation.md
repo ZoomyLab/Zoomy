@@ -51,6 +51,7 @@ Substitute any name from the table below.
 | `zoomy_dmplex` | `dmplex` | ✅ | ✅ | builds PETSc from source |
 | `zoomy_firedrake` | `firedrake` | ✅ | ✅ | |
 | `zoomy_openfoam` | `foam` | ✅ | ✅ | OpenFOAM 13 + preCICE 3 |
+| `zoomy_dune` | — | ✅ | ✅ | DUNE-FEM 2.12 + ALUGrid + fem-dg; UFL weak forms, unstructured AMR |
 | `zoomy_postprocess` | `postprocess` | ✅ | ✅ | plotting / HDF5 tooling |
 | `zoomy_jax_dev`, `zoomy_firedrake_dev` | — | ✅ | — | heavy base layers the two above build on |
 

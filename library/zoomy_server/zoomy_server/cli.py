@@ -18,6 +18,7 @@ def main():
         "jax": "zoomy_server.adapters.jax.JaxAdapter",
         "amrex": "zoomy_server.adapters.amrex.AmrexAdapter",
         "dmplex": "zoomy_server.adapters.dmplex.DmplexAdapter",
+        "dune": "zoomy_server.adapters.dune.DuneAdapter",
         "firedrake": "zoomy_server.adapters.firedrake.FiredrakeAdapter",
         "OpenFOAM": "zoomy_server.adapters.foam.FoamAdapter",
         "foam": "zoomy_server.adapters.foam.FoamAdapter",  # TEMP back-compat alias for --adapter foam
