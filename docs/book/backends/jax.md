@@ -1,5 +1,9 @@
 # JAX backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_jax` runs the same finite-volume solvers on JAX — JIT compilation,
 vectorisation, autodiff, and GPU/TPU acceleration — against the **same** `Model`
 / `SystemModel` / `NumericalSystemModel` contract as the

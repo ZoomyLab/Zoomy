@@ -1,5 +1,9 @@
 # System Model
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 A `SystemModel` is the **frozen operator form** of a `Model`. It holds the
 matrices every solver and every code printer consumes, in one canonical balance
 law:

@@ -87,6 +87,12 @@ setup_s, compile_s | status ("ok" | "FAIL: ..." | "error: ...") | diff {metric, 
 
 A record of an `error:` status holds only the metadata, case, backend, config and status.
 
+The docs page "Tests and timings" (`docs/book/testing/symsolver.md`) is rendered from
+`timings_latest.json` and `matrix_latest.json` (the matrix rows, written by
+`MATRIX_STORE=... python docs/scripts/generate_symsolver_results.py --from-store`) by
+`python docs/scripts/generate_symsolver_results.py`, a step of the docs build.  Commit both
+files after a run.
+
 ## test_matrix.py
 
 `matrix.measure()` yields the rows of the matrix table `(case, check, backend, config, value, threshold, note)`;

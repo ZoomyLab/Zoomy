@@ -4,7 +4,15 @@ Zoomy is a flexible modeling and simulation software for free-surface flows.
 
 ![](images/overview2.png)
 
-Zoomy's main objective is to provide a convenient modeling interface for complex free-surface flow models. Zoomy transitions from a **symbolic** modeling layer to **numerical** layer, compatible with a multitude of numerical solvers, e.g. Numpy, Jax, Firedrake, FenicsX, OpenFOAM and AMReX. Additionally, we work to support the PreCICE coupling framework in some numerical implementations, to allow for a convenient integration of our solver with your existing code.
+A model is written once as a symbolic PDE (`Model` -> `SystemModel` ->
+`NumericalSystemModel`).  The solvers are templates written once as sympy
+graphs and printed for each backend: JAX (CPU, GPU, MPI, automatic
+differentiation), OpenFOAM and AMReX (C++, MPI, AMReX on GPUs), with preCICE
+coupling.  A cross-backend test matrix checks that every backend passes the
+same tests.
+
+Start with the [quick start](guide/quickstart.md), the
+[user guide](guide/index.md) or the [test results](testing/symsolver.md).
 
 
 
@@ -34,11 +42,11 @@ Walk the full modeling stack — `Model` → `SystemModel` → `NumericalSystemM
 Sketch your own irrigation system, open the gate and fill the gardens — a shallow-water-equation game running entirely in your browser.
 :::
 
-:::{grid-item-card} Testing and CI Reports
-:link: ci-reports.html
-:link-type: url
+:::{grid-item-card} Tests and timings
+:link: testing/symsolver
+:link-type: doc
 ![Testing](images/tests.png)
-Review testing policy, marker model, and generated CI summaries.
+The cross-backend test matrix and the solver timings, generated from saved results.
 :::
 
 ::::

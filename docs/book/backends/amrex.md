@@ -1,5 +1,9 @@
 # AMReX backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_amrex` couples Zoomy models to [AMReX](https://amrex-codes.github.io/)
 for block-structured adaptive mesh refinement (AMR) on CPU and GPU.
 
@@ -14,4 +18,4 @@ Follow the AMReX
 then build `library/zoomy_amrex`.
 
 **Repository**: [`library/zoomy_amrex`](https://github.com/ZoomyLab/zoomy-amrex)  
-**API reference**: see [amrex](../api/amrex.md).
+**API reference**: see the [API reference](../api/index.md).

@@ -6,6 +6,7 @@ execute:
   execute_notebooks: "off"
 
 only_build_toc_files: false
+exclude_patterns: [examples/work_*, _build]
 
 repository:
   url: https://github.com/ZoomyLab/Zoomy
@@ -38,6 +39,9 @@ sphinx:
     html_css_files:
       - notebook-output-scroll.css
       - cards.css
+      - tutorial-filter.css
+    html_js_files:
+      - tutorial-filter.js
     autodoc_mock_imports:
       - petsc4py
       - firedrake
@@ -50,9 +54,17 @@ sphinx:
       - h5py
       - gmsh
       - precice
+      - rasterio
+      - mpi4py
+      - mpi4jax
+      - jaxamg
+      - pyamg
+      - equinox
     autodoc_default_options:
       members: true
       undoc-members: false
+      # a package's __all__ re-exports would document a class twice
+      ignore-module-all: true
     autodoc_member_order: bysource
     autodoc_typehints: description
     html_theme: sphinx_book_theme

@@ -1,5 +1,9 @@
 # Solver Backends
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 Zoomy's symbolic layer compiles to several numerical backends. The same
 `Model` → `SystemModel` → `NumericalSystemModel` definition drives all of them,
 so switching backend is a change of solver import, not a change of model.

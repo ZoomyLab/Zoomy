@@ -1,5 +1,9 @@
 # OpenFOAM backend — zoomyFoam (via preCICE)
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_foam` runs a Zoomy depth-averaged model as a native **OpenFOAM** finite-volume
 solver, and couples it across an interface to another solver (a second Zoomy
 participant, or a 3-D OpenFOAM region) through the [preCICE](https://precice.org/)

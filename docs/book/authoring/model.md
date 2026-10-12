@@ -1,5 +1,9 @@
 # Model
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 A `Model` is a **symbolic PDE**: a state vector `Q`, some parameters, and
 operator methods that return sympy expressions. Nothing in a `Model` is
 numerical — no mesh, no timestep, no solver. That separation is the whole point:

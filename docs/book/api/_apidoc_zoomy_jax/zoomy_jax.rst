@@ -9,10 +9,9 @@ zoomy\_jax package
 Subpackages
 -----------
 
-.. toctree::
-   :maxdepth: 4
+* :doc:`zoomy_jax.symsolver`
 
-   zoomy_jax.fvm
-   zoomy_jax.mesh
-   zoomy_jax.misc
-   zoomy_jax.transformation
+Submodules
+----------
+
+* :doc:`zoomy_jax.gpurank`

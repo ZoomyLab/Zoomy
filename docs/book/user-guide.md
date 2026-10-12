@@ -1,5 +1,9 @@
 # User Guide
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
 Zoomy provides two interfaces for setting up and running simulations:
 a **web-based GUI** and a **command-line interface (CLI)**.
 Both work from the same card-based configuration system and produce identical results.

@@ -1,5 +1,9 @@
 # FEniCSx backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_fenicsx` drives [FEniCSx](https://fenicsproject.org/) — the next-gen
 FEniCS, built around DOLFINx + UFL + Basix.
 

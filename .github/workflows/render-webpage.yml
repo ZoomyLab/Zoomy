@@ -30,6 +30,7 @@ on:
       - "apps/baukasten-preview/**"
       - "tutorials/**/*.ipynb"
       - "tests/reporting/**"
+      - "tests/results/symsolver/**"
       - ".github/workflows/render-webpage.yml"
   workflow_run:
     workflows: [ "Smart Tests" ]
@@ -109,8 +110,9 @@ jobs:
           docker run --rm \
             -v "$PWD:/workspace" \
             -w /workspace \
+            -e PYTHONPATH=/workspace/library/zoomy_foam:/workspace/library/zoomy_amrex \
             "$DOCS_IMAGE" \
-            bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
+            bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_symsolver_results.py && python docs/scripts/generate_tutorial_index.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
       # NOTE: mesh cards are an AUTHORED registry now (cards/meshes/default.json,
       # hand-curated). CI no longer downloads release .msh files or regenerates

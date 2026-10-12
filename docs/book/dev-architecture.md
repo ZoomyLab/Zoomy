@@ -1,5 +1,9 @@
 # Architecture Overview
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
 ## System Layers
 
 Zoomy is organized in three layers:

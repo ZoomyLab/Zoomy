@@ -1,5 +1,9 @@
 # PETSc DMPlex backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_dmplex` is a C++ finite-volume solver built on
 [PETSc DMPlex](https://petsc.org/release/manual/dmplex/) for unstructured
 distributed meshes.
