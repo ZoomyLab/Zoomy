@@ -45,7 +45,9 @@ class face_inradius(Block):
 #          Q + 2 d g for a normal gradient g, the reflection / partner as is);
 #          evaluated at the foot of the perpendicular with the normal
 #          distance d.  Consumers: gradient, limiter bounds, derivative aux,
-#          diffusion.
+#          diffusion.  The LSQ fits read a Dirichlet- / Neumann-type row's
+#          ghost as the datum of a constraint at the foot point (ANALYSIS
+#          40, zoomy_core.numerics.boundary_closure).
 #   FACE   ``nsm.call.boundary_conditions`` -- the outer state ON the face
 #          from the inner state there; evaluated at the face centre.
 #          Consumer: the Riemann problem (boundary_traces).
@@ -81,9 +83,16 @@ class cell_traces(Block):
 
 
 class gradient(Block):
-    """``(W, Wg, mesh)`` -> the LSQ gradient of every row of ``W`` per cell
-    (backend layout).  A boundary face adds the sample ``Wg`` (its ghost) at
-    the mirror image of the cell centre."""
+    """``(W, Wg, mesh)`` -> the LSQ gradient of every row of ``W`` (the
+    system's reconstruction variables) per cell (backend layout).  A
+    boundary face of a row its BC fixes (ghost kernel affine with J_rr = -1:
+    Dirichlet; +1: Neumann) closes a fit of degree >= 2 by an exact
+    constraint at the foot of the perpendicular, its datum read off the
+    ghost ``Wg``
+    (``(Wg + W)/2`` resp. ``(Wg - W)/(2 d_n)``); any other row's boundary
+    face adds the sample ``Wg`` at the mirror image of the cell centre
+    (the boundary closure, ANALYSIS 40: the tables are the topology's,
+    ``lsq_closure``, per closure class)."""
 
 
 class minmod(Block):
@@ -125,8 +134,11 @@ class derivative_aux(Block):
     (a system's ``aux_derivatives``) refilled from mesh gradients; a boundary
     face's sample is the inner cell value (zero normal gradient).
     ``(spec, Q, Qaux, mesh, Qg, rows)``: only the derivatives of state
-    ``rows``, a boundary face's sample the GHOST ``Qg`` (see
-    :class:`boundary_ghosts`) at the mirror image of the cell centre."""
+    ``rows``, their boundary faces from the GHOSTS ``Qg`` (see
+    :class:`boundary_ghosts`) as in :class:`gradient`: a constraint at the
+    foot point for a row the system's BC fixes, else the sample at the
+    mirror image of the cell centre (the closure class of each state row
+    is the system's, ``spec``'s owner)."""
 
 
 class put(Block):

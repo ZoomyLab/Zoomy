@@ -73,6 +73,10 @@ _LSQ_TIE = 1e-6
 _LSQ_MAX_LAYERS = 2
 #: Cells per batch of the extension (bounds the candidate arrays).
 _LSQ_CHUNK = 20000
+#: Relative cut-off of the closure fits' pseudo-inverses
+#: (:func:`_lsq_closure_matrices`): their null directions sit at round-off
+#: (~1e-16), a unisolvent fit's singular values at >= ``_LSQ_COND``.
+_LSQ_PINV_RTOL = 1e-10
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -119,6 +123,11 @@ class MeshTopology:
     # periodic seams: the translation of every stencil sample to the image
     # nearest the cell, (n_cells, max_nbr, dim); None: no periodic BC
     lsq_shift: Optional[np.ndarray] = field(repr=False, default=None)
+    # boundary closure (ANALYSIS 40): per closure space ``(owner, space)``
+    # the class of each row (-1: no closure, the ghost-sample fit); the
+    # classes' kinds per boundary face and the closure cells are in
+    # ``lsq_plan["closure"]``
+    lsq_closure_class: dict = field(repr=False, default_factory=dict)
 
     # TPFA (two-point flux) masks
     tpfa_faces: np.ndarray = field(default=None)    # valid interior faces
@@ -259,6 +268,74 @@ class _FitCheck:
             axis=2).reshape(n * (b + 1), w + 1, M)
         ok = _rows_ok(blocks, rows.reshape(n * (b + 1), M))
         return ok.reshape(n, b + 1).all(axis=1)
+
+
+def _normal_derivative_columns(xp, X, nrm, powers):
+    """``n . grad`` of the monomial columns ``prod_a X_a**p_a`` at the offsets
+    ``X`` ``(..., dim)`` along ``nrm`` ``(..., dim)``: ``(..., M)``."""
+    cols = []
+    for pw in powers:
+        col = None
+        for a, p in enumerate(pw):
+            if p == 0:
+                continue
+            red = tuple(q - (b == a) for b, q in enumerate(pw))
+            t = p * nrm[..., a] * _monomial_columns(xp, X, [red])[..., 0]
+            col = t if col is None else col + t
+        cols.append(col if col is not None else xp.zeros_like(X[..., 0]))
+    return xp.stack(cols, axis=-1)
+
+
+class _ClosureCheck:
+    """Unisolvency WITH the boundary closure (ANALYSIS 40): the base fit
+    (``base``, a :class:`_FitCheck`: the ghost-sample fit every GHOST row and
+    every derivative of an aux function keeps) and, for every closure class,
+    the constrained fit of each cell with a Dirichlet / Neumann face in that
+    class -- its interior samples, the class's GHOST faces as plain samples
+    and one constraint row per Dirichlet face (the value at the foot point)
+    and Neumann face (the normal derivative there) -- must have full column
+    rank (well, as ``_LSQ_COND``).  ``kinds`` ``(n_class, n_bf)``;
+    ``foot`` ``(n_bf, dim)`` the foot offset from the owner centre;
+    ``normal`` ``(n_bf, dim)`` the outward unit normal."""
+
+    def __init__(self, base, kinds, foot, normal):
+        self.base = base
+        self.kinds = np.asarray(kinds)
+        self.foot = np.asarray(foot, dtype=float)
+        self.normal = np.asarray(normal, dtype=float)
+
+    def offsets(self, cells, S):
+        return self.base.offsets(cells, S)
+
+    def __call__(self, cells, S, B):
+        from zoomy_core.numerics.boundary_closure import GHOST
+        ok = self.base(cells, S, B)
+        for k in range(self.kinds.shape[0]):
+            kb = np.where(B >= 0, self.kinds[k][np.maximum(B, 0)], -1)
+            act = np.flatnonzero(ok & (kb > GHOST).any(axis=1))
+            if act.size:
+                ok[act] = self._constrained_ok(cells[act], S[act], B[act], kb[act])
+        return ok
+
+    def _constrained_ok(self, cells, S, B, kb):
+        from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
+        base = self.base
+        D = base.offsets(cells, S)                                # (n, w, dim)
+        Bi = np.maximum(B, 0)
+        F = np.where((B >= 0)[..., None], self.foot[Bi], 0.0)     # (n, b, dim)
+        Nf = self.normal[Bi]
+        r2 = np.maximum((D * D).sum(-1).max(axis=1, initial=0.0),
+                        (4 * F * F).sum(-1).max(axis=1, initial=0.0))
+        r = np.sqrt(np.where(r2 > 0, r2, 1.0))[:, None, None]
+        Vi = base._mono(D / r)                                   # (M, n, w)
+        Vg = np.where((kb == GHOST)[None], base._mono(2 * F / r), 0.0)
+        Vd = np.where((kb == DIRICHLET)[None], base._mono(F / r), 0.0)
+        Vn = np.where((kb == NEUMANN)[None],
+                      np.moveaxis(_normal_derivative_columns(
+                          np, F / r, Nf, [tuple(p) for p in base.powers]), -1, 0),
+                      0.0)
+        C = np.concatenate([Vi, Vg, Vd, Vn], axis=2)               # (M, n, rows)
+        return _full_rank_ok(C.transpose(0, 2, 1))
 
 
 def _full_rank_ok(C):
@@ -449,7 +526,7 @@ def _boundary_slots(owner, n_cells, boundary_face_centers, centers):
 def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
                   n_inner_cells, boundary_owner, cell_vertices,
                   boundary_face_centers, ghost_offsets, sampled=None,
-                  translations=None):
+                  translations=None, closure_kinds=None, normals=None):
     """The LSQ STENCIL SELECTION (neighbours, boundary-face slots, REQ-174b
     axis decisions) -- without the per-cell pseudo-inverse, which
     :func:`compute_geometry` batches.  ``centers`` is ``(n_cells, dim)``;
@@ -471,7 +548,12 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     periodic face, ``cell_vertices`` carries the seam's identified vertices
     (:func:`periodic_vertices`), ``translations`` the seams' periods, and
     ``sampled`` (per boundary face) is False on periodic faces: no ghost
-    sample there, the seam cell's stencil is the interior one."""
+    sample there, the seam cell's stencil is the interior one.
+
+    Boundary closure (ANALYSIS 40): ``closure_kinds`` ``(n_class, n_bf)``
+    (:mod:`zoomy_core.numerics.boundary_closure`) and the outward unit
+    ``normals`` ``(n_bf, dim)``; a stencil must then ALSO be unisolvent for
+    every class's constrained fit (:class:`_ClosureCheck`)."""
     owner = np.asarray(boundary_owner, dtype=int)
     if sampled is not None:
         owner = np.where(np.asarray(sampled, dtype=bool), owner, -1)
@@ -485,6 +567,9 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
                                   - np.asarray(centers)[np.maximum(owner, 0)]),
                            axis=1) if owner.size else np.zeros(0, dtype=int)
     check = _FitCheck(dim, mon, centers, ghost_offsets, ghost_axis, translations)
+    if closure_kinds is not None and len(closure_kinds):
+        check = _ClosureCheck(check, closure_kinds,
+                              0.5 * np.asarray(ghost_offsets, dtype=float), normals)
     cells = np.arange(n)
     face = _face_stencils(nl, n)
     ring_mode = cell_vertices is not None and dim >= 2
@@ -550,7 +635,8 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     return mon, neighbors, bdy, n_axis, pure_axis_rows
 
 
-def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows):
+def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows,
+              closure_kinds=None):
     """Static assembly plan of the batched pseudo-inverses.
 
     Groups (each ONE batched ``pinv``):
@@ -565,7 +651,13 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows):
       reference ``pinv(0)`` returns, WITHOUT a pinv (finite gradients).
 
     ``row_src`` maps every ``(cell, monomial row)`` to its row in the stacked
-    ``[plain | bint | bone | zero]`` result, so assembly is one gather."""
+    ``[plain | bint | bone | zero]`` result, so assembly is one gather.
+
+    ``closure_kinds`` ``(n_class, n_bf)`` (ANALYSIS 40): ``closure`` = the
+    cells with a Dirichlet / Neumann boundary slot in some class
+    (``cells``), each class's kind per slot (``kinds`` ``(n_class, n_cc,
+    max_bdy)``, -1 no slot) and whether the class constrains the cell at
+    all (``active``; else its table is the base one)."""
     n_cells, max_nbr = neighbors.shape
     max_bdy = bdy.shape[1]
     M = len(mon)
@@ -593,7 +685,17 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows):
         for r in rows:
             row_src[c, r] = (n_plain + n_bint + p) * M + r
     bdy_mask = bdy >= 0
+    closure = None
+    if closure_kinds is not None and len(closure_kinds):
+        from zoomy_core.numerics.boundary_closure import GHOST
+        K = np.asarray(closure_kinds)
+        slot = np.where(bdy_mask[None], K[:, np.maximum(bdy, 0)], -1)
+        active = (slot > GHOST).any(axis=2)                 # (n_class, n_cells)
+        ccells = np.flatnonzero(active.any(axis=0))
+        closure = {"cells": ccells, "kinds": slot[:, ccells].astype(np.int8),
+                   "active": active[:, ccells]}
     return {
+        "closure": closure,
         "plain": plain, "bint": bint,
         "bone_pos": np.array([p[0] for p in pairs], dtype=int),
         "bone_row": np.array([max_nbr + p[1] for p in pairs], dtype=int),
@@ -804,8 +906,36 @@ def cell_face_geometry(mesh):
     return _base_topology(mesh)[1]
 
 
+def _closure_classes(closure, sampled, n_bf):
+    """Dedup the kind rows of every closure space: ``(classes (n_class,
+    n_bf), {key: tuple of class per row, -1 none})``.  Faces without a ghost
+    sample (periodic seams) are GHOST; a row without a Dirichlet / Neumann
+    face has no class."""
+    from zoomy_core.numerics.boundary_closure import GHOST
+    keys, rows = [], []
+    for key, K in closure.items():
+        K = np.where(np.asarray(sampled, dtype=bool)[None, :],
+                     np.asarray(K).reshape(-1, n_bf), GHOST)
+        keys.append((key, K.shape[0]))
+        rows.append(K)
+    if not rows:
+        return np.zeros((0, n_bf), dtype=np.int8), {}
+    stack = np.concatenate(rows, axis=0)
+    live = (stack != GHOST).any(axis=1)
+    classes, inv = (np.unique(stack[live], axis=0, return_inverse=True)
+                    if live.any() else (np.zeros((0, n_bf), dtype=np.int8),
+                                        np.zeros(0, dtype=int)))
+    cls = -np.ones(stack.shape[0], dtype=int)
+    cls[live] = np.asarray(inv).reshape(-1)
+    out, k = {}, 0
+    for key, n in keys:
+        out[key] = tuple(int(c) for c in cls[k:k + n])
+        k += n
+    return classes.astype(np.int8), out
+
+
 def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
-                   partners=None, periodic_ids=None):
+                   partners=None, periodic_ids=None, systems=(), closure=None):
     """Build the STATIC topology of ``mesh`` (numpy, once).
 
     ``nsm`` (optional) supplies the LSQ degree (``resolved_lsq_degree``) and
@@ -814,7 +944,16 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
     input cell of every boundary face, for a mesh that cannot pair its own
     periodic faces (a distributed piece: ``Partition.resolve_periodic``);
     default: paired here, from the whole mesh.  ``periodic_ids``: the seams'
-    vertex identification (:func:`periodic_vertices`) of such a piece."""
+    vertex identification (:func:`periodic_vertices`) of such a piece.
+
+    Boundary closure (ANALYSIS 40), fits of degree >= 2: ``closure`` =
+    ``{key: (n_rows, n_bf) kinds}`` of the row spaces whose fits close at
+    the boundary; default with ``nsm``: :func:`boundary_closure.closure_kinds`
+    of ``nsm`` and ``systems`` (keys ``(owner, "state" |
+    "reconstruction")``).  Equal kind rows share one class;
+    ``lsq_closure_class[key]`` is the class of each row (-1: none, the
+    ghost-sample fit; a key without closure is absent).  Degree 1 keeps the
+    ghost sample (exact for linear data; see the comment below)."""
     if lsq_degree is None:
         lsq_degree = nsm.resolved_lsq_degree() if nsm is not None else 1
     if bcs is None and nsm is not None:
@@ -862,11 +1001,24 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
     bn = g0["face_normals"][:dim, bfaces].T
     bn = bn / np.linalg.norm(bn, axis=1)[:, None]
     ghost_off = 2 * np.sum((bfc0 - centers0[:dim, bowner].T) * bn, axis=1)[:, None] * bn
+    if int(lsq_degree) < 2:
+        # a linear fit has no closure: its gradient is one constant, so a
+        # constraint pins it to the WALL value (first order at the cell
+        # centre), while the D5 ghost as a sample is exact for linear data
+        # already and centred (Neumann on quads: second order; measured,
+        # ANALYSIS 40)
+        closure = {}
+    elif closure is None and nsm is not None and n_bf:
+        from zoomy_core.numerics.boundary_closure import closure_kinds
+        closure = closure_kinds(nsm, systems, branch, bn.T)
+    classes, closure_class = _closure_classes(closure or {}, ~periodic, n_bf)
     mon, nbr, bdy, n_axis, pure_rows = _lsq_stencils(
         n_cells, dim, nl, centers0[:dim].T, lsq_degree, n_inner, bowner,
         cv_ring, bfc0, ghost_off, sampled=~periodic,
-        translations=periodic_ids[1] if periodic.any() else None)
-    plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows)
+        translations=periodic_ids[1] if periodic.any() else None,
+        closure_kinds=classes, normals=bn)
+    plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows,
+                     closure_kinds=classes)
     shift = None
     if periodic.any():
         D = centers0[:dim, nbr].transpose(1, 2, 0) - centers0[:dim].T[:, None, :]
@@ -891,6 +1043,7 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
         lsq_scale_factors=np.asarray(scale_lsq_derivative(mon), dtype=float),
         lsq_grad_cols=grad_cols, lsq_neighbors=nbr,
         lsq_boundary_face_neighbors=bdy, lsq_plan=plan, lsq_shift=shift,
+        lsq_closure_class=closure_class,
         tpfa_faces=tf, tpfa_A=fcells[0, tf], tpfa_B=fcells[1, tf],
         tpfa_boundary_valid=bvalid,
         bc_tags=tags, bc_branch=branch, bc_input_cells=inputs,
@@ -1143,6 +1296,85 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
     return xp.transpose(A, (0, 2, 1))                    # (n_cells, R, M)
 
 
+def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
+    """The constrained LSQ fits of the boundary closure (ANALYSIS 40):
+    ``(n_class, n_cc, R, M)`` tables in the ``lsq_gradQ`` layout, one per
+    closure class and closure cell (``lsq_plan["closure"]``), applied to the
+    SAME samples ``[u_nbr - u_c ; ghost - u_c]``.
+
+    Per (class, cell): minimise |V c - du| over the interior samples and the
+    class's GHOST faces (plain samples at the mirror point), subject to one
+    constraint per DIRICHLET face, ``p(x_foot) = v``, and per NEUMANN face,
+    ``n . grad p(x_foot) = g`` (x_foot = c + d_n n).  With C the constraint
+    rows, P = I - C^+ C (Lawson & Hanson's null-space form, rank-safe):
+    ``c = (V P)^+ du + (I - (V P)^+ V) C^+ e``, exact for every polynomial
+    of the fit's degree when [V; C] has full column rank.  The data are a fixed multiple
+    of the ghost sample: Dirichlet ``e = v - u_c = (ghost - u_c) / 2``,
+    Neumann ``e = g = (ghost - u_c) / (2 d_n)`` (the D5 ghost kernel's
+    ``2 v - Q`` and ``Q + 2 d_n g``), folded into the table.  Offsets are
+    scaled by the cell size (|V|^(1/dim)) for conditioning.  A class that
+    puts no constraint on a cell keeps the base table there."""
+    plan = topo.lsq_plan
+    cl = plan.get("closure")
+    M, w = plan["n_mon"], plan["max_nbr"]
+    b = plan["bdy_idx"].shape[1]
+    if cl is None or not cl["cells"].size:
+        return xp.zeros((0, 0, w + b, M), dtype=cc.dtype)
+    from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
+    dim = topo.dim
+    cells, K = cl["cells"], cl["kinds"]                  # K (n_class, n_cc, b)
+    n_class, n_cc = K.shape[:2]
+    ccT = xp.transpose(cc[:dim])
+    c0 = ccT[cells][:, None, :]
+    dXc = ccT[topo.lsq_neighbors[cells]] - c0            # (n_cc, w, dim)
+    if topo.lsq_shift is not None:
+        dXc = dXc + xp.asarray(topo.lsq_shift[cells], dtype=dXc.dtype)
+    bdy, bmask = plan["bdy_idx"][cells], plan["bdy_mask"][cells] > 0
+    bn = xp.transpose(nrm[:dim, topo.boundary_faces])
+    bn = bn / xp.sqrt(xp.sum(bn * bn, axis=1))[:, None]
+    nb = bn[bdy]                                         # (n_cc, b, dim)
+    dn = xp.sum((fc[topo.boundary_faces, :dim][bdy] - c0) * nb, axis=-1)
+    dn = xp.where(xp.asarray(bmask), dn, 1.0)            # padded slots
+    s = vol[cells] ** (1.0 / dim)                        # (n_cc,)
+    foot = dn[..., None] * nb / s[:, None, None]
+    powers = plan["powers"]
+    Vc = _monomial_columns(xp, dXc / s[:, None, None], powers)   # (n_cc, w, M)
+    Vg = _monomial_columns(xp, 2 * foot, powers)                 # (n_cc, b, M)
+    Vd = _monomial_columns(xp, foot, powers)
+    Vn = _normal_derivative_columns(xp, foot, nb, powers)
+    dt = Vc.dtype
+    isG = xp.asarray((K == GHOST)[..., None], dtype=dt)          # (k, n_cc, b, 1)
+    isD = xp.asarray((K == DIRICHLET)[..., None], dtype=dt)
+    isN = xp.asarray((K == NEUMANN)[..., None], dtype=dt)
+    V = xp.concatenate([xp.broadcast_to(Vc[None], (n_class,) + Vc.shape),
+                        isG * Vg[None]], axis=2)                 # (k, n_cc, w+b, M)
+    C = isD * Vd[None] + isN * Vn[None]                          # (k, n_cc, b, M)
+    N = n_class * n_cc
+    V = xp.reshape(V, (N, w + b, M))
+    C = xp.reshape(C, (N, b, M))
+    I = xp.eye(M, dtype=dt)
+    Cp = xp.linalg.pinv(C, rtol=_LSQ_PINV_RTOL)                  # (N, M, b)
+    Qc = xp.matmul(Cp, C)                                        # onto row(C)
+    # (V P)^+ as the first block of pinv([V P; C^+ C]): the projector rows
+    # lift the null directions of V P (exact zeros where the constraints
+    # fix every coefficient) to 1, so the relative cut-off sees O(1)
+    X = xp.concatenate([xp.matmul(V, I - Qc), Qc], axis=1)
+    Ab = xp.linalg.pinv(X, rtol=_LSQ_PINV_RTOL)[:, :, :w + b]   # (N, M, w+b)
+    Bb = xp.matmul(I - xp.matmul(Ab, V), Cp)                     # (N, M, b)
+    fac = (isD[..., 0] * 0.5
+           + isN[..., 0] * (s[:, None] / (2.0 * dn))[None])      # (k, n_cc, b)
+    fac = xp.reshape(fac, (N, 1, b))
+    Tb = xp.where(xp.reshape(xp.asarray(K == GHOST), (N, 1, b)),
+                  Ab[:, :, w:], Bb * fac)
+    T = xp.concatenate([Ab[:, :, :w], Tb], axis=2)               # (N, M, R)
+    deg = np.asarray([sum(p) for p in powers], dtype=float)
+    unscale = s[:, None] ** (-deg)[None, :]                      # (n_cc, M)
+    T = xp.reshape(T, (n_class, n_cc, M, w + b)) * unscale[None, :, :, None]
+    T = xp.transpose(T, (0, 1, 3, 2))                            # (k, n_cc, R, M)
+    return xp.where(xp.asarray(cl["active"])[..., None, None], T,
+                    A_base[cells][None])
+
+
 def compute_geometry(topo: MeshTopology, X, *, lsq=True):
     """All template geometry from the node coordinates ``X`` ``(dim,
     n_vertices)`` — numpy or jax.numpy, decided by ``X`` itself.
@@ -1225,10 +1457,41 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
 
     if lsq:
         g["lsq_gradQ"] = _lsq_matrices(xp, topo, cc, fcT, nrm)
+        g["lsq_closure"] = _lsq_closure_matrices(xp, topo, cc, fcT, nrm, vol,
+                                                 g["lsq_gradQ"])
     return g
 
 
-def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost):
+def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
+    """The boundary closure of the LSQ derivatives (ANALYSIS 40): ``(rows,
+    D)`` -- ``rows`` the rows of ``U`` with a closure class (``classes``, one
+    per row, -1 none: e.g. ``topo.lsq_closure_class[key]``), ``D``
+    ``(len(rows), n_cc, n_mon)`` their scaled derivatives at the closure
+    cells ``topo.lsq_plan["closure"]["cells"]``, from the samples of
+    :func:`lsq_derivatives` (``U_ghost``: the D5 GHOSTS) and the class tables
+    ``table`` (``geom["lsq_closure"]``).  ``([], None)`` without closure."""
+    xp = _xp_of(U)
+    cl = topo.lsq_plan.get("closure")
+    rows = [v for v, k in enumerate(classes) if k >= 0]
+    if cl is None or not rows or not cl["cells"].size:
+        return [], None
+    cells = cl["cells"]
+    r = np.asarray(rows)
+    nbr = topo.lsq_neighbors[cells]
+    bdy = topo.lsq_boundary_face_neighbors[cells]
+    Ur = U[r]
+    uc = Ur[:, cells][:, :, None]
+    parts = [Ur[:, nbr] - uc]
+    if bdy.shape[1]:
+        ub = U_ghost[r][:, np.maximum(bdy, 0)]
+        parts.append(xp.where(xp.asarray(bdy >= 0)[None], ub - uc, 0.0))
+    delta = xp.concatenate(parts, axis=2)                # (n_r, n_cc, R)
+    T = table[np.asarray([classes[v] for v in rows])]    # (n_r, n_cc, R, M)
+    coeffs = xp.einsum("vcr,vcrm->vcm", delta, T)
+    return rows, xp.asarray(topo.lsq_scale_factors, dtype=coeffs.dtype) * coeffs
+
+
+def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
     """LSQ derivative estimates of the fields ``U`` ``(n_v, n_cells)`` with the
     D5 GHOST values ``U_ghost`` ``(n_v, n_bf)`` at the boundary-face virtual
     points: ``(n_v, n_cells, n_mon)`` scaled to derivatives (the
@@ -1236,7 +1499,9 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost):
     over fields and cells).  ``U`` must cover every cell the stencil reads
     (inner cells; ghost rows of ``lsq_gradQ`` are not needed for inner
     gradients — pass ``U`` with ``n_inner_cells`` columns and only inner rows
-    are returned when ``U`` is that short)."""
+    are returned when ``U`` is that short).  ``classes`` (one per row of
+    ``U``): rows with a closure class take the boundary closure's
+    constrained fit at the closure cells (:func:`lsq_closure_derivatives`)."""
     xp = _xp_of(U)
     A = geom["lsq_gradQ"]
     n = U.shape[1]
@@ -1252,15 +1517,27 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost):
     delta = xp.concatenate(parts, axis=2)                # (n_v, n, R)
     coeffs = xp.matmul(xp.transpose(A[:n], (0, 2, 1))[None],
                        delta[..., None])[..., 0]          # (n_v, n, M)
-    return xp.asarray(topo.lsq_scale_factors, dtype=coeffs.dtype) * coeffs
+    D = xp.asarray(topo.lsq_scale_factors, dtype=coeffs.dtype) * coeffs
+    if classes is None:
+        return D
+    rows, Dc = lsq_closure_derivatives(topo, geom["lsq_closure"], U, U_ghost,
+                                       classes)
+    if not rows:
+        return D
+    cells = topo.lsq_plan["closure"]["cells"]
+    if xp is np:
+        D = D.copy()
+        D[np.ix_(rows, cells)] = Dc
+        return D
+    return D.at[np.asarray(rows)[:, None], cells[None, :]].set(Dc)
 
 
-def lsq_gradient(topo: MeshTopology, geom, U, U_ghost):
+def lsq_gradient(topo: MeshTopology, geom, U, U_ghost, classes=None):
     """First derivatives ``(n_v, dim, n_cells)`` (see :func:`lsq_derivatives`)."""
     xp = _xp_of(U)
-    d = lsq_derivatives(topo, geom, U, U_ghost)
+    d = lsq_derivatives(topo, geom, U, U_ghost, classes)
     return xp.transpose(d[:, :, topo.lsq_grad_cols], (0, 2, 1))
 
 
 __all__ = ["MeshTopology", "build_topology", "compute_geometry", "periodic_vertices",
-           "lsq_derivatives", "lsq_gradient"]
+           "lsq_derivatives", "lsq_gradient", "lsq_closure_derivatives"]

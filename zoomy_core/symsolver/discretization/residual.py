@@ -16,7 +16,7 @@ from zoomy_core.symsolver.core import Cond, Root, unpack
 from zoomy_core.symsolver.discretization.reconstruction import reconstruct
 from zoomy_core.symsolver.discretization.time import SSP_RK
 from zoomy_core.symsolver.vocabulary import (
-    boundary_traces, cells, clean_round_off, derivative_aux,
+    boundary_ghosts, boundary_traces, cells, clean_round_off, derivative_aux,
     diffusion, divergence, edge_source, face_aux, faces, halo,
     implicit_diffusion, inadmissible, reduce_any, select)
 
@@ -123,11 +123,34 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
 
 
 def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
-    """Pointwise aux, then the derivative (mesh-gradient) aux."""
+    """Pointwise aux, then the derivative (mesh-gradient) aux.  The
+    derivatives of state rows see the boundary conditions: their fits take
+    the BC GHOSTS at ``time`` (``nsm.call.boundary_ghost_state``), so a row
+    the BC fixes (Dirichlet- / Neumann-type) closes a fit of degree >= 2 by
+    its constraint at the foot point (ANALYSIS 40); derivatives of aux
+    functions, and a system without BCs, keep the zero normal gradient."""
     Qaux = stage_aux(nsm, Q, Qaux, p, time, dt, mesh)
-    if nsm.call.aux_derivatives is not None:
-        Qaux = halo(derivative_aux(nsm.call.aux_derivatives, Q, Qaux, mesh), mesh)
-    return Qaux
+    spec = nsm.call.aux_derivatives
+    if spec is None:
+        return Qaux
+    rows, functions = derivative_rows(nsm)
+    ghost = nsm.call.boundary_ghost_state
+    if functions or ghost is None:
+        Qaux = derivative_aux(spec, Q, Qaux, mesh)
+    if rows and ghost is not None:
+        Qg = boundary_ghosts(ghost, Q, Qaux, p, time, mesh)
+        Qaux = derivative_aux(spec, Q, Qaux, mesh, Qg, rows)
+    return halo(Qaux, mesh)
+
+
+def derivative_rows(nsm):
+    """``(rows, functions)``: the state rows the derivative aux of ``nsm``
+    differentiates (static tuple), and whether it differentiates aux
+    functions too."""
+    spec = [e for e in nsm.aux_derivatives if e["kind"] == "derivative"]
+    rows = tuple(sorted({int(e["state_index"]) for e in spec
+                         if e["target_kind"] == "state"}))
+    return rows, any(e["target_kind"] != "state" for e in spec)
 
 
 def post_step(nsm, Q, Qaux, p, time, dt, mesh):
