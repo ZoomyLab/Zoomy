@@ -2,31 +2,32 @@
 
     python matrix.py run BACKEND CASE [CONFIG] [--force]   # runs -> store/
     python matrix.py table                                 # store -> table.md
+    python matrix.py run --tier large CASE [ARGS]          # large.py (never by default)
 
-BACKEND: jax foam amrex.  CASE: C1 C2 C3 C4 C5 C8 (C6 conservation, C7
-parallel = serial and C9 GPU = CPU are evaluations of these runs).
-CONFIG: serial (default) mpi2 mpi4 gpu1.  A run is skipped if its result is
-in the store (--force reruns).
+BACKEND: jax foam amrex.  CASE: C1 ... C26 (cases.py).  CONFIG: serial
+(default) mpi2 mpi4 gpu1 gpu2 (= gpu-mpi).  A run in the store is skipped
+(--force reruns).  A run that raises NotImplementedError is stored as
+"unsupported", any other exception as a failure.
 """
 import json
 import os
 import subprocess
 import sys
 import time as clock
-from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
-import common as C  # noqa: E402  (x64)
-from cases import CASES, prepare  # noqa: E402
+import common  # noqa: E402,F401  (x64)
+from cases import CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, prepare  # noqa: E402
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
 WORK = Path(os.environ.get("MATRIX_WORK", HERE / "work"))
+CONFIGS = ("serial", "mpi2", "mpi4", "gpu1", "gpu2")
+HEAD = {"gpu2": "gpu-mpi"}
 
 
 def path(backend, config, case, key):
@@ -49,82 +50,82 @@ def provenance():
     return json.dumps(out)
 
 
+def _rank0():
+    if "OMPI_COMM_WORLD_RANK" in os.environ or "PMI_RANK" in os.environ:
+        from mpi4py import MPI
+        return MPI.COMM_WORLD.Get_rank() == 0
+    return True
+
+
 def run(backend, case, config="serial", force=False):
     b = BACKENDS[backend]()
-    if config not in b.configs:
-        raise SystemExit(f"{backend}: no config {config} (has {b.configs})")
-    cmd = None if os.environ.get("MATRIX_CHILD") else b.launch(config)
-    if cmd:                                   # re-run under mpiexec / another env
+    runs = [r for r in CASES[case][1] if backend in r.backends and config in r.configs]
+    if config not in b.configs or not runs:
+        print(f"{backend} {config} {case}: n/a")
+        return
+    child = os.environ.get("MATRIX_CHILD")
+    cmd = None if child else b.launch(config)
+    if cmd and any(r.launch for r in runs):     # re-run under mpiexec / another env
         env = dict(os.environ, MATRIX_CHILD="1")
         argv = cmd + [__file__, "run", backend, case, config] + (["--force"] if force else [])
-        raise SystemExit(subprocess.run(argv, env=env).returncode)
-    for r in CASES[case][1]:
-        if backend not in r.backends or config not in r.configs:
+        subprocess.run(argv, env=env)
+    t_start, longest = clock.perf_counter(), 0.0
+    budget = float(os.environ.get("MATRIX_BUDGET", "inf"))   # s per command (env.sh: 285)
+    for r in runs:
+        if (cmd and r.launch) or (child and not r.launch):
             continue
+        if clock.perf_counter() - t_start + longest > budget:
+            print(f"{backend} {config} {case}: budget reached, rerun to continue", flush=True)
+            break
         p = path(backend, config, case, r.key)
         if p.exists() and not force:
             continue
-        mesh, systems, Q0, names = prepare(r)
+        work = WORK / backend / config / case / r.key
         t0 = clock.perf_counter()
-        err = p.with_suffix(".err")
+        err, uns = p.with_suffix(".err"), p.with_suffix(".unsupported")
         try:
-            out = b.run(r, mesh, systems, Q0, config, WORK / backend / config / case / r.key)
+            if r.custom is not None:
+                out = r.custom(backend, config, work)
+            else:
+                mesh, systems, Q0, names = prepare(r)
+                out = b.run(r, mesh, systems, Q0, config, work)
         except Exception as e:                # a backend failure is a result
-            err.parent.mkdir(parents=True, exist_ok=True)
             msg = f"{type(e).__name__}: {e}"
             first = [ln for ln in msg.splitlines() if "error:" in ln][:3]
-            err.write_text("\n".join(first + ["..."]) + "\n" + msg[-3000:])
-            print(f"{backend} {config} {case} {r.key}: FAILED ({err})", flush=True)
+            f = uns if isinstance(e, NotImplementedError) else err
+            if _rank0():
+                p.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text("\n".join(first + ["..."]) + "\n" + msg[-3000:])
+            print(f"{backend} {config} {case} {r.key}: {f.suffix[1:].upper()} ({msg[:150]})",
+                  flush=True)
+            continue
+        wall = clock.perf_counter() - t0
+        longest = max(longest, wall)
+        if out is None or not _rank0():      # non-root MPI rank
             continue
         err.unlink(missing_ok=True)
-        wall = clock.perf_counter() - t0
-        if out is None:                       # non-root MPI rank
-            continue
+        uns.unlink(missing_ok=True)
         p.parent.mkdir(parents=True, exist_ok=True)
+        if r.custom is not None:
+            np.savez(p, metrics=json.dumps(out), wall=wall, lib=provenance())
+            print(f"{backend} {config} {case} {r.key}: {out} [{wall:.1f}s]", flush=True)
+            continue
         nc = Q0.shape[1]
         np.savez(p, t=out[0], Q=out[1], Q0=Q0, names=np.array(names), wall=wall, lib=provenance(),
-                 xc=np.asarray(mesh.cell_centers)[:2, :nc],
+                 xc=np.asarray(mesh.cell_centers)[:3, :nc],
                  vol=np.asarray(mesh.cell_volumes)[:nc])
         print(f"{backend} {config} {case} {r.key}: t={out[0]:.6g} [{wall:.1f}s]", flush=True)
 
 
-# ── evaluation ──────────────────────────────────────────────────────────────
-CONFIGS = ("serial", "mpi2", "mpi4", "gpu1")
-CLOSED = ("C1", "C2", "C3", "C5")            # no boundary flux: mass exact
-# check -> (op, threshold, source).  observed = ~2x the worst observed value.
-from zoomy_core.solver.constants import ELLIPTIC_RTOL  # noqa: E402
-TH = {
-    "C8 parallel vs serial (max rel)": ("<=", 10 * ELLIPTIC_RTOL, "tolerance (10 x pressure rtol, over the steps)"),
-    "C8 GPU vs CPU (max rel)": ("<=", 10 * ELLIPTIC_RTOL, "tolerance (10 x pressure rtol, over the steps)"),
-    "C8 L1 vs JAX (rel)": ("<=", 3e-2, "observed (foam 1.6e-2)"),
-    "C5 L1 vs JAX (rel)": ("<=", 3.5e-2, "observed (foam 1.7e-2)"),
-    "sub O1 order 100->200": (">=", 0.75, "observed 0.86 (theory 1)"),
-    "sub O2 order 100->200": (">=", 1.8, "theory 2 (observed 2.8)"),
-    "trans O1 order 100->200": (">=", 0.75, "observed 0.86 (theory 1)"),
-    "trans O2 order 100->200": (">=", 0.9, "observed 1.12 (sonic point)"),
-    "sub O1 L1(h) n200": ("<=", 7.5e-3, "observed 3.7e-3"),
-    "sub O2 L1(h) n200": ("<=", 1.1e-4, "observed 5.4e-5"),
-    "trans O1 L1(h) n200": ("<=", 6e-2, "observed 3.1e-2"),
-    "trans O2 L1(h) n200": ("<=", 3.1e-4, "observed 1.6e-4"),
-    "sub O1 max|q/q_in - 1| n200": ("<=", 1.9e-2, "observed 9.5e-3"),
-    "sub O2 max|q/q_in - 1| n200": ("<=", 1.7e-3, "observed 8.3e-4"),
-    "trans O1 max|q/q_in - 1| n200": ("<=", 7e-2, "observed 3.5e-2"),
-    "trans O2 max|q/q_in - 1| n200": ("<=", 9.5e-4, "observed 4.7e-4"),
-    "O1 order 80->160": (">=", 0.75, "observed: JAX 0.82, pre-asymptotic (spec 0.9)"),
-    "O2 order 80->160": (">=", 1.8, "spec (theory 2)"),
-    "L1 order 40->80": (">=", 0.6, "spec"),
-    "L1 vs JAX n80 (rel)": ("<=", 1.5e-3, "observed (foam 7.1e-4)"),
-    "max|u| after 100 steps": ("<=", 1e-12, "spec (well-balanced: round-off)"),
-    "h_min": (">=", 0.0, "theory (positivity)"),
-    "mass change (rel)": ("<=", 1e-12, "tolerance (round-off)"),
-    "parallel vs serial (max rel)": ("<=", 1e-12, "tolerance (round-off)"),
-    "GPU vs CPU (max rel)": ("<=", 1e-12, "tolerance (round-off)"),
-}
+# ── measures ────────────────────────────────────────────────────────────────
+def names(d):
+    return [str(n) for n in d["names"]]
 
 
-def _rows(d, skip_bed=True):
-    names = [str(n) for n in d["names"]]
-    return [i for i, n in enumerate(names) if not (skip_bed and n == "b")]
+def h(d):
+    """The depth (SME) or the density (Euler)."""
+    n = names(d)
+    return d["Q"][n.index("h") if "h" in n else n.index("rho")]
 
 
 def relmax(a, b):
@@ -132,38 +133,40 @@ def relmax(a, b):
 
 
 def l1rel(a, b):
-    i = _rows(b)
+    i = [k for k, n in enumerate(names(b)) if n != "b"]
     return float(np.abs(a["Q"][i] - b["Q"][i]).sum() / np.abs(b["Q"][i]).sum())
 
 
-def h(d):
-    return d["Q"][[str(n) for n in d["names"]].index("h")]
-
-
-def mass(d):
-    i = [str(n) for n in d["names"]].index("h")
+def mass(d, row=None):
+    n = names(d)
+    i = row if row is not None else (n.index("h") if "h" in n else n.index("rho"))
     m0 = float((d["Q0"][i] * d["vol"]).sum())
     return abs(float((d["Q"][i] * d["vol"]).sum()) - m0) / abs(m0)
 
 
-def restrict(fine, coarse):
-    """The fine grid's h averaged onto the coarse grid's cells."""
-    idx = np.zeros(fine["xc"].shape[1], dtype=int)
-    cidx = np.zeros(coarse["xc"].shape[1], dtype=int)
-    stride = 1
-    for ax in range(2):
-        u = np.unique(np.round(coarse["xc"][ax], 9))
+def _grid(xc_grid, xc):
+    """Cell index of points ``xc`` on the Cartesian grid of centres ``xc_grid``."""
+    idx, stride = np.zeros(xc.shape[1], dtype=int), 1
+    for ax in range(min(xc_grid.shape[0], xc.shape[0])):
+        u = np.unique(np.round(xc_grid[ax], 9))
         d = u[1] - u[0] if len(u) > 1 else 1.0
-        f = lambda x: np.clip(np.floor((x - u[0] + d / 2) / d), 0, len(u) - 1).astype(int)  # noqa: E731
-        idx += stride * f(fine["xc"][ax])
-        cidx += stride * f(coarse["xc"][ax])
+        idx += stride * np.clip(np.floor((xc[ax] - u[0] + d / 2) / d), 0, len(u) - 1).astype(int)
         stride *= len(u)
-    avg = np.bincount(idx, h(fine), stride) / np.bincount(idx, None, stride)
-    return avg[cidx]
+    return idx, stride
+
+
+def cartesian(d):
+    return len(np.unique(_grid(d["xc"], d["xc"])[0])) == d["xc"].shape[1]
 
 
 def err_ref(d, ref):
-    return float(np.abs(h(d) - restrict(ref, d)).mean())
+    """L1(h) vs a fine Cartesian reference: averaged onto d's grid, or (d on
+    triangles) sampled at d's cell centres."""
+    if cartesian(d):
+        idx, n = _grid(d["xc"], ref["xc"])
+        avg = np.bincount(idx, h(ref), n) / np.bincount(idx, None, n)
+        return float(np.abs(h(d) - avg[_grid(d["xc"], d["xc"])[0]]).mean())
+    return float(np.abs(h(d) - h(ref)[_grid(ref["xc"], d["xc"])[0]]).mean())
 
 
 def err_exact(d, variant):
@@ -171,150 +174,400 @@ def err_exact(d, variant):
     return float(np.abs(h(d) - bernoulli(variant, d["xc"][0])).mean())
 
 
-def order(e_coarse, e_fine, n_fine=None, n_ref=None):
-    """Observed order between two grids (refinement 2).  Against a fine
-    reference (n_ref) the errors are e_N = C (N^-p - n_ref^-p); p solves
-    e_coarse / e_fine = (2^p - r) / (1 - r), r = (n_fine / n_ref)^p."""
-    if not e_fine > 0:
-        return float("inf")
-    q = e_coarse / e_fine
-    if n_ref is None:
-        return float(np.log2(q))
-    lo, hi = 0.0, 8.0
-    for _ in range(100):
-        p = 0.5 * (lo + hi)
-        r = (n_fine / n_ref) ** p
-        lo, hi = (p, hi) if (2 ** p - r) / (1 - r) < q else (lo, p)
-    return p
+def order(e_coarse, e_fine, ratio=2.0):
+    return float(np.log(e_coarse / e_fine) / np.log(ratio)) if e_fine > 0 else float("inf")
+
+
+def metrics(d):
+    return json.loads(str(d["metrics"]))
+
+
+# ── checks ──────────────────────────────────────────────────────────────────
+# A threshold is (op, value, source); source: theory | tolerance | spec |
+# observed (about 2x the worst value seen, README).  None: information.
+RO = ("<=", 1e-12, "tolerance (round-off)")
+PRESS = ("<=", 1e-9, "tolerance (10 x pressure rtol 1e-10, over the steps)")
+TH = {
+    "C1 O1": (">=", 0.6, "observed 0.71 (pre-asymptotic, theory 1)"),
+    "C1 O2": (">=", 1.8, "theory 2"),
+    "C11 O1": (">=", 0.9, "theory 1"),
+    "C11 O2": (">=", 1.5, "observed 1.67-1.70 on JAX and foam (1-D minmod; theory 2)"),
+    "C12 O1": (">=", 0.5, "observed 0.65 (coarse triangles, theory 1)"),
+    "C12 O2": (">=", 1.4, "observed 1.69 (coarse triangles, theory 2)"),
+    "C2": (">=", 0.6, "spec"),
+    "C2 foam": ("<=", 1.5e-3, "observed (foam 7.1e-4)"),
+    "C3": ("<=", 1e-12, "spec (well-balanced: round-off)"),
+    "C4 order": {("sub", 1): (">=", 0.45, "observed 0.58, pre-asymptotic (theory 1)"),
+                 ("sub", 2): (">=", 1.8, "theory 2"),
+                 ("trans", 1): (">=", 0.55, "observed 0.71, pre-asymptotic (theory 1)"),
+                 ("trans", 2): (">=", 1.8, "theory 2")},
+    "C5 foam": ("<=", 3.5e-2, "observed (foam 1.7e-2)"),
+    "C5 amrex": ("<=", 1e-9, "observed 6e-10 (wet/dry eigenvalue cluster)"),
+    "C8 foam": ("<=", 3e-2, "observed (foam 1.6e-2)"),
+    "C10": {(1, 1): (">=", 0.8, "theory 1"), (2, 1): (">=", 0.8, "theory 1 (time)"),
+            (2, 2): (">=", 1.5, "observed (theory 2, minmod)")},
+    "C14 O1": (">=", 0.5, "observed 0.63 (pre-asymptotic, theory 1)"),
+    "C14 O2": (">=", 0.8, "theory 1 (Lie splitting)"),
+    "shrink": (">=", 0.5, "observed: foam-JAX difference shrinks under refinement"),
+    "shrink tri": (">=", 0.25, "observed 0.33-0.39 (O1 triangles: both converge slowly)"),
+    "newton": ("<=", 1e-8, "tolerance (Newton 1e-10 vs GMRES 1e-10, over the steps)"),
+    "fd": ("<=", 1e-5, "tolerance (central FD, eps 1e-3..1e-5)"),
+    "rev": ("<=", 1e-10, "tolerance (checkpointed reverse vs forward)"),
+    "couple": ("<=", 1e-14, "tolerance (gate 26: coupled = single domain at O1)"),
+}
+CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23")
+TH.update({
+    "C18 L1": {1: ("<=", 4.2e-2, "observed 2.09e-2 (3-D worker)"), 2: ("<=", 1.0e-2, "observed 5.13e-3")},
+    "C18 order": {1: (">=", 0.45, "observed 0.54 (discontinuous: theory <= 1)"),
+                  2: (">=", 0.8, "observed 0.90 (discontinuous: theory <= 1)")},
+    "C19": {"o1": (">=", 0.75, "observed 0.85, pre-asymptotic"), "o2none": (">=", 1.8, "theory 2"),
+            "o2minmod": (">=", 1.8, "theory 2 (observed 2.53)")},
+    "C24 wave": {"o1": (">=", 0.85, "observed 0.96 (theory 1)"), "o2none": (">=", 1.8, "theory 2"),
+                 "o2minmod": (">=", 1.7, "observed 1.83")},
+    "fd3": ("<=", 1e-6, "observed 4.4e-8 (best eps of 1e-3..1e-6)"),
+    "C23": (">=", 1.5, "observed 2.11 (different stencils, converging)"),
+})
+
+
+def euler_checks(add, b, g, J):
+    """C18-C24: compressible Euler (exact Riemann / smooth wave, symmetry,
+    conservation, cross-backend)."""
+    import euler_common as E
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+
+    def sod_err(d, axis):
+        rho_ex = E.exact_riemann(E.SOD[0], E.SOD[1], (d["xc"][axis] - 0.5) / float(d["t"]))[0]
+        return float(np.abs(d["Q"][0] - rho_ex).mean())
+
+    def profile(d, axis):
+        key = np.lexsort(tuple(np.round(d["xc"][k], 9) for k in range(3) if k != axis)
+                         + (np.round(d["xc"][axis], 9),))
+        q = d["Q"][:, key].copy()
+        q[[1, 1 + axis]] = q[[1 + axis, 1]]          # the axis momentum first
+        return q
+    for case, dim, ns, thr_L1 in (("C18", 3, (50, 100), True), ("C24", 2, (50, 100), False)):
+        pre = "sod_" if case == "C24" else ""
+        for o in (1, 2):
+            e = [g(case, f"{pre}o{o}_n{n}_ax0") for n in ns]
+            if ok(*e):
+                es = [sod_err(x, 0) for x in e]
+                add(case, f"Sod O{o} order {ns[0]}->{ns[1]}", b, "serial", order(*es),
+                    TH["C18 order"][o], "L1(rho) " + " / ".join(f"{x:.2e}" for x in es))
+                add(case, f"Sod O{o} L1(rho) n{ns[1]}", b, "serial", es[1],
+                    TH["C18 L1"][o] if thr_L1 else None, "")
+            runs = [g(case, f"{pre}o{o}_n{ns[1]}_ax{a}") for a in range(dim)]
+            if ok(*runs):
+                ps = [profile(x, a) for a, x in enumerate(runs)]
+                add(case, f"Sod O{o} x / y / z profiles (max)", b, "serial",
+                    max(float(np.abs(p - ps[0]).max()) for p in ps[1:]), RO, "")
+                add(case, f"Sod O{o} max|u_perp|", b, "serial",
+                    max(float(np.abs(np.delete(x["Q"][1:1 + dim], a, 0) / x["Q"][0]).max())
+                        for a, x in enumerate(runs)), RO, "")
+        ns_w = (8, 16, 24) if dim == 3 else (16, 32, 64)
+        wcase, thw = ("C19", TH["C19"]) if dim == 3 else ("C24", TH["C24 wave"])
+        for v in ("o1", "o2none", "o2minmod"):
+            e = [g(wcase, f"{v}_n{n}") for n in ns_w]
+            if ok(*e):
+                vel = (1.0, 0.5, 0.25)[:dim]
+                es = [float(np.abs(x["Q"][0] - E.wave_exact(x["xc"], float(x["t"]), vel)).mean())
+                      for x in e]
+                add(wcase, f"wave {v} order {ns_w[1]}->{ns_w[2]}", b, "serial",
+                    order(es[1], es[2], ns_w[2] / ns_w[1]), thw[v],
+                    "L1(rho) " + " / ".join(f"{x:.2e}" for x in es))
+                rho, u, pr = E.primitive(e[-1]["Q"])
+                add(wcase, f"wave {v} max|u - u0|, |p - 1|", b, "serial",
+                    max(float(np.abs(u - np.asarray(vel)[:, None]).max()), float(np.abs(pr - 1).max())),
+                    RO, "contact: velocity and pressure constant")
+    for o in (1, 2):                            # C20: conservation and symmetry
+        d = g("C20", f"o{o}")
+        if d is None:
+            continue
+        add("C20", f"O{o} energy change (rel)", b, "serial", mass(d, -1), RO, "")
+        n = int(round(d["xc"].shape[1] ** (1 / 3)))
+        ijk = np.rint(d["xc"] * n - 0.5).astype(int)
+        lin = lambda a: (a[0] * n + a[1]) * n + a[2]   # noqa: E731
+        pos = np.empty(n ** 3, dtype=int)
+        pos[lin(ijk)] = np.arange(d["Q"].shape[1])
+        imgs = ((n - 1 - ijk[0], ijk[1], ijk[2]), (ijk[0], n - 1 - ijk[1], ijk[2]),
+                (ijk[0], ijk[1], n - 1 - ijk[2]), (ijk[1], ijk[0], ijk[2]), (ijk[2], ijk[1], ijk[0]))
+        sym = max(float(np.abs(d["Q"][r] - d["Q"][r][pos[lin(np.asarray(im))]]).max())
+                  for im in imgs for r in (0, -1)) / float(np.abs(d["Q"]).max())
+        add("C20", f"O{o} mirror / permutation symmetry (max rel)", b, "serial", sym, RO, "")
+    d, j = g("C26", "visc"), J("C26", "visc")
+    if b != "jax" and ok(d, j):                 # C26: implicit diffusion vs JAX
+        if b == "amrex":
+            add("C26", "max rel vs JAX", b, "serial", relmax(d, j),
+                ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"), "")
+        else:
+            add("C26", "L1 rel vs JAX", b, "serial", l1rel(d, j), TH.get("C26 foam"), "")
+    if b != "jax":                              # C23: cross-backend
+        for n in (8, 16, 24):
+            if ok(g("C23", f"o1_n{n}"), J("C23", f"o1_n{n}")):
+                add("C23", f"O1 n{n} max rel vs JAX", b, "serial",
+                    relmax(g("C23", f"o1_n{n}"), J("C23", f"o1_n{n}")), RO, "same stencil")
+        d = [(g("C23", f"o2_n{n}"), J("C23", f"o2_n{n}")) for n in (16, 24)]
+        if b == "amrex" and all(ok(*x) for x in d):
+            add("C23", "O2 max rel vs JAX", b, "serial", max(relmax(*x) for x in d), RO, "")
+        elif all(ok(*x) for x in d):
+            dl = [float(np.abs(a["Q"] - j["Q"]).mean()) for a, j in d]
+            add("C23", "O2 L1|backend - JAX| order 16->24", b, "serial", order(*dl, 1.5),
+                TH["C23"], " / ".join(f"{x:.2e}" for x in dl))
+    for c in CONFIGS:                           # C22: AD
+        for k in ("o1_dt", "o1_adaptive", "o2_dt"):
+            f, r = g("C22", f"{k}_fwd", c), g("C22", f"{k}_rev", c)
+            if f is not None:
+                add("C22", f"{k} |FD - jvp| (rel)", b, c, metrics(f)["fd_rel"], TH["fd3"], "")
+            if ok(f, r):
+                fw = metrics(f)["fwd"]
+                add("C22", f"{k} |rev - jvp| (rel)", b, c, abs(metrics(r)["rev"] - fw) / abs(fw), RO, "")
 
 
 def measure():
-    """[(case, check, backend, config, value, note)] from the store."""
-    out, B = [], tuple(BACKENDS)
-    for e in sorted(STORE.glob("*/*/*/*.err")):     # runs that raised
-        b, c, case = e.parts[-4:-1]
-        first = e.read_text().splitlines()[0]
-        out.append((case, f"{e.stem} runs", b, c, float("nan"), f"{e}: {first[:200]}"))
-    get = lambda b, c, case, k: load(b, c, case, k)  # noqa: E731
-    ref1 = get("jax", "mpi8", "C1", "ref_n320")
-    ref2 = get("jax", "mpi8", "C2", "ref_n320")
-    for b in B:
-        s = lambda case, k: get(b, "serial", case, k)  # noqa: E731
-        for o in (1, 2):                      # C1
-            e = [s("C1", f"o{o}_n{n}") for n in (40, 80, 160)]
-            if ref1 is not None and all(x is not None for x in e):
-                es = [err_ref(x, ref1) for x in e]
-                out.append(("C1", f"O{o} order 80->160", b, "serial", order(es[1], es[2]),
-                            "L1(h) " + " / ".join(f"{x:.2e}" for x in es)
-                            + (f"; corrected for the reference's error {order(es[1], es[2], 160, 320):.2f}"
-                               if o == 2 else "")))
-            d, j = s("C1", f"o{o}_n80"), get("jax", "serial", "C1", f"o{o}_n80")
-            if b != "jax" and d is not None and j is not None:
-                out.append(("C1", f"O{o} n80 max rel vs JAX (info)", b, "serial", relmax(d, j), ""))
-        e = [s("C2", f"n{n}") for n in (40, 80)]  # C2
-        if ref2 is not None and all(x is not None for x in e):
-            es = [err_ref(x, ref2) for x in e]
-            out.append(("C2", "L1 order 40->80", b, "serial", order(*es),
-                        "L1(h) " + " / ".join(f"{x:.2e}" for x in es)
-                        + f"; corrected for the reference's error {order(*es, 80, 320):.2f}"))
-        if b != "jax" and e[1] is not None and s("C2", "n80") is not None:
-            j = get("jax", "serial", "C2", "n80")
-            if j is not None:
-                out.append(("C2", "L1 vs JAX n80 (rel)", b, "serial", l1rel(e[1], j), ""))
+    """[(case, check, backend, config, value, threshold, note)]."""
+    out = []
+    add = lambda *a: out.append(a)  # noqa: E731
+    for f in sorted(STORE.glob("*/*/*/*.err")) + sorted(STORE.glob("*/*/*/*.unsupported")):
+        b, c, case = f.parts[-4:-1]
+        first = f.read_text().splitlines()[0][:160]
+        if f.suffix == ".err":
+            add(case, f"{f.stem} runs", b, c, float("nan"), ("<=", 0, "the run completes"),
+                f"{f.relative_to(STORE)}: {first}")
+        else:
+            add(case, f"{f.stem} runs", b, c, "unsupported", None,
+                f"{f.relative_to(STORE)}: {first}")
+    for case, (_, runs) in CASES.items():      # whole backends without the case
+        for b in BACKENDS:
+            if runs and not any(b in r.backends for r in runs):
+                add(case, "runs", b, "serial", "n/a", None, "")
+    J = lambda case, k, c="serial": load("jax", c, case, k)  # noqa: E731
+    for b in BACKENDS:
+        g = lambda case, k, c="serial", b=b: load(b, c, case, k)  # noqa: E731
+        ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+
+        def conv(case, label, keys, err, th, ns):
+            e = [g(case, k) for k in keys]
+            if ok(*e):
+                es = [err(x) for x in e]
+                add(case, f"{label} order {ns[-2]}->{ns[-1]}", b, "serial", order(es[-2], es[-1]),
+                    th, "L1(h) " + " / ".join(f"{x:.2e}" for x in es))
+            return e
+
+        def cross(case, label, keys, ns, tri=False, tol=RO):
+            """AMReX = JAX (round-off); foam O1 on quads = JAX (the same
+            stencil); otherwise the foam - JAX difference shrinks."""
+            d = [(g(case, k), J(case, k)) for k in keys]
+            if b == "jax" or not all(ok(*x) for x in d):
+                return
+            if b == "amrex" or ("O1" in label and not tri):
+                add(case, f"{label} max rel vs JAX".strip(), b, "serial",
+                    max(relmax(*x) for x in d), tol, "same stencil" if b == "foam" else "")
+            elif len(d) > 1:
+                dl = [l1rel(*x) for x in d]
+                add(case, f"{label} foam-JAX L1 diff order {ns[-2]}->{ns[-1]}", b, "serial",
+                    order(dl[-2], dl[-1]), TH["shrink tri" if tri else "shrink"],
+                    " / ".join(f"{x:.1e}" for x in dl))
+        ref, r11, r14 = J("C1", "ref_n320", "mpi8"), J("C11", "smooth_ref_n1280"), J("C14", "ref_n160")
+        for o in (1, 2):                        # convergence vs fine JAX references
+            k3 = lambda pre, ns: [f"{pre}o{o}_n{n}" for n in ns]  # noqa: E731
+            if ref is not None:
+                conv("C1", f"O{o}", k3("", (20, 40, 80)), lambda x: err_ref(x, ref),
+                     TH[f"C1 O{o}"], (20, 40, 80))
+                conv("C12", f"bump O{o}", k3("bump_", (10, 20, 40)), lambda x: err_ref(x, ref),
+                     TH[f"C12 O{o}"], (10, 20, 40))
+            if r11 is not None:
+                conv("C11", f"smooth O{o}", k3("smooth_", (40, 80, 160)),
+                     lambda x: err_ref(x, r11), TH[f"C11 O{o}"], (40, 80, 160))
+            if r14 is not None:
+                conv("C14", f"O{o}", k3("", (20, 40, 80)), lambda x: err_ref(x, r14),
+                     TH[f"C14 O{o}"], (20, 40, 80))
+            cross("C1", f"O{o}", k3("", (20, 40, 80)), (20, 40, 80))
+            cross("C11", f"smooth O{o}", k3("smooth_", (40, 80, 160)), (40, 80, 160))
+            cross("C12", f"bump O{o}", k3("bump_", (10, 20, 40)), (10, 20, 40), tri=True)
+            cross("C14", f"O{o}", k3("", (20, 40, 80)), (20, 40, 80),
+                  tol=("<=", 1e-8, "tolerance (implicit Newton 1e-8; foam: FD Jacobian)"))
+        ref2 = J("C2", "ref_n320", "mpi8")      # C2
+        if ref2 is not None:
+            conv("C2", "L1", ["n40", "n80"], lambda x: err_ref(x, ref2), TH["C2"], (40, 80))
+        if b == "foam" and ok(g("C2", "n80"), J("C2", "n80")):
+            add("C2", "L1 vs JAX n80 (rel)", b, "serial", l1rel(g("C2", "n80"), J("C2", "n80")),
+                TH["C2 foam"], "")
+        if b == "amrex":
+            cross("C2", "", ["n40", "n80"], (40, 80))
+            cross("C3", "", ["o1", "o2"], (24,))
+            cross("C13", "", ["o1_x2.5", "o2_x2.5"], (40,))
         for c in CONFIGS:                       # C3
             for o in (1, 2):
-                d = get(b, c, "C3", f"o{o}")
+                d = g("C3", f"o{o}", c)
                 if d is not None:
-                    names = [str(n) for n in d["names"]]
-                    q = d["Q"][[i for i, n in enumerate(names) if n.startswith("q")]]
-                    out.append(("C3", f"O{o} max|u| after 100 steps", b, c,
-                                float(np.abs(q / h(d)).max()), ""))
-        for v in ("sub", "trans"):              # C4
-            for o in (1, 2):
-                e = [s("C4", f"{v}_o{o}_n{n}") for n in (50, 100, 200)]
-                if all(x is not None for x in e):
-                    es = [err_exact(x, v) for x in e]
-                    out.append(("C4", f"{v} O{o} order 100->200", b, "serial",
-                                order(es[1], es[2]), "L1(h) " + " / ".join(f"{x:.2e}" for x in es)))
-                    out.append(("C4", f"{v} O{o} L1(h) n200", b, "serial", es[2], ""))
-                    from cases import CHANNEL
-                    q = e[2]["Q"][[str(n) for n in e[2]["names"]].index("q_x_0")]
-                    out.append(("C4", f"{v} O{o} max|q/q_in - 1| n200", b, "serial",
-                                float(np.abs(q / CHANNEL[v]["q"] - 1).max()),
-                                "steady state: discharge = inflow (the open-domain mass balance)"))
-                    qy = e[2]["Q"][[str(n) for n in e[2]["names"]].index("q_y_0")]
-                    out.append(("C4", f"{v} O{o} max|q_y| n200 (info)", b, "serial",
-                                float(np.abs(qy).max()), ""))
+                    q = d["Q"][[i for i, n in enumerate(names(d)) if n.startswith("q")]]
+                    add("C3", f"O{o} max|u| after 100 steps", b, c,
+                        float(np.abs(q / h(d)).max()), TH["C3"], "")
+        for case, vs in (("C4", ("sub", "trans")), ("C11", ("sub",)), ("C12", ("sub",))):
+            for v in vs:                        # C4 / C11 / C12: Bernoulli
+                for o in (1, 2):
+                    keys = [f"{v}_o{o}_n{n}" for n in C4_N]
+                    e = conv(case, f"{v} O{o}", keys, lambda x: err_exact(x, v),
+                             TH["C4 order"][(v, o)], C4_N)
+                    if ok(*e):
+                        q = e[-1]["Q"][2]          # [b, h, q_x, ...]
+                        add(case, f"{v} O{o} max|q/q_in - 1| n{C4_N[-1]}", b, "serial",
+                            float(np.abs(q / CHANNEL[v]["q"] - 1).max()), None,
+                            "steady discharge = inflow (open-domain mass balance)")
+                        if "q_y_0" in names(e[-1]):
+                            add(case, f"{v} O{o} max|q_y| n{C4_N[-1]}", b, "serial",
+                                float(np.abs(e[-1]["Q"][names(e[-1]).index("q_y_0")]).max()),
+                                ("<=", 1e-12, "theory (1-D flow, symmetric stencils)")
+                                if case == "C4" else None, "")
+                    cross(case, f"{v} O{o}", keys, C4_N, tri=case == "C12")
         for c in CONFIGS:                       # C5
-            d = get(b, c, "C5", "n48")
+            d = g("C5", "n48", c)
             if d is not None:
-                out.append(("C5", "h_min", b, c, float(h(d).min()), ""))
-        d, j = s("C5", "n48"), get("jax", "serial", "C5", "n48")
-        if b != "jax" and d is not None and j is not None:
-            out.append(("C5", "L1 vs JAX (rel)", b, "serial", l1rel(d, j), ""))
-        d, j = s("C8", "vam"), get("jax", "serial", "C8", "vam")
-        if b != "jax" and d is not None and j is not None:
-            out.append(("C8", "L1 vs JAX (rel)", b, "serial", l1rel(d, j), ""))
-        for case in CLOSED:                     # C6
+                add("C5", "h_min", b, c, float(h(d).min()), (">=", 0.0, "theory (positivity)"), "")
+        if b != "jax" and ok(g("C5", "n48"), J("C5", "n48")):
+            fn, th = (l1rel, TH["C5 foam"]) if b == "foam" else (relmax, TH["C5 amrex"])
+            add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
+                fn(g("C5", "n48"), J("C5", "n48")), th, "")
+        for k in ("vam", "vam_newton", "vam_t2", "vam_tri"):    # C8
+            d, j = g("C8", k), J("C8", k)
+            if b != "jax" and ok(d, j):
+                fn, th = (l1rel, TH["C8 foam"]) if b == "foam" else (relmax, PRESS)
+                add("C8", f"{k} {'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
+                    fn(d, j), th, "")
+        if ok(g("C8", "vam_newton"), g("C8", "vam")):
+            add("C8", "Newton vs linear pressure (max rel)", b, "serial",
+                relmax(g("C8", "vam_newton"), g("C8", "vam")), TH["newton"], "")
+        for o, to in C10_VARIANTS:              # C10: Richardson, 3 meshes
+            e = [g("C10", f"s{o}_t{to}_n{n}") for n in C10_N]
+            if ok(*e):
+                d1, d2 = err_ref(e[0], e[1]), err_ref(e[1], e[2])
+                add("C10", f"space O{o} time O{to} order (Richardson)", b, "serial",
+                    order(d1, d2), TH["C10"][(o, to)],
+                    f"|h{C10_N[0]}-h{C10_N[1]}| {d1:.2e}, |h{C10_N[1]}-h{C10_N[2]}| {d2:.2e}")
+        for c in CONFIGS:                       # C13: periodic shift invariance
+            for o in (1, 2):
+                a, s = g("C13", f"o{o}_x2.5", c), g("C13", f"o{o}_x7.5", c)
+                if ok(a, s):
+                    from cases import PERIODIC
+                    L = PERIODIC["L"]
+                    ka = np.lexsort((a["xc"][0], a["xc"][1]))
+                    ks = np.lexsort(((s["xc"][0] - L / 2) % L, s["xc"][1]))
+                    add("C13", f"O{o} shift by L/2 (max rel)", b, c,
+                        float(np.abs(a["Q"][:, ka] - s["Q"][:, ks]).max() / np.abs(a["Q"]).max()),
+                        RO, "")
+        if b == "foam" and ok(g("C13", "o1_x2.5"), J("C13", "o1_x2.5")):
+            add("C13", "O1 max rel vs JAX", b, "serial",
+                relmax(g("C13", "o1_x2.5"), J("C13", "o1_x2.5")), RO, "O1: the same stencil")
+        for c in CONFIGS:                       # C15: AD
+            for k in ("hyperbolic", "imex", "chorin"):
+                f, r = g("C15", f"{k}_fwd", c), g("C15", f"{k}_rev", c)
+                if f is not None:
+                    add("C15", f"{k} |FD - jvp| (rel)", b, c, metrics(f)["fd_rel"], TH["fd"], "")
+                if ok(f, r):
+                    fw, rv = metrics(f)["fwd"], metrics(r)["rev"]
+                    add("C15", f"{k} |rev - jvp| (rel)", b, c, abs(rv - fw) / abs(fw), TH["rev"], "")
+                s = g("C15", f"{k}_fwd")
+                if c != "serial" and ok(f, s):
+                    add("C15", f"{k} jvp vs serial (rel)", b, c,
+                        abs(metrics(f)["fwd"] - metrics(s)["fwd"]) / abs(metrics(s)["fwd"]),
+                        PRESS if k == "chorin" else RO, "")
+        for c in CONFIGS:                       # C16: preCICE
+            for pair in ("jax_jax", "jax_foam", "foam_foam", "amrex_amrex", "amrex_jax"):
+                d = g("C16", pair, c)
+                if d is not None:
+                    m = metrics(d)
+                    add("C16", f"{pair} coupled vs single (max)", b, c, m["coupled_vs_single"],
+                        TH["couple"], "")
+                    add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
+        euler_checks(add, b, g, J)
+        for c in CONFIGS:                       # C17: AMR (gate 37)
+            for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
+                d = g("C17", k, c)
+                if d is None:
+                    continue
+                m = metrics(d)
+                for key, lab, th in (
+                        ("vs_cpu1", "vs CPU 1 rank (max rel)", RO),
+                        ("fine_vs_single", "fine level vs fine single level (max rel)", RO),
+                        ("L1", "L1(rho - exact)", None),
+                        ("mass", "mass drift", RO if k != "boxnr" else None),
+                        ("energy", "energy drift", RO if k != "boxnr" else None),
+                        ("u", "max|u|", ("<=", 1e-12, "theory (well-balanced)")),
+                        ("h_min", "h_min", (">=", 0.0, "theory (positivity)"))):
+                    if key in m:
+                        add("C17", f"{k} {lab}", b, c, m[key], th,
+                            "no reflux: not conservative" if k == "boxnr" else "")
+            w = [g("C17", f"wave{n}") for n in (16, 32)]
+            if c == "serial" and ok(*w):
+                add("C17", "wave order 16->32 (composite)", b, c,
+                    order(metrics(w[0])["L1"], metrics(w[1])["L1"]),
+                    (">=", 1.5, "observed (O2, static patch; theory 2)"), "")
+        for case in CLOSED:                     # C6: mass of every closed-domain run
             for c in CONFIGS:
-                ds = [get(b, c, case, r.key) for r in CASES[case][1]]
+                ds = [g(case, r.key, c) for r in CASES[case][1]
+                      if r.custom is None and not r.key.startswith("sub")]
                 ds = [x for x in ds if x is not None]
                 if ds:
-                    out.append(("C6", f"{case} mass change (rel)", b, c, max(map(mass, ds)),
-                                f"max over {len(ds)} runs"))
-        for case, key in (("C1", "o2_n80"), ("C5", "n48"), ("C8", "vam")):  # C7, C9
-            ser = s(case, key)
+                    add("C6", f"{case} mass change (rel)", b, c, max(map(mass, ds)), RO,
+                        f"max over {len(ds)} runs")
+        for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C8", "vam"), ("C13", "o2_x2.5"),
+                          ("C14", "o2_n40"), ("C21", "pulse_o1"), ("C21", "pulse_o2"),
+                          ("C21", "sod_y"), ("C26", "visc")):   # C7 / C9: parallel and GPU = serial CPU
             for c in CONFIGS[1:]:
-                d = get(b, c, case, key)
-                if ser is not None and d is not None:
-                    chk = "GPU vs CPU (max rel)" if c == "gpu1" else "parallel vs serial (max rel)"
-                    out.append(("C9" if c == "gpu1" else ("C8" if case == "C8" else "C7"),
-                                f"{case} {chk}", b, c, relmax(d, ser), ""))
+                d, ser = g(case, key, c), g(case, key)
+                if ok(ser, d):
+                    gpu = c.startswith("gpu")
+                    add("C9" if gpu else "C7",
+                        f"{case} {key} {'GPU' if gpu else 'parallel'} vs serial CPU (max rel)",
+                        b, c, relmax(d, ser), PRESS if case == "C8" else RO, "")
     return out
-
-
-def threshold(check):
-    if check.endswith(" runs"):
-        return ("<=", 0.0, "the run completes")
-    for k, v in TH.items():
-        if check.endswith(k):
-            return v
-    return None
 
 
 def table():
     rows = measure()
-    lines = ["| case | check | backend | " + " | ".join(CONFIGS) + " | threshold (source) |",
-             "|---|---|---|" + "---|" * len(CONFIGS) + "---|"]
-    fails, seen = [], {}
-    for case, check, b, c, v, note in rows:
+    lines = ["| case | check | backend | " + " | ".join(HEAD.get(c, c) for c in CONFIGS)
+             + " | threshold (source) |", "|---|---|---|" + "---|" * len(CONFIGS) + "---|"]
+    fails, seen, ths = [], {}, {}
+    for case, check, b, c, v, th, note in rows:
         seen.setdefault((case, check, b), {})[c] = (v, note)
-    for (case, check, b), cells in seen.items():
-        th = threshold(check)
-        txt = []
+        ths[(case, check, b)] = th
+    for k in sorted(seen, key=lambda k: (int(k[0][1:]), k[2], k[1])):
+        case, check, b = k
+        th, cells, txt = ths[k], seen[k], []
         for c in CONFIGS:
             if c not in cells:
-                txt.append("-")
+                txt.append("-" if c in BACKENDS[b].configs else "n/a")
                 continue
             v, note = cells[c]
-            if th is None or th[1] is None:
+            if isinstance(v, str):
+                txt.append(v)
+            elif th is None:
                 txt.append(f"{v:.2e}")
-                continue
-            ok = bool(v >= th[1] if th[0] == ">=" else v <= th[1])
-            txt.append(f"{v:.2e} {'PASS' if ok else '**FAIL**'}")
-            if not ok:
-                fails.append(f"- {case} {check}, {b} {c}: {v:.3e} (need {th[0]} {th[1]:g}) {note}")
-        thr = "-" if th is None or th[1] is None else f"{th[0]} {th[1]:g} ({th[2]})"
+            else:
+                ok = bool(v >= th[1] if th[0] == ">=" else v <= th[1])
+                txt.append(f"{v:.2e} {'PASS' if ok else '**FAIL**'}")
+                if not ok:
+                    fails.append(f"- {case} {check}, {b} {c}: {v:.3e} (need {th[0]} {th[1]:g}) {note}")
+        thr = "information" if th is None else f"{th[0]} {th[1]:g} ({th[2]})"
         lines.append(f"| {case} | {check} | {b} | " + " | ".join(txt) + f" | {thr} |")
-    notes = [f"- {case} {check}, {b} {c}: {note}" for case, check, b, c, v, note in rows if note]
-    text = "\n".join(lines + ["", "Failures:"] + (fails or ["- none"]) + ["", "Notes:"] + notes)
+    notes = [f"- {case} {check}, {b} {c}: {note}" for case, check, b, c, v, th, note in rows if note]
+    walls = {}
+    for f in STORE.glob("*/*/*/*.npz"):
+        walls[f.parts[-4]] = walls.get(f.parts[-4], 0.0) + float(np.load(f)["wall"])
+    import large
+    lines += large.table()
+    text = "\n".join(lines + ["", "Failures:"] + (fails or ["- none"]) + ["", "Notes:"] + notes
+                     + ["", "Summed run wall time (s, without process start-up): "
+                        + ", ".join(f"{k} {v:.0f}" for k, v in sorted(walls.items()))])
     (HERE / "table.md").write_text(text + "\n")
     print(text)
 
 
 if __name__ == "__main__":
     a = [x for x in sys.argv[1:] if x != "--force"]
-    if a[0] == "run":
+    if a[:3] == ["run", "--tier", "large"]:
+        import large
+        large.main(a[3:])
+    elif a[0] == "run":
         run(*a[1:4], force="--force" in sys.argv)
     else:
         table()

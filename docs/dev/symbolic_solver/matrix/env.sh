@@ -6,3 +6,4 @@ export ZOOMY_AMREX_BUILD_CPUS=0-7 ZOOMY_AMREX_RUN_CPUS=0-7
 export OMP_NUM_THREADS=1
 alias mx='timeout 295 taskset -c 0-7 micromamba run -n zoomy python matrix.py'
 export ZOOMY_AMREX_SYMCACHE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/work/amrex_cache
+export MATRIX_BUDGET=270     # stop before a run that would not fit the 295 s command
