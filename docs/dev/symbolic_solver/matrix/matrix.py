@@ -613,9 +613,10 @@ def table():
     lines = ["| case | check | backend | " + " | ".join(HEAD.get(c, c) for c in CONFIGS)
              + " | threshold (source) |", "|---|---|---|" + "---|" * len(CONFIGS) + "---|"]
     fails, seen, ths = [], {}, {}
-    for case, check, b, c, v, th, note in rows:
-        seen.setdefault((case, check, b), {})[c] = (v, note)
-        ths[(case, check, b)] = th
+    for case, check, b, c, v, th, note in rows:            # each cell its own threshold
+        seen.setdefault((case, check, b), {})[c] = (v, note, th)
+        if th is not None or (case, check, b) not in ths:
+            ths[(case, check, b)] = th
     for k in sorted(seen, key=lambda k: (int(k[0][1:]), k[2], k[1])):
         case, check, b = k
         th, cells, txt = ths[k], seen[k], []
@@ -623,16 +624,16 @@ def table():
             if c not in cells:
                 txt.append("-" if c in BACKENDS[b].configs else "n/a")
                 continue
-            v, note = cells[c]
+            v, note, tc = cells[c]
             if isinstance(v, str):
                 txt.append(v)
-            elif th is None:
+            elif tc is None:
                 txt.append(f"{v:.2e}")
             else:
-                ok = bool(v >= th[1] if th[0] == ">=" else v <= th[1])
+                ok = bool(v >= tc[1] if tc[0] == ">=" else v <= tc[1])
                 txt.append(f"{v:.2e} {'PASS' if ok else '**FAIL**'}")
                 if not ok:
-                    fails.append(f"- {case} {check}, {b} {c}: {v:.3e} (need {th[0]} {th[1]:g}) {note}")
+                    fails.append(f"- {case} {check}, {b} {c}: {v:.3e} (need {tc[0]} {tc[1]:g}) {note}")
         thr = "information" if th is None else f"{th[0]} {th[1]:g} ({th[2]})"
         lines.append(f"| {case} | {check} | {b} | " + " | ".join(txt) + f" | {thr} |")
     notes = [f"- {case} {check}, {b} {c}: {note}" for case, check, b, c, v, th, note in rows if note]
