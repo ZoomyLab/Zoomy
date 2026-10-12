@@ -3,6 +3,7 @@
 import sympy as sp
 from sympy.printing.cxx import CXX11CodePrinter
 from sympy.printing.c import C99CodePrinter
+from zoomy_core.transformation.cxx_base import CxxBase
 import re
 import os
 import types
@@ -62,14 +63,21 @@ def get_nested_shape(expr):
 # =========================================================================
 
 
-class GenericCppBase(CXX11CodePrinter):
+class GenericCppBase(CxxBase):
     """GenericCppBase. (class)."""
     _output_subdir = "cpp_interface"
     _wrapper_name = "BaseWrapper"
     _is_template_class = False
     gpu_enabled = True
-    real_type = "double"
-    math_namespace = "std::"
+    # Dialect pin.  The kernel lane was written against sympy's C++11 printer,
+    # ``CxxBase`` is C++17.  The two differ, on expressions, only here: a symbol
+    # called ``register`` is renamed ``register_``, and ``beta`` / ``Ei`` /
+    # ``zeta`` print as plain calls (``None`` = no dedicated printer, so
+    # ``_print_Function`` takes them).  (``type_mappings`` / ``using`` differ
+    # too; they only matter to ``sympy.codegen`` AST nodes, which no Zoomy
+    # printer builds.)
+    reserved_words = CXX11CodePrinter.reserved_words
+    _print_beta = _print_Ei = _print_zeta = None
     # ``resolve_opaque`` — PRINTER option (codegen-time, never a case/settings
     # key): when True, calls to REGISTERED symbolic functions found inside an
     # expression body (the ``SymbolicRegistrar.proxy_caller`` products —
@@ -103,7 +111,8 @@ class GenericCppBase(CXX11CodePrinter):
     # Typed-C++ backends cast bare numeric literals in ``Min``/``Max`` to
     # ``real_type`` (``std::max((T)0, ...)``) so a literal int operand does not
     # clash with the templated ``real_type`` (``std::max(int, double)`` fails to
-    # instantiate).  Untyped backends (JS) override this to ``False``.
+    # instantiate); see ``CxxBase``.  Untyped backends (JS) override this to
+    # ``False``.
     _typed_numeric_literals = True
 
     ARG_MAPPING = {
@@ -224,11 +233,11 @@ class GenericCppBase(CXX11CodePrinter):
         return super()._print_Symbol(s)
 
     def _print_Function(self, expr):
-        """Internal helper `_print_Function`."""
+        """A ``c_functions`` print-map entry, else the call of ``CxxBase``."""
         name = expr.func.__name__
         if name in self.c_functions:
             return self.c_functions[name](self, *expr.args)
-        return f"{self._print(expr.func)}({', '.join(map(self._print, expr.args))})"
+        return super()._print_Function(expr)
 
     def _print_IndexedBase(self, expr):
         """Internal helper `_print_IndexedBase`."""
@@ -239,46 +248,6 @@ class GenericCppBase(CXX11CodePrinter):
         base = self._print(expr.base)
         indices = [self._print(i) for i in expr.indices]
         return f"{base}[{']['.join(indices)}]"
-
-    def _print_Max(self, expr):
-        """Route ``sympy.Max`` through ``_print_min_max`` so numeric-literal
-        operands are typed (``std::max((T)0, ...)``).  Overrides the sympy
-        ``_CXXCodePrinterBase._print_Max`` (which emits the bare-literal
-        ``std::max(0, ...)`` that fails to instantiate against ``real_type``)."""
-        return self._print_min_max("max", expr.args)
-
-    def _print_Min(self, expr):
-        """Route ``sympy.Min`` through ``_print_min_max`` (see ``_print_Max``)."""
-        return self._print_min_max("min", expr.args)
-
-    def _print_min_max(self, func_name, args):
-        """Internal helper `_print_min_max`.
-
-        Numeric-literal operands are cast to ``real_type`` on typed C++
-        backends so ``Max(0, h)`` emits ``std::max((T)0, Q[1])`` rather than
-        ``std::max(0, Q[1])`` — the latter is an ``std::max(int, double)``
-        template mismatch that fails to compile.  Untyped backends (JS) keep
-        the bare literal (``Math.max(0, ...)`` is fine)."""
-        if len(args) == 1:
-            return self._min_max_operand(args[0])
-        if len(args) == 2:
-            return (f"{self.math_namespace}{func_name}"
-                    f"({self._min_max_operand(args[0])}, "
-                    f"{self._min_max_operand(args[1])})")
-        arg0 = self._min_max_operand(args[0])
-        rest = self._print_min_max(func_name, args[1:])
-        return f"{self.math_namespace}{func_name}({arg0}, {rest})"
-
-    def _min_max_operand(self, arg):
-        """Print one ``Min``/``Max`` operand, casting a bare numeric literal to
-        ``real_type`` on typed C++ backends (avoids the ``std::max(int,
-        double)`` mismatch); non-literal operands print unchanged."""
-        printed = self._print(arg)
-        if self._typed_numeric_literals and isinstance(
-            arg, (sp.Integer, sp.Float, sp.Rational)
-        ):
-            return f"({self.real_type}){printed}"
-        return printed
 
     def _print_math_func(self, expr, nest=False, known=None):
         """Print a known C math function (``log`` / ``exp`` / ``sin`` / …) with
@@ -295,14 +264,6 @@ class GenericCppBase(CXX11CodePrinter):
             return super()._print_math_func(expr, nest=nest, known=known)
         args = ", ".join(self._min_max_operand(a) for a in expr.args)
         return f"{self._ns}{known}({args})"
-
-    def _print_nested_max(self, str_args):
-        """Nest std::max calls for >2 arguments: max(a, max(b, max(c, d)))."""
-        if len(str_args) == 1:
-            return str_args[0]
-        if len(str_args) == 2:
-            return f"{self.math_namespace}max({str_args[0]}, {str_args[1]})"
-        return f"{self.math_namespace}max({str_args[0]}, {self._print_nested_max(str_args[1:])})"
 
     def _expand_vector_conditionals(self, expr):
         """Internal helper `_expand_vector_conditionals`."""

@@ -30,10 +30,10 @@ import threading
 
 import sympy as sp
 from sympy.core.function import AppliedUndef
-from sympy.printing.cxx import CXX17CodePrinter
 from sympy.printing.pycode import PythonCodePrinter
 
 from zoomy_core.model.basefunction import KernelRef  # noqa: F401  (printed below)
+from zoomy_core.transformation.cxx_base import CxxBase
 
 
 # ── names in the graph ──────────────────────────────────────────────────────
@@ -312,23 +312,8 @@ class _Common:
         # step of 4e-20 and a singular pressure solve
         return repr(float(e))
 
-    def _print_Function(self, e):
-        return f"{e.func.__name__}({', '.join(self._print(a) for a in e.args)})"
-
     def _print_Abs(self, e):
         return f"abs({self._print(e.args[0])})"
-
-    def _print_Min(self, e):
-        return self._fold("minimum", e.args)
-
-    def _print_Max(self, e):
-        return self._fold("maximum", e.args)
-
-    def _fold(self, f, a):
-        s = self._print(a[0])
-        for x in a[1:]:
-            s = f"{f}({s}, {self._print(x)})"
-        return s
 
     def emit(self, plan, scope, ind):
         lines = []
@@ -405,6 +390,21 @@ class PyPrinter(_Common, PythonCodePrinter):
     def _print_Get(self, e):
         return f"{self._print(e.args[0])}[{e.args[1]}]"
 
+    def _print_Function(self, e):
+        return f"{e.func.__name__}({', '.join(self._print(a) for a in e.args)})"
+
+    def _fold(self, f, a):
+        s = self._print(a[0])
+        for x in a[1:]:
+            s = f"{f}({s}, {self._print(x)})"
+        return s
+
+    def _print_Min(self, e):
+        return self._fold("minimum", e.args)
+
+    def _print_Max(self, e):
+        return self._fold("maximum", e.args)
+
     def _print_And(self, e):          # traced booleans: no Python ``and``
         return self._fold("logical_and", e.args)
 
@@ -422,21 +422,24 @@ class PyPrinter(_Common, PythonCodePrinter):
                           f"    return {ret}"])
 
 
-class CxxPrinter(_Common, CXX17CodePrinter):
+class CxxPrinter(_Common, CxxBase):
     """C++ family: foam and amrex print the same text.  (No structured
     bindings: C++17 lambdas cannot capture them.)  ``nsm.source`` is a member
     of the backend's kernel struct; a kernel map with several outputs carries
     the count, ``faces<2>(...)``, since C++ fixes the result type at compile
-    time."""
+    time.  The runtime defines ``pow`` / ``minimum`` / ``maximum`` as free
+    functions: unqualified, bare operands, left-nested."""
     destructure = False
+    math_namespace = ""
+    _min_name, _max_name, _nest_left = "minimum", "maximum", True
 
     def __init__(self):
         super().__init__({"allow_unknown_functions": True})
 
-    def _print_Function(self, e):
+    def _callee(self, e):
         n = _ARITY.get(e, 1)
         tmpl = f"<{n}>" if n > 1 and e.args and isinstance(e.args[0], KernelRef) else ""
-        return f"{e.func.__name__}{tmpl}({', '.join(self._print(a) for a in e.args)})"
+        return f"{e.func.__name__}{tmpl}"
 
     def _print_Get(self, e):
         return f"std::get<{e.args[1]}>({self._print(e.args[0])})"

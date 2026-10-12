@@ -27,23 +27,12 @@ class AmrexCore:
         # We assume 1D vectors mapped to column matrices
         return f"{base}({indices[0]}, 0)"
 
-    def _print_Function(self, expr):
-        """AST node visitor to properly format function calls."""
-        name = expr.func.__name__
+    def _callee(self, e):
+        """AMReX wrappers are not templated: strip the ``<T>`` from the function
+        namespace (``Model<T>::flux`` -> ``Model::flux``)."""
+        name = super()._callee(e)
+        return name if getattr(self, "_is_template_class", True) else name.replace("<T>", "")
 
-        # 1. Handle pre-registered C functions (Min, Max, conditional, etc.)
-        if name in self.c_functions:
-            return self.c_functions[name](self, *expr.args)
-
-        # 2. Since AMReX wrappers are not templated, safely strip the <T>
-        #    from the function namespace (e.g., 'Model<T>::flux' -> 'Model::flux')
-        if not getattr(self, "_is_template_class", True):
-            name = name.replace("<T>", "")
-
-        # Print the arguments recursively
-        args_str = ", ".join(map(self._print, expr.args))
-        return f"{name}({args_str})"
-    
     def _print_Symbol(self, s):
         """Overrides symbol printing to match by string name, bypassing SymPy assumptions."""
         s_name = s.name
