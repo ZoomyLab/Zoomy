@@ -32,14 +32,15 @@ Per case, backend and config: the march time per cell and step (µs, of the fast
 | `euler3d_o2` | foam | serial | - | 64000 | 40 | 4.01 | 10.3 / 10.3 | 257 | 7.11 / 8.06 | ok |
 | `euler3d_o2` | amrex | gpu1 | - | 64000 | 40 | 0.0172 | 0.0441 / 0.0441 | 1.1 | 2.82 / 24.2 | ok |
 | `euler3d_o2` | amrex | serial | - | 64000 | 40 | 3.13 | 8 / 8.01 | 200 | 2.22 / 8.92 | ok |
-| `diffusion_impl` | jax | gpu1 | gpu | 2304 | 10 | 1.75 | 0.0404 / 0.0406 | 4.04 | 21.8 / 18.7 | ok |
-| `diffusion_impl` | jax | serial | cpu | 2304 | 10 | 8.86 | 0.204 / 0.204 | 20.4 | 23 / 12.1 | ok |
-| `diffusion_impl` | foam | serial | - | 2304 | 10 | 687 | 15.8 / 15.9 | 1.58e+03 | 15.4 / 16 | ok |
-| `diffusion_impl` | amrex | gpu1 | - | 2304 | 10 | 3.31 | 0.0764 / 0.0765 | 7.64 | 15.1 / 33 | ok |
-| `diffusion_impl` | amrex | serial | - | 2304 | 10 | 14.1 | 0.326 / 0.326 | 32.6 | 14.6 / 16.9 | ok |
+| `diffusion_impl` | jax | gpu1 | gpu | 2304 | 10 | 1.78 | 0.0409 / 0.0412 | 4.09 | 22.1 / 18 | ok |
+| `diffusion_impl` | jax | serial | cpu | 2304 | 10 | 9.5 | 0.219 / 0.219 | 21.9 | 22.7 / 13 | ok |
+| `diffusion_impl` | foam | serial | - | 2304 | 10 | 659 | 15.2 / 15.4 | 1.52e+03 | 15 / 16.3 | ok |
+| `diffusion_impl` | amrex | gpu1 | - | 2304 | 10 | 3.31 | 0.0762 / 0.0762 | 7.62 | 15 / 34.3 | ok |
+| `diffusion_impl` | amrex | serial | - | 2304 | 10 | 14.5 | 0.333 / 0.335 | 33.3 | 14.1 / 17.5 | ok |
 
 Machines (records grouped by host, hardware, pinning and library commits):
 
 | host | CPU | GPU | cores pinned (cpus) | wave speed | libraries | dates |
 |---|---|---|---|---|---|---|
 | 68G-gaia | INTEL(R) XEON(R) PLATINUM 8568Y+ | NVIDIA L40S | 1 (44) | power | superrepo c02eed4f, zoomy_amrex 4a7067d, zoomy_core 2f2ac62, zoomy_foam a71bff0, zoomy_jax 276cedb | 2026-10-12 .. 2026-10-12 |
+| 68G-gaia | INTEL(R) XEON(R) PLATINUM 8568Y+ | NVIDIA L40S | 1 (44) | power | superrepo 9a5f303f, zoomy_amrex 0270878, zoomy_core 6cbf885, zoomy_foam 250b152, zoomy_jax 4b2ce3f | 2026-10-12 .. 2026-10-12 |

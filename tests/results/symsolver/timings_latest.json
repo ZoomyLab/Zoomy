@@ -1,10 +1,10 @@
 {
  "schema": 1,
- "updated": "2026-10-12T21:29:47Z",
+ "updated": "2026-10-12T23:20:17Z",
  "rows": [
   {
    "schema": 1,
-   "date": "2026-10-12T21:26:27Z",
+   "date": "2026-10-12T23:20:17Z",
    "host": "68G-gaia",
    "cpu": "INTEL(R) XEON(R) PLATINUM 8568Y+",
    "gpu": "NVIDIA L40S",
@@ -12,11 +12,11 @@
    "cores_pinned": 1,
    "cpus": "44",
    "libs": {
-    "zoomy_core": "2f2ac62",
-    "zoomy_jax": "276cedb",
-    "zoomy_foam": "a71bff0",
-    "zoomy_amrex": "4a7067d",
-    "superrepo": "c02eed4f"
+    "zoomy_core": "6cbf885",
+    "zoomy_jax": "4b2ce3f",
+    "zoomy_foam": "250b152",
+    "zoomy_amrex": "0270878",
+    "superrepo": "9a5f303f"
    },
    "wave_speed": "power",
    "case": "diffusion_impl",
@@ -29,20 +29,20 @@
    "dt": 0.001953125,
    "reps": 3,
    "march_s": [
-    0.076509536,
-    0.076483175,
-    0.076374205
+    0.076196991,
+    0.076293889,
+    0.076175344
    ],
-   "min_s": 0.076374205,
-   "median_s": 0.076483175,
-   "ms_step": 7.6374205,
-   "us_cell_step": 3.3148526475694444,
-   "setup_s": 15.117700236977043,
-   "compile_s": 32.991895226005,
+   "min_s": 0.076175344,
+   "median_s": 0.076196991,
+   "ms_step": 7.617534400000001,
+   "us_cell_step": 3.3062215277777782,
+   "setup_s": 15.016605125996605,
+   "compile_s": 34.29615379899042,
    "status": "ok",
    "diff": {
     "metric": "relmax",
-    "value": 5.824109623472472e-14,
+    "value": 5.701045857435604e-14,
     "tol": "<= 1e-08",
     "source": "matrix C14 / C26: implicit Newton and GMRES tolerances",
     "ok": true
@@ -50,7 +50,7 @@
   },
   {
    "schema": 1,
-   "date": "2026-10-12T21:25:36Z",
+   "date": "2026-10-12T23:19:25Z",
    "host": "68G-gaia",
    "cpu": "INTEL(R) XEON(R) PLATINUM 8568Y+",
    "gpu": "NVIDIA L40S",
@@ -58,11 +58,11 @@
    "cores_pinned": 1,
    "cpus": "44",
    "libs": {
-    "zoomy_core": "2f2ac62",
-    "zoomy_jax": "276cedb",
-    "zoomy_foam": "a71bff0",
-    "zoomy_amrex": "4a7067d",
-    "superrepo": "c02eed4f"
+    "zoomy_core": "6cbf885",
+    "zoomy_jax": "4b2ce3f",
+    "zoomy_foam": "250b152",
+    "zoomy_amrex": "0270878",
+    "superrepo": "9a5f303f"
    },
    "wave_speed": "power",
    "case": "diffusion_impl",
@@ -75,20 +75,20 @@
    "dt": 0.001953125,
    "reps": 3,
    "march_s": [
-    0.326192649,
-    0.326580225,
-    0.325607185
+    0.335243811,
+    0.335299779,
+    0.333258017
    ],
-   "min_s": 0.325607185,
-   "median_s": 0.326192649,
-   "ms_step": 32.5607185,
-   "us_cell_step": 14.132256293402778,
-   "setup_s": 14.577626223000557,
-   "compile_s": 16.860043808992486,
+   "min_s": 0.333258017,
+   "median_s": 0.335243811,
+   "ms_step": 33.3258017,
+   "us_cell_step": 14.464323654513887,
+   "setup_s": 14.12293574401843,
+   "compile_s": 17.494355882983655,
    "status": "ok",
    "diff": {
     "metric": "relmax",
-    "value": 5.824109623472472e-14,
+    "value": 5.701045857435604e-14,
     "tol": "<= 1e-08",
     "source": "matrix C14 / C26: implicit Newton and GMRES tolerances",
     "ok": true
@@ -96,7 +96,7 @@
   },
   {
    "schema": 1,
-   "date": "2026-10-12T21:25:03Z",
+   "date": "2026-10-12T23:18:51Z",
    "host": "68G-gaia",
    "cpu": "INTEL(R) XEON(R) PLATINUM 8568Y+",
    "gpu": "NVIDIA L40S",
@@ -104,11 +104,11 @@
    "cores_pinned": 1,
    "cpus": "44",
    "libs": {
-    "zoomy_core": "2f2ac62",
-    "zoomy_jax": "276cedb",
-    "zoomy_foam": "a71bff0",
-    "zoomy_amrex": "4a7067d",
-    "superrepo": "c02eed4f"
+    "zoomy_core": "6cbf885",
+    "zoomy_jax": "4b2ce3f",
+    "zoomy_foam": "250b152",
+    "zoomy_amrex": "0270878",
+    "superrepo": "9a5f303f"
    },
    "wave_speed": "power",
    "case": "diffusion_impl",
@@ -121,22 +121,22 @@
    "dt": 0.001953125,
    "reps": 3,
    "march_s": [
-    15.822228803,
-    15.922005493,
-    15.871311136
+    15.373109355,
+    15.187886975,
+    15.402407337
    ],
-   "min_s": 15.822228803,
-   "median_s": 15.871311136,
-   "ms_step": 1582.2228803,
-   "us_cell_step": 686.7286806857638,
-   "setup_s": 15.364034101957401,
-   "compile_s": 15.952394534018822,
+   "min_s": 15.187886975,
+   "median_s": 15.373109355,
+   "ms_step": 1518.7886975,
+   "us_cell_step": 659.1964832899306,
+   "setup_s": 14.980126029973231,
+   "compile_s": 16.342896897986066,
    "status": "ok",
    "diff": null
   },
   {
    "schema": 1,
-   "date": "2026-10-12T21:23:41Z",
+   "date": "2026-10-12T23:17:31Z",
    "host": "68G-gaia",
    "cpu": "INTEL(R) XEON(R) PLATINUM 8568Y+",
    "gpu": "NVIDIA L40S",
@@ -144,11 +144,11 @@
    "cores_pinned": 1,
    "cpus": "44",
    "libs": {
-    "zoomy_core": "2f2ac62",
-    "zoomy_jax": "276cedb",
-    "zoomy_foam": "a71bff0",
-    "zoomy_amrex": "4a7067d",
-    "superrepo": "c02eed4f"
+    "zoomy_core": "6cbf885",
+    "zoomy_jax": "4b2ce3f",
+    "zoomy_foam": "250b152",
+    "zoomy_amrex": "0270878",
+    "superrepo": "9a5f303f"
    },
    "wave_speed": "power",
    "case": "diffusion_impl",
@@ -161,20 +161,20 @@
    "dt": 0.001953125,
    "reps": 3,
    "march_s": [
-    0.04064168699551374,
-    0.04060582001693547,
-    0.04041372996289283
+    0.041473274002783,
+    0.04119014099705964,
+    0.040935711993370205
    ],
-   "min_s": 0.04041372996289283,
-   "median_s": 0.04060582001693547,
-   "ms_step": 4.041372996289283,
-   "us_cell_step": 1.754068140750557,
-   "setup_s": 21.841716010996606,
-   "compile_s": 18.73373500901507,
+   "min_s": 0.040935711993370205,
+   "median_s": 0.04119014099705964,
+   "ms_step": 4.0935711993370205,
+   "us_cell_step": 1.7767236108233595,
+   "setup_s": 22.092000619042665,
+   "compile_s": 18.021568422805284,
    "status": "ok",
    "diff": {
     "metric": "relmax",
-    "value": 1.5364549760426113e-15,
+    "value": 1.3489997223361002e-15,
     "tol": "<= 1e-12",
     "source": "tolerance (round-off)",
     "ok": true
@@ -182,7 +182,7 @@
   },
   {
    "schema": 1,
-   "date": "2026-10-12T21:22:59Z",
+   "date": "2026-10-12T23:16:49Z",
    "host": "68G-gaia",
    "cpu": "INTEL(R) XEON(R) PLATINUM 8568Y+",
    "gpu": "NVIDIA L40S",
@@ -190,11 +190,11 @@
    "cores_pinned": 1,
    "cpus": "44",
    "libs": {
-    "zoomy_core": "2f2ac62",
-    "zoomy_jax": "276cedb",
-    "zoomy_foam": "a71bff0",
-    "zoomy_amrex": "4a7067d",
-    "superrepo": "c02eed4f"
+    "zoomy_core": "6cbf885",
+    "zoomy_jax": "4b2ce3f",
+    "zoomy_foam": "250b152",
+    "zoomy_amrex": "0270878",
+    "superrepo": "9a5f303f"
    },
    "wave_speed": "power",
    "case": "diffusion_impl",
@@ -207,16 +207,16 @@
    "dt": 0.001953125,
    "reps": 3,
    "march_s": [
-    0.20479182800045237,
-    0.20447377202799544,
-    0.20423685997957364
+    0.2212045729975216,
+    0.21903756901156157,
+    0.21892446605488658
    ],
-   "min_s": 0.20423685997957364,
-   "median_s": 0.20447377202799544,
-   "ms_step": 20.423685997957364,
-   "us_cell_step": 8.86444704772455,
-   "setup_s": 23.04615107999416,
-   "compile_s": 12.131295196030987,
+   "min_s": 0.21892446605488658,
+   "median_s": 0.21903756901156157,
+   "ms_step": 21.892446605488658,
+   "us_cell_step": 9.501929950298896,
+   "setup_s": 22.654261748015415,
+   "compile_s": 13.035866155358963,
    "status": "ok",
    "diff": null
   },

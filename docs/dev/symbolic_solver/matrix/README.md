@@ -220,25 +220,20 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
   sensitivity (`*_pert` runs: C4 trans O2 1.3e-11, C11 sub O2 2.0e-5,
   bounded limiter chattering), C15 Chorin AD with power-iteration wave
   speeds (the eig tangent is ~1e15 at a defective eigenvalue: NaN on gpu1).
-- Large tier (first full run; ms/step at 1/2/4 ranks or GPUs):
-  - L1 weak, 200^2 per rank: JAX CPU 380/423/389, GPU 2.9/3.4/3.6; AMReX CPU
-    845/898/809, GPU 12.9/14.7/13.5; foam 1387/1380/1380.
-  - L2 strong, 2.56M cells: JAX CPU 18681/10946/5909 (85 / 79 %), GPU
-    253/127/63 (100 %); AMReX CPU 36260/19712/10938 (92 / 83 %), GPU
-    433/221/112 (98 / 97 %); foam mpi4 17962 (serial, mpi2 > 5 min).
-  - L2P pressure, 1M cells: only JAX on GPUs (AmgX) fits, 1410/1338/1092
-    (53 / 32 %); AMReX (GMRES + cell-block Jacobi, no multigrid), foam
-    (Schur-GAMG) and JAX pyamg on CPUs do not fit 5 min.
-  - L3: JAX 14.8M cells on 4 GPUs, 5 s in 6.7 s (~29 ms/step); AMReX 10 m
-    (292k cells) = JAX on the same mesh to 6.5e-15, water = rain to 1.5e-15,
-    cpu1 221, cpu4 62, gpu1 1.4, gpu4 0.6 ms/step.
-  - L4: memory linear in cells (JAX 15.8 GB, AMReX 5.9 GB at 2.56M); L5
-    parallel write 14.8M cells 55 / 35 / 27 s.
-  - Fixed: the tier forced eig wave speeds, a host callback on a JAX GPU
-    (L1/L2 GPU > 5 min, now 2.9 ms/step); L2 at 5 steps; the AMReX catchment
-    driver (never committed) written.  Open: CPU O2 cost per cell (AMReX 24,
-    foam 35 us/cell/step vs 0.44 for AMReX O1 on the catchment); pressure
-    preconditioners of AMReX and foam at 1M cells.
+- Large tier (rerun 2026-10-13, power wave speeds everywhere, 10-min limit per run; ms/step at
+  1/2/4 ranks or GPUs):
+  - L1 weak, 200^2 per rank: JAX CPU 212/236/242, GPU 2.9/3.6/3.4; AMReX CPU 229/264/251, GPU
+    1.76/2.06/1.90; foam 384/419/399 (eig before: AMReX CPU 845, GPU 12.9; foam 1387; JAX 380).
+  - L2 strong, 2.56M cells (5 steps): JAX CPU 7521/4155/2574 (91 / 73 %), GPU 253/127/64 (99 %);
+    AMReX CPU 9492/5301/3201 (90 / 74 %), GPU 62/33/17 (93 / 90 %); foam 19280/9536/4910 (101 / 98 %).
+  - L2P pressure, 1M cells: JAX GPU (AmgX) 1417/1383/1135, JAX serial (pyamg) 30020; > 10 min:
+    JAX mpi2/mpi4, AMReX (all; GMRES + cell-block Jacobi, no multigrid), foam (all; Schur-GAMG).
+  - L3: JAX 14.8M cells on 4 GPUs, 5 s in 6.7 s; AMReX 10 m (292k cells) = JAX to 6.5e-15, water =
+    rain to 1.5e-15, cpu1 / cpu4 / gpu1 / gpu4 5.1 / 1.4 / 0.03 / 0.01 s for 5 s.
+  - L4: setup / memory linear in cells; L5 parallel write of 14.8M cells 55 / 37 / 25 s.
+  - Open: AMReX / foam pressure preconditioners (`amg_comparison.md`: hypre-CUDA BoomerAMG on the
+    2x2-scaled operator), JAX's MPI pressure path, foam's implicit diffusion (659 us/cell/step vs
+    JAX 9.5, `tests/results/symsolver`).
 - C27-C30 (wrapped gates 40, 41, 43, 44, 39; added after the full run, JAX / foam / AMReX
   on the same heads): 130 rows PASS, 0 FAIL, 5 n/a.  C27 orders 1.01 / 1.92 / 3.00
   (ODE) and 1.26 / 2.08 / 3.02 (wave) on all three backends (the foam / AMReX errors

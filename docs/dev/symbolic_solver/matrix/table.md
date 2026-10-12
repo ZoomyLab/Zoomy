@@ -634,6 +634,9 @@
 | L2P | amrex_mpi2 | does not fit 10 min (timeout 595 s) |
 | L2P | amrex_mpi4 | does not fit 10 min (timeout 595 s) |
 | L2P | amrex_serial | does not fit 10 min (timeout 595 s) |
+| L2P | foam_mpi2 | does not fit 10 min (timeout 595 s) |
+| L2P | foam_mpi4 | does not fit 10 min (timeout 595 s) |
+| L2P | foam_serial | does not fit 10 min (timeout 595 s) |
 | L2P | jax_gpu1 | cells 1024000, setup 87.99, compile 49.51, ms_step 1417, maxrss_gb 8.091, ranks 1, solver amgx |
 | L2P | jax_gpu2 | cells 1024000, setup 80.89, compile 49.16, ms_step 1383, maxrss_gb 7.969, ranks 2, solver amgx |
 | L2P | jax_gpu4 | cells 1024000, setup 73.32, compile 43.75, ms_step 1135, maxrss_gb 5.312, ranks 4, solver amgx |
