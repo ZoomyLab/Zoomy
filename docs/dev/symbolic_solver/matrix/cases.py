@@ -614,7 +614,7 @@ def _c33():
     explicit step) at constant dt = dt0 / 2^k."""
     M = MOMENT
     return [Run(f"{integ}_k{k}", partial(moment_decay, 2), M["t_end"], dt=M["dt0"] / 2 ** k,
-                imex=integ == "imex", solver=IMPLICIT)
+                imex="lie" if integ == "imex" else False, solver=IMPLICIT)
             for integ in ("imex", "rk2") for k in M["ks"]]
 
 
