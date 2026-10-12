@@ -169,13 +169,17 @@ def run_closure(mesh, d, p, kinds, U, UG, mis):
     boundary closure with per-row face ``kinds`` ``(B, n_bf)``:
     ``{mi: (B, nc)}``."""
     topo = build_topology(mesh, lsq_degree=p, closure={("gate39", "state"): kinds})
-    X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:d])
-    g = compute_geometry(topo, X)
+    # the geometry in numpy, as the solver builds it (``solver._setup``: JAX
+    # op by op compiles every primitive); the derivatives through ONE jit,
+    # as the runtime calls them
+    g = compute_geometry(topo, np.asarray(mesh.vertex_coordinates, float)[:d])
+    g = {k: jnp.asarray(v) for k, v in g.items()}
     nc = int(mesh.n_inner_cells)
     # degree 1 has no closure (the ghost sample is exact for linear data)
     classes = topo.lsq_closure_class.get(("gate39", "state"), (-1,) * len(kinds))
     assert (p >= 2) == any(c >= 0 for c in classes), (p, classes)
-    D = np.asarray(lsq_derivatives(topo, g, jnp.asarray(U)[:, :nc], jnp.asarray(UG), classes))
+    D = np.asarray(jax.jit(lambda gg, u, ug: lsq_derivatives(topo, gg, u, ug, classes))(
+        g, jnp.asarray(U)[:, :nc], jnp.asarray(UG)))
     cols = [tuple(int(k) for k in mi) for mi in topo.lsq_monomial_multi_index]
     return {mi: D[:, :, cols.index(mi)] for mi in mis}
 

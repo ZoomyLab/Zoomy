@@ -18,8 +18,12 @@ boundary face) and the interior cells; order = log2 of the last two ratios.
 PASS iff the closure's boundary order of every k >= p + 1 - k - 0.2 and its
 interior order the same (the interior fit is unchanged).
 
+Arguments: none (quads only, the quick default), ``tri``, or ``all`` (quads +
+triangles).  The SME derivation is done once per BC kind (``system_for``).
+
 GATE44_STORE=<file.json>: store the error tables (deliverable figure).
 """
+import functools
 import json
 import os
 import sys
@@ -55,13 +59,17 @@ def field(x, y, m):
             + 0.2 * m.cos(0.5 * K * x * 1.3))
 
 
+@functools.lru_cache(maxsize=None)
 def symbols():
     sm = SystemModel.from_model(SME(level=0, dimension=3,
                                     closures=[Newtonian(), StressFree()]))
     return sm.position_struct().get_list()[:2], sm.normal.get_list()[:2]
 
 
-def nsm_for(bc, p):
+@functools.lru_cache(maxsize=None)
+def system_for(bc):
+    """The derived SME(0) SystemModel with the ``bc`` BCs -- once per BC kind
+    (the SME derivation is ~5 s; the fit degree p is the NSM's, not its)."""
     (x, y), (n0, n1) = symbols()
     f = field(x, y, sp)
     if bc == "dir":
@@ -70,14 +78,17 @@ def nsm_for(bc, p):
     else:
         g = n0 * sp.diff(f, x) + n1 * sp.diff(f, y)
         bcs = [BC.Flux(t, on="h", gradient=g) for t in TAGS]
-    sm = SystemModel.from_model(SME(level=0, dimension=3,
-                                    closures=[Newtonian(), StressFree()],
-                                    boundary_conditions=BC.BoundaryConditions(bcs)))
+    return SystemModel.from_model(SME(level=0, dimension=3,
+                                      closures=[Newtonian(), StressFree()],
+                                      boundary_conditions=BC.BoundaryConditions(bcs)))
+
+
+def nsm_for(bc, p):
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=1))
+        system_for(bc), reconstruction=ReconstructionSpec(order=1))
     # the derivative a source of order p would declare -> LSQ degree p
     nsm.source_derivative_specs = [SimpleNamespace(axes=("x",) * p)]
-    return nsm, (x, y)
+    return nsm, symbols()[0]
 
 
 def mesh_for(kind, nx):
@@ -126,7 +137,9 @@ def errors(kind, bc, p, nx):
 def main():
     t0 = time.time()
     store, ok_all, lines = {}, True, []
-    kinds = sys.argv[1:] or ["quad", "tri"]
+    # quick default: the quads (~90 s); `tri` the triangles, `all` both (~3 min)
+    kinds = sys.argv[1:] or ["quad"]
+    kinds = [k for a in kinds for k in (["quad", "tri"] if a == "all" else [a])]
     for kind in kinds:
         for p in (2, 3):
             for bc in ("dir", "neu"):
