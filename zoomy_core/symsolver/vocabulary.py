@@ -160,15 +160,21 @@ class zeros(Block):
 
 class diffusion(Block):
     """``(kernel, bc, Q, Qaux, p, time, mesh)`` -> per cell div(A grad Q) of the
-    diffusion tensor ``kernel`` (explicit; RHS sign, A > 0 diffuses), by two-point
-    face fluxes. The outer value at a boundary face is the ghost of ``bc``, and a cut
-    face (distributed) carries no flux.
+    diffusion tensor ``kernel`` (explicit; RHS sign, A > 0 diffuses), face flux
+    ``n.A.grad_f``: the two-point flux plus a correction, ``grad_f`` the mean of the
+    two cells' LSQ gradients with the two-point difference as its part along the
+    cell-to-cell vector (boundary faces: the ghost of ``bc``, the tangential part from
+    the cell gradient). A cut face (distributed) carries no flux.
+
+    References:
+        Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
     """
 
 
 class implicit_diffusion(Block):
     """``(kernel, bc, Q, Qaux, p, time, dt, mesh)`` -> one Crank-Nicolson step of
-    :class:`diffusion` from ``time`` to ``time + dt``.
+    the two-point part of :class:`diffusion` from ``time`` to ``time + dt``, its
+    correction explicit at ``Q`` (deferred correction).
 
     References:
         Crank, Nicolson 1947, https://doi.org/10.1017/s0305004100023197
