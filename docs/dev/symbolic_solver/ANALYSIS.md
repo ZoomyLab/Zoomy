@@ -1048,3 +1048,30 @@ AMReX follow (CXX_NOTES), setup cost of the classification (gate 39 27 s
   derivative of the cut map).  Jittered quads: wall max 14-116 -> 1-22
   (interior 0.3-0.45).  Gate 1a 30/30 (AD = FD again), 39 72/72, 41
   orders 2.0, 42 18/18, 44 OK, 43 PASS as far as run.
+
+## 43. Test matrix rerun (all backends, serial / MPI / GPU): 327 PASS, 1 FAIL
+
+From an empty store on the current heads (the old one kept as
+`store_prev_20261012`).  Fixed on the way:
+- foam C16 (preCICE foam-foam): `FoamDriver.build(nsm, dim)` without a
+  topology again (precompile; the closure classes come with `run`).
+- AMReX C17 off cpu1 (mpi2, gpu1): first measured; the runs share one work
+  directory, so the cpu1 comparison finds its reference.  All pass.
+- foam C10 n120: the Schur-GAMG preconditioner diverged at the first solve
+  (FGMRES ended at a residual of 1e107; no preconditioner: = JAX 1.3e-12).
+  A diverged GAMG cycle now falls back to Jacobi on the Schur diagonal:
+  foam = JAX 1.4e-12, but ~260 GMRES iterations per solve (n60: ~50).
+  Open: a Schur approximation / smoother that stays convergent.
+- C12 `sub` on triangles refined in x only (ny 2) stretched the triangles:
+  foam O2 lost its order (L1 3.0e-3 / 7.9e-4 / 1.6e-3; OpenFOAM's
+  leastSquares at the walls).  Refined in x and y (ny 1/2/4) foam is
+  second order (orders 2.0, 2.8; JAX 2.1, 2.4); the case now does that.
+- foam-JAX "difference order" at round-off was noise: foam = JAX at the
+  finest mesh (L1 <= 1e-11) passes (C4 trans O2: 2.5e-6 at n25, where
+  OpenFOAM's cellLimited acts, then 6e-16 / 2e-13).
+- AMReX = JAX tolerances from measured sensitivity: JAX with Q0 perturbed
+  at 1e-14 (`*_pert` runs); tolerance 10x that.  C4 trans O2 3.7e-12 (JAX
+  sensitivity 1.3e-11); C11 sub O2 4.5e-6 (JAX sensitivity 2.0e-5: that
+  1-D steady run amplifies round-off 1e9-fold -- limiter switching; open
+  whether that is benign).
+Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).

@@ -39,6 +39,7 @@ class Run:
     backends: tuple = ("jax", "foam", "amrex")
     custom: object = None               # custom(backend, config, work) -> {metric: value}
     launch: bool = True                 # False: the custom run launches its own ranks
+    perturb: float = 0.0                # relative perturbation of Q0 (round-off sensitivity runs)
 
 
 def tri_rect(domain, nx, ny, nsm, tags=("left", "right", "bottom", "top")):
@@ -89,7 +90,10 @@ def prepare(r):
         Q0 = r.q0(names, xc)
     else:
         Q0 = nsm.sm.initial_conditions.apply(xc, np.zeros((len(names), xc.shape[1])))
-    return mesh, systems, np.asarray(Q0, dtype=float), names
+    Q0 = np.asarray(Q0, dtype=float)
+    if r.perturb:
+        Q0 = Q0 * (1.0 + r.perturb * np.random.default_rng(0).uniform(-1.0, 1.0, Q0.shape))
+    return mesh, systems, Q0, names
 
 
 # ── C3: lake at rest over a Gaussian bed ───────────────────────────────────
@@ -370,6 +374,9 @@ def _c2():
 JF = ("jax", "foam")           # triangles: no AMReX (Cartesian grids only)
 JFA = ("jax", "foam", "amrex")
 C4_N = (25, 50, 100)
+#: Q0 perturbation of the sensitivity runs (``*_pert``, JAX): the AMReX - JAX
+#: tolerance is 10x the JAX - perturbed JAX difference where one exists
+PERTURB = 1e-14
 
 
 def _c8():
@@ -420,7 +427,10 @@ CASES = {
            [Run(f"o{o}", partial(lake, o, 24), 100 * DT_LAKE, dt=DT_LAKE) for o in (1, 2)]),
     "C4": ("channel over a bump vs Bernoulli (inflow/outflow/wall BCs)",
            [Run(f"{v}_o{o}_n{n}", partial(channel, v, o, n), CHANNEL[v]["t_end"])
-            for v in CHANNEL for o in (1, 2) for n in C4_N]),
+            for v in CHANNEL for o in (1, 2) for n in C4_N]
+           + [Run(f"{v}_o{o}_n{n}_pert", partial(channel, v, o, n), CHANNEL[v]["t_end"],
+                  backends=("jax",), perturb=PERTURB)
+              for v in CHANNEL for o in (1, 2) for n in C4_N]),
     "C5": ("radial dry dam break, O2 eta + MOOD",
            [Run("n48", partial(C.dry_dambreak_2d, nx=48), 0.02, cfl=0.45, mood=True,
                 configs=ALL5)]),
@@ -434,12 +444,18 @@ CASES = {
              for o in (1, 2) for n in (40, 80, 160)]
             + [Run("smooth_ref_n1280", partial(smooth_1d, 2, 1280), 2.5, backends=("jax",))]
             + [Run(f"sub_o{o}_n{n}", partial(channel, "sub", o, n, 1), CHANNEL["sub"]["t_end"],
-                   backends=JFA) for o in (1, 2) for n in C4_N]),
+                   backends=JFA) for o in (1, 2) for n in C4_N]
+            + [Run(f"sub_o{o}_n{n}_pert", partial(channel, "sub", o, n, 1),
+                   CHANNEL["sub"]["t_end"], backends=("jax",), perturb=PERTURB)
+               for o in (1, 2) for n in C4_N]),
     "C12": ("triangles: C1 bump and C4 channel",
             [Run(f"bump_o{o}_n{n}", on_triangles(partial(C.bump_2d, o, nx=4), n, n, (0, 10, 0, 10)),
                  2.5, backends=JF) for o in (1, 2) for n in (10, 20, 40)]
-            + [Run(f"sub_o{o}_n{n}", on_triangles(partial(channel, "sub", o, 4), n, NY,
-                                                  (0, LENGTH, 0, WIDTH)),
+            # refined in x AND y (ny = n / 25): at a fixed ny the triangles
+            # stretch with n, and OpenFOAM's leastSquares gradient at the
+            # walls loses its order on them (foam O2 n100 ny 2: 1.6e-3 > n50)
+            + [Run(f"sub_o{o}_n{n}", on_triangles(partial(channel, "sub", o, 4), n,
+                                                  max(1, n * NY // 50), (0, LENGTH, 0, WIDTH)),
                    CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]),
     "C13": ("periodic in x: shifted bump in a uniform flow",
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],

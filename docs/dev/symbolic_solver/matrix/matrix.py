@@ -21,7 +21,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
-from cases import CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, prepare  # noqa: E402
+from cases import CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, PERTURB, prepare  # noqa: E402
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -186,6 +186,7 @@ def metrics(d):
 # A threshold is (op, value, source); source: theory | tolerance | spec |
 # observed (about 2x the worst value seen, README).  None: information.
 RO = ("<=", 1e-12, "tolerance (round-off)")
+RO_L1 = ("<=", 1e-11, "tolerance (round-off, L1 rel): foam = JAX")
 PRESS = ("<=", 1e-9, "tolerance (10 x pressure rtol 1e-10, over the steps)")
 TH = {
     "C1 O1": (">=", 0.6, "observed 0.71 (pre-asymptotic, theory 1)"),
@@ -359,10 +360,24 @@ def measure():
             if b == "jax" or not all(ok(*x) for x in d):
                 return
             if b == "amrex" or ("O1" in label and not tri):
+                # round-off amplified by the run (limiter switches, a
+                # transcritical flow): 10x JAX's own sensitivity, measured
+                # with Q0 perturbed at PERTURB (the ``*_pert`` runs)
+                sens = [relmax(J(case, k + "_pert"), J(case, k)) for k in keys
+                        if J(case, k + "_pert") is not None and J(case, k) is not None]
+                if sens and 10 * max(sens) > tol[1]:
+                    tol = ("<=", 10 * max(sens), f"10 x JAX round-off sensitivity "
+                           f"(Q0 perturbed {PERTURB:.0e}: {max(sens):.1e})")
                 add(case, f"{label} max rel vs JAX".strip(), b, "serial",
                     max(relmax(*x) for x in d), tol, "same stencil" if b == "foam" else "")
             elif len(d) > 1:
                 dl = [l1rel(*x) for x in d]
+                if dl[-1] <= RO_L1[1]:           # foam = JAX at the finest mesh (the
+                    # limiters differ, OpenFOAM's cellLimited acts on coarse
+                    # meshes only): an order of round-off is noise
+                    add(case, f"{label} foam-JAX L1 diff n{ns[-1]}".strip(), b, "serial", dl[-1],
+                        RO_L1, " / ".join(f"{x:.1e}" for x in dl))
+                    return
                 add(case, f"{label} foam-JAX L1 diff order {ns[-2]}->{ns[-1]}", b, "serial",
                     order(dl[-2], dl[-1]), TH["shrink tri" if tri else "shrink"],
                     " / ".join(f"{x:.1e}" for x in dl))

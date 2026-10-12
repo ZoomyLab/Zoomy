@@ -141,7 +141,8 @@ def amr(case, config, work):
     is made with the cpu1 run."""
     import gate37_amrex_amr as G
     from euler_common import wave_exact
-    out = Path(work).parent
+    # one directory for every config: off cpu1 a run is compared with the cpu1 one
+    out = Path(work).parents[2] / "serial" / Path(work).parent.name
     out.mkdir(parents=True, exist_ok=True)
     cfg = AMR_CONFIG[config]
     G.run(out, case, cfg)
