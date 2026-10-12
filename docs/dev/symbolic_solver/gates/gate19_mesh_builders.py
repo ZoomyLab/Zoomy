@@ -85,17 +85,26 @@ for label, make in cases.items():
     compare(f"FVMMesh {label}", fn, fo, [("face_subvolumes",
             nb.BaseMesh.face_subvolumes_computed(fn), ob.BaseMesh.face_subvolumes_computed(fo))])
     ln, lo = LSQMesh.from_fvm(fn), ol.LSQMesh.from_fvm(fo)
-    note = (" (intended change: 1-D from_msh stencils fixed, see below)"
-            if label == "from_msh line" else "")
+    why = ["1-D from_msh stencils fixed, see below"] if label == "from_msh line" else []
     # 2-D boundary stencils (ANALYSIS 28): ghost samples at the mirror image
     # of the cell centre (skewed cells: deg 1 changes) and counted before a
     # ring is extended (deg 2: compact boundary rings)
     two_d = label in ("create_2d", "jittered quads", "triangles", "from_msh quad", "create_3d")
-    bnote = " (intended change: boundary ghosts, ANALYSIS 28)" if two_d else ""
-    compare(f"LSQMesh deg 1 {label}{note}{bnote}", ln, lo)
+    why += ["boundary ghosts, ANALYSIS 28"] if two_d else []
+    # rank-based stencils (geometry_xp._lsq_stencils): a stencil is extended
+    # only while its fit (ghosts and REQ-174b decoupling included) cannot
+    # determine every coefficient -- not by a sample count.  1-D: boundary
+    # cells neighbour + ghost, degree 2 the 3-point ring (was 5); jittered
+    # quads deg 2: 4 corners extended; triangles deg 2: rank-deficient rings
+    # extended; create_3d deg 1: padding to the widest stencil USED (9, was
+    # the unused 17-cell ring)
+    rank = label in ("create_1d", "from_msh line", "jittered quads", "triangles", "create_3d")
+    why += ["rank-based stencils"] if rank else []
+    note = f" (intended change: {'; '.join(why)})" if why else ""
+    compare(f"LSQMesh deg 1 {label}{note}", ln, lo)
     ln._build_lsq_stencil(2)
     lo._build_lsq_stencil(2)
-    compare(f"LSQMesh deg 2 {label}{note}{bnote}", ln, lo)
+    compare(f"LSQMesh deg 2 {label}{note}", ln, lo)
 
 # the 1-D fix: a gmsh 1-D mesh gets create_1d's stencils (uniform, same cells)
 m = LSQMesh.from_msh(os.path.join(MSH, "mesh_n240.msh"))

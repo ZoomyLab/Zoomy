@@ -928,4 +928,21 @@ Found on the way: the templates' `boundary_states` uses the OTHER kernel,
 extrapolating / periodic BCs.  The ghost consumers disagree with it:
 gradient and limiter bounds treat it as a ghost (Dirichlet slope halved),
 the JAX derivative aux lifts 2Qb - Q (right for Dirichlet, wrong for walls
-and periodic partners).  Being unified on the D5 ghost kernel (section 37).
+and periodic partners).  Being unified on the D5 ghost kernel (section 38).
+
+## 37. LSQ stencils chosen by rank, not by sample count
+
+Gate 39 (polynomial reproduction, degree 1-3, 1-D / quads / jittered quads
+/ triangles / 3-D hex; interior, exact-ghost boundary, BC-built ghosts)
+found 4 rank-deficient stencil classes left by the ANALYSIS-28 count rule:
+3-D hex degree 3 interior (the 3x3x3 ring has x^3 = x: rank 16 of 19),
+triangle corner neighbours degree 2, triangle boundary cells degree 3,
+jittered-quad corners degree 2.  Now a ring is kept iff every coefficient
+the fit reads has relative singular value >= 1e-3 (ghosts count only for
+their pure-normal rows, REQ-174b); otherwise the next face-neighbour layer
+is added, nearest equidistant group first, <= 2 layers; 1-D the same.
+Gate 39: 57 PASS / 0 FAIL / 15 XFAIL (BC-built Dirichlet ghosts at degree
+>= 2 and Neumann at degree 3: the boundary closure's job).  Gates 1, 16,
+32 identical; wall d/dy check unchanged; setup 160k quads deg 1/2/3
+0.56/1.21/5.9 s -> 0.67/1.44/4.8 s.  1-D degree 2 is now the compact 3-point
+fit (was 5).  Unit test tests/template_gates/test_gate_1a_core_lsq_unisolvent.py.
