@@ -4,11 +4,12 @@
     python matrix.py table                                 # store -> table.md
     python matrix.py run --tier large CASE [ARGS]          # large.py (never by default)
 
-BACKEND: jax foam amrex.  CASE: C1 ... C26 (cases.py).  CONFIG: serial
+BACKEND: jax foam amrex.  CASE: C1 ... C33 (cases.py).  CONFIG: serial
 (default) mpi2 mpi4 gpu1 gpu2 (= gpu-mpi).  A run in the store is skipped
 (--force reruns).  A run that raises NotImplementedError is stored as
 "unsupported", any other exception as a failure.
 """
+import functools
 import json
 import os
 import subprocess
@@ -217,7 +218,7 @@ TH = {
     "rev": ("<=", 1e-10, "tolerance (checkpointed reverse vs forward)"),
     "couple": ("<=", 1e-14, "tolerance (gate 26: coupled = single domain at O1)"),
 }
-CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23")
+CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23", "C32", "C33")
 TH.update({
     "C18 L1": {1: ("<=", 4.2e-2, "observed 2.09e-2 (3-D worker)"), 2: ("<=", 1.0e-2, "observed 5.13e-3")},
     "C18 order": {1: (">=", 0.45, "observed 0.54 (discontinuous: theory <= 1)"),
@@ -228,6 +229,16 @@ TH.update({
                  "o2minmod": (">=", 1.7, "observed 1.83")},
     "fd3": ("<=", 1e-6, "observed 4.4e-8 (best eps of 1e-3..1e-6)"),
     "C23": (">=", 1.5, "observed 2.11 (different stencils, converging)"),
+    "C32 order": (">=", 1.8, "theory 2"),
+    "C32 err": ("<=", 7e-4, "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)"),
+    "C32 control": (">=", 0.1, "observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)"),
+    "C32 inviscid": ("<=", 4e-4, "observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)"),
+    "C32 foam": ("<=", 0.5, "observed 0.21 (foam's own stencils at second order)"),
+    "C33 err": {"imex": ("<=", 1e-3, "observed 5.1e-4 (implicit Euler, theory O(dt))"),
+                "rk2": ("<=", 7e-6, "observed 3.3e-6 (SSP-RK2, theory O(dt^2))")},
+    "C33 scheme": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 3e-12 C++, 4e-15 JAX)"),
+                   "rk2": RO},
+    "C33 xb": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 1.3e-12)"), "rk2": RO},
 })
 
 
@@ -390,6 +401,99 @@ def gate_checks(add, b, g):
             ("<=", 0, f"spec, gate 39: exact to {m['tol']:g}"),
             f"PASS={m['passes']} FAIL={m['fails']} (tol {m['tol']:g}); the ghost as a plain sample "
             f"is inexact in {m['sample_inexact']} cases (sensitivity)")
+
+
+@functools.lru_cache(maxsize=None)
+def _moment_jacobian():
+    import cases
+    return cases.moment_jacobian()
+
+
+def visc_checks(add, b, g, J):
+    """C32 (viscous shear decay between walls, exact u_t = nu u_yy) and C33
+    (SME(2) vertical viscosity of a uniform state, exact q(t) = expm(t J) q0)."""
+    import cases as K
+    from scipy.linalg import expm
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+    S, ny = K.SHEAR, K.SHEAR["ny"]
+
+    def shear_err(d, v):
+        return float(np.abs(d["Q"][names(d).index("q_x_0")]
+                            - K.shear_exact(v, d["xc"][1], float(d["t"]))).max())
+    for v in ("noslip", "free"):                               # C32
+        runs = [g("C32", f"{v}_n{n}") for n in ny]
+        if ok(*runs):                                          # JAX: the order
+            es = [shear_err(x, v) for x in runs]
+            add("C32", f"{v} L_inf order {ny[-2]}->{ny[-1]}", b, "serial", order(es[-2], es[-1]),
+                TH["C32 order"], "L_inf " + " / ".join(f"{x:.2e}" for x in es)
+                + f"; order {ny[0]}->{ny[1]} {order(es[0], es[1]):.2f}")
+        d, j = g("C32", f"{v}_n{ny[0]}"), J("C32", f"{v}_n{ny[0]}")
+        if d is None:
+            continue
+        n_ = names(d)
+        add("C32", f"{v} n{ny[0]} L_inf vs exact", b, "serial", shear_err(d, v),
+            TH["C32 err"], "")
+        add("C32", f"{v} n{ny[0]} max|h - 1|", b, "serial",
+            float(np.abs(d["Q"][n_.index("h")] - 1.0).max()), RO, "theory: h stays 1")
+        add("C32", f"{v} n{ny[0]} max|q_y|", b, "serial",
+            float(np.abs(d["Q"][n_.index("q_y_0")]).max()), RO, "theory: v stays 0")
+        u = d["Q"][n_.index("q_x_0")]                          # x-independent: every x-derivative is 0
+        _, grp = np.unique(np.round(d["xc"][1], 9), return_inverse=True)
+        lo, hi = np.full(grp.max() + 1, np.inf), np.full(grp.max() + 1, -np.inf)
+        np.minimum.at(lo, grp, u)
+        np.maximum.at(hi, grp, u)
+        add("C32", f"{v} n{ny[0]} x-variation of q_x (max rel)", b, "serial",
+            float((hi - lo).max() / np.abs(u).max()), RO, "theory: u = u(y)")
+        if b == "amrex" and j is not None:
+            add("C32", f"{v} n{ny[0]} max rel vs JAX", b, "serial", relmax(d, j),
+                ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"), "")
+        elif b == "foam" and j is not None:
+            add("C32", f"{v} n{ny[0]} L_inf|foam - JAX| / L_inf(JAX - exact)", b, "serial",
+                float(np.abs(d["Q"] - j["Q"]).max() / shear_err(j, v)), TH["C32 foam"],
+                "foam's own stencils at second order")
+    c = g("C32", f"ctrl_n{ny[0]}")                             # C32 negative control (JAX)
+    if c is not None:
+        add("C32", "control: no-slip profile on free-slip walls, L_inf vs the no-slip exact", b,
+            "serial", shear_err(c, "ctrl"), TH["C32 control"], "the walls act")
+    c = g("C32", f"inviscid_n{ny[0]}")                         # C32: the Dirichlet wall's own friction (JAX)
+    if c is not None:
+        add("C32", "nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction)", b,
+            "serial", shear_err(c, "inviscid"), TH["C32 inviscid"],
+            "Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells")
+    M = K.MOMENT                                               # C33
+    for integ, scheme in (("imex", "implicit Euler (I - dt J)^-N"),
+                          ("rk2", "SSP-RK2 (1 + dt J + (dt J)^2 / 2)^N")):
+        ds = [g("C33", f"{integ}_k{k}") for k in M["ks"]]
+        if not ok(*ds):
+            continue
+        J_, q0, I = _moment_jacobian(), np.array(M["q0"]), np.eye(len(M["q0"]))
+        rows = [names(ds[0]).index(f"q_{i}") for i in range(len(q0))]
+        ex = expm(M["t_end"] * J_) @ q0
+        es, sch = [], []
+        for k, d in zip(M["ks"], ds):
+            dt = M["dt0"] / 2 ** k
+            n_step = int(round(M["t_end"] / dt))
+            step = np.linalg.inv(I - dt * J_) if integ == "imex" else I + dt * J_ + (dt * J_) @ (dt * J_) / 2
+            q = d["Q"][rows, 0]
+            es.append(float(np.abs(q - ex).max() / np.abs(ex).max()))
+            sch.append(float(np.abs(q - np.linalg.matrix_power(step, n_step) @ q0).max() / np.abs(ex).max()))
+        p = 1 if integ == "imex" else 2
+        add("C33", f"{integ} q(T) vs expm, order dt/2 -> dt/4", b, "serial", order(es[-2], es[-1]),
+            (">=", p - 0.2, f"theory {p}, slack 0.2"),
+            "rel err " + " / ".join(f"{x:.2e}" for x in es) + f" (dt {M['dt0']} / 2^k); {scheme}")
+        add("C33", f"{integ} q(T) vs expm at dt {M['dt0'] / 4:g} (rel)", b, "serial", es[-1],
+            TH["C33 err"][integ], "")
+        add("C33", f"{integ} q(T) vs its own scheme, {scheme} (max rel)", b, "serial", max(sch),
+            TH["C33 scheme"][integ], "the integrator in use, to round-off / the implicit tolerance")
+        add("C33", f"{integ} uniform state: max|Q - Q[:, 0]|, |h - 1|", b, "serial",
+            float(max(np.abs(ds[-1]["Q"] - ds[-1]["Q"][:, :1])[[r for r in range(len(names(ds[-1])))
+                                                                 if names(ds[-1])[r] != "b"]].max(),
+                      np.abs(ds[-1]["Q"][names(ds[-1]).index("h")] - M["h"]).max())), RO,
+            "theory: no flux divergence, h stays")
+        jd = [J("C33", f"{integ}_k{k}") for k in M["ks"]]
+        if b != "jax" and ok(*jd):
+            add("C33", f"{integ} max rel vs JAX", b, "serial", max(relmax(d, j) for d, j in zip(ds, jd)),
+                TH["C33 xb"][integ], "")
 
 
 def measure():
@@ -565,6 +669,7 @@ def measure():
                     add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
         euler_checks(add, b, g, J)
         gate_checks(add, b, g)
+        visc_checks(add, b, g, J)
         for c in CONFIGS:                       # C17: AMR (gate 37)
             for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
                 d = g("C17", k, c)

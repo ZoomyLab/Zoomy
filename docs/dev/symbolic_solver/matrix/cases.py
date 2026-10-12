@@ -10,7 +10,8 @@ import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
-from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
+from zoomy_core.model.models.closures import (ManningFriction, NavierSlip, Newtonian,
+                                              NewtonianInPlane, StressFree)
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -353,6 +354,119 @@ def _viscous():
     return mesh, nsm     # AMReX 3-D raises NotImplementedError: "unsupported"
 
 
+# ── C32: viscous shear decay between walls (exact: u_t = nu u_yy) ──────────
+SHEAR = dict(nu=0.05, g=0.01, t_end=0.5, nx=8, ny=(20, 40, 80), steps=16)   # dt = dy / steps
+
+
+def shear_exact(variant, y, t):
+    """u(y, t): no-slip sin(pi y) e^(-nu pi^2 t), free-slip cos(pi y) e^(-nu pi^2 t).
+    ``ctrl`` (negative control): the no-slip profile on free-slip walls.
+    ``inviscid``: nu = 0 on no-slip walls, u stays sin(pi y)."""
+    f = np.sin if variant in ("noslip", "ctrl", "inviscid") else np.cos
+    return f(np.pi * y) * np.exp(-(0.0 if variant == "inviscid" else SHEAR["nu"]) * np.pi ** 2 * t)
+
+
+def shear_decay(variant, ny, order=2, limiter="none"):
+    """SWE (SME(0)) + NewtonianInPlane: h = 1, v = 0, u = u(y), periodic in x,
+    walls at y = 0, 1.  Every x-derivative vanishes, so h stays 1, v stays 0 and
+    the x-momentum equation is exactly u_t = nu u_yy (diffusion_matrix
+    A[q_x, q_x, y, y] = nu, A[q_x, h, y, y] = -nu q_x / h; no factor 2: that
+    is the xx entry).  The viscous wall is the BC's ghost: noslip =
+    ``Dirichlet`` on the momentum (face value 0, ghost -q), free = ``Wall``
+    (tangential momentum kept: ghost = q, a zero normal gradient); ``ctrl`` =
+    the no-slip profile on ``Wall``s (the walls must act: the error is O(1)); ``inviscid``
+    = nu 0 on the no-slip walls (what the Dirichlet wall's Riemann state alone does).  Second
+    order, no limiter: a smooth profile (minmod clips at its extremum).  g is
+    small (0.01): the exact solution does not depend on it, but the Rusanov
+    dissipation (wave speed sqrt(g h), a third-order error) would otherwise
+    cancel part of the O(dy^2) error of the viscous flux, and the measured
+    order jumps (3.4, 4.6, 1.4 at g = 9.81, nx 20 / 40 / 80 / 160)."""
+    nu = 0.0 if variant == "inviscid" else SHEAR["nu"]
+    wall = ((lambda t: BC.Dirichlet(tag=t, on="momentum", value=0.0))
+            if variant in ("noslip", "inviscid")
+            else (lambda t: BC.Wall(tag=t)))
+    bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+           BC.Periodic(tag="right", periodic_to_physical_tag="left"),
+           wall("bottom"), wall("top")]
+    model = SME(level=0, dimension=3, boundary_conditions=BC.BoundaryConditions(bcs),
+                closures=[Newtonian(), ManningFriction(), StressFree(), NewtonianInPlane()])
+    sm = SystemModel.from_model(model)
+    sm.parameter_values.nu, sm.parameter_values.g = nu, SHEAR["g"]
+    names = [str(s) for s in sm.state]
+    ix, ih = names.index("q_x_0"), names.index("h")
+    A = sm.diffusion_matrix            # the reduction u_t = nu u_yy rests on these two entries
+    assert A[ix, ix, 1, 1] == sm.parameters.nu, A[ix, ix, 1, 1]
+    assert A[ix, ih, 1, 1] == -sm.parameters.nu * sm.state[ix] / sm.state[ih], A[ix, ih, 1, 1]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        q[names.index("h")] = 1.0
+        q[names.index("q_x_0")] = shear_exact(variant, x[1], 0.0)
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=limiter))
+    nx = SHEAR["nx"]
+    return LSQMesh.create_2d(domain=(0, nx / ny, 0, 1), nx=nx, ny=ny), nsm
+
+
+# ── C33: vertical viscosity of the shallow moment model (exact: expm) ─────
+#: SME(2) + Newtonian (bulk) + NavierSlip (bottom) + StressFree (surface),
+#: uniform periodic state at h = 1: the flux divergence vanishes, the moments
+#: obey q' = J q (the source is linear in q at fixed h)
+MOMENT = dict(level=2, nu=0.05, lambda_s=0.5, h=1.0, q0=(0.5, 0.2, -0.1), nx=8, t_end=1.0,
+              dt0=0.05, ks=(0, 1, 2))      # dt = dt0 / 2^k
+
+
+def moment_decay(order=2):
+    """The C33 model and mesh: 1-D, periodic, flat bed, uniform (h, q_0..q_2)."""
+    M = MOMENT
+    bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+           BC.Periodic(tag="right", periodic_to_physical_tag="left")]
+    model = SME(level=M["level"], dimension=2, boundary_conditions=BC.BoundaryConditions(bcs),
+                closures=[Newtonian(), NavierSlip(), StressFree()])
+    sm = SystemModel.from_model(model)
+    sm.parameter_values.nu, sm.parameter_values.lambda_s = M["nu"], M["lambda_s"]
+    names = [str(s) for s in sm.state]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        q[names.index("h")] = M["h"]
+        for i, v in enumerate(M["q0"]):
+            q[names.index(f"q_{i}")] = v
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+    return LSQMesh.create_1d(domain=(0, M["nx"]), n_inner_cells=M["nx"]), nsm   # dx 1: CFL-safe dt
+
+
+def moment_jacobian():
+    """J = d(source_q)/d(q_0..q_L) at h = h0 and the parameters of C33,
+    by sympy differentiation of the SystemModel's source (the q rows); the
+    source must be linear in q at fixed h (asserted: source_q - J q = 0)."""
+    import sympy as sp
+    mesh, nsm = moment_decay()
+    sm = nsm.sm
+    st = list(sm.state)
+    names = [str(s) for s in st]
+    mom = [s for s in st if str(s).startswith("q_")]
+    S = sp.Matrix(sm.source)[[names.index(str(m)) for m in mom], :]
+    val = {str(k): float(v) for k, v in sm.parameter_values.items()}
+    val["h"], val["hinv"] = MOMENT["h"], 1.0 / MOMENT["h"]      # hinv: the NSM's aux 1/h
+    sub = {s: val[s.name] for s in S.free_symbols if s.name in val}     # by name
+    J = S.jacobian(mom).subs(sub)
+    resid = (S - S.jacobian(mom) * sp.Matrix(mom)).subs(sub)
+    assert sp.simplify(resid) == sp.zeros(len(mom), 1), f"source not linear in q: {resid}"
+    return np.array(J.tolist(), dtype=float)
+
+
+def moment_exact(t):
+    """q(t) = expm(t J) q(0)."""
+    from scipy.linalg import expm
+    return expm(t * moment_jacobian()) @ np.array(MOMENT["q0"])
+
+
 # ── the matrix ─────────────────────────────────────────────────────────────
 def _c1():
     runs = [Run(f"o{o}_n{n}", partial(C.bump_2d, o, nx=n), 2.5,
@@ -440,6 +554,30 @@ def _c30():
     from custom import lsq_polynomials
     return [Run("polynomials", None, 0.0, custom=lambda b, c, w: lsq_polynomials(),
                 backends=("jax",))]
+
+
+IMPLICIT = dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60)
+
+
+def _c32():
+    """Both viscous walls on ny 20 / 40 / 80 (JAX); foam and AMReX on ny 20;
+    the controls ``ctrl`` (walls act) and ``inviscid`` (JAX)."""
+    return [Run(f"{v}_n{ny}", partial(shear_decay, v, ny), SHEAR["t_end"],
+                dt=1.0 / (ny * SHEAR["steps"]), imex=True, solver=IMPLICIT,
+                backends=JFA if ny == SHEAR["ny"][0] else ("jax",))
+            for v in ("noslip", "free") for ny in SHEAR["ny"]] + [
+        Run(f"{v}_n20", partial(shear_decay, v, SHEAR["ny"][0]), SHEAR["t_end"],
+            dt=1.0 / (SHEAR["ny"][0] * SHEAR["steps"]), imex=True, solver=IMPLICIT,
+            backends=("jax",)) for v in ("ctrl", "inviscid")]
+
+
+def _c33():
+    """IMEX (implicit-Euler source) and explicit SSP-RK2 (the source in the
+    explicit step) at constant dt = dt0 / 2^k."""
+    M = MOMENT
+    return [Run(f"{integ}_k{k}", partial(moment_decay, 2), M["t_end"], dt=M["dt0"] / 2 ** k,
+                imex=integ == "imex", solver=IMPLICIT)
+            for integ in ("imex", "rk2") for k in M["ks"]]
 
 
 #: why a backend has no run of a case (measure(): the label of its n/a row)
@@ -541,4 +679,8 @@ CASES = {
     "C29": ("LSQ derivatives with the boundary closure (gate 44): quads, p 2 / 3, dir / neu", _c29()),
     "C30": ("LSQ polynomial reproduction (gate 39): 1-D, quads, jittered quads, triangles, hexahedra",
             _c30()),
+    "C32": ("viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; "
+            "no-slip and free-slip walls", _c32()),
+    "C33": ("vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
+            _c33()),
 }
