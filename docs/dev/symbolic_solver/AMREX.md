@@ -180,3 +180,30 @@ JAX) and on 1 GPU the dt reduction and three unfused cells() kernels.
      drift without it (shows the register works); (4) lake at rest over a bump crossing the
      C/F interface: |u| ~ 1e-15; (5) dynamic regrid on the dry dam break front: mass to
      round-off, h >= 0; (6) MPI 2/4 ranks = serial, GPU = CPU, as gates 27 / 3d.
+
+## Round 5: AMR (one dt for all levels) and preCICE (3e95abb; core a82305d)
+
+AMR runs the printed template step on AmrCore: per-level mesh + LSQ table,
+finer levels' halos interpolated from the coarser level in the
+reconstruction variables W, FluxRegister reflux of the conservation-law
+rows (refluxing SWE momentum broke the lake at rest: its NCP part has no
+conservative reading), average_down, regrid, multi-level output.  Templates
+unchanged (program.amr_procedures prints existing pieces).  ~470 code
+lines (+ comments: 595).  Gate 37:
+
+| test | result |
+|---|---|
+| fine level covering the domain = fine single level | 0.0 (AMReX), 6e-16 / 3e-15 vs JAX |
+| static patch, Euler wave O2 | composite L1 EOC 2.39 / 2.22; AMR - fine 8.9e-3 -> 3.8e-4 |
+| closed box, Euler O2 + MOOD | mass 0, energy 2.2e-16 (without reflux 5.9e-4 / 1.4e-3) |
+| lake at rest across C/F | abs(u) 1.1e-15 / 1.3e-15 |
+| dry dam break, regrid every 2 steps | mass 2.9e-15, h >= 0 |
+| MPI 2, GPU | = serial / = CPU (0.0) |
+
+Subcycling: not done.  preCICE (gate 38): AMReX<->AMReX 1+1 and 2+2,
+AMReX<->JAX vs single domain 3-4e-15, mass exact; images rebuilt with
+preCICE 3.4.0 (containers/zoomy_amrex/*.def).  No GPU coupling run.
+
+Correction: the dry dam break's 1.1e-9 vs JAX was not an eigenvalue
+cluster: the driver took the domain from rounded cell centres (3e-10
+off).  Fixed: 3e-15.

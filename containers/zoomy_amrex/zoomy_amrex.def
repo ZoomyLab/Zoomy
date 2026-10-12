@@ -46,6 +46,19 @@ From: ubuntu:24.04
         "fastapi>=0.100" "uvicorn[standard]>=0.20" \
         jupyterlab jupyter-server ipykernel
 
+    # preCICE 3.4.0 for the coupled AMReX participant (zoomy_amrex symsolver
+    # couple=...).  3.4.0 = the Python peers' version (conda-forge pyprecice
+    # 3.4.0): preCICE refuses to couple different versions.  `apt install
+    # ./deb` resolves its hard deps (boost, libxml2, petsc, mpi-default-dev);
+    # staged in /root (apptainer build may expose the host /tmp).  After
+    # the pip stack: its deps pull Debian's numpy, which pip cannot uninstall.
+    PRECICE_VER=3.4.0
+    wget -q "https://github.com/precice/precice/releases/download/v${PRECICE_VER}/libprecice3_${PRECICE_VER}_noble.deb" \
+        -O /root/libprecice3.deb
+    apt-get update && apt-get install -y --no-install-recommends /root/libprecice3.deb \
+    && rm -f /root/libprecice3.deb && rm -rf /var/lib/apt/lists/*
+    pkg-config --modversion libprecice
+
     # AMReX from source (headers + source kept, object files pruned). zoomy_amrex
     # code-gens + compiles per model at RUNTIME, so no compile at install time.
     git clone --depth 1 --branch 25.02 \
@@ -82,5 +95,6 @@ From: ubuntu:24.04
 %test
     python3 -c "import zoomy_core, zoomy_amrex, zoomy_server, zoomy_prepost, zoomy_plotting, h5py, meshio; print('imports OK')"
     test -d /opt/amrex/Src/Base && echo "AMReX source OK"
+    pkg-config --modversion libprecice
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
