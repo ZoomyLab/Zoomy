@@ -212,7 +212,7 @@ def check(kind, name):
     e_grad = max(np.abs(G[r, :, bcells] - exact[r]).max() for r in rows) / scale
     e_face = max(np.abs(Gf[r, :, bcells] - exact[r]).max() for r in rows) / scale
     e_face_t = max(np.abs(Gf[r, :, tcells] - exact[r]).max() for r in rows) / scale
-    spec = [e for e in s.nsm.aux_derivatives
+    spec = [e for e in s.rt.aux_derivatives
             if e["kind"] == "derivative" and e["target_kind"] == "state"
             and e["state_index"] in rows and sum(e["multi_index"]) == 1]
     A = np.asarray(m["derivative_aux"](spec, Qj, Qaux, g, jnp.asarray(Qg), rows))

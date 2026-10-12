@@ -1002,3 +1002,22 @@ FromData builds its own 2v - Q.
   configure() settings, writer / CFL check, NaN-safe min / max, Newton
   skeleton, elementwise functors.  rt.H -157, rt_amrex.H -181 (net -60).
   Gates 11, 12, 23, 26, 27, 34, 37, 38 bitwise identical; CUDA build OK.
+
+## 41. Constrained LSQ boundary closure (zoomy_core + JAX)
+
+Each state row is classed per boundary face from the D5 ghost kernel's
+Jacobian (`numerics/boundary_closure.py`): Dirichlet (ghost = -Q + 2v),
+Neumann (ghost = Q + 2 d g) or ghost (coupled rows: oblique walls).
+Dirichlet / Neumann rows enter fits of degree >= 2 as EXACT constraints at
+the foot point (KKT, precomputed in geometry_xp; the runtime inputs, the
+ghosts, are unchanged); degree-1 fits keep the ghost sample (measured
+better there).  Used by the JAX gradient, derivative_aux and full_aux
+(which now sees BC ghosts at all; it assumed zero gradient).  Gate 39: 72
+PASS / 0 FAIL (was 57 + 15 XFAIL), group (c) through the real closure;
+gate 42 18/18; gate 44 (boundary orders, quads / triangles, p 2/3,
+Dirichlet / Neumann): order p+1-k reached (ghost sample: d2 ~0.1).  Gates
+1, 7, 12, 16, 32, 41 identical; gate 21 changes at the Dirichlet-q inflow
+only (P_0 0.29 -> 0.064 at nx 60, toward the refined runs); C10 orders
+1.92 / 2.00 / 2.01.  Open: oblique-wall rows (frame rotation), foam /
+AMReX follow (CXX_NOTES), setup cost of the classification (gate 39 27 s
+-> 171 s; gate 44 > 5 min).

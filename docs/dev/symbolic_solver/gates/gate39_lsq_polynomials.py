@@ -9,25 +9,31 @@ Cell groups
   (a) interior   cells without a boundary face           -- MUST pass
   (b) boundary   cells, ghost = exact polynomial at the
                  MIRROR point m = c + 2((f-c).n)n          -- MUST pass
-  (c) boundary   cells, ghost built from a BC as the solvers do (foot point
-                 x_f = c + ((f-c).n)n, d_n = (f-c).n):
+  (c) boundary   cells, the BC data as the solvers build it -- the D5 ghost
+                 (foot point x_f = c + ((f-c).n)n, d_n = (f-c).n):
         Dirichlet     2 g(x_f) - u_c
         Neumann       u_c + 2 d_n dg/dn(x_f)
         zero-gradient u_c  (walls normal to axis 0, polynomial independent of
                             x_0; the other walls get the exact mirror value)
-Expected-inexact table (Taylor expansion of p(m) about c, n-direction, d=d_n):
+                 through the BOUNDARY CLOSURE (ANALYSIS 40; fits of degree
+                 >= 2 -- degree 1 keeps the ghost sample): the topology's
+                 closure classes (Dirichlet / Neumann rows on every face;
+                 zero-gradient: Neumann on the axis-0 walls, the exact mirror
+                 sample elsewhere) and their constrained fit
+                 (geometry_xp.lsq_derivatives with ``classes`` -- the
+                 functions the JAX runtime calls) -- MUST pass
+The ghost read as a plain SAMPLE (the pre-closure fit) is inexact
+(Taylor expansion of p(m) about c, n-direction, d=d_n):
   p(m)       = p + 2d p_n + 2d^2 p_nn + (4/3) d^3 p_nnn
   Dirichlet  = p + 2d p_n +   d^2 p_nn + (1/3) d^3 p_nnn   exact for p <= 1 only
   Neumann    = p + 2d p_n + 2d^2 p_nn +       d^3 p_nnn   exact for p <= 2 only
   zero-grad  exact for every p (polynomial constant along the wall normal)
-A case in that table that is inexact is reported XFAIL (with the measured
-error); one that is unexpectedly exact is XPASS (notice, not a failure).
-Any other miss > TOL is FAIL.  The "ghost" column is max|ghost - p(m)| / scale,
-the error of the ghost SAMPLE itself.  Group (c) is evaluated on the boundary
-cells where (b) holds ("excl=m" = cells dropped because their stencil already
-fails with exact ghosts, those are counted in (b)), so an XFAIL number
-measures the BC construction alone and not a stencil defect.  "bad=k/N" = cells
-above TOL in the group.
+its error is shown as "sample-fit" (sensitivity: the gate sees the old
+defect where the table says so).  Any miss > TOL is FAIL.  The "ghost"
+column is max|ghost - p(m)| / scale, the error of the ghost SAMPLE itself.
+Group (c) is evaluated on the boundary cells where (b) holds ("excl=m" =
+cells dropped because their stencil already fails with exact ghosts, those
+are counted in (b)).  "bad=k/N" = cells above TOL in the group.
 
 Run:  PYTHONNOUSERSITE=1 JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 \\
       PYTHONPATH=<gates>:library/zoomy_core:library/zoomy_jax \\
@@ -49,6 +55,8 @@ jax.config.update("jax_enable_x64", True)
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.mesh.base_mesh import BaseMesh
 from zoomy_core.mesh.fvm_mesh import FVMMesh
+from zoomy_core.mesh.geometry_xp import build_topology, compute_geometry, lsq_derivatives
+from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax, lsq_gradient_per_field
 from gate16_parallel import tri_bump
 
@@ -152,10 +160,24 @@ def cell_err(out, row, exact, scale_all):
     return worst
 
 
-def status(err, expect_inexact):
-    if not expect_inexact:
-        return "PASS" if err < TOL else "FAIL"
-    return "XPASS" if err < TOL else "XFAIL"
+def status(err):
+    return "PASS" if err < TOL else "FAIL"
+
+
+def run_closure(mesh, d, p, kinds, U, UG, mis):
+    """The derivatives of every row of ``U`` (ghosts ``UG``) through the
+    boundary closure with per-row face ``kinds`` ``(B, n_bf)``:
+    ``{mi: (B, nc)}``."""
+    topo = build_topology(mesh, lsq_degree=p, closure={("gate39", "state"): kinds})
+    X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:d])
+    g = compute_geometry(topo, X)
+    nc = int(mesh.n_inner_cells)
+    # degree 1 has no closure (the ghost sample is exact for linear data)
+    classes = topo.lsq_closure_class.get(("gate39", "state"), (-1,) * len(kinds))
+    assert (p >= 2) == any(c >= 0 for c in classes), (p, classes)
+    D = np.asarray(lsq_derivatives(topo, g, jnp.asarray(U)[:, :nc], jnp.asarray(UG), classes))
+    cols = [tuple(int(k) for k in mi) for mi in topo.lsq_monomial_multi_index]
+    return {mi: D[:, :, cols.index(mi)] for mi in mis}
 
 
 def main():
@@ -196,6 +218,12 @@ def main():
                 U.append(P0(cc))
                 UB.append(zg)
             out = run_derivs(mj, mis, np.array(U), np.array(UB))
+            nbf = len(bfc)
+            kinds = [np.full(nbf, GHOST), np.full(nbf, DIRICHLET), np.full(nbf, NEUMANN)]
+            if have_zg:
+                kinds.append(np.where(wall0, NEUMANN, GHOST))
+            closed = run_closure(mesh, d, p, np.array(kinds, dtype=np.int8),
+                                 np.array(U), np.array(UB), mis)
 
             def ghost_err(gv, pm_):
                 return np.abs(gv - pm_).max() / max(np.abs(pm_).max(), 1e-300)
@@ -203,26 +231,30 @@ def main():
             ce0 = cell_err(out, 0, exact, scale_all)
             good_b = boundary[ce0[boundary] <= TOL]                   # (b) holds here
             excl = len(boundary) - len(good_b)
-            lines = [("interior", "-", interior, ce0, 0.0, False, 0),
-                     ("boundary", "exact-mirror", boundary, ce0, 0.0, False, 0)]
+            lines = [("interior", "-", interior, ce0, 0.0, None, 0),
+                     ("boundary", "exact-mirror", boundary, ce0, 0.0, None, 0)]
             for row, bc in ((1, "dirichlet"), (2, "neumann")):
-                inex = INEXACT_FROM[bc] is not None and p >= INEXACT_FROM[bc]
-                lines.append(("boundary", bc, good_b, cell_err(out, row, exact, scale_all),
-                              ghost_err(ghost[bc], pm), inex, excl))
+                lines.append(("boundary", bc, good_b, cell_err(closed, row, exact, scale_all),
+                              ghost_err(ghost[bc], pm),
+                              cell_err(out, row, exact, scale_all)[good_b].max(), excl))
             if have_zg:
-                lines.append(("boundary", "zerograd", good_b, cell_err(out, 3, exact0, scale0),
-                              ghost_err(zg, P0(g["mir"])), False, excl))
-            for grp, bc, cells, ce, gerr, inex, ex in lines:
+                lines.append(("boundary", "zerograd", good_b, cell_err(closed, 3, exact0, scale0),
+                              ghost_err(zg, P0(g["mir"])),
+                              cell_err(out, 3, exact0, scale0)[good_b].max(), excl))
+            for grp, bc, cells, ce, gerr, sample, ex in lines:
                 err = ce[cells].max()
-                st = status(err, inex)
+                st = status(err)
                 n_pass += st == "PASS"
                 n_fail += st == "FAIL"
-                n_xfail += st == "XFAIL"
-                n_xpass += st == "XPASS"
+                if sample is not None:                       # sensitivity
+                    inex = INEXACT_FROM[bc] is not None and p >= INEXACT_FROM[bc]
+                    n_xfail += bool(inex and sample > TOL)   # the old defect, seen
+                    n_xpass += bool(inex and sample <= TOL)  # ... not seen
                 if st == "FAIL":
                     fails.append(f"{name} p={p} {grp} {bc}: {err:.2e}")
                 bad = int((ce[cells] > TOL).sum())
                 tail = f" excl={ex}" if ex else ""
+                tail += f"  sample-fit {sample:8.1e}" if sample is not None else ""
                 print(f"{name:16s} p={p} {grp:8s} {bc:12s} maxrel={err:9.2e} bad={bad}/{len(cells)} "
                       f"ghost={gerr:8.1e} {st}{tail}", flush=True)
             if not have_zg:
@@ -230,8 +262,9 @@ def main():
     for f in fails:
         print("UNEXPECTED FAIL:", f)
     ok = n_fail == 0
-    print(f"SUMMARY gate39: PASS={n_pass} FAIL={n_fail} XFAIL={n_xfail} XPASS={n_xpass} "
-          f"(tol {TOL:g}) runtime {time.time() - t0:.1f}s -> {'OK' if ok else 'FAILED'}")
+    print(f"SUMMARY gate39: PASS={n_pass} FAIL={n_fail} (tol {TOL:g}); the ghost as a "
+          f"plain sample is inexact in {n_xfail} cases (sensitivity; not seen: {n_xpass}) "
+          f"runtime {time.time() - t0:.1f}s -> {'OK' if ok else 'FAILED'}")
     return 0 if ok else 1
 
 
