@@ -93,7 +93,8 @@ class ChorinTemplate(HyperbolicTemplate):
 
 def pressure(press, Q, p, time, dt, mesh, newton=None):
     """Solve ``press`` for its own rows with the rest of ``Q`` frozen.  The
-    pressure derivatives see the system's boundary conditions.
+    pressure derivatives see the system's boundary conditions: their boundary
+    samples are the BC ghosts (``press.call.boundary_ghost_state``).
 
     Default: the residual is affine in the pressure, A(P) = R(P) - R(0),
     solved once.  ``newton=(tol, maxit)``: a nonlinear constraint, Newton
@@ -105,9 +106,9 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
 
     def R(P):
         Y = put(Q, rows, halo(P, mesh))
-        Yb = boundary_ghosts(press.call.boundary_conditions, Y, Qaux, p, time,
+        Yg = boundary_ghosts(press.call.boundary_ghost_state, Y, Qaux, p, time,
                              mesh)
-        Y_aux = derivative_aux(press.call.aux_derivatives, Y, Qaux, mesh, Yb,
+        Y_aux = derivative_aux(press.call.aux_derivatives, Y, Qaux, mesh, Yg,
                                rows)
         return cells(press.call.source, Y, Y_aux, p, time, dt, mesh)
 

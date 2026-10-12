@@ -16,7 +16,7 @@ from zoomy_core.symsolver.core import Cond, Root, unpack
 from zoomy_core.symsolver.discretization.reconstruction import reconstruct
 from zoomy_core.symsolver.discretization.time import SSP_RK
 from zoomy_core.symsolver.vocabulary import (
-    boundary_states, boundary_traces, cells, clean_round_off, derivative_aux,
+    boundary_traces, cells, clean_round_off, derivative_aux,
     diffusion, divergence, edge_source, face_aux, faces, halo,
     implicit_diffusion, inadmissible, reduce_any, select)
 
@@ -30,12 +30,11 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
 
     ``dt_rule``: ``dt`` is not known yet -- the face kernel also returns the
     scheme's wave speed ``S`` and ``dt = dt_rule(S)``; returns ``(dQ, dt)``."""
-    Qb, Qauxb = unpack(boundary_states(nsm.call.boundary_conditions, Q, Qaux, p,
-                                       time, mesh), 2)
-    QL, QR = reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh)
-    if order >= 2:              # at first order QL is the cell value: QR is Qb
-        QR = boundary_traces(nsm.call.boundary_conditions, Q, QL, QR, Qaux, p,
-                             time, mesh)
+    QL, QR = reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh)
+    # the outer state of each boundary face's Riemann problem: the BC's face
+    # value from the inner trace QL, at the face centre (every order)
+    QR = boundary_traces(nsm.call.boundary_conditions, Q, QL, QR, Qaux, p,
+                         time, mesh)
     AL, AR = unpack(face_aux(Qaux, mesh), 2)
     # one Riemann problem per face, its contribution to each side
     if dt_rule is None:

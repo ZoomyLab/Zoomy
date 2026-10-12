@@ -18,37 +18,46 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import unpack
 from zoomy_core.symsolver.vocabulary import (
-    barth_jespersen, cell_traces, extrapolate, face_aux, gradient, minimum,
-    minmod, pointwise, put, select, take, venkatakrishnan)
+    barth_jespersen, boundary_states, cell_traces, extrapolate, face_aux,
+    gradient, minimum, minmod, pointwise, put, select, take, venkatakrishnan)
 
 LIMITERS = {"minmod": minmod, "venkatakrishnan": venkatakrishnan,
             "barth_jespersen": barth_jespersen}
 
 
-def reconstruct(nsm, Q, Qaux, Qb, Qauxb, p, order, demote, mesh):
-    """Face traces ``(QL, QR)``; ``QR`` on a boundary face is ``Qb``.
+def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
+    """Face traces ``(QL, QR)``; ``QR`` on a boundary face is the inner
+    trace, a placeholder for the BC's face value (``boundary_traces``).
     ``demote``: ``False`` none, ``True`` all cells, or a cell mask -- demoted
-    cells are constant in ``W`` (MOOD).  With the model's free-surface map the
-    pair is (h, eta) and b_f = eta_f - h_f (:func:`bed_rows`)."""
+    cells are constant in ``W`` (MOOD).  The gradient and the limiter take
+    their boundary samples from the BC GHOSTS at ``time``
+    (``nsm.call.boundary_ghost_state``, at the mirror image of the cell
+    centre).  With the model's free-surface map the pair is (h, eta) and
+    b_f = eta_f - h_f (:func:`bed_rows`)."""
     demote = sp.S(demote)
     to_w, to_q = maps(nsm)
-    W, Wb = Q, Qb
-    if to_w is not None:
-        if nsm.call.update_aux_variables is not None:   # the ghost's own aux
-            Qauxb = pointwise(nsm.call.update_aux_variables, Qb, Qauxb, p)
-        W, Wb = pointwise(to_w, Q, Qaux, p), pointwise(to_w, Qb, Qauxb, p)
     rows = bed_rows(nsm) if to_w is not None else None
+    W = Q if to_w is None else pointwise(to_w, Q, Qaux, p)
     if rows is not None:               # reconstruct h in the bed's slot
         bed, depth = rows
-        W, Wb = put(W, (bed,), take(Q, (depth,))), put(Wb, (bed,), take(Qb, (depth,)))
+        W = put(W, (bed,), take(Q, (depth,)))
     if order == 1 or demote is sp.S.true:
-        WL, WR = unpack(cell_traces(W, Wb, mesh), 2)
+        WL, WR = unpack(cell_traces(W, mesh), 2)
     else:
-        G = gradient(W, Wb, mesh)
-        phi = limited(nsm, W, Wb, G, mesh)
+        Qg, Qauxg = unpack(boundary_states(nsm.call.boundary_ghost_state, Q,
+                                           Qaux, p, time, mesh), 2)
+        Wg = Qg
+        if to_w is not None:
+            if nsm.call.update_aux_variables is not None:   # the ghost's own aux
+                Qauxg = pointwise(nsm.call.update_aux_variables, Qg, Qauxg, p)
+            Wg = pointwise(to_w, Qg, Qauxg, p)
+        if rows is not None:
+            Wg = put(Wg, (bed,), take(Qg, (depth,)))
+        G = gradient(W, Wg, mesh)
+        phi = limited(nsm, W, Wg, G, mesh)
         if demote is not sp.S.false:
             phi = select(demote, 0, phi)
-        WL, WR = unpack(extrapolate(W, Wb, G, phi, mesh), 2)
+        WL, WR = unpack(extrapolate(W, G, phi, mesh), 2)
     if rows is not None:               # b_f = eta_f - h_f
         WL, WR = (put(X, (bed,), take(X, (depth,)) - take(X, (bed,))) for X in (WL, WR))
     if to_q is None:
@@ -94,9 +103,10 @@ def bed_rows(nsm):
     return rows
 
 
-def limited(nsm, W, Wb, G, mesh):
+def limited(nsm, W, Wg, G, mesh):
     """Limiter factor per row and cell: the NSM's limiter, its per-row
-    overrides, then its ties; 1 where no row is limited."""
+    overrides, then its ties; 1 where no row is limited.  ``Wg``: the
+    boundary ghosts (bounds at the ghost position)."""
     spec, names = nsm.reconstruction, [str(q) for q in nsm.state]
     unknown = (set(spec.limiters) | set(spec.ties) | set(spec.ties.values())) - set(names)
     if unknown:
@@ -111,7 +121,7 @@ def limited(nsm, W, Wb, G, mesh):
             continue
         if kind not in LIMITERS:
             raise ValueError(f"limiter {kind!r}: one of {sorted(LIMITERS)} or 'none'")
-        factor = LIMITERS[kind](tuple(rows), W, Wb, G, mesh)
+        factor = LIMITERS[kind](tuple(rows), W, Wg, G, mesh)
         phi = factor if phi is sp.S.One else minimum(phi, factor)
     if phi is sp.S.One:
         return phi

@@ -1561,10 +1561,12 @@ class NumericalSystemModel(SystemModel):
         is the derivative-aux spec (:attr:`aux_derivatives`).  Printed as
         ``<_symbolic_name>.<slot>`` (default ``nsm``).  Built once per name.
 
-        Two BC kernels: ``boundary_conditions`` (each BC's value: a face
-        value for a Dirichlet-type BC) and ``boundary_ghost_state`` (the
-        ghost at the mirror image of the cell centre, ``2 v - Q`` for a face
-        value ``v``; :meth:`SystemModel.boundary_ghost_kernel`)."""
+        Two BC kernels: ``boundary_conditions`` (each BC's value: the outer
+        state ON the face from the inner state there -- the Riemann
+        problem's) and ``boundary_ghost_state`` (the ghost at the mirror
+        image of the cell centre, ``2 v - Q`` for a face value ``v`` -- the
+        gradient's, limiter's, derivative aux's and diffusion's;
+        :meth:`SystemModel.boundary_ghost_kernel`)."""
         owner = getattr(self, "_symbolic_name", None) or "nsm"
         if getattr(self, "_call", None) is None or self._call_owner != owner:
             from zoomy_core.misc.misc import Zstruct

@@ -144,7 +144,10 @@ class BoundaryCondition(param.Parameterized):
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Symbolic builder for the boundary *value* — used by
         :meth:`BoundaryConditions.get_boundary_condition_function` to
-        assemble the indexed ``Piecewise`` BC kernel."""
+        assemble the indexed ``Piecewise`` BC kernel (``boundary_conditions``).
+        The solver templates read it as the outer FACE state from the inner
+        state ``Q`` at the face (the Riemann problem's); every ghost consumer
+        takes :meth:`compute_ghost_state`."""
         raise NotImplementedError(
             "BoundaryCondition is a virtual class. Use one of its derived classes!"
         )
@@ -163,13 +166,18 @@ class BoundaryCondition(param.Parameterized):
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
-        """Symbolic GHOST state of this BC (decision D5) — the ONE value the
-        new solver template's gradient, limiter bounds and Riemann right state
-        all consume.  The ghost sits at the mirror point ``x_c + 2(x_f − x_c)``
-        of the inner cell, so a BC that prescribes a FACE value ``v`` has the
-        ghost ``2v − Q_inner`` (exact for a linear field); a BC whose value is
+        """Symbolic GHOST state of this BC (decision D5) — the value the
+        solver templates' gradient, limiter bounds, derivative aux and
+        diffusion consume (``boundary_ghost_state``).  The ghost sits at the
+        mirror image ``x_c + 2((x_f − x_c)·n) n`` of the inner cell centre
+        (evaluated at the foot of the perpendicular, ``dX`` the normal
+        distance), so a BC that prescribes a FACE value ``v`` has the ghost
+        ``2v − Q_inner`` (exact for a linear field); a BC whose value is
         already a ghost (reflection, extrapolation, periodic partner) returns
-        it unchanged — see :attr:`boundary_value_kind`.  ``bdata`` is the
+        it unchanged — see :attr:`boundary_value_kind`.  The Riemann problem
+        does NOT take the ghost: its outer state is
+        :meth:`compute_boundary_condition` of the inner face trace, at the
+        face centre (``boundary_traces``).  ``bdata`` is the
         per-face boundary-data vector (coupling); ignored unless a subclass
         reads it.  Non-owned slots (``on=``) are the interior value."""
         v = ZArray(self.compute_boundary_condition(

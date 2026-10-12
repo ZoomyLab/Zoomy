@@ -39,20 +39,33 @@ class face_inradius(Block):
 
 
 # ── boundary ────────────────────────────────────────────────────────────────
+# Two BC kernels, two values (never mixed):
+#   GHOST  ``nsm.call.boundary_ghost_state`` (decision D5) -- the value at the
+#          mirror image of the inner cell centre (2 v - Q for a face value v,
+#          Q + 2 d g for a normal gradient g, the reflection / partner as is);
+#          evaluated at the foot of the perpendicular with the normal
+#          distance d.  Consumers: gradient, limiter bounds, derivative aux,
+#          diffusion.
+#   FACE   ``nsm.call.boundary_conditions`` -- the outer state ON the face
+#          from the inner state there; evaluated at the face centre.
+#          Consumer: the Riemann problem (boundary_traces).
 class boundary_states(Block):
-    """``(bc, Q, Qaux, p, time, mesh)`` -> ``(Qb, Qauxb)``: the BC kernel's
-    ghost state per boundary face (branch by tag) and the inner cell's aux."""
+    """``(ghost, Q, Qaux, p, time, mesh)`` -> ``(Qg, Qauxg)``: the GHOST per
+    boundary face (kernel ``ghost`` = ``boundary_ghost_state``, branch by
+    tag; from the inner cell, at the foot of the perpendicular with the
+    normal distance) and the inner cell's aux."""
 
 
 class boundary_ghosts(Block):
-    """``(bc, Q, Qaux, p, time, mesh)`` -> the BC kernel's boundary state per
-    boundary face (branch by tag), from the inner cell."""
+    """``(ghost, Q, Qaux, p, time, mesh)`` -> the GHOST per boundary face, as
+    :class:`boundary_states` without the aux."""
 
 
 class boundary_traces(Block):
     """``(bc, Q, QL, QR, Qaux, p, time, mesh)`` -> ``QR`` whose boundary
-    faces hold ``BC(QL)`` (on a periodic seam: the partner face's ``QL``,
-    the partner cell's trace at the seam)."""
+    faces hold the outer FACE state ``bc(QL)`` (kernel ``bc`` =
+    ``boundary_conditions``, at the face centre; on a periodic seam: the
+    partner face's ``QL``, the partner cell's trace at the seam)."""
 
 
 # ── reconstruction and assembly ─────────────────────────────────────────────
@@ -62,21 +75,22 @@ class pointwise(Block):
 
 
 class cell_traces(Block):
-    """``(Q, Qb, mesh)`` -> ``(QL, QR)``: the owner's and the neighbour's cell
-    value per face; ``QR`` on a boundary face is ``Qb``."""
+    """``(Q, mesh)`` -> ``(QL, QR)``: the owner's and the neighbour's cell
+    value per face; ``QR`` on a boundary face is ``QL`` (a placeholder for
+    :class:`boundary_traces`)."""
 
 
 class gradient(Block):
-    """``(W, Wb, mesh)`` -> the LSQ gradient of every row of ``W`` per cell
-    (backend layout).  A boundary face adds the sample ``Wb`` at the ghost
-    position, twice the cell-to-face offset."""
+    """``(W, Wg, mesh)`` -> the LSQ gradient of every row of ``W`` per cell
+    (backend layout).  A boundary face adds the sample ``Wg`` (its ghost) at
+    the mirror image of the cell centre."""
 
 
 class minmod(Block):
-    """``(rows, W, Wb, G, mesh)`` -> ``(rows of W, cells)`` limiter factors
+    """``(rows, W, Wg, G, mesh)`` -> ``(rows of W, cells)`` limiter factors
     in [0, 1], 1 off ``rows`` (static): the largest that keeps every face
     extrapolation within the bounds of the face neighbours and the boundary
-    ghosts ``Wb`` (at the ghost position, as in :class:`gradient`)."""
+    ghosts ``Wg`` (at the ghost position, as in :class:`gradient`)."""
 
 
 class venkatakrishnan(Block):
@@ -88,9 +102,10 @@ class barth_jespersen(Block):
 
 
 class extrapolate(Block):
-    """``(W, Wb, G, phi, mesh)`` -> ``(WL, WR)``: each cell's ``W`` moved to
-    the face centre by ``phi * G`` (``phi`` per row and cell, per cell, or a
-    number); ``WR`` on a boundary face is ``Wb``."""
+    """``(W, G, phi, mesh)`` -> ``(WL, WR)``: each cell's ``W`` moved to the
+    face centre by ``phi * G`` (``phi`` per row and cell, per cell, or a
+    number); ``WR`` on a boundary face is ``WL`` (a placeholder for
+    :class:`boundary_traces`)."""
 
 
 class divergence(Block):
@@ -107,10 +122,11 @@ class edge_source(Block):
 # ── whole-domain operations ─────────────────────────────────────────────────
 class derivative_aux(Block):
     """``(spec, Q, Qaux, mesh)`` -> Qaux with the derivative rows of ``spec``
-    (a system's ``aux_derivatives``) refilled from mesh gradients.
-    ``(spec, Q, Qaux, mesh, Qb, rows)``: only the derivatives of state
-    ``rows``, with ``Qb`` the boundary values at the boundary faces (the
-    sample there extrapolates linearly through it)."""
+    (a system's ``aux_derivatives``) refilled from mesh gradients; a boundary
+    face's sample is the inner cell value (zero normal gradient).
+    ``(spec, Q, Qaux, mesh, Qg, rows)``: only the derivatives of state
+    ``rows``, a boundary face's sample the GHOST ``Qg`` (see
+    :class:`boundary_ghosts`) at the mirror image of the cell centre."""
 
 
 class put(Block):
