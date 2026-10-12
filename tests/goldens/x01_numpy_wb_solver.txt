@@ -4,7 +4,7 @@
 #| (header lines are informational; comparison is on the body below)
 == X01 numpy solver: SME(1) lake-at-rest, Audusse hook, periodic, order-1, 10 cells, 2 steps ==
 state_names: ['b', 'h', 'q_0', 'q_1']
-dts: [5.07964096e-02, 5.07964096e-02]
+dts: [5.07964095e-02, 5.07964095e-02]
 wb_max_eta_dev_lt_1e-11: True
 bernoulli_roundtrip_ok: True
 Q[0] = [8.02614028e-10, 2.39255870e-06, 9.65227068e-04, 5.26996123e-02, 3.89400392e-01, 3.89400392e-01, 5.26996123e-02, 9.65227068e-04, 2.39255870e-06, 8.02614028e-10]
