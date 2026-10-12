@@ -170,7 +170,18 @@ s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
 
-## Results (table.md, 2026-10-12)
+## Results (table.md, 2026-10-12, night rerun)
+
+Power-iteration wave speeds on every backend and device (`zoomy_core.symsolver.WAVE_SPEED`;
+foam / AMReX gained `spectral_radius`).  The whole store rerun from empty (the eig store is kept
+as `store_prev_eig_20261012`); C31 (IMEX-SSP2 time order), C32 (viscous shear decay, exact),
+C33 (SME(2) vertical viscosity, expm) added.  Libraries: core 09d1584, jax 5fd4252, foam
+e17026f, amrex ce3f72a.  **538 PASS, 0 FAIL.**  The table now judges every cell by its own
+threshold: the old table hid an errored C16 jax-foam run behind an "unsupported" sibling (459
+PASS, 1 FAIL there); it passes now (4.3e-15).  Open: the VAM projection is not idempotent
+(P(P(U)) != P(U), 0.2-2.5 % of the correction), which caps every Chorin time order near 1 (C31).
+
+## Results (table.md, 2026-10-12, eig store)
 
 Libraries: core 6afd79d, jax 8a163d3, foam c6ed617, amrex eb9be98.
 The whole store rerun from empty on these heads (the previous one is kept
