@@ -95,6 +95,9 @@ class MeshTopology:
     lsq_neighbors: np.ndarray          # (n_cells, max_nbr)
     lsq_boundary_face_neighbors: np.ndarray  # (n_cells, max_bdy), -1 padded
     lsq_plan: dict = field(repr=False, default_factory=dict)
+    # periodic seams: the translation of every stencil sample to the image
+    # nearest the cell, (n_cells, max_nbr, dim); None: no periodic BC
+    lsq_shift: Optional[np.ndarray] = field(repr=False, default=None)
 
     # TPFA (two-point flux) masks
     tpfa_faces: np.ndarray = field(default=None)    # valid interior faces
@@ -134,7 +137,7 @@ def _first_visitor(cell_faces):
 
 def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
                   n_inner_cells, boundary_owner, cell_vertices,
-                  boundary_face_centers):
+                  boundary_face_centers, sampled=None):
     """The STENCIL SELECTION of
     :func:`zoomy_core.mesh.lsq_reconstruction.least_squares_reconstruction_local`
     (same neighbour order, same padding, same REQ-174b axis decisions) --
@@ -142,12 +145,21 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     batches.  ``centers`` is ``(n_cells, dim)``; ``boundary_owner`` the inner
     cell of every boundary face.  >= 2-D: the sorted vertex ring of every
     inner cell from one sparse product; per-cell loops only for ghosts and
-    cells whose ring is too small (and in 1-D)."""
+    cells whose ring is too small (and in 1-D).
+
+    Periodic seams: ``neighbors_list`` names the partner cell across a
+    periodic face, ``cell_vertices`` carries the seam's identified vertices
+    (:func:`periodic_vertices`), and ``sampled`` (per boundary face) is False
+    on periodic faces: no ghost sample there, the seam cell's stencil is the
+    interior one."""
     owner = np.asarray(boundary_owner, dtype=int)
+    if sampled is not None:
+        owner = np.where(np.asarray(sampled, dtype=bool), owner, -1)
     if cell_vertices is None or dim < 2:
         cell_bf = [[] for _ in range(n_cells)]
         for i_bf, c in enumerate(owner):
-            cell_bf[int(c)].append(i_bf)
+            if c >= 0:
+                cell_bf[int(c)].append(i_bf)
         return _lsq_stencils_loop(n_cells, dim, neighbors_list, centers,
                                   lsq_degree, n_inner_cells, cell_bf,
                                   cell_vertices, boundary_face_centers)
@@ -171,7 +183,7 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     # ghost sample.  (Counting neither extended every wall and corner cell
     # one-sidedly into the domain: wall-normal derivatives of fields constant
     # along the wall.)
-    n_bf = np.bincount(owner, minlength=n)[:n] if owner.size else 0
+    n_bf = np.bincount(owner[owner >= 0], minlength=n)[:n] if owner.size else 0
     for i_c in np.flatnonzero(lens + n_bf < required - 1):   # degenerate cells
         cur = cols[start[i_c]:start[i_c] + lens[i_c]].tolist()
         fill = [m for m in neighbors_list[i_c]
@@ -209,12 +221,13 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     for i_c, cur in special.items():
         neighbors[i_c] = np.arange(max_nbr) * 0 + i_c
         neighbors[i_c, :min(len(cur), max_nbr)] = cur[:max_nbr]
-    counts = np.bincount(owner, minlength=n_cells)
-    max_bdy = int(counts.max()) if owner.size else 0
+    valid = np.flatnonzero(owner >= 0)
+    counts = np.bincount(owner[valid], minlength=n_cells)
+    max_bdy = int(counts.max()) if valid.size else 0
     bdy = -np.ones((n_cells, max_bdy), dtype=int)
     n_axis = -np.ones((n_cells, max_bdy), dtype=int)
-    if owner.size:
-        o = np.argsort(owner, kind="stable")         # in boundary-face order
+    if valid.size:
+        o = valid[np.argsort(owner[valid], kind="stable")]   # boundary-face order
         first = np.concatenate([[0], np.cumsum(counts)])[owner[o]]
         slot = np.arange(len(o)) - first
         bdy[owner[o], slot] = o
@@ -368,22 +381,21 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows):
     }
 
 
-def _periodic_partners(mesh, bcs, centers):
-    """``boundary_face_cells`` after :meth:`BaseMesh.resolve_periodic_bcs`
-    WITHOUT mutating the mesh: the partner inner cell for every face of a
-    ``Periodic`` tag, the owner elsewhere.  ``centers`` is ``(3, n_cells)``."""
+def _periodic_pairs(mesh, bcs, centers):
+    """Per ``Periodic`` BC: the boundary-face positions of its faces and of
+    their partner faces, matched by sorting both sides' cells along the
+    seam (as :meth:`BaseMesh.resolve_periodic_bcs`)."""
     from zoomy_core.model.boundary_conditions import Periodic
-    owner = np.asarray(mesh.face_cells[0, mesh.boundary_face_face_indices])
-    out = owner.copy()
-    periodic = np.zeros(owner.size, dtype=bool)
     if bcs is None:
-        return out, periodic
+        return []
+    owner = np.asarray(mesh.face_cells[0, mesh.boundary_face_face_indices])
     name_to_index = {v: i for i, v in
                      enumerate(mesh.boundary_conditions_sorted_names)}
     index_to_tag = {i: v for i, v in
                     enumerate(mesh.boundary_conditions_sorted_physical_tags)}
     ghosts = np.asarray(mesh.boundary_face_ghosts)
     ptags = np.asarray(mesh.boundary_face_physical_tags)
+    pairs = []
     for bc in bcs.boundary_conditions_list:
         if type(bc) is not Periodic:
             continue
@@ -391,20 +403,80 @@ def _periodic_partners(mesh, bcs, centers):
         to_tag = index_to_tag[name_to_index[bc.tag]]
         m_from = ptags == from_tag
         m_to = ptags == to_tag
-        from_cells = owner[m_from]
-        to_cells = ghosts[m_to]
-        fc = centers[:, from_cells]
-        tc = centers[:, to_cells]
+        fc = centers[:, owner[m_from]]
+        tc = centers[:, ghosts[m_to]]
         sig = [fc[d, :].max() - fc[d, :].min() for d in range(mesh.dimension)]
         order_sig = np.lexsort([sig])
         f_order = np.lexsort([fc[d, :] for d in order_sig])
         t_order = np.lexsort([tc[d, :] for d in order_sig])
         idx = np.arange(m_to.shape[0])
-        to_sorted = idx[m_to][t_order]
-        from_sorted = idx[m_from][f_order]
-        out[to_sorted] = owner[from_sorted]
-        periodic[to_sorted] = True
+        pairs.append((idx[m_to][t_order], idx[m_from][f_order]))
+    return pairs
+
+
+def _periodic_partners(mesh, bcs, centers):
+    """``boundary_face_cells`` after :meth:`BaseMesh.resolve_periodic_bcs`
+    WITHOUT mutating the mesh: the partner inner cell for every face of a
+    ``Periodic`` tag, the owner elsewhere.  ``centers`` is ``(3, n_cells)``."""
+    owner = np.asarray(mesh.face_cells[0, mesh.boundary_face_face_indices])
+    out = owner.copy()
+    periodic = np.zeros(owner.size, dtype=bool)
+    for to_bf, from_bf in _periodic_pairs(mesh, bcs, centers):
+        out[to_bf] = owner[from_bf]
+        periodic[to_bf] = True
     return out, periodic
+
+
+def periodic_vertices(mesh, bcs, centers=None):
+    """The periodic seams' vertex identification: ``(canon, translations)``.
+    ``canon`` ``(n_vertices,)``: one id per class of vertices that coincide
+    modulo the periods (the smallest vertex id of the class);
+    ``translations`` ``(k, dim)``: each seam's period vector (partner face
+    minus face).  ``None`` without ``Periodic`` BCs."""
+    if centers is None:
+        centers = cell_face_geometry(mesh)["cell_centers"]
+    pairs = _periodic_pairs(mesh, bcs, centers)
+    if not pairs:
+        return None
+    dim = int(mesh.dimension)
+    X = np.asarray(mesh.vertex_coordinates, dtype=float)[:dim].T
+    topo, g0, _ = _base_topology(mesh)
+    fv = topo["face_vertices"]                       # (nvf, n_faces)
+    bfaces = topo["boundary_faces"]
+    fcen = g0["face_centers"][:, :dim]
+    parent = np.arange(len(X))
+
+    def root(v):
+        while parent[v] != v:
+            parent[v] = parent[parent[v]]
+            v = parent[v]
+        return v
+    shifts = []
+    for to_bf, from_bf in pairs:
+        ft, ff = bfaces[to_bf], bfaces[from_bf]
+        t = fcen[ff] - fcen[ft]                      # per face pair
+        shifts.append(t.mean(axis=0))
+        for a, b, d in zip(fv[:, ft].T, fv[:, ff].T, t):
+            for v in a:                              # its image on the partner face
+                w = b[int(np.argmin(np.linalg.norm(X[b] - (X[v] + d), axis=1)))]
+                rv, rw = root(int(v)), root(int(w))
+                parent[max(rv, rw)] = min(rv, rw)
+    canon = np.array([root(v) for v in range(len(X))])
+    T = []
+    for t in shifts:                                 # one per seam (t and -t)
+        if not any(np.allclose(t, u) or np.allclose(t, -u) for u in T):
+            T.append(t)
+    return canon, np.array(T)
+
+
+def _image_shifts(D, translations):
+    """The translation (a combination of +-``translations``, or none) that
+    takes each offset in ``D`` ``(..., dim)`` to its shortest image."""
+    from itertools import product
+    T = np.asarray(translations)
+    S = np.array([np.asarray(c) @ T for c in product((-1, 0, 1), repeat=len(T))])
+    norms = np.linalg.norm(D[..., None, :] + S, axis=-1)
+    return S[np.argmin(norms, axis=-1)]
 
 
 def _base_topology(mesh):
@@ -509,7 +581,7 @@ def cell_face_geometry(mesh):
 
 
 def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
-                   partners=None):
+                   partners=None, periodic_ids=None):
     """Build the STATIC topology of ``mesh`` (numpy, once).
 
     ``nsm`` (optional) supplies the LSQ degree (``resolved_lsq_degree``) and
@@ -517,7 +589,8 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
     partners); ``lsq_degree`` / ``bcs`` override them.  ``partners``: the
     input cell of every boundary face, for a mesh that cannot pair its own
     periodic faces (a distributed piece: ``Partition.resolve_periodic``);
-    default: paired here, from the whole mesh."""
+    default: paired here, from the whole mesh.  ``periodic_ids``: the seams'
+    vertex identification (:func:`periodic_vertices`) of such a piece."""
     if lsq_degree is None:
         lsq_degree = nsm.resolved_lsq_degree() if nsm is not None else 1
     if bcs is None and nsm is not None:
@@ -534,12 +607,41 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
     if hasattr(mesh, "_cell_centers") and getattr(mesh, "_cell_centers", None) is not None:
         centers0 = np.asarray(mesh._cell_centers, dtype=float)
     bfc0 = g0["face_centers"][bfaces, :dim]
-    # boundary faces per cell by OWNER (face_cells[0]) — a periodic remap of
-    # ``boundary_face_cells`` must not move a boundary sample to the partner.
+
+    # Boundary routing by tag NAME + periodic partners
+    from zoomy_core.model.boundary_conditions import boundary_face_branches
+    tags = (list(bcs.list_sorted_function_names) if bcs is not None else None)
+    branch = (np.asarray(boundary_face_branches(mesh, bcs), dtype=int)
+              if n_bf else np.zeros(0, dtype=int))
+    if partners is None:
+        inputs, periodic = _periodic_partners(mesh, bcs, centers0)
+        if periodic.any() and periodic_ids is None:
+            periodic_ids = periodic_vertices(mesh, bcs, centers0)
+    else:
+        inputs = np.asarray(partners)[:n_bf].copy()
+        periodic = inputs != bowner
+
+    # A periodic seam is no boundary for the stencils: the partner is the
+    # neighbour across it, the seam's vertices are identified, no ghost
+    # sample.  Boundary faces per cell by OWNER (face_cells[0]) otherwise.
+    nl = np.array(mesh.cell_neighbors, dtype=int)
+    cv_ring = np.asarray(mesh.cell_vertices)
+    if periodic.any():
+        for k in np.flatnonzero(periodic):           # the face's slot
+            nl[bowner[k], np.argmax(cf[:, bowner[k]] == bfaces[k])] = inputs[k]
+        if periodic_ids is not None:
+            cv_ring = np.asarray(periodic_ids[0])[cv_ring]
     mon, nbr, bdy, n_axis, pure_rows = _lsq_stencils(
-        n_cells, dim, np.asarray(mesh.cell_neighbors), centers0[:dim].T,
-        lsq_degree, n_inner, bowner, np.asarray(mesh.cell_vertices), bfc0)
+        n_cells, dim, nl, centers0[:dim].T, lsq_degree, n_inner, bowner,
+        cv_ring, bfc0, sampled=~periodic)
     plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows)
+    shift = None
+    if periodic.any():
+        if periodic_ids is None:
+            raise ValueError("periodic faces without the seams' vertex "
+                             "identification (periodic_ids)")
+        D = centers0[:dim, nbr].transpose(1, 2, 0) - centers0[:dim].T[:, None, :]
+        shift = _image_shifts(D, periodic_ids[1])
     grad_cols = np.asarray(find_derivative_indices(
         mon, [tuple(1 if k == d else 0 for k in range(dim))
               for d in range(dim)]), dtype=int)
@@ -554,23 +656,12 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
     dxb = centers0[:dim, bghost] - centers0[:dim, bowner]
     bvalid = np.sqrt((dxb ** 2).sum(axis=0)) >= _TPFA_MIN_DIST
 
-    # Boundary routing by tag NAME + periodic partners
-    from zoomy_core.model.boundary_conditions import boundary_face_branches
-    tags = (list(bcs.list_sorted_function_names) if bcs is not None else None)
-    branch = (np.asarray(boundary_face_branches(mesh, bcs), dtype=int)
-              if n_bf else np.zeros(0, dtype=int))
-    if partners is None:
-        inputs, periodic = _periodic_partners(mesh, bcs, centers0)
-    else:
-        inputs = np.asarray(partners)[:n_bf].copy()
-        periodic = inputs != bowner
-
     return MeshTopology(
         **topo_partial, inradius_fallback=fallback,
         lsq_degree=int(lsq_degree), lsq_monomial_multi_index=tuple(mon),
         lsq_scale_factors=np.asarray(scale_lsq_derivative(mon), dtype=float),
         lsq_grad_cols=grad_cols, lsq_neighbors=nbr,
-        lsq_boundary_face_neighbors=bdy, lsq_plan=plan,
+        lsq_boundary_face_neighbors=bdy, lsq_plan=plan, lsq_shift=shift,
         tpfa_faces=tf, tpfa_A=fcells[0, tf], tpfa_B=fcells[1, tf],
         tpfa_boundary_valid=bvalid,
         bc_tags=tags, bc_branch=branch, bc_input_cells=inputs,
@@ -783,6 +874,8 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
     bn = xp.transpose(nrm[:dim, topo.boundary_faces])    # (n_bf, dim)
     bn = bn / xp.sqrt(xp.sum(bn * bn, axis=1))[:, None]
     dXc = ccT[nbr] - ccT[:, None, :]
+    if topo.lsq_shift is not None:                       # periodic images
+        dXc = dXc + xp.asarray(topo.lsq_shift, dtype=dXc.dtype)
     parts = [dXc]
     if bdy.shape[1]:
         r = bfc[bdy] - ccT[:, None, :]                   # cell -> face centre
@@ -940,5 +1033,5 @@ def lsq_gradient(topo: MeshTopology, geom, U, U_ghost):
     return xp.transpose(d[:, :, topo.lsq_grad_cols], (0, 2, 1))
 
 
-__all__ = ["MeshTopology", "build_topology", "compute_geometry",
+__all__ = ["MeshTopology", "build_topology", "compute_geometry", "periodic_vertices",
            "lsq_derivatives", "lsq_gradient"]

@@ -212,6 +212,16 @@ class ArraySource:
         return (gid[owner[periodic]], slot[periodic].astype(np.int64),
                 gid[np.asarray(partner)[periodic]])
 
+    def periodic_vertices(self, bcs):
+        """:func:`geometry_xp.periodic_vertices` in the global vertex
+        numbering: ``(canon, translations)``."""
+        from zoomy_core.mesh.geometry_xp import periodic_vertices
+        m = self.mesh
+        canon, T = periodic_vertices(m, bcs, m.cell_centers_computed())
+        gvid = np.empty(self.n_vertices, dtype=np.int64)
+        gvid[self.vertex_ids] = np.arange(self.n_vertices)
+        return gvid[canon[self.vertex_ids]], T
+
 
 class FileSource:
     """A mesh file (``write_mesh``); each read touches only the rows asked
@@ -268,6 +278,8 @@ class FileSource:
         raise NotImplementedError(
             "periodic BCs in a distributed run from a mesh file: pass the "
             "mesh object instead (its periodic faces are paired in memory)")
+
+    periodic_vertices = periodic_partners
 
 
 def source(mesh):
@@ -503,10 +515,11 @@ class Partition:
     numbering (the mesh's own ids, or the file's)."""
 
     def __init__(self, comm, src, offsets, gids, n_own, n_ring, vids, send,
-                 recv, periodic=None):
+                 recv, periodic=None, periodic_ids=None):
         self.comm, self.source, self.offsets = comm, src, offsets
-        # periodic faces held here: (local cell, face slot, local partner)
-        self.periodic = periodic
+        # periodic faces held here: (local cell, face slot, local partner);
+        # the seams' vertex identification of the piece (local vertices)
+        self.periodic, self.periodic_ids = periodic, periodic_ids
         self.rank, self.size = comm.Get_rank(), comm.Get_size()
         self.gids, self.n_own, self.n_ring = gids, n_own, n_ring
         self.cells = gids if src.cell_ids is None else src.cell_ids[gids]
@@ -648,7 +661,11 @@ def distribute(src, comm, bcs=None):
     offsets = np.arange(P + 1, dtype=np.int64) * N // P
     own = np.arange(offsets[rank], offsets[rank + 1])
     cv_own = src.cells(own)
-    directory = _Directory(comm, own, cv_own, src.n_vertices)
+    # vertex rings across periodic seams: the seams' vertices identified
+    ids = src.periodic_vertices(bcs) if pairs is not None else None
+    canon = (lambda v: v) if ids is None else (lambda v: ids[0][v])   # noqa: E731
+    directory = _Directory(comm, own, canon(cv_own), src.n_vertices)
+    around = lambda v: directory.cells_around(canon(v))               # noqa: E731
 
     def partners(cells):           # periodic partners of ``cells``
         if pairs is None:
@@ -656,7 +673,7 @@ def distribute(src, comm, bcs=None):
         return pairs[2][np.isin(pairs[0], cells)]
     # layer 1: the vertex ring, and the periodic partners (an owned seam face
     # reads its partner's reconstructed trace: the partner's whole stencil)
-    l1 = np.setdiff1d(np.union1d(directory.cells_around(cv_own), partners(own)), own)
+    l1 = np.setdiff1d(np.union1d(around(cv_own), partners(own)), own)
     cv_l1 = src.cells(l1)
     new_v = np.setdiff1d(np.unique(cv_l1), np.unique(cv_own))
     near = np.concatenate([own, l1])
@@ -664,8 +681,8 @@ def distribute(src, comm, bcs=None):
     # read; a layer-1 cell on the physical boundary (a periodic partner) has
     # a one-sided stencil that reaches a ring further (1-D: two cells in)
     edge = src.cells(l1[(src.face_tags(l1) >= 0).any(axis=0)])
-    far = directory.cells_around(src.cells(directory.cells_around(edge)))
-    l2 = np.setdiff1d(np.union1d(np.union1d(directory.cells_around(new_v), far),
+    far = around(src.cells(around(edge)))
+    l2 = np.setdiff1d(np.union1d(np.union1d(around(new_v), far),
                                  partners(near)), near)
     gids = np.concatenate([own, l1, l2])
     cv = np.concatenate([cv_own, cv_l1, src.cells(l2)], axis=1)
@@ -694,7 +711,10 @@ def distribute(src, comm, bcs=None):
         loc = lambda g: o[np.searchsorted(gids[o], g)]            # noqa: E731
         held = np.isin(pairs[0], gids) & np.isin(pairs[2], gids)
         periodic = (loc(pairs[0][held]), pairs[1][held], loc(pairs[2][held]))
+    periodic_ids = None
+    if ids is not None:            # local vertices, classes renumbered
+        periodic_ids = (np.unique(ids[0][vids], return_inverse=True)[1], ids[1])
     part = Partition(comm, src, offsets, gids, len(own), len(own) + len(l1),
-                     vids, send, recv, periodic)
+                     vids, send, recv, periodic, periodic_ids)
     part.check(local)
     return local, part
