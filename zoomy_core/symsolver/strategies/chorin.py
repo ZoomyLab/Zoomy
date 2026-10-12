@@ -9,7 +9,7 @@ The model's pressure split gives three systems:
 
 One projection stage is a hyperbolic Euler step, a pressure solve and a
 correction.  ``time_order=2`` / ``3`` wraps two / three stages in the outer
-SSP-RK2 / RK3.
+SSP-RK2 / RK3; ``imex="ssp2"`` is IMEX-SSP2(2,2,2) with projected stages.
 
 Ground truth: ``zoomy_jax.fvm.solver_chorin_vam_jax.ChorinSplitVAMSolverJax``
 (``chorin_stage``, ``chorin_cycle``, ``_step_pressure_pure``,
@@ -19,8 +19,8 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import LinSolve, While
 from zoomy_core.symsolver.discretization.residual import (
-    explicit_step, full_aux, implicit_step, mood_step)
-from zoomy_core.symsolver.discretization.time import SSP_RK
+    explicit_step, full_aux, imex_step, implicit_step, mood_step)
+from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import (
     boundary_ghosts, cells, derivative_aux, diffusion, halo, put, reduce_max,
@@ -47,7 +47,30 @@ class ChorinTemplate(HyperbolicTemplate):
     def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):
         """One time step: the outer SSP-RK over full projection stages.
         Returns ``(Q, Qaux, dt)``; with ``dt_rule`` the first stage picks
-        ``dt``."""
+        ``dt``.
+
+        ``imex="ssp2"``: every stage solves the predictor's implicit source
+        S (per-cell Newton) and is then projected (P: pressure + correction),
+        and so is the new state.  The pressure joins S in the implicit
+        tableau as the stage's correction B_i = A_ii dt G P_i (off the
+        pressure rows), and f, S act on the projected stages::
+
+            R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj))
+                    + A_ii dt S(R_i)
+            Y_i = P(R_i),  B_i = Y_i - R_i,  F_i = dt f(Y_i),  S_i = dt S(Y_i)
+            Q'  = P(Q + sum_i (wt_i F_i + w_i (S_i + B_i / A_ii)))"""
+        if self.imex is Imex.ssp2:
+            rows = tuple(self.press.equation_to_state_index)
+
+            def project(Y, t, dt):          # and its update off the pressure rows
+                Yp = self.project(Y, p, t, dt, mesh)
+                return Yp, put(Yp, rows, take(Y, rows)) - Y
+            Q = imex_step(self.nsm, Q, Qaux, p, time, dt, mesh, self.order,
+                          IMEX_RK[self.imex], self.mood, dt_rule=dt_rule,
+                          project=project)
+            if dt_rule is not None:
+                Q, dt = Q
+            return Q, full_aux(self.nsm, Q, Qaux, p, time + dt, dt, mesh), dt
         Q0 = Q
         for i, (a, c) in enumerate(SSP_RK[self.time_order]):
             rule = dt_rule if i == 0 else None
@@ -67,8 +90,12 @@ class ChorinTemplate(HyperbolicTemplate):
         if dt_rule is None:
             Qaux = full_aux(self.nsm, Q, Qaux, p, time, dt, mesh)
         Q, dt = self.predictor(Q, Qaux, p, time, dt, mesh, dt_rule)
+        return self.project(Q, p, time, dt, mesh), dt
+
+    def project(self, Q, p, time, dt, mesh):
+        """The pressure solve and the correction of ``Q``."""
         Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton)
-        return correct(self.corr, Q, p, time, dt, mesh), dt
+        return correct(self.corr, Q, p, time, dt, mesh)
 
     def predictor(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
         """Euler flux step, then the SystemModel's implicit slots as Lie
@@ -80,7 +107,7 @@ class ChorinTemplate(HyperbolicTemplate):
                  implicit_terms=False, rk=1, dt_rule=dt_rule)
         if dt_rule is not None:
             Q, dt = Q
-        if self.imex:
+        if self.imex is Imex.lie:
             return implicit_step(pred, Q, Qaux, p, time + dt, dt, mesh), dt
         if pred.call.source is not None:
             Q = Q + dt * cells(pred.call.source, Q, Qaux, p, time, dt, mesh)

@@ -14,7 +14,7 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import Cond, Root, unpack
 from zoomy_core.symsolver.discretization.reconstruction import reconstruct
-from zoomy_core.symsolver.discretization.time import SSP_RK
+from zoomy_core.symsolver.discretization.time import SSP_RK, cell_wavespeed
 from zoomy_core.symsolver.vocabulary import (
     boundary_ghosts, boundary_traces, cells, clean_round_off, derivative_aux,
     diffusion, divergence, edge_source, face_aux, faces, halo,
@@ -183,3 +183,44 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
     if nsm.call.source is not None:
         Q = implicit_source(nsm, Q, Qaux, p, time, dt, mesh)
     return Q
+
+
+def imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, tableau, mood=False,
+              coupled=None, dt_rule=None, project=None):
+    """One step of the IMEX Runge-Kutta ``tableau`` (``time.IMEX_RK``):
+    f(Y) is the residual without the implicit slots, each stage an explicit
+    (MOOD-guarded) Euler step of it; g(Y) the implicit source, each stage
+    solved by the per-cell Newton (:func:`implicit_source`, step
+    ``A_ii dt``).  ``project(Y, time, dt) -> (Y', B)`` (Chorin) maps each
+    stage and the new state onto the constraint, B = Y' - Y on the corrected
+    rows: the pressure term of the implicit part, A_ii dt G P.  ``dt_rule``:
+    ``dt`` from the cell states' wave speeds (the first stage solve needs
+    it); returns ``(Q, dt)``."""
+    if nsm.call.diffusion_matrix is not None:
+        raise NotImplementedError("IMEX-RK with an implicit diffusion slot "
+                                  "(Lie only)")
+    if dt_rule is not None:
+        dt = dt_rule(cell_wavespeed(nsm, Q, Qaux, p, mesh))
+    euler = mood_step if mood else explicit_step
+    source = nsm.call.source
+    F, G = [], []                   # dt f(Y_i); dt (g(Y_i) + G P_i)
+    for i, c in enumerate(tableau.c):
+        Y = Q + sum(tableau.At[i][j] * F[j] + tableau.A[i][j] * G[j]
+                    for j in range(i))
+        if source is not None:
+            Y = implicit_source(nsm, Y, Qaux, p, time + c * dt,
+                                tableau.A[i][i] * dt, mesh)
+        B = sp.S.Zero
+        if project is not None:
+            Y, B = project(Y, time + c * dt, dt)
+        Y_aux = full_aux(nsm, Y, Qaux, p, time + c * dt, dt, mesh)
+        F.append(euler(nsm, Y, Y_aux, p, time + tableau.ct[i] * dt, dt, mesh,
+                       order, coupled=coupled, implicit_terms=False, rk=1) - Y)
+        G.append(B / tableau.A[i][i] + (
+            sp.S.Zero if source is None else
+            dt * cells(source, Y, Y_aux, p, time + c * dt, dt, mesh)))
+    Q = Q + sum(wt * f + w * g
+                for wt, w, f, g in zip(tableau.wt, tableau.w, F, G))
+    if project is not None:
+        Q, _ = project(Q, time + dt, dt)
+    return Q if dt_rule is None else (Q, dt)

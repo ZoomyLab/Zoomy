@@ -32,7 +32,7 @@ from zoomy_core.solver.constants import ELLIPTIC_RTOL, TPFA_COS_FLOOR, elliptic_
 from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
-from zoomy_core.symsolver.discretization.time import SSP_RK
+from zoomy_core.symsolver.discretization.time import SSP_RK, Imex
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
@@ -68,8 +68,9 @@ class CxxBackend(param.Parameterized):
                             "domain is the low side of the interface.")
     subcycling = param.Boolean(default=False,
                                doc="preCICE: adaptive steps inside a window.")
-    imex = param.Boolean(default=False,
-                         doc="IMEX (Lie): implicit source slot by Newton.")
+    imex = param.Selector(default=False, objects=[False, *Imex],
+                          doc="IMEX (Imex): 'lie' = implicit slots after the "
+                              "RK step; 'ssp2' = IMEX-SSP2(2,2,2).")
     implicit_tol = param.Number(default=1e-8, bounds=(0, None))
     implicit_maxiter = param.Integer(default=6, bounds=(1, None))
     gmres_tol = param.Number(default=1e-7, bounds=(0, None))

@@ -1,10 +1,13 @@
-"""Time discretization of the solver templates: the SSP-RK stages and the
-CFL step size.
+"""Time discretization of the solver templates: the SSP-RK stages, the IMEX
+Runge-Kutta tableaux and the CFL step size.
 
 ``nsm`` is the NumericalSystemModel; ``Q``, ``Qaux``, ``p`` (parameters),
 ``time`` and ``mesh`` are symbols.  Python ``if`` / ``for`` run at build time;
 ``Cond`` runs at run time.
 """
+from enum import Enum
+from typing import NamedTuple
+
 import sympy as sp
 
 from zoomy_core.symsolver.core import Cond
@@ -19,13 +22,53 @@ SSP_RK = {1: ((0, 0),),
           3: ((0, 0), (sp.Rational(3, 4), 1), (sp.Rational(1, 3), sp.S.Half))}
 
 
+class Imex(str, Enum):
+    """How a step treats the SystemModel's implicit slots (values are the
+    strings; off: ``False``)."""
+    #: Lie splitting: the explicit SSP-RK step, then implicit diffusion and
+    #: implicit Euler on the source (first order)
+    lie = "lie"
+    #: IMEX-SSP2(2,2,2) (:data:`IMEX_RK`): the implicit source in every stage
+    #: (second order; no implicit diffusion)
+    ssp2 = "ssp2"
+
+
+class ImexTableau(NamedTuple):
+    """Double Butcher tableau: explicit ``(At, wt, ct)``, diagonally implicit
+    ``(A, w, c)``."""
+    At: tuple
+    wt: tuple
+    ct: tuple
+    A: tuple
+    w: tuple
+    c: tuple
+
+
+# IMEX-SSP2(2,2,2), Pareschi & Russo 2005, Table II (J. Sci. Comput. 25:129-155,
+# doi:10.1007/s10915-004-4636-4), their eqs. (3)-(5):
+#   Y_i = Q + dt sum_{j<i} At_ij f(Y_j) + dt sum_{j<=i} A_ij g(Y_j)
+#   Q'  = Q + dt sum_i (wt_i f(Y_i) + w_i g(Y_i))
+#   explicit (SSP2):  At = [[0, 0], [1, 0]],          wt = (1/2, 1/2), ct = (0, 1)
+#   implicit (L-stable DIRK): A = [[g, 0], [1-2g, g]], w = (1/2, 1/2), c = (g, 1-g)
+#   g = 1 - 1/sqrt(2)  (a Float: the printers know no sqrt of a constant)
+_G = (1 - 1 / sp.sqrt(2)).evalf(20)
+IMEX_RK = {Imex.ssp2: ImexTableau(
+    At=((0, 0), (1, 0)), wt=(sp.S.Half, sp.S.Half), ct=(0, 1),
+    A=((_G, 0), (1 - 2 * _G, _G)), w=(sp.S.Half, sp.S.Half), c=(_G, 1 - _G))}
+
+
 def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):
     """dt <= CFL * 2 r_f / (d |lambda|_f), min over faces, capped by dt_max;
     the wave speeds from the cell states of each face."""
+    return face_dt(nsm, cell_wavespeed(nsm, Q, Qaux, p, mesh), mesh, cfl,
+                   dimension)
+
+
+def cell_wavespeed(nsm, Q, Qaux, p, mesh):
+    """Max |eigenvalue| per face over the cell states of its two cells."""
     speed = (nsm.call.eigenvalues_cfl if nsm.call.eigenvalues_cfl is not None
              else nsm.call.eigenvalues)
-    return face_dt(nsm, face_wavespeed(speed, Q, Qaux, p, mesh), mesh, cfl,
-                   dimension)
+    return face_wavespeed(speed, Q, Qaux, p, mesh)
 
 
 def face_dt(nsm, speed, mesh, cfl, dimension):

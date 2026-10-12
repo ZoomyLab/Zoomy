@@ -19,9 +19,9 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
-    explicit_step, full_aux, implicit_step, mood_step, post_step)
+    explicit_step, full_aux, imex_step, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
-    SSP_RK, cfl_dt, checked, face_dt, face_rule, step_size)
+    IMEX_RK, SSP_RK, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
     couple, coupled_faces, interface_flux, interface_states, io)
 
@@ -35,11 +35,12 @@ class HyperbolicTemplate:
     ``wave_speed``: the CFL wave speeds from the first stage's Riemann problem
     ("faces": the speeds of the interface states, Audusse et al. 2004 (2.34);
     no eigensolve of its own), or from the cell states of each face ("cells").
-    ``mood``: the a-posteriori MOOD guard of the RK step; ``imex``: the
-    SystemModel's implicit slots by an implicit step (Lie) instead of in the
-    RK step; ``dt_write``: the output interval (``None``: no output).
-    ``time_order``: the order of the SSP-RK step (``SSP_RK``); ``None``: the
-    reconstruction order."""
+    ``mood``: the a-posteriori MOOD guard of the RK step; ``imex``
+    (:class:`Imex`): the SystemModel's implicit slots by an implicit step
+    after the RK step (``"lie"``) or in every stage of IMEX-SSP2(2,2,2)
+    (``"ssp2"``), ``False``: in the RK step; ``dt_write``: the output
+    interval (``None``: no output).  ``time_order``: the order of the SSP-RK
+    step (``SSP_RK``); ``None``: the reconstruction order (``"ssp2"``: 2)."""
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
                  imex=False, cfl_check_every=10, wave_speed="faces",
@@ -47,6 +48,9 @@ class HyperbolicTemplate:
         if time_order is not None and time_order not in SSP_RK:
             raise ValueError(f"time_order {time_order}: SSP-RK of order "
                              f"{sorted(SSP_RK)} only")
+        imex = Imex(imex) if imex else None
+        if imex is Imex.ssp2 and time_order not in (None, 2):
+            raise ValueError(f"imex 'ssp2' is of time order 2, not {time_order}")
         self.nsm = nsm
         self.cfl = cfl
         self.dimension = dimension
@@ -56,7 +60,8 @@ class HyperbolicTemplate:
         self.cfl_check_every = cfl_check_every
         self.wave_speed = wave_speed
         self.dt_constant = None if dt_constant is None else sp.Float(dt_constant)
-        self.time_order = self.order if time_order is None else time_order
+        self.time_order = (time_order if time_order is not None else
+                           2 if imex is Imex.ssp2 else self.order)
 
     @property
     def order(self):
@@ -64,13 +69,17 @@ class HyperbolicTemplate:
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, coupled=None, dt_rule=None):
         """One time step ``(Q, Qaux, dt)``.  Explicit: every term in the
-        (MOOD-guarded) RK step.  IMEX (Lie): the RK step without the
+        (MOOD-guarded) RK step.  IMEX ``lie``: the RK step without the
         SystemModel's implicit slots, then implicit diffusion and implicit
-        Euler on the implicit source slot.  With ``dt_rule`` the first stage
-        picks ``dt`` from its own face wave speeds.  ``coupled``: the faces
-        carrying a shared answer, ``(mask, flux)``."""
+        Euler on the implicit source slot; ``ssp2``: :func:`imex_step`.  With
+        ``dt_rule`` the first stage picks ``dt`` from its own face wave speeds
+        (``ssp2``: from the cell states).  ``coupled``: the faces carrying a
+        shared answer, ``(mask, flux)``."""
         nsm, order, imex = self.nsm, self.order, self.imex
-        if self.mood:
+        if imex is Imex.ssp2:
+            Q = imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, IMEX_RK[imex],
+                          self.mood, coupled, dt_rule)
+        elif self.mood:
             Q = mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled,
                           implicit_terms=not imex, rk=self.time_order,
                           dt_rule=dt_rule)
@@ -80,7 +89,7 @@ class HyperbolicTemplate:
                               rk=self.time_order, dt_rule=dt_rule)
         if dt_rule is not None:
             Q, dt = Q
-        if imex:
+        if imex is Imex.lie:
             Q = implicit_step(nsm, Q, Qaux, p, time + dt, dt, mesh)
         return (*post_step(nsm, Q, Qaux, p, time + dt, dt, mesh), dt)
 
