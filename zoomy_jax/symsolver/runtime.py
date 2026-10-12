@@ -151,14 +151,24 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         return jnp.minimum(ir[j(fc0)], ir[j(fc_cfl)])
 
     # ── boundary ───────────────────────────────────────────────────────────
-    def _bc_at(bc, states, Qaux, p, time, mesh, cells_of_face):
+    def _bc_at(bc, states, Qaux, p, time, mesh, cells_of_face, ghost=True):
+        # A ghost (boundary_states/_ghosts) sits at the mirror image of the
+        # cell centre: the BC is evaluated at the foot of the perpendicular,
+        # with the normal distance.  A face trace (boundary_traces) is
+        # evaluated at the face centre.  (Equal on orthogonal cells; on
+        # triangles the face centre made data-dependent Dirichlet ghosts
+        # O(h) wrong: boundary first derivatives did not converge.)
         fc, n = mesh.face_centers, mesh.face_normals
-        d_face = jnp.linalg.norm(fc[j(bf_face), :]
-                                 - mesh.cell_centers[:, j(bf_cells)].T, axis=1)
+        cc = mesh.cell_centers[:, j(bf_cells)].T
+        r = fc[j(bf_face), :] - cc
+        nb = n[:, j(bf_face)].T
+        dn = jnp.sum(r * nb, axis=1)
+        pos = cc + dn[:, None] * nb if ghost else fc[j(bf_face), :]
+        dist = dn if ghost else jnp.linalg.norm(r, axis=1)
 
         def per_bf(k, i):
             f = j(bf_face)[i]
-            return bc(branch[k], time, fc[f, :], d_face[i], states[:, i],
+            return bc(branch[k], time, pos[i], dist[i], states[:, i],
                       Qaux[:, j(cells_of_face)[i]], p, n[:, f])
         if not cut.any():
             return jax.vmap(per_bf)(jnp.arange(n_bf), jnp.arange(n_bf)).T
@@ -179,7 +189,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
         if n_bf == 0:
             return QR
-        QRb = _bc_at(bc, QL[:, j(bf_face)], Qaux, p, time, mesh, bf_cells)
+        QRb = _bc_at(bc, QL[:, j(bf_face)], Qaux, p, time, mesh, bf_cells, ghost=False)
         if has_periodic:
             QRb = jnp.where(j(periodic)[None, :], QL[:, j(partner_face)], QRb)
         return QR.at[:, j(bf_face)].set(QRb)
