@@ -1,5 +1,9 @@
 # NumPy backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 The NumPy backend is the **reference implementation** every other backend is
 verified against. It ships **inside** `zoomy_core` at `library/zoomy_core/zoomy_core/fvm/`
 — there is no separate `zoomy_numpy` package. Same `Model` / `SystemModel` API.

@@ -1,5 +1,9 @@
 # Using the CLI
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
 The Zoomy CLI (`zoomy`) mirrors the GUI workflow from the terminal. It shares the same card system and produces identical results.
 
 ## Setup

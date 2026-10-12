@@ -1,5 +1,9 @@
 # AMReX
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 [Minimal walkthrough](ipynb/amrex/minimal.ipynb) — the same shallow-water model
 as the [NumPy tutorial](swe.md), taken to generated C++ instead of a NumPy
 solve.

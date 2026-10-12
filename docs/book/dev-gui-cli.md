@@ -1,5 +1,9 @@
 # GUI and CLI Architecture
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
 This section documents the architecture specific to the web GUI and CLI interfaces.
 
 ## Card System

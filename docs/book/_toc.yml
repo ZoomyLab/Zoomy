@@ -3,56 +3,81 @@ root: index
 parts:
   - caption: User Guide
     chapters:
-      - file: user-guide
+      - file: guide/index
         sections:
-          - file: user-guide-gui
-          - file: user-guide-cli
-          - file: user-guide-use-cases
+          - file: guide/quickstart
+          - file: guide/model
+          - file: guide/system-model
+          - file: guide/numerical-system-model
+          - file: guide/solvers
+          - file: guide/backends
       - file: installation
-      - file: backends/index
-        sections:
-          - file: backends/numpy
-          - file: backends/jax
-          - file: backends/amrex
-          - file: backends/openfoam
-          - file: backends/firedrake
-  - caption: Authoring
+      - file: tutorials/index
+  - caption: Developer Guide
     chapters:
-      - file: authoring/model
-      - file: authoring/system-model
-      - file: authoring/numerics
-  - caption: Tutorials
+      - file: developer/index
+        sections:
+          - file: developer/templates
+          - file: developer/extending
+  - caption: Tests and timings
     chapters:
-      - file: tutorials/swe
-        sections:
-          - file: tutorials/ipynb/swe/simple_numpy
-      - file: tutorials/sme
-        sections:
-          - file: tutorials/ipynb/sme/moments_2d
-      - file: tutorials/amrex
-        sections:
-          - file: tutorials/ipynb/amrex/minimal
+      - file: testing/symsolver
+      - file: ci-reports
   - caption: Reference
     chapters:
-      - file: logging
-      - file: ci-reports
-  - caption: API
-    chapters:
-      - file: api/_apidoc_zoomy_core/zoomy_core
-      - file: api/_apidoc_zoomy_jax/zoomy_jax
-      - file: api/amrex
-  - caption: Work in progress
-    chapters:
-      - file: dev-guide
+      - file: api/index
         sections:
-          - file: dev-architecture
-          - file: dev-components
-          - file: dev-gui-cli
-      - file: testing
-      - file: backends/dmplex
-      - file: backends/fenicsx
-      - file: api/dmplex
-      - file: api/firedrake
+          - file: api/_apidoc_zoomy_core/zoomy_core
+            sections:
+              - glob: api/_apidoc_zoomy_core/zoomy_core.*
+          - file: api/_apidoc_zoomy_jax/zoomy_jax
+            sections:
+              - glob: api/_apidoc_zoomy_jax/zoomy_jax.*
+          - file: api/_apidoc_zoomy_foam/zoomy_foam
+            sections:
+              - glob: api/_apidoc_zoomy_foam/zoomy_foam.*
+          - file: api/_apidoc_zoomy_amrex/zoomy_amrex
+            sections:
+              - glob: api/_apidoc_zoomy_amrex/zoomy_amrex.*
+      - file: logging
+  - caption: Legacy / work in progress
+    chapters:
+      - file: legacy
+        sections:
+          - file: user-guide
+            sections:
+              - file: user-guide-gui
+              - file: user-guide-cli
+              - file: user-guide-use-cases
+          - file: backends/index
+            sections:
+              - file: backends/numpy
+              - file: backends/jax
+              - file: backends/amrex
+              - file: backends/openfoam
+              - file: backends/firedrake
+              - file: backends/dmplex
+              - file: backends/fenicsx
+          - file: authoring/model
+          - file: authoring/system-model
+          - file: authoring/numerics
+          - file: tutorials/swe
+            sections:
+              - file: tutorials/ipynb/swe/simple_numpy
+          - file: tutorials/sme
+            sections:
+              - file: tutorials/ipynb/sme/moments_2d
+          - file: tutorials/amrex
+            sections:
+              - file: tutorials/ipynb/amrex/minimal
+          - file: dev-guide
+            sections:
+              - file: dev-architecture
+              - file: dev-components
+              - file: dev-gui-cli
+          - file: testing
+          - file: api/dmplex
+          - file: api/firedrake
       - file: software
       - file: documentation
       - file: research

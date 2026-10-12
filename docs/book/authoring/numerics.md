@@ -1,5 +1,9 @@
 # Numerical System Model
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 A `NumericalSystemModel` (NSM) is a `SystemModel` **plus the scheme choices**:
 which Riemann solver, what reconstruction order, how diffusion and sources are
 treated, how the depth is regularised. It is the last symbolic object in the

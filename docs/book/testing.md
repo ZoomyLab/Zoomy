@@ -1,6 +1,10 @@
 # Testing Guide
 
 ```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
+```{warning}
 **Work in progress.** The folder layout and workflow descriptions below have
 drifted from the tree. The parts that are current are the **marker model** and
 the **CI tiering**, both summarised on [CI Test Reports](ci-reports.md).

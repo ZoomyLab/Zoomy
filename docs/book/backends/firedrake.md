@@ -1,5 +1,9 @@
 # Firedrake backend
 
+```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```
+
 `zoomy_firedrake` drives [Firedrake](https://www.firedrakeproject.org/) (a
 Python FEM framework built on PETSc and FInAT) from the Zoomy symbolic model.
 

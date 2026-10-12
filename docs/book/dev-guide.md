@@ -1,6 +1,10 @@
 # Developer Guide
 
 ```{warning}
+Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
+```
+
+```{warning}
 **Work in progress.** These pages document Zoomy's internals for contributors.
 They are being rewritten and parts are out of date — treat them as notes, not
 as a specification. For anything user-facing, use the
