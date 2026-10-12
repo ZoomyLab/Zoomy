@@ -289,6 +289,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
         References:
             Barth, Jespersen 1989, https://doi.org/10.2514/6.1989-366
+            Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
+            Sweby 1984, https://doi.org/10.1137/0721062
         """
         def factors(rows, W, Wg, G, mesh):
             """Limiter factors for the state ``rows`` (1 elsewhere)."""
@@ -767,6 +769,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         """Per cell ``div(A(X) : grad X)`` for the ``diffusion`` block: the TPFA operator on
         interior faces, then two-point fluxes to the BC ghost (``bc``) or the periodic partner on
         boundary faces.
+
+        References:
+            Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
         """
         if not tpfa:
             tpfa.append(DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension,
@@ -807,6 +812,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
         References:
             Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+            Crank, Nicolson 1947, https://doi.org/10.1017/s0305004100023197
         """
         b = Q + 0.5 * dt * _div(k, bc, Q, Qaux, p, time, mesh)
 
@@ -958,6 +964,7 @@ def _jaxamg():
 
     References:
         Naumov et al. 2015, https://doi.org/10.1137/140980260
+        Liu, Fan, Wang 2026, https://doi.org/10.1016/j.softx.2026.102966
     """
     try:
         import jaxamg
