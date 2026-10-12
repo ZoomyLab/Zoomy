@@ -881,3 +881,19 @@ also had to take a true interior proxy cell): AMReX vs JAX 5e-16 - 2e-15
 (1-/2-/3-D, SWE and Euler; cpu1, gpu1; cpu2 = cpu1), half-period shift
 <= 1.7e-15, AMR periodic waves EOC 2.5 / 2.3.  (3-D periodic wave O2
 cpu1 vs JAX: 5.5e-16, rerun.)
+
+## 34. Boundary ghosts: BC position and distance
+
+A ghost sits at the mirror image of the cell centre, but the runtimes
+evaluated the BC kernel at the FACE CENTRE with the distance |x_f - x_c|.
+On orthogonal cells the two coincide; on triangles a position-dependent
+Dirichlet value (inflow profiles, data) put an O(h) error into the ghost:
+boundary first derivatives did not converge (8e-2 at nx 12/24/48) and
+second derivatives diverged (1.5e-1 -> 6e-1).  Now ghosts
+(boundary_states / boundary_ghosts) take the foot of the perpendicular
+and the normal distance (dn = (x_f - x_c).n, which Neumann gradients
+need); face traces (boundary_traces) stay at the face centre.  With the
+foot point: first derivatives order ~1, second derivatives bounded
+(2.5e-2; a single odd ghost cannot do better at a Dirichlet wall).
+JAX and foam; AMReX is Cartesian (no change).  Gates 1, 16, 23 tri2
+unchanged (constant BC data).
