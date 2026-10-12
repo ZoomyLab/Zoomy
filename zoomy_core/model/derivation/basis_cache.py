@@ -1,11 +1,6 @@
-"""
-Hash-based cache for basis function matrices.
-
-Replaces the old flat-file cache in Basismatrices with a manifest-based system:
-- Each (basis_type, level, weight) combination gets a unique hash
-- All matrices stored in a single .npz file per hash
-- Central manifest.json tracks all entries with metadata
-- Stale detection via basis definition fingerprint
+"""Manifest-based on-disk cache for basis-function matrices, plus an in-memory wrapper. Sits under
+the moment/Galerkin projection: consumers call get_basis_matrices instead of building a
+SymbolicIntegrator.
 """
 
 import hashlib
@@ -26,9 +21,8 @@ MATRIX_NAMES = ["phib", "M", "A", "B", "D", "Dxi", "Dxi2", "DD", "D1", "DT"]
 
 
 def _basis_fingerprint(basis):
-    """
-    Compute a fingerprint string that uniquely identifies a basis configuration.
-    Changes if the basis definition, weight, or bounds change.
+    """Return a string that changes whenever the basis name, level, bounds, weight or polynomials
+    change.
     """
     parts = [
         basis.name,
@@ -42,27 +36,26 @@ def _basis_fingerprint(basis):
 
 
 def _compute_hash(fingerprint):
+    """Return the 16-hex-digit SHA-256 prefix of a fingerprint string."""
     return hashlib.sha256(fingerprint.encode()).hexdigest()[:16]
 
 
 class BasisMatrixCache:
-    """
-    Hash-based cache for basis matrices.
-
-    Usage:
-        cache = BasisMatrixCache()
-        matrices = cache.get_or_compute(basis, level)
-        # matrices is a dict: {"M": np.array, "A": np.array, ...}
+    """Hash-keyed .npz cache of the basis matrices, indexed by a JSON manifest. Stale entries are
+    detected by comparing the stored basis fingerprint.
     """
 
     def __init__(self, cache_root=CACHE_ROOT):
+        """Set the cache directory, relative to the project root."""
         self.cache_root = cache_root
         self._abs_root = os.path.join(get_main_directory(), cache_root)
 
     def _manifest_path(self):
+        """Path of the manifest file."""
         return os.path.join(self._abs_root, MANIFEST_NAME)
 
     def _load_manifest(self):
+        """Read the manifest, or return an empty dict if absent."""
         path = self._manifest_path()
         if os.path.exists(path):
             with open(path) as f:
@@ -70,35 +63,30 @@ class BasisMatrixCache:
         return {}
 
     def _save_manifest(self, manifest):
+        """Write the manifest, creating the cache directory."""
         os.makedirs(self._abs_root, exist_ok=True)
         path = self._manifest_path()
         with open(path, "w") as f:
             json.dump(manifest, f, indent=2)
 
     def _entry_dir(self, hash_key):
+        """Directory of one hash entry."""
         return os.path.join(self._abs_root, hash_key)
 
     def _npz_path(self, hash_key):
+        """Path of the matrices archive of one hash entry."""
         return os.path.join(self._entry_dir(hash_key), "matrices.npz")
 
     def get_or_compute(self, basis, level, compute_fn):
-        """
-        Load cached matrices or compute and cache them.
+        """Return the cached matrices of a basis or compute and store them.
 
-        Parameters
-        ----------
-        basis : Basisfunction
-            The basis function object.
-        level : int
-            Polynomial level.
-        compute_fn : callable
-            Function that computes matrices. Called as compute_fn(level)
-            and should set self.M, self.A, etc. on the Basismatrices object.
-            Returns a dict of {name: np.ndarray}.
+        Args:
+            basis: Basisfunction instance.
+            level: Polynomial level.
+            compute_fn: Called as compute_fn(level), returns {name: ndarray}.
 
-        Returns
-        -------
-        dict : {name: np.ndarray} for each matrix
+        Returns:
+            Dict {name: ndarray} of basis matrices.
         """
         fingerprint = _basis_fingerprint(basis)
         hash_key = _compute_hash(fingerprint)
@@ -112,6 +100,9 @@ class BasisMatrixCache:
         return matrices
 
     def _try_load(self, hash_key, fingerprint):
+        """Return the stored matrices if the manifest fingerprint matches and the archive loads,
+        else None.
+        """
         manifest = self._load_manifest()
         entry = manifest.get(hash_key)
         if entry is None:
@@ -128,6 +119,7 @@ class BasisMatrixCache:
             return None
 
     def _save(self, hash_key, fingerprint, basis, level, matrices):
+        """Write the matrices archive and add its manifest entry."""
         entry_dir = self._entry_dir(hash_key)
         os.makedirs(entry_dir, exist_ok=True)
 
@@ -145,9 +137,11 @@ class BasisMatrixCache:
         self._save_manifest(manifest)
 
     def list_entries(self):
+        """Return the manifest dict."""
         return self._load_manifest()
 
     def clear(self):
+        """Delete the whole on-disk cache."""
         import shutil
         if os.path.exists(self._abs_root):
             shutil.rmtree(self._abs_root)
@@ -165,6 +159,7 @@ _DEFAULT_CACHE: "BasisMatrixCache | None" = None
 
 
 def _default_cache() -> "BasisMatrixCache":
+    """Return the lazily created process-wide BasisMatrixCache."""
     global _DEFAULT_CACHE
     if _DEFAULT_CACHE is None:
         _DEFAULT_CACHE = BasisMatrixCache()
@@ -172,23 +167,13 @@ def _default_cache() -> "BasisMatrixCache":
 
 
 def get_basis_matrices(basis, level=None, *, cache=None):
-    """Return the dict ``{phib, M, A, B, D, Dxi, Dxi2, DD, D1, DT}`` for
-    a given ``(basis, level)``.
+    """Return {phib, M, A, B, D, Dxi, Dxi2, DD, D1, DT} for (basis, level), memoized in memory and
+    on disk.
 
-    Computation is done by :class:`SymbolicIntegrator` and persisted on
-    disk via :class:`BasisMatrixCache`.  An in-memory dict cache wraps
-    that path so the second call in the same session is a constant-time
-    lookup.
-
-    Parameters
-    ----------
-    basis : Basisfunction
-        Concrete basis instance.  Must expose ``name``, ``level``,
-        ``bounds()``, ``weight(z)``, ``get(k)`` and ``eval(k, z)``.
-    level : int, optional
-        Polynomial level.  Defaults to ``basis.level`` if not given.
-    cache : BasisMatrixCache, optional
-        Override the default disk cache (mostly useful for tests).
+    Args:
+        basis: Basisfunction exposing name, level, bounds(), weight(z), get(k).
+        level: Polynomial level; defaults to basis.level.
+        cache: Override of the default disk cache.
     """
     if level is None:
         level = basis.level
@@ -210,7 +195,7 @@ def get_basis_matrices(basis, level=None, *, cache=None):
 
 
 def clear_basis_matrix_cache(*, in_memory: bool = True, disk: bool = False):
-    """Drop the in-memory cache (and optionally the on-disk cache)."""
+    """Drop the in-memory cache and optionally the on-disk cache."""
     if in_memory:
         _INMEM_BASIS_MATRICES.clear()
     if disk:

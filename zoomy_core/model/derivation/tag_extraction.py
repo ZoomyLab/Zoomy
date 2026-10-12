@@ -1,23 +1,6 @@
-"""Collect solver-tagged terms from a DerivedSystem into operator shapes.
-
-Single entry point: :func:`collect_solver_tag`, called from a model's
-``flux()`` / ``source()`` / ``nonconservative_matrix()`` / ... bodies.
-
-Per-canonical extraction rules:
-
-* ``flux``, ``hydrostatic_pressure`` (and ``diffusion_matrix`` — extracted via the
-  overridable ``Model.diffusion_matrix()`` method, not the tag pipeline)
-      Conservative form. Each term must be ``coeff * Derivative(F_i, x_i)``;
-      we strip the outermost first-order derivative and place
-      ``coeff * F_i`` at column ``i`` of the output row.
-
-* ``nonconservative_flux``
-      Each term must be ``coeff * Derivative(q_j, x_i)`` where ``q_j`` is a
-      state variable. We read ``(j, i)`` and place ``coeff`` at
-      ``out[row, j, i]``.
-
-* ``source``, ``time_derivative``
-      Raw expression, placed as-is at ``out[row]``.
+"""Collects solver-tagged terms into operator shapes (flux, non-conservative, source) and auto-tags
+raw residuals by a term classifier. Entry point is collect_solver_tag, called from a model's flux()
+/ source() / nonconservative_matrix() bodies.
 """
 
 from __future__ import annotations
@@ -31,29 +14,21 @@ from zoomy_core.model.derivation.tag_catalog import canonical_solver_tag
 
 
 class SolverTagged:
-    """Lightweight carrier of a residual plus its solver-tag groups.
-
-    The return type of :func:`auto_solver_tag` and the minimal object
-    :func:`collect_solver_tag` consumes — the native
-    :class:`~zoomy_core.model.equation.Equation` implements the SAME
-    duck-typed surface (``expr`` / ``_solver_groups`` / ``solver_tags`` /
-    ``get_solver_tag`` / ``untagged_remainder``).  This replaces the
-    heavyweight legacy ``ins_generator.Expression`` on the tag-routing path so
-    the derivation pipeline carries no legacy dependency.
-
-    Holds the raw residual ``expr``, an optional ``name``, and
-    ``_solver_groups`` mapping each canonical solver tag to its sub-expression.
+    """Lightweight carrier of a residual plus its solver-tag groups, the return type of
+    auto_solver_tag. It has the same duck-typed surface as Equation (expr, solver_tags,
+    get_solver_tag, untagged_remainder), which collect_solver_tag consumes.
     """
 
     def __init__(self, expr, name="", solver_groups=None):
+        """Store the residual, name and optional tag groups."""
         self.expr = sp.sympify(expr)
         self.name = name
         self._solver_groups = dict(solver_groups) if solver_groups else None
 
     def solver_tag(self, **named_groups):
-        """Attach/replace solver-tag groups (names normalized via the alias
-        catalog, so ``convection=`` and ``flux=`` both write ``flux``).
-        Returns a new carrier."""
+        """Return a new carrier with the given tag groups merged in; names are normalized through
+        the alias catalog.
+        """
         merged = dict(self._solver_groups or {})
         for k, v in named_groups.items():
             merged[canonical_solver_tag(k)] = (
@@ -62,18 +37,17 @@ class SolverTagged:
 
     @property
     def solver_tags(self):
-        """Dict of canonical solver tags, or empty dict if none set."""
+        """Dict of canonical tag to sub-expression, empty if none set."""
         return dict(self._solver_groups) if self._solver_groups else {}
 
     def get_solver_tag(self, name):
-        """The sp.Expr for a solver tag (any alias), or None if unset."""
+        """Return the sub-expression of a tag (any alias), or None if unset."""
         if not self._solver_groups:
             return None
         return self._solver_groups.get(canonical_solver_tag(name))
 
     def untagged_remainder(self):
-        """``expr - sum(solver_tags.values())``, expanded.  Zero means every
-        term was routed; non-zero drives the ``untagged_policy``."""
+        """Return the expanded residual minus all tagged parts; non-zero means untagged terms."""
         if not self._solver_groups:
             return self.expr
         tagged_sum = sum(self._solver_groups.values(), S.Zero)
@@ -85,13 +59,13 @@ class SolverTagged:
 # ---------------------------------------------------------------------------
 
 def _iter_terms(expr):
+    """Return the additive terms of the expanded expression."""
     return Add.make_args(sp.expand(expr))
 
 
 def _split_coeff_and_derivative(term):
-    """Return (coeff, Derivative) for a term that is Derivative or coeff*Derivative.
-
-    Returns ``(None, None)`` if the term cannot be cleanly split this way.
+    """Split a term into (coeff, Derivative) if it is Derivative or coeff * Derivative, else (None,
+    None).
     """
     if isinstance(term, Derivative):
         return S.One, term
@@ -106,10 +80,8 @@ def _split_coeff_and_derivative(term):
 
 
 def _first_order_direction(deriv, coords):
-    """If ``deriv`` is first-order w.r.t. exactly one coord, return its index.
-
-    Handles both ``Derivative(F, x)`` and ``Derivative(F, (x, 1))`` forms.
-    Returns ``None`` otherwise.
+    """Return the index in coords of a first-order derivative w.r.t. exactly one coordinate, else
+    None.
     """
     variables = deriv.variables
     if len(variables) != 1:
@@ -124,12 +96,9 @@ def _first_order_direction(deriv, coords):
 
 def _extract_conservative(expr, coords, n_directions, context,
                           state_variables=None):
-    """Return ``[F_0, ..., F_{n_directions-1}]`` for a conservative-form tag.
-
-    Each term of ``expr`` must be ``coeff * Derivative(F_i, x_i)``.
-    If ``state_variables`` is provided, the coefficient must not reference
-    any of them — catches terms like ``h * d hu / dx`` that are non-conservative.
-    Raises ``ValueError`` otherwise with a message naming the offending term.
+    """Return [F_0, ..., F_{n_directions-1}] from terms coeff * Derivative(F_i, x_i). Raises
+    ValueError for non-conservative terms, including state variables in coeff if state_variables is
+    given.
     """
     state_set = set(state_variables) if state_variables is not None else None
     result = [S.Zero] * n_directions
@@ -170,7 +139,7 @@ def _extract_conservative(expr, coords, n_directions, context,
 
 
 def _extract_nc(expr, state_variables, coords, context):
-    """Return a list of ``(j, i, coeff)`` for a ``sum_{i,j} B_ij d q_j / d x_i`` tag."""
+    """Return (j, i, coeff) triples for terms coeff * d q_j / d x_i."""
     contributions = []
     for term in _iter_terms(expr):
         if term == S.Zero:
@@ -213,31 +182,21 @@ def collect_solver_tag(
     coords: Optional[Sequence] = None,
     policy: str = "strict",
 ):
-    """Assemble a numerical operator from solver-tagged equations.
+    """Assemble the operator of one solver tag (flux, nonconservative_flux, source, time_derivative)
+    from tagged equations.
 
-    Parameters
-    ----------
-    system
-        A DerivedSystem or System with ``.equations`` mapping name -> Expression.
-    tag
-        Canonical name or alias for the solver tag to collect.
-    variable_map
-        ``{equation_name: [row_indices]}``. One equation may map to one or
-        more output rows. For scalar equations, a single-element list.
-    n_variables, n_directions
-        Output shape parameters.
-    state_variables
-        Required for ``nonconservative_flux``. List of symbols that may
-        appear as ``Derivative`` arguments in NCP terms.
-    coords
-        Required for flux-type tags and NCP. Spatial coords ``[x, (y)]``.
-    policy
-        ``"strict"`` (raise) / ``"warn"`` / ``"ignore"`` if any tagged
-        equation has a non-zero ``untagged_remainder()``.
+    Args:
+        system: Object with .equations mapping name to a tagged equation.
+        tag: Canonical name or alias.
+        variable_map: {equation_name: [output rows]}.
+        n_variables, n_directions: Output shape.
+        state_variables: Required for nonconservative_flux.
+        coords: Spatial coordinates, required for flux-type tags and NCP.
+        policy: "strict", "warn" or "ignore" for a non-zero untagged remainder.
 
-    Returns
-    -------
-    sp.Matrix, sp.MutableDenseNDimArray, or list, depending on the tag's rank.
+    Returns:
+        Matrix, N-d array or list, depending on the tag's rank; source tags carry a sign flip to the
+            RHS.
     """
     canonical = canonical_solver_tag(tag)
 
@@ -309,7 +268,7 @@ def collect_solver_tag(
 
 
 def _enforce_untagged_policy(eq, eq_name, policy):
-    """Complain if an equation has solver tags set but a non-zero remainder."""
+    """Raise, warn or ignore if a tagged equation has a non-zero untagged remainder."""
     if not getattr(eq, "_solver_groups", None):
         return
     remainder = eq.untagged_remainder()
@@ -333,40 +292,10 @@ def _enforce_untagged_policy(eq, eq_name, policy):
 # ---------------------------------------------------------------------------
 
 def _classify_term(term, *, state_funcs, gravity_param, t, coords):
-    """Classify a single PDE term by canonical solver-tag category.
-
-    Heuristic (priority-ordered):
-
-    - any ``Derivative(*, t)`` atom → ``time_derivative``
-    - ``coeff * Derivative(state_var, x_i)`` (deriv arg is a single state
-      Function, w.r.t. *any* spatial coord ``x_i ∈ coords``): ``flux`` if
-      the coefficient is state-free — then it is identically
-      ``Derivative(coeff·state_var, x_i)``, a CONSERVATIVE flux that
-      telescopes (e.g. the mass fluxes ``∂_x(q_x_0)`` AND ``∂_y(q_y_0)``)
-      — else ``nonconservative_flux`` (state-dependent coefficient, a
-      genuine path-conservative product, e.g. ``g·h·∂_x b``)
-    - ``coeff * Derivative(parameter, x_i)`` (deriv of pure parameter)
-      → ``implicit_source``
-    - ``coeff(state) * Derivative(F(state), x_i)`` (state coeff on a
-      compound deriv argument) → ``implicit_source`` (too complex for
-      the flux/NC slots)
-    - ``Derivative(F(state), x_i)`` with state-independent coeff and
-      ``g·state`` inside → ``hydrostatic_pressure``
-    - ``Derivative(F(state), x_i)`` with state-independent coeff
-      → ``flux``
-    - everything else (no derivative, …) → ``implicit_source`` (catch-all).
-
-    The direction check is over the FULL spatial coordinate list ``coords``
-    (``[x]`` in 1-D, ``[x, y]`` in 2-D), so a cross-direction conservative
-    flux ``∂_y(q_y_d)`` is tagged ``flux`` and routed to its own column by
-    the (already N-D) extractor — NOT mis-tagged as a source.  Keying off a
-    single ``x`` instead leaked mass on 2-D meshes (task 0009): the y-flux
-    fell into the source, which does not telescope.
-
-    The "source" catch-all uses **implicit_source** as the safe default
-    because friction / reaction / stiff body forces benefit from
-    implicit treatment.  Authors who want explicit treatment must tag
-    the term manually as ``explicit_source``.
+    """Classify one PDE term into a canonical solver tag by priority: time derivative, flux or
+    nonconservative_flux for coeff * d(state), hydrostatic_pressure, else implicit_source. The
+    direction check runs over all spatial coords so cross-direction conservative fluxes are not lost
+    into the source.
     """
     if any(isinstance(d, sp.Derivative) and t in d.variables
            for d in term.atoms(sp.Derivative)):
@@ -399,21 +328,10 @@ def _classify_term(term, *, state_funcs, gravity_param, t, coords):
 
 
 def _is_self_diffusion_compound(term, own_func, coords):
-    """True iff ``term`` is a compound second-order ``coeff·∂_{x_d}(A·∂_{x_e}(·))``
-    whose INNER spatial derivative carries the row's OWN evolved state Function
-    (genuine viscous self-diffusion ``Fᵈ = A ∂_x(own)``).
-
-    Mirrors :func:`system_extract._is_self_diffusion`: the decision is made on
-    the WHOLE compound (before any ``.doit()`` change-of-variable expansion), so
-    the CoV cross piece ``∂_x h`` that ``∂_x(q/h)`` expands into still counts as
-    the row's own self-diffusion.
-
-    Returns ``False`` for an OFF-DIAGONAL ``∂_{x_d}(A(Q)·∂_{x_e}(field))`` whose
-    inner derivative is of a FOREIGN field — the canonical case being the VAM
-    bed-slope vertical-momentum flux ``∂_x(A·∂_x b)`` from the bottom KBC
-    ``w|_bed=u·∂_x b``.  That is a CONSERVATIVE flux carrying a gradient-aux, not
-    viscosity, and must NOT be doit-expanded into a bed-curvature source
-    (``b_x_x``) here (REQ-80, the split re-tagger's mirror of 9f7f52e)."""
+    """True iff the term is a compound second-order coeff * d_xd(A * d_xe(.)) whose inner derivative
+    carries the row's own state function. Off-diagonal terms of a foreign field (e.g. the bed slope)
+    return False and stay conservative fluxes.
+    """
     if own_func is None:
         return False
     _coeff, deriv = _split_coeff_and_derivative(term)
@@ -432,26 +350,16 @@ def _is_self_diffusion_compound(term, own_func, coords):
 
 def auto_solver_tag(expr_or_leaf, *, state_funcs, t, coords, gravity_param=None,
                     own_func=None):
-    """Walk additive terms and auto-tag with canonical solver tags.
+    """Auto-tag the additive terms of a residual with canonical solver tags and return a
+    SolverTagged.
 
-    ``coords`` is the full spatial coordinate list (``[x]`` / ``[x, y]``);
-    a first-order derivative w.r.t. ANY of them is eligible for the flux /
-    NCP slots, so cross-direction conservative fluxes are not lost into the
-    source (task 0009).
-
-    ``own_func`` (optional) is the row's OWN evolved state Function.  When given,
-    a compound second-order ``∂_x(A·∂_x own)`` is recognised as genuine viscous
-    self-diffusion and routed to the central-difference SOURCE in its
-    ``.doit()``-expanded ``∂²_x`` form (a split sub-system has no
-    ``diffusion_matrix`` slot, and the predictor solver has no diffusion path —
-    the runtime freezes the second derivative to a ``_x_x`` aux).  An OFF-DIAGONAL
-    ``∂_x(A·∂_x field)`` of a FOREIGN field (the bed ``∂_x b``) is left COMPOUND
-    and falls through to ``_classify_term`` → conservative ``flux`` with the
-    inner ``∂_x field`` frozen to a gradient-aux, matching
-    ``system_extract._classify_row`` (REQ-80, mirror of 9f7f52e).
-
-    Returns a :class:`SolverTagged` carrying the grouped solver tags so
-    :func:`collect_solver_tag` can extract operator matrices from it.
+    Args:
+        expr_or_leaf: Residual expression or SolverTagged.
+        state_funcs: Evolved state functions.
+        t: Time symbol.
+        coords: Full spatial coordinate list.
+        gravity_param: Gravity symbol marking hydrostatic pressure.
+        own_func: The row's own state function; self-diffusion compounds are expanded to a source.
     """
     if isinstance(expr_or_leaf, SolverTagged):
         raw, name = expr_or_leaf.expr, expr_or_leaf.name
@@ -465,6 +373,7 @@ def auto_solver_tag(expr_or_leaf, *, state_funcs, t, coords, gravity_param=None,
     canon_terms: list = []
 
     def _route(term):
+        """Classify one term and add it to its tag group."""
         tag = _classify_term(
             term, state_funcs=state_funcs, gravity_param=gravity_param,
             t=t, coords=coords,

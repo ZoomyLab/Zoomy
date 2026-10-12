@@ -1,38 +1,6 @@
-"""Function-level cache for the symbolic derivation (task 0018 / REQ-10).
-
-The heavy symbolic passes (``ResolveModes`` ≈ 70 % of an SME(4) build,
-``ResolveBasis``, ``simplify``) are expensive to recompute when a notebook cell
-re-runs or a convergence study sweeps over ``Nu``.  Rather than checkpoint and
-restore a half-built ``Model`` (fragile — the modal registry / σ-state would all
-have to round-trip), we cache at **function boundaries**: decorate the expensive
-*stages* of a derivation and the cache returns the prior result whenever the
-function's SOURCE and ARGUMENTS are unchanged.
-
-    @derivation_cache
-    def project_sme(spec, basis, level):
-        ...                      # the expensive build
-        return system_model
-
-Multi-level caching is just composition — decorate each stage and let the
-orchestrator call them::
-
-    @derivation_cache
-    def stage_0(spec):  ...      # basis/level-agnostic prefix (reused across a sweep)
-
-    @derivation_cache
-    def stage_final(model0, basis, level):  ...
-
-    def derive(spec, basis, level):          # leave the orchestrator UNcached
-        return stage_final(stage_0(spec), basis, level)
-
-**Cache the leaf stages, not the orchestrator.**  The key includes the decorated
-function's own source (so editing the recipe auto-invalidates) but NOT the source
-of functions it calls — caching ``derive`` would short-circuit changed stages.
-
-The default tier is **in-memory** (session lifetime): no serialization, the
-returned object is held live — ideal for notebook re-runs and sweeps.  Cross-
-session disk persistence is out of scope here (it needs the return value to
-round-trip; a ``SystemModel`` can, an intermediate ``Model`` cannot reliably).
+"""Function-level derivation cache: memoizes expensive derivation stages on (function source,
+argument content). In-memory by default with an optional pickle tier on disk; decorate leaf stages,
+not the orchestrator.
 """
 from __future__ import annotations
 
@@ -53,18 +21,15 @@ _STORE: dict[str, dict[str, object]] = {}
 
 
 def _cache_enabled() -> bool:
-    """This tier keys on the derivation call arguments, which do NOT include
-    the model's numeric parameter values, so a warm store serves the FIRST
-    build's numbers to every later build of the same shape."""
+    """Return whether derivation caching is enabled (see derivation_cache_enabled)."""
     from zoomy_core.model.derivation.cache_keys import derivation_cache_enabled
     return derivation_cache_enabled()
 
 
 def _persist_dir() -> Path:
-    """The on-disk derivation-cache directory (cross-session tier).
-
-    Rooted at ``$ZOOMY_CACHE_DIR`` (subdir ``derivation_cache``); defaults to
-    ``~/.cache/zoomy/derivation_cache``."""
+    """Return the on-disk cache directory ($ZOOMY_CACHE_DIR/derivation_cache or
+    ~/.cache/zoomy/derivation_cache), creating it.
+    """
     base = os.environ.get("ZOOMY_CACHE_DIR")
     root = str(Path(base) / "derivation_cache") if base else None
     p = Path(root) if root else Path.home() / ".cache" / "zoomy" / "derivation_cache"
@@ -73,32 +38,27 @@ def _persist_dir() -> Path:
 
 
 def _persist_path(fid: str, key: str) -> Path:
+    """Return the pickle path of one (function id, call key) entry."""
     safe = fid.replace(os.sep, "_").replace(".", "_")
     return _persist_dir() / f"{safe}-{key}.pkl"
 
 
 class CacheStats:
-    """Hit / miss / call counters, per decorated function and global.
-
-    The per-function ``calls`` counter is what the acceptance test asserts on:
-    a cache HIT does NOT increment ``calls`` (the wrapped body — and therefore
-    ``ResolveModes`` — never runs)."""
+    """Hit, miss and wrapped-body call counters of one decorated function."""
 
     def __init__(self):
+        """Zero all counters."""
         self.hits = 0
         self.misses = 0
         self.calls = 0          # wrapped-body executions (= misses, kept distinct for clarity)
 
     def __repr__(self):
+        """Counters as text."""
         return f"CacheStats(hits={self.hits}, misses={self.misses}, calls={self.calls})"
 
 
 def _fn_source(fn) -> str:
-    """Source text of ``fn`` for the key — edit the body ⇒ key changes ⇒ MISS.
-
-    Falls back to the qualified name when source is unavailable (e.g. a function
-    built by ``exec``); callers then rely on args + a manual ``version=`` bump.
-    """
+    """Return the source of a function for the key, or its qualified name if no source is available."""
     try:
         return inspect.getsource(fn)
     except (OSError, TypeError):
@@ -110,6 +70,7 @@ def _fn_source(fn) -> str:
 
 
 def _call_key(source: str, args, kwargs, version) -> str:
+    """Return the hash of a call from CACHE_VERSION, version, function source and argument keys."""
     parts = [CACHE_VERSION, f"version={version!r}", source]
     parts += [argument_key(a) for a in args]
     parts += [f"{k}={argument_key(v)}" for k, v in sorted(kwargs.items())]
@@ -117,34 +78,19 @@ def _call_key(source: str, args, kwargs, version) -> str:
 
 
 def derivation_cache(fn=None, *, version=0, verify=False, persist=False):
-    """Memoise a derivation stage, keyed on (function source ⊕ argument content).
+    """Memoize a derivation stage, keyed on function source and argument content; usable bare or
+    with arguments.
 
-    Parameters
-    ----------
-    version : hashable, optional
-        Bump to force-invalidate this function's entries without editing its
-        body (or when the body's source is unavailable).
-    verify : bool, optional
-        On a cache HIT, RE-RUN the body and assert the fresh result is
-        ``srepr``-identical to the cached one.  Defeats the purpose of caching
-        (it always recomputes) — use it in tests / CI to catch a key that
-        forgets a result-affecting argument.
-    persist : bool, optional
-        Add a CROSS-SESSION disk tier (REQ-142).  On an in-memory miss the
-        wrapper first tries to ``pickle.load`` a prior result from
-        ``$ZOOMY_DERIVATION_CACHE`` (default ``~/.cache/zoomy/derivation_cache``);
-        a disk hit is loaded into memory and counted as a HIT — the (minutes-long)
-        body never runs.  A fresh computation is written back best-effort;
-        UNpicklable results (e.g. a half-built ``Model`` carrying dynamically
-        created φ/ψ ``Function`` subclasses) are kept in memory only and skip disk
-        with a warning.  **Cache the FINAL, fully-resolved result** (a closed-row
-        dict of ordinary sympy expressions round-trips; an intermediate ``Model``
-        does not) to get cross-run reuse.
+    Args:
+        version: Bump to invalidate the entries without editing the body.
+        verify: On a hit re-run the body and assert an identical srepr (test aid).
+        persist: Add a cross-session pickle tier; unpicklable results stay in memory.
 
-    The wrapper exposes ``.stats`` (a :class:`CacheStats`), ``.cache_clear()``,
-    and ``.__wrapped__`` (the original function).
+    Returns:
+        The wrapped function with .stats, .cache_clear() and .__wrapped__.
     """
     def decorate(func):
+        """Wrap one function with the cache."""
         fid = f"{func.__module__}.{func.__qualname__}"
         source = _fn_source(func)
         _STORE.setdefault(fid, {})
@@ -152,6 +98,7 @@ def derivation_cache(fn=None, *, version=0, verify=False, persist=False):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            """Return the cached result for the call, else compute and store it."""
             if not _cache_enabled():
                 stats.misses += 1
                 stats.calls += 1
@@ -202,6 +149,7 @@ def derivation_cache(fn=None, *, version=0, verify=False, persist=False):
 
 
 def _assert_same(fresh, cached, fid):
+    """Raise AssertionError if the fresh and cached results differ in srepr."""
     import sympy as sp
     try:
         a, b = sp.srepr(fresh), sp.srepr(cached)
@@ -215,7 +163,7 @@ def _assert_same(fresh, cached, fid):
 
 
 def clear_derivation_cache(fn=None):
-    """Clear all derivation-cache entries, or just one decorated function's."""
+    """Clear all entries, or those of one decorated function."""
     if fn is not None:
         _STORE.get(getattr(fn, "_cache_id", None), {}).clear()
     else:
@@ -223,7 +171,7 @@ def clear_derivation_cache(fn=None):
 
 
 def cache_size() -> int:
-    """Total number of cached entries across all decorated functions."""
+    """Return the total number of cached entries."""
     return sum(len(d) for d in _STORE.values())
 
 

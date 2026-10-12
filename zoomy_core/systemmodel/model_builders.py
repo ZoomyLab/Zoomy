@@ -1,19 +1,7 @@
-"""Per-model SystemModel builders (REQ-143).
-
-A :class:`~zoomy_core.model.basemodel.Model` must NOT know that
-:class:`~zoomy_core.systemmodel.system_model.SystemModel` exists.  The single
-public entry point for turning a model instance into its runtime system is
-:meth:`SystemModel.from_model`; when handed a production model it delegates
-HERE, dispatching on the model's plain-string ``_system_model_kind`` class
-attribute to the matching builder below.
-
-Each builder holds the EXACT body that the model's old ``system_model``
-@property used to run (``self`` → ``model``): Q selection, the manual
-hydrostatic-pressure tag/un-tag, ``canonical_source=model``, the β-HSWME
-spectrum registration, the positivity flags, and the boundary-condition
-resolution.  The builders call the LOW-LEVEL
-``SystemModel.from_model(model.derivation, Q=...)`` path (the declarative
-model + Q signature), which is untouched.
+"""Per-model ``SystemModel`` builders, dispatched from ``SystemModel.from_model`` on the model's
+``_system_model_kind``.
+Sits between the declarative ``Model`` and the ``SystemModel`` that the ``NumericalSystemModel``
+consumes.
 """
 from __future__ import annotations
 
@@ -27,11 +15,11 @@ from zoomy_core.systemmodel.roles import declare_free_surface_roles
 
 
 def _free_surface(sm, depth, bed, kind):
-    """Every builder below is a FREE-SURFACE family: declare its roles from
-    the fields the builder itself put into Q (depth / bed Functions, the
-    model's gravity parameter ``g``), momentum derived from the model's own
-    ``interpolate_to_3d`` lift.  Generic code reads these roles only."""
+    """Declare the free-surface roles (depth, bed, gravity, momentum) of a builder's
+    ``SystemModel``.
+    """
     def _name(f):
+        """Field name of an applied Function or Symbol."""
         return getattr(getattr(f, "func", None), "__name__", None) or str(f)
     declare_free_surface_roles(
         sm, depth=_name(depth), bed=None if bed is None else _name(bed),
@@ -42,6 +30,7 @@ def _free_surface(sm, depth, bed, kind):
 
 # ── SWE ─────────────────────────────────────────────────────────────────────
 def build_swe(model) -> SystemModel:
+    """Shallow-water-equations ``SystemModel`` built straight from the model."""
     # ``SystemModel.from_model`` parses the model's function groups AND attaches
     # its ``_coupling_bcs`` on raw promotion (REQ-87), so every backend adapter /
     # FVM solver that builds from the model inherits it.
@@ -51,6 +40,12 @@ def build_swe(model) -> SystemModel:
 
 # ── SME ─────────────────────────────────────────────────────────────────────
 def build_sme(model) -> SystemModel:
+    """Shallow-moment-equations ``SystemModel`` with hydrostatic pressure tagged for well-balanced
+    reconstruction.
+
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+    """
     m = model.derivation
     dim = int(model.dimension)
     horiz = (x,) if dim == 2 else (x, y)
@@ -87,6 +82,11 @@ def build_sme(model) -> SystemModel:
 
 # ── VAM ─────────────────────────────────────────────────────────────────────
 def build_vam(model) -> SystemModel:
+    """Vertically-averaged-and-moment ``SystemModel`` with pressure modes appended to the state.
+
+    References:
+        Escalante et al. 2024, https://doi.org/10.1016/j.jcp.2024.112882
+    """
     m = model.derivation
     Nu = int(model.level)
     # Pressure modes carry the SAME horizontal dependence as the rest of the
@@ -111,6 +111,7 @@ def build_vam(model) -> SystemModel:
 
 # ── MLSWE ────────────────────────────────────────────────────────────────────
 def build_mlswe(model) -> SystemModel:
+    """Multilayer shallow-water ``SystemModel`` (bed, total depth, per-layer momenta)."""
     m = model.derivation
     sm = SystemModel.from_model(
         m, Q=[m.bed, m.ht, *m.q_l])
@@ -122,6 +123,9 @@ def build_mlswe(model) -> SystemModel:
 
 # ── MLSME ────────────────────────────────────────────────────────────────────
 def build_mlsme(model) -> SystemModel:
+    """Multilayer shallow-moment ``SystemModel`` (per-layer hydrostatic pressure is tagged in the
+    derivation).
+    """
     # Per-layer hydrostatic ``g·h_ℓ²/2`` is marked HydrostaticPressure at its
     # fold site in ``MLSME.derive_model`` (each h_ℓ is a DISTINCT function there,
     # so the mark is unambiguous — a builder-side ``.subs`` cannot separate the
@@ -138,6 +142,9 @@ def build_mlsme(model) -> SystemModel:
 
 # ── MLVAM ────────────────────────────────────────────────────────────────────
 def build_mlvam(model) -> SystemModel:
+    """Multilayer vertically-averaged-and-moment ``SystemModel`` (state adds the per-layer ``r`` and
+    pressure ``P`` modes).
+    """
     # Per-layer hydrostatic marked at its fold site in ``MLVAM.derive_model``
     # (see ``build_mlsme`` — distinct h_ℓ makes the mark unambiguous).
     m = model.derivation
@@ -152,6 +159,9 @@ def build_mlvam(model) -> SystemModel:
 
 # ── Sigma3D ──────────────────────────────────────────────────────────────────
 def build_sigma3d(model) -> SystemModel:
+    """Sigma-coordinate 3-D ``SystemModel``; the closure-derived bed/surface conditions become BCs
+    on the zeta faces.
+    """
     m = model.derivation
     qs = list(m.explicit_state())
     bed = sp.Function("b", real=True)(t, x)
@@ -181,6 +191,7 @@ def build_sigma3d(model) -> SystemModel:
 
 # ── KESME ────────────────────────────────────────────────────────────────────
 def build_kesme(model) -> SystemModel:
+    """SME ``SystemModel`` with the k and epsilon moments flagged positivity-constrained."""
     # SME build + flag the k, ε moments as positivity-constrained so
     # ``NumericalSystemModel(regularization.positivity_floor>0)`` floors their
     # singular source dependence (ν_t=C_μk²/ε, wall √k).
@@ -192,6 +203,9 @@ def build_kesme(model) -> SystemModel:
 
 # ── QRKESME ──────────────────────────────────────────────────────────────────
 def build_qrkesme(model) -> SystemModel:
+    """SME ``SystemModel`` with the sqrt(k) and sqrt(epsilon) moments flagged
+    positivity-constrained.
+    """
     # SME build + flag the sk, se moments as positivity-constrained so the floor
     # guards the 1/sk, 1/se, 1/sk² source prefactors as se (=√ε) passes near zero.
     sm = build_sme(model)
@@ -214,14 +228,10 @@ _BUILDERS = {
 
 
 def build_system_model(model) -> SystemModel:
-    """Dispatch on ``model._system_model_kind`` to the matching builder.
-
-    Cached BY DEFAULT (REQ-163): the built SystemModel (final lowered operator
-    matrices) is stored across memory / user-dir / shipped-prebuilt tiers via
-    :mod:`zoomy_core.systemmodel.sm_cache`; a hit skips the derivation AND the
-    build entirely and returns a fresh, safely-mutable object.  Parameter
-    VALUES are not part of the identity (free symbols end-to-end).  Disable
-    with ``ZOOMY_DERIVATION_CACHE=0``; force ``ZOOMY_DERIVATION_REBUILD=1``.
+    """Build the ``SystemModel`` of ``model`` with the builder for its ``_system_model_kind``,
+    through the ``sm_cache`` tiers when the cache is enabled.
+    Parameter values are not part of the cache identity; the cache is off by default
+    (``ZOOMY_DERIVATION_CACHE=1`` enables it, ``ZOOMY_DERIVATION_REBUILD=1`` forces a rebuild).
     """
     kind = model._system_model_kind
     try:
@@ -241,11 +251,9 @@ def build_system_model(model) -> SystemModel:
 
 
 def _attach_runtime_data(model, sm) -> None:
-    """Re-attach the INSTANCE's runtime data to a cache-fetched SystemModel.
-
-    BCs/ICs embed parameter values and case choices — they are deliberately
-    NOT part of the cache identity.  ``resolve_and_attach`` replaces any
-    BCs the entry was built with; ICs are plain field assignments."""
+    """Re-attach the instance's BCs, ICs and parameter values (not part of the cache identity) to
+    a cache-fetched ``SystemModel``.
+    """
     from zoomy_core.model.boundary_conditions import resolve_and_attach
     # Two BC homes (REQ-87): production models POP the constructor
     # ``boundary_conditions=`` into ``_coupling_bcs`` (their param is then a
@@ -253,6 +261,7 @@ def _attach_runtime_data(model, sm) -> None:
     # models keep theirs on the param.  Mirror from_model's promotion check:
     # only attach a container that actually HAS entries.
     def _nonempty(bc):
+        """``bc`` if it holds at least one entry, else ``None``."""
         if bc is None:
             return None
         entries = (list(bc) if isinstance(bc, list)

@@ -1,7 +1,5 @@
-"""Least-squares polynomial reconstruction for FVM derivative estimation.
-
-Pure-numpy utilities: monomial construction, Vandermonde matrices,
-weighted least-squares stencils, and cell-wise derivative computation.
+"""Pure-numpy least-squares reconstruction: monomial bases, Vandermonde matrices, per-cell LSQ
+stencils and derivatives, used by ``LSQMesh``.
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ import numpy as np
 # ── Monomial helpers ──────────────────────────────────────────────────────────
 
 def build_monomial_indices(degree: int, dim: int):
-    """Build monomial multi-indices up to total degree (excluding constant)."""
+    """Monomial multi-indices up to total ``degree`` in ``dim`` dimensions, excluding the constant."""
     mon_indices = []
     for powers in product(range(degree + 1), repeat=dim):
         if 0 < sum(powers) <= degree:
@@ -24,16 +22,15 @@ def build_monomial_indices(degree: int, dim: int):
 
 
 def scale_lsq_derivative(mon_indices):
-    """Factorial scaling so LSQ coefficients equal derivatives."""
+    """Factorial scale factors that turn monomial coefficients into derivatives."""
     return np.array(
         [np.prod([factorial(k) for k in mi]) for mi in mon_indices]
     )
 
 
 def find_derivative_indices(full_monomials_arr, requested_derivs_arr):
-    """Map requested derivative multi-indices to positions in monomial list.
-
-    Returns shape (M,) array; -1 where a requested derivative is not found.
+    """Positions of the requested derivative multi-indices in the monomial list, as an ``(M,)``
+    array (-1 where absent).
     """
     full_monomials_arr = np.array(full_monomials_arr)
     requested_derivs_arr = np.array(requested_derivs_arr)
@@ -47,16 +44,19 @@ def find_derivative_indices(full_monomials_arr, requested_derivs_arr):
 
 
 def get_polynomial_degree(mon_indices):
+    """Maximum total degree among the monomial multi-indices."""
     return max(sum(m) for m in mon_indices)
 
 
 def get_required_monomials_count(degree, dim):
+    """Number of monomials (constant included) of a polynomial of ``degree`` in ``dim`` dimensions."""
     return comb(int(degree + dim), int(dim))
 
 
 # ── Vandermonde & weights ─────────────────────────────────────────────────────
 
 def build_vandermonde(cell_diffs, mon_indices):
+    """Vandermonde matrix of the monomials ``mon_indices`` at the offsets ``cell_diffs``."""
     n_neighbors, dim = cell_diffs.shape
     n_monomials = len(mon_indices)
     V = np.zeros((n_neighbors, n_monomials))
@@ -66,7 +66,7 @@ def build_vandermonde(cell_diffs, mon_indices):
 
 
 def expand_neighbors(neighbors_list, initial_neighbors, n_valid=None):
-    """Expand neighbor set by one ring.  Skips sentinel/invalid indices."""
+    """Grow a neighbour set by one ring, skipping sentinel indices ``>= n_valid``."""
     expanded = set(initial_neighbors)
     for n in initial_neighbors:
         if n_valid is not None and n >= n_valid:
@@ -80,10 +80,9 @@ def expand_neighbors(neighbors_list, initial_neighbors, n_valid=None):
 
 
 def build_vertex_to_cells(cell_vertices, n_inner_cells):
-    """Inverse of ``cell_vertices``: for each vertex, the list of inner
-    cells that touch it.  ``cell_vertices`` has shape
-    ``(verts_per_cell, n_cells)``.  Ghost cells (``ic >= n_inner_cells``)
-    are excluded — the LSQ stencil only samples interior cells."""
+    """Inverse of ``cell_vertices`` (shape ``(verts_per_cell, n_cells)``): per vertex, the inner
+    cells touching it.
+    """
     n_cells = cell_vertices.shape[1]
     # Vertex ids are dense from 0..n_vertices-1.  Use the max ID as size.
     n_v = int(cell_vertices[:, :n_inner_cells].max()) + 1 if n_inner_cells > 0 else 0
@@ -97,9 +96,7 @@ def build_vertex_to_cells(cell_vertices, n_inner_cells):
 
 
 def vertex_one_ring(ic, cell_vertices, vertex_to_cells, n_inner_cells):
-    """All inner cells sharing at least one vertex with ``ic``.
-    Excludes ``ic`` itself.  On a structured 2D quad/triangle mesh
-    this is the geometrically symmetric stencil around ``ic``."""
+    """Inner cells sharing at least one vertex with cell ``ic`` (excluding ``ic``), sorted."""
     ring = set()
     for v in cell_vertices[:, ic]:
         v_int = int(v)
@@ -112,6 +109,7 @@ def vertex_one_ring(ic, cell_vertices, vertex_to_cells, n_inner_cells):
 
 
 def compute_gaussian_weights(dX, sigma=1.0):
+    """Gaussian weights ``exp(-(|dX|/sigma)^2)`` of the offsets ``dX``."""
     distances = np.linalg.norm(dX, axis=1)
     return np.exp(-((distances / sigma) ** 2))
 
@@ -125,77 +123,23 @@ def least_squares_reconstruction_local(
     cell_boundary_faces=None,
     cell_vertices=None,
 ):
-    """Build per-cell LSQ gradient operators.
+    """Build the per-cell LSQ gradient operators over the vertex-1-ring stencil, with boundary faces
+    as virtual ghost samples at ``2*(face_center - cell_center)``.  The value placed there must
+    be a ghost value (``2*u_face - u_cell``).
 
-    Interior cells (index < ``n_inner_cells``) are used as neighbors.
-    Boundary cells additionally include the boundary-face center(s)
-    they touch as **virtual sampling positions** — the LSQ row at a
-    boundary face contributes the BC-prescribed face value, so the
-    cell-centered derivative is boundary-aware.  This is the
-    ghost-cell-free analogue of "apply boundary_operator then take
-    the gradient": the boundary face is a first-class entity in the
-    mesh.
-
-    The virtual sampling POSITION is the GHOST-CELL offset
-    ``2·(face_center − cell_center)`` (= dx in 1-D) — see the ``dX``
-    assembly below — so the VALUE carried there must be a GHOST value.
-    (An earlier revision of this docstring claimed the sample sat at
-    ``|face_center − cell_center|`` = dx/2; the code has always used
-    2·, and a caller trusting the dx/2 claim placed a face value at a
-    ghost position.)
-
-    Stencil selection
-    -----------------
-    * When ``cell_vertices`` is provided (recommended for ≥2D),
-      the per-cell stencil is the **full vertex-1-ring**: every
-      inner cell sharing at least one vertex with the current cell.
-      On a structured quad/triangle mesh this is geometrically
-      symmetric around the cell centre (offset sum ≈ 0), giving
-      O(h²) gradient accuracy at the cell centre on smooth fields.
-    * When ``cell_vertices`` is None, the legacy face-neighbour +
-      ``expand_neighbors`` iteration is used to fill the stencil.
-      That path is symmetric in 1D but biased in 2D/3D — only kept
-      for backward compatibility with callers that lack vertex
-      topology.
-
-    Stencil selection
-    -----------------
-    * When ``cell_vertices`` is provided (recommended for ≥2D),
-      the per-cell stencil is the **full vertex-1-ring**: every
-      inner cell sharing at least one vertex with the current cell.
-      On a structured quad/triangle mesh this is geometrically
-      symmetric around the cell centre (offset sum ≈ 0), giving
-      O(h²) gradient accuracy at the cell centre on smooth fields.
-    * When ``cell_vertices`` is None, the legacy face-neighbour +
-      ``expand_neighbors`` iteration is used to fill the stencil.
-      That path is symmetric in 1D but biased in 2D/3D — only kept
-      for backward compatibility with callers that lack vertex
-      topology.
-
-    Parameters
-    ----------
-    boundary_face_centers : ndarray, shape ``(n_boundary_faces, dim)``, optional
-        Face centers of all boundary faces.  Required when
-        ``cell_boundary_faces`` provides any non-empty entry.
-    cell_boundary_faces : sequence, length ``n_cells``, optional
-        For each cell, the list of boundary-face indices touching that
-        cell.  Empty list for interior cells.  When omitted, the
-        stencil reduces to the legacy interior-only form.
-    cell_vertices : ndarray, shape ``(verts_per_cell, n_cells)``, optional
-        Vertex topology used to build a symmetric vertex-1-ring
-        stencil.  Strongly recommended for 2D/3D meshes — without
-        it the stencil is biased and gradient convergence drops to
-        O(h).
-
-    Returns
-    -------
-    A_glob : ``(n_cells, max_neighbors + max_bdy_per_cell, n_monomials)``
-    neighbors_array : ``(n_cells, max_neighbors)`` int
-    boundary_face_neighbors_array : ``(n_cells, max_bdy_per_cell)`` int
-        Boundary-face indices used by each cell's stencil, padded with
-        ``-1`` in unused slots.  Empty array (shape ``(n_cells, 0)``)
-        when no boundary-face augmentation was requested.
-    mon_indices : list of tuples
+    Args:
+        neighbors_list: face-neighbour table, used only to top up or replace the vertex ring.
+        boundary_face_centers: ``(n_boundary_faces, dim)``; required when
+            ``cell_boundary_faces`` is non-empty.
+        cell_boundary_faces: per cell, the boundary faces it touches.
+        cell_vertices: ``(verts_per_cell, n_cells)``; without it the stencil is the biased
+            face-neighbour expansion.
+    Returns:
+        ``(A_glob, neighbors_array, boundary_face_neighbors_array, mon_indices)``; ``A_glob`` is
+            ``(n_cells, max_neighbors + max_bdy_per_cell, n_monomials)``, boundary slots are
+            padded with -1.
+    References:
+        Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
     if n_inner_cells is None:
         n_inner_cells = n_cells
@@ -420,30 +364,8 @@ _BC_EXTRAPOLATION = "extrapolation"
 
 
 def _resolve_u_boundary_face(u, u_boundary_face, mesh):
-    """Resolve ``u_boundary_face`` → values at the boundary virtual-
-    neighbour position.
-
-    The LSQ stencil places boundary points at the **ghost-cell**
-    position (symmetric image of the inner cell through the boundary
-    face — see ``least_squares_reconstruction_local``).  The value
-    assigned to that ghost point is:
-
-    * ``'extrapolation'`` (Neumann-zero / ``zeroGradient``): ghost =
-      inner cell value.  Slope between ghost and cell is zero, and by
-      symmetry the slope at the midpoint (= boundary face) is zero —
-      the exact Neumann-zero discretisation.
-    * ndarray of face values (Dirichlet / Lambda prescribed): the
-      virtual point sits at the GHOST-CELL offset ``2·(face - cell)``,
-      so the value carried there is the linear extrapolation through
-      the face, ``u_ghost = 2·u_face - u_cell``.  Returning the bare
-      face value would place a face-valued sample at the ghost
-      position — an inconsistency that caps the boundary gradient at
-      1st order for a linear field at any finite ``dx``.  The
-      ``2·u_face - u_cell`` form reproduces ``(b, c)`` exactly for
-      ``u = a + b·x + c·y``.
-
-    Passing ``None`` or any other type raises — callers must be
-    explicit about the BC interpretation.
+    """Ghost-cell value at each boundary face: the inner value for ``'extrapolation'``
+    (Neumann-zero) or ``2*u_face - u_cell`` for an array of face values; anything else raises.
     """
     if isinstance(u_boundary_face, np.ndarray):
         return 2.0 * u_boundary_face - u[mesh.boundary_face_cells]
@@ -462,21 +384,16 @@ def _resolve_u_boundary_face(u, u_boundary_face, mesh):
 
 def compute_derivatives(u, mesh, derivatives_multi_index=None, *,
                         u_boundary_face):
-    """Cell-wise derivative estimates using the mesh LSQ stencil.
+    """Cell-wise derivative estimates of ``u`` from the mesh LSQ stencil.
 
-    Parameters
-    ----------
-    u : ndarray, shape ``(n_cells,)``
-        Field values at cell centers (interior + sentinel/ghost slots).
-    u_boundary_face : ndarray | ``'extrapolation'``
-        **Required.**  Either an ``(n_boundary_faces,)`` array of values
-        at boundary face centers (typically from the SystemModel's
-        ``boundary_conditions`` runtime kernel applied to the inner-
-        cell state) — for prescribed-value BCs (Dirichlet, Lambda) — or
-        the literal string ``'extrapolation'`` to request Neumann-zero
-        / face = inner-cell-value treatment (the Chorin pressure
-        projection's natural P BC, and the safe fallback for
-        intrinsically-Neumann fields like static bathymetry).
+    Args:
+        u: ``(n_cells,)`` values at cell centres (inner plus ghost slots).
+        u_boundary_face: required; ``(n_boundary_faces,)`` face values for prescribed BCs, or
+            ``'extrapolation'`` for Neumann-zero.
+    Returns:
+        ``(n_cells, len(derivatives_multi_index))`` array.
+    References:
+        Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
     A_glob = mesh.lsq_gradQ
     neighbors = mesh.lsq_neighbors
@@ -511,14 +428,14 @@ def compute_derivatives(u, mesh, derivatives_multi_index=None, *,
 
 
 def get_physical_boundary_labels(filepath):
-    """Extract physical boundary labels from a .msh file via meshio."""
+    """Map physical-group names of a ``.msh`` file to their tags via meshio."""
     import meshio
     mesh = meshio.read(filepath)
     return {key: value[0] for key, value in mesh.field_data.items()}
 
 
 def compute_inradius_generic(cell_center, face_centers, face_normals):
-    """Inradius of a cell: shortest normal distance from center to any face."""
+    """Inradius of a cell: the shortest normal distance from its centre to any face."""
     inradius = np.inf
     for center, normal in zip(face_centers, face_normals):
         distance = np.abs(np.dot(center - cell_center, normal))

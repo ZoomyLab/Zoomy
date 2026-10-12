@@ -1,22 +1,5 @@
-"""Clean-redesign derivation framework.
-
-The derivation spine: build a symbolic PDE derivation as a computational graph
-of :class:`Model` operations.
-
-    from zoomy_core import coords
-    import zoomy_core.derivatives as d
-    from zoomy_core.model.derivation import Model, Substitution, ChangeOfVariables
-
-    t, x, z = coords.t, coords.x, coords.z
-    model = Model(coords=(t, x, z), parameters={"g": 9.81, "rho": 1.0})
-    model.Q = [h, u, w, p]
-    model.add_equation("mass", d.x(u) + d.z(w))
-
-``Model`` and the operations reuse the existing
-:class:`zoomy_core.model.operations.Operation` /
-:class:`zoomy_core.model.equation.Equation` spine — the redesign is the
-model/unknown contract (declared-and-present ``Q``, derived ``Qaux``, ops that
-carry their own unknown bookkeeping), not a fresh operator surface.
+"""Symbolic derivation framework: a PDE derivation is a graph of Model operations (substitution,
+projection, closure, split). Its output is lifted into a SystemModel by extract_system_operators.
 """
 
 from .model import (

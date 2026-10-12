@@ -1,11 +1,7 @@
-"""Regenerate the SHIPPED SystemModel cache (REQ-163).
-
-    python -m zoomy_core.systemmodel.build_prebuilt_cache
-
-Builds the default model configurations from scratch (cache reads disabled)
-and writes their pickled SystemModels into ``zoomy_core/systemmodel/_prebuilt/``
-(package data) so a fresh install gets instant first-time builds.  Commit the
-regenerated files whenever a derivation or builder changes.
+"""Regenerate the shipped ``SystemModel`` cache (``python -m
+zoomy_core.systemmodel.build_prebuilt_cache``).
+Writes the pickled default models into ``zoomy_core/systemmodel/_prebuilt/`` so a fresh install
+builds instantly.
 """
 from __future__ import annotations
 
@@ -15,6 +11,7 @@ import time
 
 
 def default_models():
+    """Yield ``(label, factory)`` for the default model configurations that ship prebuilt."""
     from zoomy_core.model.models.swe import SWE
     from zoomy_core.model.models.sme import SME
     from zoomy_core.model.models.vam import VAM
@@ -62,6 +59,9 @@ def default_models():
 
 
 def main() -> int:
+    """Build every default model from scratch (cache reads off) and pickle it to the prebuilt
+    directory; returns 0 on full success.
+    """
     os.environ["ZOOMY_DERIVATION_REBUILD"] = "1"     # always build fresh
     from zoomy_core.systemmodel import sm_cache
     from zoomy_core.systemmodel.model_builders import _BUILDERS, build_system_model

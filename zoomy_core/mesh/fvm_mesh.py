@@ -1,8 +1,4 @@
-"""FVMMesh — BaseMesh with precomputed geometry for FVM solvers.
-
-Caches cell centers, volumes, inradii, face normals, face volumes,
-and face centers so they are not recomputed every access.
-"""
+"""FVMMesh: BaseMesh with cached cell/face geometry for finite-volume solvers."""
 
 from __future__ import annotations
 
@@ -13,7 +9,7 @@ from zoomy_core.mesh.base_mesh import BaseMesh
 
 
 class FVMMesh(BaseMesh):
-    """BaseMesh + precomputed cell/face geometry."""
+    """BaseMesh plus precomputed cell centers, volumes, inradii and face normals, volumes, centers."""
 
     # Precomputed geometry (overrides the on-the-fly methods in BaseMesh)
     _cell_centers = param.Array(default=None, allow_None=True)
@@ -24,52 +20,66 @@ class FVMMesh(BaseMesh):
     _face_centers = param.Array(default=None, allow_None=True)
 
     def cell_centers_computed(self) -> np.ndarray:
+        """Return the cached cell centers."""
         return self._cell_centers
 
     def cell_volumes_computed(self) -> np.ndarray:
+        """Return the cached cell volumes."""
         return self._cell_volumes
 
     def cell_inradius_computed(self) -> np.ndarray:
+        """Return the cached cell inradii."""
         return self._cell_inradius
 
     def face_normals_computed(self) -> np.ndarray:
+        """Return the cached face normals."""
         return self._face_normals
 
     def face_volumes_computed(self) -> np.ndarray:
+        """Return the cached face areas."""
         return self._face_volumes
 
     def face_centers_computed(self) -> np.ndarray:
+        """Return the cached face centers."""
         return self._face_centers
 
     # Public property accessors (compatible with old Mesh flat attributes)
     @property
     def cell_centers(self):
+        """Cached cell centers."""
         return self._cell_centers
 
     @property
     def cell_volumes(self):
+        """Cached cell volumes."""
         return self._cell_volumes
 
     @property
     def cell_inradius(self):
+        """Cached cell inradii."""
         return self._cell_inradius
 
     @property
     def face_normals(self):
+        """Cached face normals."""
         return self._face_normals
 
     @property
     def face_volumes(self):
+        """Cached face areas."""
         return self._face_volumes
 
     @property
     def face_centers(self):
+        """Cached face centers."""
         return self._face_centers
 
 
     @classmethod
     def from_base(cls, base: BaseMesh) -> "FVMMesh":
-        """Build an FVMMesh by computing geometry from a BaseMesh."""
+        """Build an FVMMesh by computing the geometry of a BaseMesh (vectorised for supported cell
+        types).
+        """
         # Copy all base fields
         fvm = cls(
             dimension=base.dimension,
@@ -130,27 +140,30 @@ class FVMMesh(BaseMesh):
 
     @classmethod
     def from_msh(cls, filepath: str) -> "FVMMesh":
-        """Load .msh and build FVMMesh with precomputed geometry."""
+        """Load a gmsh ``.msh`` file as an FVMMesh."""
         base = BaseMesh.from_msh(filepath)
         return cls.from_base(base)
 
     @classmethod
     def from_hdf5(cls, filepath: str) -> "FVMMesh":
-        """Load BaseMesh from H5 and compute geometry."""
+        """Load an HDF5 mesh as an FVMMesh."""
         base = BaseMesh.from_hdf5(filepath)
         return cls.from_base(base)
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "FVMMesh":
+        """Structured 1D FVMMesh on ``domain`` with ``n_inner_cells`` cells."""
         base = BaseMesh.create_1d(domain, n_inner_cells)
         return cls.from_base(base)
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "FVMMesh":
+        """Structured 2D FVMMesh on ``domain`` with ``nx`` x ``ny`` cells."""
         base = BaseMesh.create_2d(domain, nx, ny)
         return cls.from_base(base)
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "FVMMesh":
+        """Structured 3D FVMMesh on ``domain`` with ``nx`` x ``ny`` x ``nz`` cells."""
         base = BaseMesh.create_3d(domain, nx, ny, nz)
         return cls.from_base(base)

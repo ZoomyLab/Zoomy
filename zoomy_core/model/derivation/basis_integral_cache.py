@@ -1,23 +1,6 @@
-"""Query-driven integral cache over a basis.
-
-The pipeline hands an ``Integral(integrand, (var, lower, upper))`` — where
-``integrand`` contains opaque basis functions ``phi_k(arg)`` and their
-derivatives — to :class:`BasisIntegralCache`.  The cache either returns a
-stored result or falls back to a fast, polynomial-only integration.  No
-``sympy.integrate`` on the symbolic basis definitions: the opaque
-``phi_k`` is first concretized against the basis polynomial (in the
-basis's own ``z`` symbol), substituted at ``arg``, then integrated
-via sympy's polynomial path (``expand`` + ``Poly.integrate``).
-
-Cache key: the tuple ``(integrand, var, lower, upper)``.  sympy
-expressions hash structurally — commutative ``Mul``/``Add`` arguments
-collide on rearrangement — so ``phi_0(ζ)·phi_1(ζ)`` and
-``phi_1(ζ)·phi_0(ζ)`` share an entry.
-
-The cache is **per basis instance** and lives in-memory.  A new query
-shape is computed once and reused.  No precomputed M/A/B/D arrays: this
-module doesn't know about "matrix tags" — it's a pure functional cache
-that maps a symbolic integrand to its symbolic value.
+"""Memoizing integral cache over a basis: concretizes opaque phi_k(arg) with the basis polynomials
+and integrates in polynomial form. Used by the Galerkin projection; it caches symbolic integrals,
+not M/A/B/D arrays.
 """
 
 import sympy as sp
@@ -27,7 +10,7 @@ _PHI_PREFIX = "phi_"
 
 
 def _is_phi_call(e):
-    """Return ``True`` iff ``e`` is ``phi_k(arg)``."""
+    """True iff the expression is an opaque call phi_k(arg)."""
     return (
         isinstance(e, sp.Function)
         and not isinstance(e, sp.Derivative)
@@ -36,35 +19,18 @@ def _is_phi_call(e):
 
 
 def _phi_index(e):
-    """Return ``k`` given ``phi_k(...)`` or its derivative."""
+    """Return k for phi_k(...) or its derivative."""
     name = e.func.__name__ if _is_phi_call(e) else e.args[0].func.__name__
     return int(name[len(_PHI_PREFIX):])
 
 
 class BasisIntegralCache:
-    """Memoizing symbolic integrator over a basis.
-
-    Parameters
-    ----------
-    basis : :class:`~zoomy_core.model.derivation.basisfunctions.Basisfunction`
-        The basis whose polynomial definitions back the opaque
-        ``phi_k(arg)`` and ``Derivative(phi_k(arg), arg)`` functions
-        used in the caller's expression tree.
-
-    Notes
-    -----
-    The caller is expected to have factored out all ``var``-independent
-    factors before querying.  The integrand passed in should be a
-    product of ``phi_k(arg)``, ``Derivative(phi_k(arg), arg)``,
-    polynomial factors in ``var``, and possibly a nested
-    ``Integral(kernel, (var', ..., var))`` whose inner integrand is
-    itself basis-only.  In particular, the cache will happily
-    concretize every ``phi_k`` it sees — if a ``phi_k`` slips through
-    with a ``var``-independent argument, that's a no-op (the poly is
-    evaluated at a number / constant, which is itself a constant).
+    """Per-basis, in-memory cache from (integrand, var, lower, upper) to the symbolic integral. The
+    caller must have factored out all var-independent factors from the integrand.
     """
 
     def __init__(self, basis):
+        """Store the basis polynomials and their z-derivatives."""
         self.basis = basis
         self._cache = {}
         # The basis stores its polynomials in a conventional "z" symbol.
@@ -79,16 +45,9 @@ class BasisIntegralCache:
     # Public API
 
     def integrate(self, integrand, var, lower, upper):
-        """Return the symbolic value of ``∫_lower^upper integrand d(var)``.
-
-        The integrand may contain opaque ``phi_k(arg)`` and
-        ``Derivative(phi_k(arg), arg)`` nodes — these are substituted
-        with the basis's polynomial before integration.  All other
-        factors are carried through as symbolic coefficients.
-
-        The ``(integrand, var, lower, upper)`` tuple is the cache key.
-        Hits return instantly; misses invoke the polynomial integrator
-        and store the result.
+        """Return the symbolic value of the integral of integrand over var from lower to upper,
+        cached by that tuple. Opaque phi_k(arg) and Derivative(phi_k(arg), arg) nodes are replaced
+        by the basis polynomials before integration.
         """
         key = (integrand, var, lower, upper)
         cached = self._cache.get(key)
@@ -102,6 +61,9 @@ class BasisIntegralCache:
     # Internals
 
     def _compute(self, integrand, var, lower, upper):
+        """Concretize, expand and integrate in polynomial form; fall back to sympy.integrate for
+        non-polynomial integrands.
+        """
         concrete = self._concretize(integrand)
         # Flatten any nested Integrals whose integrand is now a
         # polynomial (after concretization, any ``phi_k(arg)`` → poly;
@@ -123,9 +85,11 @@ class BasisIntegralCache:
         return sp.simplify(value)
 
     def _concretize(self, expr):
-        """Substitute every ``phi_k(arg)`` / ``Derivative(phi_k(arg), arg)``
-        with the corresponding basis polynomial (evaluated at ``arg``)."""
+        """Replace every phi_k(arg) and Derivative(phi_k(arg), arg) by the basis polynomial or its
+        derivative at arg.
+        """
         def _rec(e):
+            """Rebuild the expression tree with phi nodes replaced."""
             # Derivative(phi_k(arg), arg) → dphi_k/dz|_{z=arg}
             if isinstance(e, sp.Derivative):
                 inner = e.args[0]

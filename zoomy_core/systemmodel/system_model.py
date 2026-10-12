@@ -1,26 +1,8 @@
-"""SystemModel — operator-form symbolic PDE for analysis + transformation.
-
-`SystemModel` is the runtime/operator-form representation of a PDE
-system: a flat container of symbolic ``sp.Matrix`` / sympy-tensor
-operators (flux, non-conservative-matrix, source, mass matrix,
-hydrostatic pressure) plus state, parameters, coordinates, and
-boundary-condition kernels.  It carries no derivation history and no
-equation tree — that's the `Model` class's job.
-
-The two are **independent siblings**, not inherited.  `Model` owns
-derivation; `SystemModel` owns the operator surface that solvers and
-analysis consume.  ``SystemModel.from_model(m)`` extracts the
-operators once by calling the model's API methods and freezes the
-result; subsequent calls on the SystemModel never re-walk.
-
-Operations on a SystemModel modify the stored matrices in place via
-``apply(operation)`` — the most important being ``InvertMassMatrix``
-which left-multiplies the system by ``M⁻¹`` to reach canonical
-``∂_t Q + ∂_x F + B·∂_x Q − S = 0`` form.
-
-Solvers and analysis routines accept either a ``Model`` or a
-``SystemModel`` directly; internally they normalize via
-``SystemModel.from_model(m)`` if a Model is passed.
+"""Symbolic operator-form PDE system (``SystemModel``) extracted from a ``Model``: flux,
+nonconservative matrix, source, diffusion, eigenvalues and boundary conditions in operator
+slots.
+Sits between ``Model`` and ``NumericalSystemModel``; also holds the system-level operations that
+repack operators in place.
 """
 
 from __future__ import annotations
@@ -62,12 +44,8 @@ from zoomy_core.misc.misc import Zstruct, ZArray
 # would then be a duplicate lambdify argument) — a lowering-SYNTAX constraint,
 # not a signature difference (handled in ``NumpyRuntimeModel``).
 def face_normal_symbols(n_dim):
-    """The canonical outward face-normal symbols ``n0 … n_{n_dim-1}``.
-
-    ONE definition of the name/ordering convention, shared by the
-    ``SystemModel.normal`` Zstruct and by every DERIVATION that needs to write
-    a geometric (normal-aware) relation — e.g. a model-registered free-slip
-    wall, which reflects only the normal component of the momentum vector.
+    """Canonical outward face-normal symbols ``n0 ... n_{n_dim-1}``, the one naming convention
+    shared by ``SystemModel.normal`` and the derivations.
     """
     return [sp.Symbol(f"n{d}", real=True) for d in range(int(n_dim))]
 
@@ -115,13 +93,8 @@ _DT_SYMBOL = sp.Symbol("dt", positive=True)
 
 
 def _to_zarray(obj):
-    """Coerce a sympy Matrix / NDimArray / list into ``ZArray``.
-
-    Accepts ``None`` (returns None) and existing ``ZArray`` (returns
-    as-is).  Shape is preserved exactly — column vectors stay
-    ``(n, 1)`` Matrix → ``(n, 1)`` ZArray.  Construction sites are
-    responsible for choosing the rank they want; this normaliser
-    just unifies the storage type.
+    """Coerce a sympy Matrix, NDimArray or list to ``ZArray`` with its shape preserved; ``None``
+    passes through.
     """
     if obj is None or isinstance(obj, ZArray):
         return obj
@@ -133,23 +106,12 @@ def _to_zarray(obj):
 
 
 def _channel_explicit_diffusion(model, canonical_source):
-    """Mirror the basemodel ``from_model`` handling of the EXPLICIT diffusion
-    tensor on the declarative (``_from_derivation_model``) path.
-
-    A case-side SME/VAM model may override ``diffusion_matrix_explicit()`` (the
-    ``∇·(ν_h h ∇u)`` horizontal-eddy-viscosity slot).  The override lives on the
-    user-facing model — the ``canonical_source`` here (the SME/VAM wrapper the
-    case constructs), NOT on the derivation ``model`` whose untagged residuals
-    the structural extractor reads.  Read the override off either object,
-    coerce it to an ``NDimArray`` exactly as the basemodel branch's
-    ``_extract_A`` does, and return it.
-
-    Returns ``None`` when no real (non-zero) override is declared — the
-    basemodel default ``diffusion_matrix_explicit()`` returns an all-zero
-    tensor, so treat that as "no override" and inject NOTHING (a plain SME/VAM
-    keeps ``diffusion_matrix_explicit is None``; the implicit, extractor-derived
-    ``diffusion_matrix`` slot is never touched here)."""
+    """Read the ``diffusion_matrix_explicit()`` override off ``canonical_source`` or ``model`` on
+    the declarative path.
+    Returns ``None`` when the override is absent or all zero.
+    """
     def _is_zero(e):
+        """Whether the entry ``e`` is zero."""
         z = getattr(e, "is_zero", None)
         return z if z is not None else (e == 0)
     for src in (canonical_source, model):
@@ -172,6 +134,7 @@ def _channel_explicit_diffusion(model, canonical_source):
 
 
 def _iter_indices(shape):
+    """Iterate over all multi-indices of an array of ``shape``."""
     if not shape:
         yield ()
         return
@@ -181,15 +144,8 @@ def _iter_indices(shape):
 
 
 def _cov_diffusion_tensor(A_old, sub_map, J, *, n_state):
-    """Apply a state-variable change-of-vars to a diffusion tensor.
-
-    ``A`` has shape ``(n_eq, n_state, n_dim, n_dim)`` and enters the
-    residual via the contraction
-    ``F_diff[i, d] = Σ_{j, e} A[i, j, d, e] · ∂_e Q[j]``.
-    Under ``∂_e Q_old[j] = J[j, k] · ∂_e Q_new[k]`` this rewrites to
-    ``A_new[i, k, d, e] = Σ_j A_old[i, j, d, e](T) · J[j, k]``.
-
-    Returns ``None`` when ``A_old`` is ``None`` (default-zero slot).
+    """Apply a state change of variables to the diffusion tensor: ``A_new[i,k,d,e] = sum_j
+    A_old[i,j,d,e](T) J[j,k]``; ``None`` stays ``None``.
     """
     if A_old is None:
         return None
@@ -211,22 +167,8 @@ def _cov_diffusion_tensor(A_old, sub_map, J, *, n_state):
 
 
 def _cov_propagate_bc_function(bc_func, sub_map, new_state):
-    """Apply a state-variable change-of-vars to a symbolic BC kernel.
-
-    The BC kernel is a :class:`zoomy_core.model.basefunction.Function`
-    whose ``definition`` is a (typically Piecewise) sympy expression
-    referencing state Symbols, and whose ``args`` Zstruct binds named
-    positional arguments — including ``variables`` — to those Symbols.
-
-    Under CoV we (i) xreplace the OLD state Symbols in ``definition``
-    with their NEW-state expressions, and (ii) rebuild
-    ``args.variables`` as a fresh Zstruct over the new state Symbols
-    (preserving the ``_symbolic_name`` so the lambdifier sees the same
-    positional slot).  Other ``args`` entries (``time``, ``position``,
-    ``distance``, ``aux_variables``, ``parameters``, ``normal``,
-    ``idx``) stay untouched.
-
-    Returns ``None`` when ``bc_func`` is ``None``.
+    """Apply a state change of variables to a symbolic BC kernel: substitute the old state symbols
+    in its definition and rebuild ``args.variables`` over the new state.
     """
     if bc_func is None:
         return None
@@ -270,16 +212,16 @@ _FUNCTION_SLOTS: Dict[str, str] = {
 
 
 def register_function_slot(group_name: str, sm_attr: str) -> None:
-    """Route a custom derivation function-group ``group_name`` to the
-    ``SystemModel`` attribute ``sm_attr`` (e.g. a derived wall BC → a
-    boundary-condition slot)."""
+    """Route the derivation function group ``group_name`` to the ``SystemModel`` attribute
+    ``sm_attr`` (e.g. a derived wall BC to a boundary-condition slot).
+    """
     _FUNCTION_SLOTS[group_name] = sm_attr
 
 
 def _grad_aux_name(base, axis="x") -> str:
-    """Name a spatial-gradient aux symbol after the field it differentiates and
-    the axis/axes it is taken along: ``∂_x h → dhdx``, ``∂_y q_0 → dq0dy``,
-    ``∂_x∂_x b → dbdxx`` (``axis`` carries the concatenated axis letters)."""
+    """Name of the gradient aux of field ``base`` along ``axis`` (concatenated axis letters), e.g.
+    ``dhdx``, ``dq0dy``, ``dbdxx``.
+    """
     if isinstance(base, sp.Function):
         head = base.func.__name__
         idx = "".join(str(int(a)) for a in base.args
@@ -289,18 +231,12 @@ def _grad_aux_name(base, axis="x") -> str:
 
 
 def _gradients_to_aux(expr, spaces):
-    """Replace every PURELY-SPATIAL ``∂(field)`` in ``expr`` (along ANY of the
-    ``spaces`` coordinates, to any order) with a fresh gradient-aux Symbol.
+    """Replace every purely spatial derivative in ``expr`` (any order, any axis of ``spaces``)
+    with a gradient-aux Symbol the solver fills from its LSQ stencil.
 
-    Returns ``(new_expr, grads)`` with ``grads`` an order-stable, de-duplicated
-    list of ``(aux_symbol, differentiated_field, multi_index_tuple)`` — the
-    runtime aux the solver supplies from its LSQ stencil, and the metadata the
-    caller registers in ``aux_registry`` so :meth:`Solver._walk_derivative_aux`
-    fills them.  This is what a reconstructed ``w`` (and any derivative-carrying
-    reconstruction slot) needs to lower cleanly: it leaves NO raw ``Derivative``
-    atoms for the backend printer (which would otherwise drop the slot — e.g.
-    the jax ``interpolate_to_3d`` drop) and is dimension-complete (x AND y AND
-    z), not the old x-only conversion that left ``∂_y`` raw in the 2-D w slot.
+    Returns:
+        ``(new_expr, grads)`` with ``grads`` the ordered unique ``(aux_symbol, field,
+            multi_index)``.
     """
     space_index = {s: d for d, s in enumerate(spaces)}
     n_dim = len(spaces)
@@ -308,10 +244,12 @@ def _gradients_to_aux(expr, spaces):
     seen: set = set()
 
     def _is_spatial_grad(e):
+        """Whether ``e`` is a purely spatial derivative."""
         return (isinstance(e, sp.Derivative)
                 and all(v in space_index for v, _ in e.variable_count))
 
     def _to_sym(e):
+        """The gradient-aux Symbol of derivative ``e``, recorded in ``grads`` on first use."""
         mi = [0] * n_dim
         for v, n in e.variable_count:
             mi[space_index[v]] += int(n)
@@ -326,11 +264,13 @@ def _gradients_to_aux(expr, spaces):
 
 
 def _fields_to_state_symbols(expr, x):
-    """Collapse applied state/aux fields ``q(i, t, x) → q_i``, ``h(t, x) → h``
-    so the stored operator reads in the SystemModel's bare state symbols."""
+    """Collapse applied state/aux fields to bare symbols (``q(i, t, x) -> q_i``, ``h(t, x) ->
+    h``).
+    """
     from zoomy_core.model.derivation.system_extract import _state_symbol
 
     def _is_field(e):
+        """Whether ``e`` is an applied field depending on ``x``."""
         return (isinstance(e, sp.Function) and bool(e.args)
                 and any(a == x for a in e.args))
 
@@ -350,17 +290,10 @@ _CANONICAL_METHODS = {
 
 
 def _attach_function_groups(sm, model, canonical_source=None) -> None:
-    """Parse ``model._function_groups`` into the matching ``SystemModel`` slots.
-
-    Each group ``{component_index: rhs}`` becomes a vector operator: the rhs is
-    rewritten into bare state symbols, every ``∂_x(state)`` becomes a runtime
-    gradient aux (appended to ``aux_state``), and the unit-interval vertical
-    coordinate ``ζ`` is exposed via ``sm.position``.
-
-    Groups named ``boundary:<name>`` are model-DERIVED boundary definitions
-    (``{state_index: boundary value}``); they land in ``sm.boundary_specs``
-    where :class:`~zoomy_core.model.boundary_conditions.FromModel` picks them
-    up by ``<name>`` at :meth:`SystemModel.attach_boundary_conditions` time.
+    """Parse ``model._function_groups`` into the matching ``SystemModel`` slots, turning each
+    ``d_x(state)`` into a gradient aux.
+    Groups named ``boundary:<name>`` land in ``sm.boundary_specs`` for ``FromModel`` boundary
+    conditions.
     """
     groups = dict(getattr(model, "_function_groups", None) or {})
     if canonical_source is not None:
@@ -396,6 +329,9 @@ def _attach_function_groups(sm, model, canonical_source=None) -> None:
     recon_group_registered = False
 
     def _parse(rhs, group, idx):
+        """Rewrite one group right-hand side into bare state symbols and gradient aux, mapping
+        ``zeta`` onto the vertical position.
+        """
         # ``.doit()`` expands derivatives of compounds (the CoV leaves
         # ``∂_x(q_i/h)``) into the bare-field gradients ``∂_x q_i``, ``∂_x h``
         # so the gradient aux are named cleanly (``dq0dx``, ``dhdx``).
@@ -410,8 +346,7 @@ def _attach_function_groups(sm, model, canonical_source=None) -> None:
         return e.subs(zeta, z_pos)
 
     def _state_slot(key):
-        """A boundary-group key may be the state FIELD itself — resolve it to
-        its slot in ``sm.state`` so registrations never hard-code the layout."""
+        """Resolve a boundary-group key (a state field) to its slot in ``sm.state``."""
         if isinstance(key, int):
             return key
         sym = _fields_to_state_symbols(sp.sympify(key), x)
@@ -521,32 +456,12 @@ def _attach_function_groups(sm, model, canonical_source=None) -> None:
 
 
 def _perron_radius_bound(M, iterations):
-    """``Min`` over ``k ≤ iterations`` of ``(maxᵢ (Mᵏ·1)ᵢ)^{1/k}`` — a strict
-    upper bound on ``ρ(M)`` for a NONNEGATIVE symbolic matrix ``M`` (given as
-    a list of rows), read off one ``vₖ = M vₖ₋₁`` chain from ``v₀ = 1``.
+    """``Min`` over ``k <= iterations`` of ``(max_i (M^k 1)_i)^(1/k)``, an upper bound on
+    ``rho(M)`` for a nonnegative symbolic matrix ``M`` given as rows; see
+    ``SystemModel.spectral_radius_bound``.
 
-    See :attr:`SystemModel.spectral_radius_bound` for the statement, the
-    safety argument and the measured tightness.  Every candidate is an upper
-    bound on its own, so the ``Min`` is one too.
-
-    Deliberately ALL products and NO quotients: the obvious companion bound
-    (Collatz–Wielandt, ``ρ(M) ≤ maxᵢ (Mv)ᵢ/vᵢ`` for any ``v > 0``) is tighter
-    per iteration but needs the iterate rescaled and floored away from zero —
-    and a ``Max`` INSIDE the chain multiplies the symbolic TREE size by
-    ``n + 1`` per step on top of the ``n`` the matvec already costs.  Sympy's
-    ``Max``/``Min`` constructor sorts its arguments through ``ordered`` →
-    ``_node_count``, which walks the TREE and does not see the shared DAG, so
-    that turned a 0.8 s foam emission of ``SME(level=1)`` into 70 s.  Products
-    only keeps the tree at ``nᵏ`` and the emission at 2 s.
-
-    ``evaluate=False`` on both reductions for the SAME reason
-    ``local_max_abs_eigenvalue`` uses it: ``Max``/``Min`` over wave-speed
-    scale expressions is a RUNTIME reduction, and letting sympy attempt the
-    pairwise ordering expands every branch and explodes setup further.
-
-    No rescaling means ``vₖ`` carries the raw ``ρᵏ``.  In IEEE double that is
-    unreachable either way for a wave speed: overflow needs ``‖A‖ > 1e77``
-    and underflow ``‖A‖ < 1e-77`` at ``k = 4``.
+    References:
+        Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
     """
     n = len(M)
     v = [sp.Integer(1)] * n
@@ -566,59 +481,10 @@ def _perron_radius_bound(M, iterations):
 
 @dataclass
 class SystemModel:
-    """Symbolic operator-form PDE system.
-
-    Stored matrices follow the contract:
-
-    .. math::
-
-        M(Q) \\; \\partial_t Q
-            + \\nabla \\cdot \\big(F(Q) + P(Q)\\big)
-            + \\sum_d B(Q)[:,:,d] \\, \\partial_d Q
-            - S(Q) = 0
-
-    Operators are indexed ``(equation_row, state_col[, dim])``.  In
-    general the system is **rectangular** — there can be fewer (or
-    more) equations than state entries; this is the case for the
-    splitter sub-systems, where each stage updates only a subset of
-    the shared state vector.  ``equation_to_state_index[r]`` records
-    which state entry equation ``r`` updates; for square systems the
-    default is the identity map ``[0, 1, …, n_state-1]``.
-
-    Every operator the system needs is a **stored field**, frozen at
-    construction — there are no derived-on-demand methods.  Alongside
-    the five primaries (flux, P, NCP, source, mass matrix) the system
-    carries the derived operators ``quasilinear_matrix``, the source
-    jacobians ``source_jacobian_wrt_variables`` /
-    ``source_jacobian_wrt_aux_variables`` and ``eigenvalues``, plus the
-    ``normal`` symbols and the parameter Zstructs.  ``quasilinear_matrix``
-    is a cheap derivative computed lazily on first access.  The source
-    jacobians are CHANNELED from the source Model in :meth:`from_model`
-    (read off the SystemModel, never re-derived by printers); a standalone
-    SystemModel falls back to deriving them once from ``source`` in
-    ``__post_init__``.  Any in-place operation refreshes them via
-    :meth:`refresh_derived_operators`.  ``eigenvalues`` is the one
-    operator that may be expensive (a symbolic spectral derivation) or
-    deliberately skipped — :meth:`from_model` simply carries over
-    whatever ``Model.eigenvalues()`` produced, and ``None`` means
-    "skipped" (numerical-eigenvalue mode).
-
-    Shape contract:
-
-    * ``flux``                  — ``(n_eq, n_dim)``
-    * ``hydrostatic_pressure``  — ``(n_eq, n_dim)``
-    * ``nonconservative_matrix``— ``(n_eq, n_state, n_dim)``
-    * ``source``                — ``(n_eq, 1)``
-    * ``mass_matrix``           — ``(n_eq, n_state)``
-    * ``quasilinear_matrix``    — ``(n_eq, n_state, n_dim)``
-    * ``source_jacobian_wrt_variables``     — ``(n_eq, n_state)``
-    * ``source_jacobian_wrt_aux_variables`` — ``(n_eq, n_aux)``
-    * ``eigenvalues``           — ``(n_eq, 1)`` or ``None`` if skipped
-
-    ``parameters`` is a Zstruct mapping parameter name → symbol (the
-    symbolic side the operators reference); ``parameter_values`` maps
-    name → numeric default.  ``normal`` is a Zstruct of the face-normal
-    component symbols ``n0, n1, …``.
+    """Operator-form PDE system ``M dQ/dt + div(F + P) + sum_d B[:,:,d] d_d Q - S = 0`` with
+    operators indexed ``(equation_row, state_col[, dim])``.
+    It may be rectangular (``equation_to_state_index`` maps equations to state entries); derived
+    operators are cached or refreshed by ``refresh_derived_operators``.
     """
 
     time: sp.Symbol
@@ -832,6 +698,9 @@ class SystemModel:
     admissible: Optional[ZArray] = None
 
     def __post_init__(self):
+        """Normalise all operator fields to ``ZArray`` and derive the source jacobians when no
+        Model channeled them.
+        """
         # Lazy derived-operator cache — filled on first ``quasilinear_matrix``
         # access.  The source jacobians are real FIELDS (channeled in
         # ``from_model``); the fallback below derives them once when absent.
@@ -895,14 +764,17 @@ class SystemModel:
 
     @property
     def n_equations(self) -> int:
+        """Number of equations (rows of the operators)."""
         return self.flux.shape[0]
 
     @property
     def n_state(self) -> int:
+        """Number of state entries."""
         return len(self.state)
 
     @property
     def n_dim(self) -> int:
+        """Number of space dimensions."""
         return len(self.space)
 
     # ── Free-surface ROW MAP ───────────────────────────────────────────
@@ -925,22 +797,11 @@ class SystemModel:
 
     @property
     def depth_scaled_state_indices(self) -> list:
-        """Q rows carrying exactly one factor of the depth — the rows an
-        Audusse-Bristeau-Klein hydrostatic reconstruction MUST rescale by
-        ``h*/h``.
+        """State rows carrying one factor of the depth, i.e. every row except depth and bed, which
+        a hydrostatic reconstruction must rescale by ``h*/h``.
 
-        In a depth-averaged system every conserved row except the depth
-        itself and the bathymetry is an EXTENSIVE (depth-weighted) quantity:
-        ``q_{d,j} = h·alpha_{d,j}`` for a moment model, ``hu`` for SWE,
-        ``hK`` / ``hE`` for a k-epsilon closure.  Rescaling all of them is
-        what makes the reconstructed pair a STATE — the Audusse positivity
-        proof assumes ``q* = h* u``, and a partially rescaled pair
-        ``(h* = 0, q != 0)`` is not a state at all: it exports mass out of an
-        empty cell.
-
-        ``h`` and ``b`` are excluded when (and only when) they are state
-        rows; a model that carries either in ``aux_state`` has nothing to
-        exclude here.
+        References:
+            Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
         """
         roles = self.roles
         if roles.depth_declared:
@@ -952,27 +813,8 @@ class SystemModel:
 
     @property
     def discharge_state_indices(self) -> list:
-        """Per horizontal direction ``d``, the state row whose value IS the
-        depth-integrated mass flux in that direction — ``hu``/``hv`` for SWE,
-        ``q_x_0``/``q_y_0`` for a moment model.  ``-1`` where the system has no
-        unique such row.
-
-        Read straight off the model's OWN mass balance: the ``h`` equation is
-        ``d_t h + d_d (mass flux)_d = 0``, so the direction-``d`` discharge row
-        is the single state the mass-row flux depends on.  That is the row
-        which
-
-        * exports the mass an Audusse-reconstructed face may not export
-          (hence its place in the positivity argument), and
-        * carries the bed-slope / hydrostatic force, so it is the row that
-          receives the Audusse well-balancing source once the bed NCP has
-          been cancelled by ``b_L = b_R = b_face`` at the face.
-
-        ``-1`` is returned per direction when the mass flux is not a single
-        state row — a multilayer system, whose mass flux is the SUM of the
-        layer discharges, genuinely has no single momentum row and a
-        depth-averaged bed source is not defined for it.  Consumers must
-        check, not assume.
+        """Per horizontal direction, the state row that is the depth-integrated mass flux (``hu``,
+        ``q_x_0``), read off the mass balance; ``-1`` where no unique row exists.
         """
         roles = self.roles
         if roles.depth_declared:
@@ -1006,45 +848,35 @@ class SystemModel:
 
     @property
     def n_variables(self) -> int:
+        """Number of state variables (equal to ``n_equations``)."""
         return self.n_equations
 
     @property
     def n_aux_variables(self) -> int:
+        """Number of aux variables."""
         return len(self.aux_state)
 
     @property
     def n_parameters(self) -> int:
+        """Number of parameters."""
         return self.parameters.length()
 
     @property
     def dimension(self) -> int:
+        """Number of space dimensions (``Model`` API alias of ``n_dim``)."""
         return self.n_dim
 
     @property
     def variables(self) -> Zstruct:
-        """Zstruct view ``name → state Symbol`` (mirrors ``Model.variables``)."""
+        """Zstruct view ``name -> state Symbol`` (mirrors ``Model.variables``)."""
         v = Zstruct(**{str(s): s for s in self.state})
         v._symbolic_name = "Q"
         return v
 
     def update_variables_or_identity(self) -> ZArray:
-        """``update_variables`` with the documented ``None ⇒ identity`` fallback
-        MADE EXPLICIT — always an ``(n_eq, 1)`` expression, never ``None``.
-
-        Row ``i`` of the identity is ``state[equation_to_state_index[i]]``, i.e.
-        exactly "leave Q alone", which is what the numpy runtime already does
-        when it sees ``None`` (``solver_numpy._apply_update_variables`` returns
-        Q unchanged).  This is the seam the C-family printers emit from, so the
-        generated ABI carries the symbol even for a model with no per-cell
-        remap.
-
-        Why the ABI must not be conditional: the wet/dry cap is OFF by default,
-        so a derived SME(level=0) has ``update_variables = None`` — and foam's
-        hand-written ``zoomyFoam.C:352`` calls ``Model::update_variables(...)``
-        unconditionally.  Emitting the symbol only when the slot is non-empty
-        made every capless model fail to compile with "'update_variables' is
-        not a member of 'Model'".  Callers must not have to know whether a
-        model happens to clamp.
+        """``update_variables`` as an explicit ``(n_eq, 1)`` expression, the identity
+        ``state[equation_to_state_index[i]]`` when the model has none; the C-family printers
+        emit from this.
         """
         if (self.update_variables is not None
                 and len(sp.flatten(self.update_variables)) > 0):
@@ -1056,24 +888,22 @@ class SystemModel:
 
     @property
     def aux_variables(self) -> Zstruct:
-        """Zstruct view ``name → aux Symbol`` (mirrors ``Model.aux_variables``)."""
+        """Zstruct view ``name -> aux Symbol`` (mirrors ``Model.aux_variables``)."""
         v = Zstruct(**{str(s): s for s in self.aux_state})
         v._symbolic_name = "Qaux"
         return v
 
     @property
     def _parameter_symbols(self) -> Zstruct:
-        """Alias of ``parameters`` (name → Symbol) for Model-API parity."""
+        """Alias of ``parameters`` (name -> Symbol) for Model-API parity."""
         return self.parameters
 
     # ── Operators carried as declared Functions (single signature source) ──
 
     def position_struct(self) -> Zstruct:
-        """The length-3 position group ``(x, y, z)`` — THE accessor for a
-        consumer that needs the coordinates (printers, analysis).
-        ``self.position`` is set by the derivation / BC path; a bare
-        SystemModel resolves the canonical symbols exactly like
-        ``attach_boundary_conditions``."""
+        """The length-3 position group ``(x, y, z)`` that printers and analysis read; a bare
+        system resolves the canonical symbols.
+        """
         if self.position is not None:
             return self.position
         return Zstruct(X0=self.space[0],
@@ -1083,9 +913,9 @@ class SystemModel:
     _position_struct = position_struct
 
     def operator_signature(self, name: str) -> Zstruct:
-        """The declared ``args`` :class:`Zstruct` for operator ``name`` — the
-        SINGLE source every backend reads.  Groups are materialised from this
-        SystemModel's own symbols in the ``OPERATOR_ARG_SLOTS`` order."""
+        """The declared ``args`` Zstruct of operator ``name``, built from this system's symbols in
+        ``OPERATOR_ARG_SLOTS`` order; the single source every backend reads.
+        """
         group = {
             "variables": self.variables,
             "aux_variables": self.aux_variables,
@@ -1099,20 +929,18 @@ class SystemModel:
         return Zstruct(**{s: group[s] for s in OPERATOR_ARG_SLOTS[name]})
 
     def _reconstruction_struct(self) -> Zstruct:
-        """The ``WB_<state>`` symbols the reconstruction INVERSE is written in.
-
-        ``state_from_reconstruction`` takes the limiter's reconstructed FACE
-        values, not the cell state, so its first argument group is these fresh
-        symbols rather than ``variables``."""
+        """The ``WB_<state>`` symbols in which the reconstruction inverse
+        ``state_from_reconstruction`` is written, since it takes limiter face values rather
+        than the cell state.
+        """
         from zoomy_core.model.reconstruction_inverse import reconstruction_symbols
         syms = reconstruction_symbols(list(self.state))
         return Zstruct(**{s.name: s for s in syms})
 
     def operator(self, name: str) -> "Any":
-        """The operator kernel CARRIED as a ``basefunction.Function``: ``args``
-        is the declared signature (:meth:`operator_signature`) and ``definition``
-        is the live operator array.  Backends read ``operator(name).args`` for
-        the signature and only translate syntax — they never route arguments."""
+        """Operator ``name`` as a ``basefunction.Function`` whose ``args`` is the declared
+        signature and whose ``definition`` is the live array; backends only translate syntax.
+        """
         from zoomy_core.model.basefunction import Function
         defn = getattr(self, name, None)
         if name == "admissible" and defn is None:      # declared, else [depth]
@@ -1123,23 +951,18 @@ class SystemModel:
 
     @property
     def eigenvalue_mode(self) -> str:
-        """``"symbolic"`` when a symbolic spectrum was carried over,
-        ``"numerical"`` when it was skipped (``eigenvalues is None``) —
-        mirrors ``Model.eigenvalue_mode`` so a solver's wavespeed build
-        branches the same way."""
+        """``"symbolic"`` when a symbolic spectrum is carried, ``"numerical"`` when it was skipped
+        (``eigenvalues is None``).
+        """
         return "numerical" if self.eigenvalues is None else "symbolic"
 
     def attach_boundary_conditions(self, bcs, aux_bcs=None):
-        """Inject boundary conditions onto a declarative SystemModel using the
-        SAME ``BoundaryConditions`` objects as the production models — the hook
-        for "use our old BCs as we always did".
+        """Build the indexed symbolic BC kernels (``boundary_conditions``, ``boundary_gradients``,
+        ``aux_boundary_conditions``) from existing ``BoundaryConditions`` objects.
 
-        Builds the indexed symbolic BC kernels (``boundary_conditions`` /
-        ``boundary_gradients`` / ``aux_boundary_conditions``) the runtime +
-        codegen expect, from this SystemModel's own time / position / state /
-        aux / parameters / normal.  ``aux_bcs`` defaults to per-tag
-        Extrapolation.  Optional — a SystemModel without BCs still builds; the
-        solver only needs them at run time.  Returns ``self``.
+        Args:
+            bcs: a ``BoundaryConditions`` container (or list).
+            aux_bcs: aux BCs; defaults to per-tag Extrapolation.
         """
         from zoomy_core.model.boundary_conditions import (
             BoundaryConditions, PerFieldBoundary, Periodic, Coupled,
@@ -1172,6 +995,9 @@ class SystemModel:
         # mask fires), and run the SystemModel-needing hooks (FromModel,
         # Characteristic).  Recurse into any PerFieldBoundary slot BCs.
         def _prepare(bc):
+            """Resolve ``bc`` against this system and bind it to the state names, recursing into
+            slot BCs.
+            """
             if hasattr(bc, "resolve"):
                 bc.resolve(self)
             bc.bind_on(state_names)
@@ -1210,32 +1036,31 @@ class SystemModel:
     @property
     def roles(self):
         """The declared state roles resolved against the current state
-        (:class:`zoomy_core.systemmodel.roles.Roles`).  Generic code reads
-        these — never field names."""
+        (``systemmodel.roles.Roles``).
+        """
         from zoomy_core.systemmodel.roles import resolve_roles
         return resolve_roles(self)
 
     @property
     def tags(self):
-        """The declared model tags (strings, see ``systemmodel/tags.py``)."""
+        """The declared model tags (see ``systemmodel/tags.py``)."""
         from zoomy_core.systemmodel.tags import declared_tags
         return declared_tags(self)
 
     def declare_tags(self, *tags):
-        """Record model tags (strings).  Returns self."""
+        """Record model tags; returns ``self``."""
         from zoomy_core.systemmodel.tags import declare_tags
         return declare_tags(self, tags)
 
     def declare_roles(self, **roles):
-        """Record a role declaration (see
-        :func:`zoomy_core.systemmodel.roles.declare_roles`).  Returns self."""
+        """Record a role declaration (see ``systemmodel.roles.declare_roles``); returns ``self``."""
         from zoomy_core.systemmodel.roles import declare_roles
         return declare_roles(self, **roles)
 
     def declare_admissible(self, constraints):
-        """Declare the admissibility list: expressions in this system's
-        ``(Q, Qaux, p)`` symbols that must stay ``>= 0``.  An empty list
-        declares "every state is admissible".  Returns self."""
+        """Declare the admissibility list, expressions in ``(Q, Qaux, p)`` that must stay ``>= 0``
+        (empty: every state admissible); returns ``self``.
+        """
         exprs = [sp.sympify(e) for e in sp.flatten(constraints)] \
             if constraints is not None else None
         self.admissible = None if exprs is None else ZArray(exprs)
@@ -1244,16 +1069,17 @@ class SystemModel:
         return self
 
     def boundary_ghost_kernel(self):
-        """The D5 ghost-state boundary kernel ``(function, branches)`` — see
-        :func:`zoomy_core.model.boundary_conditions.build_boundary_ghost_kernel`.
-        Built on demand (only the new solver template consumes it)."""
+        """The ghost-state boundary kernel ``(function, branches)``, built on demand (see
+        ``build_boundary_ghost_kernel``).
+        """
         from zoomy_core.model.boundary_conditions import (
             build_boundary_ghost_kernel)
         return build_boundary_ghost_kernel(self)
 
     def admissible_constraints(self) -> list:
-        """The admissibility list as plain sympy expressions: the declared
-        one, else ``[depth]`` for a free-surface system, else ``[]``."""
+        """The admissibility list as sympy expressions: the declared one, else ``[depth]`` for a
+        free-surface system, else ``[]``.
+        """
         if self.admissible is not None:
             return [sp.sympify(e) for e in sp.flatten(self.admissible)]
         depth = self.roles.depth
@@ -1261,38 +1087,14 @@ class SystemModel:
 
     @property
     def is_square(self) -> bool:
-        """True when n_equations == n_state and equations map identity-style."""
+        """True when ``n_equations == n_state`` and equations map identity-style."""
         return (self.n_equations == self.n_state
                 and self.equation_to_state_index == list(range(self.n_state)))
 
     @property
     def stationary_indices(self) -> frozenset:
-        """State indices whose evolution is identically zero by
-        construction.
-
-        A field ``Q[i]`` is **stationary** iff its row vanishes in
-        every transport / source / diffusion slot:
-
-        - ``flux[i, :] = 0``
-        - ``hydrostatic_pressure[i, :] = 0``
-        - ``nonconservative_matrix[i, :, :] = 0``
-        - ``source[i] = 0``
-        - ``source_explicit[i] = 0`` (if present)
-        - ``diffusion_matrix[i, :, :, :] = 0`` (if present)
-        - ``diffusion_matrix_explicit[i, :, :, :] = 0`` (if present)
-
-        The discrete time-step then writes nothing to ``Q[i]``, so any
-        post-step hook (slope limiter, positivity projection, ...)
-        that does is introducing **spurious** modification — the
-        canonical example is a vertex-based DG slope limiter clipping
-        the bathymetry ``b`` row in a shallow-water model, which
-        breaks rank-boundary consistency under MPI and silently
-        creates or destroys topography.
-
-        Solvers should consult this set to skip such fields when
-        applying post-step state transforms.  Users can override (in
-        either direction) via per-solver kwargs that resolve handles
-        through :meth:`field_index`.
+        """State indices whose row vanishes in every transport, source and diffusion slot, i.e.
+        fields stationary by construction (e.g. the bed).
         """
         n = self.n_variables
         slots = (
@@ -1308,23 +1110,8 @@ class SystemModel:
 
     @staticmethod
     def _row_is_identically_zero(tensor, i) -> bool:
-        """Return ``True`` if ``tensor[i, ...]`` is identically zero.
-
-        ``None`` (slot absent) counts as zero.  Entries are checked
-        with ``== 0`` only (catches ``sp.S.Zero`` / ``sp.Integer(0)``
-        / ``0`` — the canonical "stationary row" produced by
-        ``Matrix.zeros`` / ``sp.MutableDenseNDimArray.zeros`` plus the
-        model author's explicit zero assignment).  We deliberately do
-        **NOT** fall back to ``sp.simplify`` here — the source / NCP /
-        diffusion rows of non-stationary fields routinely contain
-        deeply nested expressions (Manning friction = nested
-        ``sqrt`` ∘ ``Max`` ∘ ``Rational``) on which ``sp.simplify``
-        runs for many minutes.  Stationary detection runs at solver
-        setup, so any pessimisation hits the user-facing startup
-        latency.  If a model author writes a non-trivially-simplified
-        expression that *happens* to evaluate to zero, they should
-        either simplify it in the model or list the field manually
-        via ``solver.limiter_exclude_fields``.
+        """Whether ``tensor[i, ...]`` is identically zero (``None`` counts as zero); checked with
+        ``== 0`` only, never ``simplify``.
         """
         if tensor is None:
             return True
@@ -1342,21 +1129,8 @@ class SystemModel:
         return True
 
     def field_index(self, field) -> int:
-        """Resolve a state-field handle to its integer index.
-
-        Accepts:
-
-        - ``sp.Symbol`` (e.g. ``self.variables.b``) — matched by name.
-        - ``str`` (e.g. ``"b"``) — matched by name.
-        - ``int`` — returned as-is (with bounds check).
-
-        Raises ``ValueError`` if the handle does not correspond to a
-        registered state variable.  This is the canonical way for
-        solvers to translate the *symbolic* field handles that the
-        model author writes (``[model.variables.b]``) into the
-        *integer* indices the post-processing pipeline uses
-        internally — without ever forcing the model author to think
-        about state layout.
+        """Integer state index of a field handle (Symbol or name matched by name, or an int
+        bounds-checked); raises ``ValueError`` otherwise.
         """
         names = list(self.variables.keys())
         if isinstance(field, str):
@@ -1391,28 +1165,24 @@ class SystemModel:
 
     @property
     def quasilinear_matrix(self):
-        """Flux Jacobian ``∂F/∂Q + ∂P/∂Q + B`` — LAZY: computed from the
-        primaries on first access, then cached.  Assigning re-seeds the cache
-        (e.g. ``refresh_derived_operators`` after a state change)."""
+        """Flux Jacobian ``dF/dQ + dP/dQ + B``, computed lazily from the primaries on first access
+        and cached; assigning re-seeds the cache.
+        """
         if self._quasilinear_matrix is None:
             self._quasilinear_matrix = _to_zarray(self._compute_quasilinear_matrix())
         return self._quasilinear_matrix
 
     @quasilinear_matrix.setter
     def quasilinear_matrix(self, value):
+        """Re-seed the cached quasilinear matrix."""
         self._quasilinear_matrix = _to_zarray(value)
 
     def _compute_quasilinear_matrix(self):
-        """``∂F/∂Q + ∂P/∂Q + B`` — shape ``(n_eq, n_state, n_dim)``.
-
-        Computed from the CLEAN primaries (with a bare ``1/h``), so a wet
-        entry reads e.g. ``∂(q²/h)/∂h = −q²/h²``.  The wet/dry
-        desingularization does NOT recompute this from ``q²·hinv`` (which
-        would drop the ``−u²`` term, since ``hinv`` is an independent symbol);
-        instead :func:`zoomy_core.systemmodel.operations.regularize_pow`
-        FREEZES this clean matrix and then substitutes ``1/h**k → hinv**k``
-        into it (``−q²/h² → −q²·hinv²``), keeping the wavespeed exact and the
-        codegen factored — no ``∂kp_hinv/∂h`` Heaviside/Dirac chain term."""
+        """``dF/dQ + dP/dQ + B`` of shape ``(n_eq, n_state, n_dim)``, from the clean primaries
+        (bare ``1/h``).
+        ``regularize_pow`` freezes it before substituting ``hinv``, so the ``-u^2`` wave-speed
+        term survives.
+        """
         n_eq = self.n_equations
         n_st = self.n_state
         d = self.n_dim
@@ -1427,8 +1197,7 @@ class SystemModel:
         return Q
 
     def _compute_source_jacobian_wrt_variables(self):
-        """``∂S/∂Q`` — shape ``(n_eq, n_state)``.  Fallback derivation used only
-        when no Model channeled ``source_jacobian_wrt_variables``."""
+        """``dS/dQ`` of shape ``(n_eq, n_state)``; fallback derivation when no Model channeled it."""
         n_eq = self.n_equations
         n_st = self.n_state
         out = sp.zeros(n_eq, n_st)
@@ -1438,8 +1207,9 @@ class SystemModel:
         return out
 
     def _compute_source_jacobian_wrt_aux_variables(self):
-        """``∂S/∂Qaux`` — shape ``(n_eq, n_aux)``.  Fallback derivation used only
-        when no Model channeled ``source_jacobian_wrt_aux_variables``."""
+        """``dS/dQaux`` of shape ``(n_eq, n_aux)``; fallback derivation when no Model channeled
+        it.
+        """
         n_eq = self.n_equations
         n_aux = len(self.aux_state)
         out = sp.zeros(n_eq, n_aux)
@@ -1449,16 +1219,9 @@ class SystemModel:
         return out
 
     def ensure_jacobians(self):
-        """Derive the source/flux jacobians NOW, if they are not already there.
-
-        The fallback derivation is off by default (:attr:`derive_jacobians`)
-        because it is ``n_eq x n_state`` sympy.diff calls and is wasted whenever
-        nothing downstream asks for them.  A consumer that DOES need them — IMEX
-        assembling an implicit source Jacobian, a quasilinear/steady-ODE
-        assembly — calls this BEFORE the runtime is lowered, since the printers
-        emit whatever is present at that moment.
-
-        Idempotent, and never overwrites a matrix a Model channeled.
+        """Derive the source and flux jacobians now if absent (off by default, see
+        ``derive_jacobians``); call before the runtime is lowered, since printers emit what is
+        present.
         """
         self.derive_jacobians = True
         if self.source is not None and self.source_jacobian_wrt_variables is None:
@@ -1477,24 +1240,8 @@ class SystemModel:
         return self
 
     def _compute_flux_jacobian_wrt_aux_variables(self):
-        """``∂F/∂Qaux`` — shape ``(n_eq, n_aux, n_dim)``.
-
-        The flux twin of :meth:`_compute_source_jacobian_wrt_aux_variables`, and
-        needed for the same reason its source counterpart is: a TOTAL derivative
-        of the flux along x is
-
-            d/dx F(Q, Qaux) = ∂F/∂Q · dQ/dx + ∂F/∂Qaux · dQaux/dx
-
-        and ``quasilinear_matrix`` carries only the first term (it differentiates
-        w.r.t. the state with aux held independent).  Anything that forms a
-        steady balance or a quasilinear system from the flux — the
-        moving-equilibrium steady-ODE reconstruction is the current consumer —
-        needs the second term too, or it silently solves a different equation.
-
-        Note ``P`` (hydrostatic pressure) is deliberately NOT folded in here:
-        this is the flux jacobian, and callers that want the full transport
-        matrix add ``∂P/∂Qaux`` themselves, exactly as ``quasilinear_matrix``
-        assembles ``∂F/∂Q + ∂P/∂Q + B`` from separate pieces.
+        """``dF/dQaux`` of shape ``(n_eq, n_aux, n_dim)``, the flux twin of the aux source
+        jacobian needed for total flux derivatives.
         """
         n_eq = self.n_equations
         n_aux = len(self.aux_state)
@@ -1507,9 +1254,9 @@ class SystemModel:
         return out
 
     def _compute_eigenvalues(self):
-        """Eigenvalues of the normal-projected quasilinear matrix —
-        ``(n_eq, 1)``.  This is the (potentially expensive) symbolic
-        spectral derivation; callers decide when to pay it."""
+        """Eigenvalues of the normal-projected quasilinear matrix, shape ``(n_eq, 1)``; a
+        potentially expensive symbolic derivation.
+        """
         n_eq = self.n_equations
         n = list(self.normal.values())
         A = sp.zeros(n_eq, n_eq)
@@ -1523,25 +1270,11 @@ class SystemModel:
 
     @property
     def eigensystem(self) -> ZArray:
-        """Opaque eigendecomposition of the normal-projected quasilinear
-        matrix ``A_n = Σ_d n_d · quasilinear_matrix[:, :, d]``.
+        """Opaque eigendecomposition of the normal-projected quasilinear matrix ``A_n = sum_d n_d
+        quasilinear_matrix[:, :, d]``.
 
-        Flattened layout (row-major), length ``n + 2·n²``::
-
-            [ eigenvalues λ (n),
-              right eigenvectors R (n·n),
-              left  eigenvectors L = R⁻¹ (n·n) ]
-
-        Each component is a call to the opaque
-        :class:`zoomy_core.model.kernel_functions.eigensystem` kernel —
-        realised numerically per backend (``np.linalg.eig`` / Eigen),
-        never a closed-form symbolic spectral derivation.  The Roe
-        scheme builds ``|A| = R |Λ| L`` symbolically on top.  This is a
-        *derived* operator (cheap symbolic wrapping of
-        ``quasilinear_matrix``), so it is exposed as a property — always
-        consistent with the current quasilinear matrix — and mirrors
-        ``Model.eigensystem`` so a SystemModel-driven solver reaches the
-        same operator the root model defines.
+        Returns:
+            Flat row-major array ``[lambda (n), R (n*n), L = R^-1 (n*n)]``.
         """
         from zoomy_core.model.kernel_functions import (
             eigensystem as _es, pick as _pick)
@@ -1558,19 +1291,9 @@ class SystemModel:
 
     @property
     def numerical_eigenvalues(self) -> ZArray:
-        """λ-only numerical spectrum of the normal-projected quasilinear matrix
-        ``A_n = Σ_d n_d · quasilinear_matrix[:, :, d]`` — ``n`` calls to the
-        opaque :class:`zoomy_core.model.kernel_functions.eigenvalues` kernel.
-
-        The light companion of :attr:`eigensystem` (no R / L): the wave-speed /
-        CFL bound needs only ``max|λ|``, so this feeds
-        ``Numerics.local_max_abs_eigenvalue`` when the model has no closed-form
-        ``eigenvalues`` (SME / VAM) — a DIMENSIONALLY CORRECT numerical spectrum
-        in place of the old Gershgorin row-sum bound, which was a row-sum of a
-        dimensionally-inhomogeneous matrix (mass row ~1, momentum row ~g·h) and
-        scaled as ``g·h`` rather than ``sqrt(g·h)`` — ~6-9× too large (REQ-167).
-        A *derived* operator (cheap symbolic wrapping of ``quasilinear_matrix``),
-        so exposed as a property — always consistent with the current matrix."""
+        """Eigenvalues of ``A_n`` as ``n`` calls to the opaque eigenvalue kernel, used for the
+        wave speed when the model has no closed-form ``eigenvalues`` (SME, VAM).
+        """
         from zoomy_core.model.kernel_functions import (
             eigenvalues as _ev, pick as _pick)
         n = self.n_equations
@@ -1624,79 +1347,13 @@ class SystemModel:
 
     @property
     def spectral_radius_bound(self):
-        """CLOSED-FORM upper bound on ``ρ(A_n)`` — the wave speed, without an
-        eigen-decomposition.  A scalar expression, not a spectrum.
+        """Closed-form scalar upper bound on ``rho(A_n)``, the ``Min`` over ``k <= iterations`` of
+        ``(max_i (|A_n|^k 1)_i)^(1/k)``, so the CFL needs no eigen-decomposition.
+        Every candidate is an upper bound on its own, so ``iterations`` buys tightness only and
+        the CFL cannot become unsafe.
 
-        The CFL / Rusanov consumer needs ``max|λ|``, and a RADIUS is far
-        cheaper than a SPECTRUM: :attr:`numerical_eigenvalues` costs an
-        ``Eigen::EigenSolver`` per face per step (an ``O(n³)`` QR iteration
-        behind an opaque kernel call), which is what made every emitted C /
-        foam SME case run ~40× slow once a model stopped carrying a
-        closed-form ``eigenvalues``.
-
-        ONE classical statement, applied at several ``k``::
-
-            ρ(A)ᵏ = ρ(Aᵏ) ≤ ‖Aᵏ‖_∞ ≤ ‖|A|ᵏ‖_∞ = ‖|A|ᵏ·1‖_∞
-
-        so ``ρ(A_n) ≤ (maxᵢ (Mᵏ·1)ᵢ)^{1/k}`` with ``M = |A_n|``, for EVERY
-        ``k ≥ 1``.  ``k = 1`` is exactly the Gershgorin row-sum ``‖A_n‖_∞``;
-        each further ``k`` is one more matvec on the same chain
-        ``vₖ = M vₖ₋₁`` from ``v₀ = 1``, and the bound falls toward
-        ``ρ(|A_n|)``.  The emitted kernel is the ``Min`` over ``k ≤
-        iterations``.
-
-        The second step is what makes this usable at all, and SWE at rest
-        shows why in two lines: ``A = [[0, 1], [c², 0]]`` has ``ρ = c``, the
-        row-sum bound reads ``c²`` (a factor ``c`` = 3.13 too large at
-        ``g h = 9.81``, and dimensionally wrong — ``g·h``, not ``√(g·h)``,
-        exactly the REQ-167 objection to Gershgorin), and ``M²·1 = (c², c²)``
-        makes ``k = 2`` return ``c`` EXACTLY.  Squaring is what restores the
-        dimensional homogeneity the conservative variables destroyed.
-
-        **Safety is structural, not statistical.**  Every candidate is an
-        upper bound on its own — no eigenvalue is ever computed, nothing
-        converges, and there is no iterate at which the inequality could fail.
-        So ``iterations`` buys TIGHTNESS ONLY, the CFL cannot go unsafe, and
-        no safety factor is needed.  Measured on the confluence
-        ``SME(level=4, dimension=3)`` (n = 12) against
-        ``numpy.linalg.eigvals`` of the SAME matrix over 1688 states — wet,
-        near-dry to ``h = 1e-8``, ``|u|`` to 10 m/s, shear to ``3·u``, bed
-        steps, axis-aligned and oblique normals — as ``bound / ρ(A_n)``, and
-        the codegen cost of the foam ``NumericsKernels.H`` it emits:
-
-        ==========  ==========  ==========  ==========  ==========  =========
-        iterations  median wet  p95 wet     median all  min ratio   emit (s)
-        ==========  ==========  ==========  ==========  ==========  =========
-        1           2.79        6.00        4.86        1.457       ~40
-        2           1.40        1.80        2.17        1.224       46
-        3           1.38        1.63        1.88        1.126       424
-        ==========  ==========  ==========  ==========  ==========  =========
-
-        (5064 bound evaluations, 0 below 1.  For reference the incumbent — the
-        opaque eigensolve — is not a bound at all: it returns ``max|Re λ|``,
-        which came in BELOW ``ρ(A_n)`` on 2 of those states, both
-        non-hyperbolic.)
-
-        Two things set the default at 2.  It is where the runtime win is
-        already essentially complete (2 matvecs = ``2n²`` multiply-adds
-        against an ``O(n³)`` QR iteration plus an ``Eigen::MatrixXd`` heap
-        allocation per call), AND it is the last ``k`` whose CODEGEN is cheap:
-        the C printers walk the expression TREE, not the shared DAG, and the
-        tree grows by a factor ``n`` per step (``count_ops`` 1.9k / 23k / 239k
-        at ``k = 1 / 2 / 3``, ``n = 12``), so ``k = 3`` already costs 424 s to
-        emit at ``n = 12`` where ``k = 2`` costs 46 s — and the whole
-        ``NumericsKernels.H`` took 69 s on the opaque-eigensolve baseline, so
-        at ``k = 2`` this is a codegen SPEED-UP as well.  Raise
-        ``spectral_bound_iterations`` on a small system, where ``nᵏ`` is
-        affordable and the extra tightness is free.
-
-        The limit of the chain is ``ρ(|A_n|)``, at 1.001 (median, wet) on the
-        same sweep — what is left on the table past a few iterations is the
-        sign cancellation ``|·|`` throws away, not the iteration.
-
-        A *derived* operator (a cheap symbolic wrapping of
-        ``quasilinear_matrix``), so exposed as a property — always consistent
-        with the current matrix, exactly like :attr:`numerical_eigenvalues`.
+        References:
+            Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
         """
         n = self.n_equations
         qm = self.quasilinear_matrix
@@ -1706,14 +1363,9 @@ class SystemModel:
         return _perron_radius_bound(M, self.spectral_bound_iterations)
 
     def refresh_derived_operators(self, *, eigenvalues: bool = False):
-        """Recompute ``quasilinear_matrix`` and the source jacobians from
-        the (possibly just-mutated) primary operators, keeping the
-        derived operators consistent.  After an in-place CoV / xreplace the
-        channeled Model matrices are stale, so the jacobians are re-derived
-        from the current ``source`` here.  ``eigenvalues=True`` also
-        re-derives the spectrum — only request it when an operation
-        genuinely changes the system's characteristic structure and the
-        spectrum was not skipped."""
+        """Recompute ``quasilinear_matrix`` and the source jacobians from the current (possibly
+        mutated) primaries; ``eigenvalues=True`` also re-derives the spectrum.
+        """
         self.quasilinear_matrix = self._compute_quasilinear_matrix()
         # POINT-IMPLICIT SOURCE: once ``source_treatment='linearized'`` has
         # rewritten ``source`` into ``(I − dt·J)⁻¹ S``, that expression is a
@@ -1746,11 +1398,9 @@ class SystemModel:
             self.eigenvalues = self._compute_eigenvalues()
 
     def _pad_aux_jacobian_columns(self, J):
-        """Widen ``J`` to ``(n_equations, len(aux_state))`` with zero columns.
-
-        Point-implicit path only, where the aux jacobian is not re-derived (see
-        :meth:`refresh_derived_operators`) but must still match the aux width
-        the printers lower."""
+        """Widen ``J`` to ``(n_equations, len(aux_state))`` with zero columns (point-implicit
+        path).
+        """
         n_aux = len(self.aux_state or [])
         if J is None:
             return sp.zeros(self.n_equations, n_aux)
@@ -1762,23 +1412,8 @@ class SystemModel:
             lambda i, j: sp.sympify(J[i, j]) if j < have else sp.S.Zero)
 
     def assert_diagonal_mass_matrix(self):
-        """Consistency check: verify ``mass_matrix`` is diagonal on
-        every evolution row and zero on every algebraic row.
-
-        - Evolution row ``i`` (with ``equation_to_state_index[i] = j``):
-          must have ``M[i, k] = 0`` for every ``k != j``, and
-          ``M[i, j] != 0``.
-        - Algebraic row ``i``: ``M[i, :] = 0``.
-
-        Raises ``ValueError`` with a precise location report on
-        violation.  Run this **after** ``change_state_variables`` to
-        confirm the variable choice produces a clean diagonal mass
-        matrix — otherwise the variable map is wrong for the system
-        at hand.
-
-        Once this passes, ``InvertMassMatrix`` is a trivial per-row
-        division by the diagonal entry; downstream consumers see
-        ``M = I`` on evolution rows.
+        """Check that ``mass_matrix`` is diagonal and nonzero on every evolution row and zero on
+        every algebraic row; raises otherwise.
         """
         n_eq = self.n_equations
         n_st = self.n_state
@@ -1811,7 +1446,7 @@ class SystemModel:
 
     def apply(self, operation, *, name: Optional[str] = None,
               description: Optional[str] = None):
-        """Apply a system-level operation in place.  Returns self."""
+        """Apply a system-level operation in place; returns ``self``."""
         op_name = name or getattr(operation, "name", None) or \
                   type(operation).__name__
         op_desc = description or getattr(operation, "description", op_name)
@@ -1820,6 +1455,7 @@ class SystemModel:
         return self
 
     def __getitem__(self, i: int) -> "SystemModelRow":
+        """Row view ``SystemModelRow`` of equation ``i``."""
         return SystemModelRow(self, i)
 
     # ── from_model factory ────────────────────────────────────────────
@@ -1828,12 +1464,13 @@ class SystemModel:
     def _from_derivation_model(cls, model, Q=None, Qaux=None,
                                canonical_source=None,
                                dae=False) -> "SystemModel":
-        """Build a SystemModel from a declarative
-        :class:`zoomy_core.model.derivation.model.Model` by structurally extracting
-        the operators from its untagged residuals (see
-        :func:`zoomy_core.model.derivation.system_extract.extract_system_operators`).
-        ``Q`` (one applied field per evolution row) is required; ``Qaux`` is
-        auto-populated when ``None``."""
+        """Build a ``SystemModel`` from a declarative derivation ``Model`` by structurally
+        extracting the operators from its untagged residuals.
+
+        Args:
+            Q: one applied field per evolution row (required).
+            Qaux: aux fields; auto-populated when ``None``.
+        """
         from zoomy_core.model.derivation.system_extract import (
             extract_system_operators,
         )
@@ -1933,19 +1570,14 @@ class SystemModel:
         return sm
 
     def has_active_source(self) -> bool:
-        """``True`` if any source row is non-zero AT THE CONFIGURED PARAMETERS.
-
-        The symbolic source carries free parameters (``e_x``, ``n``, …) that are
-        non-zero as symbols but vanish at their configured values (``n=0``
-        frictionless, ``e_x=0`` no tilt), so the raw symbolic form is not the
-        question — substitute first.  Matching is by symbol NAME because the
-        assumptions on a source symbol need not equal a freshly minted
-        ``Symbol``, which makes ``subs``-by-object silently miss.
+        """True if any source row is nonzero at the configured parameter values (matched by symbol
+        name).
         """
         import sympy as _sp
         pv = dict(self.parameter_values or {})
 
         def _numify(e):
+            """Substitute the configured parameter values into ``e``."""
             e = _sp.sympify(e)
             return e.subs({s: pv[s.name] for s in e.free_symbols
                            if s.name in pv})
@@ -1956,29 +1588,14 @@ class SystemModel:
             return True          # unknown ⇒ assume active, the safe branch
 
     def has_higher_moments(self) -> bool:
-        """``True`` if the system carries moment rows beyond the depth-averaged
-        one — i.e. anything a level-0 shallow-water closed form does not cover."""
+        """True if the system carries moment rows beyond the depth-averaged one."""
         names = [str(s) for s in self.state]
         return len([n for n in names if n not in ("h", "b")]) - 1 >= 1
 
     def resolve_equilibrium_kernel(self, *, force_steady_ode: bool = False) -> str:
-        """Which CONCRETE well-balanced kernel a backend must run.
-
-        This is model knowledge and it is decided HERE, once, so a backend never
-        re-derives it.  Backends previously reconstructed the moment level by
-        counting non-``h``/``b`` state fields and sniffed the source with
-        ``sympy.simplify`` at solver-setup time — the model layer telling the
-        model's own story through the numerics layer's mouth.  A backend now
-        reads the answer and branches on a plain Python string at trace time, so
-        nothing about "level" survives into generated code.
-
-        ``none`` / ``audusse`` pass through unchanged.  The Bernoulli family
-        splits: the closed-form specific-energy reconstruction is only valid for
-        a level-0, source-free system, so anything with friction or higher
-        moments resolves to the fully well-balanced steady-ODE moving-equilibrium
-        reconstruction (Pimentel-García).  ``force_steady_ode`` routes a
-        frictionless level-0 system there too, which is what makes the WB
-        head-to-head comparison possible (cid 157).
+        """Which concrete well-balanced kernel a backend must run: ``none`` / ``audusse`` pass
+        through, the Bernoulli family resolves to ``steady_ode`` (friction, higher moments or
+        ``force_steady_ode``) or ``bernoulli_closed_form``.
         """
         eqr = getattr(self, "equilibrium_reconstruction", "none") or "none"
         if eqr in ("none", "audusse"):
@@ -1988,11 +1605,9 @@ class SystemModel:
         return "bernoulli_closed_form"
 
     def is_vertical_dependent(self, symbol) -> bool:
-        """``True`` if the state ``symbol`` is a vertical-dependent (3-D) field
-        — e.g. ``ũ(t,x,ζ)`` — and ``False`` for a depth-collapsed field
-        (``h(t,x)``, ``b(t,x)``).  Reads :attr:`state_function_map` against
-        :attr:`vertical`; ``False`` when either is absent (a model with no
-        vertical, e.g. SME/VAM after the moment projection integrates ζ out)."""
+        """True if state ``symbol`` is a vertical-dependent field such as ``u(t,x,zeta)``, False
+        for depth-collapsed fields or when no vertical is known.
+        """
         if self.vertical is None or not self.state_function_map:
             return False
         if isinstance(symbol, str):
@@ -2004,30 +1619,18 @@ class SystemModel:
     def from_model(cls, model, Q=None, Qaux=None,
                    canonical_source=None, dae=False,
                    derive_source_jacobians=None) -> "SystemModel":
-        """Build a SystemModel from a Model — the ONE entry point (REQ-143).
+        """Build a ``SystemModel`` from a ``Model``; the single entry point.
+        Production models with a ``_system_model_kind`` dispatch to their builder in
+        ``model_builders``, others go through ``_from_model_impl``.
 
-        A production model that carries a plain-string ``_system_model_kind``
-        class attribute (SWE, SME, VAM, MLSWE, MLSME, MLVAM, Sigma3D, KESME,
-        QRKESME) is dispatched to its per-model builder in
-        :mod:`zoomy_core.systemmodel.model_builders` (lazy import to avoid an
-        import cycle) — the builder holds the model-specific Q selection,
-        hydrostatic-pressure tag, spectrum/positivity flags and BC resolution.
-
-        Otherwise the LOW-LEVEL path (:meth:`_from_model_impl`) runs, dispatched
-        on the *Model class*:
-
-        * the **declarative** clean-redesign
-          :class:`zoomy_core.model.derivation.model.Model` (whose equations are plain
-          untagged sympy residuals) — the operators are extracted
-          STRUCTURALLY from the residuals via
-          :func:`zoomy_core.model.derivation.system_extract.extract_system_operators`.
-          ``Q`` (and optionally ``Qaux``) are supplied HERE, at the transition,
-          one ``Q`` entry per evolution row; the field coverage ``Q ∪ Qaux`` is
-          validated (a ``ValueError`` names any uncovered field).
-        * the **production** :class:`zoomy_core.model.basemodel.Model` — the
-          operator-API methods (``model.flux()`` / ``model.source()`` / …,
-          backed by solver-tag extraction) are read once and frozen.  ``Q`` /
-          ``Qaux`` are ignored (the state vector is baked into the model).
+        Args:
+            Q: state fields of a declarative model (required there).
+            Qaux: aux fields; auto-populated when ``None``.
+            canonical_source: user-facing model that owns the source and explicit-diffusion
+                overrides.
+            dae: retain a non-diagonal or singular mass matrix (index-1 DAE) instead of requiring
+                unit diagonal.
+            derive_source_jacobians: override of the field of the same name.
         """
         if getattr(model, "_system_model_kind", None) is not None:
             from zoomy_core.systemmodel.model_builders import build_system_model
@@ -2038,9 +1641,9 @@ class SystemModel:
     @classmethod
     def _from_model_impl(cls, model, Q=None, Qaux=None,
                          canonical_source=None, dae=False) -> "SystemModel":
-        """Low-level Model → SystemModel build (declarative model + Q, or a
-        production model whose state vector is baked in).  Unchanged behaviour;
-        see :meth:`from_model` for the dispatch."""
+        """Low-level build of a ``SystemModel`` from a declarative model plus ``Q`` or from a
+        production model with a baked-in state; see ``from_model``.
+        """
         from zoomy_core.model.derivation.model import Model as _DerivationModel
         if isinstance(model, _DerivationModel):
             return cls._from_derivation_model(
@@ -2079,8 +1682,9 @@ class SystemModel:
         n_eq = model.n_variables
 
         def _to_matrix(z, n_rows, n_cols):
-            """Coerce a model ZArray / sp.Matrix / 1-D ZArray into an
-            sp.Matrix with the requested shape."""
+            """Coerce a model ZArray, ``sp.Matrix`` or 1-D ZArray to an ``sp.Matrix`` of the
+            requested shape.
+            """
             # A ``derive_by_array`` of a COLUMN source ``(n_eq, 1)`` (e.g. SWE's
             # friction-only source) yields a rank-3 ZArray ``(n_state, n_eq, 1)``
             # with a trailing singleton axis, whereas a rank-1 source ``(n_eq,)``
@@ -2135,9 +1739,9 @@ class SystemModel:
             B = sp.MutableDenseNDimArray(ncp_z)
 
         def _extract_A(name):
-            """Pull a rank-4 ``(n_eq, n_state, n_dim, n_dim)`` ZArray
-            from ``model.<name>()`` if the model defines it; otherwise
-            return an explicit zero tensor of that shape."""
+            """The rank-4 ``(n_eq, n_state, n_dim, n_dim)`` tensor from ``model.<name>()``, or an
+            explicit zero tensor if the model defines none.
+            """
             if hasattr(model, name) and callable(getattr(model, name)):
                 A_z = getattr(model, name)()
                 if hasattr(A_z, "todense"):
@@ -2315,17 +1919,8 @@ class SystemModel:
     # ── reconstruct_residuals ─────────────────────────────────────────
 
     def reconstruct_residuals(self):
-        """Re-assemble the row-wise residuals ``M·∂_t Q + ∂_x F + ∂_x P
-        + B·∂_x Q − S`` for every equation.  Returns a list of sympy
-        expressions, indexed by row.
-
-        Aux Symbols generated by ``expose_aux_atoms`` are back-
-        substituted to their original ``Function`` / ``Derivative``
-        atoms so the residuals display in their natural form for
-        bit-for-bit fixture comparisons.
-
-        Used in tests to compare the operator-form back against the
-        original equation residuals (e.g. against Escalante eq (4)).
+        """Re-assemble the row-wise residuals ``M d_t Q + d_x F + d_x P + B d_x Q - S`` as sympy
+        expressions, with aux symbols back-substituted to their original atoms.
         """
         n_eq = self.n_equations
         n_st = self.n_state
@@ -2337,6 +1932,9 @@ class SystemModel:
         # state is held as Symbols.  We need a coordinate-dependent
         # representation to take symbolic derivatives.
         def _as_function(sym):
+            """The applied Function of ``sym`` over time and coordinates (``sym`` itself if
+            already one).
+            """
             if isinstance(sym, sp.Function):
                 return sym
             args = [t] + list(coords)
@@ -2347,9 +1945,7 @@ class SystemModel:
         aux_reverse = self._aux_reverse_map()
 
         def _restore(expr):
-            """First put back the original aux atoms (which still
-            reference state as Symbols), then upgrade state Symbols
-            to Functions so derivatives display naturally."""
+            """Put back the original aux atoms, then upgrade state Symbols to Functions."""
             return (sp.sympify(expr)
                     .xreplace(aux_reverse)
                     .xreplace(sym_to_func))
@@ -2401,43 +1997,8 @@ class SystemModel:
     # ── expose_aux_atoms (auto-scan) ──────────────────────────────────
 
     def expose_aux_atoms(self):
-        """Auto-scan the operator matrices and route every
-        non-state symbolic input into ``aux_state``.
-
-        For each unique:
-
-        * **bare** ``Function`` atom whose name is **not** a state
-          variable (e.g. topography ``b(t, x, y)``, externally
-          prescribed forcing fields) — substitute with an aux Symbol
-          of the same name;
-        * ``Derivative`` atom — substitute with an aux Symbol named
-          ``{target}_{axes}`` (e.g. ``b_x``, ``h_x``, ``b_x_x``);
-
-        and populate :attr:`aux_registry` with one structured dict per
-        new aux entry:
-
-        .. code-block:: python
-
-            {"kind":   "function" | "derivative",
-             "name":   <aux symbol name>,
-             "row":    <index in self.aux_state>,
-             "atom":   <original sympy atom>,
-             "aux_symbol": <Symbol>,
-             # derivative entries also carry:
-             "target_name":  <name of the field being differentiated>,
-             "target_kind":  "state" | "function" | "unknown",
-             "state_index":  <int>          # if target_kind == "state"
-             "function_row": <int>          # if target_kind == "function"
-             "multi_index":  <tuple>        # spatial-derivative orders
-                                            # in (axis_0, axis_1, …)}
-
-        ``multi_index`` follows the SAME convention as
-        :meth:`LSQMesh.compute_derivatives` so a solver can compute
-        every derivative-aux entry in one call.  Time derivatives are
-        skipped (they live in the mass matrix).
-
-        Idempotent — if ``aux_registry`` is already non-empty (or all
-        atoms are state) this is a no-op.
+        """Route every non-state symbolic input (bare Functions such as the bed, and Derivative
+        atoms) of the operators into ``aux_state`` and record each in ``aux_registry``.
         """
         import sympy as sp
         from itertools import product as _product
@@ -2450,6 +2011,7 @@ class SystemModel:
         n_dim = len(self.space)
 
         def _iter_entries(M):
+            """Iterate over the scalar entries of operator ``M``."""
             if isinstance(M, sp.Matrix):
                 for i in range(M.shape[0]):
                     for j in range(M.shape[1]):
@@ -2731,17 +2293,9 @@ class SystemModel:
     # ── reverse-aux substitution helper (for tests / inspection) ──
 
     def _aux_reverse_map(self):
-        """Return ``{aux_Symbol: original_atom}`` for every aux entry so
-        reconstructed residuals can be displayed in their original
-        ``Derivative(…)`` form.
-
-        Covers both ``aux_registry`` (the live, re-derived aux) and
-        ``aux_input_registry`` (frozen inputs a split stage reads but does
-        not re-derive — e.g. the predictor-produced derivatives a Chorin
-        pressure block consumes).  Both appear as aux symbols in the
-        operators, so both must reverse-map; otherwise a pruned input
-        symbol (``q_0_x``) would survive the reconstruction and fail to
-        cancel against its ``Derivative(q_0, x)`` reference."""
+        """``{aux_Symbol: original_atom}`` over ``aux_registry`` and ``aux_input_registry``, used
+        to display reconstructed residuals in ``Derivative`` form.
+        """
         registry = ((getattr(self, "aux_registry", None) or [])
                     + (getattr(self, "aux_input_registry", None) or []))
         return {entry["aux_symbol"]: entry["atom"] for entry in registry}
@@ -2749,24 +2303,8 @@ class SystemModel:
     # ── (legacy) expose_functions_as_aux / expose_derivatives_as_aux ─
 
     def expose_functions_as_aux(self, function_names=None):
-        """Replace bare :class:`~sympy.Function` atoms with auxiliary
-        Symbols of the same name added to :attr:`aux_state`.
-
-        Companion to :meth:`expose_derivatives_as_aux`.  For each
-        unique Function atom whose name is in ``function_names``
-        (or every free Function if ``function_names is None``), a
-        fresh aux Symbol named ``{function_name}`` is substituted in
-        every operator matrix.
-
-        Use for free Functions like topography ``b(t, x, y)`` so they
-        live as proper aux state (visible in VTK output, fed from a
-        per-cell callable at runtime) instead of being symbolically
-        deleted via ``_zero_functions_by_name``.
-
-        The mapping ``aux_function_map: Dict[Symbol, Function]`` is
-        attached to ``self`` so solvers know which aux entries are
-        free-function values (vs state derivatives, vs permanent
-        Zstruct aux).
+        """Replace bare Function atoms (those named in ``function_names``, else all) by aux
+        Symbols of the same name appended to ``aux_state``.
         """
         import sympy as sp
         from itertools import product as _product
@@ -2775,6 +2313,7 @@ class SystemModel:
                  if function_names is not None else None)
 
         def _matches(a):
+            """Whether ``a`` is a Function selected by ``function_names``."""
             if not isinstance(a, sp.Function):
                 return False
             n = a.func.__name__
@@ -2849,30 +2388,13 @@ class SystemModel:
     # ── expose_derivatives_as_aux ─────────────────────────────────────
 
     def expose_derivatives_as_aux(self):
-        """Replace ``Derivative(target, axes...)`` atoms in every
-        operator matrix with auxiliary Symbols added to
-        ``self.aux_state``.
-
-        Each unique Derivative atom found in ``flux``,
-        ``hydrostatic_pressure``, ``nonconservative_matrix``,
-        ``source``, or ``mass_matrix`` is replaced with a fresh aux
-        Symbol named ``{target}_{axes}``  (e.g. ``h_x``, ``U_0_x_x``,
-        ``b_x``).  The Symbols are appended to ``self.aux_state`` and
-        recorded in ``self.aux_derivative_map: Dict[Symbol,
-        Derivative]`` so a solver can compute their per-cell values
-        (state derivatives via mesh + LSQ reconstruction; parameter
-        Function derivatives via analytical / tabulated evaluation).
-
-        This makes spatial derivatives — at any order — first-class
-        runtime inputs without changing the
-        ``(Q, Qaux, p) → ndarray`` operator-API surface.
-
-        Mutates ``self`` in place; no-op if the matrices contain no
-        Derivative atoms.
+        """Replace every ``Derivative(target, axes...)`` atom in the operators by an aux Symbol
+        ``{target}_{axes}`` and record it in ``aux_derivative_map`` for the solver to fill.
         """
         from itertools import product
 
         def _matrix_entries(M):
+            """Iterate over ``(index, entry)`` of operator ``M``."""
             if isinstance(M, sp.Matrix):
                 for i in range(M.shape[0]):
                     for j in range(M.shape[1]):
@@ -2886,6 +2408,7 @@ class SystemModel:
         aux_derivative_map = {}
 
         def _aux_name(d):
+            """Aux symbol name ``{target}_{axes}`` of derivative ``d``."""
             target = d.args[0]
             target_name = (target.func.__name__
                            if isinstance(target, sp.Function)
@@ -2948,75 +2471,12 @@ class SystemModel:
     # ── change_state_variables ────────────────────────────────────────
 
     def change_state_variables(self, new_state, transform):
-        """Apply a state-variable change of variables in place.
+        """Change the state variables in place, updating every state-dependent field (operators,
+        derived operators, reconstruction pair, BC kernels, aux registry by the chain rule).
 
-        Parameters
-        ----------
-        new_state : list
-            The new state vector (same length as ``self.state``).
-            Entries that already appear in the old state stay; entries
-            that replace an old state must appear in ``transform``.
-        transform : dict
-            Maps each OLD state entry that is being replaced to its
-            expression in the NEW state variables.  Old states not
-            mentioned are assumed to map identically to themselves.
-
-        Updates **every state-dependent field** in place:
-
-        * the state list itself (``state``);
-        * primary operators — ``flux``, ``hydrostatic_pressure``,
-          ``nonconservative_matrix``, ``source``, ``mass_matrix``;
-        * explicit / IMEX twins — ``source_explicit``,
-          ``diffusion_matrix``, ``diffusion_matrix_explicit``;
-        * derived operators (refreshed) — ``quasilinear_matrix``,
-          ``source_jacobian``;
-        * eigenvalue spectrum (``eigenvalues`` — invariant under
-          invertible CoV, so just xreplace);
-        * MUSCL well-balanced pair —
-          ``reconstruction_variables`` (xreplaced) and
-          ``state_from_reconstruction`` (re-inverted against the new
-          state slots);
-        * per-cell state remap / explicit Chorin-corrector update
-          (``update_variables``);
-        * **symbolic BC kernels** — ``boundary_conditions``,
-          ``aux_boundary_conditions``, ``boundary_gradients`` —
-          definitions are xreplaced through ``transform`` and the
-          ``args.variables`` Zstruct is rebuilt to bind the new state
-          symbols positionally (otherwise ``state.u`` would still be
-          named in the BC args after the CoV substitutes it away);
-        * the aux registry — chain-rule propagation through
-          ``∂_x state_old[i] = J[i, k] · ∂_x state_new[k]`` for every
-          derivative aux entry that targeted a substituted state slot.
-
-        Fields **not** transformed by this method:
-
-        * ``initial_conditions`` and ``aux_initial_conditions`` — these
-          are runtime callable objects (``InitialConditions`` subclasses
-          like ``Constant``, ``RP``, ``UserFunction``) that produce
-          per-cell numeric arrays.  They do not reference state Symbols
-          symbolically; the user must re-supply them with values in the
-          new state ordering after a CoV (e.g. ``Constant(constants=
-          lambda n: [h, q_U0=h·U_0, …])`` instead of the old
-          ``[h, U_0, …]``).
-
-        Mechanics.  Let ``T_i(Q_new) = transform[Q_old[i]]`` (identity
-        if not in ``transform``) and ``J[i, j] = ∂T_i/∂Q_new[j]``.  In
-        operator form the system is invariant under the substitution
-        ``Q_old → T(Q_new)`` together with the time-derivative
-        identity ``∂_t Q_old = J · ∂_t Q_new`` and the spatial-
-        derivative identity ``∂_d Q_old = J · ∂_d Q_new``:
-
-          * ``F_new = F_old(T(Q_new))``,
-            ``P_new = P_old(T(Q_new))``,
-            ``S_new = S_old(T(Q_new))``.
-          * ``B_new[i, k, d] = Σ_j B_old[i, j, d](T) · J[j, k]``.
-          * ``M_new = M_old(T(Q_new)) · J``.
-          * ``A_new[i, k, d, e] = Σ_j A_old[i, j, d, e](T) · J[j, k]``
-            (state-axis multiplication on the diffusion tensor; same
-            pattern as the NCP).
-
-        This contract preserves the residual ``M ∂_t Q + ∂_x F + ∂_x P
-        + B · ∂_x Q − ∇·(A:∇Q) − S`` under the change of variables.
+        Args:
+            new_state: new state vector of the same length.
+            transform: maps each replaced OLD state entry to its expression in the new variables.
         """
         n = self.n_state
         if len(new_state) != n:
@@ -3196,43 +2656,16 @@ class SystemModel:
 
     def _cov_rebuild_bc_kernels(self, new_variables_zstruct,
                                 full_transform, new_state):
-        """Rebuild the symbolic BC kernels against a NEW state Zstruct.
-
-        Called from :meth:`change_state_variables` after the primary
-        operator matrices are updated.  Three kernels are rebuilt:
-        ``boundary_conditions``, ``boundary_gradients`` (both from
-        ``self._bc_source``) and ``aux_boundary_conditions``
-        (from ``self._aux_bc_source``).
-
-        The source ``BoundaryConditions`` instances are cached on the
-        SystemModel by :meth:`from_model` (``_bc_source`` /
-        ``_aux_bc_source``).  When a source is available we call
-        ``source.get_boundary_condition_function(...)`` (and the
-        gradient variant) with the new state Zstruct — the body
-        re-emerges semantically:
-
-          * Extrapolation slots → ``ZArray(new_state)``
-            (identity on slot symbols, *not* the inverse transform of
-            the old symbols);
-          * Prescribed values / pressure rows / wall BCs that compute
-            *physical* expressions of state get rebuilt against the
-            new symbols by the BC subclasses themselves.
-
-        Fallback: when the source isn't available (e.g. the SystemModel
-        was constructed by hand without going through ``from_model``)
-        we drop back to the legacy ``xreplace`` propagation with a
-        ``stacklevel=3`` warning.  Hand-built BC bodies that were
-        *physical* expressions of state survive that fallback
-        correctly; extrapolation-shaped bodies do not, which is why
-        rebuilding is the default.
+        """Rebuild the boundary, boundary-gradient and aux-boundary kernels against a new state
+        Zstruct after a change of variables.
         """
         bc_source = getattr(self, "_bc_source", None)
         aux_bc_source = getattr(self, "_aux_bc_source", None)
 
         def _reuse_arg(args, name):
-            """Read a non-variables arg out of an existing BC kernel's
-            args Zstruct (time, position, distance, parameters, normal,
-            etc.) — these are stable under CoV."""
+            """Read a non-variables arg (time, position, normal, ...) out of an existing kernel's
+            args; stable under the change of variables.
+            """
             return args[name] if hasattr(args, "__contains__") and name in args.keys() else args[name]
 
         # boundary_conditions + boundary_gradients share the main BC
@@ -3302,20 +2735,8 @@ class SystemModel:
 
     def _propagate_chain_rule_through_aux(self, full_transform, J,
                                           old_state, new_state):
-        """After ``change_state_variables`` substitutes state Symbols
-        in the operator matrices, the aux-registry entries that
-        represent ``∂_x state[i]`` (where ``state[i]`` is an OLD
-        variable being substituted) carry stale meaning: the symbol
-        in the operator was ``∂_x U_0`` but the runtime computes
-        ``∂_x state[i] = ∂_x q_U0`` after the substitution.  Chain-rule
-        propagation fixes this:
-
-        ``∂_x T_i(Q_new) = Σ_j (∂T_i/∂Q_new[j]) · ∂_x Q_new[j]``
-
-        For every aux entry whose target was an OLD state variable
-        that got substituted, substitute the aux Symbol in the
-        operators with the chain-rule expansion, and add new aux
-        entries for ``∂_x Q_new[j]`` if not already present.
+        """Rewrite the derivative-aux registry entries that target a substituted state slot by the
+        chain rule ``d_x old[i] = J[i,k] d_x new[k]`` (1-D only).
         """
         if not getattr(self, "aux_registry", None):
             return
@@ -3419,21 +2840,15 @@ class SystemModel:
         }
 
     def remove_non_diagonal_h(self, **kwargs):
-        """Convenience wrapper around :class:`RemoveNonDiagonalH`."""
+        """Apply ``RemoveNonDiagonalH`` to this system."""
         return RemoveNonDiagonalH()(self, **kwargs)
 
     # ── classification guard ──────────────────────────────────────────
 
     def assert_all_classified(self):
-        """Raise if any equation row carries an operator term the structural
-        extractor could not classify into a slot (a silent drop).
-
-        The opt-in STRICT counterpart to the default build-time warning: a
-        model that quietly loses a term from the balance law — e.g. a
-        ``∂_x(A·∂_x b)`` bed-slope routed to an off-diagonal diffusion entry
-        the runtime discards — fails here instead of running wrong.  A
-        correctly-routed model (``unclassified_terms`` empty) returns ``self``
-        so it can be chained."""
+        """Raise if any equation row carries an operator term the structural extractor could not
+        classify into a slot; the strict counterpart of the build-time warning.
+        """
         if self.unclassified_terms:
             lines = "\n".join(
                 f"  row {i}: {sp.sstr(r)}" for i, r in self.unclassified_terms)
@@ -3449,21 +2864,8 @@ class SystemModel:
     # ── describe ──────────────────────────────────────────────────────
 
     def describe_unclosed(self) -> str:
-        """List the aux rows nothing computes — the model's OPEN terms.
-
-        Every aux slot is one of three things, and this says which:
-
-        * **computed** — an ``aux_registry`` row (a derivative from the LSQ
-          walk, or a closure evaluated pointwise);
-        * **external** — declared by the model with a definition it cannot
-          evaluate pointwise (the stay-3D column integrals ``U``, ``ω``);
-          a backend fills it;
-        * **UNCLOSED** — neither.  Nothing writes the row, so it reads ZERO:
-          silently absent physics, which is what
-          :class:`UnclosedClosureError` refuses to hand back.
-
-        Written for the reader who just hit that error and wants to know which
-        closures the model is still missing.
+        """List the aux rows nothing computes (the model's open terms), classifying each aux slot
+        as computed, external or open.
         """
         unclosed = list(getattr(self, "_unclosed_closures", None) or ())
         external = dict(getattr(self, "external_aux", None) or {})
@@ -3485,44 +2887,43 @@ class SystemModel:
         return "\n".join(out)
 
     def describe(self, full: bool = False) -> "SystemModelDescription":
-        """Return a Description rendering the operator form.
-
-        By DEFAULT the core balance-law operators are rendered — ``Q``,
-        ``Q_aux``, the mass matrix ``M``, flux ``F``, hydrostatic
-        pressure ``P``, diffusive flux ``A``, NCP ``B`` and the
-        (implicit / explicit) source ``S``.  ``full=True`` additionally
-        renders the rare / derived slots (quasilinear matrix, source
-        Jacobian, eigenvalues, state-update, reconstruction maps,
-        ``interpolate_to_3d``, …)."""
+        """A ``SystemModelDescription`` rendering the core operators; ``full=True`` adds the
+        derived slots.
+        """
         return SystemModelDescription(self, full=full)
 
 
 class SystemModelRow:
-    """Row view of a :class:`SystemModel` — exposes row ``i`` of
-    every stored matrix."""
+    """Row view of a ``SystemModel``: row ``i`` of every stored matrix."""
 
     def __init__(self, parent: SystemModel, i: int):
+        """View row ``i`` of ``parent``."""
         self._parent = parent
         self._i = i
 
     @property
     def flux(self):
+        """Row ``i`` of the flux."""
         return self._parent.flux[self._i, :]
 
     @property
     def hydrostatic_pressure(self):
+        """Row ``i`` of the hydrostatic pressure."""
         return self._parent.hydrostatic_pressure[self._i, :]
 
     @property
     def source(self):
+        """Entry ``i`` of the source."""
         return self._parent.source[self._i, 0]
 
     @property
     def mass_matrix_row(self):
+        """Row ``i`` of the mass matrix."""
         return self._parent.mass_matrix[self._i, :]
 
     @property
     def nonconservative_matrix_row(self):
+        """Row ``i`` of the nonconservative matrix as an ``(n_eq, n_dim)`` array."""
         n = self._parent.n_equations
         d = self._parent.n_dim
         out = sp.MutableDenseNDimArray.zeros(n, d)
@@ -3533,22 +2934,19 @@ class SystemModelRow:
 
 
 class SystemModelDescription:
-    """Markdown / plaintext description of a SystemModel.
-
-    Renders via ``_repr_markdown_`` in Jupyter; ``str(...)`` gives a
-    plain-text fallback.
-    """
+    """Markdown (Jupyter ``_repr_markdown_``) and plain-text description of a ``SystemModel``."""
 
     def __init__(self, sm: SystemModel, *, full: bool = False):
+        """Describe ``sm``; ``full`` adds the derived slots."""
         self._sm = sm
         self._full = full
 
     # ── rendering helpers ──────────────────────────────────────────────
     @staticmethod
     def _as_matrix(obj):
-        """Coerce a stored operator (ZArray / list / Matrix) to a 2-D
-        ``sp.Matrix`` (a flat vector becomes a column).  ``None`` passes
-        through so callers can render it as ``= 0``."""
+        """Coerce a stored operator to a 2-D ``sp.Matrix`` (a flat vector becomes a column);
+        ``None`` passes through.
+        """
         if obj is None:
             return None
         if isinstance(obj, sp.MatrixBase):
@@ -3557,6 +2955,7 @@ class SystemModelDescription:
         return sp.Matrix(lst)
 
     def _render(self, parts, label, mat):
+        """Append the labelled operator ``mat`` (or ``= 0``) to ``parts``."""
         M = self._as_matrix(mat)
         if M is None or M.is_zero_matrix:
             parts.append(f"**{label} $= 0$**")
@@ -3565,9 +2964,9 @@ class SystemModelDescription:
             parts.append(f"$$\n{sp.latex(M)}\n$$")
 
     def _render_ndim(self, parts, label, arr, rank):
-        """Render a rank-3 NCP ``B[i, j, d]`` or rank-4 diffusion
-        ``A[i, j, d, e]`` by slicing into ``n_eq × n_state`` slabs per
-        direction (pair).  All-zero / ``None`` collapses to ``= 0``."""
+        """Render a rank-3 NCP or rank-4 diffusion tensor as ``n_eq x n_state`` slabs per
+        direction (pair); all-zero collapses to ``= 0``.
+        """
         sm = self._sm
         if arr is None:
             parts.append(f"**{label} $= 0$**")
@@ -3597,8 +2996,7 @@ class SystemModelDescription:
             parts.append(f"$$\n{sp.latex(slab)}\n$$")
 
     def _operator_block(self) -> str:
-        """The CORE operator set — always rendered: state, aux state, and
-        every operator that is part of the canonical balance law."""
+        """The core operators of the balance law (always rendered)."""
         sm = self._sm
         parts = []
 
@@ -3639,7 +3037,7 @@ class SystemModelDescription:
         return "\n\n".join(parts)
 
     def _extra_block(self) -> str:
-        """The rare / derived operators — only with ``full=True``."""
+        """The rare and derived operators (only with ``full=True``)."""
         sm = self._sm
         parts = ["**Extended operators:**"]
         any_shown = False
@@ -3667,11 +3065,9 @@ class SystemModelDescription:
         return "\n\n".join(parts)
 
     def _unclassified_block(self) -> str:
-        """The classification-completeness report — only with ``full=True``.
-
-        Lists every additive operator term the structural extractor matched no
-        slot for (a silent drop from the balance law).  Clearly labelled and
-        EMPTY-when-clean so its absence is never mistaken for "not checked"."""
+        """The classification-completeness report listing operator terms matched to no slot (only
+        with ``full=True``, empty when clean).
+        """
         sm = self._sm
         unc = list(getattr(sm, "unclassified_terms", []) or [])
         parts = ["**Unclassified terms (silent drops):**"]
@@ -3687,6 +3083,7 @@ class SystemModelDescription:
         return "\n\n".join(parts)
 
     def _repr_markdown_(self) -> str:
+        """The Markdown rendering of the system."""
         sm = self._sm
         parts = [
             f"**SystemModel** — {sm.n_equations} equation"
@@ -3714,54 +3111,22 @@ class SystemModelDescription:
         return "\n\n".join(parts)
 
     def __str__(self) -> str:
+        """Plain-text rendering (Markdown markers stripped)."""
         md = self._repr_markdown_()
         return md.replace("$$", "").replace("$", "").replace("**", "")
 
     def __repr__(self) -> str:
+        """Same as ``str``."""
         return self.__str__()
 
 
 # ── System-level operations ───────────────────────────────────────────
 
 class RemoveNonDiagonalH:
-    """System-level op: substitute the mass equation into every row
-    whose mass-matrix ``h``-column entry is non-zero, pushing the
-    ``M[i, h] · ∂_t h`` term into the NCP matrix ``B`` and the source
-    ``S``.  Leaves ``M[i, k]`` untouched for ``k != h``.
-
-    Motivation.  The Galerkin chain for free-surface models produces
-    j ≥ 1 momentum rows that carry a state-dependent ``∂_t h``
-    cross-term — e.g. ``M[xmom_j1, h] = (q_U1 − q_U0)/h`` in the
-    conservative state of VAM(1, 2, 2).  The cross-term reflects the
-    test function's time-dependence through ``ζ = (z − b)/h`` and is
-    genuine, not a bug.  Substituting the mass equation
-    ``∂_t h = −∂_x F[m, :] − ∂_x P[m, :] − Σ_k B[m, k, :] ∂_x Q_k +
-    S[m]`` into each affected row pushes the term out of the
-    time-derivative slot, where state-dependent ``M`` would otherwise
-    silently mislead explicit solvers that assume ``M = I``.
-
-    Scope.  This op clears only the ``h`` column of ``M``.  Other
-    diagonal / off-diagonal entries are left intact — normalising
-    state-dependent diagonal entries (e.g. ``M[xmom_j1, U_1] = h/3`` in
-    primitive form) is the job of an extended
-    :class:`InvertMassMatrix`, not this pass.
-
-    Preconditions.  The mass row ``m`` (auto-detected, or supplied via
-    ``mass_equation_index``) must satisfy ``M[m, h] = 1`` and
-    ``M[m, k] = 0`` for ``k != h``.  Other rows may have arbitrary
-    ``M[i, h]`` content.
-
-    Post-conditions.  ``M[i, h_state_index] = 0`` for every previously
-    affected row ``i``.  Per affected row, ``B`` and ``S`` are updated
-    so the residual is exact modulo the mass equation:
-
-    ``B[i, k, d] ← B[i, k, d] − M_old[i, h] · (∂F[m, d]/∂Q_k
-                                                + ∂P[m, d]/∂Q_k
-                                                + B[m, k, d])``
-
-    ``S[i] ← S[i] − M_old[i, h] · S[m]``
-
-    The mass row ``m`` itself is never modified.
+    """System-level op: substitute the mass equation into every row with a nonzero ``h`` entry in
+    the mass matrix, moving the ``M[i,h] d_t h`` term into the NCP matrix and source.
+    The mass row must satisfy ``M[m,h] = 1`` and zero elsewhere; other mass-matrix entries are
+    left alone.
     """
 
     name = "remove_non_diagonal_h"
@@ -3772,6 +3137,9 @@ class RemoveNonDiagonalH:
 
     def __call__(self, sm: "SystemModel", *, h_state_index=None,
                  mass_equation_index=None):
+        """Clear the ``h`` column of the mass matrix; ``h_state_index`` and
+        ``mass_equation_index`` are auto-detected when omitted.
+        """
         n_eq = sm.n_equations
         n_st = sm.n_state
         n_dim = sm.n_dim
@@ -3861,6 +3229,7 @@ class RemoveNonDiagonalH:
 
     @staticmethod
     def _find_h_state_index(sm: "SystemModel") -> int:
+        """Index of the state entry named ``h``; raises ``ValueError`` if absent."""
         for i, s in enumerate(sm.state):
             if getattr(s, "name", None) == "h":
                 return i
@@ -3871,7 +3240,7 @@ class RemoveNonDiagonalH:
 
     @staticmethod
     def _find_mass_row(sm: "SystemModel", h_col: int) -> int:
-        """Find the row m with M[m, h_col] = 1 and M[m, k] = 0 elsewhere."""
+        """Row ``m`` with ``M[m, h_col] = 1`` and zeros elsewhere."""
         candidates = []
         for i in range(sm.n_equations):
             entry = sp.simplify(sm.mass_matrix[i, h_col])
@@ -3899,53 +3268,13 @@ class RemoveNonDiagonalH:
 
 
 class HydrostaticReconstruction:
-    """System-level op: repack `g·h·∂_x η` from the chain's
-    ``(P, B)`` form to standard SWE ``P = g·h²/2`` form, for use
-    with Audusse hydrostatic-reconstruction Riemann solvers.
+    """System-level op: repack the gravity term ``g h d_x eta`` from the chain's ``(P, B)`` form
+    to the standard SWE ``P = g h^2/2`` form that hydrostatic-reconstruction Riemann solvers
+    expect.
+    The bathymetry term is then supplied at runtime by the Audusse fluctuation.
 
-    **What this does**
-
-    The chain's ``quadratic_form="escalante"`` output represents
-    the depth-integrated gravity term ``g·h·∂_x η`` as
-
-    ``P[i, d] = g·h·(b + h)``  and  ``B[i, h, d] = −g·(b + h)``,
-
-    because ``∂_x(g·h·η) − g·η·h_x ≡ g·h·∂_x η`` (product rule).
-    This packaging makes the bathymetry ``b`` appear *inside* the
-    hydrostatic-pressure flux, which is correct as a continuous
-    PDE — but Audusse's WB cancellation works most cleanly when
-    ``P`` has the *standard SWE* form ``g·h²/2`` (no ``b``) and
-    the bathymetry-on-momentum contribution ``−g·h·b_x`` is left
-    to be supplied at runtime by the Audusse fluctuation
-    ``(P_raw − P_star) @ n`` (see
-    :meth:`PositiveRusanov.numerical_fluctuations`).
-
-    This op rewrites for every row with that packaging:
-
-    * ``P[i, d]``      →  ``P[i, d] − g·h·(b + h) + g·h²/2``
-                       =  remainder + ``g·h²/2``
-    * ``B[i, h, d]``   →  ``B[i, h, d] + g·(b + h)``
-                       =  ``0`` (chain's escalante form had only
-                          the gravity term here on the j=0 row)
-
-    **Trade-off**
-
-    The resulting symbolic SystemModel is *missing* the
-    ``−g·h·b_x`` term — its residual no longer represents the
-    full PDE on its own.  Audusse HR provides this term via the
-    flux fluctuation at runtime; a non-HR Riemann solver (plain
-    Rusanov) will be inconsistent on a varying bathymetry.  Only
-    apply this op when the runtime is configured to use a
-    ``PositiveRusanov``-family flux (which the
-    :class:`ChorinSplitVAMSolver` does by default).
-
-    **Detection**
-
-    The op auto-detects every row ``i`` whose
-    ``P[i, d]`` contains a ``g·h·(b + h)`` summand AND whose
-    ``B[i, h_state_index, d]`` contains a matching ``−g·(b + h)``.
-    These together signal the chain's gravity-on-η packaging.
-    For VAM(1, 2, 2) this fires on the ``xmom_j0`` row only.
+    References:
+        Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
     """
 
     name = "hydrostatic_reconstruction"
@@ -3956,6 +3285,9 @@ class HydrostaticReconstruction:
     )
 
     def __call__(self, sm: "SystemModel", *, h_state_index=None):
+        """Repack every row carrying the ``g h (b + h)`` packaging; ``h_state_index`` is
+        auto-detected when omitted.
+        """
         # Locate h state index.
         if h_state_index is None:
             for i, s in enumerate(sm.state):
@@ -4062,22 +3394,10 @@ class HydrostaticReconstruction:
 
 
 class InvertMassMatrix:
-    """System-level op: left-multiply each evolution row by ``1/M_ii``.
-
-    Operates on a SystemModel whose mass matrix is **diagonal** on
-    every evolution row (with arbitrary state-dependent diagonal
-    entries) and zero on every algebraic row.  Use
-    :meth:`SystemModel.assert_diagonal_mass_matrix` first to verify
-    this precondition.
-
-    Per evolution row ``i`` (with ``equation_to_state_index[i] = j``):
-    divide ``flux[i, :]``, ``hydrostatic_pressure[i, :]``,
-    ``source[i, 0]``, and ``nonconservative_matrix[i, :, :]`` by the
-    diagonal entry ``M[i, j]``.  Set ``M[i, j] = 1``.
-
-    Diagonal entries may be state- or aux-dependent — the division is
-    symbolic and produces a ``1/M_ii`` factor in the resulting
-    operators (which gets lambdified per-cell at runtime).
+    """System-level op: divide each evolution row by its diagonal mass entry ``M_ii`` and set
+    ``M_ii = 1``.
+    Requires a diagonal mass matrix on evolution rows and zero on algebraic rows (check with
+    ``assert_diagonal_mass_matrix``); state-dependent entries give a symbolic ``1/M_ii``.
     """
 
     name = "invert_mass_matrix"
@@ -4087,6 +3407,7 @@ class InvertMassMatrix:
     )
 
     def __call__(self, sm: SystemModel):
+        """Left-multiply every evolution row of ``sm`` by ``1/M_ii``."""
         # Precondition: mass matrix is diagonal on evolution rows.
         sm.assert_diagonal_mass_matrix()
 
@@ -4166,20 +3487,8 @@ _ALLOW_UNCLOSED = False
 
 @contextmanager
 def allow_unclosed():
-    """Permit a build to RETURN a SystemModel that still has unclosed terms.
-
-    The open system is a legitimate object to want — it is the honest
-    full-stress model, and printing it is how you find out *which* closures a
-    model still needs.  What is not legitimate is getting it by accident, so
-    the opt-in is explicit and greppable::
-
-        with allow_unclosed():
-            sm = SystemModel.from_model(VAM(level=1, dimension=2))
-        print(sm.describe_unclosed())
-
-    Inside the block the open terms are reported as a ``UserWarning`` and
-    listed on :attr:`SystemModel._unclosed_closures`; outside it they raise
-    :class:`UnclosedClosureError`.
+    """Context manager permitting a build to return a ``SystemModel`` that still has unclosed
+    terms, an explicit and greppable opt-in for inspecting open full-stress models.
     """
     global _ALLOW_UNCLOSED
     prev = _ALLOW_UNCLOSED
@@ -4191,11 +3500,9 @@ def allow_unclosed():
 
 
 def _declare_model_hooks(sm, model) -> None:
-    """Apply the model's own role / admissibility declarations, if it makes
-    any: ``model.declare_system_roles(sm)`` (declares on the built system, so
-    it can read the final state layout) and ``model.admissible_constraints()``
-    (expressions in the model's state/aux/parameter symbols that must stay
-    ``>= 0``)."""
+    """Apply the model's own role and admissibility declarations (``declare_system_roles``,
+    ``admissible_constraints``), if any.
+    """
     if model is None:
         return
     hook = getattr(model, "declare_system_roles", None)
@@ -4213,18 +3520,8 @@ def _declare_model_hooks(sm, model) -> None:
 
 
 def _declared_aux_definitions(model) -> dict:
-    """``{name: definition}`` for aux the MODEL declared itself.
-
-    ``add_equation(name, Eq(sym, expr), group="aux")`` is how a model says "this
-    is a genuine auxiliary field with a definition, filled by the backend" — the
-    stay-3D column integrals ``U = ∫₀¹ u dζ`` and ``ω`` are the standing
-    example: a running quadrature is not an algebraic ``update_aux_variables``
-    row, so it has no registry entry and never will.
-
-    Those names live in ``_aux_names`` on the DERIVATION model, which is reached
-    as ``model.derivation`` — the outer user-facing Model does not carry them
-    (the same seam that hides ``_closure_vars``), so checking only ``model``
-    silently returns nothing and every declared aux looks unclosed.
+    """``{name: definition}`` of the aux the model declared itself via ``add_equation(...,
+    group="aux")``; the backend fills them (e.g. stay-3D column integrals).
     """
     for owner in (model, getattr(model, "derivation", None)):
         names = getattr(owner, "_aux_names", None)
@@ -4236,20 +3533,8 @@ def _declared_aux_definitions(model) -> dict:
 
 
 def _assert_declared_closures_closed(sm, model, canonical_source=None):
-    """Refuse to hand back a SystemModel with a DECLARED closure left unbound.
-
-    ``Model.declare_closure`` marks a field as needing a closure; if no closure
-    substitutes it during the derivation it is swept into ``aux_state`` by
-    ``expose_aux_atoms`` — with NO ``update_aux_variables`` row.  Nothing then
-    ever writes that slot, so the term reads ZERO: not an error, not garbage,
-    silently absent physics.  That is how the ML-VAM interface tractions
-    ``tau(0)`` / ``tau(1)`` vanish — they ARE derived (the by-parts step emits
-    them), but ``apply_layer_stress_closures`` binds them only on the top / bed
-    layer, so every internal interface is frictionless and nothing says so.
-
-    An aux that is MEANT to be external is declared explicitly (``register_aux``
-    gives it a formula, so it is computed).  This check fires only on the
-    difference: declared a closure, landed in aux, and has no row.
+    """Raise ``UnclosedClosureError`` if a closure declared via ``Model.declare_closure`` was
+    never substituted and its aux slot would silently read zero.
     """
     # ``_closure_vars`` lives on the INNER per-layer DModel built inside
     # ``derive_model`` and does NOT survive to the model handed here, so
@@ -4310,14 +3595,12 @@ def _assert_declared_closures_closed(sm, model, canonical_source=None):
 
 
 class UnclosedClosureError(RuntimeError):
-    """A declared closure reached the SystemModel with nothing closing it.
-
-    Carries the built :attr:`system_model` so the open terms can be inspected
-    from the exception itself — ``err.describe()`` is the same listing
-    :meth:`SystemModel.describe_unclosed` produces.
+    """A declared closure reached the ``SystemModel`` with nothing closing it; carries the built
+    ``system_model``.
     """
 
     def __init__(self, unclosed, model_name="", system_model=None):
+        """Store the unclosed terms, the model name and the built system."""
         self.unclosed = list(unclosed)
         self.model_name = model_name
         self.system_model = system_model
@@ -4335,7 +3618,7 @@ class UnclosedClosureError(RuntimeError):
             "`with allow_unclosed():` and call sm.describe_unclosed().")
 
     def describe(self) -> str:
-        """The open-term listing (see :meth:`SystemModel.describe_unclosed`)."""
+        """The open-term listing (see ``SystemModel.describe_unclosed``)."""
         if self.system_model is not None:
             return self.system_model.describe_unclosed()
         return "\n".join([f"UNCLOSED TERMS — {self.model_name}"]

@@ -1,37 +1,6 @@
-"""Viscous wet/dry SWE (the Malpasset variant) — derived from the canonical
-:class:`~zoomy_core.model.models.swe.SWE` basis.
-
-This is the model the Firedrake dam-break / Malpasset tutorials and the
-``thesis/cases/parabolic_bowl`` cases run.  It is the level-0 SWE basis
-plus the pieces a real wetting/drying, friction-and-viscosity flood run
-needs, kept as a SUBCLASS of :class:`SWE` so there is exactly one
-shallow-water basis in ``zoomy_core/model/models`` (no hand-rolled model
-classes living in tutorial/thesis scripts):
-
-* state ``[b, h, hu, hv]`` (2-D), aux ``[hinv]`` (desingularised 1/h),
-* ``reconstruction_variables`` — INHERITED from :class:`SWE`: limit the
-  free surface ``eta = b + h`` (well-balanced, inert at lake-at-rest),
-* ``flux`` — convective only (``hu ⊗ u`` via the bounded ``hinv``); the
-  ``½ g h²`` pressure is a SEPARATE operator,
-* ``hydrostatic_pressure`` — ``½ g h²`` on the momentum diagonal, the
-  operator the Audusse well-balanced Riemann solvers
-  (``PositiveNonconservative{HLL,Rusanov}``) add to the physical flux and
-  use for the hydrostatic-reconstruction corrections,
-* ``nonconservative_matrix`` — bed slope ``g h ∂_d b`` only (the pressure
-  must NOT be folded in here — see :meth:`nonconservative_matrix`),
-* ``source`` — Manning bed friction with a floored ``h^{-1/3}``,
-* ``diffusion_matrix_explicit`` — depth-averaged eddy viscosity that
-  diffuses VELOCITY (diagonal on ``hu`` + cross term on ``h``),
-* ``update_variables`` — per-cell momentum capping (``h`` untouched),
-* ``update_aux_variables`` — Kurganov–Petrova desingularised ``hinv``,
-* ``eigenvalues`` — velocity from the bounded ``hinv``, optional dry-cell
-  wave-speed gate (``ev_gate``).
-
-Every operator is the SAME expression as the previous hand-rolled
-tutorial class — only its HOME changed (tutorial script → canonical
-models package).  ``SystemModel.from_model`` picks the methods up by name
-(``hasattr``/``callable``), so the Firedrake solver consumes the derived
-model identically to the old standalone one.
+"""Viscous wet/dry SWE with Manning friction (the Malpasset variant), derived from
+:class:`~zoomy_core.model.models.swe.SWE`. Used by the Firedrake dam-break and Malpasset cases;
+``SystemModel.from_model`` picks its operators up by name.
 """
 from __future__ import annotations
 
@@ -48,7 +17,10 @@ __all__ = ["MalpassetSWE"]
 
 
 class MalpassetSWE(SWE):
-    """Viscous wetting/drying SWE, ``[b, h, hu, hv]`` + aux ``[hinv]``."""
+    """Viscous wetting/drying SWE with state ``[b, h, hu, hv]`` and aux ``[hinv]``, dissipation
+    closed by ``closures``. The pressure ``g h^2/2`` is a separate operator so the well-balanced
+    Riemann solvers can reconstruct it.
+    """
 
     # Own state + parameter set (overrides the SWE class defaults so the
     # SWE.__init__ parameter merge does NOT drag in n_m / h_in / q_in).
@@ -68,6 +40,14 @@ class MalpassetSWE(SWE):
 
     def __init__(self, *, g=9.81, n=0.033, nu=1.0, eps=1e-2,
                  h_friction_floor=0.5, ev_gate=True, closures=None, **kw):
+        """Build the model.
+
+        Args:
+            eps: wet/dry depth threshold (declared as ``wet_dry_eps``).
+            h_friction_floor: depth floor in the Manning ``h^(-1/3)``.
+            ev_gate: zero the eigenvalues of dry cells (default on).
+            closures: bottom / horizontal closures; default Manning friction + eddy viscosity.
+        """
         # ``eps`` stays the public constructor knob (the wet/dry depth
         # threshold value); it is declared on the parameter vector under
         # the canonical name ``wet_dry_eps`` (REQ-48), so there is exactly
@@ -112,20 +92,26 @@ class MalpassetSWE(SWE):
     # build none here.  ``reconstruction_variables`` is a METHOD (inherited
     # from SWE) and is unaffected.
     def _build_function_groups(self):
+        """No function groups: the Firedrake path takes boundary conditions through
+        ``boundary_conditions``.
+        """
         return {}
 
     # -- convenience -----------------------------------------------------
     @property
     def _parameter_symbols(self):
+        """The parameter symbol vector."""
         return self.parameters
 
     def _primitives(self):
+        """Return the symbols ``(b, h, hu, hv, hinv)``."""
         v = self.variables
         a = self.aux_variables
         return v.b, v.h, v.hu, v.hv, a.hinv
 
     # -- operators -------------------------------------------------------
     def flux(self):
+        """Convective momentum flux ``hu (x) u`` via the bounded ``hinv``, without pressure."""
         _, h, hu, hv, hinv = self._primitives()
         F = sp.Matrix.zeros(4, 2)
         # mass equation
@@ -139,6 +125,9 @@ class MalpassetSWE(SWE):
         return ZArray(F)
 
     def hydrostatic_pressure(self):
+        """Hydrostatic pressure ``g h^2/2`` on the momentum diagonal, added by the positive
+        nonconservative Riemann solvers.
+        """
         # ½ g h² on the momentum diagonal, as a SEPARATE operator (not
         # folded into ``flux`` or the NCP).  This is the encoding the
         # ``PositiveNonconservative{HLL,Rusanov}`` solvers are built
@@ -154,6 +143,7 @@ class MalpassetSWE(SWE):
         return P
 
     def nonconservative_matrix(self):
+        """Bed-slope product ``g h d_d b`` only; the pressure must not be folded in here."""
         # Bed-slope coupling ONLY (``g h ∂_d b``).  The pressure term must
         # NOT be encoded here as ``g h ∂_d h``: the NCP path-integral in
         # the WB Riemann solvers is evaluated over hydrostatically
@@ -168,13 +158,8 @@ class MalpassetSWE(SWE):
         return N
 
     def source(self):
-        """Bed-friction momentum sink, CLOSED by the ``bottom`` closures.
-
-        Each bottom closure supplies a friction RATE ``r`` (per unit
-        velocity, e.g. Manning ``-g n² |u| / max(h,h_floor)^{1/3}``); the
-        momentum sink is ``r · u_i`` on each component (the conservative
-        ``-g n² u_i |u| / h^{1/3}``).  ``b``/``h`` rows stay source-free.
-        Vanishes for ``u = 0`` (no spurious lake-at-rest forcing).
+        """Bed-friction momentum sink ``rate * u_i``, with ``rate`` summed over the ``bottom``
+        closures; zero at rest.
         """
         _, h, hu, hv, hinv = self._primitives()
         u, w = hu * hinv, hv * hinv
@@ -184,17 +169,8 @@ class MalpassetSWE(SWE):
         return ZArray([sp.S.Zero, sp.S.Zero, rate * u, rate * w])
 
     def diffusion_matrix_explicit(self):
-        """Horizontal eddy mixing on the momentum rows (explicit), CLOSED by
-        the ``horizontal`` closures.
-
-        Each horizontal closure supplies an isotropic kinematic eddy
-        viscosity ``D`` (e.g. ``EddyViscosity`` → ``ν``); the model builds
-        the velocity-diffusion tensor ``∇·(D h ∇u)`` — diagonal ``D`` on the
-        momentum rows plus the chain-rule cross term ``-D u_i`` on ``h``
-        (so the operator diffuses VELOCITY ``u=hu/h``, not momentum).  Both
-        vanish at lake-at-rest (``u = w = 0``) → well-balanced.  Explicit:
-        the parabolic CFL (``dt ≤ h²/2ν`` ~ 10³–10⁴ s) never constrains the
-        hyperbolic step and the implicit source Jacobian stays block-diagonal.
+        """Explicit eddy-viscosity tensor of ``div(D h grad u)`` (``D`` summed over the
+        ``horizontal`` closures), diagonal on the momentum rows plus a cross term on ``h``.
         """
         _, h, hu, hv, hinv = self._primitives()
         u, w = hu * hinv, hv * hinv
@@ -211,6 +187,9 @@ class MalpassetSWE(SWE):
 
     # -- state hygiene (SystemModel update_variables / aux slots) --------
     def update_variables(self):
+        """Cap ``hu`` and ``hv`` to ``max(h - wet_dry_eps, 0) * U_MAX``; ``b`` and ``h`` are
+        never modified.
+        """
         v = self.variables
         p = self._parameter_symbols
         h, hu, hv = v.h, v.hu, v.hv
@@ -224,11 +203,13 @@ class MalpassetSWE(SWE):
         max_hu = h_wet * u_max
 
         def cap(c):
+            """Clip ``c`` to ``[-max_hu, max_hu]``."""
             return sp.Max(-max_hu, sp.Min(c, max_hu))
 
         return ZArray([v.b, h, cap(hu), cap(hv)])
 
     def update_variables_jacobian_wrt_variables(self):
+        """Zero Jacobian of ``update_variables`` (the cap is not differentiated)."""
         # The Min/Max cap would differentiate to non-serialisable
         # Piecewise/sign; this Jacobian is only used by IMEX implicit-update
         # Newton (which the Firedrake backend does not run on
@@ -237,6 +218,9 @@ class MalpassetSWE(SWE):
         return ZArray.zeros(n, n)
 
     def eigenvalues(self):
+        """Eigenvalues ``[0, un, un -/+ c]`` from the bounded ``hinv``, with an optional wet/dry
+        gate (``ev_gate``).
+        """
         _, h, hu, hv, hinv = self._primitives()
         p = self._parameter_symbols
         n = self.normal
@@ -260,12 +244,11 @@ class MalpassetSWE(SWE):
         return ZArray(gated)
 
     def update_aux_variables(self):
-        """Kurganov–Petrova desingularised inverse depth
-        ``hinv = √2 · h / √(h⁴ + max(h, eps)⁴)``: equals ``1/h`` for
-        ``h ≥ eps`` but tends smoothly to ZERO as ``h → 0`` (instead of
-        saturating at ``1/eps``), so the derived velocity ``u = hu·hinv``
-        decays to zero at DG(1) wet/dry interfaces — the missing piece
-        that lets DG(1) avoid dt-collapse at the shoreline.
+        """Desingularised inverse depth ``hinv = sqrt(2) h / sqrt(h^4 + max(h, eps)^4)``: equals
+        ``1/h`` for ``h >= eps`` and tends to zero as ``h -> 0``.
+
+        References:
+            Kurganov & Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6
         """
         v = self.variables
         p = self._parameter_symbols

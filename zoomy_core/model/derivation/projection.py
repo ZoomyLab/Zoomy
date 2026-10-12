@@ -1,31 +1,6 @@
-"""Modal projection operations for the clean-redesign framework.
-
-After :func:`~zoomy_core.model.derivation.modal.separation_of_variables` has put the
-unexpanded ansatz ``Σ_i a(i, …)·φ(i, ζ)`` into every equation, these four ops
-carry the derivation to the Galerkin-projected, basis-resolved form:
-
-:class:`ExpandSums`
-    Products / integer powers of unexpanded ``sp.Sum`` factors → ONE
-    multi-index ``Sum`` with DISTINCT dummies (cross terms kept):
-    ``(Σ_i a_iφ_i)² → Σ_iΣ_j a_i a_j φ_iφ_j``.
-
-:class:`Project`
-    Galerkin PROJECT — sugar for ``Multiply(test_function)`` then integrate
-    over ``(ζ, 0, 1)``, pushing the ζ-integral *through* the unexpanded Sum
-    so the opaque ``∫ φ·c·φ dζ`` brackets stay unevaluated:
-    ``Σ_i a_i ⟨φ_i, c φ_l⟩``.
-
-:class:`ExtractBrackets`
-    The GENERIC bracket split: a ζ-INDEPENDENT factor comes OUT as ``const``;
-    the ζ-DEPENDENT body stays as ``Integral(body, (ζ, 0, 1))`` (rendered
-    ``⟨body⟩``).  ONLY ``Gram(i, l)`` and ``Weight(l)`` keep closed forms.
-    ``∂_x`` commutes out of the ζ-integral (conservative flux).
-
-:class:`ResolveBasis`
-    Per-field bracket resolution: substitute the concrete basis's
-    ``closed_form_bracket`` (Gram / Weight → δ-form, ``l`` kept symbolic) and
-    integrate every leftover ``∫_0^1 … dζ`` whose integrand carries this
-    field's index, then ``.doit()`` collapses the δ-Sums.
+"""Galerkin-projection operations on the modal ansatz: sum expansion, test-function projection,
+bracket extraction and basis resolution. They carry a Model derivation from the unexpanded ansatz to
+basis-resolved moment equations.
 """
 
 from __future__ import annotations
@@ -57,6 +32,7 @@ __all__ = [
 
 
 def _bracket_tex(name):
+    """LaTeX renderer for the named bracket ``Gram`` or ``Weight``."""
     return {
         "Gram":   lambda A: rf"\langle \phi_{{{A[0]}}}, c\phi_{{{A[1]}}}\rangle",
         "Weight": lambda A: rf"\langle c, \phi_{{{A[0]}}}\rangle",
@@ -64,9 +40,11 @@ def _bracket_tex(name):
 
 
 def _mk_bracket(name):
+    """Build the sympy Function class for a named bracket (``Gram`` or ``Weight``)."""
     body = _bracket_tex(name)
 
     def _latex(expr, printer=None, exp=None):
+        """LaTeX printer of the bracket as an inner product."""
         render = printer._print if printer is not None else sp.latex
         A = [str(render(a)) for a in expr.args]
         s = body(A)
@@ -82,7 +60,7 @@ Weight = _mk_bracket("Weight")
 
 
 def bracket_atoms(expr):
-    """All named-bracket Function atoms present in ``expr``."""
+    """All named-bracket (``Gram``/``Weight``) atoms present in ``expr``."""
     return {a for a in expr.atoms(sp.Function)
             if getattr(a.func, "_is_bracket", False)}
 
@@ -95,11 +73,7 @@ _MODE_LETTERS = ["i", "j", "k", "m", "n", "o", "p", "q", "r", "s"]
 
 
 def _fresh_index(idx, used):
-    """A fresh integer, non-negative summation index NOT in ``used``, drawn from
-    the canonical mode-letter pool ``i, j, k, m, …`` so every expanded sum reads
-    in the SAME convention as the ansatz / closure indices (``Σ_{i,j}``, not the
-    suffixed ``Σ_{i_1,i_2}``).  Falls back to ``idx_n`` only if the pool is
-    exhausted."""
+    """A fresh summation index from the pool ``i, j, k, m, ...`` that is not in ``used``."""
     for nm in _MODE_LETTERS:
         cand = sp.Symbol(nm, integer=True, nonnegative=True)
         if cand not in used:
@@ -114,10 +88,9 @@ def _fresh_index(idx, used):
 
 
 def _merge_sums(sums):
-    """Merge ``sp.Sum`` factors into ONE multi-index Sum with DISTINCT indices
-    (so cross terms ``i ≠ j`` survive).  The FIRST occurrence of an index keeps
-    its name; later duplicates are relabelled to fresh mode letters — so
-    ``(Σ_i a_i φ_i)² → Σ_{i,j} a_i a_j φ_i φ_j`` rather than ``Σ_{i_1,i_2}``."""
+    """Merge ``Sum`` factors into one multi-index Sum with distinct indices, so cross terms ``i !=
+    j`` survive.
+    """
     used = set()
     for s in sums:
         used |= set(s.free_symbols)
@@ -137,8 +110,9 @@ def _merge_sums(sums):
 
 
 def _expand_sum_products(e):
-    """Recursively rewrite products / positive-integer powers of ``sp.Sum``
-    into a single multi-index Sum."""
+    """Rewrite products and positive integer powers of ``Sum`` into one multi-index Sum,
+    recursively.
+    """
     if not getattr(e, "args", None):
         return e
     e = e.func(*[_expand_sum_products(a) for a in e.args])
@@ -161,57 +135,40 @@ def _expand_sum_products(e):
 
 
 class ExpandSums(Operation):
-    """Expand products / integer powers of unexpanded ``sp.Sum`` factors into a
-    SINGLE multi-index ``Sum`` with DISTINCT dummies — cross terms kept.
-
-    A quadratic ``u·u`` with the modal ansatz ``u = Σ_i a_i φ_i`` becomes
-    ``(Σ_i a_i φ_i)²`` after substitution, and ``sympy`` keeps the two factors
-    SHARING ``i`` (silently dropping the ``i ≠ j`` cross terms).  ``ExpandSums``
-    relabels and merges:
-
-    .. math::
-
-        \\Bigl(\\sum_i a_i\\phi_i\\Bigr)^2
-            \\;\\longrightarrow\\;
-        \\sum_i\\sum_j a_i\\,a_j\\,\\phi_i\\,\\phi_j .
-
-    Apply it AFTER the ansatz substitution and BEFORE :class:`Project`.
+    """Merge products and integer powers of unexpanded ``Sum`` factors into one multi-index ``Sum``
+    with distinct dummies. Apply after the ansatz substitution and before :class:`Project`.
     """
 
     whole_leaf_op = True
 
     def __init__(self, name="expand_sums"):
+        """Create the operation."""
         super().__init__(
             name=name,
             description="products/powers of Sum → one multi-index Sum",
         )
 
     def _leaf_sp(self, sp_expr):
+        """Expand the sum products of one leaf expression."""
         return _expand_sum_products(sp_expr)
 
 
 class EvaluateSums(Operation):
-    """Unroll every FINITE ``sp.Sum`` (a concrete integer bound) to its explicit
-    modes: ``Σ_{i=0}^{2} a_i φ_i → a_0 φ_0 + a_1 φ_1 + a_2 φ_2``.
-
-    The modal ansatz from :func:`~zoomy_core.model.derivation.modal.separation_of_variables`
-    is an UNEXPANDED ``sp.Sum`` with an abstract bound ``N_u``; after
-    ``Substitution({N_u: N})`` binds the bound, ``sympy`` still keeps the ``Sum``
-    node — ``.doit()`` is what expands it.  This op is the operation form of the
-    bind-then-expand step (replacing the raw ``for eq: eq.expr.replace(Sum,
-    doit)`` loop), and is deliberately NARROWER than a bare ``expr.doit()``: it
-    only fires on ``Sum`` atoms, leaving any deferred ``Integral`` / ``Derivative``
-    untouched (the pipeline defers those on purpose)."""
+    """Unroll every finite ``Sum`` (concrete integer bound) to explicit modes, leaving ``Integral``
+    and ``Derivative`` deferred. Narrower than a bare ``doit()``.
+    """
 
     whole_leaf_op = True
 
     def __init__(self, name="evaluate_sums"):
+        """Create the operation."""
         super().__init__(
             name=name,
             description="finite Sum.doit() → explicit modes",
         )
 
     def _leaf_sp(self, sp_expr):
+        """Unroll finite sums with ``doit(deep=False)``, so inner integrals are not handed to sympy."""
         # ``deep=False`` is essential: a bare ``Sum.doit()`` first calls
         # ``self.function.doit()``, which descends into the opaque Galerkin
         # ``Integral(c φ_i φ_j φ_k …)`` and hands it to sympy's ``heurisch``
@@ -227,32 +184,10 @@ class EvaluateSums(Operation):
 
 
 def _integrate_one_term(term, var, lo, hi):
-    """Integrate a single additive term over ``(var, lo, hi)``.
-
-    The ``var``-INDEPENDENT factor comes out front; the ``var``-dependent body
-    ``rest`` is then resolved by shape:
-
-    * a BARE outer ``Derivative(g, (var,))`` (``∂_ζ`` of the whole body) →
-      **fundamental theorem of calculus**: ``g|_{var=hi} − g|_{var=lo}`` (this is
-      how the vertical-velocity boundary traces ``w̃(·,0/1)`` surface, ready for a
-      :class:`~zoomy_core.model.operations.KinematicBC`);
-    * a BARE outer ``Derivative(g, (w,))`` in another variable ``w ≠ var`` (a
-      CONSERVATIVE flux ``∂_x(F)`` whose ``φ·h`` was moved INSIDE by a prior
-      ``ProductRule``) → the derivative **commutes OUT** of the ζ-integral:
-      ``∂_x(∫ g dζ)``;
-    * a single unexpanded ``Sum`` factor → push the integral inside, leaving the
-      opaque ``φ`` bracket unevaluated;
-    * everything else (incl. σ-metric coefficient-derivative factors like
-      ``∂_x(ζh)`` that must NOT commute, and ``coeff·∂_x F`` terms whose ``φ/h``
-      were NOT folded in) → left as an opaque ``sp.Integral`` for
-      :class:`~zoomy_core.model.derivation.closure.ResolveIntegral` to close by basis.
-
-    The conservative commute fires ONLY on a *bare* outer derivative: a generic
-    ``coeff·∂_x F`` is left abstract, because pulling ``∂_x`` past an
-    ``x``-dependent ``coeff`` (e.g. ``h``) would give the NON-conservative
-    ``h·∂_x(…)`` instead of ``∂_x(h·…)``.  Moving ``φ·h`` inside the derivative
-    (so the term is bare) is the job of the ``ProductRule`` that precedes
-    ``Integrate`` in the projection.
+    """Integrate one additive term over ``(var, lo, hi)``: fundamental theorem for a bare ``var``
+    derivative, commute a bare conservative ``d_w`` out, push through a single ``Sum``, else leave
+    an opaque ``Integral``. The commute applies only to a bare outer derivative, since pulling
+    ``d_x`` past an ``x``-dependent coefficient is not conservative.
     """
     coeff, rest = term.as_independent(var, as_Add=False)
     if rest == 1:
@@ -295,11 +230,9 @@ def _integrate_one_term(term, var, lo, hi):
 
 
 def _integrate_through_sum(expr, var, lo, hi):
-    """Integrate ``expr`` over ``(var, lo, hi)``, pushing the integral *through*
-    any unexpanded ``sp.Sum``.  ``sympy``'s ``Integral.doit`` refuses to
-    interchange a Sum and an Integral with an abstract bound, so we do it by
-    hand — leaving the opaque ``φ`` integrals unevaluated (they become the
-    brackets).  Result: ``Σ_i coeff(i)·∫(var-dep) dvar``.  Zero ``Subs``."""
+    """Integrate ``expr`` over ``(var, lo, hi)`` term by term, pushing the integral through
+    unexpanded ``Sum`` factors.
+    """
     expr = sp.expand_mul(expr)
     out = sp.S.Zero
     for term in sp.Add.make_args(expr):
@@ -308,28 +241,22 @@ def _integrate_through_sum(expr, var, lo, hi):
 
 
 class Integrate(Operation):
-    """PURELY ABSTRACT definite integral: wrap EACH additive term of the leaf in
-    an unevaluated ``sp.Integral(term, (var, lo, hi))`` and stop.  It performs NO
-    evaluation — no FTC, no ``∂_x``-commute, no Sum-push, no basis substitution.
-    All of that "smart" resolution is the job of
-    :class:`~zoomy_core.model.derivation.closure.ResolveIntegral` (the ``auto`` method
-    classifies each ``∫`` atom: ``∂_ζ`` → FTC, ``∂_x`` → commute, ``Sum`` → push,
-    ``φ``-bracket → basis matrix) or of
-    :class:`ExtractBrackets` (``∫c·φ_i φ_l → Gram(i,l)``).
-
-    Wrapping per additive term keeps the result readable — one ``∫`` per term —
-    and lets the resolution step decide each term's fate independently.
-
-    When ``var`` also appears in the bounds (a RUNNING integral, e.g.
-    ``bounds=(0, ζ)``) the integration variable would collide with the bound and
-    later ops would drag the σ-coordinate ζ into the rename.  In that case the
-    integrand is bound to a fresh ``\\hat{<var>}`` Dummy, leaving the bound ζ
-    free: ``∫_0^ζ ũ(\\hat ζ) d\\hat ζ``.  Pass ``dummy=`` to choose the symbol.
+    """Purely abstract definite integral: wrap each additive term in an unevaluated ``Integral(term,
+    (var, lo, hi))``. Evaluation is left to ``ResolveIntegral`` or :class:`ExtractBrackets`; a
+    running integral (``var`` in the bounds) gets a fresh dummy variable.
     """
 
     whole_leaf_op = True
 
     def __init__(self, var=None, bounds=(0, 1), dummy=None, name="integrate"):
+        """Create the operation.
+
+        Args:
+            var: Integration variable (default zeta).
+            bounds: Integration interval.
+            dummy: Symbol to bind the integrand to (default: a fresh dummy only when ``var`` is in
+                the bounds).
+        """
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         self._bounds = tuple(bounds)
         self._dummy = dummy
@@ -338,6 +265,7 @@ class Integrate(Operation):
             description=f"∫ d{self._var} over {self._bounds} (abstract)")
 
     def _leaf_sp(self, sp_expr):
+        """Wrap each additive term of the expression in an unevaluated ``Integral``."""
         var, (lo, hi) = self._var, self._bounds
         # bind to a fresh dummy ONLY when var appears in the bounds (collision).
         bound_syms = sp.sympify(lo).free_symbols | sp.sympify(hi).free_symbols
@@ -353,32 +281,22 @@ class Integrate(Operation):
 
 
 class Project(Operation):
-    """Galerkin PROJECT — sugar for ``Multiply(test_function)`` then integrate
-    over ``(ζ, 0, 1)``.
+    """Galerkin projection: multiply by the test function, then integrate over ``(zeta, 0, 1)``
+    through the unexpanded ``Sum``. The opaque basis brackets stay unevaluated.
 
-    The test function is passed VERBATIM (typically ``c(ζ)·φ(l, ζ)``); the
-    multiply is the production
-    :class:`~zoomy_core.model.operations.Multiply`, and the integral pushes
-    *through* the unexpanded Sum so the opaque ``∫ φ·c·φ dζ`` brackets stay
-    unevaluated:
+    Args:
+        test_function: Full test weight, e.g. ``c(zeta) * phi(l, zeta)``.
+        var: Integration variable (default zeta).
+        bounds: Integration interval.
 
-    .. math::
-
-        \\sum_i a_i(t,x)\\,\\langle\\phi_i, c\\phi_l\\rangle .
-
-    Parameters
-    ----------
-    test_function : sympy.Expr
-        The full test weight to multiply by — e.g. ``c(ζ)·φ(l, ζ)``.
-    var : sympy.Symbol
-        ζ integration variable (default ``Symbol("zeta")``).
-    bounds : tuple[Expr, Expr]
-        Integration interval (default ``(0, 1)``).
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     whole_leaf_op = True
 
     def __init__(self, test_function, var=None, bounds=(0, 1), name="project"):
+        """Create the operation."""
         self._test = sp.sympify(test_function)
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         self._bounds = tuple(bounds)
@@ -390,6 +308,7 @@ class Project(Operation):
         )
 
     def _leaf_sp(self, sp_expr):
+        """Multiply by the test function and integrate."""
         scaled = self._multiply._leaf_sp(sp_expr)
         return self._integrate._leaf_sp(scaled)
 
@@ -398,10 +317,11 @@ class Project(Operation):
 
 
 def _dist_deriv_over_sum(expr):
-    """``∂_v(Σ_j body) → Σ_j ∂_v body`` with the ``v``-independent part of the
-    summand pulled out of the derivative — the derivative-side of "push the
-    operator-independent factor out"."""
+    """Rewrite ``d_v(Sum_j body)`` as ``Sum_j d_v body``, pulling the ``v``-independent factor of
+    the summand out.
+    """
     def _f(e):
+        """Replacement for one derivative of a Sum."""
         body, wrt = e.args[0].function, e.variables
         const, dep = (body.as_independent(*wrt)
                       if isinstance(body, sp.Mul) else (sp.S.One, body))
@@ -412,10 +332,12 @@ def _dist_deriv_over_sum(expr):
 
 
 def _pull_piece(piece, v, lo, hi):
-    """One additive term of an ``∫_v`` integrand: push an independent ``Σ`` out,
-    commute an independent ``∂_w`` (``w⊥v``, ``v``-dependent argument) out, or
-    hoist the ``v``-independent constant factor out — leaving a ``v``-dependent
-    body under ``∫_v``.  Returns ``(rewritten, changed)``."""
+    """Normalise one additive term of an ``Integral`` over ``v``: push an independent ``Sum`` out,
+    commute an independent ``d_w`` out, or hoist the ``v``-independent factor.
+
+    Returns:
+        ``(rewritten, changed)``.
+    """
     facs = list(piece.args) if isinstance(piece, sp.Mul) else [piece]
     # An independent ``Σ_j`` (``j ⊥ v``) commutes OUT of the integral.
     the_sum = next((f for f in facs if isinstance(f, sp.Sum)), None)
@@ -444,10 +366,9 @@ def _pull_piece(piece, v, lo, hi):
 
 
 def _normalize_one_integral(integ):
-    """Pull every bound-variable-INDEPENDENT factor / independent ``Σ`` /
-    commuting ``∂_w`` OUT of one ``∫_v`` (var-agnostic: reads the integral's own
-    bound variable), leaving a single ``v``-dependent body under each ``∫_v``.
-    No basis naming."""
+    """Pull every ``v``-independent factor, independent ``Sum`` and commuting ``d_w`` out of one
+    ``Integral`` over ``v``; basis-agnostic.
+    """
     limits = integ.args[1]
     if len(limits) != 3:
         return integ
@@ -462,21 +383,13 @@ def _normalize_one_integral(integ):
 
 
 def pull_out(expr):
-    """Pull every factor INDEPENDENT of a binding operator's variable OUT of that
-    operator — the linearity normalisation shared by ``∂`` and ``∫``:
-
-        ∂_v(c·f) → c·∂_v f          ∫_v c·f dv  → c·∫_v f dv        (c free of v)
-        ∂_v(Σ_j) → Σ_j ∂_v          ∫_v Σ_j  dv → Σ_j ∫_v dv        (j ⊥ v)
-                                    ∫_v ∂_w g dv → ∂_w ∫_v g dv     (w ⊥ v)
-
-    "Constant" means INDEPENDENT OF THE OPERATOR'S VARIABLE.  It is the GENTLE
-    normalisation: it NEVER applies the product rule to a ``v``-dependent product
-    (so it can neither split ``∂_v(a·b)`` nor undo a Leibniz fold), which is what
-    keeps it from competing with :func:`~zoomy_core.model.derivation.closure.consolidate`.
-    Applied bottom-up to a fixpoint."""
+    """Pull every factor independent of a binding operator's variable out of that derivative or
+    integral, to a fixpoint. Gentle: never applies the product rule to a variable-dependent product.
+    """
     from .closure import pull_consts
 
     def _walk(e):
+        """Bottom-up normalisation of every ``Integral``."""
         if hasattr(e, "args") and e.args:
             try:
                 e = e.func(*(_walk(a) for a in e.args))
@@ -496,26 +409,21 @@ def pull_out(expr):
 
 
 class PullConstants(Operation):
-    """Pull every factor INDEPENDENT of a binding operator's variable OUT of that
-    operator — for ``∫`` AND ``∂`` alike (see :func:`pull_out`).
-
-    This is the dedicated "factor-out" step the bracket pipeline runs BEFORE
-    :class:`ExtractBrackets`: coefficients ``a_j(t,x)``, mode-sums ``Σ_j`` and
-    coefficient derivatives ``∂_x a_j`` are lifted out of every ζ-integral, so
-    that what is left under an ``∫_ζ`` is purely ζ-dependent — only then is it
-    legitimate to NAME it a bracket (a pure number).  It is basis-agnostic
-    (knows nothing of ``φ``/``c``) and gentle (never splits a ζ-dependent
-    product), so it neither competes with the Leibniz folder
-    (:class:`~zoomy_core.model.derivation.closure.Consolidate`) nor hard-codes ζ."""
+    """Pull operator-independent factors out of every ``Integral`` and ``Derivative`` (see
+    :func:`pull_out`). Run before :class:`ExtractBrackets` so that only purely zeta-dependent bodies
+    remain under a bracket.
+    """
 
     whole_leaf_op = True
 
     def __init__(self, name="pull_constants"):
+        """Create the operation."""
         super().__init__(
             name=name,
             description="pull operator-independent factors out of ∫ / ∂")
 
     def _leaf_sp(self, sp_expr):
+        """Apply :func:`pull_out` to one leaf expression."""
         return pull_out(sp_expr)
 
 
@@ -523,35 +431,22 @@ class PullConstants(Operation):
 
 
 class ExtractBrackets(Operation):
-    """Replace ``Integral(φ-product, (ζ, 0, 1))`` with a named bracket atom or
-    an explicit ⟨…⟩ Integral, pulling ζ-independent factors out first.
+    """Name Galerkin brackets: a zeta-independent factor comes out as a constant, ``int phi_i c
+    phi_l`` becomes ``Gram(i, l)``, ``int c phi_l`` becomes ``Weight(l)``, any other pure-zeta body
+    stays an explicit ``Integral``. A non-zeta ``d_x`` wrapping the product commutes out
+    (conservative flux).
 
-    The UNIVERSAL rule (no Mixed/Triple pattern dance):
-
-    * a ζ-INDEPENDENT factor comes OUT as ``const``;
-    * the ζ-DEPENDENT body stays inside;
-    * ONLY two shapes keep a closed form for symbolic ``l`` (orthogonal
-      bases): ``∫ φ_i·c·φ_l dζ → Gram(i, l)`` and ``∫ c·φ_l dζ → Weight(l)``;
-    * every other ζ-dependent shape stays as ``Integral(body, (ζ, 0, 1))``,
-      rendered ``⟨body⟩`` by the strip-args printer, for ``ResolveBasis`` to
-      substitute the concrete basis and integrate;
-    * a non-ζ ``∂_x`` derivative wrapping the φ-product commutes OUT of the
-      integral (conservative flux): ``∫ c·φ_l·∂_x F dζ = ∂_x ∫ c·φ_l·F dζ``.
-
-    Parameters
-    ----------
-    basis : Basis
-        The opaque basis whose ``phi`` head is recognised.
-    var : sympy.Symbol
-        ζ integration variable (default ``Symbol("zeta")``).
-    weight_name : str, optional
-        Name of the weight Function ``c`` (default read off the basis).
+    Args:
+        basis: Opaque basis whose ``phi`` head is recognised.
+        var: Integration variable (default zeta).
+        weight_name: Name of the weight Function ``c`` (default read off the basis).
     """
 
     whole_leaf_op = True
 
     def __init__(self, basis, var=None, weight_name=None,
                  name="extract_brackets"):
+        """Create the operation."""
         super().__init__(name=name, description="extract basis brackets")
         self._basis = basis
         self._phi = getattr(basis, "phi", None) or getattr(basis, "phi_fn", basis)
@@ -561,7 +456,9 @@ class ExtractBrackets(Operation):
         self._weight_name = weight_name
 
     def _phi_indices(self, factors):
-        """φ-indices among ``factors`` plus weight / ∂-weight flags."""
+        """Split ``factors`` into phi indices and remaining factors, with weight and
+        weight-derivative flags.
+        """
         idx, rest = [], []
         has_weight = has_dweight = False
         for a in factors:
@@ -582,13 +479,11 @@ class ExtractBrackets(Operation):
         return idx, rest, has_weight, has_dweight
 
     def _to_bracket(self, integrand, v=None, lo=sp.S.Zero, hi=sp.S.One):
-        """Generic split: const out, ⟨body⟩ stays, Gram/Weight closed form.
+        """Split an integrand into a constant and a bracket (``Gram``/``Weight`` over (0, 1), else
+        an opaque ``Integral``).
 
-        Returns the rewritten piece, or ``None`` when there is nothing for
-        EXTRACT to claim (a pure non-φ term) so the caller keeps the original
-        integral as-is.  The opaque bracket keeps the integral's OWN ``(lo, hi)``
-        bounds; the closed-form ``Gram``/``Weight`` names are emitted only over
-        the canonical reference interval ``(0, 1)`` (their δ-form assumes it).
+        Returns:
+            The rewritten piece, or ``None`` when nothing is claimed.
         """
         if v is None:
             v = self._var
@@ -615,13 +510,7 @@ class ExtractBrackets(Operation):
         return const * sp.Integral(dep, (v, lo, hi))
 
     def _name_one_integral(self, integ):
-        """NAME one ``∫_v`` — assuming a :class:`PullConstants`-normalised input
-        (no ``v``-independent factors / sums left inside).  Each additive term's
-        ζ-body is matched by HEAD to ``Gram`` / ``Weight`` (over the canonical
-        ``(0,1)``) or kept as an explicit ⟨…⟩ Integral over its own bounds.  A
-        non-φ term is left as a plain Integral.  Var-agnostic (reads the
-        integral's OWN bound variable, so the canonicalised ``\\hat ζ`` dummy and
-        a running ``∫_0^ζ`` are handled the same way)."""
+        """Name one ``Integral`` term by term, assuming a PullConstants-normalised input."""
         limits = integ.args[1]
         if len(limits) != 3:
             return integ
@@ -637,6 +526,7 @@ class ExtractBrackets(Operation):
         return out if changed else integ
 
     def _leaf_sp(self, expr):
+        """Run :func:`pull_out`, then name every ``Integral`` in the expression."""
         # SHARP gate: first run the general :func:`pull_out` (PullConstants) so
         # every ζ-independent factor / sum is hoisted out — only THEN is a
         # ``∫_0^1`` over a purely ζ-dependent body, which :meth:`_to_bracket`
@@ -645,6 +535,7 @@ class ExtractBrackets(Operation):
         expr = pull_out(expr)
 
         def _walk(e):
+            """Bottom-up naming of every ``Integral``."""
             if hasattr(e, "args") and e.args:
                 try:
                     e = e.func(*(_walk(a) for a in e.args))
@@ -660,25 +551,14 @@ class ExtractBrackets(Operation):
 
 
 class ResolveBasis(Operation):
-    """Resolve EVERY Galerkin bracket in the equation to a NUMBER against a
-    CONCRETE basis — a thin op over
-    :meth:`~zoomy_core.model.derivation.basisfunctions.Basisfunction.resolve` (fast
-    antiderivative + per-instance cache; named ``Gram``/``Weight`` close by their
-    orthogonality forms, opaque ``⟨…⟩`` and the nested ω-coupling integrals by
-    polynomial evaluation, loose ``φ_i(0)``/``c(0)`` boundary terms concretised).
-
-    Apply it AFTER :class:`~zoomy_core.model.derivation.model.ResolveModes` has
-    specialised the abstract test index to a concrete moment (and the modal sums
-    are unrolled), so every bracket index is an integer::
-
-        legendre = Legendre_shifted(level=N)
-        m.momentum.x.apply(ResolveModes(index=k, modes=range(N + 1)))
-        m.momentum.apply(ResolveBasis(legendre))
+    """Resolve every Galerkin bracket to a number against a concrete basis via
+    ``Basisfunction.resolve``. Apply after ``ResolveModes`` has made every bracket index an integer.
     """
 
     whole_leaf_op = True
 
     def __init__(self, basis, var=None, name="resolve_basis"):
+        """Create the operation."""
         self._basis = basis
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         super().__init__(
@@ -686,4 +566,5 @@ class ResolveBasis(Operation):
             description=f"resolve brackets via {getattr(basis, 'name', basis)}")
 
     def _leaf_sp(self, sp_expr):
+        """Resolve the brackets of one leaf expression against the basis."""
         return self._basis.resolve(sp_expr, self._var)

@@ -1,32 +1,7 @@
-"""Declared state ROLES of a SystemModel — the general-PDE replacement for
-name-based inference (``h``, ``b``, ``g``, ``hinv``).
-
-A role is a fact the MODEL states about its own state vector:
-
-* ``depth``      — the row carrying the water depth (free-surface models only);
-* ``bed``        — the row carrying the bathymetry;
-* ``stationary`` — rows whose evolution is identically zero (no flux, no
-  source, no dissipation may act on them);
-* ``positive``   — rows the model's analytic sign assumptions declare
-  positive / non-negative;
-* ``momentum``   — the momentum rows per horizontal direction:
-  ``momentum[d]`` lists the direction-``d`` components, aligned across ``d``
-  (``momentum[0][k]`` and ``momentum[1][k]`` are the x/y components of the
-  SAME vector — one moment / layer / mode);
-* ``gravity``    — the NAME of the gravity parameter.
-
-Generic code reads :class:`Roles` only.  A model with no declaration (a
-tracer, Burgers, Euler) has ``depth is None`` and gets none of the
-free-surface specialisations, whatever its fields happen to be called.
-
-Storage: a declaration is a record in ``sm.history`` (``{"name":
-"declare_roles", "roles": {...}}``) holding FIELD NAMES, resolved to row
-indices against the current ``sm.state`` on every read.  The history is the
-one attribute every SystemModel copy carries along (``deepcopy``, the
-assumption-free NSM twin, the Chorin splitter stages, the padded predictor of
-the old Chorin solvers), so the declaration survives every hand-built copy
-without each construction site having to know about roles.  Later records
-override earlier ones key by key.
+"""Declared state roles of a ``SystemModel`` (depth, bed, stationary, positive, momentum,
+gravity), stored as ``sm.history`` records of field names.
+Generic code reads ``Roles`` instead of guessing from field names; a model with no declaration
+gets no free-surface specialisation.
 """
 from __future__ import annotations
 
@@ -45,7 +20,9 @@ _UNSET = object()
 
 @dataclass(frozen=True)
 class Roles:
-    """Resolved roles: row INDICES into ``sm.state`` (see module docstring)."""
+    """Resolved roles: row indices into ``sm.state`` for depth, bed, stationary, positive and
+    momentum rows, plus the gravity parameter name.
+    """
 
     depth: Optional[int] = None
     bed: Optional[int] = None
@@ -59,10 +36,7 @@ class Roles:
 
     @property
     def depth_declared(self) -> bool:
-        """True iff the model made a statement about its depth row (possibly
-        "none").  Legacy name-based fallbacks of the free-surface-only
-        components (Audusse HR solvers, opt-in depth operations) apply ONLY
-        to systems that never made such a statement."""
+        """True iff the model made a statement about its depth row (possibly "none")."""
         return "depth" in self.declared_keys
 
     @property
@@ -72,8 +46,9 @@ class Roles:
 
     @property
     def momentum_vectors(self) -> Tuple[Tuple[int, ...], ...]:
-        """The momentum rows grouped per VECTOR (one tuple per moment/layer,
-        one entry per direction) — the transpose of :attr:`momentum`."""
+        """Momentum rows grouped per vector (one tuple per moment/layer, one entry per direction);
+        the transpose of ``momentum``.
+        """
         if not self.momentum:
             return ()
         return tuple(tuple(v) for v in zip(*self.momentum))
@@ -83,6 +58,7 @@ class Roles:
         nm = self.names
 
         def one(i):
+            """State name of row ``i`` (``None`` stays ``None``)."""
             return None if i is None else nm[i]
         return {
             "depth": one(self.depth), "bed": one(self.bed),
@@ -94,12 +70,14 @@ class Roles:
 
 
 def _state_names(sm) -> list:
+    """State names of ``sm`` as strings."""
     return [str(s) for s in sm.state]
 
 
 def _as_name(sm, ref) -> str:
-    """Normalise a row reference (name, Symbol, applied Function, index) to the
-    state NAME, validating that it exists."""
+    """Normalise a row reference (name, Symbol, applied Function or index) to a validated state
+    name.
+    """
     names = _state_names(sm)
     if isinstance(ref, bool):
         raise TypeError(f"role reference {ref!r} is not a state field")
@@ -118,16 +96,15 @@ def _as_name(sm, ref) -> str:
 
 
 def _carries_sign(sym) -> bool:
+    """True if the symbol carries a positive or non-negative assumption."""
     return any(getattr(sym, f"is_{p}", None) is True for p in _SIGN_PREDICATES)
 
 
 def assumption_positive_names(sm) -> list:
-    """State fields whose SYMBOL carries a positive / non-negative assumption.
-
-    Valid on a SystemModel only: the NSM strips state assumptions at its
-    boundary (:func:`~zoomy_core.numerics.numerical_system_model.
-    construct_numerical`), so this must be read BEFORE that — which is what
-    :func:`declare_roles` does when it records ``positive``."""
+    """State fields whose symbol carries a positive or non-negative assumption.
+    Valid on a ``SystemModel`` only, because the ``NumericalSystemModel`` strips state
+    assumptions.
+    """
     return [str(s) for s in sm.state
             if isinstance(s, sp.Symbol) and _carries_sign(s)]
 
@@ -135,11 +112,13 @@ def assumption_positive_names(sm) -> list:
 def declare_roles(sm, *, depth=_UNSET, bed=_UNSET, stationary=_UNSET,
                   positive=_UNSET, momentum=_UNSET, gravity=_UNSET,
                   description: Optional[str] = None):
-    """Record a role declaration on ``sm`` (a history record, see the module
-    docstring).  Only the keys passed are recorded; ``None`` explicitly clears
-    a scalar role.  Field references may be names, Symbols, applied field
-    Functions or row indices; they are validated and stored as NAMES.
-    Returns ``sm``."""
+    """Record a role declaration on ``sm`` (a ``history`` record) and return ``sm``.
+
+    Args:
+        depth, bed, stationary, positive, momentum, gravity: only the keys passed are recorded;
+            ``None`` clears a scalar role.
+        description: label of the history record.
+    """
     rec = {}
     if depth is not _UNSET:
         rec["depth"] = None if depth is None else _as_name(sm, depth)
@@ -190,24 +169,18 @@ def declared_role_record(sm) -> dict:
 
 
 def resolve_roles(sm) -> Roles:
-    """Resolve the declared roles against the CURRENT state.
-
-    Undeclared keys fall back to STRUCTURE, never to names:
-
-    * ``stationary`` → :attr:`SystemModel.stationary_indices` (rows that are
-      identically zero in every operator slot);
-    * ``positive``   → the state symbols' sign assumptions (empty on an NSM,
-      whose state symbols are assumption-free by construction).
-
-    A declared field that is no longer in the state (e.g. after a change of
-    state variables) resolves to "absent"."""
+    """Resolve the declared roles against the current state; undeclared
+    ``stationary``/``positive`` fall back to structure and sign assumptions, never to names.
+    """
     names = _state_names(sm)
     rec = declared_role_record(sm)
 
     def idx(name):
+        """Row index of state name ``name`` (``None`` if absent)."""
         return names.index(name) if (name is not None and name in names) else None
 
     def idx_list(lst):
+        """Row indices of the names in ``lst`` that are still in the state."""
         return tuple(i for i in (idx(n) for n in lst) if i is not None)
 
     if rec.get("stationary") is not None:
@@ -234,16 +207,9 @@ def resolve_roles(sm) -> Roles:
 
 
 def derive_momentum_directions(sm, depth=None) -> Optional[list]:
-    """The momentum rows per direction, DERIVED — never guessed from names.
-
-    1. From the model's own ``interpolate_to_3d`` lift (the ``[b, h, u, v,
-       w, p]`` registry every derived free-surface family registers) via
-       :func:`~zoomy_core.model.boundary_conditions.derive_momentum_field_indices`.
-    2. Without a usable lift, from the MASS BALANCE: the direction-``d``
-       momentum rows are the state rows the depth row's flux depends on
-       (``∂_t h + ∂_d Σ q_d = 0``; a multilayer system sums its layers).
-
-    Returns per-direction NAME lists, or ``None`` when neither applies."""
+    """Momentum rows per direction as name lists, derived from the model's ``interpolate_to_3d``
+    lift or, failing that, from the depth row's mass-balance flux; ``None`` if neither applies.
+    """
     from zoomy_core.model.boundary_conditions import (
         derive_momentum_field_indices)
     names = _state_names(sm)
@@ -276,12 +242,12 @@ def derive_momentum_directions(sm, depth=None) -> Optional[list]:
 def declare_free_surface_roles(sm, *, depth, bed=None, gravity=None,
                                momentum="derive", positive="assumptions",
                                description=None):
-    """The free-surface specialisation: declare ``depth`` / ``bed`` /
-    ``gravity``, the bed as the stationary row, the momentum groups (derived
-    from the model's lift unless given) and ``positive`` (the analytic sign
-    assumptions plus the depth).  The admissibility list of a system that
-    declares none defaults to ``[depth]`` (see
-    :meth:`SystemModel.admissible_constraints`).  Returns ``sm``."""
+    """Declare the free-surface roles (depth, bed as stationary row, gravity, momentum groups,
+    positive rows) and tag ``sm`` as ``free_surface``.
+
+    Returns:
+        ``sm``.
+    """
     depth_name = _as_name(sm, depth)
     bed_name = None if bed is None else _as_name(sm, bed)
     if momentum == "derive":
@@ -302,11 +268,9 @@ def declare_free_surface_roles(sm, *, depth, bed=None, gravity=None,
 
 
 def infer_sigma_map_roles(sm, model) -> bool:
-    """Declare depth / bed from a σ-mapped derivation model's coordinate
-    relation ``z = b + h·ζ`` (recorded by ``PDETransformation`` in
-    ``model.coord_relations``).  STRUCTURAL: the depth is the coefficient of
-    the reference coordinate, the bed the relation at ``ζ = 0``; both must be
-    single state fields.  Returns True when a declaration was made."""
+    """Declare depth and bed from a sigma-mapped model's relation ``z = b + h*zeta``; returns True
+    when a declaration was made.
+    """
     rel = getattr(model, "coord_relations", None) or {}
     zeta = getattr(model, "_vertical", None) or getattr(model, "vertical", None)
     if not rel or zeta is None:
@@ -314,6 +278,7 @@ def infer_sigma_map_roles(sm, model) -> bool:
     names = set(_state_names(sm))
 
     def field_name(expr):
+        """Name of ``expr`` if it is a single state field, else ``None``."""
         expr = sp.sympify(expr)
         if isinstance(expr, sp.Symbol):
             return str(expr) if str(expr) in names else None

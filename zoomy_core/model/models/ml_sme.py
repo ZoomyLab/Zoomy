@@ -1,22 +1,7 @@
-"""ML-SME — multilayer shallow MOMENT equations, the declarative canonical
-model.
-
-Every layer is a full SME column (moments ``q_ℓ_0 … q_ℓ_level`` + the ŵ
-closure), derived per layer with its own σ-map and
-``KinematicBC(mass_flux=G)`` interfaces; the internal-interface mass fluxes
-are closed by the **Hörnschemeyer fraction-multiplier**
-(``h_ℓ = l_ℓ·h`` ⇒ ``G_ℓ = ρ·Σ_{j≤ℓ}(l_j·∂_x Q − ∂_x q_j_0)``), exactly as
-:class:`~zoomy_core.model.models.ml_swe.MLSWE`.
-
-Moment-specific care: G also enters the moment rows through the ŵ closure —
-those terms are KINEMATIC (the vertical velocity carries the mass flux; no
-velocity ambiguity) and stay untouched.  Only the advection-trace TRANSFER
-``±φ_k(side)·u_ℓ(side)·G/ρ`` gets the shared interface velocity ``u*``
-(sign-of-G upwind, Hörnschemeyer Eq. 9, or mean), via the surgical
-correction ``mom_k += ±φ_k(side)·(u* − u_ℓ(side))·G/ρ`` with the modal
-traces ``u_ℓ(1) = Σ_i q_ℓ_i/h_ℓ``, ``u_ℓ(0) = Σ_i (−1)^i q_ℓ_i/h_ℓ``.
-
-State: ``[b, h, q_1_0 … q_1_level, …, q_N_0 … q_N_level]``.
+"""Multilayer shallow moment equations (ML-SME): every layer is a full SME moment column, with
+interface mass fluxes closed by the layer-fraction constraint. State is
+``[b, h, q_1_0 ... q_N_level]``; the model is lifted to a SystemModel via
+``SystemModel.from_model``.
 """
 from __future__ import annotations
 
@@ -46,18 +31,21 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class MLSME(BaseModel):
-    """Multilayer SME: ``n_layers`` moving-with-the-surface layers, each a
-    moment column of order ``level``."""
+    """Multilayer SME with ``n_layers`` layers that move with the free surface, each a moment
+    column of order ``level``. The interface transfer velocity is upwinded or averaged through
+    the ``closures`` (``UpwindInterface`` / ``MeanInterface``); the kinematic ``w`` terms stay
+    untouched.
+
+    References:
+        Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+    """
 
     _finalize_lazy = True
     _cacheable_derivation = True        # derive_model returns m; byproducts on m
     n_layers = param.Integer(default=2, bounds=(1, None))
     level = param.Parameter(default=1, doc=(
-        "Moment truncation order per layer.  An int applies the SAME order to "
-        "every layer (the canonical MLSME).  A list ``[N_1, …, N_{n_layers}]`` "
-        "sets a PER-LAYER degree — e.g. ``level=[2, 0]`` makes the bottom layer "
-        "quadratic-sheared and the top a stress-free deg-0 PLUG (REQ-160: drops "
-        "the ε-stiffness of a viscoplastic film's yielded cap)."))
+        "Moment truncation order per layer: an int applies to every layer, a "
+        "list ``[N_1, …, N_{n_layers}]`` sets it per layer."))
     dimension = param.Integer(default=2, bounds=(2, 3), doc=(
         "Total spatial dimension incl. vertical: 2 → (t,x,z), one horizontal "
         "(q_ℓ_i); 3 → (t,x,y,z), two horizontal (q_x_ℓ_i, q_y_ℓ_i).  Each layer "
@@ -77,6 +65,11 @@ class MLSME(BaseModel):
         "SME.project_nz.  Each layer reduces its own sub-column to moments."))
 
     def derive_model(self):
+        """Derive each layer as an SME column, close the interface mass fluxes ``G`` from the
+        fraction constraint, and assemble the model. Returns the derivation model with
+        continuity, one momentum equation per layer / direction / mode, and the interpolate,
+        project and wall rows.
+        """
         N = int(self.n_layers)
         # per-layer moment order: int → uniform (byte-identical to before);
         # list → one degree per layer (REQ-160 stress-free plug top).
@@ -96,11 +89,14 @@ class MLSME(BaseModel):
         # horizontal keeps q_ℓ / û_ℓ (byte-identical); 2 horizontal → q_x_ℓ,
         # q_y_ℓ / û_ℓ, v̂_ℓ.
         def qname(xd, ell):
+            """Name of the discharge of layer ``ell`` in direction ``xd``."""
             return f"q_{ell}" if dim == 2 else f"q_{CN[xd]}_{ell}"
         def shat(xd, ell):
+            """Name of the velocity coefficient of layer ``ell`` in direction ``xd``."""
             return (rf"\hat{{u}}_{ell}" if dim == 2
                     else rf"\hat{{{HNAME[xd]}}}_{ell}")
         def sname(xd, ell):
+            """Name of the shear-stress field of layer ``ell`` in direction ``xd``."""
             return f"tau_{ell}" if dim == 2 else f"tau_{CN[xd]}z_{ell}"
         # e_x (downslope gravity component) is minted on the per-layer sub-model
         # by gravity_components (mirrors SME/VAM); declare it on the assembled
@@ -138,6 +134,9 @@ class MLSME(BaseModel):
                              for c in (self.closures or []))
 
         def derive_layer(ell):
+            """Return the continuity and the per-direction modal momentum rows of layer ``ell``
+            as ``(cont, {direction: [row per mode]})``.
+            """
             Nu = levels[ell - 1]            # per-layer moment order
             z_bot, z_top, h_l = ifaces[ell - 1], ifaces[ell], hl[ell - 1]
             G_bot, G_top = Gf[ell - 1], Gf[ell]
@@ -168,6 +167,9 @@ class MLSME(BaseModel):
                                     uvel, list(horiz), nu_s)
 
             def _kbc(iface, G):
+                """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
+                mass flux ``G``.
+                """
                 kw = dict(w=w, u=uvel[0], interface=iface, rho=rl,
                           mass_flux=(G if G != 0 else None))
                 if dim == 3:
@@ -201,6 +203,7 @@ class MLSME(BaseModel):
                 c.register(ml)
 
             def _state(at, *, alias=None, btag=None):
+                """Closure state of layer ``ell`` evaluated at the vertical location ``at``."""
                 fields = {"u": getattr(ml.functions, f"u_{ell}"),
                           "w": getattr(ml.functions, f"w_{ell}")}
                 if dim == 3:
@@ -312,7 +315,9 @@ class MLSME(BaseModel):
         inner_basis = Legendre_shifted(level=max(levels) + 2)
 
         def _trace(ell, side, xd):
-            """Modal interface velocity of layer ℓ in direction xd at ζ=side."""
+            """Modal velocity of layer ``ell`` in direction ``xd`` at local height ``side`` (0
+            bottom, 1 top).
+            """
             sgn = lambda i: inner_basis.eval(i, side)
             return (sum(sgn(i) * q_mod[ell][xd][i]
                         for i in range(levels[ell - 1] + 1))
@@ -322,7 +327,9 @@ class MLSME(BaseModel):
         iface = interface_closure(self.closures)
 
         def _ustar(a, xd):
-            """Per-direction shared transfer velocity at internal interface α."""
+            """Transfer velocity ``u*`` shared by the layers adjacent to internal interface
+            ``a`` in direction ``xd``.
+            """
             below, above = _trace(a, 1, xd), _trace(a + 1, 0, xd)
             if iface is not None:
                 return iface.expression(below, above, G_sol[Gf[a]])
@@ -401,6 +408,9 @@ class MLSME(BaseModel):
             cum.append(cum[-1] + lf)
 
         def _u_piecewise(xd):
+            """Velocity profile in direction ``xd`` over global ``zeta``, piecewise over the
+            layers.
+            """
             pieces = []
             for ell in range(1, N + 1):
                 lf, c0 = l_all[ell - 1], cum[ell - 1]

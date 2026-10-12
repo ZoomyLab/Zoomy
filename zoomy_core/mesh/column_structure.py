@@ -1,13 +1,5 @@
-"""Column structure for extruded meshes.
-
-Provides vertical column mapping and numerical integration operations
-for meshes built by ``BaseMesh.extrude_2d()`` or ``mesh_extrude``.
-
-Cell indexing convention (from extrusion):
-    cell_3d = iz * n_horizontal + i_horizontal
-
-where ``iz`` is the layer index (0 = bottom, n_layers-1 = top) and
-``i_horizontal`` is the horizontal cell index.
+"""Column structure of extruded meshes (cell index = ``iz * n_horizontal + i_horizontal``) for
+vertical integrals in sigma coordinates.
 """
 
 from __future__ import annotations
@@ -16,20 +8,14 @@ import numpy as np
 
 
 class ColumnStructure:
-    """Vertical column mapping for extruded meshes.
-
-    Precomputes column-cell mapping and layer weights for numerical
-    vertical integration in sigma coordinates (zeta in [0, 1]).
-
-    Parameters
-    ----------
-    n_horizontal : int
-        Number of horizontal (inner) cells.
-    n_layers : int
-        Number of vertical layers.
+    """Column-to-cell mapping and uniform layer weights of an extruded mesh, in sigma coordinate
+    zeta in [0, 1].
     """
 
     def __init__(self, n_horizontal: int, n_layers: int):
+        """Build the ``(n_horizontal, n_layers)`` column-cell table for ``n_horizontal`` cells and
+        ``n_layers`` layers.
+        """
         self.n_horizontal = n_horizontal
         self.n_layers = n_layers
 
@@ -46,19 +32,12 @@ class ColumnStructure:
         self.zeta_midpoints = (np.arange(n_layers) + 0.5) / n_layers
 
     def integrate(self, Q: np.ndarray) -> np.ndarray:
-        """Numerical vertical integral: integral_0^1 Q(zeta) dzeta.
+        """Midpoint-rule vertical integral of ``Q`` over zeta in [0, 1].
 
-        Midpoint rule over uniform layers.
-
-        Parameters
-        ----------
-        Q : ndarray, shape (n_vars, n_3d_cells)
-            Field values on the full extruded mesh.
-
-        Returns
-        -------
-        ndarray, shape (n_vars, n_horizontal)
-            Vertically integrated values per horizontal cell.
+        Args:
+            Q: ``(n_vars, n_3d_cells)`` field on the extruded mesh.
+        Returns:
+            ``(n_vars, n_horizontal)`` integrals per column.
         """
         n_vars = Q.shape[0]
         result = np.zeros((n_vars, self.n_horizontal))
@@ -68,22 +47,13 @@ class ColumnStructure:
         return result
 
     def partial_integrate(self, Q: np.ndarray, from_top: bool = True) -> np.ndarray:
-        """Running vertical integral per cell.
+        """Running vertical integral per cell, from the surface down (``from_top``) or from the
+        bottom up.
 
-        Computes integral_zeta^1 Q(zeta') dzeta' (from_top=True) or
-        integral_0^zeta Q(zeta') dzeta' (from_top=False).
-
-        Parameters
-        ----------
-        Q : ndarray, shape (n_vars, n_3d_cells)
-        from_top : bool
-            If True, integrate from surface (zeta=1) downward.
-            If False, integrate from bottom (zeta=0) upward.
-
-        Returns
-        -------
-        ndarray, shape (n_vars, n_3d_cells)
-            Running integral value at each cell.
+        Args:
+            Q: ``(n_vars, n_3d_cells)`` field on the extruded mesh.
+        Returns:
+            ``(n_vars, n_3d_cells)`` running integral at each cell.
         """
         n_vars = Q.shape[0]
         result = np.zeros_like(Q)
@@ -102,15 +72,8 @@ class ColumnStructure:
         return result
 
     def scatter_to_column(self, Q_horiz: np.ndarray) -> np.ndarray:
-        """Broadcast horizontal values to all layers in each column.
-
-        Parameters
-        ----------
-        Q_horiz : ndarray, shape (n_vars, n_horizontal)
-
-        Returns
-        -------
-        ndarray, shape (n_vars, n_3d_cells)
+        """Broadcast ``(n_vars, n_horizontal)`` values to every layer, giving ``(n_vars,
+        n_3d_cells)``.
         """
         n_vars = Q_horiz.shape[0]
         Q_3d = np.zeros((n_vars, self.n_horizontal * self.n_layers))
@@ -120,17 +83,6 @@ class ColumnStructure:
         return Q_3d
 
     def gather_layer(self, Q: np.ndarray, iz: int) -> np.ndarray:
-        """Extract values at a single layer.
-
-        Parameters
-        ----------
-        Q : ndarray, shape (n_vars, n_3d_cells)
-        iz : int
-            Layer index (0 = bottom, n_layers-1 = top).
-
-        Returns
-        -------
-        ndarray, shape (n_vars, n_horizontal)
-        """
+        """Extract layer ``iz`` (0 = bottom) of ``Q`` as ``(n_vars, n_horizontal)``."""
         cells = self.column_cells[:, iz]
         return Q[:, cells]

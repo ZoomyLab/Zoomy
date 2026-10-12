@@ -1,9 +1,11 @@
-"""Module `zoomy_core.mesh.mesh_util`."""
+"""Reference-element geometry (face order, normals, areas, volumes, inradii) for the supported cell
+types, used by ``BaseMesh``.
+"""
 
 import numpy as np
 
 def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
-    """Convert mesh type to meshio mesh type."""
+    """Map a Zoomy cell type (``wface`` = wedge) to the meshio cell-type name."""
     if mesh_type == "triangle":
         return "triangle"
     elif mesh_type == "hexahedron":
@@ -20,7 +22,7 @@ def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
         assert False
 
 def _get_n_nodes_per_element(mesh_type: str) -> int:
-    """Internal helper `_get_n_nodes_per_element`."""
+    """Number of vertices of a cell of ``mesh_type``."""
     if (mesh_type) == "quad":
         return 4
     elif (mesh_type) == "triangle":
@@ -35,7 +37,9 @@ def _get_n_nodes_per_element(mesh_type: str) -> int:
         assert False
 
 def get_extruded_mesh_type(mesh_type: str) -> str:
-    """Get extruded mesh type."""
+    """Cell type obtained by extruding ``mesh_type`` one layer (line -> quad, triangle -> wface,
+    quad -> hexahedron).
+    """
     if (mesh_type) == "quad":
         return "hexahedron"
     elif (mesh_type) == "triangle":
@@ -49,7 +53,9 @@ def get_extruded_mesh_type(mesh_type: str) -> str:
 def get_global_cell_index_from_vertices(
     cells, coordinates, return_first=True, offset=0
 ):
-    """Get global cell index from vertices."""
+    """Index (plus ``offset``) of the first cell, or of all cells if ``return_first`` is False,
+    containing every vertex in ``coordinates``.
+    """
     hits = []
     for index, cell in enumerate(cells):
         if set(coordinates).issubset(set(cell)):
@@ -62,7 +68,9 @@ def get_global_cell_index_from_vertices(
 
 
 def get_element_neighbors(element_vertices, current_elem, mesh_type):
-    """Get element neighbors."""
+    """Elements sharing a face with ``current_elem``; returns ``(n_found, neighbour_indices,
+    local_face_indices)``.
+    """
     num_vertices_per_face = _get_num_vertices_per_face(mesh_type)
     max_num_neighbors = _get_faces_per_element(mesh_type)
     element_neighbor_indices = np.zeros((max_num_neighbors), dtype=int)
@@ -87,7 +95,9 @@ def get_element_neighbors(element_vertices, current_elem, mesh_type):
 
 
 def face_normals(coordinates, element, mesh_type) -> float:
-    """Face normals."""
+    """Unit normals of the faces of one element, ``(n_faces, 3)``; orientation follows the vertex
+    order.
+    """
     if mesh_type == "triangle":
         return _face_normals_2d(coordinates, element, mesh_type)
     elif mesh_type == "quad":
@@ -102,7 +112,7 @@ def face_normals(coordinates, element, mesh_type) -> float:
 
 
 def _face_normals_2d(coordinates, element, mesh_type) -> float:
-    """Internal helper `_face_normals_2d`."""
+    """Unit edge normals of a 2D element (edge direction crossed with ez)."""
     edges = _face_order(element, mesh_type)
     ez = np.array([0, 0, 1], dtype=float)
     normals = np.zeros((len(edges), 3), dtype=float)
@@ -122,7 +132,7 @@ def _face_normals_2d(coordinates, element, mesh_type) -> float:
 
 
 def _face_normals_3d(coordinates, element, mesh_type) -> float:
-    """Internal helper `_face_normals_3d`."""
+    """Unit face normals of a 3D element from the cross product of each face's first two edges."""
     faces = _face_order(element, mesh_type)
     boundary_mesh_type = _get_boundary_element_type(mesh_type)
     normals = np.zeros((len(faces), 3), dtype=float)
@@ -140,7 +150,7 @@ def _face_normals_3d(coordinates, element, mesh_type) -> float:
 
 
 def _face_normals_wface(coordinates, element, mesh_type) -> float:
-    """Internal helper `_face_normals_wface`."""
+    """Unit face normals of a wedge element (same construction as ``_face_normals_3d``)."""
     faces = _face_order(element, mesh_type)
     boundary_mesh_type = _get_boundary_element_type(mesh_type)
     normals = np.zeros((len(faces), 3), dtype=float)
@@ -158,7 +168,7 @@ def _face_normals_wface(coordinates, element, mesh_type) -> float:
 
 
 def face_areas(coordinates, element, mesh_type) -> float:
-    """Face areas."""
+    """Area (length in 2D) of each face of one element."""
     num_faces = _get_faces_per_element(mesh_type)
     faces = _face_order(element, mesh_type)
     boundary_mesh_type = _get_boundary_element_type(mesh_type)
@@ -171,7 +181,7 @@ def face_areas(coordinates, element, mesh_type) -> float:
 
 
 def center(coordinates, element) -> float:
-    """Center."""
+    """Vertex-average centre of ``element``."""
     center = np.zeros(3, dtype=float)
     dim = coordinates.shape[1]
     for vertex_coord in coordinates[np.array(element)]:
@@ -181,7 +191,7 @@ def center(coordinates, element) -> float:
 
 
 def volume(coordinates, element, mesh_type) -> float:
-    """Volume."""
+    """Volume (area in 2D, length for lines) of one element of ``mesh_type``."""
     if mesh_type == "line":
         return edge_length(coordinates, element)
     elif mesh_type == "triangle":
@@ -198,13 +208,13 @@ def volume(coordinates, element, mesh_type) -> float:
 
 
 def _area_triangle(coordinates, element) -> float:
-    """Internal helper `_area_triangle`."""
+    """Triangle area from its edge lengths."""
     edges = _edge_order_triangle(element)
     return _area_triangle_heron_formula(coordinates, edges)
 
 
 def _area_triangle_heron_formula(coordinates, edges):
-    """Internal helper `_area_triangle_heron_formula`."""
+    """Triangle area from its three edges by Heron's formula."""
     perimeter = 0.0
     for edge in edges:
         perimeter += edge_length(coordinates, edge)
@@ -217,7 +227,7 @@ def _area_triangle_heron_formula(coordinates, edges):
 
 def _area_quad(coordinates, element) -> float:
     # compute area by splitting in 2 triangles.
-    """Internal helper `_area_quad`."""
+    """Quad area as the sum of two triangles split along the 0-2 diagonal."""
     edges_tri_1 = [
         (element[0], element[1]),
         (element[1], element[2]),
@@ -235,7 +245,7 @@ def _area_quad(coordinates, element) -> float:
 
 # formula from https://en.wikipedia.org/wiki/Tetrahedron, section 'general properties'
 def _volume_tetra(coordinates, element) -> float:
-    """Internal helper `_volume_tetra`."""
+    """Tetrahedron volume from the scalar triple product."""
     a = coordinates[element[0]]
     b = coordinates[element[1]]
     c = coordinates[element[2]]
@@ -245,11 +255,7 @@ def _volume_tetra(coordinates, element) -> float:
 
 
 def _volume_hex(coordinates, element) -> float:
-    """Volume of a hexahedron via decomposition into tetrahedra.
-
-    Each quad face is split into 2 triangles, each forming a tet with
-    the cell center.  6 faces × 2 triangles = 12 tets.
-    """
+    """Hexahedron volume as 12 tetrahedra between the cell centre and the split faces."""
     volume = 0.0
     d = center(coordinates, element)
     faces = _face_order_hex(element)
@@ -263,7 +269,7 @@ def _volume_hex(coordinates, element) -> float:
 
 
 def _volume_wface(coordinates, element) -> float:
-    """Internal helper `_volume_wface`."""
+    """Wedge volume as triangle area times height."""
     volume = 0
     faces = _face_order_wface(element)
     area_triangle = _area_triangle(coordinates, faces[0])
@@ -272,7 +278,7 @@ def _volume_wface(coordinates, element) -> float:
 
 
 def inradius(coordinates, element, mesh_type) -> float:
-    """Inradius."""
+    """Inradius of one element of ``mesh_type``."""
     if mesh_type == "triangle":
         return _inradius_triangle(coordinates, element)
     elif mesh_type == "quad":
@@ -287,7 +293,7 @@ def inradius(coordinates, element, mesh_type) -> float:
 
 
 def _inradius_triangle(coordinates, element) -> float:
-    """Internal helper `_inradius_triangle`."""
+    """Triangle inradius ``sqrt((s-a)(s-b)(s-c)/s)``."""
     area = _area_triangle(coordinates, element)
     edges = _edge_order_triangle(element)
     perimeter = 0.0
@@ -302,7 +308,7 @@ def _inradius_triangle(coordinates, element) -> float:
 
 
 def _inradius_quad(coordinates, element) -> float:
-    """Internal helper `_inradius_quad`."""
+    """Quad inradius ``area / semi-perimeter``."""
     area = _area_quad(coordinates, element)
     edges = _edge_order_quad(element)
     perimeter = 0.0
@@ -314,7 +320,7 @@ def _inradius_quad(coordinates, element) -> float:
 
 # see https://en.wikipedia.org/wiki/Tetrahedron, "Inradius"
 def _inradius_tetra(coordinates, element) -> float:
-    """Internal helper `_inradius_tetra`."""
+    """Tetrahedron inradius ``3 V / total face area``."""
     faces = _face_order_tetra(element)
     area = 0
     for face in faces:
@@ -324,10 +330,7 @@ def _inradius_tetra(coordinates, element) -> float:
 
 
 def _inradius_generic(coordinates, element, mesh_type) -> float:
-    """
-    strategy: find the shortest path from the center to each side (defined by face center and normal)
-    use the minimum of all these shortest paths
-    """
+    """Inradius as the shortest normal distance from the element centre to any face plane."""
     faces = _face_order(element, mesh_type)
     normals = face_normals(coordinates, element, mesh_type)
     element_center = center(coordinates, element)
@@ -341,14 +344,14 @@ def _inradius_generic(coordinates, element, mesh_type) -> float:
 
 
 def edge_length(coordinates, edge) -> float:
-    """Edge length."""
+    """Euclidean length of ``edge``."""
     x0 = coordinates[edge[0]]
     x1 = coordinates[edge[1]]
     return np.linalg.norm(x1 - x0, 2)
 
 
 def _face_order(element, mesh_type):
-    """Internal helper `_face_order`."""
+    """Vertex tuples of the faces of ``element``, dispatched on ``mesh_type``."""
     if mesh_type == "triangle":
         return _edge_order_triangle(element)
     elif mesh_type == "quad":
@@ -364,7 +367,7 @@ def _face_order(element, mesh_type):
 
 
 def _edge_order_triangle(element):
-    """Internal helper `_edge_order_triangle`."""
+    """Edges of a triangle in order."""
     return [
         (element[0], element[1]),
         (element[1], element[2]),
@@ -373,7 +376,7 @@ def _edge_order_triangle(element):
 
 
 def _edge_order_quad(element):
-    """Internal helper `_edge_order_quad`."""
+    """Edges of a quad in order."""
     return [
         (element[0], element[1]),
         (element[1], element[2]),
@@ -383,7 +386,7 @@ def _edge_order_quad(element):
 
 
 def _face_order_tetra(element):
-    """Internal helper `_face_order_tetra`."""
+    """Triangular faces of a tetrahedron in order."""
     return [
         (element[0], element[1], element[2]),
         (element[0], element[1], element[3]),
@@ -393,7 +396,7 @@ def _face_order_tetra(element):
 
 
 def _face_order_hex(element):
-    """Internal helper `_face_order_hex`."""
+    """Quad faces of a hexahedron in order (bottom, top, then sides)."""
     return [
         (element[0], element[1], element[2], element[3]),
         (element[4], element[5], element[6], element[7]),
@@ -405,7 +408,7 @@ def _face_order_hex(element):
 
 
 def _face_order_wface(element):
-    """Internal helper `_face_order_wface`."""
+    """Faces of a wedge in order (two triangles, then three quads)."""
     return [
         (element[0], element[1], element[2]),
         (element[3], element[4], element[5]),
@@ -416,7 +419,7 @@ def _face_order_wface(element):
 
 
 def _get_num_vertices_per_face(mesh_type) -> float:
-    """Internal helper `_get_num_vertices_per_face`."""
+    """Vertices per face for each face of ``mesh_type``."""
     if mesh_type == "triangle":
         return [2, 2, 2]
     elif mesh_type == "quad":
@@ -431,7 +434,7 @@ def _get_num_vertices_per_face(mesh_type) -> float:
 
 
 def _get_dimension(mesh_type):
-    """Internal helper `_get_dimension`."""
+    """Spatial dimension of ``mesh_type``."""
     if mesh_type == "triangle":
         return 2
     elif mesh_type == "quad":
@@ -445,7 +448,7 @@ def _get_dimension(mesh_type):
 
 
 def _get_faces_per_element(mesh_type):
-    """Internal helper `_get_faces_per_element`."""
+    """Number of faces of ``mesh_type``."""
     if mesh_type == "line":
         return 2
     elif mesh_type == "triangle":
@@ -463,7 +466,7 @@ def _get_faces_per_element(mesh_type):
 
 
 def _get_boundary_element_type(mesh_type):
-    """Internal helper `_get_boundary_element_type`."""
+    """Cell type of each face of ``mesh_type``."""
     if mesh_type == "triangle":
         return ["line", "line", "line"]
     elif mesh_type == "quad":
@@ -479,7 +482,7 @@ def _get_boundary_element_type(mesh_type):
 
 
 def find_edge_index(element, edge_vertices, element_type):
-    """Find edge index."""
+    """Local index of the edge/face of ``element`` whose vertices lie in ``edge_vertices``."""
     edges = _face_order(element, element_type)
     for i_edge, edge in enumerate(edges):
         if set(edge).issubset(edge_vertices):
@@ -488,16 +491,13 @@ def find_edge_index(element, edge_vertices, element_type):
 
 
 def compute_subvolume(face_vertices, cell_center, dim):
-    """
-    Computes the subvolume of a face given its vertices and the cell center.
+    """Volume of the sub-simplex spanned by a face and the cell centre (length, triangle,
+    tetrahedron or pyramid for dim 1, 2, 3).
 
-    Parameters:
-    face_vertices (np.ndarray): The coordinates of the vertices of the face.
-    cell_center (np.ndarray): The coordinates of the cell center.
-    dim (int): The dimensionality of the problem (1, 2, or 3).
-
-    Returns:
-    float: The subvolume of the face.
+    Args:
+        face_vertices: coordinates of the face vertices.
+        cell_center: coordinates of the cell centre.
+        dim: spatial dimension (1, 2 or 3).
     """
     if dim == 1:
         # 1D: Length of the line segment

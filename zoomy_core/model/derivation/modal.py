@@ -1,30 +1,6 @@
-"""Modal separation-of-variables for the clean-redesign framework.
-
-The pieces here turn a single field ``ũ(t, x, ζ)`` into an UNEXPANDED modal
-sum ``Σ_i a(i, t, x)·φ(i, ζ)`` and keep the bookkeeping that lets a later
-``ResolveBasis`` recover the trial index and basis per field:
-
-:class:`ModalIndexRegistry`
-    Hands out a **distinct** real summation index per coefficient family
-    (``a → i``, ``aw → j``, ``ap → k`` …) drawn from ``_INDEX_NAMES``, and
-    records ``coeff_name → (index, basis)`` plus a reverse
-    ``field_head → coeff_name`` map.  Distinct indices are essential: when two
-    expansions multiply (``u·w``) their dummies must differ, else ``sympy``
-    keeps the two ``Sum``s sharing one index and silently drops the cross
-    terms.  Lives on every :class:`~zoomy_core.model.derivation.model.Model` as
-    ``model._modal_registry``.
-
-:func:`separation_of_variables`
-    A :class:`~zoomy_core.model.derivation.model.Model` op (``whole_model_op``).  It
-    looks up the field's DECORATED head (post-PDE, via
-    ``model._field_decoration``), builds the unexpanded ``sp.Sum`` with a fresh
-    distinct registry index, substitutes the decorated head → that Sum across
-    every equation, registers ``coeff → (index, basis)`` and
-    ``field_head → coeff``, and calls ``model.redeclare_unknown(field →
-    coeff-family)`` so ``Q`` tracks the modal coefficients.
-
-:func:`modal_bound`
-    A fresh abstract truncation-bound Symbol ``N`` (integer, non-negative).
+"""Modal separation of variables: turns a field u(t, x, zeta) into an unexpanded sum over a basis,
+with the index bookkeeping ResolveBasis needs. Sits at the start of the moment/Galerkin derivation
+on a derivation Model.
 """
 
 from __future__ import annotations
@@ -55,31 +31,24 @@ _INDEX_NAMES = ["i", "j", "k", "m", "n", "o", "p", "q", "r", "s"]
 
 
 def modal_index(name="i"):
-    """A single integer, non-negative summation-index Symbol (a *trial*
-    summation dummy ``i`` / ``j`` in ``Σ_i a_i φ_i``)."""
+    """Return an integer, non-negative trial summation-index symbol."""
     return sp.Symbol(name, integer=True, nonnegative=True)
 
 
 def test_index(name="l"):
-    """A Galerkin **test / moment** index Symbol (integer, non-negative).
-
-    Distinct in intent from :func:`modal_index` (a trial summation dummy) and
-    :func:`modal_bound` (a truncation bound), though the Symbol shape is
-    identical.  Use it for the projection test weight ``c(ζ)·φ(l, ζ)`` so the
-    derivation reads ``l = test_index()`` instead of a raw ``sp.Symbol``.
-    Default ``"l"`` matches the codebase's test-index name (``_INDEX_NAMES``
-    reserves ``l`` for exactly this)."""
+    """Return an integer, non-negative Galerkin test/moment index symbol; the name l is reserved for
+    it.
+    """
     return sp.Symbol(name, integer=True, nonnegative=True)
 
 
 def modal_bound(name="N_u"):
-    """A fresh abstract truncation-bound Symbol (integer, non-negative)."""
+    """Return a fresh abstract integer, non-negative truncation-bound symbol."""
     return sp.Symbol(name, integer=True, nonnegative=True)
 
 
 def _coeff_key(coeff):
-    """Resolve any coefficient handle (name / head class / applied) to its
-    family name string (``a(i, t, x) → "a"``)."""
+    """Return the coefficient family name of a name, head class or applied coefficient."""
     if isinstance(coeff, str):
         return coeff
     if isinstance(coeff, type):
@@ -94,22 +63,20 @@ def _coeff_key(coeff):
 
 
 class ModalIndexRegistry:
-    """Per-model registry of ``coeff_name → (index, basis)`` with a reverse
-    ``field_head → coeff_name`` map.
-
-    ``separation_of_variables`` calls :meth:`assign` with the field head, the
-    coefficient name, and the (opaque) basis; ``ResolveBasis(u, …)`` later
-    looks the index + basis up by FIELD or by COEFFICIENT via
-    :meth:`index_for` / :meth:`basis_for`.
+    """Per-model registry of coeff_name -> (index, basis) plus a field_head -> coeff_name map. Every
+    field gets a distinct summation index, otherwise products of two sums would silently lose their
+    cross terms.
     """
 
     def __init__(self):
+        """Create an empty registry."""
         self._entries = {}          # coeff_name → {"index": Symbol, "basis": …}
         self._field_to_coeff = {}   # field head class → coeff_name
         self._order = []            # mode letters handed out, in order
         self._registered = {}       # user-registered test/moment index → Symbol
 
     def _mint_index(self):
+        """Return the next unused index symbol (i, j, k, ...; l is skipped)."""
         nm = next((n for n in _INDEX_NAMES if n not in self._order), None)
         if nm is None:
             nm = f"i_{len(self._order)}"
@@ -117,7 +84,7 @@ class ModalIndexRegistry:
         return sp.Symbol(nm, integer=True, nonnegative=True)
 
     def assign(self, coeff_name, *, basis=None, field_head=None, index=None):
-        """Register or update an entry; return the (possibly memoised) index."""
+        """Register or update a coefficient entry and return its (memoised) index."""
         if coeff_name in self._entries:
             if basis is not None:
                 self._entries[coeff_name]["basis"] = basis
@@ -131,14 +98,15 @@ class ModalIndexRegistry:
         return self._entries[coeff_name]["index"]
 
     def fresh(self, key=None):
-        """Hand out (or recall) an index keyed by coefficient name."""
+        """Return a new index, or the memoised one for the given coefficient name."""
         if key is None:
             return self._mint_index()
         return self.assign(key)
 
     def coeff_name_for(self, target):
-        """Resolve ``target`` (name / coeff head / applied coeff / field head /
-        applied field) to its coefficient name in this registry, or ``None``."""
+        """Resolve a name, coefficient or field head (bare or applied) to its coefficient name, or
+        None.
+        """
         if isinstance(target, str):
             return target if target in self._entries else None
         if isinstance(target, type):                    # head class
@@ -155,17 +123,17 @@ class ModalIndexRegistry:
         return None
 
     def index_for(self, target):
+        """Return the registered summation index of a field or coefficient, or None."""
         name = self.coeff_name_for(target)
         return self._entries[name]["index"] if name else None
 
     def basis_for(self, target):
+        """Return the registered basis of a field or coefficient, or None."""
         name = self.coeff_name_for(target)
         return self._entries[name]["basis"] if name else None
 
     def register(self, name):
-        """Mint and register a user test/moment index Symbol, raising if the
-        name is already a registered index OR an auto-minted trial index — so
-        the user cannot accidentally create two colliding indices."""
+        """Mint a user test/moment index, raising if the name collides with an existing index."""
         if name in self._registered:
             return self._registered[name]
         if name in self._order:
@@ -177,6 +145,7 @@ class ModalIndexRegistry:
         return sym
 
     def reset(self):
+        """Clear all entries and indices."""
         self._entries.clear()
         self._field_to_coeff.clear()
         self._order.clear()
@@ -184,8 +153,7 @@ class ModalIndexRegistry:
 
 
 def reset_modal_indices(model):
-    """Clear ``model``'s modal-index registry so index assignment is
-    deterministic (call at the top of a derivation / notebook cell)."""
+    """Clear the model's modal-index registry so index assignment is deterministic."""
     model._modal_registry.reset()
 
 
@@ -193,23 +161,14 @@ def reset_modal_indices(model):
 
 
 def build_modal_sum(field, coeff, basis, order, index):
-    """Build the unexpanded modal sum ``Σ_i coeff(i, *coords)·φ(i, ζ)``.
+    """Build the unexpanded modal sum Sum_i coeff(i, *coords) * phi(i, zeta) for a field.
 
-    Parameters
-    ----------
-    field : sympy applied Function
-        The field application being approximated, e.g. ``ũ(t, x, ζ)``.  Its
-        LAST argument is the separation coordinate ``ζ`` (read off here).
-    coeff : sympy Function head | applied
-        The modal coefficient.  Applied (``a(t, x)``) supplies its own
-        horizontal coords; a bare head defaults to ``field``'s leading args.
-    basis : Basis | sympy Function head
-        Supplies the opaque ``φ`` head (``basis.phi`` / ``basis.phi_fn``) or
-        is itself a bare ``φ`` head.
-    order : sympy.Expr | int
-        The (abstract or concrete) truncation bound ``N``.
-    index : sympy.Symbol
-        The distinct summation index.
+    Args:
+        field: Applied field; its last argument is the separation coordinate zeta.
+        coeff: Coefficient head, or applied coefficient carrying its own coords.
+        basis: Basis supplying the opaque phi head, or a bare phi head.
+        order: Truncation bound N.
+        index: Summation index.
     """
     zeta = field.args[-1]
     if isinstance(coeff, type):
@@ -227,20 +186,19 @@ def build_modal_sum(field, coeff, basis, order, index):
 
 
 class SeparationOfVariables(Operation):
-    """Replace a field's decorated head with its unexpanded modal sum and
-    swap the unknown family in ``Q``.
+    """Model operation that replaces a field's decorated head by its unexpanded modal sum and swaps
+    the unknown family in Q. Built by separation_of_variables; it rewrites every equation and
+    registers the index and basis in model._modal_registry.
 
-    Built by :func:`separation_of_variables`.  This is a model-level op
-    (``whole_model_op``): it rewrites every equation, registers
-    ``coeff → (index, basis)`` + ``field_head → coeff`` on
-    ``model._modal_registry``, and redeclares the unknown
-    ``field → coeff-family`` so ``Q`` tracks the modal coefficients.
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     whole_model_op = True
 
     def __init__(self, field, coeff, basis, order, *, index=None,
                  name="separation_of_variables"):
+        """Store the field, coefficient, basis, truncation order and optional index."""
         self._field = field
         self._coeff = coeff
         self._basis = basis
@@ -253,6 +211,10 @@ class SeparationOfVariables(Operation):
         )
 
     def apply_to_model(self, model):
+        """Expand every application of the field head into a modal sum, each with a distinct dummy
+        index, and redeclare the unknown as the coefficient family. Boundary evaluations u(t, x,
+        0/1) expand too, so the ansatz may follow a field-level boundary condition.
+        """
         # The field's DECORATED head (post-PDE).  Read it off the model's
         # ``_field_decoration`` map; if the model never ran a PDE transform
         # the original head is used.
@@ -303,16 +265,14 @@ class SeparationOfVariables(Operation):
         # this fix removes the collision for the DISTINCT-node cross terms that
         # ``ExpandSums`` never sees (they are handed to it pre-multiplied).
         def _make_expander():
-            """A fresh per-equation expander: the FIRST distinct occurrence keeps
-            the canonical registry index ``idx`` (byte-identical to the old
-            single-dummy behaviour when a field occurs once per equation); every
-            LATER distinct occurrence gets a fresh index from the ``i, j, k, …``
-            pool.  Resetting per equation keeps cross-equation dummy names stable
-            (they never interact) while removing the within-equation collision."""
+            """Return a per-equation expander; the first occurrence keeps the registry index and
+            later ones get fresh distinct indices.
+            """
             used = {idx}
             first = {"done": False}
 
             def _next_index():
+                """Return the next unused summation index."""
                 if not first["done"]:
                     first["done"] = True
                     return idx
@@ -331,6 +291,7 @@ class SeparationOfVariables(Operation):
                     n += 1
 
             def _expand(*call_args):
+                """Return the modal sum for one application of the field head."""
                 j = _next_index()
                 return sp.Sum(coeff_head(j, *coords) * phi(j, call_args[-1]),
                               (j, 0, order))
@@ -359,54 +320,24 @@ class SeparationOfVariables(Operation):
 
 
 class TensorSeparationOfVariables(Operation):
-    r"""Direct **tensor-product** Galerkin ansatz — the N-direction generalization
-    of :func:`separation_of_variables`.
+    """Model operation for a concretely expanded tensor-product Galerkin ansatz over a vertical and
+    a lateral separation coordinate. Heads are matched by name (the field and its sigma-decorated
+    sibling) and the sum is expanded with integer orders, so there are no shared dummies.
 
-    Approximates a field by a full tensor product over TWO (or, via the generic
-    ``slots`` form, N) separation coordinates at once:
-
-    .. math::
-
-        u(\dots,\eta,\zeta)\;\approx\;
-            \sum_{i=0}^{N_z}\sum_{j=0}^{N_y}
-            q_{ji}(t,x)\,\varphi_i(\zeta)\,\psi_j(\eta).
-
-    Unlike a *chain* of single-coordinate expansions, this is inserted
-    **concretely expanded** (integer orders), so every occurrence is
-    collision-free — no shared summation dummies to collapse the cross terms of a
-    product.  Boundary evaluations (a separation slot carrying a concrete ``0``/
-    ``scale`` instead of the reference coord) resolve through φ/ψ naturally.
-
-    Heads are matched **BY NAME** (the field head *and* its σ-decorated
-    ``\tilde{field}`` sibling): a ``PDETransformation`` σ-map produces a decorated
-    head that is a custom :class:`sympy.Function` subclass, and object identity is
-    unreliable across maps/assumptions — so name matching is the robust key.
-
-    Parameters
-    ----------
-    field : sympy applied Function
-        The ORIGINAL field application (e.g. ``u(t, x, y, z)``) whose head (and
-        decorated sibling) is expanded.
-    coeff_head : sympy Function head
-        The tensor coefficient family ``q``.  Applied as
-        ``coeff_head(j, i, *kept_args)`` — lateral index ``j`` OUTER, vertical
-        index ``i`` inner (matches the nested resolution order).
-    pos_z, basis_z, order_z : int, Basis, int
-        Argument position of the vertical (inner) separation coordinate, its
-        opaque basis, and truncation order ``N_z``.
-    pos_y, basis_y, order_y : int, Basis, int
-        Same for the lateral (outer) separation coordinate.
-    scale_y : sympy.Expr | int, optional
-        The lateral slot carries the PHYSICAL coordinate ``y = scale_y·η``
-        textually (a ``PDETransformation`` maps ``y → W·η``); the coefficient's
-        η is recovered as ``arg / scale_y`` (so ``W·η → η``, ``0 → 0``,
-        ``W → 1``).  Default ``1``.
+    Args:
+        field: Original field application, e.g. u(t, x, y, z).
+        coeff_head: Tensor coefficient family, applied as q(j, i, *kept_args) with lateral j outer,
+            vertical i inner.
+        pos_z, basis_z, order_z: Position, basis and truncation order of the vertical coordinate.
+        pos_y, basis_y, order_y: Same for the lateral coordinate.
+        scale_y: Lateral slot carries y = scale_y * eta, so the coefficient's eta is arg / scale_y.
     """
 
     whole_model_op = True
 
     def __init__(self, field, coeff_head, *, pos_z, basis_z, order_z,
                  pos_y, basis_y, order_y, scale_y=1, name="tensor_sov"):
+        """Store the field, coefficient family and per-direction positions, bases and orders."""
         self._field, self._coeff = field, coeff_head
         self._pz, self._bz, self._oz = pos_z, basis_z, order_z
         self._py, self._by, self._oy = pos_y, basis_y, order_y
@@ -417,6 +348,9 @@ class TensorSeparationOfVariables(Operation):
                         f"Σ_ji {_coeff_key(coeff_head)}·φ_i·ψ_j"))
 
     def apply_to_model(self, model):
+        """Replace the field head and its decorated sibling by the tensor-product sum in every
+        equation.
+        """
         # Match heads BY NAME — field + its σ-decorated ``\tilde{field}`` sibling
         # (decorated heads are custom Function subclasses; identity is unreliable).
         names = {self._field.func.__name__,
@@ -430,6 +364,7 @@ class TensorSeparationOfVariables(Operation):
                                                          self._by)
 
         def _expand(*call_args):
+            """Return the double sum for one application of the field head."""
             kept = tuple(a for p, a in enumerate(call_args) if p not in (pz, py))
             eta_val = sp.cancel(call_args[py] / self._sy)   # W·η→η, 0→0, W→1
             return sp.Add(*[
@@ -449,32 +384,20 @@ class TensorSeparationOfVariables(Operation):
 
 
 def separation_of_variables(field, coeff, basis, order, *, index=None):
-    """Modal **separation of variables** — a :class:`Model` op.
+    """Return a SeparationOfVariables operation approximating field by Sum_i coeff(i, *coords) *
+    phi(i, zeta) with a distinct registry index.
 
-    Returns a :class:`SeparationOfVariables` ready for ``model.apply(...)``.
-    It approximates ``field`` by the UNEXPANDED sum ``Σ_i coeff(i, *coords)·
-    φ(i, ζ)`` with a FRESH DISTINCT registry index, substitutes the field's
-    decorated head everywhere, registers the index + basis, and redeclares
-    the unknown ``field → coeff-family`` in ``Q``.
+    Args:
+        field: Original field application, e.g. u(t, x, z).
+        coeff: Coefficient head or applied coefficient, e.g. a(t, x).
+        basis: Basis supplying the opaque phi.
+        order: Truncation bound N.
+        index: Override of the summation index.
 
-    .. math::
+    Returns:
+        Operation for model.apply(...).
 
-        u(t,x,\\zeta)\\;\\approx\\;\\sum_{i=0}^{N} a(i,t,x)\\,\\phi(i,\\zeta)
-
-    Parameters
-    ----------
-    field : sympy applied Function
-        The ORIGINAL field application (``u(t, x, z)``) — its decorated head
-        is looked up on the model.
-    coeff : sympy Function head | applied
-        The modal coefficient family, given applied to its horizontal coords
-        (``a(t, x)``) or as a bare head (``a``).
-    basis : Basis
-        The opaque basis (``basis.phi`` / ``basis.weight``).
-    order : sympy.Expr | int
-        Truncation bound ``N``.
-    index : sympy.Symbol, optional
-        Override the summation index.  By default a fresh DISTINCT index is
-        drawn from the model's registry.
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
     return SeparationOfVariables(field, coeff, basis, order, index=index)

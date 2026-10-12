@@ -1,25 +1,6 @@
-"""KESME — k–ε Shallow Moment Equations, DERIVED through the Model path.
-
-This is the SME derivation (copied verbatim from :class:`SME.derive_model`) with
-TWO extra transport equations added up front — the turbulent kinetic energy ``k``
-and its dissipation ``ε`` — which then ride through the *same* moment-projection
-pipeline as mass and momentum:
-
-    ∂_t k + Σ_d ∂_d(u_d k) + ∂_z(w k) − ∂_z(J_k) = ν_t(∂_z u)² − ε
-    ∂_t ε + Σ_d ∂_d(u_d ε) + ∂_z(w ε) − ∂_z(J_ε) = (ε/k)(C_1 ν_t(∂_z u)² − C_2 ε)
-
-with the turbulent fluxes ``J_k = (ν_t/σ_k)∂_z k``, ``J_ε = (ν_t/σ_ε)∂_z ε``
-declared as closure variables (exactly like the momentum stress τ) and closed
-with zero-Neumann bed/surface traces (no turbulent flux through the bed or free
-surface).  ``k`` and ``ε`` carry their OWN modal order ``turbulence_level``
-(N_k), independent of the velocity order ``level`` (N_u); ``ν_t = C_μ k(ζ)²/ε(ζ)``
-is ζ-resolved and rational, so its Galerkin brackets survive ``ExtractBrackets``
-and are resolved by ``GaussQuadrature`` (``quadrature_order>0``) — the one and
-only special step, just as for a non-polynomial material closure.
-
-NOTE: derive_model is a deliberate copy of SME.derive_model + the k,ε weaving.
-Refactoring the shared body into one place is a FOLLOW-UP, only after the
-derivation and its results are approved.
+"""k-epsilon Shallow Moment Equations (KESME): the SME derivation with transported turbulent
+kinetic energy ``k`` and dissipation ``epsilon``. They are projected on the same modal basis as
+mass and momentum; the model is lifted to a SystemModel via ``SystemModel.from_model``.
 """
 from __future__ import annotations
 
@@ -50,15 +31,13 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class KESME(SME):
-    """k–ε Shallow Moment Equations (see module docstring).
+    """SME with ``k`` and ``epsilon`` transported at their own modal order ``turbulence_level``,
+    independent of the velocity ``level``. Default closures are ``KEpsilonViscosity``,
+    ``RoughWall`` and ``StressFree``; build with ``quadrature_order>0`` because
+    ``nu_t = C_mu k^2/epsilon`` is rational.
 
-    ``turbulence_level`` (N_k) sets the modal order of k, ε independently of the
-    velocity ``level`` (N_u).  Default closures
-    ``[KEpsilonViscosity(), RoughWall(), StressFree()]``: the eddy-viscosity
-    bulk stress ``τ = ρ(ν + C_μ k(ζ)²/ε(ζ)) ∂_z u`` (built from the transported,
-    ζ-RESOLVED k, ε fields — the k–ε feedback into the momentum), turbulent
-    rough-wall bed, stress-free surface.  Build with ``quadrature_order>0``
-    (default 6): ν_t(ζ) is rational.
+    References:
+        Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     _cacheable_derivation = True        # derive_model returns m; byproducts on m
@@ -68,14 +47,19 @@ class KESME(SME):
         "velocity order ``level`` (N_u)."))
 
     def __init__(self, **params):
+        """Build the model with the k-epsilon default closures and ``quadrature_order=6`` unless
+        overridden.
+        """
         params.setdefault("closures",
                           [KEpsilonViscosity(), RoughWall(), StressFree()])
         params.setdefault("quadrature_order", 6)
         super().__init__(**params)
 
     def derive_model(self):
-        """COPY of SME.derive_model with the k, ε transport equations added and
-        projected through the same pipeline (see module docstring)."""
+        """Derive the model: a copy of ``SME.derive_model`` with the k and epsilon transport
+        equations added and projected through the same pipeline. Returns the derivation model
+        with interpolate / project / reconstruction rows and the free-slip wall registered.
+        """
         Nu = int(self.level)
         Nk = int(self.turbulence_level)
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0, "e_x": 0.0,
@@ -139,6 +123,7 @@ class KESME(SME):
                        d.t(ef) + adv_e - d.z(Je) - (ef / kf) * (C_1 * Pk - C_2 * ef))
 
         def _kbc(interface):
+            """Kinematic boundary condition of the vertical velocity at ``interface``."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -177,6 +162,9 @@ class KESME(SME):
 
         # 5 — project each horizontal momentum, then close the stress
         def _state(at, *, alias=None, btag=None):
+            """Closure state evaluated at the vertical location ``at`` (optionally for a
+            boundary tag).
+            """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
                                 boundary_tag=btag, horiz=list(horiz))
@@ -380,13 +368,10 @@ class KESME(SME):
     _system_model_kind = "kesme"
 
     def _register_hswme_spectrum(self, sm):
-        """HSWME spectrum EXCLUDING k, ε (they are not critical for the CFL
-        estimate): the turbulence fields are advected at the depth-mean velocity
-        ``n·u_m`` and diffuse (parabolic), so their wave speed lies INSIDE the
-        SME gravity cone ``n·(u_m ± √(g h + α₁²))`` and never sets the Rusanov /
-        CFL bound.  Take the plain ``SME(level=N_u)`` hyperbolic spectrum for the
-        b, h, q block and pad the k, ε slots with ``n·u_m`` — avoiding the flaky
-        9×9 symbolic eigensolve on the rational ν_t entries."""
+        """Set the SystemModel spectrum from the plain ``SME`` twin and pad the k, epsilon slots
+        with the depth-mean normal velocity. The turbulence fields travel inside the gravity
+        cone, so they never set the CFL bound.
+        """
         n_eq = sm.n_equations
         twin = SystemModel.from_model(SME(level=int(self.level), dimension=int(self.dimension),
                    small_slope=bool(self.small_slope),

@@ -1,4 +1,4 @@
-"""Zoomy mesh hierarchy: BaseMesh → FVMMesh → LSQMesh."""
+"""Mesh hierarchy BaseMesh -> FVMMesh -> LSQMesh shared by every backend."""
 
 from zoomy_core.mesh.base_mesh import BaseMesh
 from zoomy_core.mesh.fvm_mesh import FVMMesh
@@ -10,29 +10,15 @@ from zoomy_core.mesh.mesh_ic import (
 
 
 def ensure_lsq_mesh(mesh, model) -> LSQMesh:
-    """Promote ``mesh`` to an LSQMesh sized for ``model``.
+    """Promote ``mesh`` to an LSQMesh whose stencil degree is taken from ``model``.
 
-    The LSQ polynomial degree is **always** derived from the model —
-    user code does not set it.  ``model`` may be a :class:`Model`, a
-    :class:`SystemModel`, or a :class:`NumericalSystemModel`; in every
-    case the resolution path is the same:
-
-    1. The model is promoted to an NSM (if not already one).
-    2. ``nsm.resolved_lsq_degree()`` returns the max spatial-derivative
-       order required across ``sm.aux_registry``,
-       ``source_derivative_specs``, and any ``additional_systems``.
-    3. The mesh's cached LSQ stencil is built (or rebuilt) at that
-       degree.
-
-    Passing an already-built :class:`LSQMesh` whose cached stencil is
-    of lower degree triggers a rebuild in place.
-
-    Parameters
-    ----------
-    mesh : BaseMesh, FVMMesh, or LSQMesh
-    model : Model, SystemModel, or NumericalSystemModel
-        Required.  The degree is taken from this object — there is no
-        ``lsq_degree`` kwarg.
+    Args:
+        mesh: BaseMesh, FVMMesh or LSQMesh; an LSQMesh of lower degree is rebuilt in place.
+        model: Model, SystemModel or NumericalSystemModel; its resolved LSQ degree sets the stencil.
+    Returns:
+        The LSQMesh (or ``mesh`` untouched if it is not a BaseMesh).
+    References:
+        Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
     if model is None:
         raise TypeError(

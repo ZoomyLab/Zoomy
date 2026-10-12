@@ -1,10 +1,12 @@
-"""Module `zoomy_core.mesh.mesh_extrude`."""
+"""Pure-numpy helpers that extrude a 2D (or 1D) mesh's points, elements and boundary faces by ``Nz``
+vertical layers.
+"""
 
 import numpy as np
 
 
 def extrude_points(points, Z):
-    """Extrude points."""
+    """Replicate ``points`` at each z in ``Z``, layer by layer."""
     n_points = points.shape[0]
     dim = points.shape[1]
     Nz = Z.shape[0]
@@ -19,7 +21,7 @@ def extrude_points(points, Z):
 
 def extrude_element_vertices(element_vertices, n_vertices, Nz):
 
-    """Extrude element vertices."""
+    """Extruded element-vertex table: bottom-layer vertices followed by top-layer vertices."""
     n_elements = element_vertices.shape[0]
     n_vertices_per_element = element_vertices.shape[1]
     if n_vertices_per_element == 2:
@@ -39,7 +41,7 @@ def extrude_element_vertices(element_vertices, n_vertices, Nz):
     return element_vertices_ext
 
 def extrude_element_vertices_line(element_vertices, n_vertices, Nz):
-    """Extrude element vertices line."""
+    """Extruded quad vertices for 2-vertex line elements, in cyclic order."""
     n_elements = element_vertices.shape[0]
     n_vertices_per_element = 2
     element_vertices_ext = np.empty(
@@ -58,9 +60,7 @@ def extrude_element_vertices_line(element_vertices, n_vertices, Nz):
 
 
 def extrude_boundary_face_vertices(msh, Nz):
-    """
-    convenction: 1. bottom 2. sides 3. top
-    """
+    """Extruded boundary-face vertices, ordered bottom, sides, top."""
     n_boundary_elements = msh.n_boundary_elements * Nz + 2 * msh.n_elements
     n_vertices_per_face = msh.boundary_face_vertices.shape[1]
     n_vertices_per_face_ext = 2 * n_vertices_per_face
@@ -108,9 +108,7 @@ def extrude_boundary_face_vertices(msh, Nz):
 
 
 def extrude_boundary_face_corresponding_element(msh, Nz):
-    """
-    convenction: 1. bottom 2. sides 3. top
-    """
+    """Owning extruded cell of each extruded boundary face, ordered bottom, sides, top."""
     n_boundary_elements = msh.n_boundary_elements * Nz + 2 * msh.n_elements
     boundary_face_corresponding_element = np.empty((n_boundary_elements), dtype=int)
 
@@ -141,8 +139,8 @@ def extrude_boundary_face_corresponding_element(msh, Nz):
 
 
 def extrude_boundary_face_tags(msh, Nz):
-    """
-    convenction: 1. bottom 2. sides 3. top
+    """Boundary tag of each extruded boundary face (ordered bottom, sides, top), with two new tags
+    for bottom and top.
     """
     n_boundary_elements = msh.n_boundary_elements * Nz + 2 * msh.n_elements
     boundary_face_tags = np.empty((n_boundary_elements), int)

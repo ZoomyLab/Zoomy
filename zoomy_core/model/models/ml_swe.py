@@ -1,25 +1,6 @@
-"""ML-SWE — multilayer shallow water with mass exchange, the declarative
-canonical model.
-
-Per-layer derivation (each layer is its own sub-model with its own σ-map
-``z = z_{ℓ-1} + h_ℓ ζ``; interfaces closed with
-``KinematicBC(mass_flux=G_ℓ)``, bed/surface impermeable) + the
-**Hörnschemeyer closure** (Aguillon, Hörnschemeyer & Sainte-Marie,
-"Barotropic-Baroclinic Splitting for Multilayer Shallow Water Models with
-Exchanges"): the internal-interface mass fluxes are the Lagrange multipliers
-of the layer-fraction constraint ``h_ℓ = l_ℓ·h`` (fractions of the
-INSTANTANEOUS depth — layers move with the free surface), giving the closed
-form ``G_ℓ = ρ·Σ_{j≤ℓ}(l_j·∂_x Q − ∂_x q_j)`` with ``Q = Σ q_j``; the
-momentum-transfer interface velocity ``u*_ℓ`` is shared by the adjacent
-rows and either UPWINDED by the sign of G (their Eq. 9, the default) or the
-arithmetic MEAN (admissible per Audusse et al.).
-
-NOTE the kinematic-closure vacuity result (thesis ml_swe notebook): with
-independent layer heights, NO recombination of the layers' own kinematics
-determines G — the fraction constraint is the missing statement; this class
-implements exactly that.
-
-State: ``[b, h, q_1 … q_N]`` (one total depth; per-layer discharges).
+"""Multilayer shallow water with mass exchange (ML-SWE), state ``[b, h, q_1 ... q_N]`` with
+layer heights fixed as fractions of the total depth. The interface mass fluxes follow from the
+layer-fraction constraint; the model is lifted to a SystemModel via ``SystemModel.from_model``.
 """
 from __future__ import annotations
 
@@ -45,7 +26,10 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class MLSWE(BaseModel):
-    """Multilayer SWE, ``n_layers`` moving-with-the-surface layers."""
+    """Multilayer SWE with ``n_layers`` layers that move with the free surface, derived layer by
+    layer with kinematic interface conditions. The interface transfer velocity is upwinded or
+    averaged through the ``closures`` (``UpwindInterface`` / ``MeanInterface``).
+    """
 
     _finalize_lazy = True
     _cacheable_derivation = True        # derive_model returns m; byproducts on m
@@ -63,17 +47,24 @@ class MLSWE(BaseModel):
             "Transfer velocity u* at internal interfaces.")
 
     def derive_model(self):
+        """Derive the per-layer balances, close the interface mass fluxes ``G`` from the
+        fraction constraint, and assemble the model. Returns the derivation model with
+        continuity and one momentum equation per layer and direction.
+        """
         N = int(self.n_layers)
         dim = int(self.dimension)
         coords = (t, x, z) if dim == 2 else (t, x, y, z)
         horiz = (x,) if dim == 2 else (x, y)
         HNAME = {x: "u", y: "v"}; DERIV = {x: d.x, y: d.y}; CN = {x: "x", y: "y"}
         def qname(xd, ell):
+            """Name of the discharge of layer ``ell`` in direction ``xd``."""
             return f"q_{ell}" if dim == 2 else f"q_{CN[xd]}_{ell}"
         def shat(xd, ell):
+            """Name of the velocity coefficient of layer ``ell`` in direction ``xd``."""
             return (rf"\hat{{u}}_{ell}" if dim == 2
                     else rf"\hat{{{HNAME[xd]}}}_{ell}")
         def sname(xd, ell):
+            """Name of the shear-stress field of layer ``ell`` in direction ``xd``."""
             return f"tau_{ell}" if dim == 2 else f"tau_{CN[xd]}z_{ell}"
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0}
         for j in range(1, N):
@@ -99,7 +90,9 @@ class MLSWE(BaseModel):
         from zoomy_core.model.models.closures import apply_layer_stress_closures
 
         def derive_layer(ell):
-            """Depth-averaged continuity + per-direction momentum of layer ℓ."""
+            """Return the depth-averaged continuity and per-direction momentum of layer ``ell``
+            as ``(cont, {direction: momentum})``.
+            """
             z_bot, z_top, h_l = ifaces[ell - 1], ifaces[ell], hl[ell - 1]
             G_bot, G_top = Gf[ell - 1], Gf[ell]
             ml = DModel(coords=coords, parameters={"g": 9.81, "rho": 1.0})
@@ -119,6 +112,9 @@ class MLSWE(BaseModel):
                     + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl)
 
             def _kbc(iface, G):
+                """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
+                mass flux ``G``.
+                """
                 kw = dict(w=wl, u=uvel[0], interface=iface, rho=rl,
                           mass_flux=(G if G != 0 else None))
                 if dim == 3:
@@ -142,6 +138,7 @@ class MLSWE(BaseModel):
             par_ns = SimpleNamespace(rho=rl, nu=nu_s, lambda_s=lam_s)
 
             def _state(at, *, alias=None, btag=None):
+                """Closure state of layer ``ell`` evaluated at the vertical location ``at``."""
                 fields = {"u": getattr(ml.functions, f"u_{ell}"),
                           "w": getattr(ml.functions, f"w_{ell}")}
                 if dim == 3:
@@ -185,11 +182,15 @@ class MLSWE(BaseModel):
             ml.apply(InvertMassMatrix())
 
             def _clean(e):
+                """Drop zero integrals and pull constants out of derivatives, then expand."""
                 e = e.replace(
                     lambda a: isinstance(a, sp.Integral) and a.function == 0,
                     lambda a: sp.S.Zero)
 
                 def _pull(a):
+                    """Pull the factor independent of the differentiation variables out of a
+                    derivative.
+                    """
                     vs = [v for v, _ in a.variable_count]
                     co, rest = a.expr.as_independent(*vs, as_Mul=True)
                     return (co * sp.Derivative(rest, *a.args[1:])
@@ -227,7 +228,9 @@ class MLSWE(BaseModel):
         iface = interface_closure(self.closures)
 
         def _ustar(a, xd):
-            """Per-direction shared transfer velocity at internal interface α."""
+            """Transfer velocity ``u*`` shared by the layers adjacent to internal interface
+            ``a`` in direction ``xd``.
+            """
             below, above = u_lc[a][xd], u_lc[a + 1][xd]
             if iface is not None:
                 return iface.expression(below, above, G_sol[Gf[a]])

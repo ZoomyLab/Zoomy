@@ -1,43 +1,7 @@
-"""QRKESME — k–ε Shallow Moment Equations in the q–r variables (k=q², ε=r²).
-
-Positivity-by-construction variant of :class:`KESME`.  Instead of transporting
-``k`` and ``ε`` (which can — and did, in the plain KESME spin-up — go negative
-and crash the run), we transport their square roots
-
-    sk = √k ,   se = √ε      (Finnie & Jeppson 1991, q=√k, r=√ε; Fe et al. 2009)
-
-so that ``k = sk² ≥ 0`` and ``ε = se² ≥ 0`` hold IDENTICALLY, for every modal
-combination.  The starting 3-D balance is the SAME k–ε system; the q–r form is
-obtained by substituting ``k=sk²``, ``ε=se²`` into the 3-D k and ε transport
-equations and dividing by ``2·sk`` / ``2·se`` (so the time derivative stays
-linear, ``∂_t(sk²)=2 sk ∂_t sk`` → ``∂_t sk``).  The diffusion term splits
-cleanly under the product rule
-
-    (1/2 sk) ∂_z(2 sk · ν_t/σ_k · ∂_z sk)
-        = ∂_z(ν_t/σ_k · ∂_z sk)              ← a clean flux divergence (IBP + 0-Neumann)
-          + (ν_t/(σ_k sk))(∂_z sk)²          ← an extra cross-term source (Gauss-quad)
-
-so the ONLY hard-coded thing is the 3-D q–r balance (the user's "3d balance as a
-start"); everything else rides the SAME moment-projection pipeline as mass,
-momentum and KESME.  The cross-term, the production/dissipation prefactors
-``1/(2 sk)``, ``1/(2 se)`` and the eddy viscosity ``ν_t = C_μ sk⁴/se²`` are all
-rational in ζ → their Galerkin brackets survive ``ExtractBrackets`` and are
-resolved by ``GaussQuadrature`` (``quadrature_order>0``), exactly as for the plain
-KESME ``ν_t = C_μ k²/ε``.
-
-KESME is left completely untouched — this is a separate class so the working
-model is not put at risk.
-
-q–r transport equations (3-D residual form, the ONLY hard-coding):
-
-    ∂_t sk + ∇·(u sk) + ∂_z(w sk)
-        − ∂_z(J_k) − (ν_t/σ_k sk)(∂_z sk)²
-        − (ν_t/2 sk)(∂_z u)²  +  se²/(2 sk)                       = 0
-    ∂_t se + ∇·(u se) + ∂_z(w se)
-        − ∂_z(J_e) − (ν_t/σ_e se)(∂_z se)²
-        − (C_1 C_μ sk²/2 se)(∂_z u)²  +  C_2 se³/(2 sk²)          = 0
-
-with  J_k = ν_t/σ_k ∂_z sk,  J_e = ν_t/σ_e ∂_z se,  ν_t = C_μ sk⁴/se².
+"""k-epsilon Shallow Moment Equations in the q-r variables ``sk = sqrt(k)``,
+``se = sqrt(epsilon)`` (QRKESME), positive by construction. A separate variant of
+:class:`~zoomy_core.model.models.ke_sme.KESME`; lifted to a SystemModel via
+``SystemModel.from_model``.
 """
 from __future__ import annotations
 
@@ -69,14 +33,14 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class QRKESME(SME):
-    """k–ε Shallow Moment Equations in the q–r variables (see module docstring).
+    """SME with ``sk`` and ``se`` transported at their own modal order ``turbulence_level``, so
+    ``k = sk^2 >= 0`` and ``epsilon = se^2 >= 0`` hold identically. Default closures are
+    ``QRViscosity``, ``RoughWall`` and ``StressFree``; build with ``quadrature_order>0`` because
+    ``nu_t = C_mu sk^4/se^2`` is rational.
 
-    Transports ``sk = √k`` and ``se = √ε`` at modal order ``turbulence_level``
-    (N_k), independent of the velocity order ``level`` (N_u).  Default closures
-    ``[QRViscosity(), RoughWall(), StressFree()]``: the eddy-viscosity bulk stress
-    ``τ = ρ(ν + C_μ sk(ζ)⁴/se(ζ)²) ∂_z u`` (the k–ε feedback into the momentum,
-    positive by construction), turbulent rough-wall bed, stress-free surface.
-    Build with ``quadrature_order>0`` (default 6): ν_t(ζ) is rational."""
+    References:
+        Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+    """
 
     _cacheable_derivation = True        # derive_model returns m; byproducts on m
 
@@ -85,14 +49,19 @@ class QRKESME(SME):
         "the velocity order ``level`` (N_u)."))
 
     def __init__(self, **params):
+        """Build the model with the q-r default closures and ``quadrature_order=6`` unless
+        overridden.
+        """
         params.setdefault("closures",
                           [QRViscosity(), RoughWall(), StressFree()])
         params.setdefault("quadrature_order", 6)
         super().__init__(**params)
 
     def derive_model(self):
-        """COPY of SME.derive_model with the sk=√k, se=√ε transport equations
-        added and projected through the same pipeline (see module docstring)."""
+        """Derive the model: a copy of ``SME.derive_model`` with the ``sk`` and ``se`` transport
+        equations added and projected through the same pipeline. Returns the derivation model
+        with interpolate / project / reconstruction rows and the free-slip wall registered.
+        """
         Nu = int(self.level)
         Nk = int(self.turbulence_level)
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0, "e_x": 0.0,
@@ -182,6 +151,7 @@ class QRKESME(SME):
                        + C_2 * se ** 3 * inv_sk2 / 2)
 
         def _kbc(interface):
+            """Kinematic boundary condition of the vertical velocity at ``interface``."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -220,6 +190,9 @@ class QRKESME(SME):
 
         # 5 — project each horizontal momentum, then close the stress
         def _state(at, *, alias=None, btag=None):
+            """Closure state evaluated at the vertical location ``at`` (optionally for a
+            boundary tag).
+            """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
                                 boundary_tag=btag, horiz=list(horiz))
@@ -463,10 +436,10 @@ class QRKESME(SME):
     _system_model_kind = "qrkesme"
 
     def _register_hswme_spectrum(self, sm):
-        """HSWME spectrum EXCLUDING sk, se (advective, in-cone — they never set
-        the CFL bound): take the plain ``SME(level=N_u)`` hyperbolic spectrum for
-        the b, h, q block and pad the sk, se slots with ``n·u_m`` (avoids the flaky
-        symbolic eigensolve on the rational ν_t entries)."""
+        """Set the SystemModel spectrum from the plain ``SME`` twin and pad the sk, se slots
+        with the depth-mean normal velocity. The turbulence fields travel inside the gravity
+        cone, so they never set the CFL bound.
+        """
         n_eq = sm.n_equations
         twin = SystemModel.from_model(SME(level=int(self.level), dimension=int(self.dimension),
                    small_slope=bool(self.small_slope),

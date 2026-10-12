@@ -1,8 +1,5 @@
-"""Backward-compatible wrappers around :class:`MeshCatalog`.
-
-New code should use ``from zoomy_core.mesh.mesh_catalog import MeshCatalog``
-directly. These free-functions are kept so existing notebooks and scripts
-continue to work without changes.
+"""Backward-compatible free functions around ``MeshCatalog``; new code should use ``MeshCatalog``
+directly.
 """
 
 from __future__ import annotations
@@ -29,6 +26,7 @@ _catalog: MeshCatalog | None = None
 
 
 def _get_catalog() -> MeshCatalog:
+    """Return the lazily created module-level ``MeshCatalog``."""
     global _catalog
     if _catalog is None:
         _catalog = MeshCatalog()
@@ -39,6 +37,7 @@ def _get_catalog() -> MeshCatalog:
 # Mesh listing (async + sync)
 # ============================================================
 async def show_meshes_async(do_print=True):
+    """Async: refresh the catalog, optionally print it, and return its entries."""
     catalog = MeshCatalog(auto_fetch=False)
     await catalog.refresh_async()
     meshes = catalog.entries
@@ -48,6 +47,7 @@ async def show_meshes_async(do_print=True):
 
 
 def show_meshes(do_print=True):
+    """Return (and optionally print) the catalog entries; returns a coroutine under Pyodide."""
     if _IN_PYODIDE:
         return show_meshes_async(do_print)
     catalog = _get_catalog()
@@ -60,12 +60,16 @@ def show_meshes(do_print=True):
 # Mesh download
 # ============================================================
 async def download_mesh_async(mesh_name, folder="./", filetype="msh", size="medium"):
+    """Async: download ``mesh_name`` of the given ``size`` and ``filetype`` into ``folder``."""
     catalog = MeshCatalog(auto_fetch=False)
     await catalog.refresh_async()
     return await catalog.download_async(mesh_name, size=size, filetype=filetype, folder=folder)
 
 
 def download_mesh(mesh_name, folder="./", filetype="msh", size="medium"):
+    """Download ``mesh_name`` of the given ``size`` and ``filetype`` into ``folder``; returns a
+    coroutine under Pyodide.
+    """
     if _IN_PYODIDE:
         return download_mesh_async(mesh_name, folder, filetype, size)
     catalog = _get_catalog()
@@ -76,6 +80,7 @@ def download_mesh(mesh_name, folder="./", filetype="msh", size="medium"):
 # meshio physical boundaries
 # ============================================================
 def get_boundary_names(mesh_path, do_print=True):
+    """Return the gmsh physical tags per cell type of a mesh file (needs meshio)."""
     if not _HAVE_MESHIO:
         raise RuntimeError(
             "get_boundary_names requires meshio, which is not available."
