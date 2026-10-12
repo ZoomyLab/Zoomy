@@ -36,6 +36,8 @@ class CxxBackend(param.Parameterized):
     :meth:`build` and :meth:`run`."""
     time_end = param.Number(default=None, allow_None=True)
     cfl = param.Number(default=0.9, bounds=(0, None))
+    time_order = param.Integer(default=None, allow_None=True, bounds=(1, 3),
+                               doc="SSP-RK order; None: the reconstruction order.")
     dt = param.Number(default=None, allow_None=True,
                       doc="Constant time step; None = adaptive CFL step.")
     cfl_check_every = param.Integer(default=10, bounds=(0, None),
@@ -108,7 +110,8 @@ class CxxBackend(param.Parameterized):
         return dict(cfl=self.cfl, dimension=dimension, mood=self._mood(nsm),
                     dt_write=self.dt_write, imex=self.imex,
                     cfl_check_every=self.cfl_check_every,
-                    wave_speed=self.cfl_wave_speed, dt_constant=self.dt)
+                    wave_speed=self.cfl_wave_speed, dt_constant=self.dt,
+                    time_order=self.time_order)
 
     def _template(self, nsm, dimension):
         return HyperbolicTemplate(nsm, **self._config(nsm, dimension))
@@ -156,7 +159,7 @@ class CxxChorinBackend(CxxBackend):
     runtime.  ``run`` takes ``(pred, press, corr)``: ``pred``, the predictor
     NSM on the full state; ``press`` / ``corr``, the pressure and corrector
     systems of the model's split (zoomy's ``dt``)."""
-    time_order = param.Integer(default=1, bounds=(1, 2))
+    time_order = param.Integer(default=1, bounds=(1, 3))
     pressure_tol = param.Number(default=ELLIPTIC_RTOL, bounds=(0, None))
     pressure_maxit = param.Integer(default=100, bounds=(1, None))
     pressure_restart = param.Integer(default=None, allow_None=True, bounds=(1, None))
@@ -199,8 +202,8 @@ class CxxChorinBackend(CxxBackend):
     def _template(self, nsm, dimension):
         newton = (None if self.pressure_solve == "linear" else
                   (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
-        return ChorinTemplate(nsm, self.press, self.corr, time_order=self.time_order,
-                              pressure_newton=newton, **self._config(nsm, dimension))
+        return ChorinTemplate(nsm, self.press, self.corr, pressure_newton=newton,
+                              **self._config(nsm, dimension))
 
     def _print(self, nsm, dimension):
         if self._amr_loop():
@@ -250,7 +253,7 @@ def _amr_procedures(template):
         return (Q if depth is None or tol is None else clean_round_off(Q, (depth,), tol),)
 
     beta = []
-    for a, _c in SSP_RK[order]:
+    for a, _c in SSP_RK[template.time_order]:
         beta = [(1 - a) * b for b in beta] + [1 - a]
     procs = [
         "#define ZS_AMR_PROCEDURES 1",
