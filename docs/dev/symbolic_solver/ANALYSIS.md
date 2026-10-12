@@ -897,3 +897,15 @@ foot point: first derivatives order ~1, second derivatives bounded
 (2.5e-2; a single odd ghost cannot do better at a Dirichlet wall).
 JAX and foam; AMReX is Cartesian (no change).  Gates 1, 16, 23 tri2
 unchanged (constant BC data).
+
+## 35. SSP-RK3; the Chorin step is first order in time
+
+`SSP_RK[3]` (Shu-Osher; stage time = the stage input's time) and a
+`time_order` option (default: the reconstruction order) on the templates,
+JAX and C++ drivers.  Gate 40: ODE with exact solution 1.01 / 1.92 / 3.00
+(rerun), forced SWE wave on a fixed mesh 1.28 / 2.07 / 3.00, 2 ranks =
+serial 4e-16; a wrong last-stage time drops RK3 to 0.99 (the gate catches
+it).  Default output byte-identical.  Open: the Chorin projection stage is
+itself first order (Lie-split sources, pressure at the stage end), so its
+temporal order stays ~1.2 for time_order 1, 2, 3; a second-order
+projection is needed before the pressure solver can claim O2 in time.
