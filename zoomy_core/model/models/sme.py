@@ -1,22 +1,6 @@
-"""Shallow Moment Equations (Kowalski & Torrilhon 2019) — the single
-canonical model, derived with the declarative
-:mod:`zoomy_core.model.derivation` framework (moment-projected vertical
-velocity route).
-
-``SME`` is the ONLY model class in :mod:`zoomy_core.model.models`; everything
-else is archived under ``legacy/``.  It extends the empty base
-:class:`zoomy_core.model.basemodel.Model` for the parameter / identity surface,
-but its derivation is the declarative pipeline (the `sme_wmoments` notebook):
-full 3-D system → hydrostatic → σ-map → moment-project the mass balance (h-eq +
-the ŵ closure) → project & close the x-momentum → insert the shifted-Legendre
-basis → conservative CoV ``û_i → q_i/h``.  The vertical reconstruction is
-registered into the ``interpolate`` function group with the ŵ closure inlined
-(``w(ζ) = Σ_j ŵ_j(q, ∂_x q, ∂_x h, ∂_x b) φ_j(ζ)``), so ``interpolate_to_3d`` is
-self-contained.
-
-``SME(level=2).derive_model()`` builds the declarative model;
-``SystemModel.from_model(SME(level=2))`` returns the runtime
-:class:`~zoomy_core.systemmodel.SystemModel`.
+"""Shallow Moment Equations (``SME``): the declaratively derived depth-resolved moment Model,
+for one or two horizontal directions. ``SystemModel.from_model(SME(level=2))`` lifts it to the
+runtime system.
 """
 from __future__ import annotations
 
@@ -44,10 +28,14 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class SME(BaseModel):
-    """Shallow Moment Equations, modal truncation order ``level`` (``N_u``).
+    """Shallow Moment Equations of modal order ``level`` (``level=2`` gives h, q_0, q_1, q_2
+    plus the bed ``b``), derived symbolically by Galerkin projection.
 
-    ``level=2`` matches K&T (4.17): 4 dynamic equations (h, q_0, q_1, q_2)
-    plus the bed ``b``.
+    Lifted to a SystemModel by ``SystemModel.from_model``; stress closures are injected through
+    ``closures``.
+
+    References:
+        Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     _finalize_lazy = True               # declarative path — skip the production tag pipeline
@@ -55,18 +43,12 @@ class SME(BaseModel):
     level = param.Integer(default=2, bounds=(0, None))
     dimension = param.Integer(default=2, bounds=(2, 3), doc=(
         "Total spatial dimension INCLUDING the vertical: 2 → coords (t, x, z), "
-        "one horizontal direction (the canonical 1-horizontal SME, q_0,q_1,…); "
-        "3 → coords (t, x, y, z), two horizontal directions (q_x_i, q_y_i).  "
-        "Closures and boundary conditions are dimension-agnostic; only the state "
-        "setup and the per-direction projection loops switch on this."))
+        "one horizontal direction (q_0, q_1, …); 3 → coords (t, x, y, z), two "
+        "horizontal directions (q_x_i, q_y_i)."))
     small_slope = param.Boolean(default=True, doc=(
-        "Apply small_slope_scaling — resolve the opaque boundary frame to its "
-        "n→ẑ limit (drop the O(slope) traction corrections), recovering the "
-        "K&T shallow-moment form.  True (default) = the standard shallow model "
-        "(byte-identical to the hand-derived SME).  False = keep the "
-        "geometrically-exact, slope-aware boundary tractions (the higher-order "
-        "model); the projected-traction closures then carry the bed/surface "
-        "slope explicitly."))
+        "True (default) resolves the opaque boundary frame to its n→ẑ limit, "
+        "the standard shallow form. False keeps the slope-aware boundary "
+        "tractions."))
     quadrature_order = param.Integer(default=0, bounds=(0, None), doc=(
         "Gauss-Legendre order for NUMERICAL integration of Galerkin "
         "integrals that survive the analytic bracket machinery "
@@ -75,38 +57,21 @@ class SME(BaseModel):
         "extraction."))
     closures = param.List(default=[], doc=(
         "List of composable stress Closure pieces (closures.py), e.g. "
-        "closures=[Newtonian(), NavierSlip(), StressFree()] or "
-        "closures=[KEpsilonViscosity(), RoughWall()].  Each closes one stress "
-        "component (bulk / bottom / surface).  An empty list leaves tau_xz "
-        "UNCLOSED (modal moments stay free)."))
+        "[Newtonian(), NavierSlip(), StressFree()]. An empty list leaves "
+        "tau_xz UNCLOSED (modal moments stay free)."))
     symbolic_spectrum = param.Boolean(default=False, doc=(
-        "Compute the closed-form beta-HSWME spectrum at BUILD time "
-        "(:meth:`_register_hswme_spectrum`).  OFF by default: the runtime then "
-        "takes numerical eigenvalues from the quasilinear matrix, which every "
-        "consumer already supports via ``eigenvalues is None`` (the path "
-        "hand-built models such as VAM have always used).\n\n"
-        "The closed form buys a sharp analytic Rusanov/CFL wavespeed with no "
-        "per-face eigensolve, but it costs a SYMBOLIC eigen-decomposition: "
-        "``A.eigenvals()`` factors the truncated characteristic polynomial over "
-        "the integers, and sympy's heuristic polynomial GCD then runs on huge "
-        "integer coefficients.  Measured on SME(level=2, dimension=3): 67 s of "
-        "a 123 s build -- 54%, of which 61 s is ``dup_zz_heu_gcd`` from a mere "
-        "16 calls.  The cost grows ~9x per level, so at level 4 in 2-D it turns "
-        "a minutes-long derivation into an hours-long one and made ordinary "
-        "postprocessing (which never reads ``eigenvalues``) unaffordable.\n\n"
-        "Turn it ON for a production run whose CFL bound you want analytic; "
-        "leave it OFF for derivation, codegen and postprocessing."))
+        "Compute the closed-form beta-HSWME spectrum at BUILD time; OFF by "
+        "default, the runtime then takes numerical eigenvalues. The symbolic "
+        "eigen-decomposition is expensive."))
     project_nz = param.Integer(default=33, bounds=(2, None), doc=(
-        "FIXED number of vertical samples ``N_z`` for the Integral-FREE "
-        "``project_from_3d`` Galerkin reduction: the resolved (e.g. VOF) "
-        "column is sampled at ``N_z`` uniform nodes on the unit interval and "
-        "reduced to the moments by trapezoid quadrature.  Set this to the VOF "
-        "column height the coupling supplies.  Trapezoid is O(N_z^-2); raise "
-        "``project_nz`` for a tighter inverse."))
+        "Number of vertical samples N_z of the trapezoid Galerkin reduction "
+        "in ``project_from_3d``; set it to the VOF column height the coupling "
+        "supplies."))
 
     def derive_model(self):
-        """Build the declarative SME model (stored as ``self.derivation``) and
-        register the vertical reconstruction.  Called by the base ``__init__``."""
+        """Build the declarative SME model (h-equation, projected horizontal momenta, closures)
+        and register the vertical reconstruction; called by the base ``__init__``.
+        """
         Nu = int(self.level)
         # nu (kinematic viscosity) and lambda_s (Navier slip) are MODEL
         # PARAMETERS — default 0 (inviscid / free-slip); override values via
@@ -176,6 +141,7 @@ class SME(BaseModel):
         self._declare_turbulence_fields(m, t, horiz)
 
         def _kbc(interface):
+            """Kinematic boundary condition of the vertical velocity at ``interface``."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -253,6 +219,9 @@ class SME(BaseModel):
 
         # 5 — project EACH horizontal momentum component, then close the stress.
         def _state(at, *, alias=None, btag=None):
+            """``ClosureState`` for the bulk (``at=None``) or the bed/surface trace
+            (``at=0/1``).
+            """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
                                 boundary_tag=btag, horiz=list(horiz))
@@ -423,12 +392,14 @@ class SME(BaseModel):
 
     # ── turbulence hooks (no-op on plain SME; KESME overrides) ──────────────
     def _declare_turbulence_fields(self, m, t, horiz):
-        """Declare extra depth-averaged transported state (e.g. k, ε) BEFORE
-        the bulk-stress closure, so the closure can read them.  No-op on SME."""
+        """Hook: declare extra depth-averaged transported state (e.g. k, epsilon) before the
+        bulk closure; no-op on ``SME``.
+        """
 
     def _add_turbulence_transport(self, m, t, horiz, h, q_heads):
-        """Add the transported-scalar balances (e.g. the k–ε equations) AFTER
-        the moment system is assembled.  No-op on SME."""
+        """Hook: add the transported-scalar balances after the moment system is assembled; no-op
+        on ``SME``.
+        """
 
     # The runtime operator-form system is built via
     # ``SystemModel.from_model(SME(...))`` (REQ-143); the builder in
@@ -438,32 +409,9 @@ class SME(BaseModel):
     _system_model_kind = "sme"
 
     def _register_hswme_spectrum(self, sm):
-        """Register the β-HSWME spectrum as the SystemModel's symbolic
-        eigenvalues — computed DIRECTLY from the truncated quasilinear matrix
-        (dimension-agnostic, any 1-D / 2-D normal):
-
-        Take the normal-projected quasilinear matrix ``A·n = Σ_d n_d·
-        quasilinear_matrix[:,:,d]``, ZERO the higher-order moment coefficients
-        (``q_i, q_{x/y,i}`` for ``i ≥ 2`` → 0 — the β-HSWME hyperbolic
-        truncation that drops the α_{≥2} coupling), and take its symbolic
-        eigenvalues.  This reproduces the Koellermeier-Rominger (2020, Thm 3.5)
-        spectrum — gravity waves ``n·(u_m ± √(g h + α₁²))`` plus the moment
-        waves ``n·(u_m + c_{i}·α₁)`` — but with the CORRECT characteristic
-        roots ``c_i`` (the truncated matrix's own; the previous closed form
-        wrongly used the Gauss-Legendre quadrature nodes, e.g. ±1/√3 instead of
-        ±1/√5 at level 2), and it generalises to a 2-D normal with no extra
-        logic (``A·n`` carries ``n_x, n_y``; the transverse moment advection
-        adds ``n·u_m`` eigenvalues automatically).
-
-        Gives a sharp Rusanov wavespeed / CFL bound without per-face numerical
-        eigensolves (the JAX/CUDA blocker, ~90% of the numpy step cost); the bed
-        row carries λ = 0.
-
-        VALID ONLY WHERE THE TRUNCATION IS EMPTY, i.e. level ≤ 1 — see the guard
-        below and :meth:`_wave_speed_cone`.  From level 2 up this method never
-        reaches the eigensolve, so the old level-≥6 Abel-wall splice (a level-5
-        twin's spectrum padded with ``n·u_m``) is gone with it: it described the
-        same truncated matrix and was subject to the same objection."""
+        """Publish the closed-form beta-HSWME spectrum as ``sm.eigenvalues``; valid only where
+        the truncation drops nothing (level <= 1), otherwise defers to ``_wave_speed_cone``.
+        """
         import re
         n_eq = sm.n_equations
         normal = list(sm.normal.values())
@@ -547,38 +495,10 @@ class SME(BaseModel):
             self._wave_speed_cone(sm)
 
     def _wave_speed_cone(self, sm):
-        """No closed-form spectrum, but a closed-form WAVE-SPEED CONE.
-
-        Used from level 2 up, where the β-HSWME closed form is the spectrum of
-        the truncated matrix and NOT of the one the solver marches (see
-        :meth:`_register_hswme_spectrum`).  Two slots, two different contracts:
-
-        * ``eigenvalues = None`` — the honest statement.  Every consumer already
-          branches on it: :meth:`~zoomy_core.fvm.riemann_solvers.HLL.
-          wave_speed_bounds` degrades to local Lax-Friedrichs and
-          ``local_max_abs_eigenvalue`` supplies the dissipation coefficient, so
-          it becomes an UPPER bound on ρ(A·n) instead of an under-estimate.
-          Nothing here fabricates a spectrum: Roe / eigensystem consumers still
-          see ``None`` and take the numerical decomposition.
-        * ``eigenvalues_cfl = [−ρ̄, +ρ̄, 0, …]`` — the dt-only slot, whose single
-          consumer is ``max|λ|``.  ``ρ̄`` is that same ``spectral_radius_bound``:
-          a power-norm (``ρ(A)ᵏ ≤ ‖|A|ᵏ·1‖_∞``) bound, strict at every iteration,
-          so the CFL cannot go unsafe.  Published HERE rather than left to the
-          ``eigenvalues is None`` fallback because that fallback is a per-face
-          NUMERICAL eigensolve (``jnp.linalg.eigvals`` on the JAX backend, which
-          has no GPU implementation at all) — measured at ~19 s/step against
-          1.3 ms/step on the 26k-cell Malpasset march, i.e. not a runnable dt
-          path.  The bound is ONE expression (4053 ops at level 2, dimension 3)
-          and rides the ordinary operator sweep, so ``desingularize_hinv``
-          rewrites its ``1/h`` exactly as it does the matrix it came from.
-
-        Price of correctness: the bound is loose where the conservative
-        variables cancel signs — MEASURED ρ̄/ρ(A·n) at level 2, dimension 3,
-        median 3.2 / p95 4.2 over 2000 realistic states (|α| ≤ 1.5|u|) at the
-        default ``spectral_bound_iterations = 2``, falling to 2.1 / 2.9 at 4 —
-        so the timestep is a few times shorter than the sharp one.  That is the
-        cost of a wave speed that actually bounds the system; the sharp
-        alternative was wrong."""
+        """Set ``eigenvalues = None`` and publish a strict spectral-radius-bound cone as
+        ``eigenvalues_cfl``, so the CFL needs no per-face eigensolve and HLL falls back to local
+        Lax-Friedrichs.
+        """
         import warnings
         n_eq = sm.n_equations
         sm.eigenvalues = None

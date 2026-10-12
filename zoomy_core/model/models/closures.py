@@ -1,30 +1,7 @@
-"""Stress closures as composable, self-describing operations.
-
-A :class:`Closure` is a single constitutive relation for one component of the
-shear stress ``τ_xz`` — the *bulk* field, the *bottom* (bed) trace, or the
-*surface* trace.  You compose a model's closure by listing the pieces::
-
-    SME(level=2, closures=[Newtonian(), NavierSlip(), StressFree()])
-    SME(level=2, closures=[KEpsilonViscosity(), RoughWall()])   # turbulent
-
-Each closure is a small object that
-
-* declares **which component** it closes — ``closes ∈ {"bulk","bottom","surface"}``;
-* declares **which fields it needs** — ``requires`` (asserted against the model);
-* **registers its parameters** — ``register(model)`` (register-or-query, with a
-  default), so a closure is self-contained and never depends on a constant the
-  model author forgot to declare;
-* returns its **symbolic relation** — ``expression(s)`` over a full-access
-  :class:`~zoomy_core.model.models.material.ClosureState` ``s`` (``s.u``, ``s.k``,
-  ``s.dz(...)``, ``s.par.rho`` …), with NO side effects; the model performs the
-  substitution.
-
-Closures only *consume* the state a model already declares — they never mint a
-new Q/Qaux field.  New physics (k, ε transport) is a new *equation* on a new
-model class, not a closure (see the k–ε derivation notebook).
-
-Class-level metadata (``closes``, ``requires``) is IMMUTABLE (str / tuple) so two
-instances can never contaminate each other's defaults.
+"""Composable stress closures: each ``Closure`` is one constitutive relation for a stress
+component (bulk, bed trace, surface trace, horizontal or in-plane) over a ``ClosureState``.
+Models list them in ``closures=[...]`` and perform the substitution when the Model is derived,
+before the lift to a SystemModel.
 """
 from __future__ import annotations
 
@@ -35,17 +12,10 @@ from zoomy_core.model.models.material import ClosureState   # the full-access st
 
 
 def _solve_traction(P, s, nh):
-    """Solve the boundary frame system ``t_α·(τ·n) = P_α`` for the shear-stress
-    traces ``τ_iz`` (``i = 0…nh−1``), given the prescribed tangential tractions
-    ``P`` and the local frame on the :class:`ClosureState` ``s``.
-
-    Our stress tensor carries only the shear components ``τ_xz, τ_yz`` (the
-    in-plane components were dropped by ``moment_scaling``), so
-    ``(τ·n)_horiz_i = τ_iz n_z`` and ``(τ·n)_z = Σ_i τ_iz n_i``.  Returns the
-    ``τ_iz`` as expressions in the OPAQUE frame slopes; under
-    ``small_slope_scaling`` (slopes → 0, ``n → ẑ``) they collapse to
-    ``τ_iz = P_i`` — the flat-boundary trace.  In 1-D, exactly
-    ``τ_0 = P_0·(1+σ²)/(1−σ²)`` → ``P_0``."""
+    """Solve the boundary frame system ``t_a . (tau n) = P_a`` for the shear-stress traces
+    ``tau_iz`` given the prescribed tangential tractions ``P``; they reduce to ``tau_iz = P_i``
+    under small-slope scaling.
+    """
     nvec, tans = s.normal, s.tangents
     tau = [sp.Symbol(f"__tauz{i}") for i in range(nh)]
     nz = nvec[nh]
@@ -60,21 +30,19 @@ def _solve_traction(P, s, nh):
 
 
 def apply_stress_closures(closures, m, axes, state, horiz):
-    """Inject stress closures at the projected momentum (shared by SME / VAM /
-    the multilayer models) — frame-aware, dimension-agnostic.
+    """Inject the bulk, bed and surface stress closures into the projected momentum equations of
+    SME/VAM, frame-aware and dimension-agnostic.
 
-    Boundary closures prescribe the traction in the local frame ``{n, t_α}``
-    (:meth:`Closure.traction` → ``{"normal", "tangent"}``) and
-    :func:`_solve_traction` recovers the per-direction shear traces; bulk
-    closures stay diagonal (one constitutive :meth:`Closure.expression` per
-    direction, ``s.u`` aliased to that direction's velocity).
-
-    ``axes`` is a list of ``{"mx": eq, "tau": FieldHandle, "velname": "u"|"v"}``
-    (one per horizontal momentum component) and ``state`` is
-    ``state(at, *, alias=None, btag=None) -> ClosureState``.  Boundary traces
-    (surface/bottom) are substituted BEFORE the bulk field.  Returns True iff a
-    BULK closure was applied (else the caller leaves the bulk stress free /
-    modally expanded)."""
+    Args:
+        closures: list of ``Closure`` objects.
+        m: derivation model.
+        axes: one ``{"mx": eq, "tau": FieldHandle, "velname": "u"|"v"}`` per horizontal momentum
+            component.
+        state: callable ``state(at, *, alias=None, btag=None) -> ClosureState``.
+        horiz: horizontal coordinates.
+    Returns:
+        True iff a bulk closure was applied.
+    """
     nh = len(axes)
     for c in closures:
         c.register(m)
@@ -102,39 +70,36 @@ def apply_stress_closures(closures, m, axes, state, horiz):
 
 
 class Closure(Operation):
-    """Base for a one-component stress closure (see module docstring).
-
-    Subclasses set the immutable class attributes ``closes`` / ``requires`` and
-    implement :meth:`expression`; :meth:`register` is optional."""
+    """Base class of a one-component stress closure; subclasses set the immutable ``closes`` /
+    ``requires`` and implement ``expression``.
+    """
 
     closes = None          # "bulk" | "bottom" | "surface"   (immutable)
     requires = ()          # field names the closure consumes (immutable tuple)
 
     def __init__(self, name=None):
+        """Name the closure after its class and describe it by the component it closes."""
         super().__init__(name=name or type(self).__name__,
                          description=f"{type(self).__name__} ({self.closes})")
 
     def _key_content(self):
-        """Result-affecting identity of this closure for the derivation cache.
-
-        Canonicalises the non-cosmetic instance state (so e.g. an
-        ``ElderViscosity(friction=bed)`` keys differently from a standalone
-        ``ElderViscosity()``, and a nested bed closure folds in its own config).
-        Without this a closure is keyed only by its class ``repr`` and two
-        configurations of the same class would share a cached derivation."""
+        """Result-affecting instance state of this closure, used as its derivation-cache key."""
         from zoomy_core.model.derivation.cache_keys import _state_repr
         return _state_repr(vars(self))
 
     def __repr__(self):
+        """Class name plus ``_key_content``, so the derivation-cache canonicaliser sees the
+        configuration.
+        """
         # The derivation-cache canonicaliser falls back to ``repr`` for callable
         # Operations, so the repr MUST carry the result-affecting config.
         return f"{type(self).__name__}({self._key_content()})"
 
     def register(self, model):
-        """Register-or-query the parameters this closure needs (override)."""
+        """Register-or-query the model parameters this closure needs (override)."""
 
     def check(self, model):
-        """Assert every required field is present in the model."""
+        """Assert every field in ``requires`` is present in the model."""
         have = set(model.functions.keys())
         for f in self.requires:
             assert f in have, (
@@ -142,28 +107,25 @@ class Closure(Operation):
                 f"model does not define (has: {sorted(have)})")
 
     def expression(self, s):
-        """Return the symbolic relation for this stress component (override)."""
+        """Return the symbolic relation for this stress component over the ``ClosureState``
+        ``s`` (override).
+        """
         raise NotImplementedError
 
     def friction_velocity(self, s):
-        """Bed friction velocity ``u_⋆`` this closure defines, or ``None``.
-
-        A bottom drag law (RoughWall / Chezy) overrides this to expose its
-        recovered ``u_⋆ = √(C_f)|u_b|`` so a bulk eddy-viscosity closure
-        (:class:`ElderViscosity`) can CONSUME it instead of a free parameter.
-        Closures without a bed drag return ``None``."""
+        """Bed friction velocity ``u_star`` this closure defines, or ``None``; bed drag laws
+        override it so an eddy viscosity can consume it.
+        """
         return None
 
     def traction(self, s):
-        """BOUNDARY traction in the local frame ``{n, t_α}``:
-        ``{"normal": <n·σn or None>, "tangent": [t_α·σn, …]}`` (one entry per
-        horizontal direction).  Default wraps the scalar :meth:`expression` as a
-        single tangential component — the 1-D / diagonal fallback.  Boundary
-        closures whose components COUPLE (friction magnitude ``|U|``, a
-        prescribed wind/tension direction) override this to return the full
-        vector; ``"normal"=None`` leaves the normal traction (pressure) to the
-        hydrostatic step.  Only consulted for ``closes ∈ {"bottom","surface"}``
-        under the frame-aware caller."""
+        """Boundary traction in the local frame ``{n, t_a}``; the default wraps the scalar
+        ``expression`` as one tangential component.
+
+        Returns:
+            ``{"normal": n.sigma.n or None, "tangent": [t_a.sigma.n, ...]}``, one tangent entry
+                per horizontal direction.
+        """
         return {"normal": None, "tangent": [self.expression(s)]}
 
 
@@ -171,42 +133,44 @@ class Closure(Operation):
 
 
 class Newtonian(Closure):
-    """Newtonian bulk stress  τ = ρ ν ∂_z u."""
+    """Newtonian bulk stress ``tau = rho nu d_z u``."""
     closes = "bulk"; requires = ("u",)
 
     def register(self, m):
+        """Register the kinematic viscosity ``nu``."""
         m.parameter("nu", 0.0)
 
     def expression(self, s):
+        """Return ``rho nu d_z u``."""
         return s.par.rho * s.par.nu * s.dz(s.u)
 
 
 class KEpsilonViscosity(Closure):
-    """Turbulent bulk stress with the standard k–ε eddy viscosity
-    ``τ = ρ ν_t ∂_z u``,  ``ν_t = C_μ k²/ε`` — reads the transported turbulence
-    fields ``k`` and ``ε`` (only available on a k–ε model class).  The Galerkin
-    projection is rational in ζ → build with ``quadrature_order > 0``.
+    """Bulk stress ``tau = rho nu_t d_z u`` with the k-epsilon eddy viscosity ``nu_t = C_mu
+    k^2/epsilon``; needs ``k`` and ``varepsilon`` fields and ``quadrature_order > 0``.
 
-    ``wall_floor`` (default on) adds the WALL-FUNCTION-consistent near-wall eddy
-    viscosity ``ν_t,wall = C_μ^{1/4}√k · κ z_p`` (the log-layer ``κ u_⋆ z_p`` with
-    ``u_⋆=C_μ^{1/4}√k``).  Why: ``C_μ k²/ε`` VANISHES at the wall, so in the moment
-    projection it provides almost no damping of the velocity-shape moments
-    (their stress-trace damping scales with the viscosity AT the wall — see
-    :class:`QRViscosity`).  The mixing-length floor keeps ν_t non-zero there and
-    restores that damping.  Set ``wall_floor=False`` for the bare ``C_μ k²/ε``."""
+    Args:
+        wall_floor: add the near-wall mixing-length viscosity ``C_mu^(1/4) sqrt(k) kappa z_p``
+            so the stress still damps the velocity moments at the wall.
+    """
     closes = "bulk"; requires = ("u", "k", "varepsilon")
 
     def __init__(self, name=None, wall_floor=True):
+        """Store the ``wall_floor`` switch."""
         super().__init__(name=name)
         self.wall_floor = bool(wall_floor)
 
     def register(self, m):
+        """Register ``C_mu``, ``nu`` and, with ``wall_floor``, ``kappa`` and ``z_p``."""
         m.parameter("C_mu", 0.09)
         m.parameter("nu", 0.0)        # molecular part: ν_eff = ν + ν_t
         if self.wall_floor:
             m.parameter("kappa", 0.41); m.parameter("z_p", 0.1)
 
     def expression(self, s):
+        """Return ``rho (nu + nu_t) d_z u`` with ``nu_t = C_mu k^2/epsilon`` plus the optional
+        wall floor.
+        """
         nu_t = s.par.C_mu * s.k ** 2 / s.varepsilon
         if self.wall_floor:
             # offset log-layer mixing length ℓ=κ(z+z_p) (see QRViscosity)
@@ -216,21 +180,24 @@ class KEpsilonViscosity(Closure):
 
 
 class QRViscosity(Closure):
-    """Turbulent bulk stress for the q–r (positivity-by-construction) k–ε model.
+    """Bulk stress for the positivity-preserving q-r k-epsilon model, with ``nu_t = C_mu
+    sk^4/se^2`` for the transported ``sk = sqrt(k)``, ``se = sqrt(epsilon)``; needs
+    ``quadrature_order > 0``.
 
-    Same eddy viscosity ``ν_t = C_μ k²/ε`` as :class:`KEpsilonViscosity`, but the
-    transported state is ``sk = √k`` and ``se = √ε`` (Finnie & Jeppson 1991,
-    k=q², ε=r²; later used by Fe et al. 2009),
-    so ``ν_t = C_μ sk⁴/se²`` — k=sk²≥0 and ε=se²≥0 hold by construction.  Reads
-    the transported ``sk``, ``se`` fields (only on a q–r k–ε model class); the
-    Galerkin projection is rational in ζ → build with ``quadrature_order > 0``."""
+    Args:
+        wall_floor: add the near-wall mixing-length viscosity, as in ``KEpsilonViscosity``.
+    """
     closes = "bulk"; requires = ("u", "sk", "se")
 
     def __init__(self, name=None, wall_floor=True):
+        """Store the ``wall_floor`` switch."""
         super().__init__(name=name)
         self.wall_floor = bool(wall_floor)
 
     def register(self, m):
+        """Register ``C_mu``, ``nu``, the floor ``eps_min`` and, with ``wall_floor``, ``kappa``
+        and ``z_p``.
+        """
         m.parameter("C_mu", 0.09)
         m.parameter("nu", 0.0)        # molecular part: ν_eff = ν + ν_t
         m.parameter("eps_min", 0.0)   # realizability floor: ε → ε + eps_min
@@ -238,6 +205,9 @@ class QRViscosity(Closure):
             m.parameter("kappa", 0.41); m.parameter("z_p", 0.1)
 
     def expression(self, s):
+        """Return ``rho (nu + nu_t) d_z u`` with ``nu_t = C_mu sk^4/(se^2 + eps_min)`` plus the
+        optional wall floor.
+        """
         # ν_t = C_μ k²/ε = C_μ sk⁴/(se²+ε_min)  (sk=√k, se=√ε); the ε_min
         # realizability floor keeps the denominator off zero (see QRKESME).
         nu_t = s.par.C_mu * s.sk ** 4 / (s.se ** 2 + s.par.eps_min)
@@ -260,44 +230,39 @@ class QRViscosity(Closure):
 
 
 class Bingham(Closure):
-    """Regularized BINGHAM (viscoplastic) bulk stress
-    ``τ = (ρν + τ_y/√((∂_z u)² + ε²))·∂_z u`` — rigid below the yield stress
-    ``τ_y`` in the ``ε→0`` limit; the ``ε²`` floor keeps the root argument
-    positive in floating point (the ``|γ̇|+ε`` form NaN-ed at plug formation).
-    Needs ``tau_y`` (yield stress) and ``eps_reg`` (regularization scale).  The
-    Galerkin projection is not analytically integrable → build the model with
-    ``quadrature_order > 0`` (Gauss–Legendre)."""
+    """Regularized Bingham bulk stress ``tau = (rho nu + tau_y/sqrt((d_z u)^2 + eps^2)) d_z u``,
+    rigid below the yield stress ``tau_y`` as ``eps -> 0``.
+    Not analytically integrable, so build the model with ``quadrature_order > 0``.
+    """
     closes = "bulk"; requires = ("u",)
 
     def register(self, m):
+        """Register ``nu``, the yield stress ``tau_y`` and the regularization scale ``eps_reg``."""
         m.parameter("nu", 0.0); m.parameter("tau_y", 0.0); m.parameter("eps_reg", 1e-3)
 
     def expression(self, s):
+        """Return the regularized Bingham stress."""
         return (s.par.rho * s.par.nu
                 + s.par.tau_y / sp.sqrt(s.dz(s.u) ** 2 + s.par.eps_reg ** 2)) * s.dz(s.u)
 
 
 class ElderViscosity(Closure):
-    """Elder / parabolic eddy viscosity  ν_t = κ u_⋆ h ζ(1−ζ)  (Elder 1959) —
-    the classical ALGEBRAIC turbulence closure for free-surface flow:
-    ``τ = ρ ν_t ∂_z u``.  Unlike k–ε it is a POLYNOMIAL in ζ, so the Galerkin
-    projection closes analytically (no quadrature).  ``u_star`` is the friction
-    velocity: a free PARAMETER by default, or — when a bed drag closure is passed
-    as ``friction=`` — the SAME live ``u_⋆ = √(C_f)|u_b|`` that closure recovers
-    (one shared bed instance), e.g.::
+    """Algebraic Elder eddy viscosity ``nu_t = kappa u_star h zeta (1 - zeta)``, polynomial in
+    zeta so the Galerkin projection closes analytically.
 
-        bed = RoughWall()
-        SME(..., closures=[ElderViscosity(friction=bed), bed, StressFree()])
-
-    so the eddy viscosity tracks the computed bed shear per cell instead of a
-    frozen constant.  ``friction=None`` keeps the standalone parameter form."""
+    Args:
+        friction: optional bed closure whose live ``friction_velocity`` replaces the ``u_star``
+            parameter.
+    """
     closes = "bulk"; requires = ("u",)
 
     def __init__(self, name=None, friction=None):
+        """Store the optional bed closure supplying ``u_star``."""
         super().__init__(name=name)
         self.friction = friction      # a bottom closure exposing friction_velocity
 
     def register(self, m):
+        """Register ``kappa``, ``u_star``, ``nu`` and the parameters of the bed closure, if any."""
         m.parameter("kappa", 0.41)
         m.parameter("u_star", 0.0)
         m.parameter("nu", 0.0)        # molecular part: ν_eff = ν + ν_t
@@ -305,6 +270,7 @@ class ElderViscosity(Closure):
             self.friction.register(m)  # ensure the bed law's params (k_s, z_p) exist
 
     def expression(self, s):
+        """Return ``rho (nu + nu_t) d_z u`` with the Elder ``nu_t``."""
         u_star = (self.friction.friction_velocity(s) if self.friction is not None
                   else s.par.u_star)
         nu_t = s.par.kappa * u_star * s.depth * s.zeta * (1 - s.zeta)
@@ -315,55 +281,54 @@ class ElderViscosity(Closure):
 
 
 class NavierSlip(Closure):
-    """Navier slip at the bed  τ_b = λ_s · u_b  (linear; the "easy" closure)."""
+    """Linear Navier slip at the bed, ``tau_b = lambda_s u_b``."""
     closes = "bottom"; requires = ("u",)
 
     def register(self, m):
+        """Register the slip coefficient ``lambda_s``."""
         m.parameter("lambda_s", 0.0)
 
     def expression(self, s):
+        """Return ``lambda_s u``."""
         return s.par.lambda_s * s.u
 
     def traction(self, s):
-        """Tangential traction ∝ slip velocity, per axis (linear — no coupling;
-        the per-axis form is just the slip components in the frame).  Reduces to
-        ``τ_iz|_b = λ_s u_i`` under small-slope scaling."""
+        """Tangential traction ``lambda_s u_t`` per axis (reduces to ``lambda_s u_i`` under
+        small-slope scaling).
+        """
         return {"normal": None,
                 "tangent": [s.par.lambda_s * ut for ut in s.u_tangent]}
 
 
 class RoughWall(Closure):
-    """Turbulent ROUGH-WALL bed drag (OpenFOAM ``nutkRoughWallFunction`` family):
-
-        τ_b = ρ C_f · u_b |u_b|,   C_f = (κ / ln(z_p / z_0))²,   z_0 = k_s/30,
-
-    the physically-correct turbulent replacement for Navier slip.  ``u_b`` is the
-    bed velocity trace; ``k_s`` the Nikuradse roughness, ``z_p`` the reference
-    height.  The recovered friction velocity ``u_⋆ = √(C_f)|u_b|`` is what feeds
-    the k–ε bed sources (Rastogi & Rodi 1978)."""
+    """Turbulent rough-wall bed drag ``tau_b = rho C_f u_b |u_b|`` with ``C_f =
+    (kappa/ln(z_p/z_0))^2`` and ``z_0 = k_s/30``.
+    Needs ``k_s`` (Nikuradse roughness), ``z_p`` and ``kappa``.
+    """
     closes = "bottom"; requires = ("u",)
 
     def register(self, m):
+        """Register ``kappa``, ``k_s`` and ``z_p``."""
         m.parameter("kappa", 0.41); m.parameter("k_s", 1e-3); m.parameter("z_p", 0.1)
 
     def expression(self, s):
+        """Return ``rho C_f u |u|``."""
         Cf = (s.par.kappa / sp.log(s.par.z_p / (s.par.k_s / 30))) ** 2
         return s.par.rho * Cf * s.u * sp.Abs(s.u)
 
     def friction_velocity(self, s):
-        """Recovered bed friction velocity ``u_⋆ = √(C_f)·|u_b|`` (Rastogi & Rodi
-        1978), with ``|u_b|`` the horizontal-momentum magnitude of the ζ=0 bed
-        trace.  Consumed by :class:`ElderViscosity` (``friction=``)."""
+        """Recovered bed friction velocity ``sqrt(C_f) |u_b|`` of the horizontal bed trace,
+        consumed by ``ElderViscosity``.
+        """
         Cf = (s.par.kappa / sp.log(s.par.z_p / (s.par.k_s / 30))) ** 2
         ub = s.velocity_at(0)                        # bed trace [u, (v,) w]
         u_b_mag = sp.sqrt(sum(ub[i] ** 2 for i in range(len(ub) - 1)))  # horizontal
         return sp.sqrt(Cf) * u_b_mag
 
     def traction(self, s):
-        """Quadratic bed drag as a VECTOR traction opposing the slip velocity:
-        ``τ_b,i = ρ C_f |U_t| u_{t,i}`` — the magnitude ``|U_t| = √(Σ u_{t,α}²)``
-        couples the x/y components (a single scalar per axis would wrongly use
-        ``|u_i|``).  Reduces to ``ρ C_f u_b|u_b|`` in 1-D under small-slope."""
+        """Quadratic bed drag as a vector traction ``rho C_f |U_t| u_t`` opposing the slip
+        velocity, coupling the x/y components through ``|U_t|``.
+        """
         Cf = (s.par.kappa / sp.log(s.par.z_p / (s.par.k_s / 30))) ** 2
         speed = sp.sqrt(sum(ut ** 2 for ut in s.u_tangent))
         return {"normal": None,
@@ -371,42 +336,31 @@ class RoughWall(Closure):
 
 
 class WallFunctionBed(Closure):
-    """k–ε ROUGH-WALL-FUNCTION bed stress — the standard turbulent momentum sink.
-
-    Same log-law drag coefficient as :class:`RoughWall`,
-    ``C_f = (κ / ln(z_p/z_0))²``, ``z_0 = k_s/30``, giving the wall shear
-    ``τ_b,i = ρ C_f |U_p| U_{p,i}`` (= ρ u_*² in the flow direction, with
-    ``u_* = κ|U_p|/ln(z_p/z_0)``).  The crucial difference: the reference
-    velocity ``U_p`` is read at the first NEAR-WALL height ``ζ_p = z_p/h`` —
-    NOT at the bed trace ``ζ=0``.
-
-    Why this matters for a moment model: the bed trace ``u(0) = Σ û_i(−1)^i`` is
-    where the log-law velocity is formally singular, and in a truncated moment
-    expansion it COLLAPSES as the higher velocity moments grow (the bulk eddy
-    viscosity ν_t correctly vanishes at the wall and cannot damp those moments),
-    so ``RoughWall``'s ``u(0)``-based drag drops toward zero and the slope-driven
-    flow accelerates without bound.  Evaluating ``U_p`` at ``ζ_p`` instead drains
-    momentum at the physically-correct rate ρu_*² regardless of the profile — the
-    wall-function momentum sink, consistent with the k/ε wall-function BCs.
-
-    Needs ``k_s`` (Nikuradse roughness), ``z_p`` (reference height), ``kappa``."""
+    """k-epsilon rough-wall-function bed stress ``tau_b = rho C_f |U_p| U_p`` with the log-law
+    ``C_f`` of ``RoughWall`` but the velocity ``U_p`` read at the near-wall height ``zeta_p =
+    z_p/h`` rather than at the bed trace.
+    Needs ``k_s``, ``z_p`` and ``kappa``.
+    """
     closes = "bottom"; requires = ("u",)
 
     def register(self, m):
+        """Register ``kappa``, ``k_s`` and ``z_p``."""
         m.parameter("kappa", 0.41); m.parameter("k_s", 1e-3); m.parameter("z_p", 0.1)
 
     def _Cf(self, s):
+        """Log-law drag coefficient ``(kappa/ln(z_p/(k_s/30)))^2``."""
         return (s.par.kappa / sp.log(s.par.z_p / (s.par.k_s / 30))) ** 2
 
     def expression(self, s):
+        """Scalar 1-D drag ``rho C_f U_p |U_p|`` from the near-wall velocity."""
         # scalar 1-D fallback: drag from the near-wall reference velocity U_p
         Up = s.velocity_at(s.par.z_p / s.depth)[0]
         return s.par.rho * self._Cf(s) * Up * sp.Abs(Up)
 
     def traction(self, s):
-        """Wall-function bed drag as a VECTOR traction ``τ_b,i = ρ C_f |U_p| U_{p,i}``
-        with ``U_p`` the tangential velocity at the near-wall height ``ζ_p=z_p/h``
-        (couples x/y via ``|U_p|``).  Reduces to ``ρ C_f U_p|U_p|`` in 1-D."""
+        """Vector bed traction ``rho C_f |U_p| U_p`` from the tangential velocity at ``zeta_p =
+        z_p/h``.
+        """
         Cf = self._Cf(s)
         ut = s.u_tangent_at(s.par.z_p / s.depth)
         speed = sp.sqrt(sum(u ** 2 for u in ut))
@@ -426,38 +380,32 @@ class WallFunctionBed(Closure):
 
 
 class ManningFriction(Closure):
-    """Manning bed friction as a BOTTOM (bed-trace) closure.
+    """Manning bed friction as a bottom closure for depth-averaged SWE; ``expression`` is the
+    rate ``-g n^2 |u| / max(h, h_floor)^(1/3)`` multiplying each velocity component.
 
-    Returns the friction RATE (per unit velocity)
-    ``-g n² |u| / max(h, h_floor)^{1/3}`` so the depth-averaged momentum sink
-    on each component is ``rate · u_i`` (the conservative
-    ``-g n² u_i |u| / h^{1/3}``).  ``|u|`` is the full horizontal speed
-    (``s.speed``) so x/y momenta couple correctly; ``h_floor`` keeps friction
-    finite at the wet/dry interface.  No ``Piecewise``/``sign`` — the source
-    Jacobian is auto-derived by sp.diff.
+    Args:
+        h_floor: depth floor that keeps friction finite at the wet/dry interface.
     """
     closes = "bottom"; requires = ("u", "h")
 
     def __init__(self, name=None, h_floor=0.0):
+        """Store the depth floor ``h_floor``."""
         super().__init__(name=name)
         self.h_floor = float(h_floor)
 
     def register(self, m):
+        """Register ``g`` and the Manning coefficient ``n``."""
         m.parameter("g", 9.81); m.parameter("n", 0.0)
 
     def expression(self, s):
+        """Return the friction rate (per unit velocity) for the depth-averaged SWE."""
         h_eff = sp.Max(s.h, sp.Float(self.h_floor)) if self.h_floor > 0 else s.h
         return -s.par.g * s.par.n ** 2 * s.speed / h_eff ** sp.Rational(1, 3)
 
     def traction(self, s):
-        """Bed-shear-stress VECTOR for the moment hierarchy (SME / VAM bottom
-        trace): ``τ_b,i = ρ g n² |U_t| u_{t,i} / h^{1/3}`` — the Manning analog
-        of :meth:`RoughWall.traction`, with ``C_f = g n²/h^{1/3}`` and the speed
-        ``|U_t| = √(Σ u_{t,α}²)`` from the frame tangents (couples x/y).  This is
-        the depth-resolved STRESS form; the depth-averaged SWE path consumes the
-        scalar :meth:`expression` (a rate) instead.  Uses the untraced column
-        depth ``s.depth`` (NOT ``s.h`` — depth has no vertical profile to trace
-        at the bed)."""
+        """Bed shear stress vector ``rho g n^2 |U_t| u_t / h^(1/3)`` for the moment hierarchy,
+        the Manning analogue of ``RoughWall.traction``.
+        """
         h = s.depth
         h_eff = sp.Max(h, sp.Float(self.h_floor)) if self.h_floor > 0 else h
         Cf = s.par.g * s.par.n ** 2 / h_eff ** sp.Rational(1, 3)
@@ -467,65 +415,48 @@ class ManningFriction(Closure):
 
 
 class EddyViscosity(Closure):
-    """Horizontal eddy viscosity as a HORIZONTAL-stress closure.
-
-    The depth-averaged turbulent mixing ``∇·(ν h ∇u)`` (the τ_xx/τ_xy stress
-    divergence — a horizontal diffusion, NOT the vertical τ_xz shear).
-    Returns the isotropic kinematic eddy viscosity ``ν``; the SWE model builds
-    the velocity-diffusion tensor (diagonal on momentum, chain-rule cross term
-    on h) from it.  Vanishes at lake-at-rest (u=0) so well-balancing holds.
+    """Horizontal eddy viscosity closure for the depth-averaged mixing ``div(nu h grad u)``;
+    ``expression`` returns the isotropic ``nu`` and the SWE model builds the diffusion tensor
+    from it.
     """
     closes = "horizontal"; requires = ("u",)
 
     def register(self, m):
+        """Register the kinematic viscosity ``nu``."""
         m.parameter("nu", 0.0)
 
     def expression(self, s):
+        """Return ``nu``."""
         return s.par.nu
 
 
 class ShallowInPlane(Closure):
-    """Shallow-moment in-plane stress closure: DROP the in-plane deviatoric
-    stress (``τ_xx, τ_xy, τ_yy → 0``).
-
-    The explicit, opt-in form of the old ``moment_scaling`` shallow-scaling step.
-    A full-stress 3-D model (e.g. :class:`~zoomy_core.model.models.sigma3d.Sigma3D`)
-    keeps every deviatoric term in the derivation; adding this horizontal closure
-    reproduces the shallow / SME-type form where only the vertical shear ``τ_xz``
-    survives.  Add it to a model's ``closures=[…]`` to "get the shallow version
-    back"; leave it out for the geometrically-exact full-stress model.
+    """Opt-in shallow form: drop the in-plane deviatoric stress
+    (``tau_xx, tau_xy, tau_yy -> 0``) of a full-stress model.
     """
     closes = "horizontal"; requires = ()
 
     def expression(self, s):
+        """Return zero."""
         return sp.S.Zero
 
 
 class NewtonianInPlane(Closure):
-    """KEEP the IN-PLANE deviatoric stress as incompressible Newtonian
-    ``τ_de = ρ ν (∂_d u_e + ∂_e u_d)`` — the RETAIN complement of
-    :class:`ShallowInPlane` (which drops it, the default ``moment_scaling``).
-
-    The shallow-moment / VAM families (SME, ML-SME, VAM, ML-VAM) drop the
-    in-plane deviatoric stress by default (only the vertical shear ``τ_xz``
-    survives).  Adding this closure to a model's ``closures=[…]`` RETAINS the
-    streamwise / cross normal stress (``τ_xx`` in 1-horizontal; ``τ_xx, τ_xy,
-    τ_yy`` in 2-horizontal): the model's derivation adds the in-plane Newtonian
-    divergence (``add_inplane_viscous``) and routes it into ``diffusion_matrix``
-    as a horizontal eddy viscosity (``package_viscous``) — the term the standard
-    shallow-moment quasilinear structure lacks.  Constant ``ν`` ⇒ mode-diagonal
-    diffusion; a ζ-dependent ``ν_t`` would fill the inter-moment off-diagonals.
-
-    A pure marker closure: it declares only that the in-plane stress is kept and
-    which molecular ``ν`` closes it; the model performs the (tensor-valued)
-    substitution, exactly as it consumes :class:`ShallowInPlane` for the drop.
+    """Marker closure that keeps the in-plane deviatoric stress as incompressible Newtonian,
+    ``tau_de = rho nu (d_d u_e + d_e u_d)``, the complement of ``ShallowInPlane``.
+    The model adds the divergence (``add_inplane_viscous``) and routes it into
+    ``diffusion_matrix`` (``package_viscous``).
     """
     closes = "in_plane"; requires = ("u",)
 
     def register(self, m):
+        """Register the kinematic viscosity ``nu``."""
         m.parameter("nu", 0.0)
 
     def expression(self, s):
+        """Return ``rho nu d_z u``; the in-plane tensor itself is built by the model, not by
+        this scalar.
+        """
         # in-plane stress is tensor-valued and consumed by the model's
         # add_inplane_viscous (not the scalar apply_stress_closures path)
         return s.par.rho * s.par.nu * s.dz(s.u)
@@ -535,15 +466,17 @@ class NewtonianInPlane(Closure):
 
 
 class StressFree(Closure):
-    """Stress-free free surface  τ(1) = 0  (the usual top BC)."""
+    """Stress-free free surface, ``tau(1) = 0``."""
     closes = "surface"; requires = ()
 
     def expression(self, s):
+        """Return zero."""
         return sp.S.Zero
 
     def traction(self, s):
-        """Zero tangential traction on every axis (the normal traction — the
-        free-surface pressure — is left to the hydrostatic step, as before)."""
+        """Zero tangential traction on every axis; the free-surface pressure is left to the
+        hydrostatic step.
+        """
         return {"normal": None, "tangent": [sp.S.Zero for _ in s.tangents]}
 
 
@@ -555,40 +488,45 @@ class StressFree(Closure):
 
 
 class InterfaceFlux(Closure):
-    """Base for the multilayer interface transfer-velocity scheme."""
+    """Base of the multilayer interface transfer-velocity schemes;
+    ``expression(below, above, G)`` takes the two one-sided interface traces and the interface
+    mass flux ``G``.
+    """
     closes = "interface"; requires = ()
 
     def expression(self, below, above, G):    # noqa: D401 - distinct signature
+        """Return the shared interface velocity ``u*`` (override)."""
         raise NotImplementedError
 
 
 class MeanInterface(InterfaceFlux):
-    """Central interface velocity  u* = (u_below + u_above) / 2."""
+    """Central interface velocity ``u* = (u_below + u_above)/2``."""
 
     def expression(self, below, above, G):
+        """Return the arithmetic mean of the two traces."""
         return (below + above) / 2
 
 
 class UpwindInterface(InterfaceFlux):
-    """Donor interface velocity by the sign of the interface flux G
-    (Hörnschemeyer Eq. 9): u* = u_below if G ≥ 0 else u_above."""
+    """Donor interface velocity chosen by the sign of the interface flux, ``u* = u_below`` if
+    ``G >= 0`` else ``u_above``.
+    """
 
     def expression(self, below, above, G):
+        """Return the upwind trace selected by the sign of ``G``."""
         return sp.Piecewise((below, G >= 0), (above, True))
 
 
 def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
-    """Per-layer stress-closure injection for the multilayer models — frame-aware.
+    """Per-layer variant of ``apply_stress_closures`` for the multilayer models: the surface
+    closure acts only on the top layer and the bed closure only on the bottom layer.
 
-    Same contract as :func:`apply_stress_closures` (boundary closures prescribe
-    the traction in the local frame {n, t_α}, bulk closures stay diagonal), but
-    the *surface* closure fires only on the TOP layer and the *bottom* closure
-    only on the BED layer (internal interfaces carry no dynamic stress BC — they
-    use the InterfaceFlux family).  ``axes`` = ``[{"mx","tau","velname"}]`` per
-    horizontal component, ``state(at, *, alias=None, btag=None)``.  No
-    ``c.check(m)`` — the per-layer state maps the generic name ("u") to the
-    layer field (u_ℓ) explicitly, so the model-namespace check does not apply.
-    Returns True iff a BULK closure was applied."""
+    Args:
+        is_top: this layer carries the free surface.
+        is_bottom: this layer sits on the bed.
+    Returns:
+        True iff a bulk closure was applied.
+    """
     nh = len(axes)
     stress = [c for c in closures if c.closes in ("bulk", "bottom", "surface")]
     for c in stress:
@@ -615,7 +553,7 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
 
 
 def interface_closure(closures):
-    """Return the InterfaceFlux closure in ``closures`` (or None)."""
+    """Return the ``InterfaceFlux`` closure in ``closures``, or ``None``."""
     return next((c for c in (closures or []) if c.closes == "interface"), None)
 
 
@@ -627,21 +565,24 @@ def interface_closure(closures):
 
 
 class _SWEField:
-    """Minimal FunctionFamily stand-in for a depth-averaged SWE field: a single
-    bulk expression with no vertical-trace distinction (depth-averaged)."""
+    """Minimal ``FunctionFamily`` stand-in for a depth-averaged SWE field, whose bulk and trace
+    expressions coincide.
+    """
 
     def __init__(self, expr):
+        """Store the field expression."""
         self.expr = expr
 
     def at(self, loc):              # bottom/surface trace == the depth average
+        """Return the expression itself; the bed and surface traces equal the depth average."""
         return self.expr
 
 
 def swe_closure_state(model):
-    """Build a :class:`ClosureState` over a depth-averaged SWE model so its
-    closures can read ``s.u``/``s.w``/``s.h``/``s.speed`` and ``s.par.*``.
-    Velocity is desingularised through the model's ``hinv`` aux (``u=hu·hinv``);
-    ``speed`` is the floored horizontal magnitude (couples x/y friction)."""
+    """Build a ``ClosureState`` over a depth-averaged SWE model, exposing ``s.u``, ``s.w``,
+    ``s.h``, ``s.speed`` (floored horizontal magnitude) and ``s.par``, with velocity
+    desingularised through the ``hinv`` aux.
+    """
     v = model.variables
     a = model.aux_variables
     hinv = a.hinv

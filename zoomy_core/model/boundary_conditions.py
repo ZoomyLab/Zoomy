@@ -1,4 +1,7 @@
-"""Module `zoomy_core.model.boundary_conditions`."""
+"""Boundary conditions of the Model layer: per-tag BC classes, the BoundaryConditions container
+and the kernels it lowers to. They are attached to a SystemModel, which turns them into the
+boundary / ghost-state kernels the solver templates call.
+"""
 
 import functools
 import numpy as np
@@ -36,11 +39,12 @@ _BC_ON_METHODS = {
 
 
 def _wrap_on_method(fn, interior_idx, is_grad, symbolic):
-    """Wrap a BC value/gradient producer so its result is applied ONLY to the
-    slots in ``self._on_slots`` (``None`` ⇒ owns all ⇒ pass through unchanged,
-    bit-identical to the un-wrapped behaviour)."""
+    """Wrap a BC producer so its result is written only to the slots in ``self._on_slots``
+    (None: owns all, pass through).
+    """
     @functools.wraps(fn)
     def wrapped(self, *args, **kw):
+        """Call the producer and mask its result to the owned slots."""
         full = fn(self, *args, **kw)
         slots = getattr(self, "_on_slots", None)
         if slots is None:                       # owns everything → no masking
@@ -61,7 +65,9 @@ def _wrap_on_method(fn, interior_idx, is_grad, symbolic):
 
 # --- Helper Function (Unchanged) ---
 def _sympy_interpolate_data(time, timeline, data):
-    """Internal helper `_sympy_interpolate_data`."""
+    """Piecewise-linear sympy interpolation of ``data`` over ``timeline``, constant outside the
+    range.
+    """
     assert timeline.shape[0] == data.shape[0]
     conditions = (((data[0], time <= timeline[0])),)
     for i in range(timeline.shape[0] - 1):
@@ -78,19 +84,9 @@ def _sympy_interpolate_data(time, timeline, data):
 
 # --- Base Class ---
 class BoundaryCondition(param.Parameterized):
-    """
-    Default implementation. The required data for the 'ghost cell' is the data
-    from the interior cell. Can be overwritten e.g. to implement periodic boundary conditions.
-
-    Flat-list interface: a BC carries a positional ``tag`` (the boundary patch)
-    and an ``on`` selector naming the FIELD(S) it applies to — a state field name
-    (``"h"``, ``"q_0"``), a family base (``"q"``, ``"k"``, ``"T"`` → every
-    ``<base>_i`` slot), a model-registered alias (``"momentum"``), or ``"all"``
-    (default).  ``on`` is resolved generically against the model's own declared
-    state by :func:`resolve_per_field`, so ANY future field is addressable by
-    name with no hard-coding.  Pass a flat list of these to a model and different
-    fields get different BCs at the same tag (momentum reflects, depth
-    extrapolates, …).
+    """Base class of a boundary condition: a ``tag`` (patch) and an ``on`` selector naming the
+    state field(s) it owns. A flat list of BCs gives different fields different BCs at one tag;
+    ``on`` is resolved against the model state by :func:`resolve_per_field`.
     """
 
     tag = param.String(default="bc")
@@ -112,10 +108,7 @@ class BoundaryCondition(param.Parameterized):
     boundary_value_kind = "ghost"
 
     def __init_subclass__(cls, **kw):
-        """Apply the ``on=`` mask to EVERY subclass automatically: each
-        value/gradient producer defined on the subclass is wrapped so it only
-        writes the slots the BC owns.  Inherited (un-overridden) producers are
-        already wrapped on the base class, so they mask too."""
+        """Wrap every value/gradient producer of a subclass so it honours the ``on=`` mask."""
         super().__init_subclass__(**kw)
         for name, (idx, is_grad, symbolic) in _BC_ON_METHODS.items():
             fn = cls.__dict__.get(name)
@@ -123,6 +116,7 @@ class BoundaryCondition(param.Parameterized):
                 setattr(cls, name, _wrap_on_method(fn, idx, is_grad, symbolic))
 
     def __init__(self, tag=None, on=None, **params):
+        """Set ``tag`` and ``on`` (both optional) and forward the remaining parameters."""
         if tag is not None:
             params["tag"] = tag
         if on is not None:
@@ -130,10 +124,9 @@ class BoundaryCondition(param.Parameterized):
         super().__init__(**params)
 
     def bind_on(self, state_names, aliases=None):
-        """Resolve this BC's ``on=`` selector to the state-slot indices it owns
-        (``None`` ⇒ ``"all"`` ⇒ owns everything, masking disabled).  Idempotent;
-        called by ``SystemModel.attach_boundary_conditions`` against the declared
-        state so the per-field mask is honored at EVERY entry point."""
+        """Resolve ``on`` to the owned state-slot indices (None: all, no masking); called by
+        ``SystemModel.attach_boundary_conditions``.
+        """
         on = self.on or "all"
         if on in ("all", ""):
             self._on_slots = None
@@ -142,44 +135,28 @@ class BoundaryCondition(param.Parameterized):
                 on, list(state_names), aliases or {"momentum": "q"})
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Symbolic builder for the boundary *value* — used by
-        :meth:`BoundaryConditions.get_boundary_condition_function` to
-        assemble the indexed ``Piecewise`` BC kernel (``boundary_conditions``).
-        The solver templates read it as the outer FACE state from the inner
-        state ``Q`` at the face (the Riemann problem's); every ghost consumer
-        takes :meth:`compute_ghost_state`."""
+        """Symbolic boundary value (the outer face state seen by the Riemann problem), assembled
+        into the indexed ``boundary_conditions`` kernel.
+        """
         raise NotImplementedError(
             "BoundaryCondition is a virtual class. Use one of its derived classes!"
         )
 
     def compute_boundary_gradient(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Symbolic builder for the boundary *normal-direction gradient*
-        ``∂Q/∂n`` at the face — used by
-        :meth:`BoundaryConditions.get_boundary_gradient_function` to
-        assemble the indexed ``Piecewise`` boundary-gradient kernel
-        (consumed by the diffusion path).
-
-        Default: zero Neumann.  Subclasses override when a non-zero
-        gradient is part of the BC (e.g. prescribed-flux Robin BCs)."""
+        """Symbolic face-normal gradient ``dQ/dn`` (default: zero Neumann), assembled into the
+        ``boundary_gradients`` kernel.
+        """
         n_vars = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         return ZArray.zeros(n_vars)
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
-        """Symbolic GHOST state of this BC (decision D5) — the value the
-        solver templates' gradient, limiter bounds, derivative aux and
-        diffusion consume (``boundary_ghost_state``).  The ghost sits at the
-        mirror image ``x_c + 2((x_f − x_c)·n) n`` of the inner cell centre
-        (evaluated at the foot of the perpendicular, ``dX`` the normal
-        distance), so a BC that prescribes a FACE value ``v`` has the ghost
-        ``2v − Q_inner`` (exact for a linear field); a BC whose value is
-        already a ghost (reflection, extrapolation, periodic partner) returns
-        it unchanged — see :attr:`boundary_value_kind`.  The Riemann problem
-        does NOT take the ghost: its outer state is
-        :meth:`compute_boundary_condition` of the inner face trace, at the
-        face centre (``boundary_traces``).  ``bdata`` is the
-        per-face boundary-data vector (coupling); ignored unless a subclass
-        reads it.  Non-owned slots (``on=``) are the interior value."""
+        """Symbolic ghost state at the mirror image of the inner cell centre; a
+        ``boundary_value_kind == "face"`` value ``v`` gives ``2v - Q``.
+
+        Args:
+            bdata: per-face boundary data (coupling), read only by subclasses that need it.
+        """
         v = ZArray(self.compute_boundary_condition(
             time, X, dX, Q, Qaux, parameters, normal))
         if self.boundary_value_kind == "face":
@@ -188,68 +165,33 @@ class BoundaryCondition(param.Parameterized):
         return v
 
     def face_state(self, Q_face, Qaux_face, normal, parameters):
-        """Compute the boundary-side Riemann state from the reconstructed face value.
-
-        Called at boundary faces inside the flux operator.
-        ``Q_face`` is the MUSCL-reconstructed interior state at the face.
-        Returns the state that the Riemann solver sees on the boundary side.
-
-        Default: same as Q_face (Neumann / zero-flux).
-
-        .. deprecated:: Use ``face_value`` instead.
+        """Deprecated numpy boundary-side Riemann state from the reconstructed face value
+        (default: copy); use ``face_value``.
         """
         return Q_face.copy()
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Boundary-side Riemann state for convective flux (ghost-cell-free).
+        """Numpy boundary-side Riemann state of the adjacent interior cell (default: copy of
+        ``Q_inner``).
 
-        Parameters
-        ----------
-        Q_inner : ndarray, shape (n_vars,)
-            Cell-center values of the adjacent interior cell.
-        Qaux_inner : ndarray, shape (n_aux,)
-            Auxiliary variables of the adjacent interior cell.
-        normal : ndarray, shape (dim,)
-            Outward unit face normal.
-        d_face : float
-            Distance from interior cell center to face center.
-        time : float
-            Current simulation time.
-        parameters : ndarray, shape (n_params,)
-            Model parameters.
+        Args:
+            d_face: distance from the interior cell centre to the face centre.
 
-        Returns
-        -------
-        ndarray, shape (n_vars,)
-            The state that the Riemann solver sees on the boundary side.
+        Returns:
+            State of shape ``(n_vars,)`` seen by the Riemann solver on the boundary side.
         """
         return np.asarray(Q_inner, dtype=float).copy()
 
     def face_gradient(self, Q_inner, Q_face, Qaux_inner, normal, d_face,
                       time, parameters):
-        """Face-normal gradient dQ/dn for diffusive flux at boundary.
+        """Numpy face-normal gradient ``dQ/dn`` for the diffusive flux (default:
+        ``(Q_face - Q_inner) / d_face``).
 
-        Parameters
-        ----------
-        Q_inner : ndarray, shape (n_vars,)
-            Cell-center values of the adjacent interior cell.
-        Q_face : ndarray, shape (n_vars,)
-            The ``face_value`` result (already computed upstream).
-        Qaux_inner : ndarray, shape (n_aux,)
-            Auxiliary variables of the adjacent interior cell.
-        normal : ndarray, shape (dim,)
-            Outward unit face normal.
-        d_face : float
-            Distance from interior cell center to face center.
-        time : float
-            Current simulation time.
-        parameters : ndarray, shape (n_params,)
-            Model parameters.
+        Args:
+            Q_face: the already computed ``face_value`` result.
 
-        Returns
-        -------
-        ndarray, shape (n_vars,)
-            Face-normal gradient at the boundary face.
+        Returns:
+            Gradient of shape ``(n_vars,)``.
         """
         Q_inner = np.asarray(Q_inner, dtype=float)
         Q_face = np.asarray(Q_face, dtype=float)
@@ -269,48 +211,48 @@ for _name, (_idx, _grad, _sym) in _BC_ON_METHODS.items():
 
 
 class Extrapolation(BoundaryCondition):
-    """Extrapolation. (class)."""
+    """Ghost state equals the interior state (zero normal gradient)."""
     use_gradient = param.Boolean(default=True,
         doc="Use gradient for 2nd-order ghost extrapolation when available")
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value: the inner state."""
         return ZArray(Q)
 
     def face_state(self, Q_face, Qaux_face, normal, parameters):
-        """Extrapolation: boundary state = interior face state (zero flux)."""
+        """Boundary state equals the interior face state."""
         return Q_face.copy()
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Extrapolation: boundary state = interior cell state."""
+        """Boundary state equals the interior cell state."""
         return np.asarray(Q_inner, dtype=float).copy()
 
     def face_gradient(self, Q_inner, Q_face, Qaux_inner, normal, d_face,
                       time, parameters):
-        """Extrapolation: zero Neumann (no normal gradient)."""
+        """Zero normal gradient."""
         return np.zeros_like(np.asarray(Q_inner, dtype=float))
 
 
 class ZeroNeumann(Extrapolation):
-    """Zero-gradient (∂Q/∂n = 0) — the named alias of :class:`Extrapolation`.
-    Ghost = interior cell value; zero normal gradient.  Per-field via ``on=``."""
+    """Named alias of :class:`Extrapolation` (``dQ/dn = 0``)."""
 
 
 class Dirichlet(BoundaryCondition):
-    """Prescribed VALUE on the field(s) this BC covers (``on=``).  ``value`` is a
-    scalar (or symbolic expression on the codegen path) imposed on every slot the
-    BC owns; other slots are untouched (the :class:`PerFieldBoundary` picks only
-    this BC's slots).  Example: ``Dirichlet("left", on="h", value=1.5)``."""
+    """Prescribed value on the field(s) selected by ``on=``, e.g.
+    ``Dirichlet("left", on="h", value=1.5)``.
+    """
 
     value = param.Number(default=0.0)
     boundary_value_kind = "face"
 
     def __init__(self, tag=None, on=None, value=None, **params):
+        """Set the prescribed ``value`` besides ``tag`` and ``on``."""
         if value is not None:
             params["value"] = value
         super().__init__(tag=tag, on=on, **params)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Symbolic boundary value: ``value`` in every slot."""
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         out = ZArray(Q)
         for i in range(n):
@@ -318,36 +260,21 @@ class Dirichlet(BoundaryCondition):
         return out
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
+        """Numpy boundary state: ``value`` in every slot."""
         return np.full(np.asarray(Q_inner, dtype=float).shape, float(self.value))
 
 
 class Flux(BoundaryCondition):
-    """Prescribed normal-gradient (Neumann / Robin flux ``∂Q/∂n = gradient``) on
-    the field(s) this BC covers (``on=``).  The ghost VALUE extrapolates; the
-    boundary GRADIENT is set to ``gradient`` (consumed by the diffusion path).
-
-    ``gradient`` is general and, like ``on=`` / ``tag``, needs NO live objects —
-    it is one of:
-
-    * a **number** — constant Neumann, e.g. ``Flux("top", on="mom", gradient=0)``
-      (stress-free);
-    * a **string formula** in field / parameter NAMES — the recommended Robin
-      form, e.g. Navier slip ``Flux("bottom", on="mom", gradient="lambda_s*h*mom/nu")``;
-      the names are resolved against ``sm`` at attach time, exactly the way
-      ``on="mom"`` is resolved against the declared state — so the BC is written
-      before the SystemModel exists;
-    * a **callable** ``(Q, Qaux, normal, d, t, p) → value`` (numpy escape hatch);
-    * a **sympy expression** (free symbols matched to ``sm`` by name).
-
-    :meth:`resolve` (called from ``attach_boundary_conditions``) binds the names
-    to the SystemModel's ``(state, aux, parameters)`` — storing the resolved
-    expression for the codegen path and a lambda for the numpy path, so
-    :meth:`face_gradient` evaluates it from the adjacent interior cell.  Only
-    this BC's ``on=`` slots receive the gradient (root masking)."""
+    """Prescribed normal gradient ``dQ/dn = gradient`` on the field(s) selected by ``on=``; the
+    ghost value extrapolates. ``gradient`` is a number, a string formula in field/parameter
+    names (e.g. Navier slip ``"lambda_s*h*mom/nu"``), a sympy expression or a numpy callable;
+    names are bound by :meth:`resolve`.
+    """
 
     gradient = param.Parameter(default=0.0)
 
     def __init__(self, tag=None, on=None, gradient=None, **params):
+        """Set the ``gradient`` specification besides ``tag`` and ``on``."""
         if gradient is not None:
             params["gradient"] = gradient
         super().__init__(tag=tag, on=on, **params)
@@ -355,10 +282,9 @@ class Flux(BoundaryCondition):
         self._grad_lambda = None       # numpy evaluator (state, aux, params)
 
     def resolve(self, sm):
-        """Resolve a string / sympy ``gradient`` against ``sm`` BY NAME (numbers
-        and callables pass through).  ``"lambda_s*h*mom/nu"`` → the expression in
-        this SystemModel's actual state / aux / parameter symbols; then lambdify
-        for the numpy path."""
+        """Bind a string / sympy ``gradient`` to the symbols of ``sm`` by name and lambdify it
+        for the numpy path.
+        """
         g = self.gradient
         if callable(g) and not isinstance(g, sympy.Basic):
             return
@@ -378,19 +304,19 @@ class Flux(BoundaryCondition):
             self._grad_lambda = sympy.lambdify(syms, expr, "numpy")
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Symbolic boundary value: the inner state."""
         return ZArray(Q)                      # value extrapolates
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
-        """Ghost of a prescribed normal gradient ``g``: ``Q + 2·dX·g`` (the
-        mirror point lies ``2·dX`` along the outward normal), exact for a
-        linear field with ``∂_n u = g`` on an orthogonal face."""
+        """Ghost of the prescribed gradient ``g``: ``Q + 2*dX*g``."""
         q = ZArray(Q)
         g = ZArray(self.compute_boundary_gradient(
             time, X, dX, Q, Qaux, parameters, normal))
         return ZArray([q[i] + 2 * dX * g[i] for i in range(len(q))])
 
     def compute_boundary_gradient(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Symbolic prescribed gradient in every slot."""
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         out = ZArray.zeros(n)
         g = self._resolved_grad if self._resolved_grad is not None else self.gradient
@@ -401,9 +327,11 @@ class Flux(BoundaryCondition):
         return out
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
+        """Numpy boundary state: the interior cell state."""
         return np.asarray(Q_inner, dtype=float).copy()
 
     def face_gradient(self, Q_inner, Q_face, Qaux_inner, normal, d_face, time, parameters):
+        """Numpy prescribed gradient, evaluated at the interior cell."""
         g = self.gradient
         if callable(g) and not isinstance(g, sympy.Basic):
             val = g(Q_inner, Qaux_inner, normal, d_face, time, parameters)
@@ -419,74 +347,36 @@ class Flux(BoundaryCondition):
 
 
 class Coupled(BoundaryCondition):
-    """preCICE-coupled boundary patch.
+    """preCICE-coupled boundary patch; the kernel is an extrapolation fallback that the solver
+    overwrites with the exchanged data at runtime.
 
-    The kernel is a regular symbolic fallback (default: extrapolation —
-    copy the inner state), printed into ``Model.H`` like any other BC.
-    At runtime the solver intercepts this patch and overwrites its
-    boundary values with the preCICE-exchanged data; the fallback is
-    used before preCICE delivers data (initial step, decoupled runs).
-
-    The interface always exchanges the **full** ``interpolate_to_3d``
-    field set ``[b, h, u, v, w, p]`` sampled on a uniform vertical
-    ``z``-grid — no per-field selection.  Direction, mapping and
-    coupling scheme live entirely in ``precice-config.xml``; the BC only
-    binds the patch to a named preCICE mesh.
-
-    Parameters
-    ----------
-    tag : str
-        OpenFOAM patch name (matches ``constant/polyMesh/boundary``).
-    mesh_name : str
-        preCICE mesh name (matches an entry in ``precice-config.xml``).
+    Args:
+        mesh_name: preCICE mesh name of the patch (as in ``precice-config.xml``).
     """
 
     mesh_name = param.String(default="")
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Fallback (extrapolation) — overwritten by preCICE at runtime."""
+        """Fallback boundary value (extrapolation), overwritten by preCICE at runtime."""
         return ZArray(Q)
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
-        """Coupled ghost = the per-face boundary DATA supplied by the coupling
-        (``bdata``, filled by the coupling plugin; the template default is the
-        BC input state, i.e. extrapolation before the peer delivers)."""
+        """Ghost equals the per-face coupling data ``bdata`` (the inner state if absent)."""
         if bdata is None:
             return ZArray(Q)
         return ZArray(list(bdata))
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Fallback face value = interior cell (extrapolation)."""
+        """Fallback face value: the interior cell state."""
         return np.asarray(Q_inner, dtype=float).copy()
 
 
 class InflowOutflow(BoundaryCondition):
-    """Inflow / outflow boundary — prescribe selected state fields,
-    extrapolate the rest.
-
-    ``prescribe_fields`` maps a **state index** to a *spec*.  A spec is
-    either a bare value (scalar or symbolic expression — the field is
-    replaced by it) or a ``dict`` carrying a ``"mode"`` key:
-
-    * ``{"mode": "replace", "value": v}`` — ``Q_out[k] = v``.
-    * ``{"mode": "inlet_outlet", "value": v}`` — OpenFOAM ``inletOutlet``
-      style: the field takes ``v`` where the interior is inflowing
-      (``Q[k] >= 0``) and keeps the interior value otherwise (so
-      backflow is never overridden):
-      ``Q_out[k] = conditional(Q[k] >= 0, v, Q[k])``.  The index ``k``
-      is assumed to be a momentum component whose positive direction
-      points into the domain.
-    * ``{"mode": "blend", "target": t, "weight": w}`` — a *soft* inflow:
-      ``Q_out[k] = Q[k] + max(0, t - Q[k]) * w``.  ``w = 0`` means "no
-      inflow" (the field stays at its interior value); ``w = 1`` pulls
-      it fully to ``t``.
-
-    Every ``value`` / ``target`` / ``weight`` is a scalar or a symbolic
-    expression — typically built by the codegen driver from model
-    parameters (e.g. a piecewise-linear Q(t) timeline interpolated over
-    a fixed block of timeline parameters).  The BC plugs the
-    expressions in; it never builds them and it never reads data.
+    """Prescribe selected state fields, extrapolate the rest. ``prescribe_fields`` maps a state
+    index to a value (scalar or expression) or to a dict with ``mode`` in ``replace`` (value),
+    ``inlet_outlet`` (value only where inflowing) or ``blend`` (soft pull to ``target`` with
+    ``weight``).
     """
 
     prescribe_fields = param.Dict(default={})
@@ -494,8 +384,7 @@ class InflowOutflow(BoundaryCondition):
 
     @staticmethod
     def _coerce(v):
-        """Symbolic expressions and numbers pass through unchanged; a
-        legacy eval-able string spec is evaluated."""
+        """Pass expressions and numbers through; evaluate a string spec."""
         if isinstance(v, sympy.Basic):
             return v
         try:
@@ -504,7 +393,7 @@ class InflowOutflow(BoundaryCondition):
             return float(eval(v))
 
     def _symbolic_field(self, k, spec, Q):
-        """Symbolic ghost value for prescribed state index ``k``."""
+        """Symbolic ghost value of state index ``k`` for its spec."""
         from zoomy_core.model.kernel_functions import conditional
 
         if not isinstance(spec, dict):
@@ -525,18 +414,14 @@ class InflowOutflow(BoundaryCondition):
         )
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value with the prescribed fields replaced."""
         Qout = ZArray(Q)
         for k, spec in self.prescribe_fields.items():
             Qout[k] = self._symbolic_field(k, spec, Q)
         return Qout
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """InflowOutflow (numpy path): prescribe selected fields, rest
-        from the interior.  Supports constant ``replace`` specs only —
-        the symbolic ``inlet_outlet`` / ``blend`` modes and
-        parameter-valued prescriptions flow through the codegen path
-        (``compute_boundary_condition``)."""
+        """Numpy path: constant ``replace`` specs only; other modes go through the codegen path."""
         Q_out = np.asarray(Q_inner, dtype=float).copy()
         for k, spec in self.prescribe_fields.items():
             if isinstance(spec, dict):
@@ -556,13 +441,14 @@ class InflowOutflow(BoundaryCondition):
 
 
 class Lambda(BoundaryCondition):
-    """User-function FACE values: ``prescribe_fields`` maps a slot to
-    ``f(time, X, dX, Q, Qaux, p, n)`` evaluated at the face centre ``X``."""
+    """Face values from user functions: ``prescribe_fields`` maps a slot to
+    ``f(time, X, dX, Q, Qaux, p, n)`` at the face centre.
+    """
     prescribe_fields = param.Dict(default={})
     boundary_value_kind = "face"
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value with the prescribed slots from the user functions."""
         Qout = ZArray(Q)
         for k, func in self.prescribe_fields.items():
             Qout[k] = func(time, X, dX, Q, Qaux, parameters, normal)
@@ -570,24 +456,10 @@ class Lambda(BoundaryCondition):
 
 
 class FromModel(BoundaryCondition):
-    """Boundary values DERIVED IN THE MODEL.
-
-    References a boundary definition the declarative derivation registered as
-    a function group, e.g.::
-
-        m.register_group("boundary:wall", state_index, boundary_value_expr)
-
-    ``SystemModel.from_model`` parses these into ``sm.boundary_specs[<name>]``
-    (state-symbol expressions per state slot);
-    ``SystemModel.attach_boundary_conditions`` then calls :meth:`resolve` on
-    every ``FromModel`` entry — after which this BC has the SAME signature
-    and kernel path as every other :class:`BoundaryCondition`.  Slots the
-    model definition does not prescribe extrapolate (ghost = inner).
-
-    Usage::
-
-        BoundaryConditions([FromModel(tag="left", definition="wall"),
-                            Extrapolation(tag="right")])
+    """Boundary values derived in the model: references a ``boundary:<name>`` function group
+    registered by the derivation. :meth:`resolve` (called by
+    ``SystemModel.attach_boundary_conditions``) binds it to ``sm.boundary_specs``; slots the
+    definition does not prescribe extrapolate.
     """
 
     definition = param.String(default="", doc="name registered in the model "
@@ -597,8 +469,9 @@ class FromModel(BoundaryCondition):
                                   "filled by resolve()")
 
     def resolve(self, sm):
-        """Pull the named definition off ``sm.boundary_specs`` (the wrapper
-        model-definition → boundary function)."""
+        """Take the named definition from ``sm.boundary_specs`` and capture the state and
+        face-normal symbols.
+        """
         specs = getattr(sm, "boundary_specs", None) or {}
         if self.definition not in specs:
             raise KeyError(
@@ -619,7 +492,9 @@ class FromModel(BoundaryCondition):
         return self
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value: the model definition with state and normal symbols
+        substituted.
+        """
         if not self.prescribe_fields:
             raise RuntimeError(
                 f"FromModel(tag={self.tag!r}, definition={self.definition!r}) "
@@ -636,27 +511,10 @@ class FromModel(BoundaryCondition):
 
 
 class Characteristic(BoundaryCondition):
-    """Incoming-characteristic ghost — the data-level analogue of Roe
-    upwinding.
-
-    With ``A·n = R Λ L`` the eigendecomposition of the normal-projected
-    quasilinear matrix at the interior state, the ghost is
-
-        ``Q_ghost = Q + P⁻·(Q_target − Q)``,   ``P⁻ = R · 1_{λ<0} · L``,
-
-    i.e. only the INCOMING characteristic fields (λ < 0 w.r.t. the outward
-    normal) carry the target's information; the outgoing content is the
-    interior's, so the face Riemann problem reflects nothing — even when the
-    target data is inconsistent (mid-coupling-iteration peer data, far-field
-    guesses).  Built symbolically over the SystemModel's OPAQUE
-    ``eigensystem`` kernel (numerical eigendecomposition per backend), so it
-    works for systems without a closed-form spectrum (SME N≥2, K&T).
-
-    The target defaults to extrapolation (= interior ⇒ pure outflow);
-    override slots via ``prescribe_fields`` (slot → callable, Lambda-style)
-    or override :meth:`target_state` in subclasses (far-field, wall,
-    coupled).  Resolved against the SystemModel by
-    ``attach_boundary_conditions`` (needs the eigensystem + state layout).
+    """Incoming-characteristic ghost: only the characteristic fields with ``lambda < 0`` take
+    the target state, ``Q + R 1_{lambda<0} L (Q_target - Q)``, so the Riemann problem reflects
+    nothing. Built on the SystemModel's opaque ``eigensystem`` kernel; the target is the inner
+    state unless overridden by ``prescribe_fields`` or :meth:`target_state`.
     """
 
     prescribe_fields = param.Dict(default={}, doc="state_index → callable("
@@ -664,21 +522,23 @@ class Characteristic(BoundaryCondition):
                                   "TARGET state in that slot")
 
     def resolve(self, sm):
+        """Bind the state symbols, normal symbols and eigensystem of ``sm``."""
         self._state_syms = list(sm.state)
         self._normal_syms = list(sm.normal.values())
         self._es = [sympy.sympify(e) for e in sm.eigensystem]
         return self
 
     def target_state(self, time, X, dX, Q, Qaux, parameters, normal):
-        """The state whose incoming-characteristic content is imposed.
-        Default: extrapolation base overridden by ``prescribe_fields``."""
+        """State whose incoming content is imposed (default: inner state overridden by
+        ``prescribe_fields``).
+        """
         target = ZArray(Q)
         for k, func in self.prescribe_fields.items():
             target[k] = func(time, X, dX, Q, Qaux, parameters, normal)
         return target
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value from the eigendecomposition of the normal-projected system."""
         if getattr(self, "_es", None) is None:
             raise RuntimeError(
                 f"Characteristic(tag={self.tag!r}) is unresolved — attach "
@@ -707,14 +567,15 @@ class Characteristic(BoundaryCondition):
 
 
 class CharacteristicFarField(Characteristic):
-    """Far-field / open boundary: the incoming characteristics carry a
-    prescribed far-field state, the outgoing ones leave undisturbed
-    (Thompson-style non-reflecting in-/outflow)."""
+    """Non-reflecting far-field boundary: incoming characteristics carry ``far_field``, outgoing
+    ones leave undisturbed.
+    """
 
     far_field = param.Parameter(default=None, doc="callable(n_state) → "
                                 "far-field state vector, or a sequence")
 
     def target_state(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Far-field state vector (the inner state if ``far_field`` is None)."""
         if self.far_field is None:
             return ZArray(Q)
         vals = (self.far_field(len(self._state_syms))
@@ -726,29 +587,12 @@ class CharacteristicFarField(Characteristic):
 
 
 def derive_momentum_field_indices(sm):
-    """DERIVE the wall's momentum index groups from the model's OWN variable
-    registry, so no caller has to know the state layout.
+    """Derive the momentum index groups (one vector per group, across the horizontal directions)
+    from the registry ``sm.interpolate_to_3d``, or from declared roles.
 
-    The registry is ``sm.interpolate_to_3d`` — the canonical
-    ``[b, h, u, v, w, p](ζ)`` lift that every derived family registers.  Row 0
-    is ``b`` and row 1 is ``h`` (the GEOMETRY slots, never momentum); rows 2
-    and 3 are the horizontal velocities ``u`` and ``v``.  The state entries a
-    velocity row depends on — minus the geometry slots — ARE that direction's
-    momentum components, **in state order**, so position ``j`` means the same
-    moment / layer in every direction.
-
-    Returns the groups in the convention :class:`Wall` consumes: a list of
-    index groups, each group one VECTOR across the horizontal directions
-    (``[[q_x_0, q_y_0], [q_x_1, q_y_1], …]``), i.e. the transpose of the
-    per-direction lists.  A 1-D model yields singleton groups.
-
-    A system that DECLARES its momentum role (``sm.declare_roles(momentum=…)``,
-    e.g. the compressible Euler system, which has no lift) is read from that
-    declaration instead.
-
-    Raises with the model's own state printed if the registry is missing or
-    the per-direction lists are ragged — guessing an index layout is exactly
-    the failure this function exists to remove.
+    Returns:
+        Groups such as ``[[q_x_0, q_y_0], [q_x_1, q_y_1], ...]``; raises if the registry is
+        missing or ragged.
     """
     from zoomy_core.systemmodel.roles import declared_role_record
     if declared_role_record(sm).get("momentum"):
@@ -799,10 +643,12 @@ def derive_momentum_field_indices(sm):
 
 
 class _DerivedMomentumIndices:
-    """Mixin: ``momentum_field_indices=None`` means DERIVE (ruling 9396582 —
-    pinned-only, derive otherwise).  An explicit pin always wins."""
+    """Mixin: ``momentum_field_indices=None`` means derive at resolve time; an explicit pin
+    wins.
+    """
 
     def resolve(self, sm):
+        """Derive ``momentum_field_indices`` from ``sm`` unless pinned."""
         sup = getattr(super(), "resolve", None)
         if sup is not None:
             sup(sm)
@@ -811,6 +657,7 @@ class _DerivedMomentumIndices:
         return self
 
     def _require_indices(self):
+        """Return the momentum groups, raising if still unresolved."""
         if self.momentum_field_indices is None:
             raise RuntimeError(
                 f"{type(self).__name__}(tag={self.tag!r}) is unresolved: "
@@ -821,19 +668,15 @@ class _DerivedMomentumIndices:
 
 
 class CharacteristicWall(_DerivedMomentumIndices, Characteristic):
-    """Wall built from the characteristic tool: the target is the MIRROR
-    state (normal momentum reflected); only its incoming content is imposed,
-    which enforces u·n → 0 at the face without over-specifying the outgoing
-    fields.
-
-    ``momentum_field_indices`` defaults to ``None`` = DERIVE from the model's
-    variable registry at resolve time (see
-    :func:`derive_momentum_field_indices`).  An explicit pin wins.
+    """Wall from the characteristic tool: the target is the mirror state (normal momentum
+    reflected) and only its incoming content is imposed. ``momentum_field_indices=None`` derives
+    the groups at resolve time (see :func:`derive_momentum_field_indices`).
     """
 
     momentum_field_indices = param.List(default=None, allow_None=True)
 
     def target_state(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Inner state with the normal momentum of each group reflected."""
         q = ZArray(Q)
         out = ZArray(Q)
         for indices in self._require_indices():
@@ -848,12 +691,14 @@ class CharacteristicWall(_DerivedMomentumIndices, Characteristic):
 
 
 class FromData(BoundaryCondition):
-    """FromData. (class)."""
+    """Face values from a time series: ``prescribe_fields`` maps a slot to data interpolated
+    over ``timeline``.
+    """
     prescribe_fields = param.Dict(default={})
     timeline = param.Array(default=None)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic ghost ``2*interp - Q`` for the prescribed slots."""
         Qout = ZArray(Q)
         for k, v in self.prescribe_fields.items():
             interp_func = _sympy_interpolate_data(time, self.timeline, v)
@@ -862,7 +707,10 @@ class FromData(BoundaryCondition):
 
 
 class CharacteristicReflective(BoundaryCondition):
-    """CharacteristicReflective. (class)."""
+    """Reflective boundary in characteristic variables: incoming ones (``D <= 0``) are mapped
+    through ``M``. ``R, L, D`` are the user-supplied eigen-decomposition and ``S`` the rotation
+    into the normal frame.
+    """
     R = param.Parameter(default=None)
     L = param.Parameter(default=None)
     D = param.Parameter(default=None)
@@ -870,7 +718,9 @@ class CharacteristicReflective(BoundaryCondition):
     M = param.Parameter(default=None)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic boundary value: incoming characteristic variables reflected through ``M``,
+        guarded against dry cells.
+        """
         q = Matrix(Q)
         q_n = self.S @ q
         W_int = self.L @ q_n
@@ -891,19 +741,10 @@ class CharacteristicReflective(BoundaryCondition):
 
 
 class Wall(_DerivedMomentumIndices, BoundaryCondition):
-    """Free-slip / partially-permeable wall.
-
-    ``momentum_field_indices`` is a list of index GROUPS, each group one
-    momentum VECTOR across the mesh's horizontal directions
-    (``[[q_x_0, q_y_0], [q_x_1, q_y_1], …]``).  It defaults to ``None``, which
-    means DERIVE the groups from the model's own variable registry at resolve
-    time — see :func:`derive_momentum_field_indices`.  An explicit pin always
-    wins, for models with no registry (hand-built) or an exotic layout.
-
-    The former default ``[[1, 2]]`` was correct only for the hand-built SWE
-    layout ``[h, hu, hv]``; on the derived layout ``[b, h, q…]`` it selected
-    the DEPTH as the first momentum component (ShapeError in 1-D, and in 2-D a
-    silently negative ghost depth at a lake at rest against a wall).
+    """Free-slip / partially permeable wall: per momentum vector,
+    ``u_wall = slip * u_tangential - (1 - permeability) * u_normal``; scalars extrapolate.
+    ``momentum_field_indices`` lists index groups (one vector per group); None derives them from
+    the model at resolve time, an explicit pin wins.
     """
     momentum_field_indices = param.List(default=None, allow_None=True)
     permeability = param.Number(default=0.0)
@@ -913,7 +754,9 @@ class Wall(_DerivedMomentumIndices, BoundaryCondition):
         doc="Use gradient for 2nd-order ghost extrapolation when available")
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic wall ghost: reflected normal momentum, slip on the tangential part, blended
+        with the inner state by ``blending``.
+        """
         q = ZArray(Q)
         groups = self._require_indices()
         dim = len(groups[0])
@@ -937,7 +780,7 @@ class Wall(_DerivedMomentumIndices, BoundaryCondition):
         return out
 
     def face_state(self, Q_face, Qaux_face, normal, parameters):
-        """Wall: reflect normal momentum component of the reconstructed face value."""
+        """Numpy wall state from the reconstructed face value."""
         Q_wall = Q_face.copy()
         for indices in self._require_indices():
             dim = len(indices)
@@ -950,12 +793,7 @@ class Wall(_DerivedMomentumIndices, BoundaryCondition):
         return Q_wall
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Wall: reflect normal momentum, copy scalars.
-
-        Momentum decomposition:
-            u_wall = slip * u_tangential - (1 - perm) * u_normal
-        Scalars are extrapolated (copied from interior).
-        """
+        """Numpy wall state: reflected normal momentum, scalars copied from the interior."""
         Q_inner = np.asarray(Q_inner, dtype=float)
         Q_wall = Q_inner.copy()
         for indices in self._require_indices():
@@ -970,12 +808,12 @@ class Wall(_DerivedMomentumIndices, BoundaryCondition):
 
 
 class RoughWall(Wall):
-    """RoughWall. (class)."""
+    """:class:`Wall` with a distance-dependent slip from a log-law roughness (``CsW``, ``Ks``)."""
     CsW = param.Number(default=0.5)
     Ks = param.Number(default=0.001)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Symbolic wall ghost with the roughness slip ``(1 - f) / (1 + f)``."""
         slip_length = dX * sympy.ln((dX * self.CsW) / self.Ks)
         f = dX / slip_length
         wall_slip = (1 - f) / (1 + f)
@@ -988,7 +826,7 @@ class RoughWall(Wall):
         return res
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """RoughWall: Wall reflection with distance-dependent slip."""
+        """Numpy wall state with the roughness slip."""
         slip_length = d_face * np.log(max((d_face * self.CsW) / self.Ks, 1e-30))
         f = d_face / max(slip_length, 1e-30)
         original_slip = self.wall_slip
@@ -1001,48 +839,21 @@ class RoughWall(Wall):
 
 
 class Periodic(BoundaryCondition):
-    """Periodic. (class)."""
+    """Periodic boundary; the runtime pairs it with ``periodic_to_physical_tag``
+    (``mesh.resolve_periodic_bcs``), the kernel is an extrapolation fallback.
+    """
     periodic_to_physical_tag = param.String(default="")
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Compute boundary condition."""
+        """Fallback boundary value: the inner state."""
         return ZArray(Q)
 
 
 class WindStress(BoundaryCondition):
-    """Mixed Neumann + Dirichlet BC — POM-style wind-stress surface.
-
-    Some state rows get a prescribed *value* (Dirichlet); others get a
-    prescribed *face-normal gradient* (Neumann).  Rows mentioned in
-    neither default to zero-gradient extrapolation.  Symbolic specs in
-    state / aux / parameter symbols are supported on the codegen and
-    Firedrake-DG paths (boundary kernels lambdify the resulting
-    expressions); the numpy paths require numeric specs.
-
-    Built for the canonical POM surface BC (BM87 §2.15)::
-
-        ρ_o K_M ∂_z U = τ_o            ← Neumann on the velocity row
-        ∂_z T = 0                       ← Neumann on the tracer row
-        q² = B₁^(2/3) u_τs²             ← Dirichlet on the q² row
-        q²ℓ = 0                         ← Dirichlet on the q²ℓ row
-
-    For the velocity Neumann gradient ``∂_z U = u_*² / K_M`` the user
-    pulls the symbolic ``K_M`` from the model so the BC stays
-    consistent with the interior closure::
-
-        sm = SystemModel.from_model(my_col)
-        K_M_sym = sm.diffusion_matrix[0, 0, 0, 0]
-        bc = WindStress(
-            tag="surface",
-            prescribe_gradients={0: sm.parameters.u_star**2 / K_M_sym,
-                                 1: 0},
-            prescribe_values={2: sm.parameters.B1 ** sp.Rational(2, 3)
-                                * sm.parameters.u_star**2,
-                              3: 0},
-        )
-
-    Same mechanism handles the bottom BC (no-slip + zero heat flux +
-    bottom-stress q² + zero q²ℓ) with different per-row specs.
+    """Mixed Dirichlet and Neumann boundary (POM-style wind-stress surface):
+    ``prescribe_values`` fixes rows, ``prescribe_gradients`` fixes face-normal gradients, other
+    rows extrapolate. Symbolic specs work on the codegen and Firedrake-DG paths, the numpy paths
+    need numbers.
     """
 
     prescribe_values = param.Dict(default={})
@@ -1050,6 +861,7 @@ class WindStress(BoundaryCondition):
 
     @staticmethod
     def _coerce(v):
+        """Sympify a spec value."""
         if isinstance(v, sympy.Basic):
             return v
         return sympy.sympify(v)
@@ -1071,8 +883,7 @@ class WindStress(BoundaryCondition):
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
-        """Dirichlet rows ``2v − Q``, Neumann rows ``Q + 2·dX·g``, the rest
-        extrapolate."""
+        """Dirichlet rows ``2v - Q``, Neumann rows ``Q + 2*dX*g``, the rest extrapolate."""
         out = ZArray(Q)
         q = ZArray(Q)
         for k, spec in self.prescribe_values.items():
@@ -1082,9 +893,7 @@ class WindStress(BoundaryCondition):
         return out
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Numpy: Dirichlet rows get the prescribed value, others extrapolate.
-        Only numeric specs work here; symbolic specs need to flow through
-        the codegen / Firedrake-DG path."""
+        """Numpy: Dirichlet rows take the prescribed (numeric) value; others extrapolate."""
         Q_out = np.asarray(Q_inner, dtype=float).copy()
         for k, spec in self.prescribe_values.items():
             try:
@@ -1099,8 +908,7 @@ class WindStress(BoundaryCondition):
 
     def face_gradient(self, Q_inner, Q_face, Qaux_inner, normal, d_face,
                       time, parameters):
-        """Numpy: Neumann rows get the prescribed gradient; others zero.
-        Numeric specs only (same caveat as ``face_value``)."""
+        """Numpy: Neumann rows take the prescribed (numeric) gradient; others zero."""
         out = np.zeros_like(np.asarray(Q_inner, dtype=float))
         for k, spec in self.prescribe_gradients.items():
             try:
@@ -1120,25 +928,29 @@ class WindStress(BoundaryCondition):
 
 
 class SystemExtrapolation:
-    """Apply Extrapolation to all equations in the system."""
+    """System-aware BC: :class:`Extrapolation` on every equation."""
 
     def __init__(self, tag=None):
+        """Store the boundary ``tag``."""
         self.tag = tag
 
     def apply_to_system_bcs(self, system_bcs, tag=None):
+        """Set :class:`Extrapolation` for every equation of ``system_bcs`` at the tag."""
         t = tag or self.tag
         for eq_name in system_bcs.equation_names:
             system_bcs.set(eq_name, Extrapolation(tag=t), tag=t)
 
 
 class SystemPeriodic:
-    """Apply Periodic to all equations in the system."""
+    """System-aware BC: :class:`Periodic` on every equation."""
 
     def __init__(self, tag=None, periodic_to_physical_tag=""):
+        """Store the ``tag`` and ``periodic_to_physical_tag``."""
         self.tag = tag
         self.periodic_to_physical_tag = periodic_to_physical_tag
 
     def apply_to_system_bcs(self, system_bcs, tag=None):
+        """Set :class:`Periodic` for every equation of ``system_bcs`` at the tag."""
         t = tag or self.tag
         for eq_name in system_bcs.equation_names:
             system_bcs.set(
@@ -1149,28 +961,24 @@ class SystemPeriodic:
 
 
 class SystemWall:
-    """System-aware wall BC: Extrapolation for scalars, reflection for momentum.
+    """System-aware wall: extrapolation (without gradient) for scalar equations, reflection
+    (:class:`WallMomentumBC`) for momentum equations.
 
-    Applied via ``system.boundary_conditions.apply(SystemWall(), tag="right")``.
-    The Wall BC holds a reference to the system and reads its equations
-    to determine scalar vs momentum fields automatically.
-
-    Parameters
-    ----------
-    tag : str
-        Boundary tag (e.g. "right", "bottom").
-    permeability : float
-        0 = impermeable (default), 1 = fully permeable.
-    wall_slip : float
-        1 = free-slip (default), 0 = no-slip.
+    Args:
+        permeability: 0 impermeable (default), 1 fully permeable.
+        wall_slip: 1 free-slip (default), 0 no-slip.
     """
 
     def __init__(self, tag=None, permeability=0.0, wall_slip=1.0):
+        """Store tag, permeability and wall slip."""
         self.tag = tag
         self.permeability = permeability
         self.wall_slip = wall_slip
 
     def apply_to_system_bcs(self, system_bcs, tag=None, system=None):
+        """Set extrapolation on scalar equations and :class:`WallMomentumBC` on momentum
+        equations at the tag.
+        """
         t = tag or self.tag
         momentum_eqs = [n for n in system_bcs.equation_names if "momentum" in n]
         scalar_eqs = [n for n in system_bcs.equation_names if n not in momentum_eqs]
@@ -1192,18 +1000,13 @@ class SystemWall:
 
 
 class WallMomentumBC:
-    """Wall BC for momentum equations — reads the system to build reflection.
-
-    Holds a reference to the ``SystemBoundaryConditions`` (and thus knows
-    which equations exist).  At compile time, determines the momentum
-    vector grouping automatically from the equation names.
-
-    The normal/tangential decomposition works for any system derived from
-    INS: SWE (hu), SME (hu0, hu1, ...), VAM (hu, hv, hw moments), full INS.
+    """Wall BC for the momentum equations of a system; :func:`compile_system_bcs` groups their
+    variables into momentum vectors.
     """
 
     def __init__(self, tag, system_bcs, permeability=0.0, wall_slip=1.0,
                  use_gradient=True):
+        """Store the tag, the system BC container and the wall parameters."""
         self.tag = tag
         self._system_bcs = system_bcs
         self.permeability = permeability
@@ -1212,10 +1015,11 @@ class WallMomentumBC:
 
     @property
     def momentum_equations(self):
-        """Momentum equations in the current system."""
+        """Momentum equations of the current system."""
         return [n for n in self._system_bcs.equation_names if "momentum" in n]
 
     def __repr__(self):
+        """Short summary of the momentum equations and wall parameters."""
         return (f"WallMomentumBC(eqs={self.momentum_equations}, "
                 f"perm={self.permeability}, slip={self.wall_slip})")
 
@@ -1224,24 +1028,17 @@ class WallMomentumBC:
 
 
 def compile_system_bcs(system_bcs, equation_variable_map, dimension):
-    """Translate system-aware BCs into the legacy BoundaryConditions container.
+    """Translate system-aware BCs into a :class:`BoundaryConditions` container with one BC per
+    tag.
 
-    Reads per-equation, per-tag BCs from ``system_bcs`` and produces
-    a ``BoundaryConditions`` with one entry per tag. The
-    ``equation_variable_map`` maps equation names to variable indices
-    so the Wall BC knows which indices form the momentum vector.
+    Args:
+        system_bcs: per-equation, per-tag BCs.
+        equation_variable_map: ``{equation_name: [var_index, ...]}``, used to group momentum
+            indices.
+        dimension: horizontal model dimension (1 or 2).
 
-    Parameters
-    ----------
-    system_bcs : SystemBoundaryConditions
-    equation_variable_map : dict
-        ``{equation_name: [var_index, ...]}``
-    dimension : int
-        Model dimension (1 or 2 for horizontal).
-
-    Returns
-    -------
-    BoundaryConditions
+    Returns:
+        The container, with ``_gradient_variable_indices`` per tag.
     """
     bc_list = []
     for tag in system_bcs.tags:
@@ -1332,13 +1129,17 @@ def compile_system_bcs(system_bcs, equation_variable_map, dimension):
 
 
 class BoundaryConditions(param.Parameterized):
-    """BoundaryConditions. (class)."""
+    """Container of the per-tag BCs, sorted by tag; builds the indexed boundary, gradient and
+    ghost-state kernels.
+    """
     boundary_conditions_list = param.List(default=[], item_type=BoundaryCondition)
     _boundary_functions = param.List(default=[])
     _boundary_tags = param.List(default=[])
 
     def __init__(self, boundary_conditions=None, **params):
-        """Initialize the instance."""
+        """Take the list of BCs (``boundary_conditions``), sort by tag and collect their
+        kernels.
+        """
         if boundary_conditions is not None:
             params["boundary_conditions_list"] = boundary_conditions
         elif "boundary_conditions" in params:
@@ -1356,12 +1157,12 @@ class BoundaryConditions(param.Parameterized):
 
     @property
     def list_sorted_function_names(self):
-        """List sorted function names."""
+        """Tags in kernel-branch order."""
         return self._boundary_tags
 
     @property
     def boundary_conditions_list_dict(self):
-        """Boundary conditions list dict."""
+        """BCs keyed by tag."""
         return {bc.tag: bc for bc in self.boundary_conditions_list}
 
     # [FIX] Added 'function_name' argument with default "boundary_conditions"
@@ -1376,7 +1177,9 @@ class BoundaryConditions(param.Parameterized):
         normal,
         function_name="boundary_conditions",
     ):
-        """Get boundary condition function."""
+        """Indexed symbolic ``boundary_conditions`` kernel: a Piecewise over the BC index
+        dispatching to each BC's boundary value.
+        """
         bc_idx = sympy.Symbol("bc_idx", integer=True)
 
         if not self._boundary_functions:
@@ -1425,17 +1228,9 @@ class BoundaryConditions(param.Parameterized):
         normal,
         function_name="boundary_gradients",
     ):
-        """Indexed symbolic kernel for the boundary face-normal gradient
-        ``∂Q/∂n``.
-
-        Same shape and contract as
-        :meth:`get_boundary_condition_function`: a ``Function`` whose
-        first argument is the BC index, with a ``Piecewise`` body
-        dispatching to each BC subclass's
-        :meth:`BoundaryCondition.compute_boundary_gradient`.  The
-        default per BC is zero Neumann (matches ``Extrapolation``'s
-        gradient); subclasses override when a non-zero gradient is
-        part of the BC."""
+        """Indexed symbolic ``boundary_gradients`` kernel (face-normal gradient), same contract
+        as :meth:`get_boundary_condition_function`.
+        """
         bc_idx = sympy.Symbol("bc_idx", integer=True)
 
         if not self._boundary_gradient_functions:
@@ -1473,9 +1268,9 @@ class BoundaryConditions(param.Parameterized):
 
     def ghost_state_branches(self, time, X, dX, Q, Qaux, parameters, normal,
                              bdata):
-        """Per-branch symbolic GHOST states (decision D5): one ``ZArray`` per
-        sorted BC (branch ``i`` serves tag ``list_sorted_function_names[i]``).
-        An empty container yields the single extrapolation branch."""
+        """Per-BC symbolic ghost states (branch ``i`` serves tag ``i``); an empty container
+        gives one extrapolation branch.
+        """
         args = (time, X.get_list(), dX, Q.get_list(), Qaux.get_list(),
                 parameters.get_list(), normal.get_list(), bdata.get_list())
         if not self.boundary_conditions_list:
@@ -1486,10 +1281,9 @@ class BoundaryConditions(param.Parameterized):
     def get_boundary_ghost_function(self, time, X, dX, Q, Qaux, parameters,
                                     normal, bdata,
                                     function_name="boundary_ghost_state"):
-        """Indexed symbolic GHOST-state kernel — same contract as
-        :meth:`get_boundary_condition_function` plus the per-face boundary
-        data group ``boundary_data`` (coupling), returning the D5 ghost of the
-        BC branch ``idx``."""
+        """Indexed symbolic ghost-state kernel; as :meth:`get_boundary_condition_function` plus
+        the per-face ``boundary_data`` group.
+        """
         bc_idx = sympy.Symbol("bc_idx", integer=True)
         branches = self.ghost_state_branches(time, X, dX, Q, Qaux, parameters,
                                              normal, bdata)
@@ -1509,8 +1303,9 @@ class BoundaryConditions(param.Parameterized):
 
 
 def boundary_data_symbols(n_state):
-    """The per-face boundary-data group ``bdata_0 … bdata_{n-1}`` of the
-    ghost-state kernel (coupling data, one entry per state row)."""
+    """Per-face boundary-data group ``bdata_0 .. bdata_{n-1}`` (coupling data, one entry per
+    state row) of the ghost-state kernel.
+    """
     z = Zstruct(**{f"bdata_{i}": sympy.Symbol(f"bdata_{i}", real=True)
                    for i in range(int(n_state))})
     z._symbolic_name = "bdata"
@@ -1518,19 +1313,13 @@ def boundary_data_symbols(n_state):
 
 
 def build_boundary_ghost_kernel(sm):
-    """The D5 GHOST-state kernel of ``sm`` as ``(function, branches)``.
+    """Build the ghost-state kernel of ``sm`` from its ``BoundaryConditions`` source, in the
+    system's current symbols.
 
-    ``function`` is the indexed ``boundary_ghost_state(idx, time, position,
-    distance, variables, aux_variables, parameters, normal, boundary_data)``
-    kernel; ``branches[i]`` is the ghost ``ZArray`` of BC branch ``i`` (the
-    sorted-tag order :func:`boundary_face_branches` routes to), over the SAME
-    argument symbols (``function.args``).
-
-    Built from the system's own ``BoundaryConditions`` container
-    (``sm._bc_source``) in the system's CURRENT symbols, so an NSM gets its
-    assumption-free state and its registered aux.  A system carrying a bare
-    kernel without its container falls back to that kernel's branches,
-    read as ghosts."""
+    Returns:
+        ``(function, branches)``: the indexed ``boundary_ghost_state`` kernel and the ghost
+            ``ZArray`` per BC branch.
+    """
     bcs = getattr(sm, "_bc_source", None)
     bdata = boundary_data_symbols(sm.n_state)
     if isinstance(bcs, BoundaryConditions):
@@ -1557,25 +1346,11 @@ def build_boundary_ghost_kernel(sm):
 
 
 def boundary_face_branches(mesh, bcs):
-    """BC-kernel branch index of every boundary face of ``mesh``, matched BY
-    TAG NAME — the ``bc_idx`` every solver passes to the lowered
-    ``boundary_conditions`` / ``boundary_gradients`` kernels.
-
-    :class:`BoundaryConditions` sorts its BCs by tag, so kernel branch ``i``
-    serves tag ``bcs.list_sorted_function_names[i]``.  The mesh numbers its
-    tags on its own: ``mesh.boundary_face_function_numbers`` index
-    ``mesh.boundary_conditions_sorted_names``, ordered by position on
-    ``create_2d`` (left, right, bottom, top) and by gmsh physical id on
-    ``from_msh``.  The raw mesh number is therefore NOT a branch index — read
-    as one, ``create_2d`` sends ``bottom`` faces to the ``right`` BC.
-
-    ``bcs is None`` (a SystemModel built from a bare kernel, without its
-    ``BoundaryConditions`` source) carries no tag names; the mesh numbering is
-    then the kernel's only contract and is returned unchanged.  So is an EMPTY
-    container: its kernel has no branches (``ZArray(Q)``, extrapolation on
-    every face) and never reads ``bc_idx``.  A boundary face whose tag has no
-    BC, or a tag declared twice, raises -- except the reserved tag ``halo``
-    (faces a distributed run's partition cuts, no BC): branch -1."""
+    """BC-kernel branch index of every boundary face of ``mesh``, matched by tag name (the
+    mesh's own tag numbers are not branch indices). A face whose tag has no BC raises, except
+    the reserved ``halo`` tag (branch -1); without ``bcs`` the mesh numbering is returned
+    unchanged.
+    """
     n_bf = int(mesh.n_boundary_faces)
     numbers = np.asarray(mesh.boundary_face_function_numbers, dtype=int)[:n_bf]
     tags = [] if bcs is None else list(bcs.list_sorted_function_names)
@@ -1620,10 +1395,9 @@ def boundary_face_branches(mesh, bcs):
 
 
 def _resolve_on(on, state_names, aliases):
-    """Resolve an ``on`` selector to a list of state-slot indices, generically.
-
-    ``"all"`` → every slot; an exact field name → that slot; a family base
-    (``"q"`` → ``q_0, q_1, …``); an alias (``"momentum"`` → ``"q"``)."""
+    """Resolve an ``on`` selector (``"all"``, field name, family base, alias) to state-slot
+    indices.
+    """
     on = aliases.get(on, on)
     if on in ("all", "", None):
         return list(range(len(state_names)))
@@ -1639,13 +1413,9 @@ def _resolve_on(on, state_names, aliases):
 
 
 def _momentum_groups(slots, state_names):
-    """Group momentum slots into VECTORS per moment level — dimension-agnostic.
-
-    Slots sharing a trailing moment index are the (x[, y[, z]]) components of ONE
-    momentum vector; a :class:`Wall` decomposes each group into normal+transverse
-    w.r.t. the face normal and reflects ONLY the normal component (transverse
-    keeps slip).  1-D → one component per group (``[[q_0],[q_1],…]`` → each
-    reflects); 2-D/3-D → ``[[q_x_i, q_y_i, …], …]`` ordered by direction name."""
+    """Group momentum slots into vectors per moment level (the x, y, z components of one
+    moment), as :class:`Wall` expects.
+    """
     import re
     by_level = {}
     for s in slots:
@@ -1658,17 +1428,19 @@ def _momentum_groups(slots, state_names):
 
 
 class PerFieldBoundary(BoundaryCondition):
-    """Composite BC for one tag: each state slot delegates to the BC assigned to
-    its field.  Built by :func:`resolve_per_field`; unclaimed slots fall back to
-    :class:`Extrapolation`.  Reuses the existing BC engines unchanged — it just
-    picks, per slot, the ghost value/gradient produced by that slot's BC."""
+    """Composite BC for one tag: each state slot takes the value/gradient of the BC assigned to
+    its field. Built by :func:`resolve_per_field`; unclaimed slots fall back to
+    :class:`Extrapolation`.
+    """
 
     def __init__(self, tag=None, slot_bc=None, n_state=0, **params):
+        """Store the ``{slot: BC}`` map and the state size."""
         super().__init__(tag=tag, **params)
         self._slot_bc = slot_bc or {}        # {slot_index: BoundaryCondition}
         self._n = n_state
 
     def _per_slot(self, method, base, *args):
+        """Fill ``base`` slot by slot from the result of ``method`` on each slot's BC."""
         cache = {}
         for slot, bc in self._slot_bc.items():
             key = id(bc)
@@ -1679,39 +1451,41 @@ class PerFieldBoundary(BoundaryCondition):
 
     # symbolic kernels (codegen path)
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Symbolic boundary value, per slot from the owning BC."""
         return self._per_slot("compute_boundary_condition", ZArray(Q),
                               time, X, dX, Q, Qaux, parameters, normal)
 
     def compute_boundary_gradient(self, time, X, dX, Q, Qaux, parameters, normal):
+        """Symbolic boundary gradient, per slot from the owning BC."""
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         return self._per_slot("compute_boundary_gradient", ZArray.zeros(n),
                               time, X, dX, Q, Qaux, parameters, normal)
 
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
+        """Symbolic ghost state, per slot from the owning BC."""
         return self._per_slot("compute_ghost_state", ZArray(Q),
                               time, X, dX, Q, Qaux, parameters, normal, bdata)
 
     # numeric kernels (numpy path)
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
+        """Numpy boundary state, per slot from the owning BC."""
         return self._per_slot("face_value",
                               np.asarray(Q_inner, dtype=float).copy(),
                               Q_inner, Qaux_inner, normal, d_face, time, parameters)
 
     def face_gradient(self, Q_inner, Q_face, Qaux_inner, normal, d_face, time, parameters):
+        """Numpy face gradient, per slot from the owning BC."""
         return self._per_slot("face_gradient",
                               np.zeros_like(np.asarray(Q_inner, dtype=float)),
                               Q_inner, Q_face, Qaux_inner, normal, d_face, time, parameters)
 
 
 def resolve_per_field(bc_list, state_names, aliases=None):
-    """Build a :class:`BoundaryConditions` from a FLAT LIST of per-field BCs.
-
-    For each tag, group the ``(tag, on)`` BCs into a :class:`PerFieldBoundary`:
-    every state slot is served by the BC whose ``on`` covers it (a :class:`Wall`
-    gets its ``momentum_field_indices`` set to the slots it owns so it reflects
-    exactly those); unclaimed slots default to :class:`Extrapolation`; two BCs on
-    the same ``(tag, field)`` raise."""
+    """Build a :class:`BoundaryConditions` from a flat list of per-field BCs: one
+    :class:`PerFieldBoundary` per tag, unclaimed slots extrapolate, two BCs on one (tag, field)
+    raise. Whole-patch BCs (:class:`Periodic`, :class:`Coupled`) pass through unwrapped.
+    """
     aliases = aliases or {}
     n = len(state_names)
     by_tag = {}
@@ -1757,11 +1531,9 @@ def resolve_per_field(bc_list, state_names, aliases=None):
 
 
 def resolve_and_attach(sm, boundary_conditions, aux_bcs=None, aliases=None):
-    """Attach boundary conditions to a built SystemModel, accepting EITHER the
-    legacy :class:`BoundaryConditions` container OR the NEW flat per-field list
-    (``[Wall("left", on="momentum"), …]``), which is resolved against ``sm``'s
-    declared state via :func:`resolve_per_field`.  Shared by every model's
-    ``system_model``."""
+    """Attach boundary conditions (a :class:`BoundaryConditions` container or a flat per-field
+    list) to the SystemModel ``sm``; shared by every model's ``system_model``.
+    """
     if isinstance(boundary_conditions, list):
         boundary_conditions = resolve_per_field(
             boundary_conditions, [str(s) for s in sm.state],

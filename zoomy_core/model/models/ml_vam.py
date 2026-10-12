@@ -1,39 +1,7 @@
-"""ML-VAM — multilayer non-hydrostatic vertically-averaged moments, the
-declarative canonical model.
-
-Per layer a VAM column in the ESCALANTE spaces (u ∈ P_N; w, p ∈ P_{N+1}
-with the top modes closed — the uniform truncation left the pressure space
-inconsistent and drifted secularly, exactly like the single-layer VAM did
-before `7103770`).  Layers are coupled by ``KinematicBC(mass_flux=G_ℓ)``
-with the Hörnschemeyer fraction-multiplier closure (``h_ℓ = l_ℓ·h``).
-
-The 2N top-mode closures cascade through the stack:
-
-* p̂-closures run DOWNWARD: surface ``p_N(1) = 0``; every lower layer's
-  top trace equals the layer-above's bottom trace (downward convention —
-  the upward one makes the elliptic block singular, see the ml_vam thesis
-  notebook).  The traces are FULL modal traces including the closed top
-  modes, so the chain resolves from the surface to the bed.
-* ŵ-closures run UPWARD: bottom KBC ``w_1(0) = u_1(0)·∂x b``; every higher
-  layer's bottom trace is the kinematic interface condition
-  ``w_ℓ(0) = ∂t z_{ℓ-½} + u_ℓ(0)·∂x z_{ℓ-½} + G_{ℓ-½}/ρ``.
-
-Per layer the advective σ-mass flux ω̃ is resolved to its CLOSED form
-``ω̃(ζ) = G_{ℓ-½}/ρ − ∫₀^ζ (∂t h_ℓ + ∂x(h_ℓ ũ_ℓ))`` (Escalante's
-eq(3)→(4) step with the interface mass-flux offset) — the definition form
-differs by {layer-mass, constraint} combinations, equivalent ON the
-constraint manifold but not in the off-manifold predictor.
-
-Interface momentum transfer: ``u*`` is the surgical mean-trace swap on the
-x-momentum rows (u-traces are genuinely one-sided).  The w-rows get NO
-swap — the kinematic closures make the w-traces of adjacent layers exactly
-continuous, so a w* transfer correction is identically zero.
-
-``SystemModel.from_model(MLVAM(...))`` is the square DAE (state
-``[b, h, q_ℓk, r_ℓk, P_ℓj]``; the per-layer divergence constraints are the
-zero-mass-matrix rows); ``MLVAM.chorin_split(dt)`` returns the structural
-predictor / pressure / corrector sub-systems for
-:class:`~zoomy_core.fvm.solver_chorin_vam_numpy.ChorinSplitVAMSolver`.
+"""Multilayer non-hydrostatic vertically averaged moments (ML-VAM): every layer is a VAM column,
+with interface mass fluxes closed by the layer-fraction constraint. ``SystemModel.from_model``
+gives the square DAE with state ``[b, h, q, r, P]``; ``MLVAM.chorin_split`` gives the predictor
+/ pressure / corrector sub-systems.
 """
 from __future__ import annotations
 
@@ -63,8 +31,14 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class MLVAM(BaseModel):
-    """Multilayer non-hydrostatic VAM: ``n_layers`` σ-fraction layers, each a
-    moment column with u ∈ P_level and w, p ∈ P_{level+1} (closed top modes)."""
+    """Multilayer non-hydrostatic VAM with ``n_layers`` layers that move with the free surface,
+    each a column with u in P_level and w, p in P_(level+1) (closed top modes). Pressure
+    closures run downward from ``p(1) = 0`` at the surface and ``w`` closures run upward from
+    the bed kinematic condition.
+
+    References:
+        Escalante et al. 2024, https://doi.org/10.1016/j.jcp.2024.112882
+    """
 
     _finalize_lazy = True
     _cacheable_derivation = True        # derive_model returns m; byproducts on m
@@ -80,6 +54,11 @@ class MLVAM(BaseModel):
         "scheme is the mean; empty stress leaves tau UNCLOSED."))
 
     def derive_model(self):
+        """Derive each layer as a VAM column top-down (pressure-trace cascade), close the
+        interface mass fluxes ``G`` from the fraction constraint, and assemble the model.
+        Returns the derivation model with continuity, constraint and momentum rows, and the
+        interpolate, project, reconstruction and wall rows.
+        """
         N = int(self.n_layers)
         Nu = int(self.level)
         top = Nu + 1
@@ -88,11 +67,14 @@ class MLVAM(BaseModel):
         horiz = (x,) if dim == 2 else (x, y)
         HNAME = {x: "u", y: "v"}; DERIV = {x: d.x, y: d.y}; CN = {x: "x", y: "y"}
         def qname(xd, ell):
+            """Name of the discharge of layer ``ell`` in direction ``xd``."""
             return f"q_{ell}" if dim == 2 else f"q_{CN[xd]}_{ell}"
         def shat(xd, ell):
+            """Name of the velocity coefficient of layer ``ell`` in direction ``xd``."""
             return (rf"\hat{{u}}_{ell}" if dim == 2
                     else rf"\hat{{{HNAME[xd]}}}_{ell}")
         def sname(xd, ell):
+            """Name of the shear-stress field of layer ``ell`` in direction ``xd``."""
             return f"tau_{ell}" if dim == 2 else f"tau_{CN[xd]}z_{ell}"
         MOM = [f"momentum_{CN[xd]}" for xd in horiz]
         # e_x (downslope gravity component) is minted on the per-layer sub-models
@@ -141,14 +123,16 @@ class MLVAM(BaseModel):
         mus = [inner_basis.gram(j, j) for j in range(top + 1)]
 
         def _zint01(e):
+            """Integral of the polynomial ``e`` in ``zeta`` over ``[0, 1]``."""
             poly = sp.Poly(sp.expand(e.doit()), zeta)
             return sum(cc / (nn[0] + 1)
                        for nn, cc in zip(poly.monoms(), poly.coeffs()))
 
         def derive_layer(ell, p_top_trace_full):
-            """One VAM column.  Returns (cont, constraints, momx, momz,
-            p_bot_trace_full) — the bottom pressure trace (FULL, incl. the
-            closed top mode) feeds the layer below."""
+            """Derive VAM column ``ell`` given the pressure trace ``p_top_trace_full`` at its
+            top. Returns the layer rows and, last, the full bottom pressure trace that feeds the
+            layer below.
+            """
             z_bot, z_top, h_l = ifaces[ell - 1], ifaces[ell], hl[ell - 1]
             G_bot, G_top = Gf[ell - 1], Gf[ell]
             ml = DModel(coords=coords, parameters={"g": 9.81, "rho": 1.0})
@@ -169,6 +153,9 @@ class MLVAM(BaseModel):
             w = sp.Function(f"w_{ell}", real=True)(*coords)
 
             def _kbc(iface, G):
+                """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
+                mass flux ``G``.
+                """
                 kw = dict(w=w, u=uvel[0], interface=iface, rho=rl,
                           mass_flux=(G if G != 0 else None))
                 if dim == 3:
@@ -203,6 +190,7 @@ class MLVAM(BaseModel):
                 c.register(ml)
 
             def _state(at, *, alias=None, btag=None):
+                """Closure state of layer ``ell`` evaluated at the vertical location ``at``."""
                 fields = {"u": getattr(ml.functions, f"u_{ell}"),
                           "w": getattr(ml.functions, f"w_{ell}")}
                 if dim == 3:
@@ -432,6 +420,9 @@ class MLVAM(BaseModel):
             G_sol[Gf[a]] = sp.solve(part, Gf[a])[0]
 
         def _trace(ell, side, xd):
+            """Modal velocity of layer ``ell`` in direction ``xd`` at local height ``side`` (0
+            bottom, 1 top).
+            """
             sgn = lambda i: inner_basis.eval(i, side)
             return (sum(sgn(i) * q_mod[ell][xd][i] for i in range(Nu + 1))
                     / (l_all[ell - 1] * ht))
@@ -440,6 +431,9 @@ class MLVAM(BaseModel):
         iface = interface_closure(self.closures)
 
         def _ustar(a, xd):
+            """Transfer velocity ``u*`` shared by the layers adjacent to internal interface
+            ``a`` in direction ``xd`` (mean unless a closure is given).
+            """
             below, above = _trace(a, 1, xd), _trace(a + 1, 0, xd)
             if iface is not None:
                 # pass the REAL internal-interface mass flux G_α (not 0): an
@@ -581,7 +575,9 @@ class MLVAM(BaseModel):
             cum.append(cum[-1] + lf)
 
         def _xform(prof, ell):
-            """Local-ζ layer profile → global-ζ, with the assembly subs."""
+            """Map the local-``zeta`` profile of layer ``ell`` to global ``zeta`` and apply the
+            assembly substitutions.
+            """
             lf, c0 = l_all[ell - 1], cum[ell - 1]
             e = sp.sympify(prof).subs(zeta, (zeta - c0) / lf)
             e = sp.expand(e.subs(frac).doit())
@@ -589,6 +585,7 @@ class MLVAM(BaseModel):
             return e
 
         def _piece(prof_of_ell):
+            """Piecewise-over-layers profile built from ``prof_of_ell(ell)``."""
             pieces = []
             for ell in range(1, N + 1):
                 val = _xform(prof_of_ell(ell), ell)
@@ -687,7 +684,13 @@ class MLVAM(BaseModel):
     _system_model_kind = "mlvam"
 
     def chorin_split(self, dt=None, *, system_model=None):
-        """Structural Chorin split (predictor / pressure / corrector)."""
+        """Split the system into predictor, pressure and corrector sub-systems for the Chorin
+        solver. Returns the structural split with respect to the ``P_*`` pressure modes and time
+        step ``dt`` (symbol if None).
+
+        References:
+            Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
+        """
         from zoomy_core.model.splitter import split_for_pressure_structural
         sm = system_model if system_model is not None \
             else SystemModel.from_model(self)
