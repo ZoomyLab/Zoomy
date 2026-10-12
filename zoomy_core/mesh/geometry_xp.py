@@ -1266,6 +1266,9 @@ def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
     """Constrained LSQ fits of the boundary closure, ``(n_class, n_cc, R, M)`` tables in the
     ``lsq_gradQ`` layout: minimise the residual over interior and ghost samples subject to one
     Dirichlet value or Neumann normal-derivative constraint per face, in null-space form.
+
+    References:
+        Lawson, Hanson 1995, https://doi.org/10.1137/1.9781611971217
     """
     plan = topo.lsq_plan
     cl = plan.get("closure")
@@ -1377,6 +1380,9 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
     def _tpfa(faces, a, b, valid=None):
         """Distance and floored obliquity factor ``max(|n.e|, _TPFA_MIN_COS)`` between cells ``a``
         and ``b`` across ``faces``.
+
+        References:
+            Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
         """
         dx = cc[:dim, b] - cc[:dim, a]
         dist = _norm_rows(xp, dx)

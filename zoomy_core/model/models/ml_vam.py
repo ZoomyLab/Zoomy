@@ -38,6 +38,7 @@ class MLVAM(BaseModel):
 
     References:
         Escalante et al. 2024, https://doi.org/10.1016/j.jcp.2024.112882
+        Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
     """
 
     _finalize_lazy = True

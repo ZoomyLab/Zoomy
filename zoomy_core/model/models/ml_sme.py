@@ -38,6 +38,7 @@ class MLSME(BaseModel):
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+        Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
     """
 
     _finalize_lazy = True

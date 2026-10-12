@@ -13,6 +13,9 @@ class ElderSME(SME):
     """SME with the Elder parabolic eddy viscosity ``nu_t = kappa u_star h zeta (1 - zeta)`` and
     a turbulent rough-wall bed; algebraic, adds no state. Pass ``closures=[...]`` to override
     the default closure set.
+
+    References:
+        Elder 1959, https://doi.org/10.1017/s0022112059000374
     """
 
     def __init__(self, **params):

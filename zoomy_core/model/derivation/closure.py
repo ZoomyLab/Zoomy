@@ -946,6 +946,9 @@ class GaussQuadrature(Operation):
     Args:
         var: integration variable (default ``zeta``).
         order: number of Gauss nodes (>= 1).
+
+    References:
+        Golub, Welsch 1969, https://doi.org/10.1090/s0025-5718-69-99647-1
     """
 
     whole_leaf_op = True
@@ -1071,6 +1074,9 @@ class ResolveNumQuad(Operation):
     """Resolve every opaque NumQuad(f) to its order-point Gauss-Legendre sum over ζ in [0, 1]; run
     it as the last derivation step. ``basis`` (optional) resolves opaque φ(k, ζ) still present in a
     bracket body at the nodes.
+
+    References:
+        Golub, Welsch 1969, https://doi.org/10.1090/s0025-5718-69-99647-1
     """
 
     whole_leaf_op = True

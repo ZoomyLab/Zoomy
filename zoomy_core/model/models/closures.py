@@ -152,6 +152,9 @@ class KEpsilonViscosity(Closure):
     Args:
         wall_floor: add the near-wall mixing-length viscosity ``C_mu^(1/4) sqrt(k) kappa z_p``
             so the stress still damps the velocity moments at the wall.
+
+    References:
+        Launder, Spalding 1974, https://doi.org/10.1016/0045-7825(74)90029-2
     """
     closes = "bulk"; requires = ("u", "k", "varepsilon")
 
@@ -186,6 +189,9 @@ class QRViscosity(Closure):
 
     Args:
         wall_floor: add the near-wall mixing-length viscosity, as in ``KEpsilonViscosity``.
+
+    References:
+        Fe et al. 2009, https://doi.org/10.1002/fld.1880
     """
     closes = "bulk"; requires = ("u", "sk", "se")
 
@@ -253,6 +259,9 @@ class ElderViscosity(Closure):
     Args:
         friction: optional bed closure whose live ``friction_velocity`` replaces the ``u_star``
             parameter.
+
+    References:
+        Elder 1959, https://doi.org/10.1017/s0022112059000374
     """
     closes = "bulk"; requires = ("u",)
 
@@ -510,6 +519,9 @@ class MeanInterface(InterfaceFlux):
 class UpwindInterface(InterfaceFlux):
     """Donor interface velocity chosen by the sign of the interface flux, ``u* = u_below`` if
     ``G >= 0`` else ``u_above``.
+
+    References:
+        Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
     """
 
     def expression(self, below, above, G):

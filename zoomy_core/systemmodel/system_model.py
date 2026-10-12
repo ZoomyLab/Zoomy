@@ -1596,6 +1596,9 @@ class SystemModel:
         """Which concrete well-balanced kernel a backend must run: ``none`` / ``audusse`` pass
         through, the Bernoulli family resolves to ``steady_ode`` (friction, higher moments or
         ``force_steady_ode``) or ``bernoulli_closed_form``.
+
+        References:
+            Pimentel-Garcia et al. 2022, https://doi.org/10.1016/j.jcp.2022.111152
         """
         eqr = getattr(self, "equilibrium_reconstruction", "none") or "none"
         if eqr in ("none", "audusse"):

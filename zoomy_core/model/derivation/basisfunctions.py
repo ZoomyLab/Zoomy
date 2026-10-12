@@ -451,6 +451,9 @@ class LayeredBasis(Basisfunction):
         inner_level: level of the inner basis.
         interfaces: explicit breakpoints (``N + 1``), in zeta or physical z.
         n_layers: number of equal layers on ``[0, 1]`` when ``interfaces`` is not given.
+
+    References:
+        Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
     """
 
     name = "LayeredBasis"
@@ -691,6 +694,9 @@ class Chebyshevu_shifted(Basisfunction):
 
         Returns:
             Tuple ``(nodes, weights)`` of arrays.
+
+        References:
+            Golub, Welsch 1969, https://doi.org/10.1090/s0025-5718-69-99647-1
         """
         if n is None:
             n = 2 * (self.level + 1)
@@ -738,6 +744,9 @@ class GalerkinBasis(Basisfunction):
         bc_bottom: condition at ``z = 0``.
         bc_top: condition at ``z = 1``.
         slip_length: slip length for ``'slip'`` (symbolic ``slip_length`` if None).
+
+    References:
+        Shen 1994, https://doi.org/10.1137/0915089
     """
     name = "GalerkinBasis"
 

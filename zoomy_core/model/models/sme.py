@@ -411,6 +411,9 @@ class SME(BaseModel):
     def _register_hswme_spectrum(self, sm):
         """Publish the closed-form beta-HSWME spectrum as ``sm.eigenvalues``; valid only where
         the truncation drops nothing (level <= 1), otherwise defers to ``_wave_speed_cone``.
+
+        References:
+            Koellermeier, Rominger 2020, https://doi.org/10.4208/cicp.oa-2019-0065
         """
         import re
         n_eq = sm.n_equations

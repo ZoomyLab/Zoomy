@@ -308,6 +308,9 @@ def implicit_stage_mode(nsm) -> str:
     ``"none"``.
     Derived from the operators, so a model with both implicit diffusion and source gives one
     coupled stage.
+
+    References:
+        Kennedy, Carpenter 2003, https://doi.org/10.1016/s0168-9274(02)00138-1
     """
     if _operator_is_live(getattr(nsm, "diffusion_matrix", None)):
         diffusion = getattr(nsm, "diffusion", None)
@@ -422,6 +425,8 @@ class ReconstructionSpec:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         Clain, Diot, Loubere 2011, https://doi.org/10.1016/j.jcp.2011.02.026
+        Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
+        Xing, Zhang, Shu 2010, https://doi.org/10.1016/j.advwatres.2010.08.005
     """
     order: int = 1
     limiter: str = "venkatakrishnan"
@@ -721,6 +726,9 @@ class NumericalSystemModel(SystemModel):
     def implicit_mode(self) -> str:
         """Implicit-stage path this system needs (``"none"``, ``"local_source"``, ``"coupled"``),
         re-read from the operators on every access; see ``implicit_stage_mode``.
+
+        References:
+            Kennedy, Carpenter 2003, https://doi.org/10.1016/s0168-9274(02)00138-1
         """
         return implicit_stage_mode(self)
 

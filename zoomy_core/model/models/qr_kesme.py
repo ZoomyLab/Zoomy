@@ -40,6 +40,7 @@ class QRKESME(SME):
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+        Fe et al. 2009, https://doi.org/10.1002/fld.1880
     """
 
     _cacheable_derivation = True        # derive_model returns m; byproducts on m

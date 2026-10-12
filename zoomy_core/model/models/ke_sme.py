@@ -38,6 +38,7 @@ class KESME(SME):
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
+        Launder, Spalding 1974, https://doi.org/10.1016/0045-7825(74)90029-2
     """
 
     _cacheable_derivation = True        # derive_model returns m; byproducts on m

@@ -29,6 +29,9 @@ class MLSWE(BaseModel):
     """Multilayer SWE with ``n_layers`` layers that move with the free surface, derived layer by
     layer with kinematic interface conditions. The interface transfer velocity is upwinded or
     averaged through the ``closures`` (``UpwindInterface`` / ``MeanInterface``).
+
+    References:
+        Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
     """
 
     _finalize_lazy = True

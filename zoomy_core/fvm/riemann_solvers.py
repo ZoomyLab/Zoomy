@@ -678,6 +678,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
         References:
             Pares 2006, https://doi.org/10.1137/050628052
+            Audusse, Bristeau 2005, https://doi.org/10.1016/j.jcp.2004.12.016
         """
         return ZArray.zeros(self.n_variables)
 
@@ -764,6 +765,7 @@ class HLL(Numerics):
 
         References:
             Toro 2009, https://doi.org/10.1007/b79761
+            Davis 1988, https://doi.org/10.1137/0909030
         """
         if self.model.eigenvalues is None:
             return super().wave_speed_bounds(qL, qR, auxL, auxR, p, n)
@@ -816,6 +818,7 @@ class HLLC(HLL):
 
     References:
         Toro 2009, https://doi.org/10.1007/b79761
+        Toro, Spruce, Speares 1994, https://doi.org/10.1007/bf01414629
     """
 
     name = param.String(default="HLLCV2")
@@ -1173,6 +1176,9 @@ class NonconservativeRusanov(Rusanov):
     def numerical_cell_edge_source(self):
         """The in-cell nonconservative term: the segment-path integral between cell and
         edge state times their jump, with no dissipation; it vanishes at first order.
+
+        References:
+            Audusse, Bristeau 2005, https://doi.org/10.1016/j.jcp.2004.12.016
         """
         qc, qe = self.variables_minus, self.variables_plus
         auxc, auxe = self.aux_variables_minus, self.aux_variables_plus
@@ -1337,6 +1343,7 @@ class NonconservativeRoe(NonconservativeRusanov):
 
     References:
         Pares 2006, https://doi.org/10.1137/050628052
+        Roe 1981, https://doi.org/10.1016/0021-9991(81)90128-5
     """
 
     name = param.String(default="NonconservativeRoe")
@@ -1460,6 +1467,7 @@ class QuasilinearRoe(NonconservativeRoe):
 
     References:
         Pares 2006, https://doi.org/10.1137/050628052
+        Roe 1981, https://doi.org/10.1016/0021-9991(81)90128-5
     """
 
     name = param.String(default="QuasilinearRoe")

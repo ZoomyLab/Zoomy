@@ -91,11 +91,18 @@ class minmod(Block):
     """``(rows, W, Wg, G, mesh)`` -> limiter factors in [0, 1] per row and cell (1 off
     ``rows``): the largest keeping every face extrapolation within the bounds of the
     face neighbours and boundary ghosts ``Wg``.
+
+    References:
+        Sweby 1984, https://doi.org/10.1137/0721062
     """
 
 
 class venkatakrishnan(Block):
-    """As :class:`minmod`, the smooth Venkatakrishnan factor (eps^2 = h^2)."""
+    """As :class:`minmod`, the smooth Venkatakrishnan factor (eps^2 = h^2).
+
+    References:
+        Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
+    """
 
 
 class barth_jespersen(Block):
@@ -162,6 +169,9 @@ class diffusion(Block):
 class implicit_diffusion(Block):
     """``(kernel, bc, Q, Qaux, p, time, dt, mesh)`` -> one Crank-Nicolson step of
     :class:`diffusion` from ``time`` to ``time + dt``.
+
+    References:
+        Crank, Nicolson 1947, https://doi.org/10.1017/s0305004100023197
     """
 
 
