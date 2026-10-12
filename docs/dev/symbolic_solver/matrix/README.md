@@ -160,19 +160,19 @@ here has nu = 0.
 
 ## Results (table.md, 2026-10-12)
 
-Libraries: jax b59227c, amrex a9ef6c2, foam 3c51d7b (superrepo 9dd4420f + 42df7e8e).
-Every run in the store ran on these heads (older runs were deleted by
-library commit).  Wrapped up before the end of the full run:
+Libraries: core 6afd79d, jax 8a163d3, foam c6ed617, amrex eb9be98.
+The whole store rerun from empty on these heads (the previous one is kept
+as `store_prev_20261012`); every backend on every config it has (serial,
+mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
 
-- **Run:** JAX C1-C5, C8, C10-C16, C18-C24, C26 (serial, mpi2/4, gpu1, part of gpu-mpi);
-  AMReX C1-C5, C8, C10, C11, C13, C14, C16, C17 (serial), C18-C24, C26 (serial, mpi2/4).
-- **Not run on these heads:** foam (every case; its earlier numbers are in git
-  history of table.md only), AMReX C17 mpi2 / gpu1, AMReX gpu configs, JAX C22 gpu,
-  the large tier (`large.py`, never executed in full).
-- **Failures (164 PASS, 8 FAIL):** AMReX vs JAX not at round-off on open
-  boundaries (C4 1.7e-3, C11 4.5e-6) and periodic O1/O2 vs JAX (C13 3.9e-3;
-  both are shift-invariant to 0); JAX gpu1 Chorin AD is NaN (C15, eig spectral
-  radius on the GPU).
+- Fixed during the rerun: foam C16 (`build` without a topology), AMReX C17
+  off cpu1 (shared work directory), foam C10 n120 (Schur-GAMG divergence ->
+  Jacobi fallback), C12 `sub` refined in x and y, foam = JAX at round-off
+  counted as a pass, AMReX = JAX tolerances from JAX's measured round-off
+  sensitivity (`*_pert` runs: C4 trans O2 1.3e-11, C11 sub O2 2.0e-5,
+  bounded limiter chattering), C15 Chorin AD with power-iteration wave
+  speeds (the eig tangent is ~1e15 at a defective eigenvalue: NaN on gpu1).
+- Not run: the large tier (`large.py`, never executed in full).
 - C27-C30 (wrapped gates 40, 41, 43, 44, 39; added after the full run, JAX / foam / AMReX
   on the same heads): 130 rows PASS, 0 FAIL, 5 n/a.  C27 orders 1.01 / 1.92 / 3.00
   (ODE) and 1.26 / 2.08 / 3.02 (wave) on all three backends (the foam / AMReX errors
