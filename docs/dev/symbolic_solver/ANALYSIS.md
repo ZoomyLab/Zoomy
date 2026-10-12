@@ -1075,3 +1075,19 @@ From an empty store on the current heads (the old one kept as
   1-D steady run amplifies round-off 1e9-fold -- limiter switching; open
   whether that is benign).
 Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
+
+## 44. C15 GPU NaN: the eig tangent at a defective eigenvalue; C11 sensitivity
+
+- C15 Chorin jvp on gpu1 was NaN (J finite, = CPU) from t ~0.015 on.  Not
+  GMRES (its outputs stayed finite).  `eigvals`' tangent at a defective
+  dominant eigenvalue is ~1e15 (unit test: a 2x2 Jordan block, CPU and GPU);
+  the CPU's exact tie lets max|lambda| average the +-1e15 pair to a finite
+  value, the GPU splits the tie and propagates 1e15 into dt -> NaN.  Power
+  iteration (the GPU default) is smooth: gpu1 finite.  C15 Chorin now runs
+  `power` on every config: serial / mpi2 fd_rel 6.4e-9, rev = fwd.  Open:
+  AD through `eig` wave speeds is ill-posed at defective points on any
+  device (a cluster-mean tangent from Schur vectors would fix it).
+- C11 `sub` O2 (1-D): the 1e-14 sensitivity is bounded, not growing:
+  8e-8 at t 0.5, 1e-6 .. 2e-5 to t 6, error vs Bernoulli steady 5.6e-4 --
+  limiter chattering in the near-steady state; the sensitivity tolerance
+  (section 43) is the right check there.
