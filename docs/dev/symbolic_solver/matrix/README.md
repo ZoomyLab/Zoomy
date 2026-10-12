@@ -110,11 +110,17 @@ are raw log(e_coarse / e_fine) / log(refinement).
 
 Never in the default run; each command <= 5 min.  L1 weak scaling (C1 bump
 O2, 200^2 cells per rank, 1/2/4 ranks, 20 constant steps: ms/step); L2
-strong scaling (1600^2 = 2.56M cells); L2P pressure strong scaling (VAM(1)
-channel 3200 x 320 = 1M cells; JAX pyamg on CPU ranks, AmgX on GPUs; foam
-GAMG; AMReX); L3 catchment (JAX: the 14.8M-cell 1 m mesh on 4 GPUs, a
-time window; AMReX: its 10 m grid driver); L4 setup / compile / memory vs
-mesh size; L5 parallel mesh + field write of the 14.8M-cell mesh.
+strong scaling (1600^2 = 2.56M cells, 5 steps); L2P pressure strong scaling
+(VAM(1) channel 3200 x 320 = 1M cells; JAX pyamg on CPU ranks, AmgX on GPUs;
+foam Schur-GAMG; AMReX GMRES + cell-block Jacobi); L3 catchment (JAX: the
+14.8M-cell 1 m mesh on 4 GPUs, a 5 s window, reads the mesh L5 writes: run
+L5 first; AMReX: `gates/catchment_amrex.py`, the 10 m raster with nodata
+cells as a bed-1e4 wall, against JAX on the same mesh); L4 setup / compile /
+memory vs mesh size; L5 parallel mesh + field write of the 14.8M-cell mesh.
+Each backend uses its default wave speed (JAX: eig on the CPU, power
+iteration on a GPU: JAX's eig is a host callback there).  A timed-out AMReX
+run can log a SIGBUS: `timeout` kills apptainer, which unmounts the image
+under the still-running ranks.
 Results: the "Large tier" section of `table.md`.
 
 ## Adding a backend
@@ -172,7 +178,25 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
   sensitivity (`*_pert` runs: C4 trans O2 1.3e-11, C11 sub O2 2.0e-5,
   bounded limiter chattering), C15 Chorin AD with power-iteration wave
   speeds (the eig tangent is ~1e15 at a defective eigenvalue: NaN on gpu1).
-- Not run: the large tier (`large.py`, never executed in full).
+- Large tier (first full run; ms/step at 1/2/4 ranks or GPUs):
+  - L1 weak, 200^2 per rank: JAX CPU 380/423/389, GPU 2.9/3.4/3.6; AMReX CPU
+    845/898/809, GPU 12.9/14.7/13.5; foam 1387/1380/1380.
+  - L2 strong, 2.56M cells: JAX CPU 18681/10946/5909 (85 / 79 %), GPU
+    253/127/63 (100 %); AMReX CPU 36260/19712/10938 (92 / 83 %), GPU
+    433/221/112 (98 / 97 %); foam mpi4 17962 (serial, mpi2 > 5 min).
+  - L2P pressure, 1M cells: only JAX on GPUs (AmgX) fits, 1410/1338/1092
+    (53 / 32 %); AMReX (GMRES + cell-block Jacobi, no multigrid), foam
+    (Schur-GAMG) and JAX pyamg on CPUs do not fit 5 min.
+  - L3: JAX 14.8M cells on 4 GPUs, 5 s in 6.7 s (~29 ms/step); AMReX 10 m
+    (292k cells) = JAX on the same mesh to 6.5e-15, water = rain to 1.5e-15,
+    cpu1 221, cpu4 62, gpu1 1.4, gpu4 0.6 ms/step.
+  - L4: memory linear in cells (JAX 15.8 GB, AMReX 5.9 GB at 2.56M); L5
+    parallel write 14.8M cells 55 / 35 / 27 s.
+  - Fixed: the tier forced eig wave speeds, a host callback on a JAX GPU
+    (L1/L2 GPU > 5 min, now 2.9 ms/step); L2 at 5 steps; the AMReX catchment
+    driver (never committed) written.  Open: CPU O2 cost per cell (AMReX 24,
+    foam 35 us/cell/step vs 0.44 for AMReX O1 on the catchment); pressure
+    preconditioners of AMReX and foam at 1M cells.
 - C27-C30 (wrapped gates 40, 41, 43, 44, 39; added after the full run, JAX / foam / AMReX
   on the same heads): 130 rows PASS, 0 FAIL, 5 n/a.  C27 orders 1.01 / 1.92 / 3.00
   (ODE) and 1.26 / 2.08 / 3.02 (wave) on all three backends (the foam / AMReX errors

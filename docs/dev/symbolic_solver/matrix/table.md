@@ -522,27 +522,27 @@
 | L1 | foam_mpi2 | cells 80089, setup 46.79, ms_step 1380, maxrss_gb 0.9041, ranks 2 |
 | L1 | foam_mpi4 | cells 160000, setup 53, ms_step 1380, maxrss_gb 0.9043, ranks 4 |
 | L1 | foam_serial | cells 40000, setup 51.05, ms_step 1387, maxrss_gb 0.9033, ranks 1 |
-| L1 | jax_gpu1 | does not fit 5 min (timeout 295 s) |
-| L1 | jax_gpu2 | does not fit 5 min (timeout 295 s) |
-| L1 | jax_gpu4 | does not fit 5 min (timeout 295 s) |
+| L1 | jax_gpu1 | cells 40000, setup 16.67, compile 2.297, ms_step 2.915, maxrss_gb 1.441, ranks 1 |
+| L1 | jax_gpu2 | cells 80089, setup 18.23, compile 8.665, ms_step 3.389, maxrss_gb 1.369, ranks 2 |
+| L1 | jax_gpu4 | cells 160000, setup 20.25, compile 8.035, ms_step 3.56, maxrss_gb 1.415, ranks 4 |
 | L1 | jax_mpi2 | cells 80089, setup 20.77, compile 5.208, ms_step 422.8, maxrss_gb 1.197, ranks 2 |
 | L1 | jax_mpi4 | cells 160000, setup 20.29, compile 5.855, ms_step 388.9, maxrss_gb 1.237, ranks 4 |
 | L1 | jax_serial | cells 40000, setup 15.31, compile 4.734, ms_step 380.4, maxrss_gb 1.011, ranks 1 |
-| L2 | amrex_gpu1 | cells 2560000, setup 79.87, ms_step 444.2, maxrss_gb 5.915, ranks 1 |
-| L2 | amrex_gpu2 | cells 2560000, setup 36.9, ms_step 226.2, maxrss_gb 5.893, ranks 2 |
-| L2 | amrex_gpu4 | cells 2560000, setup 34.17, ms_step 114.6, maxrss_gb 5.912, ranks 4 |
-| L2 | amrex_mpi2 | does not fit 5 min (timeout 295 s) |
-| L2 | amrex_mpi4 | cells 2560000, setup 35.9, ms_step 1.012e+04, maxrss_gb 5.911, ranks 4 |
-| L2 | amrex_serial | does not fit 5 min (timeout 295 s) |
+| L2 | amrex_gpu1 | cells 2560000, setup 42.72, ms_step 432.7, maxrss_gb 5.892, ranks 1 |
+| L2 | amrex_gpu2 | cells 2560000, setup 34.52, ms_step 221.3, maxrss_gb 5.895, ranks 2 |
+| L2 | amrex_gpu4 | cells 2560000, setup 34.69, ms_step 112.4, maxrss_gb 5.896, ranks 4 |
+| L2 | amrex_mpi2 | cells 2560000, setup 36, ms_step 1.971e+04, maxrss_gb 5.895, ranks 2 |
+| L2 | amrex_mpi4 | cells 2560000, setup 36.21, ms_step 1.094e+04, maxrss_gb 5.894, ranks 4 |
+| L2 | amrex_serial | cells 2560000, setup 35.77, ms_step 3.626e+04, maxrss_gb 5.912, ranks 1 |
 | L2 | foam_mpi2 | does not fit 5 min (timeout 295 s) |
-| L2 | foam_mpi4 | does not fit 5 min (timeout 295 s) |
+| L2 | foam_mpi4 | cells 2560000, setup 149.7, ms_step 1.796e+04, maxrss_gb 7.145, ranks 4 |
 | L2 | foam_serial | does not fit 5 min (timeout 295 s) |
-| L2 | jax_gpu1 | does not fit 5 min (timeout 295 s) |
-| L2 | jax_gpu2 | does not fit 5 min (timeout 295 s) |
-| L2 | jax_gpu4 | does not fit 5 min (timeout 295 s) |
-| L2 | jax_mpi2 | does not fit 5 min (timeout 295 s) |
-| L2 | jax_mpi4 | cells 2560000, setup 55.59, compile 5.612, ms_step 5906, maxrss_gb 6.774, ranks 4 |
-| L2 | jax_serial | does not fit 5 min (timeout 295 s) |
+| L2 | jax_gpu1 | cells 2560000, setup 65.82, compile 7.42, ms_step 252.8, maxrss_gb 8.777, ranks 1 |
+| L2 | jax_gpu2 | cells 2560000, setup 72.85, compile 8.16, ms_step 127.4, maxrss_gb 6.692, ranks 2 |
+| L2 | jax_gpu4 | cells 2560000, setup 60.69, compile 8.726, ms_step 63.2, maxrss_gb 5.935, ranks 4 |
+| L2 | jax_mpi2 | cells 2560000, setup 66.65, compile 2.476, ms_step 1.095e+04, maxrss_gb 10.38, ranks 2 |
+| L2 | jax_mpi4 | cells 2560000, setup 55.52, compile 2.542, ms_step 5909, maxrss_gb 6.807, ranks 4 |
+| L2 | jax_serial | cells 2560000, setup 58.98, compile 4.333, ms_step 1.868e+04, maxrss_gb 15.64, ranks 1 |
 | L2P | amrex_gpu1 | does not fit 5 min (timeout 295 s) |
 | L2P | amrex_gpu2 | does not fit 5 min (timeout 295 s) |
 | L2P | amrex_gpu4 | does not fit 5 min (timeout 295 s) |
@@ -558,8 +558,10 @@
 | L2P | jax_mpi2 | does not fit 5 min (timeout 295 s) |
 | L2P | jax_mpi4 | does not fit 5 min (timeout 295 s) |
 | L2P | jax_serial | does not fit 5 min (timeout 295 s) |
-| L3 | amrex_mpi4 | python: can't open file '/Users/adam-obbpb5az1dhsjzf/git/wt-amrex/gates/catchment_amrex.py': [Errno 2] No such file or directory |
-| L3 | amrex_serial | python: can't open file '/Users/adam-obbpb5az1dhsjzf/git/wt-amrex/gates/catchment_amrex.py': [Errno 2] No such file or directory |
+| L3 | amrex_gpu1 | catchment 10 m: 291930 cells (148339 catchment), gpu1: setup 51.9 s, 5 s simulated in 0.03 s (23 steps, 1.4 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_gpu4 | catchment 10 m: 291930 cells (148339 catchment), gpu4: setup 10.8 s, 5 s simulated in 0.01 s (23 steps, 0.6 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_mpi4 | catchment 10 m: 291930 cells (148339 catchment), cpu4: setup 9.1 s, 5 s simulated in 1.42 s (23 steps, 61.7 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_serial | catchment 10 m: 291930 cells (148339 catchment), cpu1: setup 8.4 s, 5 s simulated in 5.09 s (23 steps, 221.5 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
 | L3 | jax_gpu4 | fine run: 14.77M cells on 4 GPUs (3691674 owned/rank 0): setup 70 s, compile 2 s, 5 s simulated in 6.7 s; h_max 2.98 m; water change 615.277 m3 vs rain 615.277 m3; CFL dt 0.0218 s (start) 0.0214 s (end) -> ~231 steps, ~29 ms/step; 1 h of catchment ~1.3 h wall |
 | L4 | amrex_100 | cells 10000, setup 26.7, ms_step 252.7, maxrss_gb 0.497 |
 | L4 | amrex_1600 | cells 2560000, setup 55.2, ms_step 3.601e+04, maxrss_gb 5.894 |

@@ -8,6 +8,8 @@
     python matrix.py run --tier large L4 BACKEND NX         setup / compile / memory vs mesh size
     python matrix.py run --tier large L5 RANKS              parallel mesh + field write, 14.8M cells
 
+L3 JAX reads the fine mesh that L5 writes: run L5 first.
+
 CONFIG: serial mpi2 mpi4 gpu1 gpu2 gpu4.  Results: STORE/large/<L>/<backend>_<config>[_<n>].json;
 `python matrix.py table` prints them in their own section.  Multi-node / Slurm: untestable here.
 """
@@ -50,9 +52,8 @@ def maxrss_gb():
 # ── hyperbolic timing: C1 bump O2, constant dt, N_STEPS steps ───────────────
 def bump(nx):
     import common as C
-    mesh, nsm = C.bump_2d(2, nx=nx)
-    nsm.spectral_radius_method = "eig"
-    return mesh, nsm
+    return C.bump_2d(2, nx=nx)        # each backend's default wave speed: JAX eig is
+                                      # CPU-only (a host callback on a GPU), power there
 
 
 def time_jax(make, n_steps, dt, chorin=None, comm=None, q0=None):
@@ -113,7 +114,7 @@ def time_cxx(backend, make, n_steps, dt, config, work, chorin=False, q0=None):
                 maxrss_gb=maxrss_gb())
 
 
-def hyperbolic(level, backend, config, nx):
+def hyperbolic(level, backend, config, nx, n_steps=N_STEPS):
     dt = 0.05 * 10.0 / nx                                 # CFL ~ 0.1
     name = f"{backend}_{config}"
     if backend == "jax":
@@ -121,11 +122,11 @@ def hyperbolic(level, backend, config, nx):
         if ranks(config) > 1:
             from mpi4py import MPI
             comm = MPI.COMM_WORLD
-        res = time_jax(lambda: bump(nx), N_STEPS, dt, comm=comm)
+        res = time_jax(lambda: bump(nx), n_steps, dt, comm=comm)
         if comm is None or comm.Get_rank() == 0:
             save(level, name, dict(res, maxrss_gb=maxrss_gb(), ranks=ranks(config)))
     else:
-        res = time_cxx(backend, lambda: bump(nx), N_STEPS, dt, config,
+        res = time_cxx(backend, lambda: bump(nx), n_steps, dt, config,
                        WORK / level / name)
         save(level, name, dict(res, ranks=ranks(config)))
 
@@ -175,8 +176,10 @@ def _sub(argv, env_name, n, timeout=290):
 def catchment(backend, config, T):
     out = WORK / "catch"
     if backend == "amrex":
-        drv = Path.home() / "git/wt-amrex/gates/catchment_amrex.py"   # the AMReX worker's driver
+        drv = GATES / "catchment_amrex.py"
         cfg = {"serial": "cpu1", "mpi4": "cpu4"}.get(config, config)
+        if not (out / "amrex" / f"jax_{T:g}.npz").exists():   # the same mesh on JAX
+            _sub(["python", str(drv), str(out / "amrex"), str(T), "jax"], "zoomy", 1)
         rc, txt = _sub(["python", str(drv), str(out / "amrex"), str(T), cfg], "zoomy", 1)
         m = re.search(r"catchment .*", txt)
         save("L3", f"amrex_{config}", dict(rc=rc, line=m.group(0) if m else txt[-500:]))
@@ -234,7 +237,7 @@ def main(args):
     if level == "L1":
         hyperbolic("L1", args[1], args[2], int(round(200 * np.sqrt(ranks(args[2])))))
     elif level == "L2":
-        hyperbolic("L2", args[1], args[2], 1600)
+        hyperbolic("L2", args[1], args[2], 1600, 5)      # steps of seconds: 5 fit 5 min
     elif level == "L2P":
         pressure(args[1], args[2])
     elif level == "L3":
