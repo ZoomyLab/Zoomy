@@ -1,5 +1,6 @@
+import os
 import sys
-sys.path.insert(0, "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/docs/dev/symbolic_solver/gates")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../docs/dev/symbolic_solver/gates"))
 import common, numpy as np
 from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_core.mesh.geometry_xp import build_topology

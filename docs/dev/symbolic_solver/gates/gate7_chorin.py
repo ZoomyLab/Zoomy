@@ -4,6 +4,7 @@ Escalante VAM(1) dam break over a bump, 60 cells, open ends (the config of
 zoomy_jax/tests/runtime/test_vam_chorin_bump.py), constant dt = 2^-7 to
 t = 0.5 (64 steps, exact time sums), time_order 1 and 2.
 """
+import os
 import sys
 import time as wall
 
@@ -13,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import sympy as sp
 
-T = "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/library/zoomy_jax/tests"
+T = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../library/zoomy_jax/tests")
 sys.path[:0] = [T, T + "/runtime"]
 import cases  # noqa: E402
 import models  # noqa: E402

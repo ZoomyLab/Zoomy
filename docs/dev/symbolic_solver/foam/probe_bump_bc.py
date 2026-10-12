@@ -1,5 +1,6 @@
+import os
 import sys
-sys.path.insert(0, "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/thesis/cases/escalante_vam_bump")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../thesis/cases/escalante_vam_bump"))
 import numpy as np, sympy as sp
 from run_derived import build_model
 from zoomy_core.systemmodel.system_model import SystemModel, _DT_SYMBOL

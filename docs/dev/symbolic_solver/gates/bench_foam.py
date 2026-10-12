@@ -12,7 +12,7 @@ import sys
 import common  # noqa: F401
 import numpy as np
 
-T = "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/library/zoomy_foam/tests"
+T = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../library/zoomy_foam/tests")
 sys.path.insert(0, T)
 import foam_cases as FC  # noqa: E402
 import foam_models as FM  # noqa: E402

@@ -1,5 +1,6 @@
+import os
 import sys
-sys.path.insert(0, "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/docs/dev/symbolic_solver/gates")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../docs/dev/symbolic_solver/gates"))
 import common
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_foam._pipeline import _codegen, FOAM_ROOT

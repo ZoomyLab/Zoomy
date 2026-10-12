@@ -12,7 +12,7 @@ import time as wall
 
 import numpy as np
 
-CASE = "/Users/adam-obbpb5az1dhsjzf/git/Zoomy-solver-template/thesis/cases/malpasset_jax"
+CASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../thesis/cases/malpasset_jax")
 GATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gates")
 sys.path[:0] = [CASE, GATES]
 import jax  # noqa: E402
