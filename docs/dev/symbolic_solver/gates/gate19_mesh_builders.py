@@ -13,8 +13,9 @@ import numpy as np
 import gate16_parallel as G
 
 REV = sys.argv[1] if len(sys.argv) > 1 else "6b20967"
-CORE = os.path.join(os.path.dirname(__file__), "../../../../library/zoomy_core")
-MSH = os.path.join(os.path.dirname(__file__), "../../../../library/zoomy_dmplex")
+LIB = os.environ.get("ZOOMY_LIBRARY",
+                     os.path.join(os.path.dirname(__file__), "../../../../library"))
+CORE, MSH = os.path.join(LIB, "zoomy_core"), os.path.join(LIB, "zoomy_dmplex")
 old_dir = tempfile.mkdtemp()
 for name in ("base_mesh", "fvm_mesh", "lsq_mesh", "lsq_reconstruction"):
     src = subprocess.run(["git", "-C", CORE, "show", f"{REV}:zoomy_core/mesh/{name}.py"],
@@ -102,3 +103,37 @@ c = LSQMesh.create_1d((-1.5, 1.5), 240)
 n = 240                     # inner cells; ghost rows and tag numbers differ by design
 compare("LSQMesh 1-D from_msh vs create_1d, inner cells", None, None, [
     (k, getattr(m, k)[:n], getattr(c, k)[:n]) for k in ("_lsq_neighbors", "_lsq_gradQ")])
+
+# Periodic seams (build_topology with Periodic BCs, the solver's stencils):
+# intended change -- seam cells take the interior ring wrapped across the
+# seam (identified vertices, offsets to the nearest image), no ghost sample.
+# Cells away from the seams keep their stencils exactly; a seam cell's
+# stencil equals its mirror interior cell's (translation invariance).
+from zoomy_core.mesh.geometry_xp import build_topology, compute_geometry  # noqa: E402
+from zoomy_core.model.boundary_conditions import BoundaryConditions, Periodic  # noqa: E402
+for label, mk, pairs in (
+        ("create_1d", lambda: LSQMesh.create_1d((0.0, 1.0), 20), (("left", "right"),)),
+        ("create_2d", lambda: LSQMesh.create_2d((0, 1, 0, 1), 10, 10),
+         (("left", "right"), ("bottom", "top")))):
+    for deg in (1, 2):
+        mesh = mk()
+        bcs = BoundaryConditions([Periodic(tag=a, periodic_to_physical_tag=b)
+                                  for p in pairs for a, b in (p, p[::-1])])
+        tp = build_topology(mesh, lsq_degree=deg, bcs=bcs)
+        t0 = build_topology(mesh, lsq_degree=deg)
+        X = np.asarray(mesh.vertex_coordinates)[:mesh.dimension]
+        Ap = np.asarray(compute_geometry(tp, X)["lsq_gradQ"])
+        nc = int(mesh.n_inner_cells)
+        cc = np.asarray(mesh.cell_centers)[:mesh.dimension, :nc]
+        h = 1.0 / (20 if mesh.dimension == 1 else 10)
+        far = np.all((cc > 2.5 * h) & (cc < 1 - 2.5 * h), axis=0)
+        ring = lambda t, c: set(t.lsq_neighbors[c].tolist()) - {c}      # noqa: E731
+        same = all(ring(tp, c) == ring(t0, c) for c in np.flatnonzero(far))
+        # every cell's fit matrix (sorted by offset) is the same: no seam
+        key = lambda c: np.sort(np.round(Ap[c], 9), axis=0)          # noqa: E731
+        uniform = max(np.abs(key(c) - key(0)).max() for c in range(nc))
+        print(f"periodic topology deg {deg} {label} (intended change: periodic rings): "
+              f"away from seams {'equal' if same else 'DIFFER'}, max |A_c - A_0| over "
+              f"cells {uniform:.1e}, ghost samples {int((tp.lsq_boundary_face_neighbors >= 0).sum())}")
+        if not same or uniform > 1e-9 or (tp.lsq_boundary_face_neighbors >= 0).any():
+            raise SystemExit("G19 periodic: FAILED")

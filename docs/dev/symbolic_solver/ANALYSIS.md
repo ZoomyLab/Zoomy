@@ -862,3 +862,18 @@ rev = jvp to 1.2e-11).
   not done.
 - Open: a JAX periodic shift-invariance check (foam's gate 35) shows 8.3e-6
   / 5.9e-5 / 8.5e-4 (1-D / 2-D / tri) where foam has 1e-15.
+
+## 33. Periodic seams wrap the LSQ stencils (core 20712a9, jax b59227c, foam 3c51d7b)
+
+JAX treated a periodic seam as a wall: the seam cell took the boundary
+stencil (face neighbours + a ghost; 1-D even extended one-sidedly), the
+interior the vertex ring -> the result moved with the seam (shift by half a
+period: 1-D 1.2e-4, 2-D 2.2e-3; foam 1e-15).  Now `build_topology`
+identifies seam vertices across the period: seam cells get the wrapped
+interior ring, offsets to the nearest periodic image, no ghost sample;
+distributed halos ring across seams.  JAX and foam take their stencils
+from this topology (foam's own ring code removed).  Shift invariance: 1-D
+2.2e-15, 2-D 6.2e-16 (my rerun), triangles 2.1e-15, 3-D 6.8e-16; gate 32
+(3 ranks) <= 1.2e-14; gate 35 1-D O2 foam vs JAX 3.7e-15.  AMReX: its
+periodic path (ee56d68) keys the seam as a boundary class -- needs the same
+change (one line, pending).

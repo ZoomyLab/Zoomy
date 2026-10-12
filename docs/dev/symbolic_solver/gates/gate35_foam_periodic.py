@@ -1,16 +1,17 @@
-"""Gate 30: periodic BCs on foam (OpenFOAM cyclic patches) vs JAX.
+"""Gate 35: periodic BCs on foam (OpenFOAM cyclic patches) vs JAX.
 
 A smooth SWE wave on the periodic unit interval / square (zoomy Periodic
 pairs -> cyclic patches in blockMesh; decomposePar makes processorCyclic
 patches where a seam crosses ranks), t = 0.1, no MOOD.
-- First order (1-D, 2-D): foam = JAX to round-off.
-- Second order: foam's cyclic face takes the partner's reconstructed trace,
-  its derivative stencils wrap the seam.  Foam is periodic to round-off:
-  shifting the domain by half a period (the seam into the middle of the
-  wave) gives the same cells.  JAX (zoomy_jax 89ed42a: the seam takes the
-  partner's face trace) is not yet (1-D nx 400: 8.3e-6, 2-D nx 80: 5.9e-5,
-  triangles 8.5e-4), and foam - JAX is that difference: it converges (L1
-  >= 1.5 / 0.8 on triangles, max >= 0.8 in 1-D, 2.0 in 2-D).
+- First order (1-D, 2-D, 3-D, triangles) and 1-D second order: foam = JAX
+  to round-off.
+- Second order: both wrap the derivative stencils across the seam
+  (zoomy_core build_topology: identified seam vertices, offsets to the
+  nearest periodic image; foam reads that stencil) and take the partner's
+  reconstructed face trace.  Both are periodic to round-off: shifting the
+  domain by half a period (the seam into the middle of the wave) gives the
+  same cells.  2-D / 3-D / triangles: OpenFOAM's MUSCL gradients and
+  limiters differ from JAX's, foam - JAX converges.
 - N ranks vs serial foam: round-off.
 - 3-D: the Euler density wave of gate 3d-b (periodic box, blockMesh
   hexahedra, all three pairs cyclic), O1 round-off, O2 converging (no
@@ -113,11 +114,12 @@ def stats(Qa, Qb, mass=1):
             abs(Qa[mass].sum() - Qb[mass].sum()))
 
 
-def euler3d(order, n, nprocs=(1,), decomposition="scotch"):
+def euler3d(order, n, nprocs=(1,), decomposition="scotch", shift=0.0):
     """Gate 3d-b's wave: JAX and foam runs (Q[0] = rho)."""
     from euler_common import nsm_of, wave_system
     vel, t_end = (1.0, 0.5, 0.25), 0.1
-    mesh = LSQMesh.create_3d(domain=(0, 1, 0, 1, 0, 1), nx=n, ny=n, nz=n)
+    a, b = shift, 1.0 + shift
+    mesh = LSQMesh.create_3d(domain=(a, b, a, b, a, b), nx=n, ny=n, nz=n)
     sj = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=0.45)
     Q0, A0 = sj.setup(mesh, nsm_of(wave_system(3, vel), order, limiter="none"))
     _, Qj, _ = sj.run(Q0, A0)
@@ -127,8 +129,11 @@ def euler3d(order, n, nprocs=(1,), decomposition="scotch"):
                                           decomposition=decomposition)
         t0 = wall.perf_counter()
         t, Qf = sf.run(sj.mesh_np, sj.nsm, np.asarray(Q0),
-                       f"{WORK}/per3d_o{order}_{n}_np{k}_{decomposition}")
+                       f"{WORK}/per3d_o{order}_{n}_np{k}_{decomposition}_s{shift}")
         out[k] = (t, Qf, wall.perf_counter() - t0)
+    xc = np.round(np.asarray(sj.mesh_np.cell_centers)[:3, :Qj.shape[1]], 9) % 1.0
+    if shift:
+        return np.asarray(Qj), out, np.lexsort(xc[::-1])
     return np.asarray(Qj), out
 
 
@@ -158,6 +163,15 @@ def case3d(w):
             check("3-D O1 max rel", mx, 1e-14)
     if order == 2:
         check("3-D O2 L1 order n 8->16", np.log2(errs[0] / errs[1]), 1.5, at_least=True)
+        xc = np.round(np.asarray(LSQMesh.create_3d(domain=(0, 1, 0, 1, 0, 1), nx=16, ny=16, nz=16)
+                                 .cell_centers)[:3, :Qj.shape[1]], 9) % 1.0
+        xo = np.lexsort(xc[::-1])
+        Qj2, out2, xo2 = euler3d(2, 16, shift=0.5)
+        for lbl, A, B in (("foam", out[1][1], out2[1][1]), ("JAX", Qj, Qj2)):
+            r = np.abs(A[:, xo] - B[:, xo2]).max() / np.abs(A).max()
+            print(f"periodic 3-D Euler O2 n 16: {lbl} shifted by half a period vs "
+                  f"unshifted: max rel {r:.1e}", flush=True)
+            check(f"3-D O2 {lbl} shift invariance", r, 1e-13)
 
 
 def case_tri(w):
@@ -190,6 +204,7 @@ def case_tri(w):
     print(f"periodic triangles O2 nx {nx}: shifted by half a period vs unshifted: "
           f"foam max rel {r:.1e}, JAX {rj:.1e}", flush=True)
     check("tri O2 foam shift invariance", r, 1e-13)
+    check("tri O2 JAX shift invariance", rj, 1e-13)
     # triangles: both gradients first order (ANALYSIS 28), JAX's seam too
     for a, b in zip(errs, errs[1:]):
         check("tri O2 L1 order", np.log2(a / b), 0.8, at_least=True)
@@ -246,12 +261,14 @@ def case(w):
         r = np.abs(A[:, xo] - B[:, xo2]).max() / np.abs(A).max()
         print(f"periodic {dim}-D O2 nx {nx}: {lbl} shifted by half a period vs unshifted: "
               f"max rel {r:.1e}", flush=True)
-        if lbl == "foam":
-            check(f"{dim}-D O2 foam shift invariance", r, 1e-13)
+        check(f"{dim}-D O2 {lbl} shift invariance", r, 1e-13)
+    if dim == 1:                         # the stencils coincide: round-off
+        for (mx, _), n in zip(errs, nxs):
+            check(f"1-D O2 nx {n} max rel", mx, 1e-14)
+        return
     for (a, b), na, nb in zip(zip(errs, errs[1:]), nxs, nxs[1:]):
         check(f"{dim}-D O2 L1 order nx {na}->{nb}", np.log2(a[1] / b[1]), 1.5, at_least=True)
-        check(f"{dim}-D O2 max order nx {na}->{nb}", np.log2(a[0] / b[0]),
-              0.8 if dim == 1 else 2.0, at_least=True)     # 1-D: the seam
+        check(f"{dim}-D O2 max order nx {na}->{nb}", np.log2(a[0] / b[0]), 2.0, at_least=True)
 
 if __name__ == "__main__":
     for w in sys.argv[1:] or ["1d:1", "1d:2", "2d:1", "2d:2", "par"]:
