@@ -1,8 +1,5 @@
-"""LSQMesh — FVMMesh with precomputed least-squares reconstruction stencils.
-
-This is the highest-fidelity mesh class: it caches the LSQ derivative
-operators so that ``compute_derivatives`` is one batched matrix–vector
-product over all cells instead of building the stencil on every call.
+"""LSQMesh: FVMMesh with cached least-squares derivative stencils, the mesh every backend
+differentiates on.
 """
 
 from __future__ import annotations
@@ -22,8 +19,9 @@ from zoomy_core.mesh.lsq_reconstruction import (
 
 
 def _build_face_neighbors(face_cells, cell_neighbors, n_faces, n_faces_per_cell, n_cells):
-    """Build face neighbor stencil for flux reconstruction (vectorised):
-    per face its two cells, then the other neighbours of both, sorted."""
+    """Per face, its two cells followed by the other neighbours of both, sorted and sentinel-padded
+    (vectorised).
+    """
     polynomial_degree = 1
     n_face_neighbors = (2 * (n_faces_per_cell + 1) - 2) * polynomial_degree
     sentinel = n_cells + 1
@@ -47,7 +45,7 @@ def _build_face_neighbors(face_cells, cell_neighbors, n_faces, n_faces_per_cell,
 
 
 class LSQMesh(FVMMesh):
-    """FVMMesh + precomputed LSQ derivative operators."""
+    """FVMMesh plus precomputed LSQ derivative operators."""
 
     _lsq_gradQ = param.Array(default=None, allow_None=True)
     _lsq_neighbors = param.Array(default=None, allow_None=True)
@@ -58,42 +56,46 @@ class LSQMesh(FVMMesh):
 
     @property
     def lsq_gradQ(self):
+        """Per-cell LSQ pseudo-inverse matrices."""
         return self._lsq_gradQ
 
     @property
     def lsq_neighbors(self):
+        """Per-cell neighbour indices of the LSQ stencil."""
         return self._lsq_neighbors
 
     @property
     def lsq_boundary_face_neighbors(self):
+        """Per-cell boundary-face indices of the LSQ stencil (-1 pads)."""
         return self._lsq_boundary_face_neighbors
 
     @property
     def lsq_monomial_multi_index(self):
+        """Multi-indices of the LSQ monomial basis."""
         return self._lsq_monomial_multi_index
 
     @property
     def lsq_scale_factors(self):
+        """Factorial scale factors turning monomial coefficients into derivatives."""
         return self._lsq_scale_factors
 
     @property
     def face_neighbors(self):
+        """Per-face flux-reconstruction stencil."""
         return self._face_neighbors
 
     def compute_derivatives(self, u: np.ndarray, degree: int = 1,
                             derivatives_multi_index=None, *,
                             u_boundary_face) -> np.ndarray:
-        """Compute derivatives using precomputed LSQ stencil.
+        """Batched LSQ derivatives of ``u`` over all cells using the cached stencil.
 
-        Parameters
-        ----------
-        u_boundary_face : ndarray | ``'extrapolation'``
-            **Required.**  Either ``(n_boundary_faces,)`` array of face
-            values (from a prescribed BC kernel), or the string
-            ``'extrapolation'`` for Neumann-zero / face = inner-cell.
-            See :func:`zoomy_core.mesh.lsq_reconstruction.compute_derivatives`
-            for the rationale: silent extrapolation was deprecated
-            because it masks Dirichlet BCs as Neumann-zero.
+        Args:
+            u_boundary_face: ``(n_boundary_faces,)`` face values from the BC kernel, or
+                ``'extrapolation'`` for Neumann-zero.
+        Returns:
+            ``(n_cells, n_derivatives)`` array in the order of ``derivatives_multi_index``.
+        References:
+            Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
         from zoomy_core.mesh.lsq_reconstruction import (
             _resolve_u_boundary_face,
@@ -144,38 +146,16 @@ class LSQMesh(FVMMesh):
         return np.ascontiguousarray((sf * coeffs)[:, indices], dtype=float)
 
     def derivative_operator(self, multi_index) -> csr_matrix:
-        """Sparse-matrix realisation of the LSQ derivative stencil.
+        """Sparse ``(n_inner_cells, n_inner_cells)`` matrix ``D`` with ``D @ u`` equal to the LSQ
+        derivative ``d^multi_index u``.  Used to assemble implicit systems (e.g. the Chorin
+        pressure matrix) where the field is unknown.
 
-        Returns a ``(n_inner_cells, n_inner_cells)`` sparse matrix
-        ``D`` such that ``D @ u`` equals the cell-wise estimate of the
-        derivative ``∂^multi_index u`` — the *same* quantity
-        :meth:`compute_derivatives` produces for that ``multi_index``,
-        but as an explicit **linear operator**.
-
-        ``compute_derivatives`` applies the stencil to a *known* field;
-        ``derivative_operator`` exposes the stencil itself, for
-        assembling implicit / elliptic systems where the field is the
-        unknown (e.g. the Chorin pressure-projection ``A·P = rhs``,
-        where ``∂_xx P`` must enter the matrix, not be evaluated).
-
-        Per cell ``i`` the stencil is
-        ``deriv[i] = Σ_j w_j·(u[nbr_j] − u[i])`` with
-        ``w_j = sf[idx]·A_loc[j, idx]`` — so
-        ``D[i, nbr_j] += w_j`` and ``D[i, i] -= w_j``.
-
-        Parameters
-        ----------
-        multi_index : tuple[int]
-            Spatial-derivative orders per axis, e.g. ``(1,)`` for
-            ``∂_x`` or ``(2,)`` for ``∂_xx`` in 1D — the same
-            convention as :meth:`compute_derivatives` and the
-            ``aux_registry`` ``multi_index`` field.
-
-        Raises
-        ------
-        ValueError
-            If ``multi_index`` is not in the mesh's monomial set —
-            i.e. the mesh was built with too low an ``lsq_degree``.
+        Args:
+            multi_index: derivative order per axis, e.g. ``(2,)`` for d_xx in 1D.
+        Returns:
+            CSR matrix; raises ValueError if ``multi_index`` is not in the mesh's monomial set.
+        References:
+            Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
         multi_index = tuple(int(o) for o in multi_index)
         idx = int(find_derivative_indices(
@@ -202,16 +182,12 @@ class LSQMesh(FVMMesh):
 
     @classmethod
     def from_fvm(cls, fvm: FVMMesh) -> "LSQMesh":
-        """Build an LSQMesh shell from an FVMMesh, populating the LSQ
-        stencil at degree 1 (the minimum that supports any derivative
-        reconstruction).
+        """Build an LSQMesh from an FVMMesh with the degree-1 stencil; use ``ensure_lsq_mesh`` to
+        size the degree from the model.
 
-        The LSQ polynomial degree is **not** a hand-adjustable knob
-        here — use :func:`zoomy_core.mesh.ensure_lsq_mesh(mesh, model)`
-        for any solver setup, which sizes the stencil from the model's
-        NumericalSystemModel.  This factory exists for low-level mesh
-        construction; the degree is set by the model in the higher
-        layers."""
+        Args:
+            fvm: source mesh with precomputed geometry.
+        """
         lsq = cls(
             dimension=fvm.dimension,
             type=fvm.type,
@@ -252,15 +228,9 @@ class LSQMesh(FVMMesh):
         return lsq
 
     def _build_lsq_stencil(self, degree: int) -> None:
-        """Rebuild the LSQ stencil at the given polynomial ``degree``.
-
-        Called from :meth:`from_fvm` (with ``degree=1``) and from
-        :func:`zoomy_core.mesh.ensure_lsq_mesh` (with the model-derived
-        degree).  Mutates the LSQ-cache slots on ``self`` in place.
-
-        The ``degree`` parameter is **internal**: user code never sets
-        it.  The right entry point for solver setup is
-        ``ensure_lsq_mesh(mesh, model)``."""
+        """Rebuild the cached LSQ stencil in place at polynomial ``degree`` (called by ``from_fvm``
+        and ``ensure_lsq_mesh``).
+        """
         from zoomy_core.mesh import geometry_xp
         if str(self.type) in geometry_xp._SUPPORTED:      # vectorised
             topo = geometry_xp.build_topology(self, lsq_degree=degree)
@@ -301,34 +271,37 @@ class LSQMesh(FVMMesh):
             self._lsq_monomial_multi_index)
 
     def _current_lsq_degree(self) -> int:
-        """Polynomial degree currently represented by the cached
-        stencil.  Used by ``ensure_lsq_mesh`` to decide if a rebuild
-        is needed."""
+        """Polynomial degree of the cached stencil (0 if none)."""
         if self._lsq_monomial_multi_index is None:
             return 0
         return max(sum(mi) for mi in self._lsq_monomial_multi_index)
 
     @classmethod
     def from_msh(cls, filepath: str) -> "LSQMesh":
+        """Load a gmsh ``.msh`` file as an LSQMesh."""
         fvm = FVMMesh.from_msh(filepath)
         return cls.from_fvm(fvm)
 
     @classmethod
     def from_hdf5(cls, filepath: str) -> "LSQMesh":
+        """Load an HDF5 mesh as an LSQMesh."""
         fvm = FVMMesh.from_hdf5(filepath)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "LSQMesh":
+        """Structured 1D LSQMesh on ``domain`` with ``n_inner_cells`` cells."""
         fvm = FVMMesh.create_1d(domain, n_inner_cells)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "LSQMesh":
+        """Structured 2D LSQMesh on ``domain`` with ``nx`` x ``ny`` cells."""
         fvm = FVMMesh.create_2d(domain, nx, ny)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "LSQMesh":
+        """Structured 3D LSQMesh on ``domain`` with ``nx`` x ``ny`` x ``nz`` cells."""
         fvm = FVMMesh.create_3d(domain, nx, ny, nz)
         return cls.from_fvm(fvm)
