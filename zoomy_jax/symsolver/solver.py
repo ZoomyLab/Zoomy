@@ -27,8 +27,8 @@ from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.symsolver import PyPrinter
 from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
-from zoomy_core.symsolver import chorin as C
-from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 from zoomy_jax.symsolver import runtime as R
@@ -204,23 +204,24 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         nsm.spectral_power_steps = int(self.spectral_power_steps)
         nsm._call = None                                  # rebuild the table
 
+    def _config(self):
+        """The configuration of the solver template."""
+        return dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
+                    mood=self.mood_active, dt_write=self.dt_write,
+                    imex=self.imex, cfl_check_every=self.cfl_check_every,
+                    wave_speed=self.cfl_wave_speed, dt_constant=self.dt)
+
     def _print(self):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
-        kw = dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
-                  mood=self.mood_active, imex=self.imex,
-                  cfl_check_every=self.cfl_check_every,
-                  wave_speed=self.cfl_wave_speed,
-                  dt_constant=None if self.dt is None else sp.Float(self.dt))
+        template = HyperbolicTemplate(self.nsm, **self._config())
         if self.couple:
             return "hyperbolic_precice", PyPrinter().procedure(
                 "hyperbolic_precice", (Q, Qaux, p, time, mesh),
-                lambda *a: T.hyperbolic_precice(
-                    self.nsm, *a, side=self.couple["side"],
-                    subcycling=self.subcycling, dt_write=self.dt_write, **kw))
+                lambda *a: template.precice_march(
+                    *a, side=self.couple["side"], subcycling=self.subcycling))
         return "hyperbolic", PyPrinter().procedure(
-            "hyperbolic", (Q, Qaux, p, time, time_end, mesh),
-            lambda *a: T.hyperbolic(self.nsm, *a, dt_write=self.dt_write, **kw))
+            "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
     def _writer(self):
         """``on_write``, plus the HDF5 snapshots when ``output`` is set.
@@ -289,7 +290,8 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
 
 
 class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
-    """The Chorin projection solver on JAX (``zoomy_core.symsolver.chorin``).
+    """The Chorin projection solver on JAX
+    (:class:`zoomy_core.symsolver.strategies.chorin.ChorinTemplate`).
 
         solver = SymbolicChorinSolverJax(time_end=0.5, dt=2**-7)
         Q, Qaux = solver.setup(mesh, pred, press, corr)   # the model's split
@@ -399,12 +401,8 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     def _print(self):
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
+        template = ChorinTemplate(
+            self.nsm, self.press, self.corr, time_order=self.time_order,
+            pressure_newton=self._newton(), **self._config())
         return "chorin", PyPrinter().procedure(
-            "chorin", (Q, Qaux, p, time, time_end, mesh),
-            lambda *a: C.chorin(
-                self.nsm, self.press, self.corr, *a, cfl=self.cfl,
-                dimension=int(self.mesh_np.dimension), mood=self.mood_active,
-                imex=self.imex, time_order=self.time_order,
-                dt_write=self.dt_write, cfl_check_every=self.cfl_check_every,
-                wave_speed=self.cfl_wave_speed, pressure_newton=self._newton(),
-                dt_constant=None if self.dt is None else sp.Float(self.dt)))
+            "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
