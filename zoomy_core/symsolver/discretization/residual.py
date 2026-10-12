@@ -62,7 +62,8 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
             dQ = dQ + cells(k, Q, Qaux, p, time, dt, mesh)
     for k in diffusions:
         if k is not None:
-            dQ = dQ + diffusion(k, Q, Qaux, p, mesh)
+            dQ = dQ + diffusion(k, nsm.call.boundary_ghost_state, Q, Qaux, p,
+                                time, mesh)
     return dQ if dt_rule is None else (dQ, dt)
 
 
@@ -151,10 +152,12 @@ def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
-    """The SystemModel's implicit slots: implicit diffusion, then implicit
-    Euler on the source."""
+    """The SystemModel's implicit slots over the step ending at ``time``:
+    implicit diffusion, then implicit Euler on the source."""
     if nsm.call.diffusion_matrix is not None:
-        Q = implicit_diffusion(nsm.call.diffusion_matrix, Q, Qaux, p, dt, mesh)
+        Q = implicit_diffusion(nsm.call.diffusion_matrix,
+                               nsm.call.boundary_ghost_state, Q, Qaux, p,
+                               time - dt, dt, mesh)
     if nsm.call.source is not None:
         Q = implicit_source(nsm, Q, Qaux, p, time, dt, mesh)
     return Q

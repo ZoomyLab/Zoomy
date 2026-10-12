@@ -1559,14 +1559,21 @@ class NumericalSystemModel(SystemModel):
         NSM carries (its operators, its boundary conditions, its numerics'
         functions), ``None`` where the kernel is empty.  ``aux_derivatives``
         is the derivative-aux spec (:attr:`aux_derivatives`).  Printed as
-        ``<_symbolic_name>.<slot>`` (default ``nsm``).  Built once per name."""
+        ``<_symbolic_name>.<slot>`` (default ``nsm``).  Built once per name.
+
+        Two BC kernels: ``boundary_conditions`` (each BC's value: a face
+        value for a Dirichlet-type BC) and ``boundary_ghost_state`` (the
+        ghost at the mirror image of the cell centre, ``2 v - Q`` for a face
+        value ``v``; :meth:`SystemModel.boundary_ghost_kernel`)."""
         owner = getattr(self, "_symbolic_name", None) or "nsm"
         if getattr(self, "_call", None) is None or self._call_owner != owner:
             from zoomy_core.misc.misc import Zstruct
             from zoomy_core.model.basefunction import KernelCall, KernelRef
             from zoomy_core.systemmodel.system_model import OPERATOR_ARG_SLOTS
             kernels = [self.operator(name) for name in OPERATOR_ARG_SLOTS]
-            kernels += [self.boundary_conditions,
+            ghost = (self.boundary_ghost_kernel()[0]
+                     if self.boundary_conditions is not None else None)
+            kernels += [self.boundary_conditions, ghost,
                         *self.build_numerics().functions.values()]
             kernels = [f for f in kernels if f is not None]
             functions = Zstruct(**{f.name: f for f in kernels})

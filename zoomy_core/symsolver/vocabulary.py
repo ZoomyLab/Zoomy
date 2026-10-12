@@ -126,13 +126,22 @@ class zeros(Block):
 
 
 class diffusion(Block):
-    """``(kernel, Q, Qaux, p, mesh)`` -> per cell div(A : grad Q) of the
-    diffusion tensor ``kernel`` (explicit)."""
+    """``(kernel, bc, Q, Qaux, p, time, mesh)`` -> per cell div(A : grad Q)
+    of the diffusion tensor ``kernel`` (explicit; RHS sign, A > 0 diffuses).
+    Two-point face fluxes ``n.A.n (Q_out - Q_in) / d``: A the mean of the
+    two cells' tensors, ``d`` the normal distance between the two values.
+    At a boundary face ``Q_out`` is the ghost of the BC ghost kernel ``bc``
+    (``nsm.call.boundary_ghost_state``) at ``time``, at the mirror image of
+    the cell centre (A the cell's, ``d`` twice its normal distance to the
+    face); across a periodic seam the partner cell; a cut face
+    (distributed) carries no flux."""
 
 
 class implicit_diffusion(Block):
-    """``(kernel, Q, Qaux, p, dt, mesh)`` -> one implicit (Crank-Nicolson)
-    step of the model's diffusion tensor ``kernel``."""
+    """``(kernel, bc, Q, Qaux, p, time, dt, mesh)`` -> one Crank-Nicolson
+    step from ``time`` to ``time + dt`` of the diffusion tensor ``kernel``
+    (as :class:`diffusion`; the ghosts of ``Q`` at ``time``, of the new
+    state at ``time + dt``)."""
 
 
 class inadmissible(Block):

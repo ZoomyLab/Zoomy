@@ -85,8 +85,9 @@ class ChorinTemplate(HyperbolicTemplate):
         if pred.call.source is not None:
             Q = Q + dt * cells(pred.call.source, Q, Qaux, p, time, dt, mesh)
         if pred.call.diffusion_matrix is not None:
-            Q = halo(Q + dt * diffusion(pred.call.diffusion_matrix, Q, Qaux, p,
-                                        mesh), mesh)
+            Q = halo(Q + dt * diffusion(pred.call.diffusion_matrix,
+                                        pred.call.boundary_ghost_state, Q,
+                                        Qaux, p, time, mesh), mesh)
         return Q, dt
 
 
