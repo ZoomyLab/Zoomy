@@ -1,39 +1,10 @@
-"""Which rows a boundary condition FIXES, per boundary face (ANALYSIS 40).
+"""Classify, per boundary face and row, whether a boundary condition fixes the value (Dirichlet),
+the normal derivative (Neumann) or neither (ghost), from the ghost-state kernel.
+Feeds the constrained LSQ derivative fits of ``geometry_xp.build_topology``; a row misclassified
+as ghost costs accuracy, never correctness.
 
-The LSQ derivative fits close at the boundary by constraints, not by ghost
-samples (:mod:`zoomy_core.mesh.geometry_xp`): a boundary face adds, per row,
-
-* DIRICHLET  ``p(x_foot) = v``             (the value at the foot point),
-* NEUMANN    ``n . grad p(x_foot) = g``    (the normal derivative there),
-* GHOST      the ghost as a fit sample at the mirror point (today's rule).
-
-Fits of degree >= 2 only: a linear fit's gradient is one constant, so a
-constraint would pin it to the wall value, while the ghost sample is exact
-for linear data and centred (``geometry_xp.build_topology``).
-
-The data come from the EXISTING D5 ghost kernel ``boundary_ghost_state`` --
-no new BC API.  For an affine BC the ghost is ``ghost = J Q + c`` per face; a
-row ``r`` whose ``J`` row is ``-e_r`` is Dirichlet-type with
-``v = (ghost_r + Q_r) / 2``, one whose ``J`` row is ``+e_r`` is
-Neumann-type with ``g = (ghost_r - Q_r) / (2 d_n)``.  Both are a fixed
-multiple of ``ghost_r - Q_r``, so the runtime's input (the ghost) does not
-change -- only the fit table does.  Every other row stays GHOST: rows the
-kernel couples (a wall reflection on a face that is not normal to an axis --
-the momentum VECTOR; a frame rotation is the clean follow-up), nonlinear or
-data-dependent ``J`` (characteristic BCs, a slip length).
-
-The test, per (space, branch, row): ``ghost_r + W_r`` (Dirichlet) or
-``ghost_r - W_r`` (Neumann) must not depend on the state.  Its gradient in
-the state is built symbolically once; per boundary face it is evaluated with
-the face normal and random values of every other argument (state, aux,
-parameters, time, position, distance, boundary data; positive and mixed
-signs) -- zero in every draw (NaN is not zero) or the row stays GHOST.
-Wrongly calling a row GHOST costs accuracy, never correctness.
-
-Spaces: ``"state"`` -- the rows of ``Q`` (derivative aux); ``"reconstruction"``
--- the rows of the reconstructed variables ``W(Q)`` of
-:func:`zoomy_core.symsolver.discretization.reconstruction.reconstruct` (the
-O2 gradient), whose ghost is ``W`` of the ghost state with its own aux.
+References:
+    Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
 """
 from __future__ import annotations
 
@@ -51,22 +22,23 @@ _SEED = 20261012
 
 
 def _flat(expr):
+    """Flatten a sympy expression into a list (empty for ``None``)."""
     return list(sp.flatten(expr)) if expr is not None else []
 
 
 def _symbols(fn):
-    """Argument groups of the ghost kernel ``fn`` (lists of symbols)."""
+    """Argument groups of the ghost kernel ``fn`` as lists of symbols."""
     a = fn.args
 
     def grp(k):
+        """Symbols of argument group ``k`` as a list."""
         v = a[k]
         return list(v.get_list()) if hasattr(v, "get_list") else [v]
     return {k: grp(k) for k in a.keys() if k != "idx"}
 
 
 def _subs_op(op, Q, A, p):
-    """The definition of NSM operator ``op`` (args variables, aux_variables,
-    parameters) at the state ``Q`` and aux ``A`` (lists of expressions)."""
+    """Definition of operator ``op`` evaluated at state ``Q``, aux ``A`` and parameters ``p``."""
     args = op.args
     m = dict(zip(args.variables.get_list(), Q))
     m.update(zip(args.aux_variables.get_list(), A))
@@ -76,15 +48,18 @@ def _subs_op(op, Q, A, p):
 
 
 def _ghost_pairs(nsm, space):
-    """``(W, [Wg_k per branch], symbols)``: the row expressions of ``space``
-    at the inner state and at the ghost of each BC branch, in the ghost
-    kernel's argument symbols."""
+    """Row expressions of ``space`` at the inner state and at the ghost of each BC branch, in the
+    ghost kernel's symbols.
+    """
     fn, branches = nsm.boundary_ghost_kernel()
     sym = _symbols(fn)
     Q, A, p = sym["variables"], sym["aux_variables"], sym["parameters"]
     upd = nsm.operator("update_aux_variables")
 
     def aux(X, Aprev):
+        """Aux values at state ``X`` from ``update_aux_variables`` (``Aprev`` if the system has
+        none).
+        """
         if upd is None or not _flat(upd.definition):
             return list(Aprev)
         return _subs_op(upd, X, Aprev, p)
@@ -112,9 +87,9 @@ def _ghost_pairs(nsm, space):
 
 
 def _tests(nsm, space):
-    """Per branch, per row: ``(dirichlet, neumann)`` evaluators of the state
-    gradient of ``ghost + W`` / ``ghost - W`` (``None``: identically zero);
-    cached on the NSM."""
+    """Per branch and row, evaluators of the state gradient of ``ghost + W`` (Dirichlet) and
+    ``ghost - W`` (Neumann), cached on the NSM.
+    """
     cache = nsm.__dict__.setdefault("_closure_tests", {})
     if space in cache:
         return cache[space]
@@ -144,8 +119,7 @@ def _tests(nsm, space):
 
 
 def _vanishes(f, normals, n_others, rng):
-    """Is the lambdified gradient ``f`` zero at every face (columns of
-    ``normals``) in every random draw?"""
+    """Per face, whether the lambdified gradient ``f`` is zero in every random draw."""
     if f is None:
         return np.ones(normals.shape[1], dtype=bool)
     if f is False:
@@ -167,10 +141,16 @@ def _vanishes(f, normals, n_others, rng):
 
 
 def face_kinds(nsm, space, branch, normals):
-    """``(n_rows, n_faces)`` int8 kinds (GHOST / DIRICHLET / NEUMANN) of the
-    rows of ``space`` on the boundary faces with BC branch ``branch``
-    (``(n_faces,)``; -1: no BC, e.g. a partition cut -> GHOST) and outward
-    unit ``normals`` (``(dim_n, n_faces)``, padded rows ignored)."""
+    """Kinds (``GHOST`` / ``DIRICHLET`` / ``NEUMANN``) of the rows of ``space`` on the boundary
+    faces.
+
+    Args:
+        branch: BC branch per face (-1: no BC, e.g. a partition cut, gives ghost).
+        normals: outward unit normals, shape ``(dim_n, n_faces)``.
+
+    Returns:
+        ``(n_rows, n_faces)`` int8 array.
+    """
     tests, n_dim, n_others, n_rows = _tests(nsm, space)
     branch = np.asarray(branch, dtype=int)
     normals = np.asarray(normals, dtype=float)
@@ -192,12 +172,14 @@ def face_kinds(nsm, space, branch, normals):
 
 
 def closure_spaces(nsm, systems=()):
-    """``[(key, system, space)]``: every row space whose derivative fits a
-    solver template closes -- the state of ``nsm`` and of each of
-    ``systems`` (derivative aux), and the reconstruction variables of
-    ``nsm`` at order >= 2 (the O2 gradient).  ``key = (owner, space)``, the
-    owner the system's printed name (``_symbolic_name``, default ``nsm``)."""
+    """Row spaces whose derivative fits a solver template closes: the state of ``nsm`` and
+    ``systems``, and the reconstruction variables at order >= 2.
+
+    Returns:
+        List of ``(key, system, space)`` with ``key = (owner, space)``.
+    """
     def owner(s):
+        """Printed name of system ``s`` (``_symbolic_name``, default ``nsm``)."""
         return getattr(s, "_symbolic_name", None) or "nsm"
     out = [((owner(nsm), "state"), nsm, "state")]
     if int(getattr(nsm.reconstruction, "order", 1)) >= 2:
@@ -208,9 +190,9 @@ def closure_spaces(nsm, systems=()):
 
 
 def closure_kinds(nsm, systems, branch, normals):
-    """``{key: (n_rows, n_bf) kinds}`` for :func:`closure_spaces` -- the
-    ``closure`` argument of :func:`geometry_xp.build_topology`.  Systems
-    without boundary conditions are skipped (no ghost kernel: GHOST)."""
+    """``{key: (n_rows, n_bf) kinds}`` over ``closure_spaces``, the ``closure`` argument of
+    ``geometry_xp.build_topology``; systems without BCs are skipped.
+    """
     out = {}
     for key, system, space in closure_spaces(nsm, systems):
         if getattr(system, "boundary_conditions", None) is None:

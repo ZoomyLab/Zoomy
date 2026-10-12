@@ -1,23 +1,7 @@
-"""Compressible Euler equations of an ideal gas, built directly as a
-:class:`SystemModel` (no Model derivation, no depth integration).
-
-State ``Q = (rho, rho_u[, rho_v[, rho_w]], E)`` in ``dimension`` = 1, 2 or 3
-space dimensions, pressure ``p = (gamma - 1)(E - |m|^2 / (2 rho))``:
-
-    d_t rho   + div(m)                      = 0
-    d_t m     + div(m (x) m / rho + p I)    = 0
-    d_t E     + div((E + p) m / rho)        = 0
-
-Declared alongside the operators:
-
-* eigenvalues along the face normal ``n``: ``u.n - c``, ``u.n`` (``dimension``
-  times), ``u.n + c``, ``c = sqrt(gamma p / rho)``;
-* roles: the momentum rows per direction (what :class:`~zoomy_core.model.
-  boundary_conditions.Wall` reflects); no depth -- none of the free-surface
-  specialisations apply;
-* admissibility ``[rho, p]`` (MOOD's troubled-cell test);
-* reconstruction variables ``W = (rho, u_d, p)`` and their inverse (the NSM's
-  ``ReconstructionSpec(variables="conservative")`` reconstructs ``Q`` instead).
+"""Compressible Euler equations of an ideal gas, built directly as a ``SystemModel`` (no ``Model``
+derivation).
+Declares eigenvalues, momentum roles, admissibility ``[rho, p]`` and the reconstruction pair ``W =
+(rho, u, p)``.
 """
 from __future__ import annotations
 
@@ -33,10 +17,19 @@ _MOMENTUM = ("rho_u", "rho_v", "rho_w")
 def compressible_euler(dimension: int = 3, gamma: float = 1.4,
                        boundary_conditions=None,
                        initial_conditions=None) -> SystemModel:
-    """The ideal-gas Euler system in ``dimension`` space dimensions.
-    ``boundary_conditions``: a ``BoundaryConditions`` (or list) of the
-    existing BC classes; ``initial_conditions``: an ``initial_conditions``
-    object (e.g. ``IC.UserFunction``)."""
+    """Ideal-gas Euler ``SystemModel`` in ``dimension`` = 1, 2 or 3 space dimensions.
+
+    Args:
+        gamma: heat-capacity ratio.
+        boundary_conditions: a ``BoundaryConditions`` (or list) of the existing BC classes.
+        initial_conditions: an ``initial_conditions`` object, e.g. ``IC.UserFunction``.
+
+    Returns:
+        The ``SystemModel`` with state ``(rho, rho_u[, rho_v[, rho_w]], E)``.
+
+    References:
+        Toro 2009, https://doi.org/10.1007/b79761
+    """
     dim = int(dimension)
     if dim not in (1, 2, 3):
         raise ValueError(f"dimension {dimension!r}: 1, 2 or 3")
@@ -92,7 +85,7 @@ def compressible_euler(dimension: int = 3, gamma: float = 1.4,
 
 
 def pressure(sm: SystemModel):
-    """``p(Q)`` of a :func:`compressible_euler` system (sympy)."""
+    """Pressure ``p(Q)`` (sympy) of a ``compressible_euler`` system."""
     return sm.admissible[1]
 
 

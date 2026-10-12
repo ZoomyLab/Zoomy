@@ -1,23 +1,7 @@
-"""Structure of a system's diffusion tensor — read off ``diffusion_matrix``
-ONLY (the new-template replacement for the numpy solver's scalar path, which
-keys its coefficient on a parameter literally named ``nu``).
-
-The tensor ``A(Q, Qaux, p)`` of shape ``(n_eq, n_state, n_dim, n_dim)``
-enters the balance law as ``∇·(A : ∇Q)``.  :func:`classify_diffusion`
-answers which discretisation it needs:
-
-* ``"none"``       — identically zero;
-* ``"isotropic"``  — ``A[i, j, d, e] = κ_i δ_ij δ_de``: one scalar
-  coefficient per row (TPFA ``κ·L`` per row, the cheap path);
-* ``"diagonal"``   — row-diagonal (``i = j``) and axis-diagonal (``d = e``)
-  but direction-dependent coefficients;
-* ``"dense"``      — any cross-row (``i ≠ j``) or cross-derivative
-  (``d ≠ e``) entry (the general ``∇·(A:∇Q)`` assembly).
-
-``state_dependent`` flags a coefficient that reads a state or aux symbol
-(the implicit solve is then nonlinear).  The coefficients are the tensor's
-OWN entries (sign as the model wrote them); nothing here looks a parameter
-up by name.
+"""Structure of a system's diffusion tensor ``A`` in ``div(A : grad Q)``, read off
+``diffusion_matrix`` only.
+Tells the solver templates which discretisation (none, isotropic, diagonal, dense) the
+``NumericalSystemModel`` needs.
 """
 from __future__ import annotations
 
@@ -29,6 +13,9 @@ import sympy as sp
 
 @dataclass(frozen=True)
 class DiffusionStructure:
+    """Classification of the diffusion tensor: ``kind`` (none | isotropic | diagonal | dense),
+    whether it is state dependent, and its coefficients.
+    """
     kind: str                                   # none|isotropic|diagonal|dense
     state_dependent: bool = False
     coefficients: dict = field(default_factory=dict)   # row -> expr (isotropic)
@@ -36,7 +23,13 @@ class DiffusionStructure:
 
 
 def classify_diffusion(sm, slot: str = "diffusion_matrix") -> DiffusionStructure:
-    """Classify ``sm.<slot>`` (see the module docstring)."""
+    """Classify ``sm.<slot>`` as none, isotropic (one scalar per row), diagonal (direction
+    dependent) or dense (cross-row or cross-derivative entries).
+
+    Returns:
+        A ``DiffusionStructure``; coefficients are the tensor's own entries, never looked up by
+            parameter name.
+    """
     A = getattr(sm, slot, None)
     if A is None:
         return DiffusionStructure("none")
