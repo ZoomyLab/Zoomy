@@ -43,6 +43,14 @@ struct Model {
     static constexpr bool fluctuations_are_zero = false;
     static constexpr const char* implicit_mode = "local_source";
     static constexpr bool has_free_surface = true;
+    static constexpr bool flux_is_zero = false;
+    static constexpr bool hydrostatic_pressure_is_zero = false;
+    static constexpr bool nonconservative_matrix_is_zero = false;
+    static constexpr bool eigenvalues_are_zero = false;
+    static constexpr bool source_is_zero = false;
+    static constexpr bool source_explicit_is_zero = true;
+    static constexpr bool diffusion_matrix_is_zero = true;
+    static constexpr bool diffusion_matrix_explicit_is_zero = true;
     static constexpr int idx_b = 0;
     static constexpr int idx_h = 1;
     static constexpr int n_boundary_tags = 0;

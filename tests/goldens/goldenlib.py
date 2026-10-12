@@ -892,7 +892,9 @@ def build_p02_generic_c_sme():
     arg lists, REQ-91 no Integral."""
     from zoomy_core.model.models import SME
     from zoomy_core.transformation.generic_c import GenericCppModel
-    model = SME(level=1, dimension=2, closures=_std_closures())
+    # the generic-C path needs a symbolic spectrum (numerical eigenvalues are
+    # the default since 48ceef8)
+    model = SME(level=1, dimension=2, closures=_std_closures(), symbolic_spectrum=True)
     code = GenericCppModel(model).create_code()
     body = ("== P02 generic-C emitted source (GenericCppModel <- SME(1)) ==\n"
             + code.rstrip() + "\n")

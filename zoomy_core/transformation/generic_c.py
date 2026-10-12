@@ -1178,8 +1178,8 @@ class GenericCppModel(GenericCppBase):
         if hasattr(model, "gradient_variables") and model.gradient_variables.length() > 0:
             self.register_map("gradQ", model.gradient_variables.values())
         self.register_map("n", model.normal.values())
-        if hasattr(model, "position"):
-            self.register_map("X", model.position_struct().values())
+        if hasattr(model, "position"):          # a Model has no position_struct
+            self.register_map("X", self.sm.position_struct().values())
         self.register_map("p", self.model.parameters.values())
 
     @classmethod
