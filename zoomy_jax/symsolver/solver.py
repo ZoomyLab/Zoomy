@@ -148,7 +148,8 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         self.nsm, self.mesh_np = nsm, mesh
         self.topo = build_topology(
             mesh, nsm=nsm, partners=partners,
-            periodic_ids=self.partition.periodic_ids if self.partition else None)
+            periodic_ids=self.partition.periodic_ids if self.partition else None,
+            systems=[sub for sub, _ in (systems or {}).values()])
         # the stencils are the topology's (periodic seams: the wrapped rings)
         self.mesh_j = dataclasses.replace(
             convert_mesh_to_jax(mesh),
@@ -164,7 +165,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
-        self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j,
+        self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j, self.topo,
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
                                 on_write=self._writer(), couple=self.couple,
@@ -266,15 +267,27 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         return write
 
     def initial_aux(self, Q, Qaux, parameters=None, X=None):
-        """The aux of the initial state: pointwise formula + derivative aux."""
+        """The aux of the initial state: pointwise formula + derivative aux
+        (the template's ``full_aux`` at time 0: state derivatives with the
+        BC ghosts and the boundary closure)."""
+        from zoomy_core.symsolver.discretization.residual import derivative_rows
         p = self.parameters if parameters is None else parameters
         mesh = self.mesh if X is None else R.geometry_of(self.topo, X)
-        m = self.module
-        if self.rt.update_aux_variables is not None:
-            Qaux = m["cells"](self.rt.update_aux_variables, Q, Qaux, p, 0.0,
+        m, rt = self.module, self.rt
+        if rt.update_aux_variables is not None:
+            Qaux = m["cells"](rt.update_aux_variables, Q, Qaux, p, 0.0,
                               1.0, mesh)
-        if self.nsm.aux_derivatives:
-            Qaux = m["derivative_aux"](self.nsm.aux_derivatives, Q, Qaux, mesh)
+        if not self.nsm.aux_derivatives:
+            return Qaux
+        rows, functions = derivative_rows(self.nsm)
+        ghost = (rt.boundary_ghost_state
+                 if self.nsm.call.boundary_ghost_state is not None else None)
+        if functions or ghost is None:
+            Qaux = m["derivative_aux"](rt.aux_derivatives, Q, Qaux, mesh)
+        if rows and ghost is not None:
+            Qg = m["boundary_ghosts"](ghost, Q, Qaux, p, 0.0, mesh)
+            Qaux = m["derivative_aux"](rt.aux_derivatives, Q, Qaux, mesh, Qg,
+                                       rows)
         return Qaux
 
     @property

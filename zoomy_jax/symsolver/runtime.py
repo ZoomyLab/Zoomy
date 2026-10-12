@@ -19,7 +19,7 @@ from jax import lax
 from jax.scipy.sparse.linalg import gmres as jax_gmres
 
 from zoomy_core.misc.logger_config import logger
-from zoomy_core.mesh.geometry_xp import compute_geometry
+from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
@@ -43,6 +43,7 @@ class Geometry(NamedTuple):
     face_volumes: jnp.ndarray
     face_centers: jnp.ndarray
     lsq_gradQ: jnp.ndarray
+    lsq_closure: jnp.ndarray       # (n_class, n_cc, R, M), ANALYSIS 40
 
 
 def geometry_of(topo, X):
@@ -70,13 +71,14 @@ def _with_geometry(R, g, mesh_np, nc):
     return R
 
 
-def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
+def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
             implicit=None, systems=None, partition=None):
-    """The name table the printed solver runs against.  ``systems``: further
-    ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``.
-    ``partition``: this rank's piece of a distributed run
-    (:mod:`zoomy_jax.symsolver.parallel`); its ``halo`` and global reductions
-    replace the serial ones."""
+    """The name table the printed solver runs against.  ``topo``: the static
+    topology (:func:`geometry_xp.build_topology`; the boundary closure's
+    classes).  ``systems``: further ``{name: (nsm, JaxRuntime)}`` a template
+    uses besides ``nsm``.  ``partition``: this rank's piece of a distributed
+    run (:mod:`zoomy_jax.symsolver.parallel`); its ``halo`` and global
+    reductions replace the serial ones."""
     sm = rt.sm
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
@@ -207,10 +209,29 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     def cell_traces(Q, mesh):
         return _inner_outside(*order1(Q))
 
+    # the boundary closure (ANALYSIS 40): the class of each row per space,
+    # the closure cells; the derivatives there replace the ghost-sample fit's
+    owner = getattr(nsm, "_symbolic_name", None) or "nsm"
+    closure_cells = (topo.lsq_plan.get("closure") or {}).get("cells")
+    recon_classes = topo.lsq_closure_class.get((owner, "reconstruction"), ())
+
+    def closed(D, U, Ug, classes, cols, mesh):
+        """``D`` (rows, len(cols), cells) with the closure fits of the rows
+        that have a class at the closure cells (monomial columns ``cols``)."""
+        rows, Dc = lsq_closure_derivatives(topo, mesh.lsq_closure, U, Ug, classes)
+        if not rows:
+            return D
+        r, c = np.asarray(rows), j(closure_cells)
+        vals = jnp.transpose(Dc[:, :, np.asarray(cols)], (0, 2, 1))
+        return D.at[r[:, None, None], np.arange(len(cols))[None, :, None],
+                    c[None, None, :]].set(vals)
+
     def gradient(W, Wg, mesh):
-        # ``Wg``: the ghosts, sampled at the mirror image of the cell centre
+        # ``Wg``: the ghosts; a row the BC fixes closes by its constraint,
+        # every other row samples the ghost at the mirror image
         R = _with_geometry(lsq, mesh, mesh_np, nc)
-        return R._compute_gradients(W, W.shape[0], Wg)
+        G = R._compute_gradients(W, W.shape[0], Wg)
+        return closed(G, W, Wg, recon_classes, topo.lsq_grad_cols, mesh)
 
     def ghost_bounds(R, u, ug):
         # min/max over the face neighbours and the boundary ghosts ``ug``
@@ -270,7 +291,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         if Qg is None:
             return _Reference._walk_derivative_aux(None, Qaux, Q, traced,
                                                    registry=spec)
-        for e in spec:            # boundary samples: the ghosts Qg
+        mis = [tuple(int(k) for k in mi) for mi in topo.lsq_monomial_multi_index]
+        for e in spec:            # boundary faces: the ghosts Qg
             if e["kind"] != "derivative" or e["target_kind"] != "state":
                 continue
             s = e["state_index"]
@@ -278,6 +300,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
                 continue
             grad = lsq_gradient_per_field(traced, Q[s], u_bf=Qg[s],
                                           multi_index=e["multi_index"])
+            col = mis.index(tuple(int(k) for k in e["multi_index"]))
+            grad = closed(grad[None, None], Q[s][None], Qg[s][None],
+                          (e["closure"],), (col,), mesh)[0, 0]
             Qaux = Qaux.at[e["row"], :grad.shape[0]].set(grad)
         return Qaux
 
@@ -699,10 +724,17 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
             jax.debug.callback(on_write, time, Q, Qaux, ordered=True)
         return (tok + 1,)
 
-    rt.aux_derivatives = nsm.aux_derivatives
-    named = {getattr(nsm, "_symbolic_name", None) or "nsm": rt}
+    def with_closure(name, sub):
+        # the spec, each state entry with its row's closure class
+        classes = topo.lsq_closure_class.get((name, "state"), ())
+        return [dict(e, closure=(classes[e["state_index"]]
+                                 if e["target_kind"] == "state" and classes else -1))
+                for e in sub.aux_derivatives]
+
+    rt.aux_derivatives = with_closure(owner, nsm)
+    named = {owner: rt}
     for name, (sub, sub_rt) in (systems or {}).items():
-        sub_rt.aux_derivatives = sub.aux_derivatives
+        sub_rt.aux_derivatives = with_closure(name, sub)
         named[name] = sub_rt
     m = dict(
         **named, cells=cells, faces=faces, face_aux=face_aux,
