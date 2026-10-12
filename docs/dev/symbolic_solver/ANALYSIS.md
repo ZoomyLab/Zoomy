@@ -985,3 +985,20 @@ the AMReX-vs-JAX C4 mismatch: that one is at O1 too, only on non-square
 cells -- AMReX's CFL size d|V|/|dV| (0.333) vs zoomy_core's inradius
 (0.25).  Open: full_aux's derivative aux ignores BCs (zero gradient);
 FromData builds its own 2v - Q.
+
+## 40. C++ runtimes: AMReX CFL size, diffusion blocks, rt_common.H
+
+- AMReX's face_inradius was d|V|/|dV| (0.333 on non-square cells), zoomy
+  core / JAX / foam use min |(x_f - x_c).n| (0.25): different dt.  Now min
+  dx/2.  Matrix C4 AMReX vs JAX (forced rerun): O1 1.2e-15 / 8.3e-16, O2
+  sub 7.3e-14, O2 trans 1.7e-12 (JAX vs JAX with Q0(1+eps) gives 1.3e-11:
+  sensitivity, the bound must follow it).  C11 (4.9e-6) is the same
+  sensitivity: JAX vs perturbed JAX already differs by 4.9e-6.
+- diffusion / implicit_diffusion in foam (rt.H) and AMReX (rt_amrex.H), as
+  JAX (ANALYSIS 36).  Gate 43: 90 checks, explicit at round-off (<= 4e-15),
+  implicit at the solver tolerance (<= 2.5e-10), 2 ranks = serial.  AMR +
+  diffusion refuses (diffusive fluxes are not refluxed yet).
+- `zoomy_core/symsolver/rt_common.H` (278 lines): preCICE sequence,
+  configure() settings, writer / CFL check, NaN-safe min / max, Newton
+  skeleton, elementwise functors.  rt.H -157, rt_amrex.H -181 (net -60).
+  Gates 11, 12, 23, 26, 27, 34, 37, 38 bitwise identical; CUDA build OK.
