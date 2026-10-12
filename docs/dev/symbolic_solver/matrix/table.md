@@ -223,8 +223,9 @@
 | C14 | O2 order 40->80 | jax | 1.52e+00 PASS | - | - | - | - | >= 0.8 (theory 1 (Lie splitting)) |
 | C15 | runs | amrex | n/a | - | - | - | - | information |
 | C15 | runs | foam | n/a | - | - | n/a | n/a | information |
-| C15 | chorin |FD - jvp| (rel) | jax | - | 6.66e-09 PASS | - | nan **FAIL** | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
-| C15 | chorin |rev - jvp| (rel) | jax | - | 4.39e-11 PASS | - | - | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
+| C15 | chorin jvp vs serial (rel) | jax | - | 5.36e-12 PASS | - | 5.54e-15 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
+| C15 | chorin |FD - jvp| (rel) | jax | 6.39e-09 PASS | 6.40e-09 PASS | - | 6.39e-09 PASS | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
+| C15 | chorin |rev - jvp| (rel) | jax | 8.87e-15 PASS | 4.07e-11 PASS | - | 4.62e-13 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
 | C15 | hyperbolic jvp vs serial (rel) | jax | - | 5.55e-16 PASS | - | 3.70e-16 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C15 | hyperbolic |FD - jvp| (rel) | jax | 7.88e-09 PASS | 1.39e-08 PASS | - | 7.88e-09 PASS | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
 | C15 | hyperbolic |rev - jvp| (rel) | jax | 7.77e-15 PASS | 1.65e-14 PASS | - | 2.03e-15 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
@@ -514,7 +515,7 @@
 |---|---|---|
 
 Failures:
-- C15 chorin |FD - jvp| (rel), jax gpu1: nan (need <= 1e-05) 
+- none
 
 Notes:
 - C16 jax_foam runs, jax serial: jax/serial/C16/jax_foam.err: ...
@@ -867,4 +868,4 @@ Notes:
 - C6 C20 mass change (rel), amrex serial: max over 2 runs
 - C6 C23 mass change (rel), amrex serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4750, foam 5840, jax 6898
+Summed run wall time (s, without process start-up): amrex 4750, foam 5840, jax 7369
