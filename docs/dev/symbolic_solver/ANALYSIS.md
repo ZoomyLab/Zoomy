@@ -909,3 +909,23 @@ it).  Default output byte-identical.  Open: the Chorin projection stage is
 itself first order (Lie-split sources, pressure at the stage end), so its
 temporal order stays ~1.2 for time_order 1, 2, 3; a second-order
 projection is needed before the pressure solver can claim O2 in time.
+
+## 36. Diffusion fluxes through boundary faces; two BC kernels
+
+The diffusion blocks summed interior faces only: every wall acted as
+homogeneous Neumann (no wall shear, no Dirichlet diffusion).  Now
+`diffusion(k, bc, Q, Qaux, p, time, mesh)` / `implicit_diffusion(k, bc, Q,
+Qaux, p, time, dt, mesh)` add n.A.n (X_ghost - X)/(2 d_n) per boundary face
+with the D5 GHOST kernel (`nsm.call.boundary_ghost_state`, now in the NSM
+call table), the CN iterate's ghosts at t+dt.  Gate 41 (1-D, quads,
+triangles; explicit and CN; Dirichlet, Neumann, position-dependent
+Dirichlet, periodic): order 2.00 everywhere (before: no convergence, errors
+0.26-1.5), linear steady state exact, 2 ranks = serial 4.8e-15.
+
+Found on the way: the templates' `boundary_states` uses the OTHER kernel,
+`boundary_conditions`, whose value is a FACE value for Dirichlet-type BCs
+(Dirichlet q = 0.11197 at the gate-21 inflow) but a ghost for reflecting /
+extrapolating / periodic BCs.  The ghost consumers disagree with it:
+gradient and limiter bounds treat it as a ghost (Dirichlet slope halved),
+the JAX derivative aux lifts 2Qb - Q (right for Dirichlet, wrong for walls
+and periodic partners).  Being unified on the D5 ghost kernel (section 37).

@@ -73,7 +73,7 @@ def block_vs_legacy():
         Q, A = s.setup(mesh, nsm)
         k, p, dt = s.rt.diffusion_matrix, s.parameters, 0.01
         new = np.asarray(jax.jit(lambda Q, A: s.module["implicit_diffusion"](
-            k, Q, A, p, dt, s.mesh))(Q, A))
+            k, s.rt.boundary_ghost_state, Q, A, p, 0.0, dt, s.mesh))(Q, A))
         op = DenseDiffusionOperatorJAX(s.mesh_np, s.mesh_np.dimension,
                                        s.rt.n_state, state_dependent=True)
         old = np.asarray(jax.jit(lambda Q, A: op.implicit_solve(

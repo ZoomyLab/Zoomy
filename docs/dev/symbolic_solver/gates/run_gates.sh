@@ -18,7 +18,7 @@ GATES=("$@")
   "gate26_foam_couple_parallel.py 2 2" "gate35_foam_periodic.py" "gate36_foam_chorin_tri.py"
   "gate10_xcouple.py jax" "gate10_xcouple.py foam" "probe_audusse_vars.py"
   "mpi:4 gate16_parallel.py" "mpi:2 gate17_parallel_ad.py o1"
-  "mpi:3 gate17_parallel_ad.py o2" "mpi:3 gate18_parallel_output.py" "gate19_mesh_builders.py" "mpi:3 gate20_parallel_write.py" "mpi:3 gate22_parallel_chorin_ad.py" "mpi:3 gate29_parallel_imex.py" "mpi:3 gate32_parallel_periodic.py" "gate31_parallel_implicit_diffusion.py" "mpi:3 gate31_parallel_implicit_diffusion.py par")
+  "mpi:3 gate17_parallel_ad.py o2" "mpi:3 gate18_parallel_output.py" "gate19_mesh_builders.py" "mpi:3 gate20_parallel_write.py" "mpi:3 gate22_parallel_chorin_ad.py" "mpi:3 gate29_parallel_imex.py" "mpi:3 gate32_parallel_periodic.py" "gate31_parallel_implicit_diffusion.py" "mpi:3 gate31_parallel_implicit_diffusion.py par" "gate40_time_order.py ode wave" "gate41_diffusion_bc.py")
 for g in "${GATES[@]}"; do
   echo "== $g"
   run="python"
