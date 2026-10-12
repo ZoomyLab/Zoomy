@@ -112,7 +112,7 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | amrex | - | 1.55e-21 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | amrex | - | 1.58e-14 PASS | 2.38e-14 PASS | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | foam | - | 9.42e-16 PASS | 1.13e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -121,7 +121,7 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | foam | - | 3.18e-16 PASS | 3.18e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | foam | - | 4.31e-16 PASS | 5.74e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | foam | - | 7.99e-16 PASS | 9.33e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 1.70e-14 PASS | 1.60e-14 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 1.19e-14 PASS | 6.39e-14 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | foam | - | 2.09e-15 PASS | 2.27e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | foam | - | 2.34e-14 PASS | 2.13e-14 PASS | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | jax | - | 1.22e-13 PASS | 1.22e-13 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -130,7 +130,7 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | jax | - | 3.18e-16 PASS | 3.18e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | jax | - | 5.84e-16 PASS | 5.84e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | jax | - | 1.78e-15 PASS | 1.15e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | jax | - | 1.83e-15 PASS | 1.94e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | jax | - | 1.02e-15 PASS | 9.68e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | jax | - | 3.62e-15 PASS | 3.39e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | jax | - | 8.73e-10 PASS | 8.67e-10 PASS | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C8 | Newton vs linear pressure (max rel) | amrex | 8.35e-10 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-10 vs GMRES 1e-10, over the steps)) |
@@ -150,7 +150,7 @@
 | C9 | C8 vam GPU vs serial CPU (max rel) | amrex | - | - | - | 1.91e-14 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 1.67e-13 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C9 | C14 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 5.84e-16 PASS | 5.32e-16 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 1.12e-15 PASS | 1.02e-15 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 9.17e-16 PASS | 9.17e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C5 n48 GPU vs serial CPU (max rel) | jax | - | - | - | 3.14e-15 PASS | 3.10e-15 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C8 vam GPU vs serial CPU (max rel) | jax | - | - | - | 2.79e-10 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C10 | space O1 time O1 order (Richardson) | amrex | 1.91e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
@@ -380,7 +380,7 @@
 | C24 | wave o2minmod order 32->64 | jax | 1.82e+00 PASS | - | - | - | - | >= 1.7 (observed 1.83) |
 | C24 | wave o2none max|u - u0|, |p - 1| | jax | 1.33e-15 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C24 | wave o2none order 32->64 | jax | 2.32e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C26 | max rel vs JAX | amrex | 1.05e-13 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
+| C26 | max rel vs JAX | amrex | 1.10e-13 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C26 | L1 rel vs JAX | foam | 1.72e-03 | - | - | n/a | n/a | information |
 | C27 | ODE time_order 1 order 32->64 steps | amrex | 1.01e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
 | C27 | ODE time_order 2 order 32->64 steps | amrex | 1.92e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
@@ -450,16 +450,16 @@
 | C28 | quad impl per max rel vs JAX | foam | 2.26e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C28 | tri expl dir0 max rel vs JAX | foam | 4.48e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl dir0 max rel vs JAX | foam | 5.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | tri expl dirL max rel vs JAX | foam | 3.01e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
-| C28 | tri expl neu max rel vs JAX | foam | 9.71e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
-| C28 | tri expl per max rel vs JAX | foam | 4.24e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl neu max rel vs JAX | foam | 5.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl per max rel vs JAX | foam | 3.52e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | tri expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | tri expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C28 | tri impl dir0 max rel vs JAX | foam | 6.72e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl dirL max rel vs JAX | foam | 1.51e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | tri impl neu max rel vs JAX | foam | 6.44e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | tri impl per max rel vs JAX | foam | 1.04e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl neu max rel vs JAX | foam | 7.46e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl per max rel vs JAX | foam | 1.08e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C28 | 1d expl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
@@ -533,31 +533,31 @@
 | C32 | free n20 max|q_y| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | free n20 x-variation of q_x (max rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 L_inf vs exact | amrex | 3.33e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
-| C32 | noslip n20 max rel vs JAX | amrex | 2.22e-16 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
+| C32 | noslip n20 max rel vs JAX | amrex | 4.44e-16 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C32 | noslip n20 max|h - 1| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 max|q_y| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | free n20 L_inf vs exact | foam | 3.33e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | free n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 2.07e-01 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | free n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | free n20 max|q_y| | foam | 6.40e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | free n20 x-variation of q_x (max rel) | foam | 5.70e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | free n20 max|q_y| | foam | 4.90e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | free n20 x-variation of q_x (max rel) | foam | 1.08e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 L_inf vs exact | foam | 3.34e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | noslip n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 2.29e-02 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | noslip n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip n20 max|q_y| | foam | 1.15e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip n20 x-variation of q_x (max rel) | foam | 5.70e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip n20 max|q_y| | foam | 3.53e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip n20 x-variation of q_x (max rel) | foam | 9.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | control: no-slip profile on free-slip walls, L_inf vs the no-slip exact | jax | 4.17e-01 PASS | - | - | - | - | >= 0.1 (observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)) |
 | C32 | free L_inf order 40->80 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C32 | free n20 L_inf vs exact | jax | 3.32e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | free n20 max|h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C32 | free n20 max|q_y| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C32 | free n20 x-variation of q_x (max rel) | jax | 1.42e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | free n20 max|q_y| | jax | 6.11e-18 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | free n20 x-variation of q_x (max rel) | jax | 3.56e-17 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip L_inf order 40->80 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C32 | noslip n20 L_inf vs exact | jax | 3.33e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | noslip n20 max|h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip n20 max|q_y| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip n20 x-variation of q_x (max rel) | jax | 1.42e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip n20 max|q_y| | jax | 8.77e-18 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip n20 x-variation of q_x (max rel) | jax | 2.85e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction) | jax | 1.69e-04 PASS | - | - | - | - | <= 0.0004 (observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)) |
 | C33 | imex max rel vs JAX | amrex | 1.30e-12 PASS | - | - | - | - | <= 1e-10 (tolerance (Newton 1e-12; observed 1.3e-12)) |
 | C33 | imex q(T) vs expm at dt 0.0125 (rel) | amrex | 5.11e-04 PASS | - | - | - | - | <= 0.001 (observed 5.1e-4 (implicit Euler, theory O(dt))) |
@@ -587,79 +587,82 @@
 | C33 | rk2 q(T) vs expm, order dt/2 -> dt/4 | jax | 2.03e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
 | C33 | rk2 q(T) vs its own scheme, SSP-RK2 (1 + dt J + (dt J)^2 / 2)^N (max rel) | jax | 2.79e-15 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C33 | rk2 uniform state: max|Q - Q[:, 0]|, |h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C34 | nx 16 max rel |L - L_JAX| | amrex | 5.62e-10 PASS | - | - | - | - | <= 2e-07 (observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), 6e-10 AMReX (round-off / dt)) |
+| C34 | nx 16 max rel |L - L_JAX| | foam | 6.94e-08 PASS | - | - | n/a | n/a | <= 2e-07 (observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), 6e-10 AMReX (round-off / dt)) |
+| C34 | q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
+| C34 | q_x_0: vs the SystemModel operator at nx 64 (max rel) | jax | 1.94e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
+| C34 | q_y_0: vs the SystemModel operator (mixed derivatives), order 32->64 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
+| C34 | q_y_0: vs the SystemModel operator at nx 64 (max rel) | jax | 3.07e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
 
 ## Large tier
 
 | level | run | result |
 |---|---|---|
-| L1 | amrex_gpu1 | cells 40000, setup 54.3, ms_step 12.94, maxrss_gb 0.9062, ranks 1 |
-| L1 | amrex_gpu2 | cells 80089, setup 58.28, ms_step 14.68, maxrss_gb 0.9062, ranks 2 |
-| L1 | amrex_gpu4 | cells 160000, setup 56.15, ms_step 13.48, maxrss_gb 0.9062, ranks 4 |
-| L1 | amrex_mpi2 | cells 80089, setup 27.62, ms_step 897.9, maxrss_gb 0.4977, ranks 2 |
-| L1 | amrex_mpi4 | cells 160000, setup 26.67, ms_step 808.7, maxrss_gb 0.6206, ranks 4 |
-| L1 | amrex_serial | cells 40000, setup 20.76, ms_step 845, maxrss_gb 0.4975, ranks 1 |
-| L1 | foam_mpi2 | cells 80089, setup 46.79, ms_step 1380, maxrss_gb 0.9041, ranks 2 |
-| L1 | foam_mpi4 | cells 160000, setup 53, ms_step 1380, maxrss_gb 0.9043, ranks 4 |
-| L1 | foam_serial | cells 40000, setup 51.05, ms_step 1387, maxrss_gb 0.9033, ranks 1 |
-| L1 | jax_gpu1 | cells 40000, setup 16.67, compile 2.297, ms_step 2.915, maxrss_gb 1.441, ranks 1 |
-| L1 | jax_gpu2 | cells 80089, setup 18.23, compile 8.665, ms_step 3.389, maxrss_gb 1.369, ranks 2 |
-| L1 | jax_gpu4 | cells 160000, setup 20.25, compile 8.035, ms_step 3.56, maxrss_gb 1.415, ranks 4 |
-| L1 | jax_mpi2 | cells 80089, setup 20.77, compile 5.208, ms_step 422.8, maxrss_gb 1.197, ranks 2 |
-| L1 | jax_mpi4 | cells 160000, setup 20.29, compile 5.855, ms_step 388.9, maxrss_gb 1.237, ranks 4 |
-| L1 | jax_serial | cells 40000, setup 15.31, compile 4.734, ms_step 380.4, maxrss_gb 1.011, ranks 1 |
-| L2 | amrex_gpu1 | cells 2560000, setup 42.72, ms_step 432.7, maxrss_gb 5.892, ranks 1 |
-| L2 | amrex_gpu2 | cells 2560000, setup 34.52, ms_step 221.3, maxrss_gb 5.895, ranks 2 |
-| L2 | amrex_gpu4 | cells 2560000, setup 34.69, ms_step 112.4, maxrss_gb 5.896, ranks 4 |
-| L2 | amrex_mpi2 | cells 2560000, setup 36, ms_step 1.971e+04, maxrss_gb 5.895, ranks 2 |
-| L2 | amrex_mpi4 | cells 2560000, setup 36.21, ms_step 1.094e+04, maxrss_gb 5.894, ranks 4 |
-| L2 | amrex_serial | cells 2560000, setup 35.77, ms_step 3.626e+04, maxrss_gb 5.912, ranks 1 |
-| L2 | foam_mpi2 | cells 2560000, setup 162.2, ms_step 3.466e+04, maxrss_gb 7.164, ranks 2 |
-| L2 | foam_mpi4 | cells 2560000, setup 149.7, ms_step 1.796e+04, maxrss_gb 7.145, ranks 4 |
-| L2 | foam_serial | cells 2560000, setup 144, ms_step 6.904e+04, maxrss_gb 11.61, ranks 1 |
-| L2 | jax_gpu1 | cells 2560000, setup 65.82, compile 7.42, ms_step 252.8, maxrss_gb 8.777, ranks 1 |
-| L2 | jax_gpu2 | cells 2560000, setup 72.85, compile 8.16, ms_step 127.4, maxrss_gb 6.692, ranks 2 |
-| L2 | jax_gpu4 | cells 2560000, setup 60.69, compile 8.726, ms_step 63.2, maxrss_gb 5.935, ranks 4 |
-| L2 | jax_mpi2 | cells 2560000, setup 66.65, compile 2.476, ms_step 1.095e+04, maxrss_gb 10.38, ranks 2 |
-| L2 | jax_mpi4 | cells 2560000, setup 55.52, compile 2.542, ms_step 5909, maxrss_gb 6.807, ranks 4 |
-| L2 | jax_serial | cells 2560000, setup 58.98, compile 4.333, ms_step 1.868e+04, maxrss_gb 15.64, ranks 1 |
+| L1 | amrex_gpu1 | cells 40000, setup 65.49, ms_step 1.758, maxrss_gb 0.9047, ranks 1 |
+| L1 | amrex_gpu2 | cells 80089, setup 54.96, ms_step 2.056, maxrss_gb 0.9047, ranks 2 |
+| L1 | amrex_gpu4 | cells 160000, setup 53.75, ms_step 1.9, maxrss_gb 0.9039, ranks 4 |
+| L1 | amrex_mpi2 | cells 80089, setup 27.08, ms_step 263.6, maxrss_gb 0.4983, ranks 2 |
+| L1 | amrex_mpi4 | cells 160000, setup 26.02, ms_step 250.8, maxrss_gb 0.6221, ranks 4 |
+| L1 | amrex_serial | cells 40000, setup 26.28, ms_step 228.7, maxrss_gb 0.4983, ranks 1 |
+| L1 | foam_mpi2 | cells 80089, setup 38.52, ms_step 418.6, maxrss_gb 0.5119, ranks 2 |
+| L1 | foam_mpi4 | cells 160000, setup 46.11, ms_step 398.5, maxrss_gb 0.7062, ranks 4 |
+| L1 | foam_serial | cells 40000, setup 42.61, ms_step 383.9, maxrss_gb 0.5116, ranks 1 |
+| L1 | jax_gpu1 | cells 40000, setup 16.81, compile 8.864, ms_step 2.913, maxrss_gb 1.503, ranks 1 |
+| L1 | jax_gpu2 | cells 80089, setup 17.31, compile 7.778, ms_step 3.603, maxrss_gb 1.352, ranks 2 |
+| L1 | jax_gpu4 | cells 160000, setup 21.03, compile 9.426, ms_step 3.417, maxrss_gb 1.407, ranks 4 |
+| L1 | jax_mpi2 | cells 80089, setup 19.85, compile 4.62, ms_step 235.8, maxrss_gb 1.146, ranks 2 |
+| L1 | jax_mpi4 | cells 160000, setup 21.44, compile 5.374, ms_step 242.3, maxrss_gb 1.193, ranks 4 |
+| L1 | jax_serial | cells 40000, setup 14.93, compile 2.021, ms_step 212.3, maxrss_gb 0.8477, ranks 1 |
+| L2 | amrex_gpu1 | cells 2560000, setup 82.35, ms_step 62.37, maxrss_gb 5.915, ranks 1 |
+| L2 | amrex_gpu2 | cells 2560000, setup 35.26, ms_step 33.43, maxrss_gb 5.912, ranks 2 |
+| L2 | amrex_gpu4 | cells 2560000, setup 33.76, ms_step 17.42, maxrss_gb 5.895, ranks 4 |
+| L2 | amrex_mpi2 | cells 2560000, setup 35.5, ms_step 5301, maxrss_gb 5.912, ranks 2 |
+| L2 | amrex_mpi4 | cells 2560000, setup 33.09, ms_step 3201, maxrss_gb 5.913, ranks 4 |
+| L2 | amrex_serial | cells 2560000, setup 58.84, ms_step 9492, maxrss_gb 5.912, ranks 1 |
+| L2 | foam_mpi2 | cells 2560000, setup 155.2, ms_step 9536, maxrss_gb 7.164, ranks 2 |
+| L2 | foam_mpi4 | cells 2560000, setup 155.2, ms_step 4910, maxrss_gb 7.145, ranks 4 |
+| L2 | foam_serial | cells 2560000, setup 156.6, ms_step 1.928e+04, maxrss_gb 11.62, ranks 1 |
+| L2 | jax_gpu1 | cells 2560000, setup 64.01, compile 8.251, ms_step 252.6, maxrss_gb 8.778, ranks 1 |
+| L2 | jax_gpu2 | cells 2560000, setup 67.18, compile 8.403, ms_step 127.4, maxrss_gb 6.665, ranks 2 |
+| L2 | jax_gpu4 | cells 2560000, setup 60.39, compile 8.461, ms_step 63.89, maxrss_gb 5.951, ranks 4 |
+| L2 | jax_mpi2 | cells 2560000, setup 69.71, compile 4.434, ms_step 4155, maxrss_gb 9.579, ranks 2 |
+| L2 | jax_mpi4 | cells 2560000, setup 57.76, compile 5.931, ms_step 2574, maxrss_gb 6.334, ranks 4 |
+| L2 | jax_serial | cells 2560000, setup 67.49, compile 4.898, ms_step 7521, maxrss_gb 14.76, ranks 1 |
 | L2P | amrex_gpu1 | does not fit 10 min (timeout 595 s) |
 | L2P | amrex_gpu2 | does not fit 10 min (timeout 595 s) |
-| L2P | amrex_gpu4 | does not fit 5 min (timeout 295 s) |
+| L2P | amrex_gpu4 | does not fit 10 min (timeout 595 s) |
 | L2P | amrex_mpi2 | does not fit 10 min (timeout 595 s) |
-| L2P | amrex_mpi4 | does not fit 5 min (timeout 295 s) |
+| L2P | amrex_mpi4 | does not fit 10 min (timeout 595 s) |
 | L2P | amrex_serial | does not fit 10 min (timeout 595 s) |
-| L2P | foam_mpi2 | does not fit 5 min (timeout 295 s) |
-| L2P | foam_mpi4 | does not fit 5 min (timeout 295 s) |
-| L2P | foam_serial | does not fit 5 min (timeout 295 s) |
-| L2P | jax_gpu1 | cells 1024000, setup 87.42, compile 49.06, ms_step 1410, maxrss_gb 8.313, ranks 1, solver amgx |
-| L2P | jax_gpu2 | cells 1024000, setup 80.35, compile 48.31, ms_step 1338, maxrss_gb 8.031, ranks 2, solver amgx |
-| L2P | jax_gpu4 | cells 1024000, setup 75.36, compile 45.3, ms_step 1092, maxrss_gb 5.35, ranks 4, solver amgx |
+| L2P | jax_gpu1 | cells 1024000, setup 87.99, compile 49.51, ms_step 1417, maxrss_gb 8.091, ranks 1, solver amgx |
+| L2P | jax_gpu2 | cells 1024000, setup 80.89, compile 49.16, ms_step 1383, maxrss_gb 7.969, ranks 2, solver amgx |
+| L2P | jax_gpu4 | cells 1024000, setup 73.32, compile 43.75, ms_step 1135, maxrss_gb 5.312, ranks 4, solver amgx |
 | L2P | jax_mpi2 | does not fit 10 min (timeout 595 s) |
 | L2P | jax_mpi4 | does not fit 10 min (timeout 595 s) |
-| L2P | jax_serial | cells 1024000, setup 88.79, compile 35.12, ms_step 3.171e+04, maxrss_gb 27.49, ranks 1, solver pyamg |
-| L3 | amrex_gpu1 | catchment 10 m: 291930 cells (148339 catchment), gpu1: setup 51.9 s, 5 s simulated in 0.03 s (23 steps, 1.4 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
-| L3 | amrex_gpu4 | catchment 10 m: 291930 cells (148339 catchment), gpu4: setup 10.8 s, 5 s simulated in 0.01 s (23 steps, 0.6 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
-| L3 | amrex_mpi4 | catchment 10 m: 291930 cells (148339 catchment), cpu4: setup 9.1 s, 5 s simulated in 1.42 s (23 steps, 61.7 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
-| L3 | amrex_serial | catchment 10 m: 291930 cells (148339 catchment), cpu1: setup 8.4 s, 5 s simulated in 5.09 s (23 steps, 221.5 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L2P | jax_serial | cells 1024000, setup 85.9, compile 35.8, ms_step 3.002e+04, maxrss_gb 27.33, ranks 1, solver pyamg |
+| L3 | amrex_gpu1 | catchment 10 m: 291930 cells (148339 catchment), gpu1: setup 53.0 s, 5 s simulated in 0.03 s (23 steps, 1.4 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_gpu4 | catchment 10 m: 291930 cells (148339 catchment), gpu4: setup 10.7 s, 5 s simulated in 0.01 s (23 steps, 0.6 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_mpi4 | catchment 10 m: 291930 cells (148339 catchment), cpu4: setup 9.5 s, 5 s simulated in 1.41 s (23 steps, 61.2 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
+| L3 | amrex_serial | catchment 10 m: 291930 cells (148339 catchment), cpu1: setup 24.1 s, 5 s simulated in 5.10 s (23 steps, 221.6 ms/step); water change 618.079167 m3 vs rain 618.079167 m3; h_max 4.1576 m; vs JAX max|dh|/max h 6.516e-15 |
 | L3 | jax_gpu4 | fine run: 14.77M cells on 4 GPUs (3691674 owned/rank 0): setup 70 s, compile 2 s, 5 s simulated in 6.7 s; h_max 2.98 m; water change 615.277 m3 vs rain 615.277 m3; CFL dt 0.0218 s (start) 0.0214 s (end) -> ~231 steps, ~29 ms/step; 1 h of catchment ~1.3 h wall |
-| L4 | amrex_100 | cells 10000, setup 26.7, ms_step 252.7, maxrss_gb 0.497 |
-| L4 | amrex_1600 | cells 2560000, setup 55.2, ms_step 3.601e+04, maxrss_gb 5.894 |
-| L4 | amrex_200 | cells 40000, setup 12.71, ms_step 983.9, maxrss_gb 0.3361 |
-| L4 | amrex_400 | cells 160000, setup 9.442, ms_step 3025, maxrss_gb 0.6125 |
-| L4 | amrex_800 | cells 640000, setup 30.86, ms_step 9693, maxrss_gb 1.698 |
-| L4 | foam_100 | cells 10000, setup 39.7, ms_step 449.4, maxrss_gb 0.9043 |
-| L4 | foam_1600 | cells 2560000, setup 141.2, ms_step 6.948e+04, maxrss_gb 11.61 |
-| L4 | foam_200 | cells 40000, setup 18.96, ms_step 1785, maxrss_gb 0.3798 |
-| L4 | foam_400 | cells 160000, setup 20.28, ms_step 5030, maxrss_gb 0.7851 |
-| L4 | foam_800 | cells 640000, setup 67.64, ms_step 1.722e+04, maxrss_gb 2.992 |
-| L4 | jax_100 | cells 10000, setup 15.6, compile 4.549, ms_step 118.3, maxrss_gb 0.7641 |
-| L4 | jax_1600 | cells 2560000, setup 60.98, compile 7.203, ms_step 1.813e+04, maxrss_gb 15.79 |
-| L4 | jax_200 | cells 40000, setup 18.73, compile 2.185, ms_step 380.3, maxrss_gb 0.8954 |
-| L4 | jax_400 | cells 160000, setup 18.38, compile 3.999, ms_step 1378, maxrss_gb 1.895 |
-| L4 | jax_800 | cells 640000, setup 32.82, compile 4.76, ms_step 5316, maxrss_gb 4.632 |
-| L5 | write_1ranks | fine mesh 1.00 m: 14.77M cells, ranks 1: build 2.5 s, parallel write 55.4 s, file 1.77 GB |
-| L5 | write_2ranks | fine mesh 1.00 m: 14.77M cells, ranks 2: build 1.1 s, parallel write 35.2 s, file 1.77 GB |
-| L5 | write_4ranks | fine mesh 1.00 m: 14.77M cells, ranks 4: build 0.7 s, parallel write 26.7 s, file 1.77 GB |
+| L4 | amrex_100 | cells 10000, setup 27.5, ms_step 63.35, maxrss_gb 0.4983 |
+| L4 | amrex_1600 | cells 2560000, setup 34.29, ms_step 9042, maxrss_gb 5.914 |
+| L4 | amrex_200 | cells 40000, setup 9.394, ms_step 238.6, maxrss_gb 0.337 |
+| L4 | amrex_400 | cells 160000, setup 8.314, ms_step 962, maxrss_gb 0.6207 |
+| L4 | amrex_800 | cells 640000, setup 29.39, ms_step 3010, maxrss_gb 1.704 |
+| L4 | foam_100 | cells 10000, setup 31.18, ms_step 104.9, maxrss_gb 0.5123 |
+| L4 | foam_1600 | cells 2560000, setup 141.3, ms_step 1.92e+04, maxrss_gb 11.62 |
+| L4 | foam_200 | cells 40000, setup 13.04, ms_step 401.6, maxrss_gb 0.3816 |
+| L4 | foam_400 | cells 160000, setup 19.21, ms_step 1598, maxrss_gb 0.7851 |
+| L4 | foam_800 | cells 640000, setup 65.92, ms_step 4493, maxrss_gb 2.992 |
+| L4 | jax_100 | cells 10000, setup 17.13, compile 4.055, ms_step 56.15, maxrss_gb 0.7546 |
+| L4 | jax_1600 | cells 2560000, setup 63.91, compile 2.267, ms_step 7253, maxrss_gb 14.36 |
+| L4 | jax_200 | cells 40000, setup 17.92, compile 1.992, ms_step 212.7, maxrss_gb 0.8398 |
+| L4 | jax_400 | cells 160000, setup 20.44, compile 3.891, ms_step 703.9, maxrss_gb 1.827 |
+| L4 | jax_800 | cells 640000, setup 32.23, compile 3.943, ms_step 1913, maxrss_gb 4.255 |
+| L5 | write_1ranks | fine mesh 1.00 m: 14.77M cells, ranks 1: build 2.4 s, parallel write 54.9 s, file 1.77 GB |
+| L5 | write_2ranks | fine mesh 1.00 m: 14.77M cells, ranks 2: build 1.4 s, parallel write 36.7 s, file 1.77 GB |
+| L5 | write_4ranks | fine mesh 1.00 m: 14.77M cells, ranks 4: build 0.5 s, parallel write 24.8 s, file 1.77 GB |
 
 Failures:
 - none
@@ -767,6 +770,8 @@ Notes:
 - C29 p3 neu d1 interior order 24->48, jax serial: max err 2.12e-03 / 2.43e-04 / 2.43e-05; ghost as sample: 2.12e-03 / 2.43e-04 / 2.43e-05
 - C29 p3 neu d2 interior order 24->48, jax serial: max err 2.07e-02 / 5.39e-03 / 1.42e-03; ghost as sample: 2.07e-02 / 5.39e-03 / 1.42e-03
 - C29 p3 neu d3 interior order 24->48, jax serial: max err 1.91e-02 / 8.77e-03 / 3.47e-03; ghost as sample: 1.91e-02 / 8.77e-03 / 3.47e-03
+- C34 q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 3.05e-02 / 7.69e-03 / 1.94e-03; vs its diagonal-index part only 1.54e-01 / 1.76e-01 / 1.82e-01
+- C34 q_y_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 4.62e-02 / 1.21e-02 / 3.07e-03; vs its diagonal-index part only 5.19e-01 / 5.79e-01 / 5.95e-01
 - C30 gate 39 checks failing, jax serial: PASS=72 FAIL=0 (tol 1e-09); the ghost as a plain sample is inexact in 15 cases (sensitivity)
 - C31 SWE lie1 order dt/4->dt/8, jax serial: L1(h) vs dt/32 3.77e-05 / 1.81e-05 / 8.43e-06 / 3.61e-06
 - C31 SWE lie2 order dt/4->dt/8, jax serial: L1(h) vs dt/32 5.61e-06 / 2.70e-06 / 1.26e-06 / 5.38e-07
@@ -923,6 +928,7 @@ Notes:
 - C28 tri impl per max rel vs JAX, foam serial: L_inf vs exact 5.20e-04
 - C28 tri impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
 - C28 tri impl steady max|u - L|, foam serial: on the backend itself
+- C34 nx 16 max rel |L - L_JAX|, foam serial: vs the SystemModel operator 3.05e-02 / 4.62e-02
 - C32 noslip n20 max|h - 1|, foam serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, foam serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
@@ -1028,6 +1034,7 @@ Notes:
 - C28 quad impl per max rel vs JAX, amrex serial: L_inf vs exact 8.16e-04
 - C28 quad impl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
 - C28 quad impl steady max|u - L|, amrex serial: on the backend itself
+- C34 nx 16 max rel |L - L_JAX|, amrex serial: vs the SystemModel operator 3.05e-02 / 4.62e-02
 - C32 noslip n20 max|h - 1|, amrex serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, amrex serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), amrex serial: theory: u = u(y)
@@ -1069,4 +1076,4 @@ Notes:
 - C6 C32 mass change (rel), amrex serial: max over 2 runs
 - C6 C33 mass change (rel), amrex serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4039, foam 3867, jax 6912
+Summed run wall time (s, without process start-up): amrex 4298, foam 4296, jax 7380

@@ -1,4 +1,4 @@
-**651 PASS, 0 FAIL** (37 information rows, 12 n/a, 1 unsupported).  Last run 2026-10-12; library commits: zoomy_amrex ce3f72a, zoomy_core 09d1584/44bc573, zoomy_foam e17026f, zoomy_jax 5fd4252/f39b67f; rendered from `matrix_latest.json` of 2026-10-12.
+**657 PASS, 0 FAIL** (37 information rows, 12 n/a, 1 unsupported).  Last run 2026-10-12; library commits: zoomy_amrex 0270878/ba55420/ce3f72a, zoomy_core 09d1584/44bc573/4c6ae22/6cbf885, zoomy_foam 250b152/8d4fb93/e17026f, zoomy_jax 4b2ce3f/5fd4252/9cb23c5/f39b67f; rendered from `matrix_latest.json` of 2026-10-12.
 
 A cell counts the checks of a case on a backend over every config (serial, MPI, GPU).  Case setups and pass criteria: [matrix README](https://github.com/ZoomyLab/Zoomy/blob/main/docs/dev/symbolic_solver/matrix/README.md#cases-and-pass-criteria); every row: [table.md](https://github.com/ZoomyLab/Zoomy/blob/main/docs/dev/symbolic_solver/matrix/table.md).  `-`: no check of its own on that backend (JAX is the reference, or the runs are counted under C6 / C7 / C9).
 
@@ -36,6 +36,7 @@ A cell counts the checks of a case on a backend over every config (serial, MPI, 
 | C31 | IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning | 7 PASS | 1 PASS | 2 PASS |
 | C32 | viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; no-slip and free-slip walls | 12 PASS | 10 PASS | 10 PASS |
 | C33 | vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0 | 8 PASS | 10 PASS | 10 PASS |
+| C34 | in-plane viscous operator vs the SystemModel operator, mixed derivatives (gate 45) | 4 PASS | 1 PASS | 1 PASS |
 
 Failures:
 
