@@ -946,3 +946,23 @@ Gate 39: 57 PASS / 0 FAIL / 15 XFAIL (BC-built Dirichlet ghosts at degree
 32 identical; wall d/dy check unchanged; setup 160k quads deg 1/2/3
 0.56/1.21/5.9 s -> 0.67/1.44/4.8 s.  1-D degree 2 is now the compact 3-point
 fit (was 5).  Unit test tests/template_gates/test_gate_1a_core_lsq_unisolvent.py.
+
+## 39. Cleanup: template classes, one C++ backend, one C++ printer base
+
+- Templates: `strategies/` (HyperbolicTemplate -> ChorinTemplate) and
+  `discretization/` (reconstruction, residual, time); 46 snapshots
+  byte-identical.
+- `backend_cxx.py` (CxxBackend, CxxChorinBackend; foam / AMReX drivers as
+  mixins): program.py gone, drivers 1135 -> 1074 lines; 554 generated files
+  byte-identical.
+- `transformation/cxx_base.py` (CxxBase, on CXX17): the solver lane's
+  CxxPrinter and the kernel lane's GenericCppBase (Cpp, Foam, Amrex,
+  GLSL/JS out-param printers) derive from it; call syntax and n-ary Min/Max
+  shared, Pow / Abs / Float stay lane policy; 1088 generated files
+  byte-identical (both lanes, legacy generators, GLSL/JS, a 172-expression
+  battery).  Net +36 lines: the shared surface is small.
+- Runtime duplication (measured, not changed yet): rt.H / rt_amrex.H are
+  ~10% / 6% backend-neutral, ~35% similar (different containers), ~56%
+  specific.  A ~150-line shared header (preCICE sequence, configure()
+  settings, writer / CFL check, NaN-safe min/max, Newton skeleton,
+  elementwise ops) removes ~270 duplicates: planned for drift control.
