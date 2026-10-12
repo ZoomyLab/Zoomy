@@ -27,6 +27,7 @@ from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
+from zoomy_core.symsolver.discretization.time import Imex
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
@@ -77,9 +78,11 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
     ad_checkpoints = param.Integer(default=64, bounds=(1, None))
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(adapter=, tag=, side=).")
-    imex = param.Boolean(default=False,
-                         doc="IMEX (Lie): explicit flux step, then implicit "
-                             "diffusion and an implicit-Euler source.")
+    imex = param.Selector(default=False, objects=[False, *Imex],
+                          doc="IMEX (Imex): 'lie' = explicit flux step, then "
+                              "implicit diffusion and an implicit-Euler "
+                              "source; 'ssp2' = IMEX-SSP2(2,2,2), the "
+                              "implicit source in every stage.")
     implicit_tol = param.Number(default=1e-8, bounds=(0, None),
                                 doc="Newton tolerance ||R||_2 (implicit solves).")
     implicit_maxiter = param.Integer(default=6, bounds=(1, None))
