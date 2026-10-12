@@ -1,24 +1,6 @@
 """zoomy_jax — JAX backend for Zoomy.
 
-Two JAX process-globals are configured HERE, at package import, because both
-must be set before the first array/compile and Python runs this module on
-*every* ``zoomy_jax.*`` import path: float precision (x64) and the persistent
-XLA compilation cache (REQ-179).
-
-It used to live only in ``zoomy_jax.transformation.to_jax``, which meant x64 was
-enabled as a SIDE EFFECT of importing a solver.  Anything touching the mesh
-kernels directly silently ran float32:
-
-    import zoomy_jax                                   -> x64 False
-    from zoomy_jax.mesh.mesh import lsq_gradient_...   -> x64 False
-    from zoomy_jax.fvm.solver_chorin_vam_jax import .. -> x64 True   (only via to_jax)
-
-which contradicts that module's own stated intent ("Default remains x64 for
-stability/parity").  It is a silent-wrong-answer bug, not a loud one: measured on
-an exact quadratic through the LSQ stencil, float32 gives d_xx error 1.4e-4 and
-d_yy 3.1e-5 where float64 gives 6.2e-13 / 1.4e-12 — ~9 orders, and small enough
-to read as a genuine discretisation defect rather than a precision artefact.
-(It is also why ~10 ``gnn_blueprint`` scripts each re-set the flag by hand.)
+Sets the process-global JAX float precision (x64 by default) and the persistent XLA compilation cache at package import, since both must be configured before the first array or compile.
 """
 
 import os
