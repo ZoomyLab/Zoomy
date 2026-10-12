@@ -10,7 +10,9 @@ import sympy as sp
 
 from zoomy_core.symsolver import chorin as CH
 from zoomy_core.symsolver import hyperbolic as T
+from zoomy_core.symsolver import reconstruction as R
 from zoomy_core.symsolver.core import CxxPrinter
+from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
 
 
 def chorin_systems(pred, press, corr):
@@ -58,14 +60,97 @@ def configure(lsq_degree, implicit, linsolve):
 
 def hyperbolic_program(nsm, *, dimension, implicit, linsolve, cfl=0.9, mood=False,
                        dt_write=None, imex=False, cfl_check_every=10,
-                       wave_speed="faces", dt_constant=None):
-    """:func:`zoomy_core.symsolver.hyperbolic.hyperbolic` as a C++ program."""
+                       wave_speed="faces", dt_constant=None, amr=False):
+    """:func:`zoomy_core.symsolver.hyperbolic.hyperbolic` as a C++ program;
+    ``amr``: also the procedures an AMR level loop calls (:func:`amr_procedures`)."""
     Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
     kw = _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every,
                    wave_speed, dt_constant)
     run = CxxPrinter().procedure("run", (Q, Qaux, p, time, time_end, mesh),
                                  lambda *a: T.hyperbolic(nsm, *a, **kw))
+    if amr:
+        run += "\n\n" + amr_procedures(nsm, dimension=dimension, cfl=cfl,
+                                        mood=kw["mood"], imex=imex)
     return _program(nsm, run, implicit, linsolve, nsm.resolved_lsq_degree())
+
+
+def hyperbolic_precice_program(nsm, *, side, subcycling=False, dimension, implicit,
+                               linsolve, cfl=0.9, mood=False, dt_write=None, imex=False,
+                               cfl_check_every=10, wave_speed="faces", dt_constant=None):
+    """:func:`zoomy_core.symsolver.hyperbolic.hyperbolic_precice` (one preCICE
+    participant) as a C++ program; ``run`` ignores ``time_end`` (preCICE ends
+    the loop)."""
+    Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
+    kw = _march_kw(cfl, dimension, mood, dt_write, imex, cfl_check_every,
+                   wave_speed, dt_constant)
+    run = CxxPrinter().procedure(
+        "run", (Q, Qaux, p, time, time_end, mesh),
+        lambda Q, Qaux, p, time, time_end, mesh: T.hyperbolic_precice(
+            nsm, Q, Qaux, p, time, mesh, side=side, subcycling=subcycling, **kw))
+    return _program(nsm, run, implicit, linsolve, nsm.resolved_lsq_degree())
+
+
+def conservative_rows(nsm):
+    """Rows of the state without a nonconservative product."""
+    B = nsm.sm.nonconservative_matrix
+    n = len(nsm.state)
+    return [i for i in range(n)
+            if all(sp.sympify(B[i, j, d]) == 0 for j in range(n) for d in range(B.shape[2]))]
+
+
+def amr_procedures(nsm, *, dimension, cfl, mood, imex):
+    """The template pieces a level loop calls, printed as they are:
+    ``step`` = :func:`hyperbolic.advance` with a given ``dt``, ``dt_of`` =
+    :func:`hyperbolic.cfl_dt`, ``amr_w`` / ``amr_q`` = the reconstruction's
+    variables and their inverse (:func:`reconstruction.reconstruct`'s maps:
+    coarse data is interpolated in them), ``amr_clean`` = a stage's
+    round-off hygiene (for the refluxed state), ``rk_weights`` = the weight of each
+    stage's residual in the step (``SSP_RK`` in Butcher form: the time
+    integral of the face terms), ``reflux_rows`` = the conservation laws (rows
+    without a nonconservative product: only their face terms are refluxed;
+    a row with one has no conservation to restore, and the coarse cell keeps
+    its own, balanced, face terms)."""
+    Q, Qaux, p, time, dt, mesh, W = sp.symbols("Q Qaux p time dt mesh W")
+    order = nsm.reconstruction.order
+    to_w, to_q = R.maps(nsm)
+    rows = R.bed_rows(nsm) if to_w is not None else None
+
+    def w_of(Q, Qaux, p, mesh):
+        W = Q if to_w is None else pointwise(to_w, Q, Qaux, p)
+        if rows is not None:                    # (h, eta): h in the bed's slot
+            W = put(W, (rows[0],), take(Q, (rows[1],)))
+        return (W,)
+
+    def q_of(W, Qaux, p, mesh):
+        if rows is not None:                    # b = eta - h
+            W = put(W, (rows[0],), take(W, (rows[1],)) - take(W, (rows[0],)))
+        return (W if to_q is None else pointwise(to_q, W, Qaux, p),)
+
+    depth, tol = getattr(nsm.roles, "depth", None), getattr(nsm, "depth_round_off", None)
+
+    def clean(Q, mesh):                         # a stage's hygiene (explicit_step)
+        return (Q if depth is None or tol is None else clean_round_off(Q, (depth,), tol),)
+
+    beta = []
+    for a, _c in T.SSP_RK[order]:
+        beta = [(1 - a) * b for b in beta] + [1 - a]
+    procs = [
+        "#define ZS_AMR_PROCEDURES 1",
+        CxxPrinter().procedure("step", (Q, Qaux, p, time, dt, mesh),
+                               lambda Q, Qaux, p, time, dt, mesh: T.advance(
+                                   nsm, Q, Qaux, p, time, dt, mesh, order, mood,
+                                   imex=imex)),
+        CxxPrinter().procedure("dt_of", (Q, Qaux, p, mesh),
+                               lambda Q, Qaux, p, mesh: (T.cfl_dt(
+                                   nsm, Q, Qaux, p, mesh, cfl, dimension),)),
+        CxxPrinter().procedure("amr_w", (Q, Qaux, p, mesh), w_of),
+        CxxPrinter().procedure("amr_q", (W, Qaux, p, mesh), q_of),
+        CxxPrinter().procedure("amr_clean", (Q, mesh), clean),
+        "inline std::vector<double> rk_weights() { return {"
+        + ", ".join(repr(float(b)) for b in beta) + "}; }",
+        "inline std::vector<int> reflux_rows() { return {"
+        + ", ".join(str(i) for i in conservative_rows(nsm)) + "}; }"]
+    return "\n\n".join(procs)
 
 
 def chorin_program(pred, press, corr, *, dimension, implicit, linsolve, cfl=0.9,
