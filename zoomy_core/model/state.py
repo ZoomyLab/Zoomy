@@ -134,30 +134,11 @@ class StateSpace:
 
 
 class MassMomentum:
-    """The free-surface incompressible mass + momentum balance.
+    """The free-surface incompressible mass + momentum balance: owns the flow, depth, bathymetry, free-surface and stress-tensor fields and builds the continuity and momentum equations.
 
-    Owns the *physics* state of the system — flow fields, depth /
-    bathymetry / free-surface, stress tensor — and builds the
-    continuity / momentum.x / momentum.z balance equations using the
-    Model's `parameters` (gravity ``g``, density ``rho``).
-
-    Parameters
-    ----------
-    state : :class:`StateSpace`
-        Coordinate scaffold.  Read-only on this end.
-    parameters : Zstruct
-        The Model's parameter Symbols Zstruct.  Must contain at least
-        ``g`` (gravity) and ``rho`` (density).  These Symbols flow
-        directly into the balance equations — no copies, no remap.
-
-    Exposed attributes
-    ------------------
-    self.state, self.parameters
-    self.u, self.v, self.w, self.p   (Function calls on (t,x,[y,]z))
-    self.tau                          (Zstruct of stress-tensor components)
-    self.h, self.b, self.eta          (depth, bathymetry, free surface)
-    self.continuity                   (:class:`Expression`)
-    self.momentum                     (Zstruct with .x [, .y] , .z Expressions)
+    Args:
+        state: :class:`StateSpace` coordinate scaffold, read-only here.
+        parameters: The Model's parameter ``Zstruct``; must contain ``g`` and ``rho``.
     """
 
     def __init__(self, state, parameters):

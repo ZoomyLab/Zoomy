@@ -1429,8 +1429,8 @@ def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
         table: class tables ``geom["lsq_closure"]``.
         classes: closure class per row of ``U`` (-1: none).
     Returns:
-        ``(rows, D)`` with ``D`` ``(len(rows), n_cc, n_mon)`` scaled derivatives, or ``([],
-            None)`` without closure.
+        ``(rows, D)`` with ``D`` ``(len(rows), n_cc, n_mon)`` scaled derivatives, or
+        ``([], None)`` without closure.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """

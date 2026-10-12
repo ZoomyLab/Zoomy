@@ -26,7 +26,7 @@ class face_aux(Block):
 
 
 class face_wavespeed(Block):
-    """``(kernel, Q, Qaux, p, mesh)`` -> max |eigenvalue| per face over its two cells.
+    """``(kernel, Q, Qaux, p, mesh)`` -> max ``|eigenvalue|`` per face over its two cells.
     """
 
 

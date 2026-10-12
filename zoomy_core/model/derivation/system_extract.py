@@ -118,8 +118,8 @@ def extract_system_operators(model, Q, Qaux=None, dae=False):
 
     Returns:
         Dict of ``SystemModel`` keyword arguments (``time, space, state, aux_state, parameters,
-            flux, hydrostatic_pressure, nonconservative_matrix, source, mass_matrix,
-            diffusion_matrix, ...``) plus the ``unclassified`` remainders.
+        flux, hydrostatic_pressure, nonconservative_matrix, source, mass_matrix,
+        diffusion_matrix, ...``) plus the ``unclassified`` remainders.
     """
     t = model.coords[0]
     # ``space`` = the spatial coordinates the STATE fields actually depend on, in

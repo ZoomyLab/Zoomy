@@ -161,7 +161,7 @@ def reset_modal_indices(model):
 
 
 def build_modal_sum(field, coeff, basis, order, index):
-    """Build the unexpanded modal sum Sum_i coeff(i, *coords) * phi(i, zeta) for a field.
+    """Build the unexpanded modal sum ``Sum_i coeff(i, *coords) * phi(i, zeta)`` for a field.
 
     Args:
         field: Applied field; its last argument is the separation coordinate zeta.
@@ -326,8 +326,8 @@ class TensorSeparationOfVariables(Operation):
 
     Args:
         field: Original field application, e.g. u(t, x, y, z).
-        coeff_head: Tensor coefficient family, applied as q(j, i, *kept_args) with lateral j outer,
-            vertical i inner.
+        coeff_head: Tensor coefficient family, applied as ``q(j, i, *kept_args)`` with lateral j
+            outer, vertical i inner.
         pos_z, basis_z, order_z: Position, basis and truncation order of the vertical coordinate.
         pos_y, basis_y, order_y: Same for the lateral coordinate.
         scale_y: Lateral slot carries y = scale_y * eta, so the coefficient's eta is arg / scale_y.
@@ -384,8 +384,8 @@ class TensorSeparationOfVariables(Operation):
 
 
 def separation_of_variables(field, coeff, basis, order, *, index=None):
-    """Return a SeparationOfVariables operation approximating field by Sum_i coeff(i, *coords) *
-    phi(i, zeta) with a distinct registry index.
+    """Return a SeparationOfVariables operation approximating ``field`` by
+    ``Sum_i coeff(i, *coords) * phi(i, zeta)`` with a distinct registry index.
 
     Args:
         field: Original field application, e.g. u(t, x, z).

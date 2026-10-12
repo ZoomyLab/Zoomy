@@ -126,8 +126,8 @@ class HyperbolicTemplate:
             side: 0 if this domain is the low side of the interface.
             subcycling: ``False``: one step per window (warns above the CFL step), mass
                 conserved exactly. ``True``: adaptive steps inside the window, mass not
-                    exactly
-                conserved.
+                exactly conserved.
+
         References:
             Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
         """

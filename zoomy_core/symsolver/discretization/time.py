@@ -71,7 +71,7 @@ def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):
 
 
 def cell_wavespeed(nsm, Q, Qaux, p, mesh):
-    """Max |eigenvalue| per face over the cell states of its two cells."""
+    """Max ``|eigenvalue|`` per face over the cell states of its two cells."""
     speed = (nsm.call.eigenvalues_cfl if nsm.call.eigenvalues_cfl is not None
              else nsm.call.eigenvalues)
     return face_wavespeed(speed, Q, Qaux, p, mesh)

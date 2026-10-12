@@ -951,8 +951,7 @@ class NumericalSystemModel(SystemModel):
             additional_systems: co-running sub-systems whose derivatives size the LSQ stencil.
             scaled_q_indices: rows a hydrostatic reconstruction rescales by ``h*/h``.
             source_treatment: ``"explicit"`` or ``"linearized"`` (point-implicit).
-            depth_regularization, regularization_eps, eigenvalue_treatment, eigenvalue_guard,
-                normalize_normal: depth-law axes, see ``depth_law_study``.
+            depth_regularization, regularization_eps, eigenvalue_treatment, eigenvalue_guard, normalize_normal: depth-law axes, see ``depth_law_study``.
 
         Returns:
             The derived NSM; the LSQ degree is always auto-derived.

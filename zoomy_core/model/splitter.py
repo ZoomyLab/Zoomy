@@ -411,42 +411,9 @@ def _partition_pressure_aux(sm_press, pressure_vars):
 
 @dataclass
 class PressureLinearOperator:
-    """Explicit coefficient fields of the affine pressure operator.
+    """Explicit coefficient fields (``A0``, ``first_derivative``, ``second_derivative``, ``RHS``) of the affine pressure operator ``SM_press.source``, as printable sympy expressions.
 
-    ``SM_press.source`` is AFFINE in the pressure modes and their spatial
-    derivatives (that is why the matrix-free probe path works):
-
-    .. math::
-
-        \\mathrm{source}_k(P)
-          = \\sum_l \\Big[ A0_{kl}\\,P_l
-              + \\sum_a Ad^{(a)}_{kl}\\,\\partial_{x_a} P_l
-              + \\sum_{a\\le b} Add^{(ab)}_{kl}\\,\\partial_{x_a x_b} P_l \\Big]
-            - \\mathrm{RHS}_k .
-
-    This carrier exposes those coefficients as printable sympy expressions in
-    the SAME symbol universe as ``SM_press.source`` (frozen predictor state,
-    params, and the input-aux derivative symbols), so the existing code
-    printers emit them unchanged.  It is produced lazily by
-    :meth:`SystemModel.pressure_operator` (attached to ``SM_press`` by the
-    splitter) — it does NOT re-derive the model: it symbolically
-    differentiates the already-split ``source``.
-
-    Fields
-    ------
-    P_modes : list[Symbol]
-        The ``NP`` pressure state symbols in ``SM_press.equation_to_state_index``
-        order (the code's canonical pressure-mode ordering, ``e2s_press``).
-    A0 : list[list]                 (NP×NP)   ``d source_k / d P_l``.
-    first_derivative : dict[int, list[list]]
-        ``axis → (NP×NP)`` coefficient of ``∂_{x_axis} P_l``.
-    second_derivative : dict[tuple[int,int], list[list]]
-        ``(a, b) with a ≤ b → (NP×NP)`` coefficient of ``∂_{x_a x_b} P_l``.
-    RHS : list                      (length NP)   ``-source_k |_{P=0, dP=0}``.
-
-    Convenience named accessors (``None`` when the axis is absent for the
-    model's dimension): ``Ax``/``Ay``/``Az`` (first) and
-    ``Axx``/``Ayy``/``Azz``/``Axy``/``Axz``/``Ayz`` (second).
+    Produced lazily by :meth:`SystemModel.pressure_operator` by differentiating the already-split ``source`` (no re-derivation); ``Ax``/``Ay``/``Az`` and ``Axx``/``Ayy``/``Azz``/``Axy``/``Axz``/``Ayz`` are accessors (``None`` when the axis is absent).
     """
     P_modes: list
     A0: list

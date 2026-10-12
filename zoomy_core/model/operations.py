@@ -1,17 +1,6 @@
-"""
-General-purpose INS equation framework with composable projection operations.
+"""Composable projection operations on INS equations (``Expression``, ``SigmaTransform``, ``Recombine``, ...).
 
-Class hierarchy:
-    StateSpace      — shared symbols (coordinates, fields, stress tensor, parameters)
-    SymbolicBase    — name + display
-    RelationMixin   — the {lhs: rhs} orientation surface (.lhs/.rhs/.subs_map)
-    └── Expression  — PDE terms with .project(), .ibp(), .apply(), .terms, [i];
-                      ORIENTED (from sp.Eq / .solve_for) it IS a relation/BC and
-                      applies as a substitution.  KinematicBC, Newtonian,
-                      HydrostaticPressure, … are oriented Expression subclasses —
-                      there is no separate Relation/Assumption/Material class.
-
-Design: the user drives every step. No hidden assumptions.
+The user drives every step; there are no hidden assumptions.
 """
 
 import warnings
@@ -857,27 +846,14 @@ class Expression(RelationMixin, SymbolicBase):
         return isolated
 
     def depth_integrate(self, lower, upper, var, method="auto"):
-        """
-        Depth-integrate this expression over [lower, upper] w.r.t. var.
+        """Depth-integrate this expression over ``[lower, upper]`` w.r.t. ``var``.
 
-        Parameters
-        ----------
-        lower, upper : sympy expressions for the integration bounds
-            (typically b and b+H, both functions of t and x)
-        var : Symbol
-            The vertical coordinate (z)
-        method : str
-            'auto'    : detect derivative direction and choose method
-            'leibniz' : pull horizontal derivative outside:
-                        int df/dx dz = d/dx[int f dz] - f(upper)*d(upper)/dx + f(lower)*d(lower)/dx
-            'fundamental_theorem' : for vertical derivatives:
-                        int df/dz dz = f(upper) - f(lower)
-            'direct'  : keep as Integral(expr, (var, lower, upper))
-
-        Returns
-        -------
-        DepthIntegralResult with .volume, .boundary_upper, .boundary_lower
-        or a plain Expression for 'direct' and 'fundamental_theorem'.
+        Args:
+            lower, upper: Integration bounds (typically b and b+H, both functions of t and x).
+            var: The vertical coordinate z.
+            method: ``'auto'`` detects the derivative direction; ``'leibniz'`` pulls a horizontal derivative outside; ``'fundamental_theorem'`` handles vertical derivatives; ``'direct'`` keeps ``Integral(expr, (var, lower, upper))``.
+        Returns:
+            ``DepthIntegralResult`` with ``.volume``, ``.boundary_upper``, ``.boundary_lower``, or a plain ``Expression`` for ``'direct'`` and ``'fundamental_theorem'``.
         """
         expr = self.expr
 
@@ -3874,51 +3850,12 @@ class AffineProjection(Operation):
 
 
 class SigmaTransform(Operation):
-    """Change of variables (t, x, [y,] z) → (t, x, [y,] ζ) on a PDE leaf.
+    """Change of variables ``(t, x, [y,] z) -> (t, x, [y,] ζ)`` with ``ζ = (z - b) / h`` on a PDE leaf, rewriting derivatives by the chain rule.
 
-    With ζ = (z − b) / h, every field ψ(t, x, [y,] z) becomes
-    ψ̃(t, x, [y,] ζ).  Derivatives are rewritten via the chain rule:
+    Only first-order derivatives are supported.
 
-        ∂_s ψ |_z = ∂_s ψ̃ |_ζ − (∂_s(ζ h + b) / h) · ∂_ζ ψ̃,
-            s ∈ {t, x, y}
-        ∂_z ψ     = (1/h) · ∂_ζ ψ̃
-
-    Reference: Kowalski & Torrilhon 2019, "Moment Approximations and
-    Model Cascades for Shallow Flow", Commun. Comput. Phys. 25 (2019),
-    eqs. (3.5)–(3.9).  The conservative form (their (3.8),
-
-        h · ∂_s ψ = ∂_s(h ψ̃) − ∂_ζ(∂_s(ζ h + b) ψ̃))
-
-    is the result of multiplying the chain-rule form by ``h`` and
-    applying the product rule.  Reach it with
-    ``model.apply(Multiply(state.h)).apply(Recombine(...))`` *after*
-    this transform.
-
-    Where it fits relative to :class:`AffineProjection`:
-      * ``AffineProjection`` rewrites *integrals* ``∫_b^η f(z) dz`` →
-        ``h · ∫_0^1 f(ζh+b) dζ`` at integration time; the underlying PDE
-        stays in z.
-      * ``SigmaTransform`` rewrites the **PDE itself** in (t, x, [y,] ζ).
-
-    The two operations are complementary.  Use ``SigmaTransform`` when
-    you want the PDE on the fixed reference domain ζ ∈ [0, 1] *before*
-    the moment / Galerkin step (K&T 2019, §3.1).  Use
-    ``AffineProjection`` when you keep the PDE in z and only need the
-    z-integral substituted at projection time (SME / VAM derivations
-    that follow ``physical_z.py``).
-
-    The operator:
-      * substitutes every free ``state.z`` by ``ζ·h + b``;
-      * walks every :class:`sympy.Derivative` and rewrites ∂_s and ∂_z
-        per the formulas above;
-      * substitutes ``z → ζ`` in the argument list of every
-        :class:`sympy.Function` atom (so ``u(t, x, z)`` becomes
-        ``u(t, x, ζ)``).  The function head is kept — ψ and ψ̃ share a
-        name in K&T's text; sympy distinguishes by the call arguments.
-
-    Only first-order derivatives are supported.  Mixed / higher-order
-    z-derivatives raise (the K&T 2019 reference system has none at the
-    relevant derivation stage; see eqs. (3.1)–(3.3)).
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     def __init__(self, state, src=None, *, sigma=None,
@@ -4235,45 +4172,9 @@ def _rule_collapse_trivial_derivative(expr, **kwargs):
 
 
 class Recombine(Operation):
-    """Fold expanded expressions back into compact / conservative shapes.
+    """Fold expanded expressions back into compact/conservative shapes, e.g. ``h·∂_t α + α·∂_t h`` -> ``∂_t(h α)``.
 
-    Typically run at the end of a derivation to pretty up ``describe()``
-    output: ``h·∂_t α + α·∂_t h`` becomes ``∂_t(h α)``, cancels like
-    ``(z_1 − b)`` can be aliased to ``h_0``, and any trivially-zero
-    Derivative re-introduced downstream gets collapsed.
-
-    **Rule catalog.**  ``Recombine.RULES`` is a module-level dict
-    mapping a rule's name to a ``callable(expr, **kwargs) → expr``.
-    The default implementation ships three rules:
-
-    * ``anti_product_rule`` — the classic
-      ``α·∂_v f + f·∂_v α → ∂_v(α·f)`` fold (needs ``vars=[...]``).
-    * ``apply_aliases`` — replaces user-declared sub-expressions with
-      shorter names (needs ``aliases={...}``).
-    * ``collapse_trivial_derivative`` — ``Derivative(c, v) → 0`` if
-      ``c`` has no ``v``.
-
-    Select / order rules via the ``rules`` argument:
-
-        # Default: all rules, in catalog order.
-        eq.apply(Recombine(vars=[t, x], aliases={h_0: z_1 - b}))
-
-        # Only the anti-product-rule, for display cleanup:
-        eq.apply(Recombine(rules=["anti_product_rule"], vars=[t, x]))
-
-        # Custom rule: pass a callable directly alongside / instead
-        # of a named rule.
-        eq.apply(Recombine(rules=["anti_product_rule", my_rule],
-                           vars=[t, x]))
-
-    **Extending the catalog.**  Add a rule once — available to every
-    subsequent ``Recombine``:
-
-        Recombine.RULES["my_rule"] = my_rule_fn
-
-    A rule is any callable with signature ``fn(expr, **kwargs) → expr``.
-    It receives the full ``vars`` / ``aliases`` kwargs; unknown kwargs
-    are harmless (they get swallowed by ``**kwargs``).
+    ``rules`` picks from ``Recombine.RULES`` by name (``anti_product_rule``, ``apply_aliases``, ``collapse_trivial_derivative``; default all) or takes callables ``fn(expr, **kwargs)``; ``vars`` and ``aliases`` are passed on as kwargs.
     """
 
     RULES = {
@@ -5113,50 +5014,16 @@ class Basis:
         return _FieldExpansion(field_fn, _field_rhs)
 
     def layer_expand(self, field, layer_idx, zeta_transformed=False):
-        """Per-layer closure substitution for a :class:`LayeredBasis`.
+        """Per-layer closure substitution for a :class:`LayeredBasis`: inside layer ``layer_idx`` the field is closed against that layer's coefficients.
 
-        Inside layer ``i`` the field is closed against that layer's
-        coefficients:
-
-        .. math::
-
-            \\text{field}(t, x, z)
-            \\;\\longrightarrow\\;
-            \\sum_{k=0}^{m-1} \\alpha_{i\\,m + k}(t, x)\\,
-                              \\phi^{\\text{inner}}_{k}(\\zeta_i(z))
-
-        where ``m = inner_level + 1`` is the number of moments per
-        layer and ``ζ_i(z) = (z - z_i) / h_i``.  The returned
-        substitution dict has three entries (volume + lower interface
-        + upper interface) — the side-local convention means the two
-        interface evaluations plug in ``ζ_i = 0`` and ``ζ_i = 1`` of
-        the **current** layer's inner basis; a neighbouring layer
-        applying its own ``layer_expand`` produces its own (generally
-        different) interface value, which is exactly the jump that
-        drives the multi-layer mass-flux terms.
-
-        Parameters
-        ----------
-        field : sympy Function call
-            The variable being closed (e.g. ``state.u``).
-        layer_idx : int
-            Index into ``self._bf.interfaces`` specifying the layer.
-        zeta_transformed : bool, default ``False``
-            If ``False`` (the SWE case), the bulk key is ``field``
-            itself — substitutes ``u(t,x,z) → Σ α·φ_inner(ζ_i(z))``.
-            If ``True`` (the SME case, applied *after*
-            :class:`AffineProjection`), the bulk key becomes
-            ``field.subs(z, ζ·h_i + z_i)`` and the substituted form
-            reduces to ``Σ α·φ_inner(ζ)`` in the shared zeta symbol,
-            ready for ``EvaluateIntegrals`` to collapse the
-            orthogonality integrals.
-
-        For the piecewise-constant case (``Monomials, inner_level=0``)
-        the sum collapses to a single coefficient per layer and you
-        recover the simple SWE closure ``u → α_i``.
-
-        Raises ``ValueError`` if the wrapped basisfunction isn't a
-        ``LayeredBasis``.
+        Args:
+            field: Variable being closed (e.g. ``state.u``).
+            layer_idx: Index into ``self._bf.interfaces`` specifying the layer.
+            zeta_transformed: ``False``: the bulk key is ``field`` itself; ``True`` (after :class:`AffineProjection`): ``field.subs(z, ζ·h_i + z_i)``.
+        Returns:
+            Substitution dict with three entries (volume, lower and upper interface of the current layer).
+        Raises:
+            ValueError: If the wrapped basis function is not a ``LayeredBasis``.
         """
         from zoomy_core.model.derivation.basisfunctions import LayeredBasis
         if not isinstance(self._bf, LayeredBasis):
