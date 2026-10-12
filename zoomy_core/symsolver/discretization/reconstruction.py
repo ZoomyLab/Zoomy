@@ -1,18 +1,7 @@
-"""Face reconstruction, written once for every backend.
-
-What is reconstructed is the NSM's choice (``nsm.reconstruction.variables``):
-the model's reconstruction variables ``W(Q)`` with their inverse, or ``Q``
-itself.  Order 1 takes the cell values of ``W`` to the faces (so ``Q(W(Q))``
-there: the model's map, e.g. a desingularized velocity, applies at every
-order).  Order 2 takes the LSQ
-gradient of ``W``, limits it row by row (``nsm.reconstruction``: the limiter,
-per-row overrides, ties; "none" leaves a row unlimited) and moves each cell's
-``W`` to the face centre; the inverse maps the traces back to ``Q``.  Nothing
-is clipped: face positivity is the flux kernel's (hydrostatic
-reconstruction), cell positivity MOOD's.
-
-Ground truth: ``zoomy_jax.fvm.reconstruction_jax.LSQMUSCLReconstructionJAX``
-and ``EmittedWLSQMUSCLJAX`` without its face clamp ``eta_f >= b_f``.
+"""Face reconstruction of the solver templates: order 1 takes cell values of the
+reconstruction variables ``W(Q)`` to the faces, order 2 a limited LSQ gradient, and
+the inverse map recovers ``Q``. Nothing is clipped: face positivity is the flux
+kernel's, cell positivity MOOD's.
 """
 import sympy as sp
 
@@ -26,14 +15,16 @@ LIMITERS = {"minmod": minmod, "venkatakrishnan": venkatakrishnan,
 
 
 def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
-    """Face traces ``(QL, QR)``; ``QR`` on a boundary face is the inner
-    trace, a placeholder for the BC's face value (``boundary_traces``).
-    ``demote``: ``False`` none, ``True`` all cells, or a cell mask -- demoted
-    cells are constant in ``W`` (MOOD).  The gradient and the limiter take
-    their boundary samples from the BC GHOSTS at ``time``
-    (``nsm.call.boundary_ghost_state``, at the mirror image of the cell
-    centre).  With the model's free-surface map the pair is (h, eta) and
-    b_f = eta_f - h_f (:func:`bed_rows`)."""
+    """Face traces ``(QL, QR)`` of order 1 (cell values) or 2 (limited LSQ gradient);
+    ``QR`` on a boundary face is a placeholder for the BC value.
+
+    Args:
+        demote: ``False`` none, ``True`` all cells, or a cell mask; demoted cells are
+            constant in ``W`` (MOOD).
+    References:
+        van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
+        Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
+    """
     demote = sp.S(demote)
     to_w, to_q = maps(nsm)
     rows = bed_rows(nsm) if to_w is not None else None
@@ -67,7 +58,8 @@ def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
 
 
 def maps(nsm):
-    """``(W(Q), Q(W))`` kernels, or ``(None, None)``: ``Q`` itself."""
+    """``(W(Q), Q(W))`` kernels, or ``(None, None)`` when ``Q`` itself is reconstructed.
+    """
     what = nsm.reconstruction.variables
     if what == "conservative":
         return None, None
@@ -81,9 +73,12 @@ def maps(nsm):
 
 
 def bed_rows(nsm):
-    """``(bed, depth)`` rows when the reconstruction is Audusse's pair
-    (h, eta = b + h) -- the NSM's ``bed="derived"`` with a model that declares
-    both roles and maps them to (b, b + h) -- else None."""
+    """``(bed, depth)`` rows when the reconstruction is the pair (h, eta = b + h) with
+    ``bed="derived"``, else None.
+
+    References:
+        Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+    """
     if nsm.reconstruction.bed == "reconstructed":
         return None
     if nsm.reconstruction.bed != "derived":
@@ -104,9 +99,9 @@ def bed_rows(nsm):
 
 
 def limited(nsm, W, Wg, G, mesh):
-    """Limiter factor per row and cell: the NSM's limiter, its per-row
-    overrides, then its ties; 1 where no row is limited.  ``Wg``: the
-    boundary ghosts (bounds at the ghost position)."""
+    """Limiter factor per row and cell (the NSM's limiter, per-row overrides, then
+    ties), 1 where no row is limited.
+    """
     spec, names = nsm.reconstruction, [str(q) for q in nsm.state]
     unknown = (set(spec.limiters) | set(spec.ties) | set(spec.ties.values())) - set(names)
     if unknown:

@@ -1,14 +1,6 @@
-"""The semi-discrete residual and the pieces of one time step, written once for
-every backend.
-
-``nsm`` is the NumericalSystemModel: ``nsm.call.<slot>`` is a kernel (the
-registrar ``call`` entry; ``None`` if the model has none), every other
-attribute is static configuration such as ``nsm.reconstruction.order``.  ``Q``,
-``Qaux``, ``p`` (parameters), ``time``, ``dt`` and ``mesh`` are symbols.  Python
-``if`` / ``for`` run at build time; ``While`` / ``Cond`` run at run time.
-
-Ground truth: ``zoomy_jax.fvm.solver_jax.HyperbolicSolver`` (``flux_operator``,
-``_explicit_hyperbolic_step``, ``post_step``).
+"""The semi-discrete residual and the pieces of one time step, written once for every
+backend: RK stage, MOOD, aux, implicit slots and hygiene. They compose the vocabulary
+and are composed by the strategies.
 """
 import sympy as sp
 
@@ -23,13 +15,21 @@ from zoomy_core.symsolver.vocabulary import (
 
 def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
              coupled=None, implicit_terms=True, dt_rule=None):
-    """Semi-discrete right-hand side: -div(face terms) - interior NCP, plus the
-    explicit source/diffusion slots, plus the implicit ones unless an implicit
-    stage takes them (``implicit_terms=False``).  Which term is stiff is the
-    SystemModel's classification, never the solver's.
+    """Semi-discrete right-hand side -div(face terms) - interior NCP, plus the explicit
+    source and diffusion slots, and the implicit ones unless an implicit stage takes
+    them.
 
-    ``dt_rule``: ``dt`` is not known yet -- the face kernel also returns the
-    scheme's wave speed ``S`` and ``dt = dt_rule(S)``; returns ``(dQ, dt)``."""
+    Args:
+        demote: MOOD demotion of the reconstruction (see ``reconstruct``).
+        coupled: ``(mask, flux)``, faces carrying a shared answer.
+        dt_rule: ``dt`` is not known yet; the face kernel also returns the wave speed
+            ``S`` and ``dt = dt_rule(S)``.
+    Returns:
+        ``dQ``, or ``(dQ, dt)`` with ``dt_rule``.
+    References:
+        LeVeque 2002, https://doi.org/10.1017/CBO9780511791253
+        Pares 2006, https://doi.org/10.1137/050628052
+    """
     QL, QR = reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh)
     # the outer state of each boundary face's Riemann problem: the BC's face
     # value from the inner trace QL, at the face centre (every order)
@@ -67,7 +67,7 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
 
 
 def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
-    """Pointwise aux of a stage state (e.g. hinv = 1/h)."""
+    """Pointwise aux of a stage state (e.g. ``hinv = 1/h``)."""
     if nsm.call.update_aux_variables is None:
         return Qaux
     return cells(nsm.call.update_aux_variables, Q, Qaux, p, time, dt, mesh)
@@ -75,9 +75,17 @@ def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
 
 def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
                   coupled=None, implicit_terms=True, rk=None, dt_rule=None):
-    """One SSP-RK step of the method of lines (RK order ``rk``, default the
-    reconstruction order).  With ``dt_rule`` the first stage picks ``dt``
-    from its own face wave speeds; returns ``(Q, dt)``."""
+    """One SSP-RK step of the method of lines, of order ``rk`` (default the
+    reconstruction order).
+
+    Args:
+        dt_rule: the first stage picks ``dt`` from its own face wave speeds.
+    Returns:
+        ``Q``, or ``(Q, dt)`` with ``dt_rule``.
+    References:
+        Shu, Osher 1988, https://doi.org/10.1016/0021-9991(88)90177-5
+        Gottlieb et al. 2001, https://doi.org/10.1137/S003614450036757X
+    """
     Q0, Qaux_stage = Q, Qaux
     depth, tol = getattr(nsm.roles, "depth", None), getattr(nsm, "depth_round_off", None)
     for i, (a, c) in enumerate(SSP_RK[rk or order]):
@@ -98,14 +106,20 @@ def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
 
 def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
               implicit_terms=True, rk=None, dt_rule=None):
-    """A-posteriori MOOD: order-2 candidate; inadmissible cells redo at first
-    order; if that still fails, the whole step redoes at first order.  The
-    repairs keep the candidate's ``dt``."""
+    """A-posteriori MOOD: an order-2 candidate step, inadmissible cells redone at first
+    order, and the whole step at first order if that still fails; the repairs keep
+    the candidate's ``dt``.
+
+    References:
+        Clain et al. 2011, https://doi.org/10.1016/j.jcp.2011.02.026
+    """
     def step(demote, dt):
+        """The explicit step with cells ``demote`` demoted to first order."""
         return explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote,
                              coupled, implicit_terms, rk)
 
     def repair():
+        """Redo the bad cells at first order, then all cells if some still fail."""
         Q_cells = step(bad, dt)
         still = inadmissible(nsm.call.admissible, Q_cells, Qaux, p)
         return Cond(reduce_any(still), lambda: step(sp.S.true, dt),
@@ -123,12 +137,9 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
 
 
 def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
-    """Pointwise aux, then the derivative (mesh-gradient) aux.  The
-    derivatives of state rows see the boundary conditions: their fits take
-    the BC GHOSTS at ``time`` (``nsm.call.boundary_ghost_state``), so a row
-    the BC fixes (Dirichlet- / Neumann-type) closes a fit of degree >= 2 by
-    its constraint at the foot point (ANALYSIS 40); derivatives of aux
-    functions, and a system without BCs, keep the zero normal gradient."""
+    """Pointwise aux, then the derivative (mesh-gradient) aux, whose boundary samples
+    are the BC ghosts at ``time``.
+    """
     Qaux = stage_aux(nsm, Q, Qaux, p, time, dt, mesh)
     spec = nsm.call.aux_derivatives
     if spec is None:
@@ -144,9 +155,9 @@ def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def derivative_rows(nsm):
-    """``(rows, functions)``: the state rows the derivative aux of ``nsm``
-    differentiates (static tuple), and whether it differentiates aux
-    functions too."""
+    """``(rows, functions)``: the state rows the derivative aux differentiates (static
+    tuple) and whether it differentiates aux functions too.
+    """
     spec = [e for e in nsm.aux_derivatives if e["kind"] == "derivative"]
     rows = tuple(sorted({int(e["state_index"]) for e in spec
                          if e["target_kind"] == "state"}))
@@ -154,19 +165,20 @@ def derivative_rows(nsm):
 
 
 def post_step(nsm, Q, Qaux, p, time, dt, mesh):
-    """Model hygiene on the new state, then its aux."""
+    """Model hygiene on the new state, then its aux; returns ``(Q, Qaux)``."""
     if nsm.call.update_variables is not None:
         Q = cells(nsm.call.update_variables, Q, Qaux, p, time, dt, mesh)
     return Q, full_aux(nsm, Q, Qaux, p, time, dt, mesh)
 
 
 def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
-    """Implicit Euler on the source at ``time``:
-    Y - Q - dt S(Y, aux(Y)) = 0.  The pointwise aux follows the iterate, the
-    derivative aux is frozen at the explicit predictor ``Q``."""
+    """Implicit Euler on the source at ``time``, ``Y - Q - dt S(Y, aux(Y)) = 0``, by a
+    per-cell root solve with the derivative aux frozen at ``Q``.
+    """
     Qaux_e = full_aux(nsm, Q, Qaux, p, time, dt, mesh)
 
     def aux_of(Y):
+        """Pointwise aux following the iterate ``Y``."""
         return stage_aux(nsm, Y, Qaux_e, p, time, dt, mesh)
 
     return Root(lambda Y: Y - Q - dt * cells(nsm.call.source, Y, aux_of(Y),
@@ -174,8 +186,9 @@ def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
-    """The SystemModel's implicit slots over the step ending at ``time``:
-    implicit diffusion, then implicit Euler on the source."""
+    """The SystemModel's implicit slots over the step ending at ``time``: implicit
+    diffusion, then implicit Euler on the source.
+    """
     if nsm.call.diffusion_matrix is not None:
         Q = implicit_diffusion(nsm.call.diffusion_matrix,
                                nsm.call.boundary_ghost_state, Q, Qaux, p,
@@ -187,15 +200,17 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
 
 def imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, tableau, mood=False,
               coupled=None, dt_rule=None, project=None):
-    """One step of the IMEX Runge-Kutta ``tableau`` (``time.IMEX_RK``):
-    f(Y) is the residual without the implicit slots, each stage an explicit
-    (MOOD-guarded) Euler step of it; g(Y) the implicit source, each stage
-    solved by the per-cell Newton (:func:`implicit_source`, step
-    ``A_ii dt``).  ``project(Y, time, dt) -> (Y', B)`` (Chorin) maps each
-    stage and the new state onto the constraint, B = Y' - Y on the corrected
-    rows: the pressure term of the implicit part, A_ii dt G P.  ``dt_rule``:
-    ``dt`` from the cell states' wave speeds (the first stage solve needs
-    it); returns ``(Q, dt)``."""
+    """One step of the IMEX Runge-Kutta ``tableau``: each stage is an explicit
+    (MOOD-guarded) Euler step of the residual without implicit slots plus a per-cell
+    Newton solve of the implicit source.
+
+    Args:
+        project: Chorin: ``project(Y, time, dt) -> (Y', B)`` maps a stage onto the
+            constraint, ``B = Y' - Y`` on the corrected rows.
+        dt_rule: ``dt`` from the cell states' wave speeds; returns ``(Q, dt)``.
+    References:
+        Pareschi, Russo 2005, https://doi.org/10.1007/s10915-004-4636-4
+    """
     if nsm.call.diffusion_matrix is not None:
         raise NotImplementedError("IMEX-RK with an implicit diffusion slot "
                                   "(Lie only)")

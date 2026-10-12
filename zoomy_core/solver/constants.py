@@ -1,60 +1,6 @@
-"""EMITTED march constants (design v7 / mandate 6a).
-
-The user law is blunt: **no numerical constant is hard-coded in a backend**.
-Every number the march compares against — the MOOD detector bound, the KP
-wet/dry ``eps``, the eigenvalue-slot wave-speed floor ``eps_h``, the CFL
-safety factor and its dimension/degree denominators, the write-cadence
-tolerance and the (default-OFF) dt floor — is therefore RESOLVED FROM THE NSM
-here and EMITTED as a named value at the head of the emitted procedure.
-
-Consequence for the emitted code: a comparison site reads
-``lam < c_eps_h``, never ``lam < 1e-14``.  The only place a float literal
-survives is the ``Assign`` that DEFINES the named value, which is exactly what
-"the constants are emitted" means.
-
-Provenance, per constant
-------------------------
-``c_mood_h_bound``
-    Strict ``0``.  The PAD predicate is ``h < 0`` — *detection*, never repair.
-    The user law forbids flooring/clipping ``h``, so this bound is exactly
-    zero and is NOT tunable; it is emitted so a backend cannot quietly widen
-    it to ``-1e-12``.
-``c_mood_require_finite``
-    ``1`` when the CAD (non-finite) half of the troubled predicate is active.
-    Emitted as a value rather than baked in so a backend that genuinely cannot
-    test finiteness must turn it OFF explicitly and visibly.
-``c_kp_eps``
-    The Kurganov–Petrova desingularisation ``eps`` of ``hinv``.  Read from the
-    model's REQ-48 ``wet_dry_eps`` parameter when it declares one, else
-    :data:`zoomy_core.systemmodel.operations._DEFAULT_WET_DRY_EPS`.  Same
-    resolution order ``desingularize_hinv`` itself uses — read, never
-    re-decided.
-``c_eps_h``
-    The EIGENVALUE-SLOT wave-speed floor (REQ-82, user ruling cid=5).
-    Recovered BY INSPECTION from ``nsm.eigenvalues``: ``regularize_pow``
-    writes ``1/Max(Float(eps_h), h)`` into that slot, so the number is read
-    back out of the derived operator rather than restated here.  If the slot
-    carries no such floor (no ``h`` state, or no regularisation applied) the
-    constant is emitted as ``None`` and no floor comparison is emitted at all.
-``c_cfl``
-    The CFL SAFETY FACTOR — the user law (0.9), a pure safety factor.  It is
-    an input to the emit, not an NSM field, because it is a user ruling; it is
-    never adjusted by the march and there is no dt-halving retry.
-``c_cfl_dimension``
-    The ``d`` of ``CFL*2r/(d*(2k+1)*|lam|)``.  The MESH dimension (user law:
-    "pass dimension = the MESH dimension").
-``c_cfl_degree_factor``
-    ``2k+1`` for reconstruction degree ``k``.
-``c_dt_max``
-    ``nsm.dt_max`` (REQ-190): the cap every backend must read from the same
-    place.  A wave-free domain steps at exactly this value.
-``c_write_eps``
-    The drift-free write-gate tolerance of ``should_write``
-    (``time + c_write_eps >= i_snapshot*write_interval``).
-``c_dt_floor``
-    DEFAULT OFF (``None``).  When OFF, the ``dt_floor`` build flag is False
-    and the emitted march contains NO floor comparison — the honesty guard is
-    a FATAL abort on ``dt <= 0``, not a silent floor.
+"""Named values the emitted march and the elliptic solve read instead of hard-coded
+numbers; each is resolved from the NSM and carries a provenance string. A backend
+never holds its own float beside them.
 """
 from __future__ import annotations
 
@@ -119,12 +65,11 @@ ELLIPTIC_RESTART_CAP = 1000
 
 
 def elliptic_restart(n_unknowns: int) -> int:
-    """The GMRES restart for an elliptic block with ``n_unknowns`` unknowns.
+    """GMRES restart for an elliptic block of ``n_unknowns``: the full Krylov space
+    ``min(n, CAP)``, bounded below by ``MIN``, so it moves with the problem size.
 
-    ``min(n, CAP)`` bounded below by ``MIN``: the FULL Krylov space (no
-    restart, hence guaranteed termination in <= n steps) until the basis
-    reaches the memory ceiling.  The point is that it MOVES with ``n`` — a
-    constant here is the defect this replaces.
+    References:
+        Saad, Schultz 1986, https://doi.org/10.1137/0907058
     """
     n = int(n_unknowns)
     if n < 1:
@@ -138,16 +83,14 @@ class ConstantResolutionError(ValueError):
 
 
 def _depth_symbol(nsm):
+    """The depth state symbol ``h`` of ``nsm``, or None."""
     return next((s for s in getattr(nsm, "state", ()) if str(s) == "h"), None)
 
 
 def eigen_wave_speed_floor(nsm):
-    """Recover ``eps_h`` from ``nsm.eigenvalues`` — the honest read.
-
-    ``regularize_pow`` rewrites the eigenvalue slot's ``1/h`` to
-    ``1/Max(Float(eps_h), h)``.  Scan the derived operator for exactly that
-    shape and return ``(value, provenance)``.  Several DIFFERENT floors in one
-    slot is a contradiction and RAISES — there is no "pick the smallest".
+    """Read ``eps_h`` back from the ``Max(eps_h, h)`` floor that ``regularize_pow``
+    wrote into ``nsm.eigenvalues``; returns ``(value, provenance)`` and raises on
+    several different floors.
     """
     ev = getattr(nsm, "eigenvalues", None)
     h = _depth_symbol(nsm)
@@ -176,8 +119,12 @@ def eigen_wave_speed_floor(nsm):
 
 
 def kp_eps(nsm):
-    """The KP desingularisation ``eps``, resolved exactly as
-    ``desingularize_hinv`` resolves it.  Returns ``(value, provenance)``."""
+    """The Kurganov-Petrova desingularization ``eps``, resolved as
+    ``desingularize_hinv`` resolves it; returns ``(value, provenance)``.
+
+    References:
+        Kurganov, Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6
+    """
     params = getattr(nsm, "parameters", None)
     if params is not None and getattr(params, "contains", None) is not None:
         if params.contains("wet_dry_eps"):
@@ -194,17 +141,16 @@ def kp_eps(nsm):
 
 @dataclasses.dataclass(frozen=True)
 class MarchConstants:
-    """The emitted named values + where each one came from.
-
-    ``values`` maps EMITTED NAME -> number; ``provenance`` maps the same names
-    to a human-readable source string.  A ``None`` value means the constant is
-    inactive and the corresponding comparison is NOT emitted.
+    """The emitted named values and where each came from: ``values`` maps name to number
+    (``None``: inactive, its comparison is not emitted) and ``provenance`` maps the
+    same names to a source string.
     """
 
     values: dict
     provenance: dict
 
     def __post_init__(self):
+        """Freeze copies of both dicts and require a provenance for every value."""
         object.__setattr__(self, "values", dict(self.values))
         object.__setattr__(self, "provenance", dict(self.provenance))
         missing = set(self.values) ^ set(self.provenance)
@@ -214,7 +160,9 @@ class MarchConstants:
                 f"unpaired: {sorted(missing)}")
 
     def symbol(self, name: str) -> sp.Symbol:
-        """The sympy Symbol a comparison site must use for ``name``."""
+        """The sympy symbol a comparison site uses for ``name``; raises if the name is
+        unknown or inactive.
+        """
         if name not in self.values:
             raise ConstantResolutionError(
                 f"{name!r} is not an emitted march constant "
@@ -227,13 +175,12 @@ class MarchConstants:
         return sp.Symbol(name)
 
     def active(self, name: str) -> bool:
+        """Whether ``name`` has a value."""
         return self.values.get(name) is not None
 
     def assigns(self, *names) -> tuple:
-        """``Assign`` statements DEFINING the named constants, in order.
-
-        These are the only float literals in the emitted procedure; every
-        later use is by name.
+        """``Assign`` statements defining the named constants, in order; the only float
+        literals in the emitted procedure.
         """
         from zoomy_core.solver.ir import Assign
         out = []
@@ -247,7 +194,7 @@ class MarchConstants:
         return tuple(out)
 
     def report(self) -> str:
-        """One line per emitted constant: name, value, provenance."""
+        """One line per constant: name, value, provenance."""
         rows = []
         for n in sorted(self.values):
             v = self.values[n]
@@ -267,12 +214,14 @@ def march_constants(nsm, *, cfl: float, dimension: int, degree: int = 0,
                     dt_floor: Optional[float] = None,
                     require_finite: bool = True,
                     dt_max: Any = None) -> MarchConstants:
-    """Resolve every emitted march constant from ``nsm`` + the user laws.
+    """Resolve every emitted march constant from ``nsm`` and the caller's settings.
 
-    ``cfl`` is the user's safety factor (law: 0.9) and ``dimension`` the MESH
-    dimension — both are rulings, not NSM fields, so they are inputs.
-    ``dt_floor`` defaults to ``None`` = OFF: there is no dt floor in the
-    sanctioned march, only the FATAL guard.
+    Args:
+        cfl: safety factor in (0, 1], never adjusted by the march.
+        dimension: mesh dimension of the CFL step.
+        degree: reconstruction degree ``k`` of the factor ``2k + 1``.
+        dt_floor: ``None``: off (the guard is a fatal abort on ``dt <= 0``, not a
+            floor).
     """
     if not (0.0 < float(cfl) <= 1.0):
         raise ConstantResolutionError(
@@ -320,17 +269,14 @@ def march_constants(nsm, *, cfl: float, dimension: int, degree: int = 0,
 def elliptic_constants(*, n_unknowns: int,
                        tol: Optional[float] = None,
                        restart: Optional[int] = None) -> MarchConstants:
-    """Resolve the EMITTED constants of an elliptic (projection) solve.
+    """Resolve the emitted constants of an elliptic (projection) solve; the restart
+    scales with the block size ``n_unknowns``, so it is required.
 
-    ``n_unknowns`` is the size of the elliptic block — for the VAM Chorin
-    pressure stage, ``n_pressure_modes * n_cells``.  It is REQUIRED, because
-    the whole point of this resolver is that the restart is a function of the
-    problem size (see :func:`elliptic_restart`); a caller that cannot say how
-    big its block is cannot get a default.
-
-    ``tol`` / ``restart`` are caller overrides and are reported as such in the
-    provenance, so an override is visible rather than indistinguishable from
-    the resolved default.
+    Args:
+        tol: caller override, reported as such in the provenance.
+        restart: caller override, clamped to ``n_unknowns``.
+    References:
+        Saad, Schultz 1986, https://doi.org/10.1137/0907058
     """
     if tol is not None and not (float(tol) > 0.0):
         raise ConstantResolutionError(

@@ -1,5 +1,7 @@
-"""Symbolic solvers: solver templates written once as sympy graphs, printed per
-language, and run by a backend runtime that implements the building blocks."""
+"""Symbolic solver templates (a sympy graph of one time step) and the printers that turn
+them into code for the JAX, foam and AMReX backends. They sit after the
+NumericalSystemModel and before the backend runtime.
+"""
 from zoomy_core.symsolver.core import (  # noqa: F401
     Block, Cond, CxxPrinter, Effect, LinSolve, PyPrinter, Root, While,
     contract, unpack)
@@ -12,8 +14,9 @@ WAVE_SPEED = "power"
 
 
 def default_wave_speed(nsm):
-    """Give ``nsm`` :data:`WAVE_SPEED` before its kernels are built, unless it
-    sets ``spectral_radius_method`` itself."""
+    """Give ``nsm`` the wave speed :data:`WAVE_SPEED` before its kernels are built,
+    unless it sets ``spectral_radius_method`` itself; returns ``nsm``.
+    """
     if "spectral_radius_method" not in vars(nsm):
         nsm.spectral_radius_method = WAVE_SPEED
         nsm._call = None                                  # rebuild the table

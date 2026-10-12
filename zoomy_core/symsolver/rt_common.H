@@ -1,23 +1,11 @@
 #pragma once
-/*---------------------------------------------------------------------------*\
-    rt_common.H -- the backend-neutral part of the C++ runtimes of the
-    symbolic solvers (foam rt.H, AMReX rt_amrex.H; both include it first):
-
-      - the elementwise functors, NaN-propagating minimum / maximum;
-      - Settings / Implicit: what the printed ``configure()`` sets
-        (zoomy_core.symsolver.backend_cxx);
-      - the effects io_write (``writer()``) and check_cfl;
-      - Newton per cell (its skeleton and the small pivoted solve) and
-        global (Jacobian-free Newton-Krylov);
-      - the preCICE call sequence and its members (ZS_PRECICE builds).
-
-    The runtime supplies, in namespace zs: ``struct Field`` (rows ``nq``),
-    ``warn(message)``, and for the Newton skeletons (found when they are
-    instantiated) ``norm(F)`` = ||.||_2 over the own cells of all ranks,
-    ``perturb(x, k)`` -> (x + h e_k, h), ``newton_update(x, r, cols, hs)``
-    and ``linsolve(op, b)``.  ``ZS_HD`` marks what a device loop calls
-    (AMReX: AMREX_GPU_HOST_DEVICE).
-\*---------------------------------------------------------------------------*/
+/// \file rt_common.H
+/// Backend-neutral part of the C++ runtimes of the symbolic solvers (foam rt.H, AMReX
+/// rt_amrex.H, both include it first): functors, settings, effects, Newton skeletons
+/// and the preCICE call sequence.
+/// The runtime supplies in namespace zs `Field` (rows `nq`), `warn`, and for the Newton
+/// skeletons `norm`, `perturb`, `newton_update` and `linsolve`; `ZS_HD` marks code a
+/// device loop calls (AMReX: AMREX_GPU_HOST_DEVICE).
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -37,38 +25,53 @@
 
 namespace zs
 {
+/// Quiet NaN.
 constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+/// sqrt(DBL_EPSILON), the finite-difference scale.
 constexpr double SQRT_EPS = 1.4901161193847656e-08;    // sqrt(DBL_EPSILON) = 2^-26
 
 // ── elementwise arithmetic ──────────────────────────────────────────────────
+/// Elementwise x + y.
 struct Add { ZS_HD double operator()(double x, double y) const { return x + y; } };
+/// Elementwise x - y.
 struct Sub { ZS_HD double operator()(double x, double y) const { return x - y; } };
+/// Elementwise x * y.
 struct Mul { ZS_HD double operator()(double x, double y) const { return x*y; } };
+/// Elementwise x / y.
 struct Div { ZS_HD double operator()(double x, double y) const { return x/y; } };
+/// Elementwise x^y.
 struct Pow { ZS_HD double operator()(double x, double y) const { return std::pow(x, y); } };
+/// Elementwise |x| (second argument ignored).
 struct Abs { ZS_HD double operator()(double x, double) const { return std::abs(x); } };
-// NaN propagates (std::min / std::max would swallow it)
+/// Elementwise minimum, NaN propagating (std::min would swallow a NaN).
 struct Min
 {
     ZS_HD double operator()(double x, double y) const
     { return (x != x || y != y) ? NaN : (x < y ? x : y); }
 };
+/// Elementwise maximum, NaN propagating.
 struct Max
 {
     ZS_HD double operator()(double x, double y) const
     { return (x != x || y != y) ? NaN : (x > y ? x : y); }
 };
+/// Host-callable NaN-propagating minimum, the name the printed code uses.
 inline double minimum(double a, double b) { return Min{}(a, b); }
+/// Host-callable NaN-propagating maximum, the name the printed code uses.
 inline double maximum(double a, double b) { return Max{}(a, b); }
 
 // ── settings (the printed configure()) ──────────────────────────────────────
+/// What the printed `configure()` sets: the LSQ degree and the two-point flux floor.
 struct Settings
 {
     int lsq_degree = 1;            // highest derivative order the model asks for
     double tpfa_cos_floor = NaN;   // two-point fluxes: |n.e| raised to this
 };
+/// The run's Settings.
 inline Settings& settings() { static Settings s; return s; }
 
+/// Tolerances of the implicit solves: Newton (tol, maxiter) and GMRES (tol, restart,
+/// maxiter, accept gate).
 struct Implicit
 {
     double tol = 1e-8;        // Newton: ||R||_2 <= tol
@@ -77,11 +80,13 @@ struct Implicit
     int ls_restart = 20, ls_maxiter = 30;
     double ls_accept = -1;    // > 0: abort above this relative residual
 };
+/// The run's Implicit settings.
 inline Implicit& implicit() { static Implicit s; return s; }
 
-// the runtime's warning (rank 0)
+/// The runtime's warning (rank 0), defined by the runtime.
 inline void warn(const std::string& message);
 
+/// Concatenate the arguments into a string.
 template<class... A> std::string text(const A&... a)
 {
     std::ostringstream s;
@@ -90,19 +95,23 @@ template<class... A> std::string text(const A&... a)
 }
 
 // ── effects ─────────────────────────────────────────────────────────────────
+/// Runtime field type (rows `nq`), defined by the runtime.
 struct Field;
+/// The output callback set by the driver.
 inline std::function<void(double, const Field&, const Field&)>& writer()
 {
     static std::function<void(double, const Field&, const Field&)> w;
     return w;
 }
 
+/// Effect `io.write`: call the output callback; returns the order token.
 inline std::tuple<long> io_write(long tok, double time, const Field& Q, const Field& Qaux)
 {
     if (writer()) writer()(time, Q, Qaux);
     return {tok + 1};
 }
 
+/// Effect `check.cfl`: warn once if `dt` exceeds the CFL step `dt_cfl`.
 inline std::tuple<long> check_cfl(long tok, double dt_cfl, double dt)
 {
     static bool warned = false;
@@ -115,7 +124,9 @@ inline std::tuple<long> check_cfl(long tok, double dt_cfl, double dt)
 }
 
 // ── Newton ──────────────────────────────────────────────────────────────────
-// x with A x = b, n x n row-major, partial pivoting; A is overwritten, x in b
+/// Solve A x = b for n x n row-major A by elimination with partial pivoting; A is
+/// overwritten and x returned in b.
+/// Ref: Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
 ZS_HD inline void solve_small(double* A, double* b, int n)
 {
     for (int k = 0; k < n; ++k)
@@ -145,13 +156,14 @@ ZS_HD inline void solve_small(double* A, double* b, int n)
     }
 }
 
-// the one-sided difference step of a variable of value v
+/// One-sided finite-difference step of a variable of value v.
 ZS_HD inline double fd_step(double v)
 {
     const double a = std::abs(v);
     return SQRT_EPS*(a > 1.0 ? a : 1.0);
 }
 
+/// Warn once that a Newton iteration did not converge.
 inline void warn_unconverged(bool& warned, const char* what, int it, double r)
 {
     if (warned) return;
@@ -160,11 +172,8 @@ inline void warn_unconverged(bool& warned, const char* what, int it, double r)
               " (warned once)"));
 }
 
-// Newton on a cell-local residual f (x -> R, same shape): each cell's n x n
-// Jacobian by one-sided differences, one variable at a time in all cells
-// (``perturb``), each cell's update by solve_small (``newton_update``);
-// ``implicit()`` tol / maxiter on ||R||_2.  (JAX: the exact jvp, the same
-// block structure.)
+/// Newton on a cell-local residual f (x -> R, same shape): each cell's Jacobian by
+/// one-sided differences, its update by solve_small; tol / maxiter from `implicit()`.
 template<class F, class X>
 X newton_cellwise(F f, X x)
 {
@@ -188,9 +197,9 @@ X newton_cellwise(F f, X x)
     return x;
 }
 
-// Newton on a global residual R (x -> R, same shape), ``implicit()`` tol /
-// maxiter on ||R||_2; each update a linsolve on the Jacobian action by a
-// directional difference (Jacobian-free Newton-Krylov; JAX: the exact jvp)
+/// Jacobian-free Newton-Krylov on a global residual R (x -> R, same shape): each update
+/// a linsolve on the Jacobian action by a directional difference.
+/// Ref: Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
 template<class F, class X>
 X newton_krylov(F R, X x)
 {
@@ -218,10 +227,10 @@ X newton_krylov(F R, X x)
 
 #ifdef ZS_PRECICE
 // ── preCICE ─────────────────────────────────────────────────────────────────
-// The app fills ``coupling()`` (participant, data names, vertices); the
-// runtime keeps where the interface lies.  Interface values live on the host
-// as rows x vertices; the effects only make preCICE API calls.
+/// Interface values on the host, rows x vertices (`v[q n + j]`).
 struct Vertices { int nq = 0, n = 0; std::vector<double> v; };   // v[q n + j]
+/// The preCICE participant, mesh, data names and vertex ids; the app fills `coupling()`.
+/// Ref: Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
 struct Coupling
 {
     std::unique_ptr<precice::Participant> participant;
@@ -229,8 +238,10 @@ struct Coupling
     std::vector<std::string> write, read;
     std::vector<precice::VertexID> ids;
 };
+/// The run's Coupling.
 inline Coupling& coupling() { static Coupling c; return c; }
 
+/// Write the interface values `s` to preCICE, one data field per row.
 inline void couple_write_data(const Vertices& s)
 {
     auto& c = coupling();
@@ -238,6 +249,8 @@ inline void couple_write_data(const Vertices& s)
         c.participant->writeData(c.mesh, c.write[i], c.ids,
             std::vector<double>(s.v.begin() + long(i)*s.n, s.v.begin() + long(i + 1)*s.n));
 }
+/// Effect `couple.init`: write initial data if required, initialize; returns whether
+/// coupling is ongoing.
 inline std::tuple<long, bool> couple_init(long tok, const Vertices& s)
 {
     auto& c = coupling();
@@ -245,10 +258,12 @@ inline std::tuple<long, bool> couple_init(long tok, const Vertices& s)
     c.participant->initialize();
     return {tok + 1, c.participant->isCouplingOngoing()};
 }
+/// Effect `couple.max_dt`: the time left in the coupling window.
 inline std::tuple<long, double> couple_max_dt(long tok)
 {
     return {tok + 1, coupling().participant->getMaxTimeStepSize()};
 }
+/// Effect `couple.read`: the peer's interface values.
 inline std::tuple<long, Vertices> couple_read(long tok)
 {
     auto& c = coupling();
@@ -262,11 +277,13 @@ inline std::tuple<long, Vertices> couple_read(long tok)
     }
     return {tok + 1, peer};
 }
+/// Effect `couple.write`: send the interface values.
 inline std::tuple<long> couple_write(long tok, const Vertices& s)
 {
     couple_write_data(s);
     return {tok + 1};
 }
+/// Effect `couple.advance`: advance preCICE by `dt`; returns whether coupling is ongoing.
 inline std::tuple<long, bool> couple_advance(long tok, double dt)
 {
     auto& c = coupling();

@@ -1,19 +1,7 @@
-"""The Chorin projection solver, written once for every backend.
-
-The model's pressure split gives three systems:
-
-* ``pred``: the hyperbolic system without the pressure (padded to the full
-  state, so the pressure rows stay frozen in the predictor);
-* ``press``: the elliptic constraint, its equations on the pressure rows;
-* ``corr``: the correction of the remaining rows by the solved pressure.
-
-One projection stage is a hyperbolic Euler step, a pressure solve and a
-correction.  ``time_order=2`` / ``3`` wraps two / three stages in the outer
-SSP-RK2 / RK3; ``imex="ssp2"`` is IMEX-SSP2(2,2,2) with projected stages.
-
-Ground truth: ``zoomy_jax.fvm.solver_chorin_vam_jax.ChorinSplitVAMSolverJax``
-(``chorin_stage``, ``chorin_cycle``, ``_step_pressure_pure``,
-``_step_corrector_pure``, ``_cfl_dt``).
+"""The Chorin projection solver, written once for every backend: a hyperbolic predictor,
+a pressure solve and a correction, from the three systems of the model's pressure
+split (``pred``, ``press``, ``corr``). ``time_order`` 2 / 3 wraps stages in SSP-RK2 /
+RK3 and ``imex="ssp2"`` uses IMEX-SSP2(2,2,2) with projected stages.
 """
 import sympy as sp
 
@@ -28,16 +16,23 @@ from zoomy_core.symsolver.vocabulary import (
 
 
 class ChorinTemplate(HyperbolicTemplate):
-    """The projection solver of a pressure split ``pred`` / ``press`` /
-    ``corr``; ``nsm`` is the predictor ``pred``.  ``config`` as in
-    :class:`HyperbolicTemplate`, whose ``march``, ``dt`` and ``initial_aux``
-    (on the predictor) it inherits; ``step`` is the projection step.  The CFL
-    step carries the reference's per-degree factor 1 / (2 order - 1), applied
-    to ``cfl`` here.  ``pressure_newton=(tol, maxit)``: a nonlinear pressure
-    constraint solved by Newton (see :func:`pressure`)."""
+    """The projection solver of a pressure split ``pred`` / ``press`` / ``corr``, with
+    ``nsm`` the predictor ``pred``; ``step`` is the projection step and ``march``,
+    ``dt`` and ``initial_aux`` are inherited from :class:`HyperbolicTemplate`.
+
+    References:
+        Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
+    """
 
     def __init__(self, pred, press, corr, *, cfl, time_order=1,
                  pressure_newton=None, **config):
+        """Set the split and the configuration of :class:`HyperbolicTemplate`; ``cfl``
+        is divided by ``2 order - 1``.
+
+        Args:
+            pressure_newton: ``(tol, maxit)`` for a nonlinear pressure constraint solved
+                by Newton, else ``None``.
+        """
         super().__init__(pred, cfl=cfl / (2 * pred.reconstruction.order - 1),
                          time_order=time_order, **config)
         self.press = press
@@ -45,24 +40,26 @@ class ChorinTemplate(HyperbolicTemplate):
         self.pressure_newton = pressure_newton
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):
-        """One time step: the outer SSP-RK over full projection stages.
-        Returns ``(Q, Qaux, dt)``; with ``dt_rule`` the first stage picks
-        ``dt``.
+        """One time step: the outer SSP-RK over projection stages; with ``imex="ssp2"``
+        every stage solves the implicit source and is then projected.
 
-        ``imex="ssp2"``: every stage solves the predictor's implicit source
-        S (per-cell Newton) and is then projected (P: pressure + correction),
-        and so is the new state.  The pressure joins S in the implicit
-        tableau as the stage's correction B_i = A_ii dt G P_i (off the
-        pressure rows), and f, S act on the projected stages::
-
-            R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj))
-                    + A_ii dt S(R_i)
-            Y_i = P(R_i),  B_i = Y_i - R_i,  F_i = dt f(Y_i),  S_i = dt S(Y_i)
-            Q'  = P(Q + sum_i (wt_i F_i + w_i (S_i + B_i / A_ii)))"""
+        Args:
+            dt_rule: the first stage picks ``dt``.
+        Returns:
+            ``(Q, Qaux, dt)``.
+        """
+        # imex="ssp2": the pressure joins the implicit source S in the tableau as the
+        # stage correction B_i = A_ii dt G P_i (off the pressure rows); f, S act on
+        # the projected stages Y_i = P(R_i):
+        #   R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj)) + A_ii dt S(R_i)
+        #   B_i = Y_i - R_i,  F_i = dt f(Y_i),  S_i = dt S(Y_i)
+        #   Q'  = P(Q + sum_i (wt_i F_i + w_i (S_i + B_i / A_ii)))
         if self.imex is Imex.ssp2:
             rows = tuple(self.press.equation_to_state_index)
 
             def project(Y, t, dt):          # and its update off the pressure rows
+                """Project a stage; returns it with its update off the pressure rows.
+                """
                 Yp = self.project(Y, p, t, dt, mesh)
                 return Yp, put(Yp, rows, take(Y, rows)) - Y
             Q = imex_step(self.nsm, Q, Qaux, p, time, dt, mesh, self.order,
@@ -80,13 +77,17 @@ class ChorinTemplate(HyperbolicTemplate):
         return Q, full_aux(self.nsm, Q, Qaux, p, time + dt, dt, mesh), dt
 
     def precice_march(self, *args, **kwargs):
+        """Not supported: raises ``NotImplementedError``."""
         raise NotImplementedError("Chorin with preCICE coupling")
 
     def stage(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
-        """One projection stage: predictor, pressure solve, correction.
-        Returns ``(Q, dt)``.  Under ``dt_rule`` the stage keeps the aux it is
-        given (the step's own): ``dt`` is chosen only by the predictor's
-        flux."""
+        """One projection stage: predictor, pressure solve, correction; returns
+        ``(Q, dt)``.
+
+        Args:
+            dt_rule: ``dt`` is chosen only by the predictor's flux, so the stage keeps
+                the aux it is given.
+        """
         if dt_rule is None:
             Qaux = full_aux(self.nsm, Q, Qaux, p, time, dt, mesh)
         Q, dt = self.predictor(Q, Qaux, p, time, dt, mesh, dt_rule)
@@ -98,9 +99,9 @@ class ChorinTemplate(HyperbolicTemplate):
         return correct(self.corr, Q, p, time, dt, mesh)
 
     def predictor(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
-        """Euler flux step, then the SystemModel's implicit slots as Lie
-        sub-steps: implicit (``imex``) or explicit Euler (the reference).
-        Returns ``(Q, dt)``; with ``dt_rule`` the flux step picks ``dt``."""
+        """Euler flux step, then the implicit slots as Lie sub-steps (implicit with
+        ``imex``, else explicit Euler); returns ``(Q, dt)``.
+        """
         pred = self.nsm
         step = mood_step if self.mood else explicit_step
         Q = step(pred, Q, Qaux, p, time, dt, mesh, self.order,
@@ -119,19 +120,20 @@ class ChorinTemplate(HyperbolicTemplate):
 
 
 def pressure(press, Q, p, time, dt, mesh, newton=None):
-    """Solve ``press`` for its own rows with the rest of ``Q`` frozen.  The
-    pressure derivatives see the system's boundary conditions: their boundary
-    samples are the BC ghosts (``press.call.boundary_ghost_state``).
+    """Solve ``press`` for its own rows with the rest of ``Q`` frozen: one linear solve
+    (GMRES) of the affine residual ``A(P) = R(P) - R(0)``, or Newton from the current
+    pressure with ``newton=(tol, maxit)``.
 
-    Default: the residual is affine in the pressure, A(P) = R(P) - R(0),
-    solved once.  ``newton=(tol, maxit)``: a nonlinear constraint, Newton
-    from the current pressure, each step the same linear solve at the
-    iterate, until max|R| <= tol."""
+    References:
+        Saad, Schultz 1986, https://doi.org/10.1137/0907058
+        Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+    """
     rows = tuple(press.equation_to_state_index)
     Qaux = full_aux(press, Q, zeros(len(press.aux_state), mesh), p, time, dt,
                     mesh)
 
     def R(P):
+        """Pressure residual of the constraint at pressure ``P``."""
         Y = put(Q, rows, halo(P, mesh))
         Yg = boundary_ghosts(press.call.boundary_ghost_state, Y, Qaux, p, time,
                              mesh)
@@ -145,6 +147,8 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
     tol, maxit = newton
 
     def newton_step(P, r, k):
+        """One Newton update ``P + d`` with ``d`` from a linear solve at the iterate.
+        """
         P = P + LinSolve(lambda d: R(P + d) - r, -r)
         return P, R(P), k + 1
 
@@ -155,7 +159,9 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
 
 
 def correct(corr, Q, p, time, dt, mesh):
-    """Overwrite ``corr``'s rows by its update formula."""
+    """Overwrite the rows of ``corr`` by its update formula (the correction by the
+    solved pressure).
+    """
     Qaux = full_aux(corr, Q, zeros(len(corr.aux_state), mesh), p, time, dt,
                     mesh)
     return halo(put(Q, tuple(corr.equation_to_state_index),

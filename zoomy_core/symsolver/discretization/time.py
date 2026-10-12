@@ -1,9 +1,5 @@
-"""Time discretization of the solver templates: the SSP-RK stages, the IMEX
-Runge-Kutta tableaux and the CFL step size.
-
-``nsm`` is the NumericalSystemModel; ``Q``, ``Qaux``, ``p`` (parameters),
-``time`` and ``mesh`` are symbols.  Python ``if`` / ``for`` run at build time;
-``Cond`` runs at run time.
+"""Time discretization of the solver templates: the SSP-RK stages, the IMEX Runge-Kutta
+tableaux and the CFL step size.
 """
 from enum import Enum
 from typing import NamedTuple
@@ -23,8 +19,10 @@ SSP_RK = {1: ((0, 0),),
 
 
 class Imex(str, Enum):
-    """How a step treats the SystemModel's implicit slots (values are the
-    strings; off: ``False``)."""
+    """How a step treats the SystemModel's implicit slots: ``lie`` splits them off after
+    the SSP-RK step (first order), ``ssp2`` solves the implicit source in every stage
+    of IMEX-SSP2(2,2,2).
+    """
     #: Lie splitting: the explicit SSP-RK step, then implicit diffusion and
     #: implicit Euler on the source (first order)
     lie = "lie"
@@ -34,8 +32,12 @@ class Imex(str, Enum):
 
 
 class ImexTableau(NamedTuple):
-    """Double Butcher tableau: explicit ``(At, wt, ct)``, diagonally implicit
-    ``(A, w, c)``."""
+    """Double Butcher tableau: explicit ``(At, wt, ct)`` and diagonally implicit
+    ``(A, w, c)``.
+
+    References:
+        Pareschi, Russo 2005, https://doi.org/10.1007/s10915-004-4636-4
+    """
     At: tuple
     wt: tuple
     ct: tuple
@@ -58,8 +60,12 @@ IMEX_RK = {Imex.ssp2: ImexTableau(
 
 
 def cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension):
-    """dt <= CFL * 2 r_f / (d |lambda|_f), min over faces, capped by dt_max;
-    the wave speeds from the cell states of each face."""
+    """CFL step ``cfl * 2 r_f / (d |lambda|_f)``, min over faces, from the wave speeds
+    of the cell states of each face and capped by ``dt_max``.
+
+    References:
+        Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+    """
     return face_dt(nsm, cell_wavespeed(nsm, Q, Qaux, p, mesh), mesh, cfl,
                    dimension)
 
@@ -72,7 +78,11 @@ def cell_wavespeed(nsm, Q, Qaux, p, mesh):
 
 
 def face_dt(nsm, speed, mesh, cfl, dimension):
-    """The CFL step from face wave speeds."""
+    """The CFL step from the face wave speeds ``speed``, capped by ``dt_max``.
+
+    References:
+        Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+    """
     dt = reduce_min(cfl * 2 * face_inradius(mesh) / (dimension * speed))
     return dt if nsm.dt_max is None else minimum(dt, nsm.dt_max)
 
@@ -87,8 +97,9 @@ def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
 
 
 def face_rule(nsm, mesh, cfl, dimension, dt_constant, time, cap, check_every=10):
-    """``dt_rule`` taking the step from the first stage's face wave speeds
-    (no eigensolve of its own); capped by ``cap``."""
+    """``dt_rule`` taking the step from the first stage's face wave speeds (no
+    eigensolve of its own), capped by ``cap``.
+    """
     if dt_constant is None:
         return lambda S: minimum(face_dt(nsm, S, mesh, cfl, dimension), cap)
     return lambda S: minimum(checked(dt_constant, time, check_every,
@@ -97,9 +108,11 @@ def face_rule(nsm, mesh, cfl, dimension, dt_constant, time, cap, check_every=10)
 
 
 def checked(dt, time, every, dt_cfl):
-    """``dt``, warning (once) if it exceeds the CFL step ``dt_cfl()``; tested
-    every ``every`` steps of size ``dt`` (1: each step, 0: never)."""
+    """``dt``, warning once if it exceeds the CFL step ``dt_cfl()``; tested every
+    ``every`` steps (1: each step, 0: never).
+    """
     def check_now():
+        """Warn if ``dt`` exceeds the CFL step."""
         check.cfl(dt_cfl(), dt)
         return sp.S.Zero
 

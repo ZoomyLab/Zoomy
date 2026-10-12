@@ -1,19 +1,6 @@
-"""The explicit hyperbolic solver, written once for every backend.
-
-A :class:`HyperbolicTemplate` holds the configuration of one solver; its
-methods are the graphs a backend prints::
-
-    template = HyperbolicTemplate(nsm, cfl=0.9, dimension=2, mood=True)
-    PyPrinter().procedure("hyperbolic", (Q, Qaux, p, time, time_end, mesh),
-                          template.march)
-
-``nsm`` is the NumericalSystemModel.  ``Q``, ``Qaux``, ``p`` (parameters),
-``time``, ``dt`` and ``mesh`` are symbols.  Python ``if`` / ``for`` run at
-build time; ``While`` / ``Cond`` run at run time.  The pieces it composes are
-the discretization components (:mod:`zoomy_core.symsolver.discretization`).
-
-Ground truth: ``zoomy_jax.fvm.solver_jax.HyperbolicSolver`` (``_advance``,
-``_run``).
+"""The explicit hyperbolic solver, written once for every backend: a finite-volume
+SSP-RK march with MOOD and IMEX options. A :class:`HyperbolicTemplate` holds the
+configuration and its methods are the graphs a backend prints.
 """
 import sympy as sp
 
@@ -27,24 +14,32 @@ from zoomy_core.symsolver.vocabulary import (
 
 
 class HyperbolicTemplate:
-    """The configuration of the explicit hyperbolic solver.
-
-    ``cfl`` and ``dimension`` set the CFL step; ``dt_constant`` (a number, or
-    ``None`` for the adaptive step) a constant step that warns when above it,
-    tested every ``cfl_check_every`` steps (1: each step, 0: never).
-    ``wave_speed``: the CFL wave speeds from the first stage's Riemann problem
-    ("faces": the speeds of the interface states, Audusse et al. 2004 (2.34);
-    no eigensolve of its own), or from the cell states of each face ("cells").
-    ``mood``: the a-posteriori MOOD guard of the RK step; ``imex``
-    (:class:`Imex`): the SystemModel's implicit slots by an implicit step
-    after the RK step (``"lie"``) or in every stage of IMEX-SSP2(2,2,2)
-    (``"ssp2"``), ``False``: in the RK step; ``dt_write``: the output
-    interval (``None``: no output).  ``time_order``: the order of the SSP-RK
-    step (``SSP_RK``); ``None``: the reconstruction order (``"ssp2"``: 2)."""
+    """The configuration of the explicit hyperbolic solver; its methods (``step``,
+    ``dt``, ``initial_aux``, ``march``) are the graphs a backend prints.
+    """
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
                  imex=False, cfl_check_every=10, wave_speed="faces",
                  dt_constant=None, time_order=None):
+        """Set the configuration; ``nsm`` is the NumericalSystemModel.
+
+        Args:
+            cfl: CFL number.
+            dimension: mesh dimension, enters the CFL step.
+            mood: a-posteriori MOOD guard of the RK step.
+            dt_write: output interval; ``None``: no output.
+            imex: ``False`` (implicit slots inside the RK step), ``"lie"`` (implicit
+                step
+                after it) or ``"ssp2"`` (IMEX-SSP2(2,2,2) stages).
+            cfl_check_every: constant ``dt``: CFL test every N steps (1: each, 0:
+                never).
+            wave_speed: CFL speeds from the first stage's Riemann problem (``"faces"``)
+                or
+                from the cell states of each face (``"cells"``).
+            dt_constant: constant step, or ``None`` for the adaptive CFL step.
+            time_order: SSP-RK order; ``None``: the reconstruction order (2 for
+                ``"ssp2"``).
+        """
         if time_order is not None and time_order not in SSP_RK:
             raise ValueError(f"time_order {time_order}: SSP-RK of order "
                              f"{sorted(SSP_RK)} only")
@@ -65,16 +60,19 @@ class HyperbolicTemplate:
 
     @property
     def order(self):
+        """Reconstruction order of the NSM."""
         return self.nsm.reconstruction.order
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, coupled=None, dt_rule=None):
-        """One time step ``(Q, Qaux, dt)``.  Explicit: every term in the
-        (MOOD-guarded) RK step.  IMEX ``lie``: the RK step without the
-        SystemModel's implicit slots, then implicit diffusion and implicit
-        Euler on the implicit source slot; ``ssp2``: :func:`imex_step`.  With
-        ``dt_rule`` the first stage picks ``dt`` from its own face wave speeds
-        (``ssp2``: from the cell states).  ``coupled``: the faces carrying a
-        shared answer, ``(mask, flux)``."""
+        """One time step ``(Q, Qaux, dt)``: the (MOOD-guarded) RK step, then the
+        implicit slots by Lie splitting or inside the stages of IMEX-SSP2 when
+        ``imex`` is set.
+
+        Args:
+            coupled: ``(mask, flux)``, the faces carrying a shared answer.
+            dt_rule: the first stage picks ``dt`` from its own face wave speeds
+                (``ssp2``: the cell states').
+        """
         nsm, order, imex = self.nsm, self.order, self.imex
         if imex is Imex.ssp2:
             Q = imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, IMEX_RK[imex],
@@ -98,7 +96,7 @@ class HyperbolicTemplate:
         return cfl_dt(self.nsm, Q, Qaux, p, mesh, self.cfl, self.dimension)
 
     def initial_aux(self, Q, Qaux, p, mesh):
-        """The aux of the initial state: pointwise formula + derivative aux."""
+        """The aux of the initial state: pointwise formula and derivative aux."""
         return full_aux(self.nsm, Q, Qaux, p, sp.S.Zero, sp.S.One, mesh)
 
     def march(self, Q, Qaux, p, time, time_end, mesh):
@@ -107,6 +105,8 @@ class HyperbolicTemplate:
         dt_constant, cfl_check_every = self.dt_constant, self.cfl_check_every
 
         def step(Q, Qaux, time, cap):
+            """One step of size at most ``cap``, with ``dt`` from the configured rule.
+            """
             if self.wave_speed == "faces":
                 return self.step(Q, Qaux, p, time, None, mesh,
                                  dt_rule=face_rule(
@@ -119,21 +119,24 @@ class HyperbolicTemplate:
         return _time_loop(Q, Qaux, time, time_end, self.dt_write, step)
 
     def precice_march(self, Q, Qaux, p, time, mesh, *, side, subcycling=False):
-        """The same march as one preCICE participant: preCICE ends the loop,
-        the coupled faces carry the shared interface answer on (own, peer).
+        """The march as one preCICE participant; preCICE ends the loop and the coupled
+        faces carry the shared interface answer on (own, peer).
 
-        subcycling=False: one step per window (dt = window; warns above the CFL
-            step).  Both participants pose the same Riemann problem with the
-            same dt, so mass is conserved exactly.
-        subcycling=True: adaptive steps inside the window, peer state held at
-            its window value.  Stable, but the two sides charge different
-            fluxes: mass is NOT exactly conserved (that would need
-            refluxing)."""
+        Args:
+            side: 0 if this domain is the low side of the interface.
+            subcycling: ``False``: one step per window (warns above the CFL step), mass
+                conserved exactly. ``True``: adaptive steps inside the window, mass not
+                    exactly
+                conserved.
+        References:
+            Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
+        """
         nsm, cfl, dimension = self.nsm, self.cfl, self.dimension
         dt_constant, cfl_check_every = self.dt_constant, self.cfl_check_every
         dt_write, wave_speed = self.dt_write, self.wave_speed
 
         def body(time, Q, Qaux, going, n_write):
+            """One coupling step inside the window, with its output."""
             window = couple.max_dt()
             if subcycling:                          # adaptive inside the window
                 cap = window if dt_write is None else sp.Min(
@@ -184,10 +187,12 @@ class HyperbolicTemplate:
 
 
 def _time_loop(Q, Qaux, time, time_end, dt_write, step):
-    """The time loop: ``step(Q, Qaux, time, cap) -> (Q, Qaux, dt)`` takes a
-    step ``dt <= cap``, ``cap`` the distance to ``time_end`` and to the next
-    write instant."""
+    """The time loop: ``step(Q, Qaux, time, cap) -> (Q, Qaux, dt)`` takes a step
+    ``dt <= cap``, ``cap`` the distance to ``time_end`` and to the next write
+    instant.
+    """
     def body(time, Q, Qaux, n_write):
+        """One step landing on write instants, then the write."""
         cap = time_end - time
         if dt_write is not None:                    # land on write instants
             cap = sp.Min(cap, n_write * dt_write - time)
@@ -207,5 +212,6 @@ def _time_loop(Q, Qaux, time, time_end, dt_write, step):
 
 
 def _write(time, Q, Qaux, n_write):
+    """Write the snapshot and advance the write counter."""
     io.write(time, Q, Qaux)
     return n_write + 1
