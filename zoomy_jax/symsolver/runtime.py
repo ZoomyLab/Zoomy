@@ -20,6 +20,7 @@ from jax import lax
 from jax.scipy.sparse.linalg import gmres as jax_gmres
 
 from zoomy_core.misc.logger_config import logger
+from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
@@ -765,25 +766,73 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     flux_bf = np.flatnonzero(~cut)
     outer_face = np.where(periodic, partner_face, bf_face)
 
-    def _div(k, bc, X, Qaux, p, time, mesh):
-        """Per cell ``div(A(X) : grad X)`` for the ``diffusion`` block: the TPFA operator on
-        interior faces, then two-point fluxes to the BC ghost (``bc``) or the periodic partner on
-        boundary faces.
+    def _operator():
+        """The TPFA operator and the static geometry of its interior faces: owner, neighbour,
+        normal, unit cell-to-cell vector ``e``, distance, floored ``|n.e|``, ``|f| / |V|`` of both.
+        """
+        if not tpfa:
+            op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
+            cc = np.asarray(mesh_np.cell_centers)[:dim]
+            f = np.flatnonzero((fc0 < nc) & (fc1 < nc))
+            dx = cc[:, fc1[f]] - cc[:, fc0[f]]
+            dist = np.sqrt((dx ** 2).sum(axis=0))
+            keep = dist >= 1e-30
+            f, dx, dist = f[keep], dx[:, keep], dist[keep]     # the operator's faces
+            e = dx / dist
+            n = np.asarray(mesh_np.face_normals)[:dim, f]
+            cosf = np.maximum(np.abs((n * e).sum(axis=0)), TPFA_COS_FLOOR)
+            fv, cv = np.asarray(mesh_np.face_volumes), np.asarray(mesh_np.cell_volumes)
+            tpfa.append((op, dict(ia=fc0[f], ib=fc1[f], n=n, e=e, dist=dist, cosf=cosf,
+                                  wa=fv[f] / cv[fc0[f]], wb=fv[f] / cv[fc1[f]])))
+        return tpfa[0]
+
+    def _state_gradient(X, Xg, mesh):
+        """``(rows, dim, cells)`` LSQ gradient of the rows of ``X``: the derivative-aux fit
+        (``lsq_gradQ``), the boundary faces sampled at the ghosts ``Xg``.
+        """
+        traced = dataclasses.replace(mesh_j, lsq_gradQ=mesh.lsq_gradQ)
+        mis = [tuple(int(v) for v in topo.lsq_monomial_multi_index[c])
+               for c in topo.lsq_grad_cols]
+        G = jnp.stack([jnp.stack([lsq_gradient_per_field(
+            traced, X[s], u_bf=None if n_bf == 0 else Xg[s], multi_index=mi)
+            for mi in mis]) for s in range(X.shape[0])])
+        return halo(G.reshape(-1, nc), mesh).reshape(G.shape)
+
+    def _div(k, bc, X, Qaux, p, time, mesh, correction=True):
+        """``(D, C)`` per cell of ``div(A(X) : grad X)``: ``D`` the two-point fluxes (TPFA on
+        interior faces, to the BC ghost of ``bc`` or the periodic partner on boundary faces),
+        ``C`` the rest of the flux ``n.A.grad_f`` (zero without ``correction`` or in 1-D).
+
+        ``grad_f`` is the mean of the two cells' LSQ gradients plus the normal correction
+        ``((X_b - X_a) / |d| - mean.e) e``, ``e`` the unit cell-to-cell vector (``n`` on boundary
+        faces: the tangential part of the cell gradients).
 
         References:
             Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
         """
-        if not tpfa:
-            tpfa.append(DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension,
-                                                  rt.n_state))
-        op = tpfa[0]
+        op, geo = _operator()
         A = op._as_cell_tensor(k(X, Qaux, p))          # (n_eq, n_st, nc, d, d)
         D = op._divergence(X, A, bf_grads=None)
+        C = jnp.zeros_like(D)
+        correction = correction and dim >= 2
+        if not len(flux_bf) and not correction:
+            return D, C
+        Xg = _bc_at(bc, X[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells) if n_bf else None
+        if correction:
+            G = _state_gradient(X, Xg, mesh)            # (n_st, d, nc)
+            ia, ib, nI, e = (j(geo[k]) for k in ("ia", "ib", "n", "e"))
+            m = jnp.einsum("ijfde,df->ijfe", 0.5 * (A[:, :, ia] + A[:, :, ib]), nI)
+            g = 0.5 * (G[:, :, ia] + G[:, :, ib])
+            t = g - jnp.einsum("jef,ef->jf", g, e)[:, None, :] * e[None]
+            s = (jnp.einsum("ijfe,ef->ijf", m, e)
+                 - jnp.einsum("ijfe,ef->ijf", m, nI) / j(geo["cosf"]))
+            F = (jnp.einsum("ijfe,jef->if", m, t)
+                 + jnp.einsum("ijf,jf->if", s, (X[:, ib] - X[:, ia]) / j(geo["dist"])))
+            C = C.at[:, ia].add(F * j(geo["wa"])).at[:, ib].add(-F * j(geo["wb"]))
         if not len(flux_bf):
-            return D
+            return D, C
         f, c, o = (j(a[flux_bf]) for a in (bf_face, inner, bf_cells))
-        Xout = _bc_at(bc, X[:, j(bf_cells)], Qaux, p, time, mesh,
-                      bf_cells)[:, j(flux_bf)]
+        Xout = Xg[:, j(flux_bf)]
         fc, cc, nrm = mesh.face_centers, mesh.cell_centers, mesh.face_normals
 
         def dn(faces, cells):
@@ -791,13 +840,21 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             return jnp.sum((fc[faces, :] - cc[:, cells].T) * nrm[:, faces].T, axis=1)
         d = dn(f, c) + dn(j(outer_face[flux_bf]), o)
         n = nrm[:dim, f]
-        T = jnp.einsum("ijbde,db,eb->ijb", 0.5 * (A[:, :, c] + A[:, :, o]), n, n)
+        Af = 0.5 * (A[:, :, c] + A[:, :, o])
+        T = jnp.einsum("ijbde,db,eb->ijb", Af, n, n)
         w = mesh.face_volumes[f] / (mesh.cell_volumes[c] * d)
-        return D.at[:, c].add(jnp.einsum("ijb,jb->ib", T, Xout - X[:, c]) * w)
+        D = D.at[:, c].add(jnp.einsum("ijb,jb->ib", T, Xout - X[:, c]) * w)
+        if correction:                                  # tangential part of the gradients
+            g = 0.5 * (G[:, :, c] + G[:, :, o])
+            t = g - jnp.einsum("jeb,eb->jb", g, n)[:, None, :] * n[None]
+            F = jnp.einsum("ijbde,db,jeb->ib", Af, n, t)
+            C = C.at[:, c].add(F * mesh.face_volumes[f] / mesh.cell_volumes[c])
+        return D, C
 
     def diffusion(k, bc, Q, Qaux, p, time, mesh):
         """Explicit ``div(A : grad Q)`` per cell (RHS sign, A > 0 diffuses)."""
-        return _div(k, bc, Q, Qaux, p, time, mesh)
+        D, C = _div(k, bc, Q, Qaux, p, time, mesh)
+        return D + C
 
     def _norm(r):
         """Euclidean norm of ``r`` (distributed: over the owned cells of all ranks)."""
@@ -806,20 +863,22 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
 
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
-        """One Crank-Nicolson step of ``div(A(X) : grad X)`` from ``time`` to ``time + dt``, A at
-        the new state, solved by Newton with a ``linsolve`` per update; differentiable through the
-        root.
+        """One Crank-Nicolson step of the two-point part of ``div(A(X) : grad X)`` from ``time``
+        to ``time + dt``, A at the new state, solved by Newton with a ``linsolve`` per update; the
+        correction explicit at ``Q`` (deferred). Differentiable through the root.
 
         References:
             Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
             Crank, Nicolson 1947, https://doi.org/10.1017/s0305004100023197
         """
-        b = Q + 0.5 * dt * _div(k, bc, Q, Qaux, p, time, mesh)
+        D, C = _div(k, bc, Q, Qaux, p, time, mesh)
+        b = Q + 0.5 * dt * (D + 2.0 * C)
 
         def R(X):
             """Crank-Nicolson residual ``X - b - dt/2 D(X)`` at ``time + dt``."""
             X = halo(X, mesh)
-            return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh)
+            return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh,
+                                           correction=False)[0]
         X = newton_root(R, Q, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
                         tol=imp["tol"], maxiter=imp["maxiter"], norm=_norm)
         return halo(X, mesh)
