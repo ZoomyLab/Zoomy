@@ -1,43 +1,5 @@
-"""Catalog of canonical solver tags and their aliases.
-
-Solver tags route symbolic terms into operator slots on the
-``SystemModel``.  They are the only tag system that directly impacts
-SystemModel construction; physical / display tags (``Expression.tag``)
-live separately and are *not* normalized through this catalog.
-
-Canonical solver-tag names are **explicit and treatment-prefixed** —
-they say *what* operator slot the term belongs in and *how* the
-solver should treat it in time (explicit vs implicit).  Authoring a
-SystemModel therefore looks like
-
-.. code-block:: python
-
-    xmom = xmom.solver_tag(
-        flux                = F_x,
-        hydrostatic_pressure= P_x,
-        implicit_source     = manning_friction,
-        explicit_source     = body_force,
-        implicit_diffusion  = nu_h_grad_u,
-    )
-
-Aliases are kept narrow on purpose: only direct re-orderings of the
-canonical name (``source_implicit`` ↔ ``implicit_source``) and a few
-legacy synonyms (``viscous``, ``ncp``).  *Physical* names like
-``friction``, ``manning``, ``gravity``, ``body_force`` deliberately
-do **not** appear here — they belong on physical ``term_groups``
-(display), not solver routing.  If a project wants such names to also
-classify into solver tags, that mapping should be a separate,
-explicit layer on top of this catalog (e.g. a per-model
-``physical_to_solver_tag`` table).
-
-Unlike physical ``term_groups`` (which drive ``\\underbrace``
-rendering and survive ``apply()``), solver tags live on
-``Expression._solver_groups`` and are dropped per-term whenever a
-substitution changes their sub-expression (see ``Expression.apply``).
-
-The alias table is mutable: register custom aliases via
-``register_alias`` and add new canonical tags via
-``register_canonical_tag``.
+"""Catalog of canonical solver tags, their aliases and their SystemModel slots. Solver tags route
+symbolic terms into SystemModel operator slots; physical display tags are not normalized here.
 """
 
 from __future__ import annotations
@@ -126,11 +88,8 @@ _SOLVER_TAG_ALIASES: dict[str, str] = {
 def canonical_solver_tag(name: str) -> str:
     """Resolve an alias to its canonical solver tag.
 
-    Raises
-    ------
-    ValueError
-        If ``name`` is not a known alias. The error message lists all
-        known aliases and their canonical targets.
+    Raises:
+        ValueError: Unknown alias; the message lists all known aliases.
     """
     try:
         return _SOLVER_TAG_ALIASES[name]
@@ -144,20 +103,16 @@ def canonical_solver_tag(name: str) -> str:
 
 
 def solver_tag_slot(canonical: str) -> str:
-    """Return the SystemModel slot name for a canonical solver tag.
+    """Return the SystemModel slot name of a canonical solver tag.
 
-    Raises ``KeyError`` if ``canonical`` is not a registered canonical
-    solver tag — use :func:`canonical_solver_tag` to normalize an alias
-    first.
+    Raises:
+        KeyError: Not a registered canonical tag; normalize aliases with canonical_solver_tag first.
     """
     return SOLVER_TAG_TO_SLOT[canonical]
 
 
 def register_alias(alias: str, canonical: str) -> None:
-    """Register a new alias → canonical mapping.
-
-    ``canonical`` must be one of the registered canonical tags.
-    """
+    """Register an alias for an already registered canonical tag."""
     if canonical not in CANONICAL_SOLVER_TAGS:
         raise ValueError(
             f"Canonical name {canonical!r} is not registered. "
@@ -168,11 +123,8 @@ def register_alias(alias: str, canonical: str) -> None:
 
 def register_canonical_tag(name: str, aliases: Iterable[str] = (),
                            *, slot: str | None = None) -> None:
-    """Register a new canonical solver tag with optional aliases.
-
-    The canonical name is always registered as an alias for itself.
-    ``slot`` declares which SystemModel field stores the extracted
-    operator (defaults to ``name``).
+    """Register a new canonical tag with optional aliases and the SystemModel slot (default: the tag
+    name) that stores its operator.
     """
     CANONICAL_SOLVER_TAGS.add(name)
     _SOLVER_TAG_ALIASES[name] = name
@@ -182,5 +134,5 @@ def register_canonical_tag(name: str, aliases: Iterable[str] = (),
 
 
 def known_aliases() -> dict[str, str]:
-    """Return a copy of the current alias → canonical mapping."""
+    """Return a copy of the alias to canonical mapping."""
     return dict(_SOLVER_TAG_ALIASES)

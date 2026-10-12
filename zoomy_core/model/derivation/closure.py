@@ -1,48 +1,6 @@
-"""Milestone-4 closure operations for the clean-redesign framework.
-
-After :class:`~zoomy_core.model.derivation.modal.separation_of_variables` has put
-every field into its unexpanded modal ansatz and the abstract truncation bound
-``N_u`` has been bound to a concrete integer (so the finite ``sp.Sum`` expands),
-these ops carry the SME derivation to the Galerkin-projected, basis-resolved,
-KBC-closed K&T (4.17) form.
-
-Three pieces live here:
-
-:class:`Resolve`
-    The concrete-level Galerkin projection-and-resolve.  Per row it multiplies
-    by the test weight ``c·φ_l`` (with ``l`` already bound to the row's mode),
-    substitutes every opaque ``φ(k, ζ)`` of each field's basis by the concrete
-    polynomial ``basis.eval(k, ζ)`` (and the weight ``c`` → the basis weight),
-    then integrates over ``(ζ, 0, 1)`` **in place** — the ``∂_x`` derivative
-    stays INSIDE the integral.
-
-    This is the crucial distinction from the symbolic-level
-    :class:`~zoomy_core.model.derivation.projection.ExtractBrackets` /
-    :class:`~zoomy_core.model.derivation.projection.ResolveBasis` pair, which pull a
-    conservative ``∂_x`` OUT of the ζ-integral before resolving.  That pull-out
-    is correct for the orthogonal flux brackets but corrupts the σ-metric mass
-    closure: the ζ-dependent metric factor ``∂_x(ζh+b)`` left inside the
-    pulled-out ``∂_x(…)`` leaves a spurious ``b``-coefficient residue that no
-    kinematic-BC substitution can cancel.  Integrating in place keeps the
-    metric terms ζ-local, so the fundamental-theorem boundary trace and the
-    advection metric terms combine exactly — the mass row closes bit-for-bit to
-    ``∂_t h + ∂_x(h·a_0)`` after the KBC absorption.
-
-:func:`kinematic_modal_closure`
-    Build the ``Substitution`` that closes the lower w-modes (``aw_0, aw_1``)
-    from the two kinematic boundary conditions, via ``sp.solve`` on the modal
-    evaluations of the surface (ζ=1) and bed (ζ=0) relations — the proven
-    ``mlme.py`` / production ``_kbc_modal_closure`` pattern, lifted to the
-    declarative :class:`Model`.
-
-:func:`mass_relation`
-    The ``Substitution`` ``∂_t h → −∂_x(h·a_0)`` built from the depth-averaged
-    mass row, used to cancel the stray ``∂_t h`` the σ-metric chain-rule injects
-    into the momentum rows.
-
-:class:`Simplify`
-    A thin whole-equation op wrapping ``Equation.simplify`` so a derivation can
-    record a canonicalisation step in the graph.
+"""Concrete-level Galerkin resolve, conservative-form folding, simplification and term-tagging
+operations of the derivation pipeline. They carry a modal ansatz to the K&T SME system form that
+system_extract classifies into SystemModel slots.
 """
 
 from __future__ import annotations
@@ -75,31 +33,15 @@ __all__ = [
 
 
 class Split(Operation):
-    """Fold a SELF-PRODUCT flux term ``c·f·∂_x f`` into the conservative form
-    ``∂_x(c·f²/2)`` by the HALF product rule.
-
-    A plain inverse :class:`~zoomy_core.model.operations.ProductRule` on
-    ``g·h·∂_x h`` only *recombines* it (``∂_x(g h²) − g·h·∂_x h = g·h·∂_x h``,
-    value-preserving) because the field ``h`` appears both as coefficient and
-    under the derivative.  The trick is to SPLIT the term in two and apply the
-    product rule to ONE half — whose residual exactly cancels the other half:
-
-    .. math::
-
-        g h\\,∂_x h
-          = \\tfrac12 g h\\,∂_x h + \\tfrac12 g h\\,∂_x h
-          \\;\\xrightarrow{\\text{PR on 1st half}}\\;
-          \\tfrac12\\big(∂_x(g h^2) - g h\\,∂_x h\\big) + \\tfrac12 g h\\,∂_x h
-          = ∂_x\\!\\big(\\tfrac{g h^2}{2}\\big).
-
-    So ``Split = ½·I + ½·ProductRule⁻¹`` — value-preserving, and the natural way
-    to recover the hydrostatic pressure ``∂_x(g h²/2)`` from ``g·h·∂_x h``
-    WITHOUT a post-hoc fold.  Apply it (via ``term[[i]].apply(Split())``) to the
-    self-product terms only."""
+    """Fold a self-product flux term c·f·∂_x f into ∂_x(c·f²/2) by splitting it in two halves and
+    applying the inverse product rule to one half. Value-preserving (½·I + ½·ProductRule⁻¹); apply
+    it to the self-product terms only.
+    """
 
     whole_leaf_op = True
 
     def __init__(self, variables=None, name="split"):
+        """``variables`` restricts the fold to these fields (None: all)."""
         self._vars = variables
         desc = ("half product rule  c·f·∂f → ∂(c·f²/2)"
                 + (f" on {{{', '.join(str(v) for v in variables)}}}"
@@ -107,6 +49,7 @@ class Split(Operation):
         super().__init__(name=name, description=desc)
 
     def _leaf_sp(self, sp_expr):
+        """Return ½·expr + ½·(inverse product rule of expr)."""
         from zoomy_core.model.operations import ProductRule
         pr = ProductRule(variables=self._vars, direction="inverse")
         return sp.Rational(1, 2) * sp_expr \
@@ -114,30 +57,24 @@ class Split(Operation):
 
 
 class InvertMassMatrix(Operation):
-    """Invert the Galerkin mass matrix by reading it off the equation.
-
-    After a moment row is projected and resolved it has the shape
-    ``M_kk·∂_t Q_k + (flux/source) = 0``, where ``M_kk`` — the (diagonal)
-    Galerkin mass-matrix entry ``⟨φ_k, c φ_k⟩`` (``1/(2k+1)`` for shifted
-    Legendre) — is EXACTLY the coefficient of the row's ``∂_t`` term.  This op
-    finds that ``∂_t`` term, divides the whole row by its coefficient, and so
-    normalises ``∂_t Q_k`` to unit coefficient — the "invert the mass matrix"
-    step, with the matrix read from the model rather than a passed basis.  For a
-    non-orthogonal basis the same idea generalises to a per-row linear solve;
-    for the diagonal SME it is a single division (``×(2k+1)``).
-
-    Apply it AFTER the stray ``∂_t h`` has been removed (``mass_relation``) so
-    the row carries the single diagonal ``∂_t`` term."""
+    """Divide a projected moment row by the coefficient of its ∂_t term, normalising ∂_t Q_k to unit
+    coefficient (the mass-matrix entry is read off the row). Apply it after the stray ∂_t h has been
+    removed so the row carries a single diagonal ∂_t term.
+    """
 
     whole_leaf_op = True
 
     def __init__(self, time=None, name="invert_mass_matrix"):
+        """``time`` is the time coordinate (default: the global ``t``)."""
         self._t = time if time is not None else _coords.t
         super().__init__(
             name=name,
             description="divide each row by its ∂_t coefficient (mass matrix)")
 
     def _leaf_sp(self, sp_expr):
+        """Find the t-free non-trivial coefficient of a ∂_t atom and divide each term by it,
+        term-wise.
+        """
         t = self._t
         # Do NOT ``sp.expand`` the whole row: post-basis it holds the rational
         # turbulence source (ν_t=C_μ sk⁴/se²) and expanding distributes N·D⁻¹ into
@@ -173,6 +110,7 @@ class InvertMassMatrix(Operation):
         # normalize the form: pull field-free factors out of Derivatives
         # (linearity) so ``∂_t(q/(2k+1))/(1/(2k+1))`` reads ``∂_t q``.
         def _pull(a):
+            """Pull field-free factors out of one Derivative (linearity)."""
             co, rest = a.expr.as_independent(
                 *a.expr.atoms(sp.Function), as_Mul=True)
             return (co * sp.Derivative(rest, *a.args[1:])
@@ -186,13 +124,8 @@ class InvertMassMatrix(Operation):
 
 
 def _antiderivative_in(coeff, var, field_to_sym):
-    """``∫ coeff d(var)`` treating every applied field in ``field_to_sym`` as
-    an independent symbol — used to recover a flux/pressure potential ``F``
-    with ``∂F/∂var = coeff``.
-
-    ``var`` is the applied Function being integrated against (``h(t, x)``);
-    ``field_to_sym`` maps every applied field (incl. ``var``) to a fresh bare
-    Symbol so ``sp.integrate`` sees a clean rational/polynomial integrand.
+    """Antiderivative of ``coeff`` in the applied field ``var``, treating every field in
+    ``field_to_sym`` as an independent symbol.
     """
     sym_of_var = field_to_sym[var]
     inv = {s: f for f, s in field_to_sym.items()}
@@ -202,48 +135,28 @@ def _antiderivative_in(coeff, var, field_to_sym):
 
 
 def fold_to_conservative_form(expr, flux_fields, *, h, b, x, gravity_param):
-    """Fold the spatial part of a momentum/continuity residual into the
-    production K&T (4.17) decomposition: conservative flux + hydrostatic
-    pressure bundles, with the genuinely non-conservative couplings LEFT
-    UNFOLDED.
+    """Fold the spatial part of a momentum/continuity residual into conservative flux and
+    hydrostatic-pressure bundles, leaving bed and cross-mode couplings as explicit nonconservative
+    terms. Reproduces the production K&T decomposition, e.g. g·h·∂_x b + ∂_x(g·h²/2) + ∂_x(q_0²/h +
+    q_1²/3h) + ∂_t q_0.
 
-    The Resolve / CoV chain leaves the spatial part fully expanded
-    (``2 q_k/h·∂_x q_k − q_k²/h²·∂_x h + …``).  This op re-bundles it EXACTLY
-    as production does:
+    Args:
+        expr: residual of one row, in Function form.
+        flux_fields: conserved modal fields q(k, t, x).
+        h, b: depth and bed (applied Functions).
+        x: spatial coordinate.
 
-    * the bed coupling ``g·h·∂_x b`` stays an explicit ``coeff·∂_x b`` term
-      (→ ``nonconservative_matrix[row, b]``);
-    * the ``∂_x h`` coefficient is integrated in ``h`` to recover the
-      conservative bundle; its gravity part (the ``∂_x(g·h²/2)`` pressure)
-      is split into a SEPARATE ``∂_x(P)`` term so the downstream classifier
-      routes it to ``hydrostatic_pressure``, and the advective part becomes
-      the flux bundle ``∂_x(F)``;
-    * whatever ``∂_x q_j`` coupling remains after subtracting ``∂_x(F + P)``
-      is left as explicit ``coeff·∂_x q_j`` NCP terms
-      (→ ``nonconservative_matrix[row, q_j]``).
+    Returns:
+        The re-bundled residual.
 
-    This reproduces production bit-exact, e.g.::
-
-        g·h·∂_x b + ∂_x(g·h²/2) + ∂_x(q_0²/h + q_1²/3h + q_2²/5h) + ∂_t q_0
-
-    Parameters
-    ----------
-    expr : sympy.Expr
-        The residual (one momentum / continuity row), Function form.
-    flux_fields : list of applied Functions
-        The conserved flux variables (the modal ``q(k, t, x)``).
-    h, b : applied Functions
-        Depth and bed.
-    x : sympy.Symbol
-        The spatial coordinate.
-    gravity_param : sympy.Symbol or None
-        The gravity parameter ``g`` — its ``∂_x h`` contribution is the
-        hydrostatic pressure; ``None`` ⇒ no pressure split.
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
     expr = sp.expand(expr.doit())
     flux_fields = list(flux_fields)
 
     def dx(f):
+        """∂_x of ``f``."""
         return sp.Derivative(f, x)
 
     # Fresh bare symbols for the antiderivative-in-h integration.
@@ -290,30 +203,23 @@ def fold_to_conservative_form(expr, flux_fields, *, h, b, x, gravity_param):
 
 
 class FoldConservative(Operation):
-    """Re-bundle a momentum row's spatial part into the K&T (4.17) conservative
-    decomposition, as a tracked ``.apply`` op (the loop-free form of pipeline
-    step 8b).
-
-    Per row: peel off the conservative DIFFUSION atoms ``∂_x(D·∂_x q)``
-    (:func:`is_conservative_diffusion`) and leave them untouched (the
-    SystemModel types them as ``diffusion_matrix``); ``.doit()`` + fold the
-    hyperbolic remainder via :func:`fold_to_conservative_form` (flux + pressure
-    → ``∂_x(F)`` / ``∂_x(g h²/2)``, bed/cross-mode couplings stay UNFOLDED as
-    NCP); reattach the diffusion.
-
-    Parameters mirror :func:`fold_to_conservative_form`: ``flux_fields`` (the
-    conserved modal ``q(k,t,x)``), ``h``, ``b``, ``x``, and ``gravity``."""
+    """Tracked op form of fold_to_conservative_form: conservative diffusion atoms ∂_x(D·∂_x q) are
+    left untouched and the hyperbolic remainder is folded. Arguments mirror
+    fold_to_conservative_form (``gravity`` is its ``gravity_param``).
+    """
 
     whole_leaf_op = True
 
     def __init__(self, flux_fields, *, h, b, x, gravity=None,
                  name="fold_conservative"):
+        """Store the fold arguments."""
         self._flux = list(flux_fields)
         self._h, self._b, self._x, self._g = h, b, x, gravity
         super().__init__(
             name=name, description="conservative flux/pressure fold")
 
     def _leaf_sp(self, sp_expr):
+        """Split off diffusion atoms, fold the rest, and reattach the diffusion."""
         x = self._x
         diff_terms, base_terms = [], []
         for term in sp.Add.make_args(sp_expr):
@@ -329,44 +235,27 @@ class FoldConservative(Operation):
 
 
 class Resolve(Operation):
-    """Concrete-level Galerkin project-and-resolve, integrating in place.
+    """Concrete-level Galerkin project-and-resolve: multiply the row by the test weight c(ζ)·φ(l,
+    ζ), substitute the concrete basis polynomials, and integrate over ζ with the ∂_x / ∂_t
+    derivatives kept inside the integral. Apply after the truncation bound is concrete and the Sum
+    ansatz is expanded; modal coefficients and h, b factors are left untouched.
 
-    Apply AFTER the abstract bound ``N_u`` has been bound to a concrete integer
-    and the finite ``sp.Sum`` ansatz expanded to explicit modes ``φ(0,ζ),
-    φ(1,ζ), …``.  For the row's test mode ``l`` (already bound — e.g. via
-    ``Substitution({l: 0})`` for the depth-mean row), this op:
+    Args:
+        test_function: Galerkin test weight, typically c(ζ)·φ(l, ζ) with l bound to the row's mode.
+        basis_cls: concrete basis class providing ``eval(k, ζ)`` and ``weight``.
+        level: concrete basis level.
+        var: ζ integration variable (default ``zeta``).
+        bounds: integration interval (default (0, 1)).
 
-    1. multiplies the residual by the test weight ``c(ζ)·φ(l, ζ)``;
-    2. substitutes every opaque ``φ(k, ζ)`` of every registered field-basis by
-       the concrete polynomial ``basis_cls.eval(int(k), ζ)`` and the opaque
-       weight ``c(ζ)`` by the basis weight (``1`` for Legendre);
-    3. integrates the whole product over ``(ζ, 0, 1)`` **in place** (the
-       ``∂_x`` / ``∂_t`` derivatives stay inside).
-
-    A ``Multiply(h)`` should already have cleared the ``1/h`` σ-Jacobian on the
-    row; this op leaves the modal coefficients ``a(k, t, x)`` and any ``h`` /
-    ``b`` factors untouched.
-
-    Parameters
-    ----------
-    test_function : sympy.Expr
-        The Galerkin test weight to multiply by — typically ``c(ζ)·φ(l, ζ)``
-        with the opaque heads, ``l`` bound to the row's mode.
-    basis_cls : type
-        The concrete basis class providing ``.eval(k, ζ)`` and ``.weight``
-        (e.g. ``Legendre_shifted``).
-    level : int
-        Concrete basis level for the polynomial evaluation.
-    var : sympy.Symbol
-        ζ integration variable (default ``Symbol("zeta")``).
-    bounds : tuple[Expr, Expr]
-        Integration interval (default ``(0, 1)``).
+    References:
+        Kowalski, Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
     whole_leaf_op = True
 
     def __init__(self, test_function, basis_cls, level, *, var=None,
                  bounds=(0, 1), name="resolve"):
+        """Build the test-weight multiplier and the concrete basis."""
         self._test = sp.sympify(test_function)
         self._basis = basis_cls(level=level)
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
@@ -383,17 +272,19 @@ class Resolve(Operation):
         )
 
     def _resolve_opaque_phi(self, expr):
-        """Substitute every opaque ``φ(k, ζ)`` (basis-machinery head, any
-        basis) by the concrete polynomial, and the opaque weight ``c(ζ)`` by
-        the basis weight.  Opaque heads carry ``_is_basis_head``."""
+        """Replace opaque φ(k, ζ) heads by the concrete basis polynomials and the opaque weight c(ζ)
+        by the basis weight.
+        """
         z = self._var
 
         def _is_phi(a):
+            """True for a two-argument basis head φ(k, ζ)."""
             return (isinstance(a, sp.Function)
                     and getattr(a.func, "_is_basis_head", False)
                     and len(a.args) == 2)
 
         def _is_weight(a):
+            """True for a one-argument basis weight head c(ζ)."""
             return (isinstance(a, sp.Function)
                     and getattr(a.func, "_is_basis_head", False)
                     and len(a.args) == 1)
@@ -402,6 +293,7 @@ class Resolve(Operation):
         wv = self._weight_value
 
         def _weight_at(arg):
+            """Basis weight at ``arg`` (1 when the basis has none)."""
             if callable(wv):
                 return wv(arg)
             return sp.S.One if wv is None else wv
@@ -416,11 +308,9 @@ class Resolve(Operation):
         return expr
 
     def _integrate_poly(self, expr):
-        """``∫_lo^hi expr dζ`` for an integrand that is polynomial in ζ — split
-        each additive term into the ζ-independent coefficient and the ζ-power
-        and integrate ``ζ^n`` analytically.  Far cheaper than ``sp.integrate``
-        on the rational (``1/h``) coefficients the modal flux carries; falls
-        back to ``sp.integrate`` for any non-polynomial ζ-dependence."""
+        """Integrate ``expr`` over the ζ bounds term by term analytically, falling back to
+        sp.integrate for non-polynomial dependence.
+        """
         z = self._var
         lo, hi = self._bounds
         out = sp.S.Zero
@@ -439,6 +329,7 @@ class Resolve(Operation):
         return out
 
     def _leaf_sp(self, sp_expr):
+        """Multiply by the test weight, resolve the basis, and integrate over ζ."""
         scaled = self._multiply._leaf_sp(sp_expr)
         resolved = self._resolve_opaque_phi(sp.expand(scaled))
         # ``.doit()`` collapses any concrete-index basis derivatives.
@@ -450,25 +341,15 @@ class Resolve(Operation):
 
 
 class ResolveIntegral(Operation):
-    """Resolve the unresolved ``∫…dζ`` integrals left by an ABSTRACT projection,
-    each by a selectable METHOD — resolution decoupled from projection so it can
-    differ per integral (and per term).
+    """Resolve the opaque ∫…dζ atoms left by an abstract projection, each by a selectable method:
+    "auto" (classified per term by shape), "basis", "ftc" or "numerical". ``classify`` (Integral ->
+    method or None) overrides the default ``method`` per integral.
 
-    Unlike :class:`Resolve` (which projects AND integrates in one welded,
-    basis-only step), this op acts on an expression that already carries opaque
-    ``sp.Integral(integrand, (ζ, 0, 1))`` atoms and rewrites EACH by:
-
-      * ``"basis"``     — substitute the concrete basis polynomial for every
-                          opaque ``φ(k, ζ)`` (and the weight ``c``) and integrate
-                          the resulting ζ-polynomial analytically (δ-form);
-      * ``"ftc"``       — fundamental theorem of calculus
-                          ``∫_0^1 ∂_ζ g dζ → g|_{ζ=1} − g|_{ζ=0}`` (term-by-term
-                          on the ζ-independent-coefficient parts);
-      * ``"numerical"`` — ``sp.integrate`` quadrature fallback.
-
-    ``method`` is the default; pass ``classify`` (a callable
-    ``Integral → method | None``) to override per integral — e.g. resolve a
-    ``∂_ζ`` flux by ``"ftc"`` and a φ-bracket by ``"basis"`` in the SAME row.
+    Args:
+        basis_cls: concrete basis used by the "basis" and "auto" methods.
+        method: default resolution method.
+        weight: basis weight when no ``basis_cls`` is given.
+        classify: optional per-integral method override.
     """
 
     whole_leaf_op = True
@@ -476,6 +357,7 @@ class ResolveIntegral(Operation):
     def __init__(self, basis_cls=None, *, var=None, method="auto", level=None,
                  weight=None, classify=None, bounds=(0, 1),
                  name="resolve_integral"):
+        """Configure the default method, basis, and bounds."""
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         self._method = method
         self._classify = classify
@@ -489,6 +371,7 @@ class ResolveIntegral(Operation):
 
     # ── per-integral method dispatch ─────────────────────────────────────
     def _method_for(self, integral):
+        """Method for one integral: the ``classify`` override, else the default."""
         if self._classify is not None:
             chosen = self._classify(integral)
             if chosen:
@@ -496,6 +379,7 @@ class ResolveIntegral(Operation):
         return self._method
 
     def _resolve_one(self, integral):
+        """Resolve one definite integral over its own bound variable with the selected method."""
         integrand = integral.function
         # Resolve using the integral's OWN bound variable (var-agnostic): the
         # field-level KinematicBC alpha-renames bound ζ → fresh ``\hat{z}``
@@ -517,20 +401,16 @@ class ResolveIntegral(Operation):
 
     # ── auto: classify each additive term by SHAPE (the "smart" resolution) ──
     def _auto_resolve(self, integrand, var, lo, hi):
-        """Resolve ``∫_lo^hi integrand d(var)`` by classifying each additive term:
-        a bare ``∂_var`` body → FTC; a bare ``∂_w`` (``w≠var``) with a
-        ``w``-independent rest → the derivative COMMUTES OUT (conservative flux);
-        a single ``Sum`` factor → push the integral inside; a φ-basis bracket →
-        substitute the concrete basis and integrate the polynomial; anything
-        else stays an opaque ``∫`` atom.  This is the only smart integrator —
-        :class:`~zoomy_core.model.derivation.projection.Integrate` merely builds the
-        abstract ``∫`` for it to act on."""
+        """Resolve ``∫_lo^hi integrand d(var)`` term by term via ``_auto_term``."""
         out = sp.S.Zero
         for term in sp.Add.make_args(sp.expand(integrand)):
             out += self._auto_term(term, var, lo, hi)
         return out
 
     def _auto_term(self, term, var, lo, hi):
+        """Resolve one term: constant, bare ∂_var (FTC), bare ∂_w with w-independent rest (commute
+        out), single Sum (push inside), or φ-bracket (basis); otherwise keep an opaque Integral.
+        """
         coeff, rest = term.as_independent(var, as_Add=False)
         if rest == 1:                                       # constant in var
             return coeff * (hi - lo)
@@ -573,8 +453,9 @@ class ResolveIntegral(Operation):
 
     # ── methods ──────────────────────────────────────────────────────────
     def _ftc(self, integrand, var, lo, hi):
-        """``∫_lo^hi ∂_ζ g dζ → g|_{ζ=hi} − g|_{ζ=lo}`` on the
-        ζ-independent-coefficient parts; ``sp.integrate`` fallback otherwise."""
+        """Apply the fundamental theorem of calculus to bare ∂_var terms; other terms go to
+        sp.integrate.
+        """
         z = var
         out = sp.S.Zero
         for term in sp.Add.make_args(sp.expand(integrand)):
@@ -588,24 +469,28 @@ class ResolveIntegral(Operation):
         return out
 
     def _resolve_basis(self, integrand, var, lo, hi):
-        """Substitute opaque ``φ(k,ζ)`` → concrete polynomial (and weight ``c``)
-        and integrate the ζ-polynomial analytically."""
+        """Substitute the concrete basis polynomials (and weight) for the opaque φ heads and
+        integrate the polynomial analytically.
+        """
         z = var
         if self._basis is None:
             return sp.integrate(integrand, (z, lo, hi))
         wv = self._weight_value
 
         def _is_phi(a):
+            """True for a two-argument basis head φ(k, ζ)."""
             return (isinstance(a, sp.Function)
                     and getattr(a.func, "_is_basis_head", False)
                     and len(a.args) == 2)
 
         def _is_weight(a):
+            """True for a one-argument basis weight head c(ζ)."""
             return (isinstance(a, sp.Function)
                     and getattr(a.func, "_is_basis_head", False)
                     and len(a.args) == 1)
 
         def _weight_at(arg):
+            """Basis weight at ``arg`` (1 when the basis has none)."""
             return (wv(arg) if callable(wv)
                     else (sp.S.One if wv is None else wv))
 
@@ -618,6 +503,9 @@ class ResolveIntegral(Operation):
         return self._integrate_poly(e.doit(), z, lo, hi)
 
     def _integrate_poly(self, expr, var, lo, hi):
+        """Integrate ``expr`` over (lo, hi) in ``var`` term by term for polynomials, sp.integrate
+        otherwise.
+        """
         z = var
         out = sp.S.Zero
         for term in sp.Add.make_args(sp.expand(expr)):
@@ -635,10 +523,9 @@ class ResolveIntegral(Operation):
         return out
 
     def _resolve_basis_atoms(self, expr):
-        """Substitute opaque ``φ(k, arg)`` → ``basis.eval(k, arg)`` for concrete
-        mode ``k`` and the weight ``c(arg)`` → weight value, EVERYWHERE the
-        atom survives outside an integral — i.e. the FTC boundary traces
-        ``φ(k, 0)`` / ``φ(k, 1)``."""
+        """Evaluate the opaque φ(k, arg) and weight atoms that survive outside integrals (the FTC
+        boundary traces) with the concrete basis.
+        """
         if self._basis is None:
             return expr
         bas = self._basis
@@ -657,13 +544,20 @@ class ResolveIntegral(Operation):
         return expr
 
     def _leaf_sp(self, sp_expr):
+        """Resolve every matching definite integral, then close the remaining boundary-trace basis
+        atoms.
+        """
         z = self._var
 
         def _has_basis_atom(a):
+            """True when ``a`` contains an opaque basis head."""
             return any(getattr(f.func, "_is_basis_head", False)
                        for f in a.atoms(sp.Function))
 
         def _mine(a):
+            """True for a single-variable definite integral this op resolves (own variable, Dummy
+            variable, ζ bound, or basis atom).
+            """
             # Resolve any single-variable definite integral over the configured
             # var, over a fresh ``\hat{<var>}`` integration Dummy (running
             # integrals ``∫_0^ζ … d\hat ζ``, whose var is the Dummy not ζ), over
@@ -686,16 +580,9 @@ class ResolveIntegral(Operation):
 
 
 def is_conservative_diffusion(term, x):
-    """True iff ``term`` is a conservative diffusive-flux atom
-    ``coeff · ∂_x(F)`` whose flux ``F`` itself carries an inner ``∂_x`` — the
-    ``∂_x(D·∂_x q)`` shape the :func:`~zoomy_core.model.derivation.system_extract`
-    classifier routes to the rank-4 ``diffusion_matrix``.
-
-    Mirrors the extractor's ``_is_second_order_x`` test so the SME pipeline and
-    the SystemModel agree on what "a diffusion term" is: a single first-order
-    ``∂_x`` factor wrapping an argument that still contains a ``∂_x``.  The
-    advective flux ``∂_x(q²/h)`` (algebraic inner) and the first-order NCP
-    couplings ``coeff·∂_x q`` are NOT matched.
+    """True iff ``term`` is coeff·∂_x(F) with a single first-order ∂_x factor whose flux F itself
+    contains a ∂_x, the ∂_x(D·∂_x q) shape that system_extract types as diffusion_matrix. Advective
+    fluxes ∂_x(q²/h) and first-order couplings coeff·∂_x q do not match.
     """
     factors = term.args if isinstance(term, sp.Mul) else [term]
     dxs = [f for f in factors
@@ -708,30 +595,20 @@ def is_conservative_diffusion(term, x):
 
 def project_conservative_diffusion(visc_expr, test_weight, *, basis_cls,
                                    level, var, x):
-    """Galerkin-project a viscous (second-order) momentum block CONSERVATIVELY.
+    """Galerkin-project a viscous second-order momentum block so the diffusive flux stays in
+    conservative ∂_x(F^d) form (typed as diffusion_matrix), with the σ-metric residual integrated in
+    place. Built from Multiply(test weight), the inverse ProductRule, abstract Integrate and
+    ResolveIntegral (basis); the sum equals the in-place Resolve.
 
-    The base SME resolution (:class:`Resolve`) integrates the ``∂_x`` in place,
-    which scatters a second-order viscous term ``−2ν h Dₓ²ũ`` into the expanded
-    ``−2ν h ∂_xx q + (σ-metric)`` form that the SystemModel can only type as a
-    SOURCE.  This routine instead keeps the genuine diffusive flux in the
-    conservative ``∂_x(F^d)`` shape the extractor types as ``diffusion_matrix``,
-    using ONLY operations — nothing about the answer is hand-written:
+    Args:
+        visc_expr: viscous term of the momentum row.
+        test_weight: Galerkin test weight c·φ_k.
+        basis_cls, level: concrete basis and its level.
+        var: ζ integration variable.
+        x: horizontal coordinate.
 
-    1. ``Multiply(test_weight)`` — the Galerkin test weight ``c·φ_k``;
-    2. ``ProductRule()`` — inverse product rule (default ``direction="inverse"``,
-       acting on ``∂_x`` by coord-name; ``∂_ζ`` is skipped) moves the outer
-       ``h·φ_k`` INTO the ``∂_x``, exposing the bare conservative flux
-       ``∂_x(−2ν h φ_k ∂_x ũ)``;
-    3. SPLIT — terms that are now a bare conservative diffusion atom
-       (:func:`is_conservative_diffusion`) go through the abstract
-       :class:`~zoomy_core.model.derivation.projection.Integrate` (which commutes the
-       single OUTERMOST ``∂_x`` out, leaving the inner ``∂_x q`` intact) then
-       :class:`ResolveIntegral` (basis); the σ-metric residual integrates in
-       place via :class:`ResolveIntegral` (basis) on an explicit ``∫dζ``;
-    4. their SUM is bit-identical to the welded in-place :class:`Resolve`, but
-       the diffusive part stays ``∂_x(F^d)``.
-
-    Returns the resolved viscous moment (conservative flux + metric residual).
+    Returns:
+        The resolved viscous moment (conservative flux plus metric residual).
     """
     from zoomy_core.model.derivation.projection import Integrate as _AbstractIntegrate
     from zoomy_core.model.operations import Multiply, ProductRule, Expression
@@ -760,16 +637,12 @@ def project_conservative_diffusion(visc_expr, test_weight, *, basis_cls,
 
 
 def pull_consts(expr):
-    """``∂_v(c·f) → c·∂_v f`` for every factor ``c`` of the integrand that is
-    INDEPENDENT of the derivative variables — applied to fixpoint, recursively
-    through nested derivatives.
-
-    This is the GENTLE normalisation that makes cancellations surface WITHOUT
-    blowing fluxes apart: it never applies the product rule to a ``v``-dependent
-    product, so ``∂_x(g h²/2) → (g/2)∂_x(h²)`` (``h²`` stays grouped) while
-    ``∂_x(ζ h) → ζ ∂_x h`` (so ``∂_ζ(−ũ²∂_x(ζh))`` and ``∂_ζ(ζũ²∂_x h)`` become
-    syntactically equal-and-opposite and cancel)."""
+    """∂_v(c·f) -> c·∂_v f for every factor c independent of the derivative variables, to a fixpoint
+    and through nested derivatives. Gentle: it never applies the product rule to a v-dependent
+    product, so ∂_x(g h²/2) -> (g/2)∂_x(h²) keeps h² grouped.
+    """
     def _pull(a):
+        """Pull the variable-independent multiplicative factor out of one Derivative."""
         if not a.variables:
             return a
         # MULTIPLICATIVE split (``as_Add=False``): pull a v-independent FACTOR
@@ -786,7 +659,7 @@ def pull_consts(expr):
 
 
 def _single_deriv_factor(term):
-    """``(coeff, deriv)`` when ``term`` has exactly ONE Derivative factor."""
+    """``(coeff, deriv)`` when ``term`` has exactly one Derivative factor, else None."""
     factors = sp.Mul.make_args(term)
     ds = [f for f in factors if isinstance(f, sp.Derivative)]
     if len(ds) != 1:
@@ -796,11 +669,10 @@ def _single_deriv_factor(term):
 
 
 def fold_conservatives(expr):
-    """Recover conservative groupings ``g·∂_v f + f·∂_v g → ∂_v(f·g)`` by a
-    count-guarded pairwise fold: a pair is replaced by its single grouped form
-    ONLY when the fold is EXACT (value-preserving) — so it always reduces the
-    term count by one and never expands a flux.  Genuine non-conservative
-    couplings (no exact partner) are left untouched."""
+    """Recover conservative groupings g·∂_v f + f·∂_v g -> ∂_v(f·g) by a pairwise fold applied only
+    when it is exact. Terms with Integral atoms and genuine nonconservative couplings are left
+    untouched.
+    """
     terms = list(sp.Add.make_args(expr))
     changed = True
     while changed:
@@ -833,8 +705,9 @@ def fold_conservatives(expr):
 # ── Consolidate: generalised Leibniz fold (incl. inside integrals) ─────────
 
 def _deriv_factor(term):
-    """``(coeff, arg, v)`` when ``term`` is ``coeff · ∂_v(arg)`` with EXACTLY one
-    single-variable Derivative factor; else ``None``."""
+    """``(coeff, arg, v)`` when ``term`` is coeff·∂_v(arg) with exactly one single-variable
+    Derivative factor, else None.
+    """
     facs = list(term.args) if isinstance(term, sp.Mul) else [term]
     ds = [f for f in facs
           if isinstance(f, sp.Derivative) and len(f.variables) == 1]
@@ -845,14 +718,9 @@ def _deriv_factor(term):
 
 
 def leibniz_fold(expr):
-    """Pairwise Leibniz fold with a shared PASSIVE factor ``M``:
-
-    .. math::  M\\,a\\,∂_v b + M\\,b\\,∂_v a \\;\\to\\; M\\,∂_v(a\\,b)
-
-    ``M=1`` is the plain conservative fold (``∂_t h·ũ + h·∂_t ũ → ∂_t(hũ)``);
-    ``M=τ̃`` folds ``τ̃ c' φ + τ̃ c φ' → τ̃ ∂_ζ(cφ)``.  Found by setting
-    ``M = c_i / a_j`` and accepting only when ``M·a_i == c_j`` exactly (so it is
-    always value-preserving) and ``M`` carries no derivative/integral."""
+    """Pairwise Leibniz fold with a shared passive factor M: M·a·∂_v b + M·b·∂_v a -> M·∂_v(a·b).
+    Accepted only when exact and M carries no derivative or integral.
+    """
     terms = list(sp.Add.make_args(sp.expand(expr)))
     changed = True
     while changed:
@@ -881,15 +749,10 @@ def leibniz_fold(expr):
 
 
 def fold_self_products(expr):
-    """SELF-product fold: a single term ``M·f·∂_v f → M·∂_v(f²/2)`` (with the
-    constant ``M`` pulled inside when it is ``v``-independent, so ``g·h·∂_x h``
-    becomes the conservative hydrostatic flux ``∂_x(g h²/2)``).
-
-    A pure ``½ + ½`` split can't do this — the two halves are identical and
-    recombine.  Detection: the differentiated ``arg`` must DIVIDE the
-    coefficient exactly (``M = coeff/arg`` does not REINTRODUCE ``arg`` — a
-    constant denominator like the Legendre ``2h/3`` is fine, only ``arg`` in
-    ``M`` is not, e.g. ``a²∂a`` is not ``M·a·∂a`` for a polynomial ``M``)."""
+    """Fold a self-product M·f·∂_v f into M·∂_v(f²/2) (M moved inside when v-independent), e.g.
+    g·h·∂_x h -> ∂_x(g h²/2). Fires only when M does not reintroduce f, which makes the fold
+    idempotent.
+    """
     out = []
     for tm in sp.Add.make_args(sp.expand(expr)):
         df = _deriv_factor(tm)
@@ -921,11 +784,9 @@ def fold_self_products(expr):
 
 
 def _coord_symbols(expr):
-    """Coordinate-like symbols in ``expr``: the non-integer arguments of field
-    Functions plus derivative / integral binding variables.  A pure parameter
-    (``g``, ``ρ``, ``ν``) never appears as a function argument, so it is NOT a
-    coordinate — which is exactly what lets :func:`push_consts_into_flux` tell a
-    cancellation-driving coordinate from a flux-shattering constant."""
+    """Coordinate-like symbols of ``expr``: non-integer function arguments plus derivative and
+    integral binding variables (parameters such as g are excluded).
+    """
     coords = set()
     for f in expr.atoms(sp.Function):
         for a in f.args:
@@ -938,23 +799,15 @@ def _coord_symbols(expr):
 
 
 def push_consts_into_flux(expr, coords=None):
-    """Recover a clean conservative flux by pushing every COORDINATE-FREE factor
-    BACK INTO a bare derivative — the targeted inverse of :func:`pull_consts`:
-
-    .. math::  \\tfrac{g}{2}\\,∂_x(h²)\\,⟨c,φ_k⟩ \\;\\to\\; ∂_x\\!\\bigl(\\tfrac{g}{2}h²\\,⟨c,φ_k⟩\\bigr)
-
-    A coordinate-free factor — a parameter ``g``, a number, or a Galerkin
-    BRACKET ``⟨…⟩`` (a pure number) — can go inside the derivative; a
-    coordinate-bearing factor (``h``, ``a_i``) cannot.  The push therefore fires
-    on a term with exactly ONE derivative factor ONLY when EVERY other factor is
-    coordinate-free — yielding a clean ``∂_v(F)`` (a flux).  A term with a
-    coordinate factor stranded outside (``g·h·∂_x b·⟨c,φ_k⟩``, or the
-    ω-coupling ``Σ a_i⟨…⟩∂_x(a_j h)``) is genuinely non-conservative and is left
-    untouched.  Applied to the top-level terms and inside every ``Sum``."""
+    """Push every coordinate-free factor back into a bare derivative (inverse of pull_consts), e.g.
+    (g/2)·∂_x(h²)·⟨c,φ_k⟩ -> ∂_x((g/2)·h²·⟨c,φ_k⟩). Fires only on a term with one derivative factor
+    whose other factors are all coordinate-free; also applied inside every Sum.
+    """
     if coords is None:
         coords = _coord_symbols(expr)
 
     def _push_one(term):
+        """Push the coordinate-free factors of one term into its single derivative, if allowed."""
         facs = list(sp.Mul.make_args(term))
         derivs = [f for f in facs
                   if isinstance(f, sp.Derivative) and f.variables]
@@ -977,14 +830,9 @@ def push_consts_into_flux(expr, coords=None):
 
 
 def _hide_brackets(expr):
-    """Replace every Galerkin BRACKET (an :func:`is_bracket` integral — an
-    x-independent NUMBER) by an opaque symbol that carries the bracket's free
-    integer indices, e.g. ``⟨…φ_i φ_j φ_k…⟩ → _Br_0(i, j, k)``.
-
-    Returns ``(hidden_expr, restore_map)``.  A bracket is a passive constant for
-    the conservative fold, so hiding it (i) lets ``∂_x(h a_j)`` fold AROUND it
-    even though the bracket body contains ``∫`` and (ii) stops the exactness
-    ``.doit()`` from trying to evaluate the opaque ``∫`` symbolically."""
+    """Replace every Galerkin bracket (an is_bracket integral) by an opaque symbol carrying its free
+    integer indices; returns ``(hidden_expr, restore_map)``.
+    """
     brackets = sorted({ig for ig in expr.atoms(sp.Integral) if is_bracket(ig)},
                       key=sp.srepr)
     hide, restore = {}, {}
@@ -999,10 +847,9 @@ def _hide_brackets(expr):
 
 
 def merge_sums_over_add(expr):
-    """Merge ``Sum(A, lims) + Sum(B, lims) → Sum(A + B, lims)`` for IDENTICAL
-    limits (linearity of the finite sum), pulling an index-independent outer
-    coefficient inside first — the ``Sum`` analogue of ``merge_integrals_over_add``,
-    so two same-index moment sums can be folded together term-by-term."""
+    """Merge Sum(A, lims) + Sum(B, lims) -> Sum(A + B, lims) for identical limits, pulling
+    index-independent coefficients inside first. The Sum analogue of merge_integrals_over_add.
+    """
     groups, rest = {}, []
     for tm in sp.Add.make_args(sp.expand(expr)):
         facs = sp.Mul.make_args(tm)
@@ -1023,21 +870,14 @@ def merge_sums_over_add(expr):
 
 
 def consolidate(expr, fold_self=False, fold_sums=False):
-    """Unify terms under a common outer derivative — :func:`leibniz_fold` applied
-    to the top-level terms AND, after merging same-limit integrals (linearity),
-    to every INTEGRAND (and ``Sum`` summand) recursively.  So ``∫τ̃c'φ + ∫τ̃cφ'``
-    (two opaque integrals) merges and folds to ``∫τ̃·∂_ζ(cφ)``.
+    """Unify terms under a common outer derivative: leibniz_fold on the top-level terms and, after
+    merging same-limit integrals, recursively on every integrand and Sum summand.
 
-    ``fold_self=True`` additionally folds SELF-products
-    (:func:`fold_self_products`, ``g·h·∂_x h → ∂_x(g h²/2)``).  Kept OFF inside
-    :class:`Simplify` (whose ``pull_consts`` would re-expand the square next
-    pass); the :class:`Consolidate` op turns it ON.
-
-    ``fold_sums=True`` additionally HIDES Galerkin brackets behind opaque
-    symbols (:func:`_hide_brackets`) and merges same-index sums
-    (:func:`merge_sums_over_add`) first, so a conservative pair split by
-    ``PullConstants`` — ``Σ_ij a_i⟨B⟩(h ∂_x a_j + a_j ∂_x h)`` — re-folds to
-    ``Σ_ij a_i⟨B⟩ ∂_x(h a_j)`` even though ``⟨B⟩`` carries an ``∫``."""
+    Args:
+        expr: expression to fold.
+        fold_self: also fold self-products (fold_self_products) and push constants back into fluxes.
+        fold_sums: hide Galerkin brackets and merge same-index Sums first.
+    """
     from zoomy_core.symbolic.primitives_canonical import merge_integrals_over_add
     restore = {}
     if fold_sums:
@@ -1051,6 +891,7 @@ def consolidate(expr, fold_self=False, fold_sums=False):
     expr = merge_integrals_over_add(expr)
 
     def _rec(e):
+        """Recursively leibniz-fold integrands and Sum summands, treating NumQuad brackets as atoms."""
         # Treat the NUMERICAL ⟨…⟩^N quadrature bracket as a true ATOM: do NOT
         # recurse into its (huge rational) body — that O(n) recursion is exactly
         # what extracting the bracket avoids.  (Galerkin Gram/Weight brackets are
@@ -1083,44 +924,35 @@ def consolidate(expr, fold_self=False, fold_sums=False):
 
 
 class Consolidate(Operation):
-    """Op form of :func:`consolidate` — fold ``M·a·∂b + M·b·∂a → M·∂(ab)`` over
-    the terms and inside integrals.  Part of :class:`Simplify`; also usable on
-    its own to recover a conservative grouping (or fold opaque-integral
-    integrands) without the rest of the simplify pipeline."""
+    """Op form of consolidate with fold_self and fold_sums enabled."""
 
     whole_leaf_op = True
     log_level = 5
 
     def __init__(self, name="consolidate"):
+        """Create the op."""
         super().__init__(name=name, description="leibniz fold (terms + integrands)")
 
     def _leaf_sp(self, sp_expr):
+        """Apply consolidate with self-product and Sum folds on."""
         return consolidate(sp_expr, fold_self=True, fold_sums=True)
 
 
 class GaussQuadrature(Operation):
-    """Replace surviving ``Integral`` atoms by an n-point GAUSS-LEGENDRE
-    quadrature sum — the numerical-integration escape hatch for Galerkin
-    terms whose integrand is NOT analytically integrable.
+    """Replace every definite Integral atom with numeric bounds by an order-point Gauss-Legendre sum
+    Σ_g w_g f(ζ_g), for integrands without a closed form (e.g. non-polynomial material closures).
+    Exact for polynomials up to degree 2·order − 1; apply after the basis is resolved.
 
-    Non-polynomial material closures (Bingham, power-law, ...) produce
-    projection integrals like ``∫ τ(∂_ζ ũ)·φ_k′ dζ`` that the bracket
-    machinery (`ExtractBrackets`/`ResolveIntegral`) rightly refuses: there
-    is no closed form.  Applying this op AFTER the basis is resolved
-    rewrites every remaining ``Integral(f(ζ), (ζ, a, b))`` as
-
-        Σ_g  w_g · f(ζ_g),        (ζ_g, w_g) = Gauss–Legendre nodes/weights
-                                   mapped to (a, b),
-
-    a plain nonlinear expression in the modal unknowns that flows through
-    extraction (source slot) and lambdifies into every solver backend.
-    ``order`` is the user's accuracy knob (exact for polynomials of degree
-    ≤ 2·order − 1)."""
+    Args:
+        var: integration variable (default ``zeta``).
+        order: number of Gauss nodes (>= 1).
+    """
 
     whole_leaf_op = True
     log_level = 1
 
     def __init__(self, var=None, order=8, name=None):
+        """Store the node count and validate it."""
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         self._order = int(order)
         if self._order < 1:
@@ -1132,6 +964,9 @@ class GaussQuadrature(Operation):
                          "analytically unintegrable closure terms)"))
 
     def _leaf_sp(self, sp_expr):
+        """Evaluate ζ-derivatives with doit, then replace each numeric-bound integral by its mapped
+        Gauss-node sum.
+        """
         import numpy as _np
         integrals = list(sp.sympify(sp_expr).atoms(sp.Integral))
         if not integrals:
@@ -1178,6 +1013,7 @@ class GaussQuadrature(Operation):
 
 
 def _numquad_latex(expr, printer=None, exp=None):
+    """LaTeX for the NumQuad bracket ⟨f⟩^N."""
     render = printer._print if printer is not None else sp.latex
     inner = render(expr.args[0])
     s = rf"\left\langle {inner} \right\rangle^{{N}}"
@@ -1192,27 +1028,24 @@ NumQuad = type("NumQuad", (sp.Function,),
 
 
 class DeferQuadrature(Operation):
-    """Hide every surviving definite ``∫ f(ζ) dζ`` (ζ∈[0,1]) as an opaque
-    ``NumQuad(f)`` (⟨f⟩^N) so the non-analytic rational closure integrals ride
-    the rest of the derivation as ATOMS — Consolidate / CoV / InvertMassMatrix
-    never see (let alone expand) the rational body.  Apply BEFORE
-    :class:`ResolveBasis`, while the body is still an OPAQUE-φ sum: the basis is
-    substituted ONLY at the Gauss nodes (:class:`ResolveNumQuad` with ``basis=``),
-    so the rational ``ν_t = C_μ sk⁴/se²`` never exists in concrete-basis symbolic
-    form — that is what keeps high-``N_k`` builds from exploding.  Only the
-    NON-bracket (moment-bearing) integrals are wrapped; the pure-ζ polynomial
-    Galerkin ``⟨…⟩`` brackets are left for :class:`ResolveBasis` to close
-    analytically (exact, cheap)."""
+    """Hide every surviving moment-bearing ∫_0^1 f dζ as an opaque NumQuad(f) atom, so non-analytic
+    rational closure integrals ride the rest of the derivation unexpanded. Apply before
+    ResolveBasis; pure-ζ Galerkin brackets are left for analytic closure.
+    """
 
     whole_leaf_op = True
     log_level = 1
 
     def __init__(self, var=None, name="defer_quadrature"):
+        """Set the integration variable (default ``zeta``)."""
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         super().__init__(name=name,
                          description="∫dζ → opaque ⟨…⟩^N numerical bracket")
 
     def _leaf_sp(self, sp_expr):
+        """Wrap each non-bracket definite integral over (0, 1) in NumQuad, keyed by its own
+        variable.
+        """
         from zoomy_core.model.operations import is_bracket
         e = sp.sympify(sp_expr)
         repl = {}
@@ -1235,17 +1068,16 @@ class DeferQuadrature(Operation):
 
 
 class ResolveNumQuad(Operation):
-    """Resolve every opaque ``NumQuad(f)`` (⟨f⟩^N) to its ``order``-point
-    Gauss–Legendre sum over ζ∈[0,1]: ``Σ_g w_g f(ζ_g)``.  Run as the VERY LAST
-    derivation step (the system is settled) — the rational body is expanded ONCE,
-    numerically.  ``basis`` (optional) resolves any opaque ``φ(k,ζ)`` left in the
-    body at the nodes; if the body is already in the concrete basis (DeferQuadrature
-    applied after ResolveBasis) it is unused."""
+    """Resolve every opaque NumQuad(f) to its order-point Gauss-Legendre sum over ζ in [0, 1]; run
+    it as the last derivation step. ``basis`` (optional) resolves opaque φ(k, ζ) still present in a
+    bracket body at the nodes.
+    """
 
     whole_leaf_op = True
     log_level = 1
 
     def __init__(self, var=None, order=8, basis=None, name=None):
+        """Store the node count and the optional basis."""
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         self._order = int(order)
         self._basis = basis
@@ -1253,6 +1085,7 @@ class ResolveNumQuad(Operation):
                          description=f"⟨…⟩^N → {self._order}-pt Gauss–Legendre sum")
 
     def _leaf_sp(self, sp_expr):
+        """Resolve the basis in each bracket body, apply doit, and sum the weighted node values."""
         import numpy as _np
         e = sp.sympify(sp_expr)
         nqs = [a for a in e.atoms(sp.Function)
@@ -1283,38 +1116,24 @@ class ResolveNumQuad(Operation):
 
 
 class Simplify(Operation):
-    """Canonicalisation that keeps fluxes as fluxes while exposing cancellations.
-
-    Two competing objectives — (1) keep conservative divergences ``∂_v(F)``
-    grouped (do NOT product-rule them) and (2) extract constants so cancelling
-    terms become visible — are reconciled in three passes:
-
-    1. :func:`pull_consts` — pull derivative-independent constants OUT of every
-       ``∂_v`` (gentle: never product-rules a ``v``-dependent product).  Equal-
-       and-opposite terms then cancel automatically in the ``Add``.
-    2. (cancellation is implicit in the ``Add`` once normalised.)
-    3. :func:`fold_conservatives` — count-guarded pairwise fold
-       ``g∂_v f + f∂_v g → ∂_v(fg)``: applied ONLY when exact, so it never
-       increases the term count and never breaks a genuine non-conservative
-       coupling apart.
-
-    Applied to an :class:`~zoomy_core.model.equation.Equation` it ALSO runs
-    :class:`Sort` (auto-tag + order by physics category) as a final step, so a
-    simplified row comes out tagged and ordered.  ``Sort`` still exists as its
-    own op; pass ``sort=False`` to skip it.
+    """Canonicalisation that keeps fluxes grouped while exposing cancellations: pull_consts followed
+    by consolidate. On an Equation it also runs Sort as a final step (``sort=False`` skips it).
     """
 
     whole_leaf_op = True
     log_level = 5            # minor canonicalisation — hidden at low verbosity
 
     def __init__(self, name="simplify", sort=True):
+        """``sort`` toggles the final Sort pass on Equations."""
         self._sort = sort
         super().__init__(name=name, description="canonical simplify")
 
     def _leaf_sp(self, sp_expr):
+        """Apply pull_consts, then consolidate."""
         return consolidate(pull_consts(sp_expr))
 
     def apply_to_equation(self, eq):
+        """Canonicalise the residual, then tag and sort its terms when ``sort`` is on."""
         # Equation-level: canonicalise the residual, then tag + sort the terms
         # (a leaf-only ``_leaf_sp`` would lose the ordering when ``eq.expr`` is
         # rebuilt, so the sort has to happen here).
@@ -1339,10 +1158,9 @@ TAG_ORDER = [
 
 
 def _strip_brackets_for_tagging(term):
-    """Replace every Galerkin bracket (a pure NUMBER — :func:`is_bracket`
-    Integral, or a ``Gram``/``Weight`` atom) by an opaque ``Dummy`` so the tagger
-    treats it as a constant: its internal ζ-derivatives are not physical fluxes
-    and it carries no unknown."""
+    """Replace Galerkin brackets (is_bracket integrals and bracket atoms) by opaque Dummies so the
+    tagger treats them as constants.
+    """
     reps = {}
     for ig in term.atoms(sp.Integral):
         if is_bracket(ig):
@@ -1354,18 +1172,10 @@ def _strip_brackets_for_tagging(term):
 
 
 def _classify_term(term, q_heads, t, spatial, detect_ncp=True):
-    """Heuristic physics category for one additive ``term``.
-
-    Galerkin brackets are first made opaque (a bracket is a number, not a flux),
-    then a single outer moment ``Sum`` is peeled so the per-mode summand is what
-    is classified — this is what lets the ``Σ_{ij} a_i⟨…⟩∂_x(a_j h)`` coupling be
-    seen as a nonconservative product rather than an opaque ``source``.
-
-    ``q_heads`` = unknown family heads; ``t`` the time coord; ``spatial`` the
-    horizontal coords.  A ``field·∂_v(…)`` term is a nonconservative product
-    (the conservative flux has NO field coefficient outside the derivative);
-    ``detect_ncp`` toggles that heuristic (off → ``source``).  Best-effort — the
-    user can always pre-/re-tag (``AutoTag`` never overwrites an existing tag)."""
+    """Heuristic physics category of one additive term (time_derivative, flux, diffusion,
+    nonconservative_flux, source or untagged), with brackets opaque and a single outer moment Sum
+    peeled.
+    """
     term = _strip_brackets_for_tagging(term)
     factors = list(term.args) if isinstance(term, sp.Mul) else [term]
     # Peel a single outer moment Sum: classify by its per-mode summand.
@@ -1409,21 +1219,19 @@ def _tag_context(eq):
 
 
 class AutoTag(Operation):
-    """Tag each UNTAGGED additive term with its physics category
-    (``time_derivative`` / ``flux`` / ``diffusion`` / ``nonconservative_flux``
-    / ``source``), leaving already-tagged terms alone.
-
-    Tags live on the terms and are hidden in ``describe`` unless
-    ``describe(show_tags=True)`` is asked for.  Pairs with :class:`SortByTag`;
-    :class:`Sort` runs both."""
+    """Tag each untagged additive term with its physics category, leaving existing tags alone. Pairs
+    with SortByTag; Sort runs both.
+    """
 
     log_level = 5
 
     def __init__(self, name="auto_tag", detect_ncp=True):
+        """``detect_ncp`` toggles detection of nonconservative products (off: they become source)."""
         self._detect_ncp = detect_ncp
         super().__init__(name=name, description="tag untagged terms by category")
 
     def apply_to_equation(self, eq):
+        """Tag the untagged terms of ``eq``."""
         q_heads, t, spatial = _tag_context(eq)
         for tm in eq._terms:
             if tm.tag is None:
@@ -1433,17 +1241,16 @@ class AutoTag(Operation):
 
 
 class SortByTag(Operation):
-    """Reorder the equation's terms into the canonical :data:`TAG_ORDER`
-    (time derivative, flux, diffusion, NCP, source, untagged), stable within
-    each group.  Display order is honoured by ``describe`` (which renders the
-    terms in their current order, bypassing sympy's ``Add`` canonicalisation)."""
+    """Reorder an equation's terms into TAG_ORDER, stable within each group."""
 
     log_level = 5
 
     def __init__(self, name="sort_by_tag"):
+        """Create the op."""
         super().__init__(name=name, description="order terms by physics tag")
 
     def apply_to_equation(self, eq):
+        """Sort ``eq``'s terms by tag rank."""
         rank = {tag: i for i, tag in enumerate(TAG_ORDER)}
         eq._terms.sort(
             key=lambda tm: rank.get(tm.tag or "untagged", len(TAG_ORDER)))
@@ -1451,17 +1258,19 @@ class SortByTag(Operation):
 
 
 class Sort(Operation):
-    """:class:`AutoTag` then :class:`SortByTag` — order the terms the way you
-    would write them by hand.  Apply it LAST (after the algebra is settled): a
-    later expression-level op rebuilds the term list and drops the ordering."""
+    """AutoTag then SortByTag; apply it last, because a later expression-level op rebuilds the term
+    list and drops the ordering.
+    """
 
     log_level = 5
 
     def __init__(self, name="sort", detect_ncp=True):
+        """``detect_ncp`` is passed to AutoTag."""
         self._detect_ncp = detect_ncp
         super().__init__(name=name, description="auto-tag + sort by physics tag")
 
     def apply_to_equation(self, eq):
+        """Auto-tag, then sort ``eq``'s terms."""
         AutoTag(detect_ncp=self._detect_ncp).apply_to_equation(eq)
         SortByTag().apply_to_equation(eq)
         return eq

@@ -1,40 +1,6 @@
-"""Residual → operator structural extraction for the declarative
-:class:`~zoomy_core.model.derivation.model.Model`.
-
-The clean-redesign :class:`Model` carries plain sympy residuals in Function
-form (``h(t, x)``, ``q(k, t, x)``) with NO solver tags.  Its equations are
-nonetheless bit-exact to production (:class:`zoomy_core.model.models.sme.SME`)
-and — after step 8b of the SME pipeline — bundled in production's K&T (4.17)
-form: the conservative flux + hydrostatic-pressure divergences fold into
-``∂_x(F)`` / ``∂_x(g h²/2)`` units, while the genuinely non-conservative
-couplings (the bed ``g·h·∂_x b`` and the cross-mode ``q_i/h·∂_x q_j`` terms)
-stay UNFOLDED.
-
-``SystemModel.from_model(model, Q, Qaux)`` therefore extracts the operators by
-feeding each residual — rewritten from Function form into the state Symbols —
-through the SAME term classifier production uses
-(:func:`zoomy_core.model.derivation.tag_extraction._classify_term`).  Per additive
-term:
-
-* ``Derivative(*, t)``                          → ``mass_matrix`` (coeff of
-  the ``∂_t Q_j`` it carries);
-* ``coeff · Derivative(F(Q), x)``, state-free
-  coeff, gravity inside                         → ``hydrostatic_pressure``;
-* ``coeff · Derivative(F(Q), x)``, state-free
-  coeff, no gravity                             → ``flux``;
-* ``coeff · Derivative(Q_j, x)``                → ``nonconservative_matrix``
-  (``B[row, j]`` += coeff);
-* ``coeff(Q) · Derivative(F(Q), x)`` with a
-  state-dependent coeff                         → ``nonconservative_matrix``
-  (recovered via the ``∂_x q_j`` couplings it expands into);
-* everything else (no spatial derivative)       → ``source`` (sign-flipped).
-
-Second-order ``∂_x(coeff · ∂_x Q_j)`` terms are routed to the rank-4
-``diffusion_matrix`` (the diffusive flux ``Fᵈ = A(Q)∇Q``) — see the Newtonian
-normal-stress variant.
-
-``Q`` ∪ ``Qaux`` must cover every field atom; otherwise a ``ValueError`` names
-the uncovered fields.
+"""Classifies the additive terms of a derivation Model's residuals into SystemModel slots (mass
+matrix, flux, hydrostatic pressure, nonconservative matrix, source, diffusion matrix). It is the
+bridge from the derivation Model to ``SystemModel.from_model``.
 """
 
 from __future__ import annotations
@@ -48,54 +14,37 @@ __all__ = ["extract_system_operators", "HydrostaticPressure", "ViscousDiffusion"
 
 
 class ViscousDiffusion(sp.Function):
-    """Opaque marker wrapping the integrand of a viscous diffusive flux.
-
-    ``package_viscous`` emits the retained in-plane deviatoric-stress divergence
-    as a conservative compound ``∂_{x_d}(ViscousDiffusion(D · ∂_{x_e} Q_j))``.
-    The marker is a PROVENANCE tag: it declares "this second-order compound is a
-    genuine ν-viscous diffusive flux — route the WHOLE rank-4 tensor, including
-    the off-diagonal σ-metric cross pieces ``D·∂_x h`` / ``D·∂_x b`` that the
-    coordinate transform produces, into ``diffusion_matrix`` (``A[i, j, d, e]``,
-    ``j`` possibly a FOREIGN state)".  Without it the extractor's
-    ``_is_self_diffusion`` gate — which only recognises the row's OWN conserved
-    variable — mis-routes the foreign-state pieces to the conservative ``flux``
-    (as a frozen gradient-aux), which SILENTLY DROPPED the in-plane h-column of
-    the diffusion matrix (``A[q_k←h] ≡ 0``; REQ-176(4) correction).  A bed-slope
-    KBC flux ``∂_x(A·∂_x b)`` carries NO such marker (it is not a ν term and
-    never passes through ``package_viscous``), so it stays a conservative flux —
-    REQ-80 preserved.  ``eval`` returns ``None`` (unevaluated, excluded from
-    field collection) and ``0`` for a zero integrand so ``ν → 0`` collapses it
-    cleanly."""
+    """Opaque provenance marker wrapping a viscous diffusive flux ``d_x(ViscousDiffusion(D d_x
+    Q_j))``. It routes the whole rank-4 compound, including foreign-state cross pieces, into
+    ``diffusion_matrix`` rather than ``flux``.
+    """
 
     nargs = 1
 
     @classmethod
     def eval(cls, arg):
+        """Leave the marker unevaluated; a zero argument collapses to zero."""
         if arg == 0:
             return sp.S.Zero
         return None
 
 
 class HydrostaticPressure(sp.Function):
-    """Opaque marker wrapping a pressure-flux argument.
-
-    A conservative term ``∂_x(HydrostaticPressure(P))`` is routed to the
-    ``hydrostatic_pressure`` operator (which feeds the well-balanced
-    hydrostatic reconstruction); every OTHER conservative ``∂_x(F(state))``
-    goes to ``flux``.  Routing to pressure is therefore an EXPLICIT, manual
-    step the model takes — e.g. ``eq.apply({g*h**2/2: HydrostaticPressure(g*h**2/2)})``
-    — never guessed from the presence of gravity.  ``eval`` returns ``None`` so
-    the marker stays unevaluated AND is excluded from field collection (it
-    carries an ``eval``, so it is not an undefined field)."""
+    """Opaque marker wrapping a pressure-flux argument; ``d_x(HydrostaticPressure(P))`` routes to
+    ``hydrostatic_pressure`` while any other conservative ``d_x(F)`` routes to ``flux``. The model
+    applies it explicitly, never inferred from gravity.
+    """
 
     nargs = 1
 
     @classmethod
     def eval(cls, arg):
+        """Leave the marker unevaluated."""
         return None
 
 
 def _field_name(field):
+    """Name of a field's Function head (or of the field itself)."""
     head = field.func if hasattr(field, "func") else field
     return getattr(head, "__name__", str(head))
 
@@ -109,27 +58,10 @@ _SIGN_PREDICATES = ("zero", "positive", "negative",
 
 
 def head_assumptions(field) -> dict:
-    """The assumption closure DECLARED on a field's Function head.
-
-    Models state physical facts on the head — ``h = sp.Function("h",
-    positive=True)(t, *horiz)`` in models/sme.py — and that statement has to
-    survive into the SystemModel, because the SystemModel is where the ANALYTIC
-    quantities are computed and the CAS needs the constraint to do its job:
-    with ``h > 0`` sympy collapses ``sqrt(h**5)/h**2`` to ``sqrt(h)``; without
-    it the identity is FALSE (it fails for negative h), so no amount of
-    ``simplify`` can reach it.
-
-    Hard-coding ``real=True`` here dropped positivity one layer too early and
-    froze the SME spectrum as ``sqrt(g)*n0*sqrt(h**5)/h**2``.  The tell:
-    PARAMETERS never had the problem (``g`` keeps ``positive=True``), which is
-    why ``sqrt(g*h**5)`` half-factored — g escaped the radical, h could not.
-
-    Only DECLARED fields inherit.  Derived aux (``h_x``, ``q_0_x__lsq``) is
-    minted from a *generated* name, not from a head, and must NOT inherit: the
-    gradient of a positive quantity is not positive.
-
-    Assumptions are dropped again at the SystemModel → NumericalSystemModel
-    boundary, where the numerical guards live."""
+    """Assumptions declared on a field's Function head (``real`` plus its strongest sign predicate),
+    so that e.g. ``h > 0`` survives into the SystemModel. Only declared fields inherit; derived aux
+    symbols do not.
+    """
     head = field.func if hasattr(field, "func") else field
     out = {"real": True}                  # every state field is real-valued
     for k in _SIGN_PREDICATES:
@@ -140,12 +72,9 @@ def head_assumptions(field) -> dict:
 
 
 def _state_symbol(field):
-    """The state/aux Symbol for a modal field — ``q(0, t, x) → q_0``,
-    ``h(t, x) → h``, ``aw(2, t, x) → aw_2``.  The leading integer mode index
-    (if any) becomes a ``_k`` suffix; bare scalar fields keep their name.
-
-    Carries the head's DECLARED assumptions through — see
-    :func:`head_assumptions`."""
+    """State/aux Symbol of a modal field: ``q(0,t,x)`` becomes ``q_0``, ``h(t,x)`` becomes ``h``,
+    with the head's assumptions.
+    """
     name = _field_name(field)
     args = getattr(field, "args", ())
     assumptions = head_assumptions(field)
@@ -155,8 +84,9 @@ def _state_symbol(field):
 
 
 def _collect_fields(expr, param_names):
-    """Every undefined-like field application in ``expr`` (excludes parameters,
-    basis machinery, sympy builtins)."""
+    """All undefined-Function field applications in ``expr``, excluding parameters, basis heads and
+    sympy builtins.
+    """
     from sympy.core.function import AppliedUndef
     out = set()
     for atom in expr.atoms(sp.Function):
@@ -175,34 +105,21 @@ def _collect_fields(expr, param_names):
 
 
 def extract_system_operators(model, Q, Qaux=None, dae=False):
-    """Structurally extract operator matrices from a declarative ``Model``.
+    """Extract the operator matrices (mass, flux, hydrostatic pressure, nonconservative, source,
+    diffusion) from a Model's residuals, one evolution row per state field. Raises ``ValueError``
+    for fields outside ``Q`` and ``Qaux``, unresolved integrals, unroutable terms, and (unless
+    ``dae``) a mass matrix that is not the identity.
 
-    Parameters
-    ----------
-    model : zoomy_core.model.derivation.model.Model
-        The threaded model after the full closure pipeline.
-    Q : list of applied field Functions
-        The state fields, one per evolution row (``[b, h, q(0,…), q(1,…), …]``).
-    Qaux : list of applied field Functions, optional
-        The auxiliary fields.  ``None`` ⇒ auto-populate with every field not in
-        ``Q``.
-    dae : bool, optional
-        When ``False`` (default) the mass matrix must be diagonal with unit
-        diagonal (``InvertMassMatrix`` was applied) — a non-unit / off-diagonal
-        entry raises, exactly as before.  When ``True`` the model is a genuine
-        **index-1 DAE**: the non-diagonal / singular ``M(Q)`` is RETAINED (entries
-        only ``cancel``-normalised, no raise), for a DAE-aware time-stepper
-        (:class:`~zoomy_core.fvm.solver_dae_numpy.DAESolver`) to invert numerically
-        per cell.  Diagonal-mass consumers still guard with
-        :meth:`SystemModel.assert_diagonal_mass_matrix`.
+    Args:
+        model: Model after the full closure pipeline.
+        Q: Applied state fields, one per evolution row.
+        Qaux: Applied auxiliary fields; ``None`` takes every field not in ``Q``.
+        dae: Keep a non-diagonal or singular mass matrix (index-1 DAE) instead of raising.
 
-    Returns
-    -------
-    dict
-        ``time, space, state, aux_state, parameters, parameter_values, normal,
-        flux, hydrostatic_pressure, nonconservative_matrix, source,
-        mass_matrix, diffusion_matrix`` — ready to splat into
-        ``SystemModel(...)``.
+    Returns:
+        Dict of ``SystemModel`` keyword arguments (``time, space, state, aux_state, parameters,
+            flux, hydrostatic_pressure, nonconservative_matrix, source, mass_matrix,
+            diffusion_matrix, ...``) plus the ``unclassified`` remainders.
     """
     t = model.coords[0]
     # ``space`` = the spatial coordinates the STATE fields actually depend on, in
@@ -273,6 +190,7 @@ def extract_system_operators(model, Q, Qaux=None, dae=False):
     # ``space == horiz``) get ``(t,*space)`` for every field, byte-identical to
     # the former uniform mapping.
     def _canon(s, f):
+        """State/aux Function of ``(t, *space)`` limited to the coordinates of ``f``."""
         used_sp = [c for c in space if c in getattr(f, "args", ())]
         return sp.Function(str(s), real=True)(t, *used_sp)
 
@@ -329,6 +247,7 @@ def extract_system_operators(model, Q, Qaux=None, dae=False):
     unclassified = [(i, r.xreplace(rev)) for i, r in unclassified]
 
     def _to_sym(m):
+        """Substitute the Symbol-functions back by bare Symbols."""
         return m.xreplace(rev) if hasattr(m, "xreplace") else m
 
     F = _to_sym(F)
@@ -398,28 +317,18 @@ def extract_system_operators(model, Q, Qaux=None, dae=False):
 
 def _classification_remainder(residuals, state_funcs, t, space,
                               F, P, B, S, M, A):
-    """Term-conservation check for the extracted operators.
+    """Rebuild each row from the slots it was routed to and subtract the original residual; a
+    nonzero remainder is a silently dropped term.
 
-    For each row ``i`` reassemble the canonical balance law from the slots
-    the classifier routed to —
-
-    ``M·∂_t Q + ∇·(F + P) + Σ_d B_d·∂_{x_d} Q + ∇·(A ∇Q) − S`` —
-
-    and subtract the ORIGINAL residual (marker-unwrapped, ``.doit()``-expanded
-    so folded ``∂_x(q²/h)`` and unfolded ``q/h·∂_x q`` normalise to the same
-    bare-derivative atoms).  A remainder that does not collapse to zero is a
-    term the classifier matched NO branch for — routed nowhere, i.e. SILENTLY
-    DROPPED.  Returns a list of ``(row, remainder)`` for the nonzero rows
-    (empty ⇒ every term is accounted for), remainders in state-Function form.
-
-    This is the durable, GENERIC guard against the class of bug that hid the
-    VAM bed-slope diffusion drop: it depends only on the balance-law algebra,
-    never on per-system knowledge of which terms a given family emits."""
+    Returns:
+        List of ``(row, remainder)`` for nonzero rows (empty if every term is accounted for).
+    """
     n_eq = len(residuals)
     n_state = len(state_funcs)
     n_dim = len(space)
 
     def _unwrap(expr):
+        """Strip the ``HydrostaticPressure`` and ``ViscousDiffusion`` markers."""
         expr = expr.replace(
             lambda e: isinstance(e, HydrostaticPressure), lambda e: e.args[0])
         expr = expr.replace(
@@ -457,13 +366,9 @@ def _classification_remainder(residuals, state_funcs, t, space,
 
 def _classify_row(residual, i, state, state_funcs, t, space, gravity_param,
                   F, P, B, S, M, A):
-    """Split one row residual into ``M / F / P / B / S / A`` slots using the
-    production term classifier.  ``residual`` is in state-Symbol-as-(t, *space)
-    Function form; ``space`` is the list of horizontal spatial symbols (one per
-    flux column).  Each spatial term routes to the column ``d`` of the
-    direction its derivative is taken in, so the multi-horizontal case folds
-    out of the SAME per-direction branch logic as the 1-D case (single
-    horizontal ⇒ ``d`` ≡ 0, byte-identical to the legacy path)."""
+    """Split one row residual term by term into the ``M / F / P / B / S / A`` slots, filling them in
+    place.
+    """
     from zoomy_core.model.derivation.tag_extraction import (
         _split_coeff_and_derivative, _first_order_direction,
     )
@@ -618,10 +523,11 @@ def _classify_row(residual, i, state, state_funcs, t, space, gravity_param,
 
 
 def _second_order_dirs(deriv, space):
-    """If ``deriv`` is a second-order spatial derivative, return the
-    ``(outer_dir, inner_dir)`` index pair — the diffusion column / gradient
-    directions ``A[:, :, d, e]``; else ``None``.  Generalizes the 1-D
-    ``∂_x∂_x`` / ``∂_x(·∂_x·)`` test to every horizontal direction."""
+    """Outer and inner spatial direction indices of a second-order spatial derivative.
+
+    Returns:
+        ``(outer, inner)`` or ``None``.
+    """
     v = deriv.variables
     # Pure second derivative ``∂_{x_d} ∂_{x_e}`` (covers ``∂_{x_d}²``).
     if len(v) == 2 and v[0] in space and v[1] in space:
@@ -637,20 +543,9 @@ def _second_order_dirs(deriv, space):
 
 
 def _is_self_diffusion(deriv, own_func, space):
-    """True iff a second-order term is GENUINE viscous self-diffusion of the
-    row's own variable — the inner spatial derivative differentiates a quantity
-    that carries ``own_func`` (the row's own state Function, e.g. the momentum
-    ``mom`` or its velocity ``q/h``).  This keeps the diffusive flux
-    ``Fᵈ = A ∂_x(own)`` — together with the change-of-variable cross piece
-    ``∂_x h`` that ``∂_x(q/h)`` expands into — in ``diffusion_matrix``.
-
-    Returns ``False`` for an OFF-DIAGONAL ``∂_{x_d}(A · ∂_{x_e}(field))`` whose
-    inner derivative is of a FOREIGN field (the bed ``∂_x b`` from the bottom
-    KBC) — that is a conservative flux carrying a gradient-aux, not viscosity.
-
-    The decision is made on the WHOLE compound (before any ``.doit()`` CoV
-    expansion), so the genuine viscous term's ``∂_x h`` cross piece is NOT
-    mistaken for a foreign-field gradient and split off into the flux."""
+    """True iff a second-order term differentiates a quantity carrying the row's own state variable
+    (genuine viscosity), not a foreign field such as the bed gradient.
+    """
     v = deriv.variables
     # Bare ``∂_{x_d}∂_{x_e} Q_j``: self iff the differentiated arg is the own var.
     if len(v) == 2 and v[0] in space and v[1] in space:
@@ -666,15 +561,9 @@ def _is_self_diffusion(deriv, own_func, space):
 
 
 def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
-    """Route a second-order ``coeff · ∂_{x_d}(D · ∂_{x_e} Q_j)`` term into the
-    rank-4 diffusion tensor ``A[i, j, d, e]`` (the diffusive flux
-    ``Fᵈ = A ∇Q``): the outer derivative sets the flux column ``d``, the inner
-    derivative the gradient direction ``e``.  Single-horizontal models give
-    ``d = e = 0``.  The term sits on the residual side and the contract is
-    "the residual contributes ``-∇·(A:∇Q)``" (the RHS ``+∇·(A:∇Q)``), so
-    ``A`` takes MINUS its coefficient -- as the source takes ``S = -LHS``.
-    (It took the coefficient itself: every extracted viscosity was
-    anti-diffusive in every solver, ``A[q, q] = -2 nu``.)"""
+    """Route ``coeff d_xd(D d_xe Q_j)`` into ``A[i, j, d, e]`` with the sign of the residual side
+    (minus the coefficient); raises if no ``D d_x Q`` reading exists.
+    """
     v = deriv.variables
     # Bare second derivative ``coeff · ∂_{x_d}∂_{x_e} Q_j``: identical to
     # ``∂_{x_d}(coeff · ∂_{x_e} Q_j)`` ONLY for a (t, spatial, state)-free coeff
@@ -715,8 +604,11 @@ def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
 
 
 def _split_inner_x_derivative(term, space):
-    """Return ``(coeff, ∂_{x_e} Q, e)`` for a ``coeff · ∂_{x_e} Q`` term (``e``
-    = the horizontal direction index), else ``(None, None, None)``."""
+    """Split a term into ``coeff * d_xe Q``.
+
+    Returns:
+        ``(coeff, derivative, e)`` or ``(None, None, None)``.
+    """
     factors = term.args if isinstance(term, sp.Mul) else [term]
     deriv = None
     for f in factors:
@@ -732,11 +624,9 @@ def _split_inner_x_derivative(term, space):
 
 
 def _route_nonconservative_product(term, i, state, state_funcs, space, d, B, S):
-    """A ``coeff(state) · ∂_{x_d}(F(state))`` term that production keeps
-    unfolded — it is already a ``coeff · ∂_{x_d} Q_j`` non-conservative coupling
-    (the SME cross-mode terms ``q_i/h · ∂_{x_d} q_j``).  Read ``(j, coeff)`` and
-    add to ``B[i, j, d]``.  If the derivative argument is not a bare state
-    Symbol the term cannot be a clean NCP coupling — route it to source."""
+    """Route ``coeff(state) d_xd(F(state))`` into the nonconservative matrix ``B`` via the product
+    rule, or to the source if it is not a clean coupling.
+    """
     from zoomy_core.model.derivation.tag_extraction import (
         _split_coeff_and_derivative, _first_order_direction,
     )
@@ -772,15 +662,15 @@ def _route_nonconservative_product(term, i, state, state_funcs, space, d, B, S):
 
 
 def _assign_rows(model, Q, field_to_fn, state, state_fn, t):
-    """Order the equation residuals so row ``i`` is the equation whose ``∂_t``
-    carries ``state[i]`` (the evolution row for that state).  Falls back to the
-    declared equation order when no ``∂_t`` match is found (algebraic rows)."""
+    """Order the equations so that row ``i`` is the one whose time derivative carries ``state[i]``,
+    falling back to declaration order for algebraic rows.
+    """
     eqs = list(model._equations.values())
 
     def _has_dt_of(expr, sf):
-        """True iff ``expr`` carries a ``∂_t(c · sf)`` term — matching the
-        conservative time term whose Gram factor sits inside the derivative
-        (``∂_t(q_k/(2k+1))``), not only the bare ``∂_t(sf)``."""
+        """True iff ``expr`` has a time-derivative term of ``c * sf``, including a constant inside
+        the derivative.
+        """
         for der in expr.atoms(sp.Derivative):
             if der.variables == (t,):
                 _, base = der.args[0].as_independent(sf, as_Mul=True)

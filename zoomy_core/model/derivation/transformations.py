@@ -1,26 +1,6 @@
-"""The transformation + boundary-condition layer for the clean-redesign
-derivation framework.
-
-One public piece:
-
-:class:`PDETransformation`
-    The explicit-geometry σ-map ``z = b + h·ζ`` from the physical vertical
-    coordinate ``z`` to the reference ``ζ ∈ [0, 1]``.  It mints a *decorated*
-    head ``f̃(t, x, ζ)`` for every field ``f(t, x, z)`` (LaTeX accent, e.g.
-    ``ũ``) and applies the σ chain rule **as a differential rewrite rule on
-    Derivative nodes** — producing ``(1/h)∂_ζ f̃`` and the metric-correction
-    terms with NO leftover ``Subs`` artifacts.  This is the explicit-geometry
-    counterpart of the production
-    :class:`zoomy_core.model.operations.SigmaTransform` (which keeps the field
-    head and substitutes ``z → ζ·h + b`` into the argument list); here the
-    decorated heads are *distinct* Function classes so the σ-mapped atoms
-    cannot cross-substitute with their physical-z originals.
-
-    It also σ-maps any stored boundary conditions: a
-    :class:`~zoomy_core.model.operations.KinematicBC` added via
-    ``model.add_equation`` is an oriented ``Expression`` whose ``{lhs: rhs}``
-    relation is rewritten alongside the bulk equations (``w(b) → w̃(0)`` …),
-    ready to apply as a substitution.
+"""Coordinate transformations applied to a Model: the vertical sigma map z -> zeta and a
+channel-fitted (s, n) map. Both are Model-level rewrites that sit between the 3-D Model and the
+depth-projection that builds the SystemModel.
 """
 
 from __future__ import annotations
@@ -37,34 +17,9 @@ __all__ = ["PDETransformation"]
 
 
 class PDETransformation(Operation):
-    """Map the physical vertical coordinate ``z`` to the reference ``ζ`` via
-    an explicit geometry ``z = b(t, x) + h(t, x)·ζ``.
-
-    Usage::
-
-        pde = PDETransformation({z: (zeta, sp.Eq(z, b + h * zeta))})
-        model.apply(pde)
-        u_tilde = pde.decorated(u)          # ũ(t, x, ζ)
-
-    With ``ζ = (z − b) / h``, every field ``f(t, x, z)`` becomes the decorated
-    ``f̃(t, x, ζ)`` and derivatives are rewritten by the chain rule:
-
-    .. math::
-
-        \\partial_z f &\\to \\tfrac{1}{h}\\,\\partial_\\zeta \\tilde f \\\\
-        \\partial_x f &\\to \\partial_x \\tilde f
-            - \\tfrac{\\partial_x(\\zeta h + b)}{h}\\,\\partial_\\zeta \\tilde f \\\\
-        \\partial_t f &\\to \\partial_t \\tilde f
-            - \\tfrac{\\partial_t(\\zeta h + b)}{h}\\,\\partial_\\zeta \\tilde f
-
-    The Jacobian ``dz = h dζ`` is available via :attr:`jacobian` so a later
-    depth-projection recovers the ``h`` factor.
-
-    This is a **model-level** operation (``whole_model_op = True``): it rewrites
-    the whole coordinate system and every equation, and records the σ-map
-    metadata on the model (``_field_decoration`` / ``_sigma_from`` /
-    ``_vertical`` / ``coord_relations``) so :func:`kinematic_bc` and later
-    depth-projection can read it.  A bare equation-level apply raises.
+    """Sigma map ``z = b + h*zeta`` that rewrites every field ``f(t, x, z)`` to a decorated ``f~(t,
+    x, zeta)`` via the chain rule on Derivative nodes. Model-level only (``model.apply(...)``); it
+    also sigma-maps stored boundary conditions and records the map on the model.
     """
 
     # A coordinate transformation is a change of representation → rewrite BCs.
@@ -81,6 +36,9 @@ class PDETransformation(Operation):
 
     def __init__(self, coord_map, *, decorate="tilde",
                  name="pde_transformation", description=None):
+        """Build the map from ``{z: (zeta, Eq(z, b + h*zeta))}``; ``decorate`` picks the accent
+        (tilde, hat, bar, check).
+        """
         if len(coord_map) != 1:
             raise ValueError(
                 "PDETransformation supports a single coordinate replacement "
@@ -119,11 +77,8 @@ class PDETransformation(Operation):
         )
 
     def _parse_spec(self, spec):
-        """Read ``(ζ, b, h)`` out of the coord-map spec.
-
-        ``spec`` is ``(ζ, relation)``; ``relation`` is an ``Eq`` or the bare
-        inverse expr ``b + h·ζ``.  We normalise to the inverse form
-        ``z = b + h·ζ`` and read ``b = z|_{ζ=0}``, ``h = ∂_ζ z``.
+        """Read ``(zeta, b, h)`` from the coord-map spec, with ``b = z|_{zeta=0}`` and ``h =
+        dz/dzeta``.
         """
         zeta, relation = spec
         if isinstance(relation, sp.Equality):
@@ -149,17 +104,13 @@ class PDETransformation(Operation):
     # ── geometry accessors ────────────────────────────────────────────
     @property
     def jacobian(self):
-        """The vertical Jacobian ``dz/dζ = h`` (so ``dz = h dζ``)."""
+        """Vertical Jacobian ``dz/dzeta = h``."""
         return self._h
 
     # ── decorated head minting ────────────────────────────────────────
     def _decorate_head(self, head):
-        """A decorated copy of a Function head whose LaTeX is the accented
-        original (``u`` → ``\\tilde{u}``).  Cached per original head.
-
-        The minted head is a *distinct* Function subclass so the σ-mapped
-        atom ``ũ(t, x, ζ)`` never cross-substitutes with the physical-z
-        original ``u(t, x, z)``.
+        """Mint (and cache) a distinct Function subclass for the accented head, so ``u~`` never
+        cross-substitutes with ``u``.
         """
         if head in self._decorated:
             return self._decorated[head]
@@ -168,6 +119,7 @@ class PDETransformation(Operation):
         accent = self._accent
 
         def _latex(expr, printer=None, exp=None):
+            """LaTeX printer of the accented head (bare head under the strip-args printer)."""
             render = printer._print if printer is not None else sp.latex
             inner = sp.latex(sp.Symbol(orig_name))
             head_tex = rf"{accent}{{{inner}}}"
@@ -187,12 +139,8 @@ class PDETransformation(Operation):
 
     # ── decorated-field accessor (post-transform) ─────────────────────
     def decorated(self, field):
-        """The σ-mapped decorated counterpart of an ORIGINAL field application.
-
-        ``pde.decorated(u)`` where ``u = u(t, x, z)`` returns ``ũ(t, x, ζ)`` —
-        the same head this transform minted, applied to the z→ζ-mapped
-        argument list.  Returns ``field`` unchanged if the head was never
-        decorated (the field carried no ``z``).
+        """Return the decorated counterpart ``u~(t, x, zeta)`` of a physical field application, or
+        the field itself if its head was never decorated.
         """
         head = self._decorated.get(field.func)
         if head is None:
@@ -202,6 +150,7 @@ class PDETransformation(Operation):
 
     # ── leaf guard (model-only) ───────────────────────────────────────
     def _leaf_sp(self, sp_expr):
+        """Leaf hook: rewrite only when reached through ``apply_to_model``, else raise TypeError."""
         if not self._via_model:
             raise TypeError(
                 "PDETransformation is a model-level operation — it rewrites "
@@ -213,6 +162,9 @@ class PDETransformation(Operation):
 
     # ── model dispatch ────────────────────────────────────────────────
     def apply_to_model(self, model):
+        """Rewrite coordinates, all equations and stored assumptions, then publish the decoration
+        map and move the unknowns to the decorated heads.
+        """
         self._via_model = True
         try:
             self._rewrite_model_coords(model)
@@ -265,6 +217,9 @@ class PDETransformation(Operation):
         return model
 
     def _rewrite_model_coords(self, model):
+        """Replace ``z`` by ``zeta`` in the model coordinates and record ``z = b + h*zeta`` in
+        ``coord_relations``.
+        """
         coords = getattr(model, "_coords", None)
         if coords is None or self._z not in coords:
             return
@@ -275,8 +230,9 @@ class PDETransformation(Operation):
 
     # ── the rewrite ───────────────────────────────────────────────────
     def _rewrite(self, e):
-        """Recursive coordinate-map rewrite producing decorated ζ-functions
-        and ζ-derivatives, with zero ``Subs``."""
+        """Recursively map z -> zeta: decorate z-dependent fields, evaluate interface values at
+        their sigma height, apply the chain rule to Derivatives.
+        """
         if isinstance(e, sp.Derivative):
             inner_new = self._rewrite(e.expr)
             result = inner_new
@@ -332,6 +288,9 @@ class PDETransformation(Operation):
         return e
 
     def _apply_one_derivative(self, inner_expr, var):
+        """Chain rule for one derivative: ``d_z -> (1/h) d_zeta`` and ``d_s -> d_s - (d_s(zeta h +
+        b)/h) d_zeta``.
+        """
         zeta, h, b = self._zeta, self._h, self._b
         if var == self._z:
             # ∂_z u → (1/h)·∂_ζ ũ
@@ -350,6 +309,7 @@ class PDETransformation(Operation):
         return sp.Derivative(inner_expr, var)
 
     def _repr_latex_(self):
+        """Notebook LaTeX summary of the map."""
         return (rf"$\zeta = \frac{{{sp.latex(self._z)} - {sp.latex(self._b)}}}"
                 rf"{{{sp.latex(self._h)}}}, \quad "
                 rf"u({sp.latex(self._z)}) \mapsto {self._accent}{{u}}"
@@ -359,43 +319,16 @@ class PDETransformation(Operation):
                 rf"{self._accent}{{u}}$")
 
 class ParametrizedGeometry(Operation):
-    r"""Map a Cartesian pair ``(x, y)`` onto coordinates fitted to a
-    parametrized centreline ``r(sigma)``.
-
-    The geometry is the INPUT.  Everything else -- the curvature, the metric,
-    the chain rule and the area element -- is derived from it, so a straight
-    line, a circular bend and a meander differ only in the curve handed in::
-
-        straight = sp.Matrix([s, 0])
-        bend     = sp.Matrix([R*sp.cos(s/R), R*sp.sin(s/R)])
-        meander  = sp.Matrix([s, A*sp.sin(k*s)])
-        model.apply(ParametrizedGeometry(bend, (x, y), (s, n)))
-
-    For a planar curve the channel-fitted map is ``X(s,n) = r(s) + n N(s)``
-    with unit tangent ``T`` and normal ``N``, giving an ORTHOGONAL frame with
-    scale factors ``(m, 1)`` and
-
-    .. math::
-
-        m = 1 - \kappa(s)\,n ,\qquad
-        \nabla f = \tfrac1m \partial_s f\,\mathbf T + \partial_n f\,\mathbf N .
-
-    Hence the rewrite applied to every ``Derivative`` node::
-
-        d_x f -> (T_x/m) d_s f + N_x d_n f
-        d_y f -> (T_y/m) d_s f + N_y d_n f
-
-    ``kappa = 0`` collapses ``m`` to 1 and both rules to the identity, so the
-    Cartesian model is the degenerate case of the same code path rather than a
-    separate one.  :attr:`jacobian` returns ``m`` so a later projection picks
-    up the area element ``dA = m dn ds``.
-
-    The curve may be parametrized any way; the speed ``|r'|`` is carried
-    explicitly rather than assuming arc length.
+    """Orthogonal map ``X(s, n) = r(s) + n N(s)`` of a Cartesian pair (x, y) onto coordinates fitted
+    to a planar centreline ``r(s)``. Curvature, metric ``m = 1 - kappa n`` and the chain rule on
+    Derivative nodes are all derived from the curve; ``kappa = 0`` is the identity.
     """
 
     def __init__(self, centreline, coords, new_coords, *, decorate="tilde",
                  name="parametrized_geometry", description=None):
+        """Derive speed, curvature, tangent, normal and metric from ``centreline`` (2-vector in the
+        new parameter) and the old/new coordinate pairs.
+        """
         self._r = sp.Matrix(centreline)
         if self._r.shape != (2, 1):
             raise ValueError(f"centreline must be planar 2-vector; got {self._r.shape}")
@@ -419,24 +352,27 @@ class ParametrizedGeometry(Operation):
 
     @property
     def kappa(self):
-        """Signed curvature of the centreline, derived from the curve."""
+        """Signed curvature of the centreline."""
         return self._kappa
 
     @property
     def metric(self):
-        """``m = 1 - kappa n``, the streamwise scale factor."""
+        """Streamwise scale factor ``m = 1 - kappa n``."""
         return self._m
 
     @property
     def jacobian(self):
-        """Area element ``dA = m dn ds``."""
+        """Area element factor ``m`` (``dA = m dn ds``)."""
         return self._m
 
     def admissible(self, half_width):
-        """``m > 0`` across the section.  False geometry, not a solver failure."""
+        """Condition ``m > 0`` across a section of the given half width."""
         return sp.simplify(sp.Abs(self._kappa) * 2 * half_width < 2)
 
     def _apply_one_derivative(self, inner, var):
+        """Chain rule ``d_x -> (T_x/m) d_s + N_x d_n`` (likewise ``d_y``); other variables are
+        unchanged.
+        """
         if var == self._x:
             return (self._T[0] / self._m) * sp.Derivative(inner, self._s) \
                  + self._N[0] * sp.Derivative(inner, self._n)
@@ -446,6 +382,7 @@ class ParametrizedGeometry(Operation):
         return sp.Derivative(inner, var)
 
     def _rewrite(self, e):
+        """Apply the derivative chain rule recursively to every Derivative node."""
         if isinstance(e, sp.Derivative):
             result = self._rewrite(e.expr)
             for var, order in e.variable_count:
@@ -459,5 +396,6 @@ class ParametrizedGeometry(Operation):
         return e
 
     def _apply_leaf(self, expr):
+        """Leaf hook: rewrite one expression."""
         return self._rewrite(expr)
 

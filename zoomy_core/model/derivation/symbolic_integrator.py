@@ -1,22 +1,6 @@
-"""
-SymbolicIntegrator: unified interface for basis function integration.
-
-Dispatches to the best available strategy based on basis capabilities:
-1. Default: sympy.integrate (always works, can be slow)
-2. Knot spans: split at knot boundaries, integrate simple polynomials per span (splines)
-3. Quadrature: use analytical quadrature nodes if basis provides them (Chebyshev)
-4. Parallel: farm independent integrals to processes (for large basis matrices)
-
-The basis declares its capabilities via methods:
-- get_knot_spans() -> list of (a, b) intervals (splines)
-- quadrature_nodes(n) -> (nodes, weights) (Chebyshev)
-- bounds() -> [a, b] (all bases)
-
-Usage:
-    integrator = SymbolicIntegrator(basis)
-    M = integrator.mass_matrix(level)
-    A = integrator.triple_product(level)
-    val = integrator.integrate(expr, z, (0, 1))
+"""Exact symbolic integration of basis-function products over the basis domain, with strategy
+dispatch (sympy, knot spans, orthogonality, quadrature). Used by the basis matrices (mass, triple
+product, derivative products) of the Galerkin projection.
 """
 
 import warnings
@@ -33,34 +17,20 @@ _DEFAULT_INTEGRAL_TIMEOUT = 30
 
 
 class SymbolicIntegrator:
-    """
-    Unified integration engine for basis functions.
-
-    By default, all integration is **symbolic** (sympy.integrate or knot-span
-    piecewise integration).  Numerical quadrature is available but must be
-    requested explicitly via ``strategy='quadrature'``.
-
-    If a single integral exceeds ``integral_timeout`` seconds a
-    ``TimeoutError`` is raised so the caller can decide how to proceed.
+    """Integrates basis-function expressions symbolically; quadrature only when requested
+    explicitly. A single integral exceeding ``integral_timeout`` seconds raises ``TimeoutError``.
     """
 
     def __init__(self, basis, strategy="auto", n_workers=1,
                  integral_timeout=_DEFAULT_INTEGRAL_TIMEOUT):
-        """
-        Parameters
-        ----------
-        basis : Basisfunction
-            The basis function object.
-        strategy : str
-            'auto': symbolic, with knot-span splitting for splines
-            'sympy': always use sympy.integrate
-            'knot_spans': split at knot boundaries (splines)
-            'quadrature': numerical quadrature (must be requested explicitly)
-        n_workers : int
-            Number of parallel workers for matrix computation (1 = serial).
-        integral_timeout : float
-            Maximum wall-clock seconds for a single integral before raising.
-            Set to ``None`` to disable the timeout.
+        """Select the integration strategy for ``basis``.
+
+        Args:
+            basis: Basisfunction providing ``bounds()``, ``weight(z)`` and ``eval(k, z)``.
+            strategy: ``'auto'`` (knot spans, orthogonal or sympy by basis capability), ``'sympy'``,
+                ``'knot_spans'`` or ``'quadrature'``.
+            n_workers: Parallel workers for matrix computation (1 = serial).
+            integral_timeout: Seconds allowed per integral; ``None`` disables the timeout.
         """
         self.basis = basis
         self.n_workers = n_workers
@@ -68,6 +38,9 @@ class SymbolicIntegrator:
         self._strategy = self._resolve_strategy(strategy)
 
     def _resolve_strategy(self, strategy):
+        """Map ``'auto'`` to the best exact-symbolic strategy; quadrature is never chosen
+        automatically.
+        """
         if strategy != "auto":
             return strategy
         # Auto: pick the best exact-symbolic strategy for the basis.
@@ -80,16 +53,17 @@ class SymbolicIntegrator:
 
     @property
     def strategy(self):
+        """The resolved strategy name."""
         return self._strategy
 
     # --- Core integration ---
 
     def integrate(self, expr, var, domain=None):
-        """
-        Integrate expr over domain w.r.t. var.
+        """Integrate ``expr`` over ``var`` in ``domain`` (default: the basis bounds), exactly unless
+        the strategy is ``'quadrature'``.
 
-        Always symbolic unless the user explicitly selected 'quadrature'.
-        Raises ``TimeoutError`` if a single integral exceeds the timeout.
+        Returns:
+            Symbolic value of the integral.
         """
         if domain is None:
             domain = tuple(self.basis.bounds())
@@ -111,13 +85,14 @@ class SymbolicIntegrator:
             return self._integrate_sympy_timed(expr, var, a, b)
 
     def _integrate_sympy_timed(self, expr, var, a, b):
-        """sympy.integrate with wall-clock timeout."""
+        """``sympy.integrate`` under a SIGALRM wall-clock timeout."""
         if self.integral_timeout is None:
             return sp_integrate(expr, (var, a, b))
 
         import signal
 
         def _handler(signum, frame):
+            """SIGALRM handler raising ``TimeoutError``."""
             raise TimeoutError(
                 f"Symbolic integration timed out after {self.integral_timeout}s. "
                 f"The integrand may be too complex for exact symbolic evaluation. "
@@ -136,16 +111,8 @@ class SymbolicIntegrator:
         return result
 
     def _integrate_orthogonal(self, expr, var, a, b):
-        """
-        Exact integration using basis orthogonality.
-
-        The basis must provide ``analytical_weighted_integral(poly, var)``
-        which computes  int poly(z) * weight(z) dz  using the orthogonal
-        decomposition of the polynomial in the basis.
-
-        All standard matrix integrands have the form weight * polynomial,
-        so this method factors out the weight, passes the polynomial part
-        to the basis, and gets an exact symbolic result (e.g. involving pi).
+        """Integrate weight times polynomial by delegating the polynomial part to
+        ``basis.analytical_weighted_integral``, falling back to sympy.
         """
         w = self.basis.weight(var)
         # Factor out the weight: expr = w * polynomial_part
@@ -166,11 +133,7 @@ class SymbolicIntegrator:
         return self._integrate_sympy_timed(expr, var, a, b)
 
     def _integrate_knot_spans(self, expr, var, a, b):
-        """Split integration at knot boundaries.
-
-        Within each span, Piecewise collapses to a simple polynomial
-        which is integrated via antiderivative evaluation (fast path).
-        """
+        """Integrate span by span, collapsing Piecewise to a polynomial in each span."""
         spans = self.basis.get_knot_spans()
         result = sympy.Integer(0)
         for span_a, span_b in spans:
@@ -189,10 +152,7 @@ class SymbolicIntegrator:
         return result
 
     def _collapse_piecewise(self, expr, var, point):
-        """
-        Evaluate Piecewise conditions at a point to collapse to a simple expression.
-        Recursively handles nested Piecewise.
-        """
+        """Evaluate Piecewise conditions at ``point``, recursively, to get a plain expression."""
         if not isinstance(expr, sympy.Basic):
             return expr
         if isinstance(expr, Piecewise):
@@ -206,7 +166,7 @@ class SymbolicIntegrator:
         return expr
 
     def _integrate_quadrature(self, expr, var, a, b):
-        """Use basis quadrature nodes for numerical integration, return sympy Rational."""
+        """Numerical integration with the basis quadrature nodes, returned as a sympy number."""
         nodes, weights = self.basis.quadrature_nodes()
         # Filter to domain
         mask = (nodes >= float(a)) & (nodes <= float(b))
@@ -228,7 +188,7 @@ class SymbolicIntegrator:
     # --- Basis matrix computation ---
 
     def _precompute_basis(self, level):
-        """Precompute phi_k(z) and dphi_k(z) expressions to avoid repeated eval."""
+        """Return the lists ``phi_k``, ``dphi_k`` and antiderivatives ``psi_k`` for ``k <= level``."""
         n = level + 1
         phi = [self.basis.eval(k, z) for k in range(n)]
         dphi = [diff(p, z) for p in phi]
@@ -236,7 +196,7 @@ class SymbolicIntegrator:
         return phi, dphi, psi
 
     def mass_matrix(self, level):
-        """Compute M[k,i] = integral(phi_k * phi_i * weight, domain). Symmetric."""
+        """``M[k,i] = int(phi_k phi_i w)`` over the domain (symmetric)."""
         n = level + 1
         M = np.empty((n, n), dtype=object)
         w = self.basis.weight(z)
@@ -250,11 +210,7 @@ class SymbolicIntegrator:
         return M
 
     def triple_product(self, level):
-        """Compute A[k,i,j] = integral(phi_k * phi_i * phi_j * weight, domain).
-
-        Fully symmetric in (k,i,j) -- only computes sorted indices k<=i<=j
-        and fills all permutations.  Saves 63% at n=3, 72% at n=5.
-        """
+        """``A[k,i,j] = int(phi_k phi_i phi_j w)`` over the domain, fully symmetric in (k,i,j)."""
         n = level + 1
         A = np.empty((n, n, n), dtype=object)
         w = self.basis.weight(z)
@@ -270,7 +226,7 @@ class SymbolicIntegrator:
         return A
 
     def derivative_product(self, level):
-        """Compute D[k,i] = integral(dphi_k/dz * dphi_i/dz * weight, domain). Symmetric."""
+        """``D[k,i] = int(phi_k' phi_i' w)`` over the domain (symmetric)."""
         n = level + 1
         D = np.empty((n, n), dtype=object)
         w = self.basis.weight(z)
@@ -284,7 +240,7 @@ class SymbolicIntegrator:
         return D
 
     def boundary_values(self, level):
-        """Compute phib[k] = phi_k(bounds[0])."""
+        """``phib[k] = phi_k`` at the lower bound."""
         n = level + 1
         phib = np.empty(n, dtype=object)
         z_bot = self.basis.bounds()[0]
@@ -293,16 +249,11 @@ class SymbolicIntegrator:
         return phib
 
     def compute_all_matrices(self, level):
-        """
-        Compute all standard basis matrices.
+        """All standard basis matrices (``phib, M, A, B, D, Dxi, Dxi2, DD, D1, DT``) for ``level``,
+        exploiting their symmetries.
 
-        Exploits symmetry to minimize the number of integrals:
-          A[k,i,j]: fully symmetric -> only sorted k<=i<=j  (63-72% savings)
-          M, D, Dxi, Dxi2: symmetric -> upper triangle only (33-40% savings)
-          DT[k,i,j]: symmetric in (k,i) -> k<=i only        (33% savings)
-          B[k,i,j]: no symmetry -> all entries
-
-        Basis evaluations phi_k(z), dphi_k(z), psi_k(z) are precomputed once.
+        Returns:
+            Dict of the matrices plus ``_elapsed`` and ``_strategy``.
         """
         t0 = get_time()
         n = level + 1
@@ -357,10 +308,7 @@ class SymbolicIntegrator:
         }
 
     def project(self, expr, test_index, weight=None):
-        """
-        Galerkin projection of expr onto test function phi_{test_index}.
-        Returns integral(expr * phi_k * weight, domain) / M[k,k].
-        """
+        """Galerkin projection of ``expr`` onto ``phi_test_index``: ``int(expr phi_k w) / M[k,k]``."""
         if weight is None:
             weight = self.basis.weight(z)
         phi_k = self.basis.eval(test_index, z)

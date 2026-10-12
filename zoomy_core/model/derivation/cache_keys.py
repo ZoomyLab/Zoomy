@@ -1,24 +1,6 @@
-"""Content-addressed cache keys for the symbolic derivation pipeline.
-
-The derivation cache (task 0018) skips the heavy ``ResolveModes`` /
-``ResolveBasis`` / ``simplify`` passes by keying intermediate results on the
-symbolic CONTENT that produced them.  This module is the single source of those
-keys — kept here (not as a mixin scattered across ~25 operation classes) so the
-keying logic is testable in one place and carries no merge surface into the op
-definitions.
-
-Design — **safe by default**.  ``cache_key`` hashes the *full* symbolic state of
-an object (every ``__dict__`` entry, recursively), denylisting only fields that
-are provably cosmetic (``name`` / ``description`` / ``log_level``) or volatile
-(``_model`` back-reference).  Capturing too much only costs a spurious cache MISS
-(slower, still correct); capturing too little would return a STALE result.  We
-always choose the former.  Round-trips rely on ``sympy.srepr`` being a
-deterministic, structural string for any expression.
-
-Lambdas (e.g. ``ChangeOfVariables(transform=lambda qi: qi/h)``) are hashed by
-their *symbolic effect*, not their object id: the transform is applied to a probe
-symbol and the result srepr'd, so ``lambda qi: qi/h`` keys as ``"__probe__/h"``
-(and any closed-over ``h(t, x)`` shows up in that result automatically).
+"""Content-addressed cache keys (SHA-256 of sympy srepr) for the derivation pipeline. Keys capture
+the full symbolic state of an operation or model, so a too-coarse key can only cause a miss, never a
+stale hit.
 """
 from __future__ import annotations
 
@@ -32,18 +14,9 @@ from zoomy_core.model.derivation.basis_cache import _basis_fingerprint
 
 
 def derivation_cache_enabled() -> bool:
-    """THE switch for every derivation-caching tier — import it, never re-read
-    the environment variable locally.
-
-    There are three independent stores (``basemodel._DERIVATION_MODEL_CACHE``,
-    ``derivation.derivation_cache``, ``systemmodel.sm_cache``).  They each used
-    to read ``$ZOOMY_DERIVATION_CACHE`` with their own hard-coded default, so
-    flipping "the" default flipped only one of them and the other two silently
-    kept serving — which is how a default ``SME()`` was handed the nu=1e-3 of
-    an ``SME(parameters=...)`` built earlier in the same process.
-
-    Default OFF while the models are under development (user, 2026-07-21):
-    every build derives from source.  Flip to "1" once the model layer settles."""
+    """Return whether derivation caching is on (env ZOOMY_DERIVATION_CACHE, default off). This is
+    the single switch for every cache tier (derivation_cache, model cache, SystemModel cache).
+    """
     return os.environ.get(
         "ZOOMY_DERIVATION_CACHE", "0").strip() not in {"0", "false", "no"}
 
@@ -97,9 +70,9 @@ _PROBE = sp.Symbol("__cache_probe__")
 
 
 def _canonical(value) -> str:
-    """Deterministic structural string for any value that can appear in an
-    operation's state or a model spec.  Falls back to ``repr`` only for opaque
-    leaves (which is still stable for the primitives we encounter)."""
+    """Return a deterministic structural string for a value in an operation state or model spec.
+    Callables are keyed by their effect on a probe symbol, opaque objects by their __dict__.
+    """
     # sympy objects → srepr (structural, deterministic)
     if isinstance(value, sp.Basic):
         return sp.srepr(value)
@@ -146,7 +119,7 @@ def _canonical(value) -> str:
 
 
 def _state_repr(state: dict) -> str:
-    """Canonical string for an object's ``__dict__``, minus cosmetic fields."""
+    """Canonical string of an object's __dict__ without cosmetic fields."""
     parts = []
     for key in sorted(state):
         if key in _COSMETIC_FIELDS:
@@ -156,21 +129,13 @@ def _state_repr(state: dict) -> str:
 
 
 def op_key_content(op) -> str:
-    """Result-affecting content string for a single derivation Operation.
-
-    Generic: ``TypeName(field=canonical;…)`` over the op's full ``__dict__``
-    (cosmetic fields removed).  ``ChangeOfVariables`` etc. need no special case —
-    its ``_relation`` lambda is handled by :func:`_canonical`'s callable branch.
-    """
+    """Return the result-affecting content string of one derivation Operation."""
     return f"{type(op).__name__}({_state_repr(vars(op))})"
 
 
 def cache_key(obj) -> str:
-    """SHA-256 hex digest of an object's result-affecting content.
-
-    Accepts a derivation ``Operation``, an ``Equation``/``Expression`` (anything
-    exposing ``.expr``), or any value :func:`_canonical` understands.  Always
-    prefixed with :data:`CACHE_VERSION`.
+    """Return the SHA-256 hex key of an Operation, Equation or any value understood by _canonical,
+    prefixed with CACHE_VERSION.
     """
     if hasattr(obj, "_key_content"):
         content = obj._key_content()
@@ -184,6 +149,7 @@ def cache_key(obj) -> str:
 
 
 def _looks_like_operation(obj) -> bool:
+    """Detect an Operation structurally, avoiding an import cycle with operations.py."""
     # Operation lives in model.operations; detect structurally to avoid an import
     # cycle (operations.py would otherwise import this module's consumers).
     return hasattr(obj, "_apply_leaf") or hasattr(obj, "apply_to_model") \
@@ -191,13 +157,8 @@ def _looks_like_operation(obj) -> bool:
 
 
 def argument_key(obj) -> str:
-    """Content key for a function ARGUMENT (used by the ``@derivation_cache``
-    decorator).  Routes by kind so a declarative model keys on its spec rather
-    than its (huge, mutable) ``__dict__``:
-
-    * a declarative ``param.Parameterized`` model → :func:`model_spec_key`;
-    * a derivation Operation / Equation → :func:`cache_key`;
-    * everything else → canonical srepr.
+    """Return the content key of a decorated function's argument: spec key for a declarative model,
+    cache_key for operations and equations, else canonical srepr.
     """
     if hasattr(obj, "param") and hasattr(getattr(obj, "param"), "values"):
         return model_spec_key(obj)
@@ -228,18 +189,11 @@ _NON_DERIVATION_PARAMS = frozenset({
 
 
 def model_spec_key(model, *, include_bc_ic=False) -> str:
-    """Key for the model's derivation IDENTITY.
+    """Return the key of a model's derivation identity: class plus constructor params, without
+    cosmetic and runtime-attached ones.
 
-    For a declarative ``param.Parameterized`` model (VAM / SME / MLVAM) this is
-    the class name plus every constructor param value EXCEPT the cosmetic /
-    runtime-attached ones (``name``, BC/IC) — those don't change the symbolic
-    operators.  Pass ``include_bc_ic=True`` to fold the BC/IC params in too (when
-    the caller caches a BC-attached SystemModel and must not return one with the
-    wrong boundary handling).
-
-    For a raw derivation ``Model`` (no ``param``) this falls back to the
-    basis/level-agnostic state: coords, declared field heads, parameters, and
-    σ-map state — so two such models with the same spec share an L0 derivation.
+    Args:
+        include_bc_ic: Also fold the boundary/initial-condition params into the key.
     """
     cls = type(model)
     parts = [f"cls={cls.__module__}.{cls.__name__}"]
@@ -292,8 +246,9 @@ def model_spec_key(model, *, include_bc_ic=False) -> str:
 
 
 def equations_key(model) -> str:
-    """Key for the current set of equation residuals on a model (the actual math
-    state).  Order-independent over equation NAMES (a dict), content-sensitive."""
+    """Return the key of a model's current equation residuals, order-independent over equation
+    names.
+    """
     eqs = getattr(model, "_equations", None) or {}
     items = sorted((name, _canonical(eq.expr)) for name, eq in eqs.items())
     body = ";".join(f"{n}={c}" for n, c in items)
@@ -302,14 +257,14 @@ def equations_key(model) -> str:
 
 
 def op_sequence_key(ops) -> str:
-    """Key for an ordered sequence of operations (the recipe)."""
+    """Return the key of an ordered sequence of operations."""
     body = ">".join(cache_key(op) for op in ops)
     return hashlib.sha256(
         f"{CACHE_VERSION}|ops|{body}".encode()).hexdigest()
 
 
 def basis_key(basis) -> str:
-    """Key for a concrete basis (reuses the matrix-cache fingerprint)."""
+    """Return the key of a concrete basis from its matrix-cache fingerprint."""
     return hashlib.sha256(
         f"{CACHE_VERSION}|basis|{_basis_fingerprint(basis)}".encode()
     ).hexdigest()
