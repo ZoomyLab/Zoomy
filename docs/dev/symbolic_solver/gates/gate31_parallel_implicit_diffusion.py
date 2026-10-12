@@ -69,7 +69,7 @@ def block_vs_legacy():
     from zoomy_jax.fvm.reconstruction_jax import DenseDiffusionOperatorJAX
     for label, make, _ in CASES:
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=0.1, imex=True, **TIGHT)
+        s = SymbolicHyperbolicSolverJax(time_end=0.1, imex="lie", **TIGHT)
         Q, A = s.setup(mesh, nsm)
         k, p, dt = s.rt.diffusion_matrix, s.parameters, 0.01
         new = np.asarray(jax.jit(lambda Q, A: s.module["implicit_diffusion"](
@@ -88,7 +88,7 @@ def block_vs_legacy():
 
 def march(make, t_end, comm, **kw):
     mesh, nsm = make()
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, imex=True, comm=comm, **kw)
+    s = SymbolicHyperbolicSolverJax(time_end=t_end, imex="lie", comm=comm, **kw)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)
@@ -103,7 +103,7 @@ def ad(make, comm):
     res = {}
     for mode in ("forward", "reverse"):
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=0.01, dt=2e-3, imex=True,
+        s = SymbolicHyperbolicSolverJax(time_end=0.01, dt=2e-3, imex="lie",
                                         ad_mode=mode, ad_checkpoints=8,
                                         comm=comm, **TIGHT)
         Q0, A0 = s.setup(mesh, nsm)

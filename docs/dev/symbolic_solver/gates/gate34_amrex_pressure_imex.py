@@ -25,7 +25,7 @@ CONFIGS = {"cpu1": (1, False), "cpu2": (2, False), "gpu1": (1, True)}
 
 def options(case):
     return {"vam2": dict(time_order=2), "vamn": dict(pressure_solve="newton"),
-            "imex": dict(imex=True)}[case]
+            "imex": dict(imex="lie")}[case]
 
 
 def setup(case):

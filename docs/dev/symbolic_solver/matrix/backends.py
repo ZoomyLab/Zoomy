@@ -23,7 +23,7 @@ def _solver_kw(r, cls):
     """The Run's solver settings; a setting the backend lacks is unsupported."""
     kw = dict(time_end=r.t_end, cfl=r.cfl, mood=r.mood, dt=r.dt, **(r.solver or {}))
     if r.imex:
-        kw["imex"] = True
+        kw["imex"] = r.imex
     if r.chorin:
         kw["time_order"] = r.time_order
         if r.pressure_solve != "linear":

@@ -32,7 +32,7 @@ class Run:
     chorin: bool = False
     time_order: int = 1
     pressure_solve: str = "linear"      # Chorin: "linear" | "newton"
-    imex: bool = False
+    imex: object = False                # False | "lie" | "ssp2" (zoomy_core Imex)
     solver: dict = None                 # further solver settings (tolerances)
     q0: object = None
     configs: tuple = ("serial",)
@@ -256,9 +256,10 @@ C10_VARIANTS = ((1, 1), (2, 1), (2, 2))     # (space order, time_order); O1 = ga
 WAVE = dict(H=0.34, a=0.01, x0=-0.5, s=0.3, t_end=0.2)   # waves stay off the ends
 
 
-def vam_split():
+def vam_split(friction=False):
     """VAM(1) split for C10 (the gate-21 boundaries with no inflow: left
-    q = r = 0 (Dirichlet), right P = 0, sides Extrapolation).  ~16 s; not
+    q = r = 0 (Dirichlet), right P = 0, sides Extrapolation); ``friction``:
+    Manning bed friction (C31), in the predictor's implicit source.  ~16 s; not
     cached: a second NSM built from the same split SMs after a JAX setup fails
     in deepcopy (Max(Abs(eigenvalues(0, 0, 0, 0))) not comparable)."""
     from zoomy_core.model.initial_conditions import Constant
@@ -268,7 +269,8 @@ def vam_split():
            + [BC.Dirichlet("right", on=f"P_{i}", value=0.0) for i in range(2)]
            + [BC.Extrapolation(tag=t) for t in ("bottom", "top")])
     model = VAM(level=1, dimension=3, boundary_conditions=bcs,
-                closures=[Newtonian(), StressFree()])
+                closures=[Newtonian(), *([ManningFriction()] if friction else []),
+                          StressFree()])
     sm = SystemModel.from_model(model)
     sm.initial_conditions = Constant(constants=lambda n: np.zeros(n))
     sm.aux_initial_conditions = Constant(constants=lambda n: np.zeros(n))
@@ -276,10 +278,10 @@ def vam_split():
     return r.SM_pred, r.SM_press, r.SM_corr
 
 
-def vam_wave(order, nx):
+def vam_wave(order, nx, friction=False):
     """Predictor numerics as gate 7 (pred_nsm), reconstruction order ``order``."""
     from gate7_chorin import pred_nsm
-    pred, press, corr = vam_split()
+    pred, press, corr = vam_split(friction)
     nsm = pred_nsm(pred, press, corr)
     if order != nsm.reconstruction.order:
         from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
@@ -303,6 +305,22 @@ def wave_q0(names, xc):
     eta = WAVE["H"] + WAVE["a"] * np.exp(-(xc[0] - WAVE["x0"]) ** 2 / (2 * WAVE["s"] ** 2))
     q[names.index("b")], q[names.index("h")] = b, eta - b
     return q
+
+
+# ── C31: IMEX time order, constant dt on a fixed mesh ──────────────────────
+#: scheme -> (imex, time_order); Lie with SSP-RK1 / RK2, IMEX-SSP2(2,2,2)
+C31_SWE = {"lie1": ("lie", 1), "lie2": ("lie", 2), "ssp2": ("ssp2", None)}
+C31_VAM = {"t1": ("lie", 1), "t2": ("lie", 2), "ssp2": ("ssp2", 2)}
+C31_K = (0, 1, 2, 3)        # dt / 2^k
+C31_DT = dict(swe=4e-3, vam=8e-3)
+
+
+def vam_friction(nx, predictor=False):
+    """C10's wave (space O1, gate 7's predictor) with Manning n = MANNING;
+    ``predictor``: the predictor alone (no projection)."""
+    mesh, (nsm, press, corr) = vam_wave(1, nx, friction=True)
+    nsm.sm.parameter_values.n = MANNING
+    return mesh, (nsm if predictor else (nsm, press, corr))
 
 
 # ── C18-C24: compressible Euler (gates/euler_common.py), 3-D and 2-D ────────
@@ -415,6 +433,26 @@ def _c27():
                        backends=("jax",))]
 
 
+def _c31():
+    """SWE (C14, space O1, nx 40): dt / 2^k and the reference dt / 32;
+    VAM(1) (C10's wave + Manning, nx 60): dt / 2^k (Richardson), and its
+    predictor alone (``pred``).  Cross-backend at k = 0."""
+    swe = [Run(f"swe_{s}_{k if k == 'ref' else f'k{k}'}", partial(imex_bump, 1, 40), 0.3,
+               dt=C31_DT["swe"] / (32 if k == "ref" else 2 ** k), imex=imex,
+               solver=dict(time_order=to, cfl_check_every=0),
+               backends=JFA if (s, k) == ("ssp2", 0) else ("jax",))
+           for s, (imex, to) in C31_SWE.items() for k in (*C31_K, "ref")]
+    vam = [Run(f"vam_{s}_k{k}", partial(vam_friction, 60), WAVE["t_end"],
+               dt=C31_DT["vam"] / 2 ** k, chorin=True, time_order=to, imex=imex, q0=wave_q0,
+               solver=dict(cfl_check_every=0),
+               backends=("jax", "amrex") if (s, k) == ("ssp2", 0) else ("jax",))
+           for s, (imex, to) in C31_VAM.items() for k in C31_K]
+    pred = [Run(f"pred_ssp2_k{k}", partial(vam_friction, 60, True), WAVE["t_end"],
+                dt=C31_DT["vam"] / 2 ** k, imex="ssp2", q0=wave_q0,
+                solver=dict(cfl_check_every=0), backends=("jax",)) for k in C31_K]
+    return swe + vam + pred
+
+
 DIFF_KINDS = ("1d", "quad", "tri")
 DIFF_PATHS = ("expl", "impl")
 DIFF_ALL = ("dir0", "neu", "dirL", "per", "steady")
@@ -501,10 +539,10 @@ CASES = {
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],
                  configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]),
     "C14": ("IMEX: SWE + Manning friction (implicit source), bump in flow, t = 0.3",
-            [Run(f"o{o}_n{n}", partial(imex_bump, o, n), 0.3, imex=True,
+            [Run(f"o{o}_n{n}", partial(imex_bump, o, n), 0.3, imex="lie",
                  configs=ALL5 if (o, n) == (2, 40) else ("serial",))
              for o in (1, 2) for n in (20, 40, 80)]
-            + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex=True, backends=("jax",))]),
+            + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex="lie", backends=("jax",))]),
     "C15": ("AD (JAX): jvp vs central FD, reverse vs forward, dJ/dg", _c15()),
     "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain", _c16()),
     "C17": ("AMR (AMReX, gate 37): covering, static patch, reflux, lake, regrid", _c17()),
@@ -532,7 +570,7 @@ CASES = {
             + [Run(f"{v}_n{n}", partial(wave, 2, v, n), 0.1, cfl=0.45, backends=EU)
                for v in ("o1", "o2none", "o2minmod") for n in (16, 32, 64)]),
     "C26": ("implicit diffusion (IMEX, NewtonianInPlane, nu 1e-3; gate 31), 20^2, t 0.05",
-            [Run("visc", _viscous, 0.05, imex=True, solver=dict(
+            [Run("visc", _viscous, 0.05, imex="lie", solver=dict(
                 implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60),
                 configs=ALL5)]),
     "C27": ("SSP-RK time order 1 / 2 / 3 (gate 40): forced SWE, exact ODE and a smooth wave", _c27()),
@@ -541,4 +579,6 @@ CASES = {
     "C29": ("LSQ derivatives with the boundary closure (gate 44): quads, p 2 / 3, dir / neu", _c29()),
     "C30": ("LSQ polynomial reproduction (gate 39): 1-D, quads, jittered quads, triangles, hexahedra",
             _c30()),
+    "C31": ("IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning",
+            _c31()),
 }

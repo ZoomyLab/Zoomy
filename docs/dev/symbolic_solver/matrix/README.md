@@ -26,6 +26,7 @@ solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 | periodic, serial and distributed | C13 | C13 | C13 |
 | IMEX (implicit source) | C14 | C14 | C14 |
 | implicit diffusion (IMEX), distributed | C26 | C26 | C26 |
+| IMEX time order: Lie vs IMEX-SSP2(2,2,2), hyperbolic and Chorin | C31 | C31 (SSP2 = JAX) | C31 (SSP2 = JAX) |
 | AD: jvp vs FD, reverse vs forward (hyperbolic, IMEX, Chorin; 3-D Euler) | C15, C22 | n/a | n/a |
 | preCICE: coupled = single domain | C16 (jax-jax, jax-foam) | C16 (foam-foam, jax-foam) | C16 (amrex-amrex, amrex-jax) |
 | AMR (reflux, regrid, one dt; gate 37) | n/a | n/a | C17 |
@@ -47,7 +48,7 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex`; CASE `C1`..`C30`; CONFIG `serial` (default)
+BACKEND `jax foam amrex`; CASE `C1`..`C31`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
@@ -99,6 +100,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C28 diffusion BCs | heat equation u_t = div(nu grad u) on [0,1]^d (gate 41's SystemModel), cases dir0 / neu / dirL / per / steady, explicit and implicit (IMEX), on 1-D, quads, triangles. `orders_*` (JAX): L_inf at nx 16 / 32 / 64 (gate 41); `{kind}_{path}_{case}` (foam, AMReX): nx 16 against JAX, the same Q0 (gate 43; AMReX has no triangles) | L_inf order 32->64 >= 1.8 (theory 2); steady max abs(u - L) <= 1e-12; foam / AMReX vs JAX: explicit <= 1e-12, implicit <= 1e-9 (gate 43's tolerances: round-off; Newton 1e-10, GMRES 1e-13) |
 | C29 LSQ boundary closure | gate 44 (JAX, quads, default set): `Lambda` (Dirichlet) and `Flux` (Neumann) BCs on SME(0), h = f(x, y), nx 12 / 24 / 48, fit degree p = 2, 3; max error of the derivatives of order k = 1..p over the boundary and interior cells, with the closure | order 24->48 >= p + 1 - k - 0.2 for every k, boundary and interior (the gate's criterion); the ghost-as-sample errors are in the notes |
 | C30 LSQ polynomials | gate 39 (subprocess): seeded random polynomials of degree p = 1..3 on 1-D, quads, jittered quads, triangles, hexahedra; interior, boundary with exact mirror ghost, Dirichlet / Neumann / zero-gradient ghosts through the closure | number of failing checks (PASS + FAIL = 72) = 0, each exact to 1e-9 |
+| C31 IMEX time order | constant dt (`cfl_check_every=0`), fixed mesh; schemes `lie1` / `lie2` (Lie: SSP-RK1 / RK2, then the implicit source), `ssp2` (IMEX-SSP2(2,2,2), Pareschi & Russo 2005: the implicit source in every stage). `swe_*`: C14 (bump in flow, Manning n 0.5) at space O1, nx 40, t 0.3, dt 4e-3 / 2^k, k = 0..3, L1(h) vs dt / 32 of the same scheme. `vam_*`: C10's wave + Manning n 0.5 (VAM(1) Chorin, space O1, nx 60, t 0.2), dt 8e-3 / 2^k, Richardson; `t1` / `t2` = time_order 1 / 2 with the Lie source per projection stage, `ssp2` = projected IMEX stages (ChorinTemplate.step); `pred_ssp2_*`: the VAM predictor alone (no projection). foam / AMReX: `swe_ssp2_k0`; AMReX: `vam_ssp2_k0` | SWE order dt/4->dt/8: lie1 >= 0.8, ssp2 >= 1.8 (theory), lie2 <= 1.4 (theory 1: the Lie splitting caps SSP-RK2); VAM: t1 >= 0.8, predictor ssp2 >= 1.8 (theory), t2 >= 0.5, ssp2 >= 0.7 (observed: the approximate projection, below); vs JAX: SWE round-off, VAM 1e-9 (pressure) |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x
@@ -207,5 +209,17 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
 - C10 (VAM(1) Chorin, Richardson): JAX and AMReX ~2.0 for every
   space/time combination at nx 30/60/120 (the error is spatial; time_order 1
   does not limit it here).
+- C31 (IMEX time order; added 2026-10-12, JAX / foam / AMReX on dev/imex): SWE + Manning
+  orders 1.06 / 1.10 / 1.22 for Lie with RK1 and with RK2 alike (the splitting; the last
+  pair is lifted by the dt/32 reference), 2.01 / 2.02 / 2.08 for IMEX-SSP2; foam and
+  AMReX = JAX to 2.4e-14. VAM(1): the predictor alone with IMEX-SSP2 2.02 / 2.01, but
+  with the projection t1 1.01 / 0.98, t2 0.81 / 0.67, ssp2 1.15 / 0.91 (L1(h);
+  max-norm ~0.5, largest at the closed left end); AMReX = JAX to 7e-12. The cap is
+  the projection, not the scheme: the VAM projection is approximate, P(P(U)) - P(U)
+  is 2.5 / 0.74 / 0.23 % of P(U) - U at nx 30 / 60 / 120 (the discrete constraint is
+  not exactly met by the corrected state), so every projection-stage scheme keeps an
+  O(dt) error at a fixed mesh. Without the stage pressure in the implicit tableau
+  the max error is ~3x larger (L1(h) 1.2-1.6x), the orders the same. Manning n 0.5
+  is not stiff at these dt (rate x dt < 3e-3); n 0 gives the same VAM orders.
 - Runtime: a Chorin run costs ~2.5 min whatever the mesh (JAX: ~130 s setup
   of the pressure template; foam / AMReX: printing), so C8 / C10 / C15 dominate.

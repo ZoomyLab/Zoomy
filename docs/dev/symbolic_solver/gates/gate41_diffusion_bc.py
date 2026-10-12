@@ -152,7 +152,7 @@ def run(kind, case, path, nx, comm=None):
     rho = 4 * dim / h ** 2 if kind != "tri" else 24 / h ** 2
     dt = 0.4 / (rho * NU) if path == "expl" else h / 32
     s = SymbolicHyperbolicSolverJax(time_end=T_END, dt=dt, cfl_check_every=0,
-                                    imex=(path == "impl"), comm=comm, **TIGHT)
+                                    imex="lie" if path == "impl" else False, comm=comm, **TIGHT)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)

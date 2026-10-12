@@ -131,10 +131,10 @@ CASES = {
                                __import__("gate1_vs_solver_jax").eta_kw(C.dry_dambreak_2d),
                                dict(mood=True))),
     "imex": ("IMEX SME(1) 1-D dam break O2, 100 cells, t=0.1",
-             lambda: hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex=True)),
+             lambda: hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex="lie")),
     "chorin": ("Chorin VAM(1) bump, 60 cells, 1280 steps", chorin),
     "malpasset": ("Malpasset SME(1) O1, 26k cells, t=0.5, explicit", lambda: malpasset(False)),
-    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=0.5, IMEX", lambda: malpasset(True)),
+    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=0.5, IMEX", lambda: malpasset("lie")),
 }
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ for label, make, t_end, cfl in CASES:
     out = []
     for c in (None, comm):
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=True, comm=c)
+        s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex="lie", comm=c)
         Q, A = s.setup(mesh, nsm)
         t0 = clock.perf_counter()
         t, Q, A = s.run(Q, A)

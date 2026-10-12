@@ -29,12 +29,12 @@ BOUND = {"1d": 2e-9, "2d1": 1e-12, "2d": 2e-3}
 
 def run(make, t_end, cfl, tag, nprocs=(1,)):
     mesh, nsm = make()
-    sj = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=True)
+    sj = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex="lie")
     Q0, A0 = sj.setup(mesh, nsm)
     tj, Qj, _ = sj.run(Q0, A0)
     out = {}
     for n in nprocs:
-        sf = SymbolicHyperbolicSolverFoam(time_end=t_end, cfl=cfl, imex=True, nprocs=n)
+        sf = SymbolicHyperbolicSolverFoam(time_end=t_end, cfl=cfl, imex="lie", nprocs=n)
         out[n] = sf.run(sj.mesh_np, sj.nsm, np.asarray(Q0), f"{WORK}/imex_{tag}_np{n}")
     return float(tj), np.asarray(Qj), out
 
