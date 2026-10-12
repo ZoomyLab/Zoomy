@@ -4,7 +4,7 @@
     python matrix.py table                                 # store -> table.md
     python matrix.py run --tier large CASE [ARGS]          # large.py (never by default)
 
-BACKEND: jax foam amrex.  CASE: C1 ... C33 (cases.py).  CONFIG: serial
+BACKEND: jax foam amrex.  CASE: C1 ... C34 (cases.py).  CONFIG: serial
 (default) mpi2 mpi4 gpu1 gpu2 (= gpu-mpi).  A run in the store is skipped
 (--force reruns).  A run that raises NotImplementedError is stored as
 "unsupported", any other exception as a failure.
@@ -239,6 +239,10 @@ TH.update({
                 "ssp2": (">=", 0.7, "observed 0.91 (the approximate projection caps it, README; "
                                     "the predictor alone: 2)"),
                 "pred": (">=", 1.8, "theory 2")},
+    "C34 order": (">=", 1.8, "theory 2"),
+    "C34 err": ("<=", 6e-3, "observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX"),
+    "C34 xb": ("<=", 2e-7, "observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), "
+                           "6e-10 AMReX (round-off / dt)"),
     "C32 order": (">=", 1.8, "theory 2"),
     "C32 err": ("<=", 7e-4, "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)"),
     "C32 control": (">=", 0.1, "observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)"),
@@ -346,8 +350,9 @@ def euler_checks(add, b, g, J):
 
 
 def gate_checks(add, b, g):
-    """C27-C30: the wrapped gates 40 (SSP-RK order), 41 / 43 (diffusion blocks
-    at the boundaries), 44 (LSQ boundary closure), 39 (LSQ polynomials)."""
+    """C27-C30, C34: the wrapped gates 40 (SSP-RK order), 41 / 43 (diffusion blocks
+    at the boundaries), 44 (LSQ boundary closure), 39 (LSQ polynomials), 45
+    (in-plane viscous operator)."""
     SLACK = 0.2
     for part, lab, pair in (("ode", "ODE", "32->64 steps"), ("wave", "wave", "dt/2->dt/4")):   # C27
         for to in (1, 2, 3):
@@ -404,6 +409,21 @@ def gate_checks(add, b, g):
                         (">=", p + 1 - k - SLACK, f"theory p+1-k = {p + 1 - k}, slack {SLACK}, gate 44"),
                         "max err " + " / ".join(f"{x:.2e}" for x in e)
                         + "; ghost as sample: " + " / ".join(f"{x:.2e}" for x in m[f"ghost_{where}_d{k}"]))
+    ds = [g("C34", f"n{n}") for n in (16, 32, 64)]   # C34 (gate 45)
+    if all(x is not None for x in ds):
+        for k in ("q_x_0", "q_y_0"):
+            e = [metrics(x)[f"{k} full"] for x in ds]
+            add("C34", f"{k}: vs the SystemModel operator (mixed derivatives), order 32->64", b,
+                "serial", order(*e[-2:]), TH["C34 order"],
+                "max rel " + " / ".join(f"{x:.2e}" for x in e) + "; vs its diagonal-index part only "
+                + " / ".join(f"{metrics(x)[f'{k} diag']:.2e}" for x in ds))
+            add("C34", f"{k}: vs the SystemModel operator at nx 64 (max rel)", b, "serial", e[-1],
+                TH["C34 err"], "")
+    d = g("C34", "n16")
+    if b != "jax" and d is not None:
+        m = metrics(d)
+        add("C34", "nx 16 max rel |L - L_JAX|", b, "serial", m["rel_vs_jax"], TH["C34 xb"],
+            "vs the SystemModel operator " + " / ".join(f"{m[f'{k} full']:.2e}" for k in ("q_x_0", "q_y_0")))
     d = g("C30", "polynomials")                     # C30
     if d is not None:
         m = metrics(d)

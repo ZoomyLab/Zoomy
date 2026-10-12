@@ -39,6 +39,7 @@ solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 | LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | in-plane viscosity with viscous walls vs an exact solution (no-slip / free-slip shear decay) | C32 | C32 | C32 |
 | vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
+| in-plane viscous operator vs the SystemModel operator, mixed derivatives (gate 45) | C34 | C34 (= JAX) | C34 (= JAX) |
 | large tier (scaling, catchment, I/O; `--tier large`) | L1-L5 | L1, L2, L2P, L4 | L1, L2, L2P, L3, L4 |
 | multi-node / Slurm | untestable here | untestable here | untestable here |
 
@@ -50,15 +51,15 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex`; CASE `C1`..`C33`; CONFIG `serial` (default)
+BACKEND `jax foam amrex`; CASE `C1`..`C34`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
 other exception as a **FAIL**; a backend without the config or the case is
 **n/a**.  Stored per run: `t, Q, Q0, xc, vol, names, wall, lib` (the library
-commits it ran on); custom runs (C15-C17, C22, C27-C30): their metrics.  Files:
+commits it ran on); custom runs (C15-C17, C22, C27-C30, C34): their metrics.  Files:
 `cases.py` (every case, defined once), `backends.py` (adapters),
-`custom.py` (AD, preCICE, AMR, the wrapped gates 39-44), `matrix.py` (runner, checks, table), `large.py`
+`custom.py` (AD, preCICE, AMR, the wrapped gates 39-45), `matrix.py` (runner, checks, table), `large.py`
 (large tier), `deliverable.py` (figure), `table.md` (the last table).
 
 ## Cases and pass criteria
@@ -105,6 +106,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C31 IMEX time order | constant dt (`cfl_check_every=0`), fixed mesh; schemes `lie1` / `lie2` (Lie: SSP-RK1 / RK2, then the implicit source), `ssp2` (IMEX-SSP2(2,2,2), Pareschi & Russo 2005: the implicit source in every stage). `swe_*`: C14 (bump in flow, Manning n 0.5) at space O1, nx 40, t 0.3, dt 4e-3 / 2^k, k = 0..3, L1(h) vs dt / 32 of the same scheme. `vam_*`: C10's wave + Manning n 0.5 (VAM(1) Chorin, space O1, nx 60, t 0.2), dt 8e-3 / 2^k, Richardson; `t1` / `t2` = time_order 1 / 2 with the Lie source per projection stage, `ssp2` = projected IMEX stages (ChorinTemplate.step); `pred_ssp2_*`: the VAM predictor alone (no projection). foam / AMReX: `swe_ssp2_k0`; AMReX: `vam_ssp2_k0` | SWE order dt/4->dt/8: lie1 >= 0.8, ssp2 >= 1.8 (theory), lie2 <= 1.4 (theory 1: the Lie splitting caps SSP-RK2); VAM: t1 >= 0.8, predictor ssp2 >= 1.8 (theory), t2 >= 0.5, ssp2 >= 0.7 (observed: the approximate projection, below); vs JAX: SWE round-off, VAM 1e-9 (pressure) |
 | C32 viscous shear decay | SME(0) + `NewtonianInPlane` (`diffusion_matrix` A[q_x, q_x, y, y] = nu, A[q_x, h, y, y] = -nu q_x / h, asserted in `cases.shear_decay`), nu 0.05, g 0.01, h = 1, v = 0, u = u(y); 8 x ny cells (dx = dy), periodic in x, walls at y = 0, 1; O2 without limiter, IMEX (Crank-Nicolson diffusion, Newton 1e-12), dt = dy/16, t 0.5. Then every x-derivative vanishes and the model is exactly u_t = nu u_yy. `noslip`: `Dirichlet(on="momentum", value=0)` (ghost -q), u0 = sin(pi y), exact sin(pi y) e^(-nu pi^2 t); `free`: `Wall` (tangential momentum kept: zero normal gradient), u0 = cos(pi y), exact cos(pi y) e^(-nu pi^2 t); ny 20 / 40 / 80 (JAX), ny 20 (foam, AMReX). Controls (JAX, ny 20): `ctrl` = the sin profile on `Wall`s, `inviscid` = nu 0 on the no-slip walls | L_inf(q_x) vs exact: order 40->80 >= 1.8 (theory 2; observed 1.87 / 1.94 for 20->40 / 40->80, both variants); ny 20 <= 7e-4 (observed 3.3e-4, JAX, foam, AMReX); h - 1, q_y, x-variation <= 1e-12 (theory: h stays 1, v stays 0, u = u(y)); AMReX max rel vs JAX <= 1e-8 (tolerance as C26; observed 3e-16); foam L_inf abs(foam - JAX) <= 0.5 x L_inf(JAX - exact) (observed 0.02 / 0.21); `ctrl` L_inf >= 0.1 (observed 0.42: the walls act); `inviscid` max abs(u - u0) <= 4e-4 (observed 1.7e-4, a regression bound: the numerical wall friction of the Dirichlet wall's Riemann state) |
 | C33 vertical viscosity | SME(2) + `Newtonian` + `NavierSlip` + `StressFree`, nu 0.05, lambda_s 0.5; 1-D, periodic (8 cells, dx 1), flat bed, uniform h = 1, q = (0.5, 0.2, -0.1): the flux divergence vanishes, only the source acts, and it is linear in q at fixed h, so q' = J q with J = d(source_q)/d(q_0..q_2) at h = 1 by sympy differentiation of the SystemModel's `source` (`cases.moment_jacobian`; linearity asserted, `hinv` = 1/h of the NSM substituted); exact q(T) = expm(T J) q0 (eigenvalues -6.68, -1.31, -0.10), T 1. Constant dt = 0.05 / 2^k, k = 0, 1, 2. `imex`: explicit flux step then an implicit-Euler source (the viscous / slip source is in the implicit slot `source`; order 1); `rk2`: explicit SSP-RK2, the source in the explicit step (order 2, the reconstruction order) | order dt/2 -> dt/4 vs expm: imex >= 0.8 (theory 1, observed 0.995), rk2 >= 1.8 (theory 2, observed 2.03); rel error at dt 0.0125 <= 1e-3 / 7e-6 (observed 5.1e-4 / 3.3e-6); q(T) = the integrator's own scheme (I - dt J)^-N resp. (1 + dt J + (dt J)^2 / 2)^N: rk2 <= 1e-12 (round-off), imex <= 1e-10 (Newton 1e-12; observed 3e-12 foam / AMReX, 4e-15 JAX); uniform state kept and h = 1 <= 1e-12; foam / AMReX = JAX: rk2 <= 1e-12, imex <= 1e-10 (observed 1e-16 / 1.3e-12) |
+| C34 in-plane viscous operator | gate 45: SME(0) + `NewtonianInPlane`, smooth periodic h, q_x, q_y on [0,1]^2 varying in x and y, O2 without limiter, one implicit-Lie step dt 1e-7 with nu 1 and nu 0, L = (Q_1 - Q_0) / dt on the momentum rows (the discrete viscous operator); nx 16 / 32 / 64 (JAX), nx 16 (foam, AMReX, against JAX's L) | max rel vs the full SystemModel operator (`diffusion_matrix` with its mixed-index entries A[i, j, x, y], plus the nu-part of the source; sympy, the aux exact): order 32->64 >= 1.8 (theory 2; observed 1.98 / 1.98 for q_x / q_y), nx 64 <= 6e-3 (observed 1.9e-3 / 3.1e-3); foam / AMReX max rel vs JAX <= 2e-7 (observed 7e-8 foam: its own O2 stencils in the explicit stage, an O(dt) effect in L; 6e-10 AMReX: round-off / dt). The two-point fluxes alone (before 2026-10-13) converged to the diagonal-index part and stayed 16 % / 38 % off the full operator |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x
@@ -169,6 +171,29 @@ Not part of the matrix: 8 model goldens in zoomy_core (m01-m04, m06-m08,
 s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
+
+## Results (2026-10-13, dev/tpfa: the diffusion face gradient)
+
+The `diffusion` block now applies the full flux `n.A.grad_f` (ANALYSIS 45): `grad_f` = the
+mean of the two cells' LSQ gradients plus the two-point difference as its part along the
+cell-to-cell vector, so the mixed-index entries A[i, j, x, y] act; `implicit_diffusion` keeps
+its Crank-Nicolson matrix (the two-point part) and takes the correction explicitly at the start
+state.  Rerun into a scratch store (C26, C28, C32, C33, C34; serial, all three backends), against
+the 2026-10-12 store:
+- C33 (1-D: no correction), C28 1-D: bit-identical on every backend.
+- C28 quads: bit-identical (metrics: errors and the vs-JAX differences) on every backend.
+- C32: AMReX bit-identical; JAX and foam within 1-2 ulp (<= 4.4e-16; nu 0 control identical): their
+  unstructured LSQ tables give an x-derivative of the x-uniform field at round-off, not 0, and
+  A has mixed entries; AMReX's Cartesian tables give exact zeros.
+- C28 triangles: within round-off (foam: error 8.147044629183342e-4 vs 8.147044629183316e-4, vs JAX
+  6e-16): gate 41's triangles are orthogonal (max 1 - |n.e| = 2.2e-16), so the correction is
+  round-off there too; JAX `orders_tri_*` errors equal to 4 digits (orders unchanged).
+- C26 (the field varies in x and y, A has mixed entries): max |Q_new - Q_old| 2.3e-4 (JAX, AMReX),
+  2.5e-4 (foam), 2.1e-4 of max |Q|; AMReX = JAX 1.1e-13 (<= 1e-8), foam vs JAX L1 rel 1.72e-3
+  (unchanged: foam's own O2 stencils).
+- C34 (new, gate 45): max rel vs the full SystemModel operator q_x 3.05e-2 / 7.69e-3 / 1.94e-3,
+  q_y 4.62e-2 / 1.21e-2 / 3.07e-3 at nx 16 / 32 / 64 (orders 1.98 / 1.98); foam and AMReX
+  give the same errors (L vs JAX 7e-8 foam, 6e-10 AMReX).
 
 ## Results (table.md, 2026-10-12, night rerun)
 

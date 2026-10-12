@@ -1,5 +1,5 @@
 """Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16),
-AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 (C27-C30).  Each
+AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
 returns {metric: value} (rank 0; None on the other ranks)."""
 import os
 import re
@@ -284,6 +284,22 @@ def lsq_closure(p, bc):
     return {f"{method}_{where}_d{k}": [float(e[(method, k, where)]) for e in E]
             for method in ("closure", "ghost") for where in ("boundary", "interior")
             for k in range(1, p + 1)}
+
+
+# ── C34: in-plane viscous operator vs the SystemModel operator (gate 45) ────
+def inplane_operator(backend, nx, work):
+    """Gate 45 at ``nx``: the discrete in-plane viscous operator of SME(0) +
+    NewtonianInPlane (one step nu = 1 minus nu = 0, over dt) against the full
+    SystemModel operator (mixed-index entries) and its diagonal-index part, max
+    rel per momentum row; foam / AMReX also max rel |L - L_JAX|."""
+    import gate45_inplane_viscous_operator as G
+    L, xc = G.operator(backend, nx, str(work))
+    out = G.errors(L, xc, G.sm_operator())
+    if backend != "jax":
+        Lj, _ = G.operator("jax", nx)
+        out["rel_vs_jax"] = max(float(np.abs(L[k] - Lj[k]).max() / np.abs(Lj[k]).max())
+                                for k in G.ROWS)
+    return out
 
 
 # ── C30: polynomial reproduction of the LSQ fit (gate 39) ───────────────────

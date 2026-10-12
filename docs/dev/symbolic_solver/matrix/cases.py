@@ -594,6 +594,12 @@ def _c30():
                 backends=("jax",))]
 
 
+def _c34():
+    from custom import inplane_operator
+    return [Run(f"n{n}", None, 0.0, custom=lambda b, c, w, n=n: inplane_operator(b, n, w),
+                backends=EU if n == 16 else ("jax",)) for n in (16, 32, 64)]
+
+
 IMPLICIT = dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60)
 
 
@@ -723,4 +729,6 @@ CASES = {
             "no-slip and free-slip walls", _c32()),
     "C33": ("vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
             _c33()),
+    "C34": ("in-plane viscous operator vs the SystemModel operator, mixed derivatives (gate 45)",
+            _c34()),
 }

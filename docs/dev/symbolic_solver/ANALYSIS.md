@@ -1119,3 +1119,25 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
      rows are "classified into NO slot".  To be checked against the paper equations before any fix.
 - **No-slip wall:** a `Dirichlet` momentum wall also zeroes the Riemann outer state, a small
   numerical wall friction (C32 `inviscid`: 1.7e-4 at g = 0.01, 2.5e-3 at g = 9.81).
+- **Fix of 1 (2026-10-13, branch dev/tpfa).**  The `diffusion` block of every runtime (JAX
+  `runtime.py`, foam `rt.H`, AMReX `rt_amrex.H`) now applies the full face flux `n.A.grad_f`:
+  `grad_f` = the mean of the two cells' LSQ gradients (the derivative-aux fit, boundary ghosts as
+  samples, no closure) plus `((Q_b - Q_a)/|d| - mean.e) e`, `e` the unit cell-to-cell vector; on
+  boundary faces and periodic seams `e = n`, i.e. the two-point normal part as before and the
+  tangential part from the cell gradients.  Written as two-point part + correction; the
+  correction is zero on a Cartesian face when A has no mixed entries (exactly: `n` and `e` are
+  axis vectors), and in 1-D it is not computed.  `implicit_diffusion` keeps its Crank-Nicolson
+  Newton solve on the two-point part only and adds `dt` times the correction at the start state
+  (deferred correction; Eymard, Gallouet, Herbin 2000).  On non-orthogonal faces (triangles) the
+  correction also carries the non-orthogonal part `(n.A.e - n.A.n / max(|n.e|, 0.1)) (Q_b - Q_a)/|d|`.
+  Gate 45 (now against the full SystemModel operator, nx 16 / 32 / 64, max rel): q_x 3.05e-2 /
+  7.69e-3 / 1.94e-3 (orders 1.99 / 1.98), q_y 4.62e-2 / 1.21e-2 / 3.07e-3 (1.93 / 1.98) on JAX,
+  foam and AMReX alike (L vs JAX's: foam 6.9e-8 / 1.1e-8 / 1.6e-9, its own O2
+  stencils in the explicit stage, an O(dt) effect in L; AMReX 6e-10, round-off / dt).  Matrix: C34 added (gate 45).  Where the correction is zero the
+  results are unchanged (scratch rerun vs the 2026-10-12 store): C33 and C28 bit-identical on all
+  backends (C28 triangles to round-off: gate 41's triangles are orthogonal), C32 bit-identical on
+  AMReX and within 1-2 ulp on JAX / foam (their LSQ x-derivative of the x-uniform field is
+  round-off, A has mixed entries).  C26 changes by 2.3e-4 (JAX, AMReX; foam 2.5e-4), 2e-4 of
+  max |Q|; AMReX = JAX 1.1e-13, foam vs JAX unchanged (L1 1.72e-3).  Open: the cell gradients
+  take the boundary ghosts as samples, not the LSQ boundary closure (ANALYSIS 40), on every
+  backend; a distributed run's halo gradients are exchanged but no mpiN config was rerun.
