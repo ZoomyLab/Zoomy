@@ -12,6 +12,7 @@ communicator) runs it distributed, one rank per device
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 
 import jax
@@ -142,12 +143,19 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                                                    Qaux)
 
         self.nsm, self.mesh_np = nsm, mesh
-        self.mesh_j = convert_mesh_to_jax(mesh)
-        self.topo = build_topology(mesh, nsm=nsm, partners=partners)
+        self.topo = build_topology(
+            mesh, nsm=nsm, partners=partners,
+            periodic_ids=self.partition.periodic_ids if self.partition else None)
+        # the stencils are the topology's (periodic seams: the wrapped rings)
+        self.mesh_j = dataclasses.replace(
+            convert_mesh_to_jax(mesh),
+            lsq_neighbors=jnp.asarray(self.topo.lsq_neighbors),
+            lsq_boundary_face_neighbors=jnp.asarray(self.topo.lsq_boundary_face_neighbors))
         self.X = jnp.asarray(np.asarray(mesh.vertex_coordinates)[:mesh.dimension])
         # the same vectorised geometry in numpy (JAX op by op is slow here)
         self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
             self.topo, np.asarray(mesh.vertex_coordinates)[:mesh.dimension])))
+        self.mesh_j = dataclasses.replace(self.mesh_j, lsq_gradQ=self.mesh.lsq_gradQ)
         self._choose_spectral_radius(nsm)
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
