@@ -875,5 +875,9 @@ distributed halos ring across seams.  JAX and foam take their stencils
 from this topology (foam's own ring code removed).  Shift invariance: 1-D
 2.2e-15, 2-D 6.2e-16 (my rerun), triangles 2.1e-15, 3-D 6.8e-16; gate 32
 (3 ranks) <= 1.2e-14; gate 35 1-D O2 foam vs JAX 3.7e-15.  AMReX: its
-periodic path (ee56d68) keys the seam as a boundary class -- needs the same
-change (one line, pending).
+periodic path now takes the interior stencil on periodic axes, the
+cross-seam samples being the partner cells in the halo (a9ef6c2; the class
+also had to take a true interior proxy cell): AMReX vs JAX 5e-16 - 2e-15
+(1-/2-/3-D, SWE and Euler; cpu1, gpu1; cpu2 = cpu1), half-period shift
+<= 1.7e-15, AMR periodic waves EOC 2.5 / 2.3.  (3-D periodic wave O2
+cpu1 vs JAX: 5.5e-16, rerun.)
