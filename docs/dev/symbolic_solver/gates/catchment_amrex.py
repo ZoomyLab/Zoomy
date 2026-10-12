@@ -51,8 +51,6 @@ def nsm_of():
         sm, reconstruction=ReconstructionSpec(order=1), riemann=PositiveHLL,
         dt_max=5.0, source_treatment="linearized",
         extra_operations=[guard_eigenvalue_powers()])
-    nsm.spectral_radius_method = "eig"            # one choice for every backend (cases.prepare)
-    nsm._call = None
     return nsm
 
 

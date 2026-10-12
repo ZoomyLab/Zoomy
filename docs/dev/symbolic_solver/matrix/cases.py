@@ -81,8 +81,6 @@ def prepare(r):
     stencils, Q0 in the mesh's cell order.  Every backend takes these."""
     mesh, systems = r.make()
     nsm = systems[0] if r.chorin else systems
-    nsm.spectral_radius_method = "eig"     # one choice for CPU and GPU runs
-    nsm._call = None
     mesh = ensure_lsq_mesh(mesh, nsm)
     names = [str(s) for s in nsm.state]
     xc = np.asarray(mesh.cell_centers)[:, :int(mesh.n_inner_cells)]

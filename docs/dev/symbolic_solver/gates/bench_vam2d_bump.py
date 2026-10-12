@@ -91,18 +91,20 @@ def split():
 
 
 print(f"VAM(1) bump channel, {jax.devices()[0].platform}, spectral radius "
-      f"{os.environ.get('SPECTRAL', 'auto')}, fold geometry {os.environ.get('FOLD', '0')}, CPU ({os.cpu_count()} cores visible: "
+      f"{os.environ.get('SPECTRAL', 'power')}, fold geometry {os.environ.get('FOLD', '0')}, CPU ({os.cpu_count()} cores visible: "
       f"{len(os.sched_getaffinity(0))}), pressure solver {SOLVER}, run to t = {T_RUN}")
 for nx in NXS:
     ny = max(1, nx // 10)
     pred, press, corr = split()
     kw = {k: float(v) if "." in v or "e" in v else int(v) for k, v in
           (a.split("=") for a in os.environ.get("PRESSURE", "").split(",") if a)}
-    kw.update(spectral_radius=os.environ.get("SPECTRAL", "auto"),
-              fold_geometry=os.environ.get("FOLD", "0") == "1")
+    kw.update(fold_geometry=os.environ.get("FOLD", "0") == "1")
     s = SymbolicChorinSolverJax(time_end=T_RUN, cfl=0.9, pressure_linear_solver=SOLVER, **kw)
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=nx, ny=ny)
-    Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
+    model = pred_nsm(pred, press, corr)
+    if os.environ.get("SPECTRAL"):                     # else the solvers' default
+        model.spectral_radius_method = os.environ["SPECTRAL"]
+    Q, A = s.setup(mesh, model, press, corr)
     names = [str(v) for v in s.nsm.state]
     xc = np.asarray(s.mesh_np.cell_centers)[0, :Q.shape[1]]
     q = np.zeros(Q.shape)
