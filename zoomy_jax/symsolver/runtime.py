@@ -152,12 +152,13 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
 
     # ── boundary ───────────────────────────────────────────────────────────
     def _bc_at(bc, states, Qaux, p, time, mesh, cells_of_face, ghost=True):
-        # A ghost (boundary_states/_ghosts) sits at the mirror image of the
-        # cell centre: the BC is evaluated at the foot of the perpendicular,
-        # with the normal distance.  A face trace (boundary_traces) is
-        # evaluated at the face centre.  (Equal on orthogonal cells; on
-        # triangles the face centre made data-dependent Dirichlet ghosts
-        # O(h) wrong: boundary first derivatives did not converge.)
+        # ``ghost=True``: the GHOST kernel (boundary_ghost_state) of the inner
+        # cell, at the mirror image of the cell centre -- evaluated at the
+        # foot of the perpendicular, with the normal distance.  ``False``:
+        # the FACE kernel (boundary_conditions) of the inner trace, at the
+        # face centre.  (Equal on orthogonal cells; on triangles the face
+        # centre made data-dependent Dirichlet ghosts O(h) wrong: boundary
+        # first derivatives did not converge.)
         fc, n = mesh.face_centers, mesh.face_normals
         cc = mesh.cell_centers[:, j(bf_cells)].T
         r = fc[j(bf_face), :] - cc
@@ -177,13 +178,13 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         out = jax.vmap(per_bf)(jnp.arange(len(phys)), j(phys)).T
         return states.at[:, j(phys)].set(out)
 
-    def boundary_ghosts(bc, Q, Qaux, p, time, mesh):
-        return _bc_at(bc, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
+    def boundary_ghosts(ghost, Q, Qaux, p, time, mesh):
+        return _bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
 
-    def boundary_states(bc, Q, Qaux, p, time, mesh):
+    def boundary_states(ghost, Q, Qaux, p, time, mesh):
         if n_bf == 0:
             return (jnp.zeros((Q.shape[0], 1)), jnp.zeros((Qaux.shape[0], 1)))
-        return (_bc_at(bc, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells),
+        return (_bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells),
                 Qaux[:, j(inner)])
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
@@ -198,40 +199,45 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
     def pointwise(k, X, Xaux, p):
         return k(X, Xaux, p)
 
-    def cell_traces(Q, Qb, mesh):
-        return order1(Q, Qb)
+    def _inner_outside(WL, WR):
+        # a boundary face's outer slot holds the inner trace until
+        # boundary_traces sets the BC's face state
+        return WL, WR.at[:, j(bf_face)].set(WL[:, j(bf_face)])
 
-    def gradient(W, Wb, mesh):
+    def cell_traces(Q, mesh):
+        return _inner_outside(*order1(Q))
+
+    def gradient(W, Wg, mesh):
+        # ``Wg``: the ghosts, sampled at the mirror image of the cell centre
         R = _with_geometry(lsq, mesh, mesh_np, nc)
-        return R._compute_gradients(W, W.shape[0], Wb)
+        return R._compute_gradients(W, W.shape[0], Wg)
 
-    def ghost_bounds(R, u, ub):
-        # min/max over the face neighbours and the boundary ghosts ``ub``,
-        # which sit at the ghost position (as in ``gradient``): no lift.  A
-        # ghost bounds its face's OWNER (on a periodic seam ``_bf_cells`` is
-        # the partner cell)
+    def ghost_bounds(R, u, ug):
+        # min/max over the face neighbours and the boundary ghosts ``ug``
+        # (as in ``gradient``).  A ghost bounds its face's OWNER (on a
+        # periodic seam ``_bf_cells`` is the partner cell)
         lo = hi = u
         for a, b in ((R._iA_int, R._iB_int), (R._iB_int, R._iA_int)):
             lo, hi = lo.at[a].min(u[b]), hi.at[a].max(u[b])
-        return lo.at[R._iInner_bnd].min(ub), hi.at[R._iInner_bnd].max(ub)
+        return lo.at[R._iInner_bnd].min(ug), hi.at[R._iInner_bnd].max(ug)
 
     def limiter(name):
-        def factors(rows, W, Wb, G, mesh):
+        def factors(rows, W, Wg, G, mesh):
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
             for v in rows:
-                lo, hi = ghost_bounds(R, W[v], Wb[v])
+                lo, hi = ghost_bounds(R, W[v], Wg[v])
                 phi = phi.at[v].set(fn(W[v], G[v], lo, hi))
             return phi
         return factors
 
-    def extrapolate(W, Wb, G, phi, mesh):
+    def extrapolate(W, G, phi, mesh):
         R = _with_geometry(lsq, mesh, mesh_np, nc)
         phi = jnp.asarray(phi, dtype=W.dtype)
         phi = jnp.broadcast_to(phi if phi.ndim != 1 else phi[None, :],
                                (W.shape[0], nc))
-        return R._reconstruct(W, G, phi, Wb)
+        return _inner_outside(*R._reconstruct(W, G, phi, None))
 
     # owner of every face; neighbour, or nc (dropped) on a boundary face
     nbr = np.where(is_bnd, nc, fc1)
@@ -258,20 +264,19 @@ def runtime(nsm, rt, mesh_np, mesh_j, *, ad_mode="forward", checkpoints=64, on_w
         return out
 
     # ── whole-domain operations ────────────────────────────────────────────
-    def derivative_aux(spec, Q, Qaux, mesh, Qb=None, rows=None):
+    def derivative_aux(spec, Q, Qaux, mesh, Qg=None, rows=None):
         # stencils are static topology; the LSQ matrices are traced geometry
         traced = dataclasses.replace(mesh_j, lsq_gradQ=mesh.lsq_gradQ)
-        if Qb is None:
+        if Qg is None:
             return _Reference._walk_derivative_aux(None, Qaux, Q, traced,
                                                    registry=spec)
-        for e in spec:            # boundary value -> ghost 2 Qb - Q (face)
+        for e in spec:            # boundary samples: the ghosts Qg
             if e["kind"] != "derivative" or e["target_kind"] != "state":
                 continue
             s = e["state_index"]
             if s not in rows:
                 continue
-            ghost = 2.0 * Qb[s] - Q[s, j(bf_cells)]
-            grad = lsq_gradient_per_field(traced, Q[s], u_bf=ghost,
+            grad = lsq_gradient_per_field(traced, Q[s], u_bf=Qg[s],
                                           multi_index=e["multi_index"])
             Qaux = Qaux.at[e["row"], :grad.shape[0]].set(grad)
         return Qaux
