@@ -9,22 +9,19 @@ zoomy\_core.model.models package
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
-
-   zoomy_core.model.models.GN
-   zoomy_core.model.models.advection
-   zoomy_core.model.models.basisfunctions
-   zoomy_core.model.models.basismatrices
-   zoomy_core.model.models.coupled_constrained
-   zoomy_core.model.models.poisson
-   zoomy_core.model.models.shallow_moments
-   zoomy_core.model.models.shallow_moments_sediment
-   zoomy_core.model.models.shallow_moments_topo
-   zoomy_core.model.models.shallow_moments_topo_turbulence
-   zoomy_core.model.models.shallow_moments_variants
-   zoomy_core.model.models.shallow_water
-   zoomy_core.model.models.shallow_water_topo
-   zoomy_core.model.models.shear_shallow_flow
-   zoomy_core.model.models.sme_turbulent
-   zoomy_core.model.models.vam
+* :doc:`zoomy_core.model.models.closures`
+* :doc:`zoomy_core.model.models.equations`
+* :doc:`zoomy_core.model.models.ke_sme`
+* :doc:`zoomy_core.model.models.malpasset`
+* :doc:`zoomy_core.model.models.material`
+* :doc:`zoomy_core.model.models.ml_sme`
+* :doc:`zoomy_core.model.models.ml_swe`
+* :doc:`zoomy_core.model.models.ml_vam`
+* :doc:`zoomy_core.model.models.ml_vam_wd`
+* :doc:`zoomy_core.model.models.qr_kesme`
+* :doc:`zoomy_core.model.models.sigma3d`
+* :doc:`zoomy_core.model.models.sme`
+* :doc:`zoomy_core.model.models.swe`
+* :doc:`zoomy_core.model.models.turbulent_sme`
+* :doc:`zoomy_core.model.models.vam`
+* :doc:`zoomy_core.model.models.walls`

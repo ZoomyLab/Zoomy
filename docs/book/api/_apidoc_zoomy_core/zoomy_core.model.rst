@@ -9,24 +9,24 @@ zoomy\_core.model package
 Subpackages
 -----------
 
-.. toctree::
-   :maxdepth: 4
-
-   zoomy_core.model.models
+* :doc:`zoomy_core.model.derivation`
+* :doc:`zoomy_core.model.models`
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
-
-   zoomy_core.model.analysis
-   zoomy_core.model.analysis_linear
-   zoomy_core.model.aux_boundary_conditions
-   zoomy_core.model.basefunction
-   zoomy_core.model.basemodel
-   zoomy_core.model.boundary_conditions
-   zoomy_core.model.custom_sympy_functions
-   zoomy_core.model.derivative_workflow
-   zoomy_core.model.initial_conditions
-   zoomy_core.model.model
+* :doc:`zoomy_core.model.analysis`
+* :doc:`zoomy_core.model.analysis_linear`
+* :doc:`zoomy_core.model.aux_boundary_conditions`
+* :doc:`zoomy_core.model.basefunction`
+* :doc:`zoomy_core.model.basemodel`
+* :doc:`zoomy_core.model.boundary_conditions`
+* :doc:`zoomy_core.model.derivative_workflow`
+* :doc:`zoomy_core.model.equation`
+* :doc:`zoomy_core.model.initial_conditions`
+* :doc:`zoomy_core.model.kernel_functions`
+* :doc:`zoomy_core.model.numerics`
+* :doc:`zoomy_core.model.operations`
+* :doc:`zoomy_core.model.reconstruction_inverse`
+* :doc:`zoomy_core.model.splitter`
+* :doc:`zoomy_core.model.state`

@@ -9,14 +9,8 @@ zoomy\_core package
 Subpackages
 -----------
 
-.. toctree::
-   :maxdepth: 4
-
-   zoomy_core.decorators
-   zoomy_core.fvm
-   zoomy_core.mesh
-   zoomy_core.misc
-   zoomy_core.model
-   zoomy_core.postprocessing
-   zoomy_core.preprocessing
-   zoomy_core.transformation
+* :doc:`zoomy_core.mesh`
+* :doc:`zoomy_core.model`
+* :doc:`zoomy_core.numerics`
+* :doc:`zoomy_core.symsolver`
+* :doc:`zoomy_core.systemmodel`
