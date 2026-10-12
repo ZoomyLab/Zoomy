@@ -34,7 +34,7 @@ def _ad_solver(kind, ad_mode, comm):
     mesh, nsm = C.bump_2d(2, nx=12, flow=(0.1, 0.05))
     nsm.sm.parameter_values.n = 0.5 if kind == "imex" else 0.03
     nsm.spectral_radius_method, nsm._call = "eig", None             # as cases.prepare
-    s = SymbolicHyperbolicSolverJax(time_end=0.2, imex=kind == "imex", **kw)
+    s = SymbolicHyperbolicSolverJax(time_end=0.2, imex="lie" if kind == "imex" else False, **kw)
     Q, A = s.setup(mesh, nsm)
     return s, Q, A
 

@@ -88,7 +88,7 @@ CASES = {
             hyperbolic(C.dry_dambreak_2d, 0.02, 0.45,
                        mood=True)),
     "imex": ("IMEX SME(1) 1-D dam break O2, 100 cells",
-             hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex=True,
+             hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex="lie",
                         mood=False)),
     "chorin_check1": ("Chorin VAM(1) bump, const dt, check every step", chorin(True, 1)),
     "chorin_check10": ("Chorin VAM(1) bump, const dt, check every 10th", chorin(True, 10)),
@@ -96,7 +96,7 @@ CASES = {
     "chorin_adaptive_rk2": ("Chorin VAM(1) bump, adaptive dt, time_order 2",
                             chorin(False, time_order=2)),
     "malpasset": ("Malpasset SME(1) O1, 26k cells, t=0.5", malpasset(False)),
-    "malpasset_imex": ("Malpasset SME(1) O1, IMEX, t=0.5", malpasset(True)),
+    "malpasset_imex": ("Malpasset SME(1) O1, IMEX, t=0.5", malpasset("lie")),
 }
 
 

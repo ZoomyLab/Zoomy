@@ -22,8 +22,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
-from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, DIFF_ALL, DIFF_KINDS, DIFF_PATHS,  # noqa: E402
-                   NA, PERTURB, prepare)
+from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C31_K, C31_SWE, C31_VAM, C4_N,  # noqa: E402
+                   DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, PERTURB, prepare)
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -229,6 +229,16 @@ TH.update({
                  "o2minmod": (">=", 1.7, "observed 1.83")},
     "fd3": ("<=", 1e-6, "observed 4.4e-8 (best eps of 1e-3..1e-6)"),
     "C23": (">=", 1.5, "observed 2.11 (different stencils, converging)"),
+    "C31 swe": {"lie1": (">=", 0.8, "theory 1"),
+                "lie2": ("<=", 1.4, "theory 1: Lie splitting caps SSP-RK2 (observed 1.22, the "
+                                    "dt/32 reference lifts the last pair)"),
+                "ssp2": (">=", 1.8, "theory 2")},
+    "C31 vam": {"t1": (">=", 0.8, "theory 1"),
+                "t2": (">=", 0.5, "observed 0.67 (theory 1: Lie source; the approximate "
+                                  "projection, README)"),
+                "ssp2": (">=", 0.7, "observed 0.91 (the approximate projection caps it, README; "
+                                    "the predictor alone: 2)"),
+                "pred": (">=", 1.8, "theory 2")},
     "C32 order": (">=", 1.8, "theory 2"),
     "C32 err": ("<=", 7e-4, "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)"),
     "C32 control": (">=", 0.1, "observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)"),
@@ -403,6 +413,27 @@ def gate_checks(add, b, g):
             f"is inexact in {m['sample_inexact']} cases (sensitivity)")
 
 
+def imex_checks(add, b, g, J):
+    """C31: time order at a constant dt on a fixed mesh, L1(h) (SWE: vs dt/32
+    of the same scheme; VAM: Richardson), and the C++ backends vs JAX."""
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+    for s in C31_SWE:
+        e, ref = [g("C31", f"swe_{s}_k{k}") for k in C31_K], g("C31", f"swe_{s}_ref")
+        if ok(ref, *e):
+            es = [err_ref(x, ref) for x in e]
+            add("C31", f"SWE {s} order dt/4->dt/8", b, "serial", order(*es[-2:]), TH["C31 swe"][s],
+                "L1(h) vs dt/32 " + " / ".join(f"{x:.2e}" for x in es))
+    for s in (*C31_VAM, "pred"):
+        e = [g("C31", f"{'pred_ssp2' if s == 'pred' else 'vam_' + s}_k{k}") for k in C31_K]
+        if ok(*e):
+            d = [err_ref(e[k], e[k + 1]) for k in range(len(e) - 1)]
+            add("C31", f"VAM {'predictor alone ssp2' if s == 'pred' else s} order (Richardson)", b,
+                "serial", order(*d[-2:]), TH["C31 vam"][s],
+                "L1(h) of dt/2^k - dt/2^(k+1) " + " / ".join(f"{x:.2e}" for x in d))
+    for key, th in (("swe_ssp2_k0", RO), ("vam_ssp2_k0", PRESS)):
+        d, j = g("C31", key), J("C31", key)
+        if b != "jax" and ok(d, j):
+            add("C31", f"{key} max rel vs JAX", b, "serial", relmax(d, j), th, "")
 @functools.lru_cache(maxsize=None)
 def _moment_jacobian():
     import cases
@@ -669,6 +700,7 @@ def measure():
                     add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
         euler_checks(add, b, g, J)
         gate_checks(add, b, g)
+        imex_checks(add, b, g, J)
         visc_checks(add, b, g, J)
         for c in CONFIGS:                       # C17: AMR (gate 37)
             for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
