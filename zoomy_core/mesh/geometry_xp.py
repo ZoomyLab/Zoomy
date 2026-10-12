@@ -53,6 +53,29 @@ _TPFA_MIN_COS = 0.1
 #: Degenerate-distance threshold of the TPFA faces (DiffusionOperatorV2).
 _TPFA_MIN_DIST = 1e-30
 
+#: LSQ stencil selection (:func:`_lsq_stencils`).  A fit is UNISOLVENT when
+#: every coefficient c_r it reads is determined, and well: with V its
+#: monomial matrix (offsets scaled by the stencil radius), e_r lies in the
+#: row space of V (singular values below ``_LSQ_RCOND`` times the largest
+#: count as zero; residual <= ``_LSQ_RESID``) and its relative singular
+#: value 1 / (|V| |row r of pinv(V)|) is >= ``_LSQ_COND``, |V|**2 = |V^T V|_F
+#: (sigma_max <= |V| <= M**(1/4) sigma_max).  Exact degeneracies (a 3x3x3
+#: ring: x**3 = x) sit at 1e-16; the compact stencils of gate 39's quads,
+#: jittered quads, triangles and hexahedra (degrees 1-3) at >= 4e-3; an
+#: extension just past rank (as many samples as coefficients, jittered
+#: quads) down to 1e-6.
+_LSQ_COND = 1e-3
+_LSQ_RCOND = 1e-10
+_LSQ_RESID = 1e-8
+#: Extension candidates whose distances agree to this (relative) join the
+#: stencil together: equidistant cells extend it symmetrically.
+_LSQ_TIE = 1e-6
+#: Face-neighbour layers an extension may add; a fit that is still not
+#: unisolvent keeps its unextended stencil (nothing in reach determines it).
+_LSQ_MAX_LAYERS = 2
+#: Cells per batch of the extension (bounds the candidate arrays).
+_LSQ_CHUNK = 20000
+
 
 # ═════════════════════════════════════════════════════════════════════════
 # Topology (numpy, static)
@@ -135,194 +158,395 @@ def _first_visitor(cell_faces):
     return faces, ic, lf
 
 
-def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
-                  n_inner_cells, boundary_owner, cell_vertices,
-                  boundary_face_centers, sampled=None):
-    """The STENCIL SELECTION of
-    :func:`zoomy_core.mesh.lsq_reconstruction.least_squares_reconstruction_local`
-    (same neighbour order, same padding, same REQ-174b axis decisions) --
-    without the per-cell pseudo-inverse, which :func:`compute_geometry`
-    batches.  ``centers`` is ``(n_cells, dim)``; ``boundary_owner`` the inner
-    cell of every boundary face.  >= 2-D: the sorted vertex ring of every
-    inner cell from one sparse product; per-cell loops only for ghosts and
-    cells whose ring is too small (and in 1-D).
+class _FitCheck:
+    """Unisolvency of the LSQ fits exactly as :func:`_lsq_plan` assembles
+    them, batched over cells.  A ``plain`` fit (1-D, or no ghost sample)
+    reads every coefficient from all its samples: full column rank.  A >= 2-D
+    cell with ghost samples is decoupled (REQ-174b): a ghost informs only the
+    PURE monomials of its axis -- those rows come from the interior samples +
+    that ghost (the last ghost of an axis wins, as in the plan) -- and every
+    other row from the interior samples alone; each row must lie in the
+    well-conditioned row space of ITS matrix.  So a wall cell whose interior
+    samples cannot tell y from y**2 (one row inside, the ghost outside) is
+    unisolvent, but a corner whose interior samples miss xy is not.
 
-    Periodic seams: ``neighbors_list`` names the partner cell across a
-    periodic face, ``cell_vertices`` carries the seam's identified vertices
-    (:func:`periodic_vertices`), and ``sampled`` (per boundary face) is False
-    on periodic faces: no ghost sample there, the seam cell's stencil is the
-    interior one."""
-    owner = np.asarray(boundary_owner, dtype=int)
-    if sampled is not None:
-        owner = np.where(np.asarray(sampled, dtype=bool), owner, -1)
-    if cell_vertices is None or dim < 2:
-        cell_bf = [[] for _ in range(n_cells)]
-        for i_bf, c in enumerate(owner):
-            if c >= 0:
-                cell_bf[int(c)].append(i_bf)
-        return _lsq_stencils_loop(n_cells, dim, neighbors_list, centers,
-                                  lsq_degree, n_inner_cells, cell_bf,
-                                  cell_vertices, boundary_face_centers)
-    mon = build_monomial_indices(lsq_degree, dim)
-    required = get_required_monomials_count(get_polynomial_degree(mon), dim)
-    cv = np.asarray(cell_vertices)[:, :n_inner_cells]
-    k, n = cv.shape
-    C = sps.csr_matrix((np.ones(k * n, dtype=np.int32),
-                        (np.repeat(np.arange(n), k), cv.T.reshape(-1))),
-                       shape=(n, int(cv.max()) + 1))
-    rows, cols = (C @ C.T).nonzero()
-    off = rows != cols
-    rows, cols = rows[off], cols[off]
-    o = np.lexsort((cols, rows))                     # each ring sorted
-    rows, cols = rows[o], cols[o]
-    lens = np.bincount(rows, minlength=n)
-    start = np.concatenate([[0], np.cumsum(lens)[:-1]])
-    special = {}                                     # cell -> stencil list
-    # Extend a ring only when its samples cannot fix the fit: the fit is of
-    # differences to the cell (no constant), and every boundary face adds a
-    # ghost sample.  (Counting neither extended every wall and corner cell
-    # one-sidedly into the domain: wall-normal derivatives of fields constant
-    # along the wall.)
-    n_bf = np.bincount(owner[owner >= 0], minlength=n)[:n] if owner.size else 0
-    for i_c in np.flatnonzero(lens + n_bf < required - 1):   # degenerate cells
-        cur = cols[start[i_c]:start[i_c] + lens[i_c]].tolist()
-        fill = [m for m in neighbors_list[i_c]
-                if m < n_inner_cells and m != i_c and m not in cur]
-        cur = cur + fill
+    ``centers`` ``(n_cells, dim)``; ``ghost_offsets`` ``(n_bf, dim)`` the
+    mirror image of the owner centre (``_lsq_matrices``), ``ghost_axis``
+    ``(n_bf,)`` its REQ-174b axis; ``translations``: periodic seams (offsets
+    to the nearest image)."""
+
+    def __init__(self, dim, mon, centers, ghost_offsets, ghost_axis,
+                 translations=None):
+        self.dim = dim
+        self.powers = np.asarray(mon, dtype=int).reshape(len(mon), dim)
+        self.centers = np.asarray(centers, dtype=float)
+        self.ghost_offsets = np.asarray(ghost_offsets, dtype=float).reshape(-1, dim)
+        self.ghost_axis = np.asarray(ghost_axis, dtype=int)
+        self.translations = translations
+        self.axis_rows = np.zeros((dim, len(mon)), dtype=bool)
+        for k, mi in enumerate(mon):
+            nz = [a for a in range(dim) if mi[a] != 0]
+            if len(nz) == 1:
+                self.axis_rows[nz[0], k] = True
+
+    def offsets(self, cells, S):
+        """Offsets ``(n, w, dim)`` of the samples ``S`` (-1: none, offset 0)
+        from ``cells``, to the periodic image nearest the cell."""
+        D = self.centers[np.maximum(S, 0)] - self.centers[cells][:, None, :]
+        if self.translations is not None:
+            D = D + _image_shifts(D, self.translations)
+        return np.where((S >= 0)[..., None], D, 0.0)
+
+    def _mono(self, D):
+        """Monomial columns ``(M, ...)`` of the offsets ``D`` ``(..., dim)``."""
+        pw = [[np.ones(D.shape[:-1])] for _ in range(self.dim)]
+        for a in range(self.dim):
+            for _ in range(int(self.powers[:, a].max(initial=0))):
+                pw[a].append(pw[a][-1] * D[..., a])
+        cols = []
+        for mi in self.powers:
+            c = pw[0][mi[0]]
+            for a in range(1, self.dim):
+                c = c * pw[a][mi[a]]
+            cols.append(c)
+        return np.stack(cols)
+
+    def __call__(self, cells, S, B):
+        """Per cell: is the fit from the inner samples ``S`` and the ghosts of
+        the boundary faces ``B`` (both -1 padded) unisolvent?  A cell without
+        any sample is (the plan's zero fit: nothing to extend)."""
+        n = len(cells)
+        ok = np.ones(n, dtype=bool)
+        if n == 0:
+            return ok
+        D = self.offsets(cells, S).transpose(1, 0, 2)          # (w, n, dim)
+        r2 = sum(D[..., a] ** 2 for a in range(self.dim)).max(axis=0, initial=0.0)
+        gh = np.flatnonzero((B >= 0).any(axis=1))
+        G = np.where((B[gh] >= 0)[..., None],
+                     self.ghost_offsets[np.maximum(B[gh], 0)], 0.0)
+        r2[gh] = np.maximum(r2[gh], (G * G).sum(axis=-1).max(axis=1, initial=0.0))
+        live = r2 > 0
+        r = np.sqrt(np.where(live, r2, 1.0))
+        Ci = self._mono(D / r[:, None])                       # (M, w, n)
+        Cg = np.zeros((Ci.shape[0], B.shape[1], n))
+        Cg[:, :, gh] = self._mono(G.transpose(1, 0, 2) / r[gh, None])
+        if self.dim >= 2:                  # ghosts decoupled (REQ-174b)
+            cpl = gh[live[gh]]
+            plain = np.flatnonzero(live & ~np.isin(np.arange(n), gh))
+            if cpl.size:
+                ok[cpl] = self._coupled(Ci[:, :, cpl].transpose(2, 1, 0),
+                                        Cg[:, :, cpl].transpose(2, 1, 0), B[cpl])
+            if plain.size:
+                ok[plain] = _full_rank_ok(Ci[:, :, plain])
+        else:                              # a ghost is a sample like any other
+            plain = np.flatnonzero(live)
+            ok[plain] = _full_rank_ok(np.concatenate(
+                [Ci[:, :, plain], Cg[:, :, plain]], axis=1))
+        return ok
+
+    def _coupled(self, Vi, Vg, B):
+        n, w, M = Vi.shape
+        b = B.shape[1]
+        valid = B >= 0
+        axis = np.where(valid, self.ghost_axis[np.maximum(B, 0)], -1)
+        j = np.arange(b)
+        later = ((axis[:, :, None] == axis[:, None, :])
+                 & (j[None, None, :] > j[None, :, None])
+                 & valid[:, None, :]).any(axis=2)
+        own = self.axis_rows[np.maximum(axis, 0)] & (valid & ~later)[..., None]
+        rows = np.concatenate([~own.any(axis=1)[:, None], own], axis=1)
+        extra = np.concatenate([np.zeros((n, 1, M)), Vg], axis=1)    # (n, b+1, M)
+        blocks = np.concatenate(
+            [np.broadcast_to(Vi[:, None], (n, b + 1, w, M)), extra[:, :, None]],
+            axis=2).reshape(n * (b + 1), w + 1, M)
+        ok = _rows_ok(blocks, rows.reshape(n * (b + 1), M))
+        return ok.reshape(n, b + 1).all(axis=1)
+
+
+def _full_rank_ok(C):
+    """Every coefficient of the fits with monomial columns ``C`` ``(M, R, n)``
+    determined (see ``_LSQ_COND``; full column rank needed): ``|V|**2
+    (V^T V)^-1_rr`` from a Cholesky factor, unrolled over the M columns, each
+    entry a vector over the cells (not PD: nan, fails)."""
+    M = C.shape[0]
+    G = [[None] * M for _ in range(M)]
+    for i in range(M):
+        for j in range(i + 1):
+            G[i][j] = (C[i] * C[j]).sum(axis=0)
+    L = [[None] * M for _ in range(M)]
+    for j in range(M):
+        d = G[j][j] - sum((L[j][k] ** 2 for k in range(j)), np.zeros_like(G[j][j]))
+        L[j][j] = np.sqrt(np.where(d > 0, d, np.nan))
+        for i in range(j + 1, M):
+            L[i][j] = (G[i][j] - sum((L[i][k] * L[j][k] for k in range(j)),
+                                     np.zeros_like(d))) / L[j][j]
+    X = [[None] * M for _ in range(M)]                        # X = L^-1
+    for j in range(M):
+        X[j][j] = 1.0 / L[j][j]
+        for i in range(j + 1, M):
+            X[i][j] = -sum((L[i][k] * X[k][j] for k in range(j, i)),
+                           np.zeros_like(d)) / L[i][i]
+    norm = np.sqrt(sum((G[i][j] ** 2 * (1 if i == j else 2)
+                        for i in range(M) for j in range(i + 1)), np.zeros_like(d)))
+    ok = np.ones(C.shape[2], dtype=bool)
+    for r in range(M):
+        ok &= norm * sum((X[k][r] ** 2 for k in range(r, M)), np.zeros_like(d)) \
+            <= _LSQ_COND ** -2
+    return ok
+
+
+def _rows_ok(V, rows):
+    """The coefficients ``rows`` ``(n, M)`` (bool) of the fits ``V``
+    ``(n, R, M)`` determined (see ``_LSQ_COND``) -- V may be rank deficient
+    in the others (SVD)."""
+    _, s, Vt = np.linalg.svd(V, full_matrices=False)
+    live = s > _LSQ_RCOND * s[:, :1]
+    Vk = Vt * live[..., None]
+    M = V.shape[2]
+    resid = np.linalg.norm(np.eye(M) - np.einsum("nki,nkj->nij", Vk, Vk), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        w = np.where(live, 1.0 / (s * s), 0.0)
+    amp2 = np.sqrt((s ** 4).sum(axis=1))[:, None] * np.einsum("nki,nk->ni", Vt * Vt, w)
+    good = (resid <= _LSQ_RESID) & (amp2 <= _LSQ_COND ** -2)
+    return (good | ~rows).all(axis=1)
+
+
+def _compact(S):
+    """Rows of ``S`` with their -1 entries moved to the end (order kept),
+    trailing all -1 columns dropped."""
+    S = np.take_along_axis(S, np.argsort(S < 0, axis=1, kind="stable"), axis=1)
+    return S[:, :int((S >= 0).sum(axis=1).max(initial=0))]
+
+
+def _pad(S, w):
+    return np.concatenate([S, -np.ones((S.shape[0], w - S.shape[1]), dtype=S.dtype)],
+                          axis=1) if S.shape[1] < w else S
+
+
+def _next_layer(check, cells, S, nl, n_inner):
+    """The face neighbours of ``cells`` and of their stencils ``S`` that are
+    not in ``S`` yet, nearest first: ``(cand, group)``, -1 padded; ``group``
+    numbers the distance classes (equidistant cells share one)."""
+    n = len(cells)
+    src = np.concatenate([cells[:, None], S], axis=1)
+    nb = nl[np.maximum(src, 0)]
+    nb = np.where((src >= 0)[..., None] & (nb >= 0) & (nb < n_inner), nb, -1)
+    nb = nb.reshape(n, -1)
+    row = np.arange(n)[:, None]
+    have = np.concatenate([cells[:, None], S], axis=1)
+    taken = np.isin(row * n_inner + nb, (row * n_inner + have)[have >= 0])
+    nb = np.sort(np.where(taken | (nb < 0), -1, nb), axis=1)
+    nb[:, 1:] = np.where(nb[:, 1:] == nb[:, :-1], -1, nb[:, 1:])
+    d = np.where(nb >= 0, np.linalg.norm(check.offsets(cells, nb), axis=2), np.inf)
+    o = np.argsort(d, axis=1, kind="stable")
+    nb, d = np.take_along_axis(nb, o, axis=1), np.take_along_axis(d, o, axis=1)
+    w = int((nb >= 0).sum(axis=1).max(initial=0))
+    nb, d = nb[:, :w], d[:, :w]
+    new = np.zeros(nb.shape, dtype=bool)
+    new[:, 1:] = d[:, 1:] > d[:, :-1] * (1 + _LSQ_TIE)
+    return nb, np.where(nb >= 0, np.cumsum(new, axis=1), w)
+
+
+def _extend(check, cells, S, B, nl, n_inner):
+    """Smallest extension of the stencils ``S`` that makes the fits
+    unisolvent: the next face-neighbour layer joins one distance class at a
+    time (nearest first; equidistant cells together), at most
+    ``_LSQ_MAX_LAYERS`` layers.  Returns the new rows (compacted, -1 padded)
+    and which cells succeeded; the others keep ``S``."""
+    out, done = [None] * len(cells), np.zeros(len(cells), dtype=bool)
+    act = np.arange(len(cells))
+    cur = S
+    for _ in range(_LSQ_MAX_LAYERS):
+        if not act.size:
+            break
+        cand, grp = _next_layer(check, cells[act], cur, nl, n_inner)
+        if not cand.shape[1]:
+            break
+        left = np.ones(act.size, dtype=bool)
+        for g in range(cand.shape[1]):
+            sel = np.flatnonzero(left & (grp == g).any(axis=1))
+            if not sel.size:
+                continue
+            trial = np.concatenate([cur[sel], np.where(grp[sel] <= g, cand[sel], -1)],
+                                   axis=1)
+            good = check(cells[act[sel]], trial, B[act[sel]])
+            for i, t in zip(sel[good], _compact(trial[good])):
+                out[act[i]] = t
+            done[act[sel[good]]] = True
+            left[sel[good]] = False
+        act, cur = act[left], np.concatenate([cur[left], cand[left]], axis=1)
+    return out, done
+
+
+def _unisolvent_stencils(check, cells, S, B, nl, n_inner, fallback=None):
+    """Stencils (-1 padded rows of ``S``, one per cell of ``cells``; ghosts:
+    the boundary faces ``B``) made unisolvent: kept where they already are,
+    else replaced by ``fallback`` (if given and unisolvent), else extended
+    (:func:`_extend`)."""
+    ok = check(cells, S, B)
+    if fallback is not None:
+        bad = np.flatnonzero(~ok)
+        w = max(S.shape[1], fallback.shape[1])
+        S, fallback = _pad(S, w), _pad(fallback, w)
+        S[bad] = fallback[bad]
+        ok[bad] = check(cells[bad], S[bad], B[bad])
+    bad = np.flatnonzero(~ok)
+    rows = {}
+    for k in range(0, bad.size, _LSQ_CHUNK):
+        part = bad[k:k + _LSQ_CHUNK]
+        grown, done = _extend(check, cells[part], _compact(S[part]), B[part],
+                              nl, n_inner)
+        rows.update({int(part[i]): grown[i] for i in np.flatnonzero(done)})
+    if rows:
+        S = _pad(S, max(len(t) for t in rows.values()))
+        for i, t in rows.items():
+            S[i] = -1
+            S[i, :len(t)] = t
+    return _compact(S)
+
+
+def _face_stencils(nl, n_inner):
+    """Face neighbours (inner, not the cell itself) of the inner cells, -1
+    padded, in ``cell_neighbors`` order."""
+    f = np.asarray(nl[:n_inner])
+    return _compact(np.where((f >= 0) & (f < n_inner)
+                             & (f != np.arange(n_inner)[:, None]), f, -1))
+
+
+def _ghost_stencils(n_cells, nl, n_inner, required):
+    """Ghost rows (``n_inner..n_cells``): the ghost's inner face neighbours,
+    grown by whole layers to ``required`` samples."""
+    out = {}
+    for i_c in range(n_inner, n_cells):
+        cur = [m for m in nl[i_c] if 0 <= m < n_inner]
         while len(cur) < required:
-            ext = expand_neighbors(neighbors_list, cur, n_valid=n_inner_cells)
-            new = [m for m in ext if m != i_c and m not in cur]
-            if not new:
+            grown = list(set(expand_neighbors(nl, cur, n_valid=n_inner)) - {i_c})
+            if len(grown) <= len(cur):          # nothing more to reach
                 break
-            cur.extend(new)
-        special[int(i_c)] = cur
-    # A linear fit has no curvature term: on a boundary cell the vertex ring
-    # (more cells inside than ghosts outside) turns curvature along the wall
-    # into a wall-normal gradient.  Face neighbours + ghosts are mirror-
-    # symmetric: the boundary stencil of a gradient.
-    if get_polynomial_degree(mon) == 1 and owner.size:
-        for i_c in np.flatnonzero(n_bf > 0):
-            face = [int(m) for m in neighbors_list[i_c]
-                    if 0 <= m < n_inner_cells and m != i_c]
-            if int(i_c) not in special and len(face) + n_bf[i_c] >= required - 1:
-                special[int(i_c)] = face
-    for i_c in range(n_inner_cells, n_cells):        # ghosts: face neighbours
-        cur = [m for m in neighbors_list[i_c] if m < n_inner_cells]
-        while len(cur) < required:
-            new_nb = expand_neighbors(neighbors_list, cur, n_valid=n_inner_cells)
-            cur = list(set(new_nb) - {i_c})
-            if len(cur) == 0:
-                break
-        special[i_c] = cur
-    max_nbr = max([int(lens.max()) if n else 0]
-                  + [len(v) for v in special.values()])
-    neighbors = np.repeat(np.arange(n_cells)[:, None], max_nbr, axis=1)
-    neighbors[rows, np.arange(len(rows)) - start[rows]] = cols
-    for i_c, cur in special.items():
-        neighbors[i_c] = np.arange(max_nbr) * 0 + i_c
-        neighbors[i_c, :min(len(cur), max_nbr)] = cur[:max_nbr]
+            cur = grown
+        out[i_c] = cur
+    return out
+
+
+def _boundary_slots(owner, n_cells, boundary_face_centers, centers):
+    """Per cell its sampled boundary faces in boundary-face order (``bdy``,
+    -1 padded) and each one's REQ-174b axis (``n_axis``)."""
     valid = np.flatnonzero(owner >= 0)
     counts = np.bincount(owner[valid], minlength=n_cells)
     max_bdy = int(counts.max()) if valid.size else 0
     bdy = -np.ones((n_cells, max_bdy), dtype=int)
     n_axis = -np.ones((n_cells, max_bdy), dtype=int)
     if valid.size:
-        o = valid[np.argsort(owner[valid], kind="stable")]   # boundary-face order
+        o = valid[np.argsort(owner[valid], kind="stable")]
         first = np.concatenate([[0], np.cumsum(counts)])[owner[o]]
         slot = np.arange(len(o)) - first
         bdy[owner[o], slot] = o
         d = 2 * (np.asarray(boundary_face_centers)[o] - np.asarray(centers)[owner[o]])
         n_axis[owner[o], slot] = np.argmax(np.abs(d), axis=1)
+    return bdy, n_axis
+
+
+def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
+                  n_inner_cells, boundary_owner, cell_vertices,
+                  boundary_face_centers, ghost_offsets, sampled=None,
+                  translations=None):
+    """The LSQ STENCIL SELECTION (neighbours, boundary-face slots, REQ-174b
+    axis decisions) -- without the per-cell pseudo-inverse, which
+    :func:`compute_geometry` batches.  ``centers`` is ``(n_cells, dim)``;
+    ``boundary_owner`` the inner cell of every boundary face,
+    ``ghost_offsets`` ``(n_bf, dim)`` its ghost sample (mirror image of the
+    owner centre).
+
+    Rule (rank-based): a cell's stencil is its vertex ring (>= 2-D; 1-D and
+    meshes without ``cell_vertices``: its face neighbours), degree-1 boundary
+    cells take face neighbours + ghosts (mirror-symmetric) -- each kept if
+    the fit as :func:`_lsq_plan` assembles it is unisolvent
+    (:class:`_FitCheck`; the ghosts count), and otherwise extended by the
+    nearest face neighbours of its cells, equidistant ones together, until
+    it is (:func:`_extend`).  A sample COUNT decides nothing: a 3x3x3 ring
+    has 26 samples for 19 cubic coefficients and still cannot tell x**3 from
+    x; a wall cell's 5 + 1 samples determine its 5 quadratic ones.
+
+    Periodic seams: ``neighbors_list`` names the partner cell across a
+    periodic face, ``cell_vertices`` carries the seam's identified vertices
+    (:func:`periodic_vertices`), ``translations`` the seams' periods, and
+    ``sampled`` (per boundary face) is False on periodic faces: no ghost
+    sample there, the seam cell's stencil is the interior one."""
+    owner = np.asarray(boundary_owner, dtype=int)
+    if sampled is not None:
+        owner = np.where(np.asarray(sampled, dtype=bool), owner, -1)
+    nl = np.asarray(neighbors_list, dtype=int)
+    mon = build_monomial_indices(lsq_degree, dim)
+    degree = get_polynomial_degree(mon)
+    required = get_required_monomials_count(degree, dim)
+    bdy, n_axis = _boundary_slots(owner, n_cells, boundary_face_centers, centers)
+    n = n_inner_cells
+    ghost_axis = np.argmax(np.abs(np.asarray(boundary_face_centers)
+                                  - np.asarray(centers)[np.maximum(owner, 0)]),
+                           axis=1) if owner.size else np.zeros(0, dtype=int)
+    check = _FitCheck(dim, mon, centers, ghost_offsets, ghost_axis, translations)
+    cells = np.arange(n)
+    face = _face_stencils(nl, n)
+    ring_mode = cell_vertices is not None and dim >= 2
+    if ring_mode:
+        cv = np.asarray(cell_vertices)[:, :n]
+        k = cv.shape[0]
+        C = sps.csr_matrix((np.ones(k * n, dtype=np.int32),
+                            (np.repeat(np.arange(n), k), cv.T.reshape(-1))),
+                           shape=(n, int(cv.max()) + 1))
+        rows, cols = (C @ C.T).nonzero()
+        off = rows != cols
+        rows, cols = rows[off], cols[off]
+        o = np.lexsort((cols, rows))                 # each ring sorted
+        rows, cols = rows[o], cols[o]
+        lens = np.bincount(rows, minlength=n)
+        start = np.concatenate([[0], np.cumsum(lens)[:-1]])
+        ring = -np.ones((n, int(lens.max(initial=0))), dtype=int)
+        ring[rows, np.arange(len(rows)) - start[rows]] = cols
+        # A linear fit has no curvature term: on a boundary cell the vertex
+        # ring (more cells inside than ghosts outside) turns curvature along
+        # the wall into a wall-normal gradient.  Face neighbours + ghosts are
+        # mirror-symmetric: the boundary stencil of a gradient.
+        if degree == 1 and (bdy[:n] >= 0).any():
+            w = max(ring.shape[1], face.shape[1])
+            base = _pad(ring.copy(), w)
+            wall = (bdy[:n] >= 0).any(axis=1)
+            base[wall] = _pad(face, w)[wall]
+            S = _unisolvent_stencils(check, cells, base, bdy[:n], nl, n,
+                                     fallback=ring)
+        else:
+            S = _unisolvent_stencils(check, cells, ring, bdy[:n], nl, n)
+        special = _ghost_stencils(n_cells, nl, n, required)
+        max_nbr = max([S.shape[1]] + [len(v) for v in special.values()])
+        neighbors = np.repeat(np.arange(n_cells)[:, None], max_nbr, axis=1)
+        neighbors[:n, :S.shape[1]] = np.where(S >= 0, S, cells[:, None])
+        for i_c, cur in special.items():
+            neighbors[i_c, :min(len(cur), max_nbr)] = cur[:max_nbr]
+    else:
+        S = _unisolvent_stencils(check, cells, face, bdy[:n], nl, n)
+        # the width of the INNER stencils: a ghost row (its inner cell's
+        # neighbours, the inner cell itself included) is cut to it, never
+        # widens the inner stencils (ANALYSIS 23); inner rows are padded
+        # with the cell itself (a zero row of the fit)
+        max_nbr = S.shape[1]
+        neighbors = np.repeat(np.arange(n_cells)[:, None], max_nbr, axis=1)
+        neighbors[:n] = np.where(S >= 0, S, cells[:, None])
+        for i_c, cur in _ghost_stencils(n_cells, nl, n, required).items():
+            while len(cur) < max_nbr:       # (legacy) ghost rows padded by growth
+                new = [m for m in set(expand_neighbors(nl, cur, n_valid=n)) - {i_c}
+                       if m not in cur and m < n]
+                if not new:
+                    break
+                cur = cur + new
+            cur = cur[:max_nbr]
+            neighbors[i_c, :len(cur)] = cur
+        if dim < 2:
+            n_axis[:] = -1
     pure_axis_rows = {}
     for kk, mi in enumerate(mon):
         nz = [a for a in range(dim) if mi[a] != 0]
         if len(nz) == 1:
             pure_axis_rows.setdefault(nz[0], []).append(kk)
-    return mon, neighbors, bdy, n_axis, pure_axis_rows
-
-
-def _lsq_stencils_loop(n_cells, dim, neighbors_list, centers, lsq_degree,
-                       n_inner_cells, cell_boundary_faces, cell_vertices,
-                       boundary_face_centers):
-    """The STENCIL SELECTION of
-    :func:`zoomy_core.mesh.lsq_reconstruction.least_squares_reconstruction_local`
-    (same neighbour order, same padding, same REQ-174b axis decisions) —
-    without the per-cell pseudo-inverse, which :func:`compute_geometry`
-    batches.  ``centers`` is ``(n_cells, dim)``."""
-    has_bdy = any(len(b) > 0 for b in cell_boundary_faces)
-    max_bdy = max(len(b) for b in cell_boundary_faces) if has_bdy else 0
-    mon = build_monomial_indices(lsq_degree, dim)
-    degree = get_polynomial_degree(mon)
-    required = get_required_monomials_count(degree, dim)
-    use_vring = cell_vertices is not None and dim >= 2
-    if use_vring:
-        cell_vertices = np.asarray(cell_vertices)
-        n_vring = min(n_inner_cells, cell_vertices.shape[1])
-        v2c = build_vertex_to_cells(cell_vertices, n_vring)
-
-    nbrs_all = []
-    for i_c in range(n_cells):
-        if use_vring and i_c < n_vring:
-            cur = vertex_one_ring(i_c, cell_vertices, v2c, n_inner_cells)
-            if len(cur) < required:
-                fill = [n for n in neighbors_list[i_c]
-                        if n < n_inner_cells and n != i_c and n not in cur]
-                cur = cur + fill
-                while len(cur) < required:
-                    ext = expand_neighbors(neighbors_list, cur,
-                                           n_valid=n_inner_cells)
-                    new = [n for n in ext if n != i_c and n not in cur]
-                    if not new:
-                        break
-                    cur.extend(new)
-        else:
-            cur = [n for n in neighbors_list[i_c] if n < n_inner_cells]
-            while len(cur) < required:
-                new_nb = expand_neighbors(neighbors_list, cur,
-                                          n_valid=n_inner_cells)
-                grown = list(set(new_nb) - {i_c})
-                if len(grown) <= len(cur):   # nothing more to reach
-                    break
-                cur = grown
-        nbrs_all.append(cur)
-
-    # the width of the INNER stencils: a ghost row (its inner cell's
-    # neighbours, the inner cell itself included) is cut to it, never widens
-    # the interior stencils one-sidedly
-    max_nbr = max(len(n) for n in nbrs_all[:n_inner_cells])
-    neighbors = np.empty((n_cells, max_nbr), dtype=int)
-    bdy = -np.ones((n_cells, max_bdy), dtype=int)
-    pure_axis_rows = {}
-    for k, mi in enumerate(mon):
-        nz = [a for a in range(dim) if mi[a] != 0]
-        if len(nz) == 1:
-            pure_axis_rows.setdefault(nz[0], []).append(k)
-    n_axis = -np.ones((n_cells, max_bdy), dtype=int)
-
-    for i_c in range(n_cells):
-        cur = list(nbrs_all[i_c])
-        n_nbr = len(cur)
-        if not use_vring:
-            while n_nbr < max_nbr:
-                ext = expand_neighbors(neighbors_list, cur,
-                                       n_valid=n_inner_cells)
-                ext = list(set(ext) - {i_c})
-                new = [n for n in ext if n not in cur and n < n_inner_cells]
-                if not new:          # nothing more to reach (an isolated cell)
-                    break
-                cur.extend(new)
-                n_nbr = len(cur)
-        if len(cur) >= max_nbr:
-            trimmed = cur[:max_nbr]
-        else:
-            trimmed = cur + [i_c] * (max_nbr - len(cur))
-        neighbors[i_c] = trimmed
-        bf = list(cell_boundary_faces[i_c])
-        bdy[i_c, :len(bf)] = bf
-        if dim >= 2:
-            for j, f in enumerate(bf):
-                d = 2 * (boundary_face_centers[f] - centers[i_c])
-                n_axis[i_c, j] = int(np.argmax(np.abs(d)))
     return mon, neighbors, bdy, n_axis, pure_axis_rows
 
 
@@ -631,15 +855,20 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
             nl[bowner[k], np.argmax(cf[:, bowner[k]] == bfaces[k])] = inputs[k]
         if periodic_ids is not None:
             cv_ring = np.asarray(periodic_ids[0])[cv_ring]
+    if periodic.any() and periodic_ids is None:
+        raise ValueError("periodic faces without the seams' vertex "
+                         "identification (periodic_ids)")
+    # ghost samples at the mirror image of the owner centre (_lsq_matrices)
+    bn = g0["face_normals"][:dim, bfaces].T
+    bn = bn / np.linalg.norm(bn, axis=1)[:, None]
+    ghost_off = 2 * np.sum((bfc0 - centers0[:dim, bowner].T) * bn, axis=1)[:, None] * bn
     mon, nbr, bdy, n_axis, pure_rows = _lsq_stencils(
         n_cells, dim, nl, centers0[:dim].T, lsq_degree, n_inner, bowner,
-        cv_ring, bfc0, sampled=~periodic)
+        cv_ring, bfc0, ghost_off, sampled=~periodic,
+        translations=periodic_ids[1] if periodic.any() else None)
     plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows)
     shift = None
     if periodic.any():
-        if periodic_ids is None:
-            raise ValueError("periodic faces without the seams' vertex "
-                             "identification (periodic_ids)")
         D = centers0[:dim, nbr].transpose(1, 2, 0) - centers0[:dim].T[:, None, :]
         shift = _image_shifts(D, periodic_ids[1])
     grad_cols = np.asarray(find_derivative_indices(
