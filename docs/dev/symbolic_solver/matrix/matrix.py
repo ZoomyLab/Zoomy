@@ -21,7 +21,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
-from cases import CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, PERTURB, prepare  # noqa: E402
+from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C4_N, DIFF_ALL, DIFF_KINDS, DIFF_PATHS,  # noqa: E402
+                   NA, PERTURB, prepare)
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -323,6 +324,74 @@ def euler_checks(add, b, g, J):
                 add("C22", f"{k} |rev - jvp| (rel)", b, c, abs(metrics(r)["rev"] - fw) / abs(fw), RO, "")
 
 
+def gate_checks(add, b, g):
+    """C27-C30: the wrapped gates 40 (SSP-RK order), 41 / 43 (diffusion blocks
+    at the boundaries), 44 (LSQ boundary closure), 39 (LSQ polynomials)."""
+    SLACK = 0.2
+    for part, lab, pair in (("ode", "ODE", "32->64 steps"), ("wave", "wave", "dt/2->dt/4")):   # C27
+        for to in (1, 2, 3):
+            d = g("C27", f"{part}_t{to}")
+            if d is not None:
+                m = metrics(d)
+                add("C27", f"{lab} time_order {to} order {pair}", b, "serial", order(*m["err"][-2:]),
+                    (">=", to - SLACK, f"theory {to}, slack {SLACK}"),
+                    "err " + " / ".join(f"{x:.2e}" for x in m["err"]))
+    d = g("C27", "ode_control")
+    if d is not None:
+        m = metrics(d)
+        add("C27", "ODE control (RK3, wrong stage time) order", b, "serial", order(*m["err"][-2:]),
+            ("<=", 2.5, "gate 40 control: a wrong stage time loses the order"),
+            "err " + " / ".join(f"{x:.2e}" for x in m["err"]))
+    for kind in DIFF_KINDS:                         # C28
+        for path in DIFF_PATHS:
+            d = g("C28", f"orders_{kind}_{path}")   # gate 41 (JAX): orders
+            if d is not None:
+                m = metrics(d)
+                for case in ("dir0", "neu", "dirL", "per"):
+                    add("C28", f"{kind} {path} {case} L_inf order 32->64", b, "serial",
+                        order(*m[case][-2:]), (">=", 1.8, "theory 2, gate 41"),
+                        "L_inf " + " / ".join(f"{x:.2e}" for x in m[case]))
+                add("C28", f"{kind} {path} steady max|u - L|", b, "serial", m["steady"], RO,
+                    "linear Dirichlet field kept to round-off")
+            for case in DIFF_ALL:                   # gate 43: foam / AMReX vs JAX
+                if b == "amrex" and kind == "tri":
+                    if (path, case) == (DIFF_PATHS[0], DIFF_ALL[0]):
+                        add("C28", "tri max rel vs JAX (n/a: AMReX takes Cartesian grids only)", b,
+                            "serial", "n/a", None, "")
+                    continue
+                d = g("C28", f"{kind}_{path}_{case}")
+                if d is None:
+                    continue
+                m = metrics(d)
+                bound = ("<=", 1e-12, "tolerance, gate 43: the same two-point fluxes and ghosts") \
+                    if path == "expl" else ("<=", 1e-9, "tolerance, gate 43: Newton 1e-10, GMRES 1e-13")
+                add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial", m["rel_vs_jax"], bound,
+                    f"L_inf vs exact {m['err']:.2e}")
+                if case == "steady":
+                    add("C28", f"{kind} {path} steady max|u - L|", b, "serial", m["err"], RO,
+                        "on the backend itself")
+    for p in (2, 3):                                # C29
+        for bc in ("dir", "neu"):
+            d = g("C29", f"p{p}_{bc}")
+            if d is None:
+                continue
+            m = metrics(d)
+            for where in ("boundary", "interior"):
+                for k in range(1, p + 1):
+                    e = m[f"closure_{where}_d{k}"]
+                    add("C29", f"p{p} {bc} d{k} {where} order 24->48", b, "serial", order(*e[-2:]),
+                        (">=", p + 1 - k - SLACK, f"theory p+1-k = {p + 1 - k}, slack {SLACK}, gate 44"),
+                        "max err " + " / ".join(f"{x:.2e}" for x in e)
+                        + "; ghost as sample: " + " / ".join(f"{x:.2e}" for x in m[f"ghost_{where}_d{k}"]))
+    d = g("C30", "polynomials")                     # C30
+    if d is not None:
+        m = metrics(d)
+        add("C30", "gate 39 checks failing", b, "serial", m["fails"],
+            ("<=", 0, f"spec, gate 39: exact to {m['tol']:g}"),
+            f"PASS={m['passes']} FAIL={m['fails']} (tol {m['tol']:g}); the ghost as a plain sample "
+            f"is inexact in {m['sample_inexact']} cases (sensitivity)")
+
+
 def measure():
     """[(case, check, backend, config, value, threshold, note)]."""
     out = []
@@ -339,7 +408,8 @@ def measure():
     for case, (_, runs) in CASES.items():      # whole backends without the case
         for b in BACKENDS:
             if runs and not any(b in r.backends for r in runs):
-                add(case, "runs", b, "serial", "n/a", None, "")
+                why = NA.get((case, b))
+                add(case, "runs" if why is None else f"runs (n/a: {why})", b, "serial", "n/a", None, "")
     J = lambda case, k, c="serial": load("jax", c, case, k)  # noqa: E731
     for b in BACKENDS:
         g = lambda case, k, c="serial", b=b: load(b, c, case, k)  # noqa: E731
@@ -494,6 +564,7 @@ def measure():
                         TH["couple"], "")
                     add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
         euler_checks(add, b, g, J)
+        gate_checks(add, b, g)
         for c in CONFIGS:                       # C17: AMR (gate 37)
             for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
                 d = g("C17", k, c)

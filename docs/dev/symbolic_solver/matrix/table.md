@@ -372,6 +372,141 @@
 | C24 | wave o2none order 32->64 | jax | 2.32e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C26 | max rel vs JAX | amrex | 6.72e-14 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C26 | L1 rel vs JAX | foam | 1.66e-03 | - | - | n/a | n/a | information |
+| C27 | ODE time_order 1 order 32->64 steps | amrex | 1.01e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
+| C27 | ODE time_order 2 order 32->64 steps | amrex | 1.92e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
+| C27 | ODE time_order 3 order 32->64 steps | amrex | 3.00e+00 PASS | - | - | - | - | >= 2.8 (theory 3, slack 0.2) |
+| C27 | wave time_order 1 order dt/2->dt/4 | amrex | 1.26e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
+| C27 | wave time_order 2 order dt/2->dt/4 | amrex | 2.08e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
+| C27 | wave time_order 3 order dt/2->dt/4 | amrex | 3.02e+00 PASS | - | - | - | - | >= 2.8 (theory 3, slack 0.2) |
+| C27 | ODE time_order 1 order 32->64 steps | foam | 1.01e+00 PASS | - | - | n/a | n/a | >= 0.8 (theory 1, slack 0.2) |
+| C27 | ODE time_order 2 order 32->64 steps | foam | 1.92e+00 PASS | - | - | n/a | n/a | >= 1.8 (theory 2, slack 0.2) |
+| C27 | ODE time_order 3 order 32->64 steps | foam | 3.00e+00 PASS | - | - | n/a | n/a | >= 2.8 (theory 3, slack 0.2) |
+| C27 | wave time_order 1 order dt/2->dt/4 | foam | 1.26e+00 PASS | - | - | n/a | n/a | >= 0.8 (theory 1, slack 0.2) |
+| C27 | wave time_order 2 order dt/2->dt/4 | foam | 2.08e+00 PASS | - | - | n/a | n/a | >= 1.8 (theory 2, slack 0.2) |
+| C27 | wave time_order 3 order dt/2->dt/4 | foam | 3.02e+00 PASS | - | - | n/a | n/a | >= 2.8 (theory 3, slack 0.2) |
+| C27 | ODE control (RK3, wrong stage time) order | jax | 9.92e-01 PASS | - | - | - | - | <= 2.5 (gate 40 control: a wrong stage time loses the order) |
+| C27 | ODE time_order 1 order 32->64 steps | jax | 1.01e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
+| C27 | ODE time_order 2 order 32->64 steps | jax | 1.92e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
+| C27 | ODE time_order 3 order 32->64 steps | jax | 3.00e+00 PASS | - | - | - | - | >= 2.8 (theory 3, slack 0.2) |
+| C27 | wave time_order 1 order dt/2->dt/4 | jax | 1.26e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
+| C27 | wave time_order 2 order dt/2->dt/4 | jax | 2.08e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
+| C27 | wave time_order 3 order dt/2->dt/4 | jax | 3.02e+00 PASS | - | - | - | - | >= 2.8 (theory 3, slack 0.2) |
+| C28 | 1d expl dir0 max rel vs JAX | amrex | 1.28e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl dirL max rel vs JAX | amrex | 1.04e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl neu max rel vs JAX | amrex | 1.46e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl per max rel vs JAX | amrex | 1.21e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl steady max rel vs JAX | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl steady max|u - L| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | 1d impl dir0 max rel vs JAX | amrex | 6.72e-11 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl dirL max rel vs JAX | amrex | 1.40e-11 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl neu max rel vs JAX | amrex | 4.48e-11 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl per max rel vs JAX | amrex | 2.52e-10 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl steady max rel vs JAX | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl steady max|u - L| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad expl dir0 max rel vs JAX | amrex | 1.20e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl dirL max rel vs JAX | amrex | 7.59e-16 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl neu max rel vs JAX | amrex | 1.20e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl per max rel vs JAX | amrex | 2.75e-15 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl steady max rel vs JAX | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl steady max|u - L| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad impl dir0 max rel vs JAX | amrex | 1.35e-15 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl dirL max rel vs JAX | amrex | 3.04e-16 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl neu max rel vs JAX | amrex | 6.00e-16 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl per max rel vs JAX | amrex | 2.16e-10 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl steady max rel vs JAX | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl steady max|u - L| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | tri max rel vs JAX (n/a: AMReX takes Cartesian grids only) | amrex | n/a | - | - | - | - | information |
+| C28 | 1d expl dir0 max rel vs JAX | foam | 1.28e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl dirL max rel vs JAX | foam | 1.04e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl neu max rel vs JAX | foam | 1.46e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl per max rel vs JAX | foam | 1.21e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | 1d expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | 1d impl dir0 max rel vs JAX | foam | 5.06e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl dirL max rel vs JAX | foam | 8.14e-12 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl neu max rel vs JAX | foam | 3.45e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl per max rel vs JAX | foam | 1.95e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad expl dir0 max rel vs JAX | foam | 1.20e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl dirL max rel vs JAX | foam | 7.59e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl neu max rel vs JAX | foam | 1.20e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl per max rel vs JAX | foam | 2.75e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | quad expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad impl dir0 max rel vs JAX | foam | 1.35e-15 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl dirL max rel vs JAX | foam | 3.04e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl neu max rel vs JAX | foam | 6.00e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl per max rel vs JAX | foam | 2.26e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | tri expl dir0 max rel vs JAX | foam | 4.48e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl dirL max rel vs JAX | foam | 3.01e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl neu max rel vs JAX | foam | 9.71e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl per max rel vs JAX | foam | 4.24e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
+| C28 | tri expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | tri impl dir0 max rel vs JAX | foam | 6.72e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl dirL max rel vs JAX | foam | 1.51e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl neu max rel vs JAX | foam | 6.44e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl per max rel vs JAX | foam | 1.04e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C28 | 1d expl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d expl dirL L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d expl neu L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d expl per L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d expl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | 1d impl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d impl dirL L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d impl neu L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d impl per L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | 1d impl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad expl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad expl dirL L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad expl neu L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad expl per L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad expl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | quad impl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad impl dirL L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad impl neu L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad impl per L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | quad impl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | tri expl dir0 L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri expl dirL L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri expl neu L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri expl per L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri expl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C28 | tri impl dir0 L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri impl dirL L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri impl neu L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri impl per L_inf order 32->64 | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
+| C28 | tri impl steady max|u - L| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C29 | runs (n/a: gate 44 calls the JAX runtime (derivative_aux)) | amrex | n/a | - | - | - | - | information |
+| C29 | runs (n/a: gate 44 calls the JAX runtime (derivative_aux)) | foam | n/a | - | - | n/a | n/a | information |
+| C29 | p2 dir d1 boundary order 24->48 | jax | 1.97e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p2 dir d1 interior order 24->48 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p2 dir d2 boundary order 24->48 | jax | 9.29e-01 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p2 dir d2 interior order 24->48 | jax | 1.99e+00 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p2 neu d1 boundary order 24->48 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p2 neu d1 interior order 24->48 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p2 neu d2 boundary order 24->48 | jax | 9.20e-01 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p2 neu d2 interior order 24->48 | jax | 1.99e+00 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p3 dir d1 boundary order 24->48 | jax | 2.94e+00 PASS | - | - | - | - | >= 2.8 (theory p+1-k = 3, slack 0.2, gate 44) |
+| C29 | p3 dir d1 interior order 24->48 | jax | 3.32e+00 PASS | - | - | - | - | >= 2.8 (theory p+1-k = 3, slack 0.2, gate 44) |
+| C29 | p3 dir d2 boundary order 24->48 | jax | 1.96e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p3 dir d2 interior order 24->48 | jax | 1.93e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p3 dir d3 boundary order 24->48 | jax | 9.34e-01 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p3 dir d3 interior order 24->48 | jax | 1.34e+00 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p3 neu d1 boundary order 24->48 | jax | 2.94e+00 PASS | - | - | - | - | >= 2.8 (theory p+1-k = 3, slack 0.2, gate 44) |
+| C29 | p3 neu d1 interior order 24->48 | jax | 3.32e+00 PASS | - | - | - | - | >= 2.8 (theory p+1-k = 3, slack 0.2, gate 44) |
+| C29 | p3 neu d2 boundary order 24->48 | jax | 1.96e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p3 neu d2 interior order 24->48 | jax | 1.93e+00 PASS | - | - | - | - | >= 1.8 (theory p+1-k = 2, slack 0.2, gate 44) |
+| C29 | p3 neu d3 boundary order 24->48 | jax | 8.27e-01 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C29 | p3 neu d3 interior order 24->48 | jax | 1.34e+00 PASS | - | - | - | - | >= 0.8 (theory p+1-k = 1, slack 0.2, gate 44) |
+| C30 | runs (n/a: gate 39 calls the JAX runtime (lsq_gradient_per_field)) | amrex | n/a | - | - | - | - | information |
+| C30 | runs (n/a: gate 39 calls the JAX runtime (lsq_gradient_per_field)) | foam | n/a | - | - | n/a | n/a | information |
+| C30 | gate 39 checks failing | jax | 0.00e+00 PASS | - | - | - | - | <= 0 (spec, gate 39: exact to 1e-09) |
 
 ## Large tier
 
@@ -428,6 +563,64 @@ Notes:
 - C24 wave o2none max|u - u0|, |p - 1|, jax serial: contact: velocity and pressure constant
 - C24 wave o2minmod order 32->64, jax serial: L1(rho) 3.60e-03 / 8.58e-04 / 2.43e-04
 - C24 wave o2minmod max|u - u0|, |p - 1|, jax serial: contact: velocity and pressure constant
+- C27 ODE time_order 1 order 32->64 steps, jax serial: err 3.25e-02 / 1.60e-02 / 7.96e-03
+- C27 ODE time_order 2 order 32->64 steps, jax serial: err 2.48e-04 / 6.95e-05 / 1.83e-05
+- C27 ODE time_order 3 order 32->64 steps, jax serial: err 4.12e-05 / 5.15e-06 / 6.43e-07
+- C27 wave time_order 1 order dt/2->dt/4, jax serial: err 1.10e-02 / 4.82e-03 / 2.01e-03
+- C27 wave time_order 2 order dt/2->dt/4, jax serial: err 4.31e-04 / 1.05e-04 / 2.49e-05
+- C27 wave time_order 3 order dt/2->dt/4, jax serial: err 1.86e-05 / 2.32e-06 / 2.86e-07
+- C27 ODE control (RK3, wrong stage time) order, jax serial: err 2.49e-02 / 1.26e-02 / 6.33e-03
+- C28 1d expl dir0 L_inf order 32->64, jax serial: L_inf 3.86e-04 / 9.67e-05 / 2.42e-05
+- C28 1d expl neu L_inf order 32->64, jax serial: L_inf 3.86e-04 / 9.67e-05 / 2.42e-05
+- C28 1d expl dirL L_inf order 32->64, jax serial: L_inf 3.86e-04 / 9.67e-05 / 2.42e-05
+- C28 1d expl per L_inf order 32->64, jax serial: L_inf 1.40e-03 / 3.52e-04 / 8.81e-05
+- C28 1d expl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C28 1d impl dir0 L_inf order 32->64, jax serial: L_inf 9.54e-04 / 2.39e-04 / 5.99e-05
+- C28 1d impl neu L_inf order 32->64, jax serial: L_inf 9.54e-04 / 2.39e-04 / 5.99e-05
+- C28 1d impl dirL L_inf order 32->64, jax serial: L_inf 9.54e-04 / 2.39e-04 / 5.99e-05
+- C28 1d impl per L_inf order 32->64, jax serial: L_inf 3.35e-03 / 8.45e-04 / 2.12e-04
+- C28 1d impl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C28 quad expl dir0 L_inf order 32->64, jax serial: L_inf 4.70e-04 / 1.18e-04 / 2.95e-05
+- C28 quad expl neu L_inf order 32->64, jax serial: L_inf 4.70e-04 / 1.18e-04 / 2.95e-05
+- C28 quad expl dirL L_inf order 32->64, jax serial: L_inf 4.70e-04 / 1.18e-04 / 2.95e-05
+- C28 quad expl per L_inf order 32->64, jax serial: L_inf 3.84e-04 / 9.75e-05 / 2.44e-05
+- C28 quad expl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C28 quad impl dir0 L_inf order 32->64, jax serial: L_inf 1.13e-03 / 2.83e-04 / 7.10e-05
+- C28 quad impl neu L_inf order 32->64, jax serial: L_inf 1.13e-03 / 2.83e-04 / 7.10e-05
+- C28 quad impl dirL L_inf order 32->64, jax serial: L_inf 1.13e-03 / 2.83e-04 / 7.10e-05
+- C28 quad impl per L_inf order 32->64, jax serial: L_inf 8.16e-04 / 2.06e-04 / 5.17e-05
+- C28 quad impl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C28 tri expl dir0 L_inf order 32->64, jax serial: L_inf 8.15e-04 / 2.01e-04 / 5.00e-05
+- C28 tri expl neu L_inf order 32->64, jax serial: L_inf 8.15e-04 / 2.01e-04 / 5.00e-05
+- C28 tri expl dirL L_inf order 32->64, jax serial: L_inf 8.15e-04 / 2.01e-04 / 5.00e-05
+- C28 tri expl per L_inf order 32->64, jax serial: L_inf 4.72e-04 / 1.15e-04 / 2.86e-05
+- C28 tri expl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C28 tri impl dir0 L_inf order 32->64, jax serial: L_inf 8.25e-04 / 2.02e-04 / 5.00e-05
+- C28 tri impl neu L_inf order 32->64, jax serial: L_inf 8.25e-04 / 2.02e-04 / 5.00e-05
+- C28 tri impl dirL L_inf order 32->64, jax serial: L_inf 8.25e-04 / 2.02e-04 / 5.00e-05
+- C28 tri impl per L_inf order 32->64, jax serial: L_inf 5.20e-04 / 1.27e-04 / 3.14e-05
+- C28 tri impl steady max|u - L|, jax serial: linear Dirichlet field kept to round-off
+- C29 p2 dir d1 boundary order 24->48, jax serial: max err 2.01e-02 / 5.32e-03 / 1.35e-03; ghost as sample: 3.10e-02 / 1.21e-02 / 4.85e-03
+- C29 p2 dir d2 boundary order 24->48, jax serial: max err 4.95e-02 / 2.42e-02 / 1.27e-02; ghost as sample: 6.45e-02 / 5.33e-02 / 4.96e-02
+- C29 p2 dir d1 interior order 24->48, jax serial: max err 4.18e-02 / 1.10e-02 / 2.81e-03; ghost as sample: 4.18e-02 / 1.10e-02 / 2.81e-03
+- C29 p2 dir d2 interior order 24->48, jax serial: max err 1.40e-02 / 3.65e-03 / 9.20e-04; ghost as sample: 1.40e-02 / 3.65e-03 / 9.20e-04
+- C29 p2 neu d1 boundary order 24->48, jax serial: max err 2.19e-02 / 6.19e-03 / 1.61e-03; ghost as sample: 2.19e-02 / 6.19e-03 / 1.61e-03
+- C29 p2 neu d2 boundary order 24->48, jax serial: max err 4.95e-02 / 2.04e-02 / 1.08e-02; ghost as sample: 4.95e-02 / 2.04e-02 / 1.08e-02
+- C29 p2 neu d1 interior order 24->48, jax serial: max err 4.18e-02 / 1.10e-02 / 2.81e-03; ghost as sample: 4.18e-02 / 1.10e-02 / 2.81e-03
+- C29 p2 neu d2 interior order 24->48, jax serial: max err 1.40e-02 / 3.65e-03 / 9.20e-04; ghost as sample: 1.40e-02 / 3.65e-03 / 9.20e-04
+- C29 p3 dir d1 boundary order 24->48, jax serial: max err 1.04e-02 / 1.52e-03 / 1.98e-04; ghost as sample: 2.01e-02 / 7.59e-03 / 3.42e-03
+- C29 p3 dir d2 boundary order 24->48, jax serial: max err 3.12e-02 / 8.71e-03 / 2.25e-03; ghost as sample: 4.33e-02 / 4.61e-02 / 4.71e-02
+- C29 p3 dir d3 boundary order 24->48, jax serial: max err 6.32e-02 / 2.91e-02 / 1.53e-02; ghost as sample: 3.54e-02 / 9.11e-02 / 2.16e-01
+- C29 p3 dir d1 interior order 24->48, jax serial: max err 2.12e-03 / 2.43e-04 / 2.43e-05; ghost as sample: 2.12e-03 / 2.43e-04 / 2.43e-05
+- C29 p3 dir d2 interior order 24->48, jax serial: max err 2.07e-02 / 5.39e-03 / 1.42e-03; ghost as sample: 2.07e-02 / 5.39e-03 / 1.42e-03
+- C29 p3 dir d3 interior order 24->48, jax serial: max err 1.91e-02 / 8.77e-03 / 3.47e-03; ghost as sample: 1.91e-02 / 8.77e-03 / 3.47e-03
+- C29 p3 neu d1 boundary order 24->48, jax serial: max err 1.04e-02 / 1.52e-03 / 1.98e-04; ghost as sample: 1.04e-02 / 1.52e-03 / 1.98e-04
+- C29 p3 neu d2 boundary order 24->48, jax serial: max err 3.12e-02 / 8.71e-03 / 2.25e-03; ghost as sample: 3.12e-02 / 8.71e-03 / 2.25e-03
+- C29 p3 neu d3 boundary order 24->48, jax serial: max err 5.35e-02 / 2.54e-02 / 1.43e-02; ghost as sample: 5.71e-02 / 2.58e-02 / 1.46e-02
+- C29 p3 neu d1 interior order 24->48, jax serial: max err 2.12e-03 / 2.43e-04 / 2.43e-05; ghost as sample: 2.12e-03 / 2.43e-04 / 2.43e-05
+- C29 p3 neu d2 interior order 24->48, jax serial: max err 2.07e-02 / 5.39e-03 / 1.42e-03; ghost as sample: 2.07e-02 / 5.39e-03 / 1.42e-03
+- C29 p3 neu d3 interior order 24->48, jax serial: max err 1.91e-02 / 8.77e-03 / 3.47e-03; ghost as sample: 1.91e-02 / 8.77e-03 / 3.47e-03
+- C30 gate 39 checks failing, jax serial: PASS=72 FAIL=0 (tol 1e-09); the ghost as a plain sample is inexact in 15 cases (sensitivity)
 - C6 C1 mass change (rel), jax serial: max over 6 runs
 - C6 C1 mass change (rel), jax mpi2: max over 1 runs
 - C6 C1 mass change (rel), jax mpi4: max over 1 runs
@@ -516,6 +709,48 @@ Notes:
 - C23 O1 n16 max rel vs JAX, foam serial: same stencil
 - C23 O1 n24 max rel vs JAX, foam serial: same stencil
 - C23 O2 L1|backend - JAX| order 16->24, foam serial: 7.44e-05 / 3.33e-05
+- C27 ODE time_order 1 order 32->64 steps, foam serial: err 3.25e-02 / 1.60e-02 / 7.96e-03
+- C27 ODE time_order 2 order 32->64 steps, foam serial: err 2.48e-04 / 6.95e-05 / 1.83e-05
+- C27 ODE time_order 3 order 32->64 steps, foam serial: err 4.12e-05 / 5.15e-06 / 6.43e-07
+- C27 wave time_order 1 order dt/2->dt/4, foam serial: err 1.10e-02 / 4.82e-03 / 2.01e-03
+- C27 wave time_order 2 order dt/2->dt/4, foam serial: err 4.31e-04 / 1.05e-04 / 2.49e-05
+- C27 wave time_order 3 order dt/2->dt/4, foam serial: err 1.86e-05 / 2.32e-06 / 2.86e-07
+- C28 1d expl dir0 max rel vs JAX, foam serial: L_inf vs exact 3.86e-04
+- C28 1d expl neu max rel vs JAX, foam serial: L_inf vs exact 3.86e-04
+- C28 1d expl dirL max rel vs JAX, foam serial: L_inf vs exact 3.86e-04
+- C28 1d expl per max rel vs JAX, foam serial: L_inf vs exact 1.40e-03
+- C28 1d expl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 1d expl steady max|u - L|, foam serial: on the backend itself
+- C28 1d impl dir0 max rel vs JAX, foam serial: L_inf vs exact 9.54e-04
+- C28 1d impl neu max rel vs JAX, foam serial: L_inf vs exact 9.54e-04
+- C28 1d impl dirL max rel vs JAX, foam serial: L_inf vs exact 9.54e-04
+- C28 1d impl per max rel vs JAX, foam serial: L_inf vs exact 3.35e-03
+- C28 1d impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 1d impl steady max|u - L|, foam serial: on the backend itself
+- C28 quad expl dir0 max rel vs JAX, foam serial: L_inf vs exact 4.70e-04
+- C28 quad expl neu max rel vs JAX, foam serial: L_inf vs exact 4.70e-04
+- C28 quad expl dirL max rel vs JAX, foam serial: L_inf vs exact 4.70e-04
+- C28 quad expl per max rel vs JAX, foam serial: L_inf vs exact 3.84e-04
+- C28 quad expl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 quad expl steady max|u - L|, foam serial: on the backend itself
+- C28 quad impl dir0 max rel vs JAX, foam serial: L_inf vs exact 1.13e-03
+- C28 quad impl neu max rel vs JAX, foam serial: L_inf vs exact 1.13e-03
+- C28 quad impl dirL max rel vs JAX, foam serial: L_inf vs exact 1.13e-03
+- C28 quad impl per max rel vs JAX, foam serial: L_inf vs exact 8.16e-04
+- C28 quad impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 quad impl steady max|u - L|, foam serial: on the backend itself
+- C28 tri expl dir0 max rel vs JAX, foam serial: L_inf vs exact 8.15e-04
+- C28 tri expl neu max rel vs JAX, foam serial: L_inf vs exact 8.15e-04
+- C28 tri expl dirL max rel vs JAX, foam serial: L_inf vs exact 8.15e-04
+- C28 tri expl per max rel vs JAX, foam serial: L_inf vs exact 4.72e-04
+- C28 tri expl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 tri expl steady max|u - L|, foam serial: on the backend itself
+- C28 tri impl dir0 max rel vs JAX, foam serial: L_inf vs exact 8.25e-04
+- C28 tri impl neu max rel vs JAX, foam serial: L_inf vs exact 8.25e-04
+- C28 tri impl dirL max rel vs JAX, foam serial: L_inf vs exact 8.25e-04
+- C28 tri impl per max rel vs JAX, foam serial: L_inf vs exact 5.20e-04
+- C28 tri impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
+- C28 tri impl steady max|u - L|, foam serial: on the backend itself
 - C6 C1 mass change (rel), foam serial: max over 6 runs
 - C6 C1 mass change (rel), foam mpi2: max over 1 runs
 - C6 C1 mass change (rel), foam mpi4: max over 1 runs
@@ -575,6 +810,36 @@ Notes:
 - C23 O1 n8 max rel vs JAX, amrex serial: same stencil
 - C23 O1 n16 max rel vs JAX, amrex serial: same stencil
 - C23 O1 n24 max rel vs JAX, amrex serial: same stencil
+- C27 ODE time_order 1 order 32->64 steps, amrex serial: err 3.25e-02 / 1.60e-02 / 7.96e-03
+- C27 ODE time_order 2 order 32->64 steps, amrex serial: err 2.48e-04 / 6.95e-05 / 1.83e-05
+- C27 ODE time_order 3 order 32->64 steps, amrex serial: err 4.12e-05 / 5.15e-06 / 6.43e-07
+- C27 wave time_order 1 order dt/2->dt/4, amrex serial: err 1.10e-02 / 4.82e-03 / 2.01e-03
+- C27 wave time_order 2 order dt/2->dt/4, amrex serial: err 4.31e-04 / 1.05e-04 / 2.49e-05
+- C27 wave time_order 3 order dt/2->dt/4, amrex serial: err 1.86e-05 / 2.32e-06 / 2.86e-07
+- C28 1d expl dir0 max rel vs JAX, amrex serial: L_inf vs exact 3.86e-04
+- C28 1d expl neu max rel vs JAX, amrex serial: L_inf vs exact 3.86e-04
+- C28 1d expl dirL max rel vs JAX, amrex serial: L_inf vs exact 3.86e-04
+- C28 1d expl per max rel vs JAX, amrex serial: L_inf vs exact 1.40e-03
+- C28 1d expl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
+- C28 1d expl steady max|u - L|, amrex serial: on the backend itself
+- C28 1d impl dir0 max rel vs JAX, amrex serial: L_inf vs exact 9.54e-04
+- C28 1d impl neu max rel vs JAX, amrex serial: L_inf vs exact 9.54e-04
+- C28 1d impl dirL max rel vs JAX, amrex serial: L_inf vs exact 9.54e-04
+- C28 1d impl per max rel vs JAX, amrex serial: L_inf vs exact 3.35e-03
+- C28 1d impl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
+- C28 1d impl steady max|u - L|, amrex serial: on the backend itself
+- C28 quad expl dir0 max rel vs JAX, amrex serial: L_inf vs exact 4.70e-04
+- C28 quad expl neu max rel vs JAX, amrex serial: L_inf vs exact 4.70e-04
+- C28 quad expl dirL max rel vs JAX, amrex serial: L_inf vs exact 4.70e-04
+- C28 quad expl per max rel vs JAX, amrex serial: L_inf vs exact 3.84e-04
+- C28 quad expl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
+- C28 quad expl steady max|u - L|, amrex serial: on the backend itself
+- C28 quad impl dir0 max rel vs JAX, amrex serial: L_inf vs exact 1.13e-03
+- C28 quad impl neu max rel vs JAX, amrex serial: L_inf vs exact 1.13e-03
+- C28 quad impl dirL max rel vs JAX, amrex serial: L_inf vs exact 1.13e-03
+- C28 quad impl per max rel vs JAX, amrex serial: L_inf vs exact 8.16e-04
+- C28 quad impl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
+- C28 quad impl steady max|u - L|, amrex serial: on the backend itself
 - C17 boxnr mass drift, amrex serial: no reflux: not conservative
 - C17 boxnr energy drift, amrex serial: no reflux: not conservative
 - C17 boxnr vs CPU 1 rank (max rel), amrex mpi2: no reflux: not conservative
@@ -602,4 +867,4 @@ Notes:
 - C6 C20 mass change (rel), amrex serial: max over 2 runs
 - C6 C23 mass change (rel), amrex serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4135, foam 4416, jax 6912
+Summed run wall time (s, without process start-up): amrex 4750, foam 5840, jax 6898

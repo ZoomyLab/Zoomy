@@ -408,6 +408,48 @@ def _c17():
             for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")]
 
 
+def _c27():
+    from custom import time_order, time_order_control
+    runs = [Run(f"{part}_t{to}", None, 0.0, custom=lambda b, c, w, part=part, to=to:
+                time_order(b, part, to, w))
+            for part in ("ode", "wave") for to in (1, 2, 3)]
+    return runs + [Run("ode_control", None, 0.0, custom=lambda b, c, w: time_order_control(),
+                       backends=("jax",))]
+
+
+DIFF_KINDS = ("1d", "quad", "tri")
+DIFF_PATHS = ("expl", "impl")
+DIFF_ALL = ("dir0", "neu", "dirL", "per", "steady")
+
+
+def _c28():
+    from custom import diffusion_cxx, diffusion_orders
+    runs = [Run(f"orders_{k}_{p}", None, 0.0, custom=lambda b, c, w, k=k, p=p: diffusion_orders(k, p),
+                backends=("jax",)) for k in DIFF_KINDS for p in DIFF_PATHS]
+    return runs + [Run(f"{k}_{p}_{case}", None, 0.0,
+                       custom=lambda b, c, w, k=k, p=p, case=case: diffusion_cxx(b, k, p, case, w),
+                       backends=("foam",) if k == "tri" else ("foam", "amrex"))   # AMReX: Cartesian
+                   for k in DIFF_KINDS for p in DIFF_PATHS for case in DIFF_ALL]
+
+
+def _c29():
+    from custom import lsq_closure
+    return [Run(f"p{p}_{bc}", None, 0.0, custom=lambda b, c, w, p=p, bc=bc: lsq_closure(p, bc),
+                backends=("jax",)) for p in (2, 3) for bc in ("dir", "neu")]
+
+
+def _c30():
+    from custom import lsq_polynomials
+    return [Run("polynomials", None, 0.0, custom=lambda b, c, w: lsq_polynomials(),
+                backends=("jax",))]
+
+
+#: why a backend has no run of a case (measure(): the label of its n/a row)
+NA = {("C29", b): "gate 44 calls the JAX runtime (derivative_aux)" for b in ("foam", "amrex")}
+NA.update({("C30", b): "gate 39 calls the JAX runtime (lsq_gradient_per_field)"
+           for b in ("foam", "amrex")})
+
+
 def _ranks(config):
     return int(config[3:]) if config.startswith("mpi") else 1
 
@@ -495,4 +537,10 @@ CASES = {
             [Run("visc", _viscous, 0.05, imex=True, solver=dict(
                 implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60),
                 configs=ALL5)]),
+    "C27": ("SSP-RK time order 1 / 2 / 3 (gate 40): forced SWE, exact ODE and a smooth wave", _c27()),
+    "C28": ("diffusion blocks at the boundaries (gates 41, 43): heat equation, dir0 / neu / dirL / per",
+            _c28()),
+    "C29": ("LSQ derivatives with the boundary closure (gate 44): quads, p 2 / 3, dir / neu", _c29()),
+    "C30": ("LSQ polynomial reproduction (gate 39): 1-D, quads, jittered quads, triangles, hexahedra",
+            _c30()),
 }

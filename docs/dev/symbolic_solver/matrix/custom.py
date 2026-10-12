@@ -1,5 +1,6 @@
-"""Runs that are not "march Q0 to t_end": AD (C15) and preCICE coupling
-(C16).  Each returns {metric: value} (rank 0; None on the other ranks)."""
+"""Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16),
+AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 (C27-C30).  Each
+returns {metric: value} (rank 0; None on the other ranks)."""
 import os
 import re
 import subprocess
@@ -174,3 +175,125 @@ def amr(case, config, work):
         res["mass"] = float(abs(r["Q"][1].sum() / r["I0"][1].sum() - 1))
         res["h_min"] = float(min(np.nanmin(r["Q"][1]), np.nanmin(r["L1"][1])))
     return res
+
+
+# ── C27: SSP-RK time order (gate 40) ────────────────────────────────────────
+ODE_STEPS = (16, 32, 64)            # gate 40 ``ode``: T = 1, dt = T / n
+WAVE_T, WAVE_DT0 = 0.04, 2e-3       # gate 40 ``wave``: dt0 / 2^k, k = 0, 1, 2 vs k = 4
+
+
+def _to_solver(backend, to, T, dt):
+    if backend == "foam":
+        from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam as S
+    else:
+        from zoomy_amrex.symsolver import SymbolicHyperbolicSolverAmrex as S
+    return S(time_end=T, dt=dt, mood=False, time_order=to, cfl_check_every=0)
+
+
+def time_order(backend, part, to, work):
+    """Gate 40's forced SWE (``forced_swe``: dh/dt = a cos(w t + 0.3) h, 1-D
+    walls, first-order space) marched at constant dt with time_order ``to``;
+    ``part`` "ode": 8 cells, T 1, dt T/16, T/32, T/64, error vs the exact
+    h(T); "wave": 100 cells, T 0.04, dt 2e-3 / 2^k, error vs k = 4.  JAX runs
+    the gate's own ``run``; foam / AMReX the same NSM and mesh through their
+    drivers.  Returns the errors and the observed orders (gate 40)."""
+    import gate40_time_order as G
+    from zoomy_core.mesh import ensure_lsq_mesh
+    if part == "ode":
+        mesh, nsm, ih = G.forced_swe(1, "minmod", 8, (0.0, 1.0), lambda x: 1.0)
+        T, ks = 1.0, ODE_STEPS
+        dts = [T / n for n in ks]
+    else:
+        mesh, nsm, ih = G.forced_swe(1, "minmod", 100, (0.0, 1.0),
+                                     lambda x: 1.0 + 0.1 * np.exp(-((x - 0.5) / 0.1) ** 2))
+        T, ks = WAVE_T, (0, 1, 2, 4)
+        dts = [WAVE_DT0 / 2 ** k for k in ks]
+    if backend != "jax":
+        nsm.spectral_radius_method, nsm._call = "eig", None     # as cases.prepare
+        mesh = ensure_lsq_mesh(mesh, nsm)
+        names = [str(s) for s in nsm.state]
+        xc = np.asarray(mesh.cell_centers)[:, :int(mesh.n_inner_cells)]
+        Q0 = np.asarray(nsm.sm.initial_conditions.apply(xc, np.zeros((len(names), xc.shape[1]))),
+                        dtype=float)
+
+    def solve(i, dt):
+        if backend == "jax":
+            return G.run(mesh, nsm, T, dt, to)
+        return np.asarray(_to_solver(backend, to, T, dt).run(mesh, nsm, Q0, Path(work) / f"s{i}")[1])
+    Q = [solve(i, dt) for i, dt in enumerate(dts)]
+    if part == "ode":
+        exact = np.exp(G.A_F * (np.sin(G.W_F * T + G.PHASE) - np.sin(G.PHASE)) / G.W_F)
+        errs = [float(abs(float(q[ih, 0]) - exact)) for q in Q]
+    else:
+        errs = [float(np.abs(q - Q[-1]).max()) for q in Q[:-1]]
+    return dict(err=errs, orders=G.orders(errs), order=G.orders(errs)[-1])
+
+
+def time_order_control():
+    """Gate 40's negative control (JAX): RK3 with the last stage evaluated at
+    the wrong time (c = 1, not 1/2) loses the order of the ODE."""
+    import gate40_time_order as G
+    mesh, nsm, ih = G.forced_swe(1, "minmod", 8, (0.0, 1.0), lambda x: 1.0)
+    exact = np.exp(G.A_F * (np.sin(G.W_F * 1.0 + G.PHASE) - np.sin(G.PHASE)) / G.W_F)
+    good = G.rk_time.SSP_RK[3]
+    G.rk_time.SSP_RK[3] = (good[0], good[1], (good[2][0], 1))
+    try:
+        errs = [float(abs(float(G.run(mesh, nsm, 1.0, 1.0 / n, 3)[ih, 0]) - exact)) for n in ODE_STEPS]
+    finally:
+        G.rk_time.SSP_RK[3] = good
+    return dict(err=errs, order=G.orders(errs)[-1])
+
+
+# ── C28: diffusion blocks at the boundaries (gates 41 and 43) ───────────────
+DIFF_CASES = ("dir0", "neu", "dirL", "per")
+
+
+def diffusion_orders(kind, path):
+    """Gate 41 (JAX): the L_inf error of the heat equation at nx 16 / 32 / 64
+    for dir0, neu, dirL, per on ``kind`` (1d, quad, tri), ``path`` (expl,
+    impl), and the steady linear Dirichlet field's residual."""
+    import gate41_diffusion_bc as G
+    out = {c: [float(G.error(kind, c, path, nx)[0]) for nx in G.NXS] for c in DIFF_CASES}
+    out["steady"] = float(G.error(kind, "steady", path, 16)[0])
+    return out
+
+
+def diffusion_cxx(backend, kind, path, case, work):
+    """Gate 43: ``backend`` (foam | amrex) against JAX on gate 41's heat
+    equation, nx 16, the same Q0: max rel |backend - JAX| and the L_inf error
+    against the exact solution (for ``steady``: the residual max|u - L|)."""
+    import gate43_cxx_diffusion as G
+    G.WORK = str(work)
+    dim = 1 if kind == "1d" else 2
+    nx = 16
+    tj, uj = G.jax_run(kind, case, path, nx)
+    tc, uc = G.cxx_run(backend, kind, case, path, nx)
+    xc = np.asarray(G.setup(kind, case, path, nx)[0].cell_centers)[:, :len(uc)]
+    return dict(rel_vs_jax=float(np.abs(uc - uj).max() / np.abs(uj).max()),
+                err=float(np.abs(uc - G.exact(case, dim, xc, tc)).max()), t=float(tc), t_jax=float(tj))
+
+
+# ── C29: LSQ boundary closure (gate 44) ─────────────────────────────────────
+def lsq_closure(p, bc):
+    """Gate 44 on the quads: the max error of the derivatives of order
+    k = 1..p over the boundary and the interior cells at nx 12 / 24 / 48, with
+    the boundary closure ("closure") and the ghost as a fit sample ("ghost",
+    for comparison); degree ``p``, BC kind ``bc`` (dir, neu)."""
+    import gate44_lsq_closure as G
+    E = [G.errors("quad", bc, p, nx) for nx in G.NX]
+    return {f"{method}_{where}_d{k}": [float(e[(method, k, where)]) for e in E]
+            for method in ("closure", "ghost") for where in ("boundary", "interior")
+            for k in range(1, p + 1)}
+
+
+# ── C30: polynomial reproduction of the LSQ fit (gate 39) ───────────────────
+def lsq_polynomials():
+    """Gate 39 as a subprocess: seeded random polynomials of degree p = 1..3
+    reproduced to 1e-9 by the LSQ fit (and its boundary closure) on 1-D, quads,
+    jittered quads, triangles, hexahedra.  Its SUMMARY line."""
+    rc, out = _gate(["gate39_lsq_polynomials.py"])
+    m = re.search(r"SUMMARY gate39: PASS=(\d+) FAIL=(\d+) \(tol ([\d.e+-]+)\).*inexact in (\d+) cases", out)
+    if m is None:
+        raise RuntimeError(f"gate 39 gave no summary (rc {rc}):\n{out[-2000:]}")
+    return dict(passes=int(m.group(1)), fails=int(m.group(2)), tol=float(m.group(3)),
+                sample_inexact=int(m.group(4)))

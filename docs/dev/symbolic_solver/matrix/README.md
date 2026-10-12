@@ -32,6 +32,10 @@ solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 | compressible Euler 3-D: Sod, smooth wave, walls, MPI | C18-C21 | C18-C21 | C18-C21 |
 | Euler 3-D cross-backend (O1 round-off, O2 converging) | C23 | C23 | C23 |
 | compressible Euler 2-D | C24 | C24 | C24 |
+| SSP-RK time order 1 / 2 / 3 (gate 40) | C27 | C27 | C27 |
+| diffusion blocks at boundaries: orders (gate 41, JAX); foam / AMReX = JAX (gate 43) | C28 | C28 | C28 (1-D, quads; triangles n/a: Cartesian) |
+| LSQ derivatives with the boundary closure (gate 44) | C29 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
+| LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | large tier (scaling, catchment, I/O; `--tier large`) | L1-L5 | L1, L2, L2P, L4 | L1, L2, L2P, L3, L4 |
 | multi-node / Slurm | untestable here | untestable here | untestable here |
 
@@ -43,15 +47,15 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex`; CASE `C1`..`C26`; CONFIG `serial` (default)
+BACKEND `jax foam amrex`; CASE `C1`..`C30`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
 other exception as a **FAIL**; a backend without the config or the case is
 **n/a**.  Stored per run: `t, Q, Q0, xc, vol, names, wall, lib` (the library
-commits it ran on); custom runs (C15, C16, C22): their metrics.  Files:
+commits it ran on); custom runs (C15-C17, C22, C27-C30): their metrics.  Files:
 `cases.py` (every case, defined once), `backends.py` (adapters),
-`custom.py` (AD, preCICE), `matrix.py` (runner, checks, table), `large.py`
+`custom.py` (AD, preCICE, AMR, the wrapped gates 39-44), `matrix.py` (runner, checks, table), `large.py`
 (large tier), `deliverable.py` (figure), `table.md` (the last table).
 
 ## Cases and pass criteria
@@ -91,6 +95,10 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C23 Euler cross-backend | acoustic pulse (0.01, 0.04) in the C20 box, t 0.3, n 8/16/24 | O1 = JAX (round-off); O2: L1 abs(backend - JAX) order 16->24 >= 1.5 (observed) |
 | C24 Euler 2-D | Sod along x, y (n x 2); periodic wave [0,1]^2, u (1, .5), n 16/32/64 | as C18 / C19; wave O2 none >= 1.8, minmod >= 1.7 (observed), O1 >= 0.85 |
 | C26 implicit diffusion | gate 31: SME(0) + NewtonianInPlane (dense, state-dependent diffusion_matrix), nu 1e-3, 20^2, IMEX (Crank-Nicolson Newton), t 0.05 | ranks / GPU vs serial <= 1e-12; AMReX vs JAX <= 1e-8 (Newton / GMRES tolerances) |
+| C27 time order | gate 40 `forced_swe` (SME(0), 1-D walls, first-order space, dh/dt = a cos(w t + 0.3) h), constant dt, time_order 1 / 2 / 3. `ode_t*`: 8 cells at rest, T 1, dt T/16, T/32, T/64, error vs the exact h(T); `wave_t*`: 100 cells, T 0.04, dt 2e-3 / 2^k, k = 0, 1, 2, error vs k = 4. JAX runs the gate's own `run`; foam / AMReX the same NSM and mesh through their drivers (`time_order` of `backend_cxx`). `ode_control` (JAX): RK3 with the last stage at the wrong time | order of the last pair >= k - 0.2 (theory k; observed 1.01 / 1.92 / 3.00 ODE); control order <= 2.5 (gate 40; observed 0.99) |
+| C28 diffusion BCs | heat equation u_t = div(nu grad u) on [0,1]^d (gate 41's SystemModel), cases dir0 / neu / dirL / per / steady, explicit and implicit (IMEX), on 1-D, quads, triangles. `orders_*` (JAX): L_inf at nx 16 / 32 / 64 (gate 41); `{kind}_{path}_{case}` (foam, AMReX): nx 16 against JAX, the same Q0 (gate 43; AMReX has no triangles) | L_inf order 32->64 >= 1.8 (theory 2); steady max abs(u - L) <= 1e-12; foam / AMReX vs JAX: explicit <= 1e-12, implicit <= 1e-9 (gate 43's tolerances: round-off; Newton 1e-10, GMRES 1e-13) |
+| C29 LSQ boundary closure | gate 44 (JAX, quads, default set): `Lambda` (Dirichlet) and `Flux` (Neumann) BCs on SME(0), h = f(x, y), nx 12 / 24 / 48, fit degree p = 2, 3; max error of the derivatives of order k = 1..p over the boundary and interior cells, with the closure | order 24->48 >= p + 1 - k - 0.2 for every k, boundary and interior (the gate's criterion); the ghost-as-sample errors are in the notes |
+| C30 LSQ polynomials | gate 39 (subprocess): seeded random polynomials of degree p = 1..3 on 1-D, quads, jittered quads, triangles, hexahedra; interior, boundary with exact mirror ghost, Dirichlet / Neumann / zero-gradient ghosts through the closure | number of failing checks (PASS + FAIL = 72) = 0, each exact to 1e-9 |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x
@@ -165,6 +173,13 @@ library commit).  Wrapped up before the end of the full run:
   boundaries (C4 1.7e-3, C11 4.5e-6) and periodic O1/O2 vs JAX (C13 3.9e-3;
   both are shift-invariant to 0); JAX gpu1 Chorin AD is NaN (C15, eig spectral
   radius on the GPU).
+- C27-C30 (wrapped gates 40, 41, 43, 44, 39; added after the full run, JAX / foam / AMReX
+  on the same heads): 130 rows PASS, 0 FAIL, 5 n/a.  C27 orders 1.01 / 1.92 / 3.00
+  (ODE) and 1.26 / 2.08 / 3.02 (wave) on all three backends (the foam / AMReX errors
+  equal JAX's to round-off); C28 L_inf orders 2.00 (JAX), foam / AMReX vs JAX <= 5e-15
+  explicit, <= 3e-10 implicit; C29 boundary / interior orders >= p+1-k-0.2; C30
+  PASS=72 FAIL=0.  Runtime: C27 20-40 s per run (C++ drivers: printing and build per dt),
+  C28 foam ~25 s per case, AMReX ~16 s, C29 ~25 s per (p, BC).
 - C10 (VAM(1) Chorin, Richardson): JAX and AMReX ~2.0 for every
   space/time combination at nx 30/60/120 (the error is spatial; time_order 1
   does not limit it here).
