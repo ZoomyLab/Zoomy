@@ -1,14 +1,10 @@
-"""Driver: print the hyperbolic templates for JAX and run them.
+"""Driver of the JAX backend: prints the solver template (hyperbolic, Chorin) of a
+NumericalSystemModel and runs it against :mod:`zoomy_jax.symsolver.runtime`.  ``ad_mode="reverse"``
+checkpoints the time loop for ``jax.grad``, ``couple=`` makes the march a preCICE participant,
+``comm=`` (mpi4py) runs it distributed, one rank per device.
 
-    solver = SymbolicHyperbolicSolverJax(time_end=0.5)       # adaptive CFL step
-    solver = SymbolicHyperbolicSolverJax(time_end=0.5, dt=1e-3)  # constant step
-    Q, Qaux = solver.setup(mesh, nsm)
-    time, Q, Qaux = solver.run(Q, Qaux)                     # parameters= for AD
-
-``ad_mode="reverse"`` swaps the time loop for a checkpointed one (``jax.grad``);
-``couple=`` turns the march into one preCICE participant; ``comm=`` (an mpi4py
-communicator) runs it distributed, one rank per device
-(:mod:`zoomy_jax.symsolver.parallel`).
+References:
+    Bradbury et al. 2018, https://github.com/jax-ml/jax
 """
 from __future__ import annotations
 
@@ -37,6 +33,9 @@ from zoomy_jax.transformation.jax_runtime import JaxRuntime
 
 
 class SymbolicHyperbolicSolverJax(param.Parameterized):
+    """Finite-volume solver on JAX: prints ``HyperbolicTemplate`` for a NumericalSystemModel, builds
+    the runtime and marches the jitted program.  Use ``setup(mesh, model)``, then ``run(Q, Qaux)``.
+    """
     time_end = param.Number(default=None, allow_None=True,
                             doc="End time (an uncoupled run).")
     cfl = param.Number(default=0.9, bounds=(0, None),
@@ -105,14 +104,24 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
             bind_device(self.comm)
 
     def setup(self, mesh, model):
+        """Lift ``model`` to an NSM if needed, then build the solver on ``mesh``.
+
+        Args:
+            mesh: a mesh, or the path of a mesh file
+            model: SystemModel or NumericalSystemModel
+        Returns:
+            initial ``(Q, Qaux)`` (distributed: the local piece)
+        """
         self._bind()
         nsm = (model if isinstance(model, NumericalSystemModel)
                else NumericalSystemModel.from_system_model(model))
         return self._setup(mesh, nsm)
 
     def _setup(self, mesh, nsm, systems=None, linsolve=None):
-        """``mesh``: a mesh, or the path of a mesh file
-        (:func:`zoomy_core.mesh.distributed.write_mesh`)."""
+        """Distribute or read the mesh, build topology, runtime and the jitted program; returns the
+        initial ``(Q, Qaux)``.  Called by :meth:`setup` and by the Chorin subclass (which adds
+        ``systems`` and ``linsolve``).
+        """
         from zoomy_core.mesh import distributed
         bcs = getattr(nsm.sm, "_bc_source", None)
         self.partition, self.global_mesh = None, mesh
@@ -198,6 +207,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
                     time_order=self.time_order)
 
     def _print(self):
+        """Print the template to Python source; returns ``(name, source)``."""
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
         template = HyperbolicTemplate(self.nsm, **self._config())
@@ -210,9 +220,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
     def _writer(self):
-        """``on_write``, plus the HDF5 snapshots when ``output`` is set.
-        Distributed: ``on_write`` sees each rank's local state; the snapshot
-        is gathered and written by rank 0, on the global mesh."""
+        """``on_write``, plus the HDF5 snapshots when ``output`` is set (distributed: gathered and
+        written by rank 0 on the global mesh).
+        """
         if not self.output:
             return self.on_write
         from zoomy_core.misc.io import _save_fields_to_hdf5, write_mesh_to_hdf5
@@ -234,6 +244,7 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         count, user = [0], self.on_write
 
         def write(time, Q, Qaux):
+            """Write snapshot number ``count`` and call the user's ``on_write``."""
             if blocks:
                 part.write_fields(path, count[0], time, Q, Qaux)
             else:
@@ -248,9 +259,9 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
         return write
 
     def initial_aux(self, Q, Qaux, parameters=None, X=None):
-        """The aux of the initial state: pointwise formula + derivative aux
-        (the template's ``full_aux`` at time 0: state derivatives with the
-        BC ghosts and the boundary closure)."""
+        """The aux of the initial state: the pointwise formula plus the derivative aux with the BC
+        ghosts and the boundary closure.
+        """
         from zoomy_core.symsolver.discretization.residual import derivative_rows
         p = self.parameters if parameters is None else parameters
         mesh = self.mesh if X is None else R.geometry_of(self.topo, X)
@@ -273,12 +284,14 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
 
     @property
     def parameters(self):
+        """The runtime's parameter vector."""
         return self.rt.parameters
 
     # ── run ────────────────────────────────────────────────────────────────
     def run(self, Q, Qaux, parameters=None, time0=0.0, X=None):
-        """March; returns ``(time, Q, Qaux)``.  ``parameters`` and the vertex
-        coordinates ``X`` (``(dim, n_vertices)``) may be traced for AD."""
+        """March to ``time_end``; returns ``(time, Q, Qaux)``.  ``parameters`` and the vertex
+        coordinates ``X`` ``(dim, n_vertices)`` may be traced for AD.
+        """
         p = self.parameters if parameters is None else parameters
         tok = jnp.int64(0)
         args = (Q, Qaux, p, time0) + (() if self.couple else (self.time_end,))
@@ -288,16 +301,12 @@ class SymbolicHyperbolicSolverJax(param.Parameterized):
 
 
 class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
-    """The Chorin projection solver on JAX
-    (:class:`zoomy_core.symsolver.strategies.chorin.ChorinTemplate`).
+    """The Chorin projection solver on JAX (``ChorinTemplate``): ``setup(mesh, pred, press, corr)``
+    takes the predictor NSM on the full state and the pressure and corrector systems.  The split
+    must use zoomy's time-step symbol ``dt`` (positive).
 
-        solver = SymbolicChorinSolverJax(time_end=0.5, dt=2**-7)
-        Q, Qaux = solver.setup(mesh, pred, press, corr)   # the model's split
-        time, Q, Qaux = solver.run(Q, Qaux)
-
-    ``pred`` is the predictor NSM (or SystemModel, then default numerics) on
-    the full state; ``press`` / ``corr`` the pressure and corrector systems.
-    The split must use zoomy's time-step symbol ``dt`` (positive).
+    References:
+        Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
     """
     time_order = param.Integer(default=1, bounds=(1, 3),
                                doc="Outer SSP-RK stages (1, 2 or 3), each a "
@@ -317,11 +326,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
     pressure_linear_solver = param.Selector(
         default="auto", objects=["auto", "gmres", "amgx", "pyamg"],
-        doc="AMG-preconditioned GMRES: 'amgx' on a GPU (NVIDIA AmgX through "
-            "the optional JAX-AMG package), 'pyamg' on the CPU (the optional "
-            "PyAMG, smoothed aggregation on the host).  'gmres': matrix-free "
-            "restarted GMRES (jax.scipy), always available.  'auto': amgx on "
-            "a GPU, pyamg on the CPU, when installed; else gmres.")
+        doc="'amgx' (GPU, optional JAX-AMG), 'pyamg' (CPU, optional PyAMG) "
+            "or 'gmres' (matrix-free, always available); 'auto': amgx on a "
+            "GPU, pyamg on the CPU, when installed, else gmres.")
     pressure_amg_rebuild = param.Integer(
         default=10, bounds=(1, None),
         doc="'pyamg': rebuild the AMG hierarchy at least every this many "
@@ -344,6 +351,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             "iterations grow with the number of ranks.")
 
     def setup(self, mesh, pred, press, corr):
+        """Check the split, build the pressure and corrector runtimes and the linear-solver
+        settings, then :meth:`_setup`; returns the initial ``(Q, Qaux)``.
+        """
         self._bind()
         if self.couple:
             raise NotImplementedError("Chorin with preCICE coupling")
@@ -383,6 +393,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):
+        """The pressure linear solver: the configured one; for 'auto' amgx on a GPU, else pyamg,
+        when installed, else gmres.
+        """
         if self.pressure_linear_solver != "auto":
             return self.pressure_linear_solver
         name = "amgx" if jax.default_backend() == "gpu" else "pyamg"
@@ -393,10 +406,14 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
         return name
 
     def _newton(self):
+        """Newton ``(tol, maxit)`` for a nonlinear pressure constraint, ``None`` for the linear
+        solve.
+        """
         return (None if self.pressure_solve == "linear" else
                 (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
 
     def _print(self):
+        """Print the Chorin template to Python source; returns ``(name, source)``."""
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
         template = ChorinTemplate(

@@ -1,8 +1,9 @@
-"""JAX runtime for the symbolic solvers: what each printed name means on JAX.
+"""JAX runtime of the symbolic solvers: what each name of a printed solver means on JAX.  The
+printed template (solver template -> ``PyPrinter``) is plain Python calling this name table: ``nsm``
+is the vmapped JaxRuntime of the kernels, every other entry a ``zoomy_core.symsolver`` block.
 
-The printed solver is plain Python calling names from this table.  ``nsm`` is
-the JaxRuntime (the NSM's kernels, vmapped); every other entry is a block of
-``zoomy_core.symsolver`` implemented with the existing JAX mesh code.
+References:
+    Bradbury et al. 2018, https://github.com/jax-ml/jax
 """
 from __future__ import annotations
 
@@ -32,10 +33,10 @@ from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
 
 class Geometry(NamedTuple):
-    """The ``mesh`` argument of a printed solver: all geometry, computed from
-    the vertex coordinates by ``geometry_xp`` INSIDE the traced function, so
-    ``jax.grad`` reaches the vertices.  Topology (indices, stencils) is static
-    and lives in the runtime's closures."""
+    """The ``mesh`` argument of a printed solver, computed from the vertex coordinates inside the
+    traced function so that ``jax.grad`` reaches the vertices.  Topology (indices, stencils) is
+    static and lives in the runtime's closures.
+    """
     cell_volumes: jnp.ndarray
     cell_centers: jnp.ndarray
     cell_inradius: jnp.ndarray
@@ -53,8 +54,9 @@ def geometry_of(topo, X):
 
 
 def _with_geometry(R, g, mesh_np, nc):
-    """A copy of reconstruction ``R`` that reads the traced geometry ``g``
-    instead of the arrays it precomputed from the static mesh."""
+    """A copy of reconstruction ``R`` that reads the traced geometry ``g`` instead of the arrays
+    precomputed from the static mesh.
+    """
     if not hasattr(R, "_lsq_gradQ"):              # first order: no geometry
         return R
     R = copy.copy(R)
@@ -73,12 +75,22 @@ def _with_geometry(R, g, mesh_np, nc):
 
 def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
             implicit=None, systems=None, partition=None):
-    """The name table the printed solver runs against.  ``topo``: the static
-    topology (:func:`geometry_xp.build_topology`; the boundary closure's
-    classes).  ``systems``: further ``{name: (nsm, JaxRuntime)}`` a template
-    uses besides ``nsm``.  ``partition``: this rank's piece of a distributed
-    run (:mod:`zoomy_jax.symsolver.parallel`); its ``halo`` and global
-    reductions replace the serial ones."""
+    """Build the name table (dict of callables) a printed solver runs against: the JAX
+    implementation of every ``zoomy_core.symsolver`` block on this mesh.  Called by the JAX solver
+    driver's ``_setup``.
+
+    Args:
+        topo: static topology (:func:`geometry_xp.build_topology`) with the boundary-closure classes
+        ad_mode: 'forward', or 'reverse' for a time loop with ``checkpoints`` checkpoints
+        on_write: ``on_write(time, Q, Qaux)`` snapshot callback (forward mode)
+        couple: preCICE settings ``dict(adapter=, tag=, side=)``
+        implicit: Newton and linear-solver settings of ``root`` and ``linsolve``
+        systems: further ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``
+        partition: this rank's piece of a distributed run; its ``halo`` and global reductions
+            replace the serial ones
+    Returns:
+        dict name -> callable
+    """
     sm = rt.sm
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
@@ -130,16 +142,20 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── kernels on cells and faces ─────────────────────────────────────────
     def cells(k, Q, Qaux, p, time, dt, mesh):
+        """Kernel ``k`` in every cell (with time, dt and the cell centre)."""
         return k(Q, Qaux, p, time=time, dt=dt,
                  position=mesh.cell_centers[:, :Q.shape[-1]])
 
     def faces(k, QL, QR, AL, AR, p, mesh):
+        """Face kernel ``k`` on every face with its unit normal."""
         return k(QL, QR, AL, AR, p, mesh.face_normals)
 
     def face_aux(Qaux, mesh):
+        """Owner and neighbour aux per face (the inner cell twice at a boundary face)."""
         return Qaux[:, j(fc0)], Qaux[:, j(fc_other)]
 
     def face_wavespeed(k, Q, Qaux, p, mesh):
+        """Max |eigenvalue| per face over the two adjacent cells."""
         n = mesh.face_normals
         evA = jnp.abs(k(Q[:, j(fc0)], Qaux[:, j(fc0)], p, n))
         evB = jnp.abs(k(Q[:, j(fc_cfl)], Qaux[:, j(fc_cfl)], p, n))
@@ -149,11 +165,15 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return jnp.maximum(evA, evB)
 
     def face_inradius(mesh):
+        """Per-face cell size: min inradius of the two adjacent cells."""
         ir = mesh.cell_inradius
         return jnp.minimum(ir[j(fc0)], ir[j(fc_cfl)])
 
     # ── boundary ───────────────────────────────────────────────────────────
     def _bc_at(bc, states, Qaux, p, time, mesh, cells_of_face, ghost=True):
+        """The BC kernel ``bc`` on every non-cut boundary face: the ghost kernel at the mirror image
+        of the cell centre, or (``ghost=False``) the face kernel at the face centre.
+        """
         # ``ghost=True``: the GHOST kernel (boundary_ghost_state) of the inner
         # cell, at the mirror image of the cell centre -- evaluated at the
         # foot of the perpendicular, with the normal distance.  ``False``:
@@ -170,6 +190,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         dist = dn if ghost else jnp.linalg.norm(r, axis=1)
 
         def per_bf(k, i):
+            """BC kernel of branch ``k`` on boundary face ``i``."""
             f = j(bf_face)[i]
             return bc(branch[k], time, pos[i], dist[i], states[:, i],
                       Qaux[:, j(cells_of_face)[i]], p, n[:, f])
@@ -181,15 +202,20 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return states.at[:, j(phys)].set(out)
 
     def boundary_ghosts(ghost, Q, Qaux, p, time, mesh):
+        """The GHOST (``boundary_ghost_state``) per boundary face."""
         return _bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
 
     def boundary_states(ghost, Q, Qaux, p, time, mesh):
+        """The GHOST per boundary face and the inner cell's aux."""
         if n_bf == 0:
             return (jnp.zeros((Q.shape[0], 1)), jnp.zeros((Qaux.shape[0], 1)))
         return (_bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells),
                 Qaux[:, j(inner)])
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
+        """``QR`` with the outer FACE state ``bc(QL)`` on the boundary faces (periodic seam: the
+        partner face's ``QL``).
+        """
         if n_bf == 0:
             return QR
         QRb = _bc_at(bc, QL[:, j(bf_face)], Qaux, p, time, mesh, bf_cells, ghost=False)
@@ -199,14 +225,19 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── reconstruction and assembly ────────────────────────────────────────
     def pointwise(k, X, Xaux, p):
+        """Kernel ``k`` in every column of ``X``."""
         return k(X, Xaux, p)
 
     def _inner_outside(WL, WR):
+        """A boundary face's outer slot holds the inner trace until ``boundary_traces`` sets the BC
+        state.
+        """
         # a boundary face's outer slot holds the inner trace until
         # boundary_traces sets the BC's face state
         return WL, WR.at[:, j(bf_face)].set(WL[:, j(bf_face)])
 
     def cell_traces(Q, mesh):
+        """First-order traces: owner and neighbour cell value per face."""
         return _inner_outside(*order1(Q))
 
     # the boundary closure (ANALYSIS 40): the class of each row per space,
@@ -216,8 +247,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     recon_classes = topo.lsq_closure_class.get((owner, "reconstruction"), ())
 
     def closed(D, U, Ug, classes, cols, mesh):
-        """``D`` (rows, len(cols), cells) with the closure fits of the rows
-        that have a class at the closure cells (monomial columns ``cols``)."""
+        """``D`` ``(rows, len(cols), cells)`` with the closure fits written at the closure cells for
+        the rows that have a class (monomial columns ``cols``).
+        """
         rows, Dc = lsq_closure_derivatives(topo, mesh.lsq_closure, U, Ug, classes)
         if not rows:
             return D
@@ -227,6 +259,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                     c[None, None, :]].set(vals)
 
     def gradient(W, Wg, mesh):
+        """LSQ gradient of every row of ``W`` per cell, closed at the boundary by constraints or by
+        the ghost samples ``Wg``.
+
+        References:
+            Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
+        """
         # ``Wg``: the ghosts; a row the BC fixes closes by its constraint,
         # every other row samples the ghost at the mirror image
         R = _with_geometry(lsq, mesh, mesh_np, nc)
@@ -234,6 +272,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return closed(G, W, Wg, recon_classes, topo.lsq_grad_cols, mesh)
 
     def ghost_bounds(R, u, ug):
+        """Min and max of ``u`` over the face neighbours and the boundary ghosts ``ug`` (a ghost
+        bounds its face's owner).
+        """
         # min/max over the face neighbours and the boundary ghosts ``ug``
         # (as in ``gradient``).  A ghost bounds its face's OWNER (on a
         # periodic seam ``_bf_cells`` is the partner cell)
@@ -243,7 +284,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return lo.at[R._iInner_bnd].min(ug), hi.at[R._iInner_bnd].max(ug)
 
     def limiter(name):
+        """Limiter factory for the reconstruction method ``name``; the factors lie in [0, 1],
+        bounded by the face neighbours and the ghosts.
+
+        References:
+            Barth, Jespersen 1989, https://doi.org/10.2514/6.1989-366
+        """
         def factors(rows, W, Wg, G, mesh):
+            """Limiter factors for the state ``rows`` (1 elsewhere)."""
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
@@ -254,6 +302,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return factors
 
     def extrapolate(W, G, phi, mesh):
+        """Each cell's ``W`` moved to the face centres by ``phi * G`` (MUSCL).
+
+        References:
+            van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
+        """
         R = _with_geometry(lsq, mesh, mesh_np, nc)
         phi = jnp.asarray(phi, dtype=W.dtype)
         phi = jnp.broadcast_to(phi if phi.ndim != 1 else phi[None, :],
@@ -264,6 +317,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     nbr = np.where(is_bnd, nc, fc1)
 
     def divergence(Wm, Wp, mesh):
+        """Per cell the sum of ``Wm`` over the faces it owns and ``Wp`` over the faces it
+        neighbours, times |face| / |cell|.
+
+        References:
+            LeVeque 2002, https://doi.org/10.1017/CBO9780511791253
+        """
         fv, cv = mesh.face_volumes, mesh.cell_volumes
         out = jnp.zeros((Wm.shape[0], nc), dtype=Wm.dtype)
         out = out.at[:, j(fc0)].add(Wm * (fv / cv[j(fc0)]))
@@ -271,6 +330,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                                      mode="drop")
 
     def edge_source(k, Q, QL, QR, Qaux, p, mesh):
+        """Per cell the interior nonconservative edge integral of kernel ``k`` over its faces,
+        divided by the volume (order >= 2).
+        """
         fv, cv, n = mesh.face_volumes, mesh.cell_volumes, mesh.face_normals
         out = jnp.zeros((Q.shape[0], nc), dtype=Q.dtype)
         I, B = j(interior), j(bf_face)
@@ -286,6 +348,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── whole-domain operations ────────────────────────────────────────────
     def derivative_aux(spec, Q, Qaux, mesh, Qg=None, rows=None):
+        """``Qaux`` with the derivative rows of ``spec`` refilled from mesh gradients; with ``Qg``
+        and ``rows`` only the derivatives of those state rows, their boundary faces from the ghosts.
+        """
         # stencils are static topology; the LSQ matrices are traced geometry
         traced = dataclasses.replace(mesh_j, lsq_gradQ=mesh.lsq_gradQ)
         if Qg is None:
@@ -307,22 +372,27 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return Qaux
 
     def clean_round_off(Q, rows, tol):
+        """Entries of the state ``rows`` in ``[-tol, 0)`` set to 0."""
         r = jnp.asarray(rows)
         X = Q[r]
         return Q.at[r].set(jnp.where((X < 0) & (X >= -tol), 0.0, X))
 
     def put(Q, rows, values):
+        """``Q`` with the state ``rows`` replaced by ``values``."""
         return Q.at[jnp.asarray(rows), :].set(values)
 
     def zeros(n, mesh):
+        """An ``(n, cells)`` array of zeros."""
         return jnp.zeros((int(n), nc), dtype=mesh.cell_volumes.dtype)
 
     def inadmissible(k, Q, Qaux, p):
+        """Cell mask: an admissibility row of kernel ``k`` below 0, or a non-finite state."""
         adm = k(Q, Qaux, p)
         return (jnp.any(adm < 0.0, axis=0)
                 | ~jnp.isfinite(Q).all(axis=0))
 
     def select(mask, A, B):
+        """``A`` where ``mask`` else ``B``, per cell or per face."""
         mask, A, B = jnp.asarray(mask), jnp.asarray(A), jnp.asarray(B)
         if mask.ndim == 1 and max(A.ndim, B.ndim) == 2:
             mask = mask[None, :]
@@ -330,6 +400,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── control ────────────────────────────────────────────────────────────
     def while_loop(c, b, init):
+        """``lax.while_loop``; with ``ad_mode='reverse'`` a binomially checkpointed loop that
+        ``jax.grad`` can differentiate.
+
+        References:
+            Griewank 1992, https://doi.org/10.1080/10556789208805505
+        """
         init = tuple(jnp.asarray(a, dtype=jnp.asarray(a).dtype) for a in init)
         cf, bf = (lambda s: c(*s)), (lambda s: tuple(b(*s)))
         if ad_mode == "reverse":
@@ -339,14 +415,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return lax.while_loop(cf, bf, init)
 
     def cond(p, a, b):
+        """``lax.cond`` of the two branches."""
         return lax.cond(p, a, b)
 
     imp = {**dict(tol=1e-8, maxiter=6, gmres_tol=1e-7, gmres_maxiter=30),
            **(implicit or {})}
 
     def root(f, x0):
-        """Newton on f(x) = 0 with a per-cell (block-diagonal) Jacobian;
-        differentiable through the converged root (custom_root)."""
+        """Newton on ``f(x) = 0`` with a per-cell (block-diagonal) Jacobian; differentiable through
+        the converged root (custom_root).
+        """
         return newton_root(f, x0, lambda x, v: jax.jvp(f, (x,), (v,))[1],
                            cellwise_solve, tol=imp["tol"], maxiter=imp["maxiter"])
 
@@ -354,10 +432,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                                      maxiter=imp["gmres_maxiter"], accept=None)
 
     def _ls_gmres(A, b):
+        """Matrix-free restarted GMRES of ``A x = b`` with the configured tolerances.
+
+        References:
+            Saad, Schultz 1986, https://doi.org/10.1137/0907058
+        """
         return jax_gmres(A, b, atol=0.0, tol=ls["tol"], restart=ls["restart"],
                          maxiter=ls["maxiter"])[0]
 
     def _ls_reject(r):
+        """Raise when the relative residual ``r`` exceeds the accept gate."""
         if float(r) > ls["accept"]:
             raise RuntimeError(
                 f"linsolve: relative residual {float(r):.3e} > accept gate "
@@ -371,9 +455,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 if amgx is not None or pyamg is not None else None)
 
     def assembled(op, n, ncells=nc):
-        """The operator's values on the cell pattern of the first ``ncells``
-        cells, by colouring: one evaluation per colour (traced; the pattern
-        is static)."""
+        """Values of the linear operator ``op`` on the cell pattern of the first ``ncells`` cells,
+        by colouring: one traced evaluation per colour.
+
+        References:
+            Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
+        """
         if (n, ncells) not in patterns:
             patterns[(n, ncells)] = _cell_pattern(n, ncells, lsq_nbrs)
         rows, cols, colors = patterns[(n, ncells)]
@@ -387,16 +474,20 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     amg_cache = {}                   # (n, transpose) -> hierarchy and its age
 
     def host_amg(rows, cols, n, k, transpose):
-        """Host solve: GMRES preconditioned by a smoothed-aggregation AMG
-        hierarchy of the block-diagonally scaled matrix.  The hierarchy is
-        reused (a lagged preconditioner for the current matrix) and rebuilt
-        every ``amg_rebuild`` solves, or as soon as the iterations exceed
-        ``amg_growth`` x those right after the last rebuild."""
+        """Host solve: GMRES preconditioned by a smoothed-aggregation AMG hierarchy of the
+        block-scaled matrix.  The hierarchy is lagged: rebuilt every ``amg_rebuild`` solves, or once
+        the iterations exceed ``amg_growth`` times those after the last rebuild.
+
+        References:
+            Saad, Schultz 1986, https://doi.org/10.1137/0907058
+            Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
+        """
         import scipy.sparse as sps
         from scipy.sparse.linalg import gmres as sp_gmres
         rebuild, growth = int(ls.get("amg_rebuild", 1)), float(ls.get("amg_growth", 2.0))
 
         def solve(vals, rhs):
+            """Solve with matrix values ``vals`` and right-hand side ``rhs``."""
             A = sps.csr_matrix((np.asarray(vals), (rows, cols)), shape=(n, n))
             A = (A.T if transpose else A).tobsr(blocksize=(k, k))
             # left-scale by the inverse cell blocks: A ~ M (x) L with a k x k
@@ -421,15 +512,19 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return solve
 
     def host_vcycle(rows, cols, n, k, transpose):
-        """Host preconditioner: one smoothed-aggregation V-cycle on the
-        block-diagonally scaled matrix (a lagged hierarchy, rebuilt once
-        ``amg_rebuild`` new matrices have been seen)."""
+        """Host preconditioner: one smoothed-aggregation V-cycle on the block-scaled matrix, with a
+        lagged hierarchy rebuilt after ``amg_rebuild`` new matrices.
+
+        References:
+            Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
+        """
         import scipy.sparse as sps
         c = amg_cache.setdefault(("vcycle", n, transpose),
                                  {"vals": None, "age": 0, "P": None, "Dinv": None})
         rebuild = int(ls.get("amg_rebuild", 1))
 
         def apply(vals, rhs):
+            """Apply the V-cycle for the matrix values ``vals`` to ``rhs``."""
             vals = np.asarray(vals)
             if c["vals"] is None or not np.array_equal(vals, c["vals"]):
                 c["vals"], c["age"] = vals.copy(), c["age"] + 1
@@ -455,11 +550,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     halo = par.get("halo", lambda X, mesh: X)
 
     def _amgx_mpi(A, b):
-        """Distributed 'amgx': ONE global AmgX solve across the ranks (AmgX's
-        MPI mode through JAX-AMG; the serial solver's FGMRES + AMG, its own
-        distributed transpose for AD).  Each rank hands its owned rows, the
-        columns numbered globally (halo cells by their owners' ids), the
-        values by colouring the operator with the halo off."""
+        """Distributed 'amgx': one global AmgX solve across the ranks, each handing over its owned
+        rows with globally numbered columns.  Called by ``linsolve`` for a partitioned run.
+
+        References:
+            Naumov et al. 2015, https://doi.org/10.1137/140980260
+        """
         from jax.experimental import sparse as jsparse
         shape, k = b.shape, b.shape[0]
         with no_halo():
@@ -512,11 +608,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return x
 
     def _dlinsolve(A, b):
-        """Distributed 'gmres' / 'pyamg': flexible GMRES over the owned cells
-        (global inner products; the operator exchanges the halo itself),
-        right preconditioned for 'pyamg' by the rank's own block -- a PyAMG
-        V-cycle of the operator assembled with the halo off -- plus a coarse
-        correction.  ('amgx': :func:`_amgx_mpi`.)"""
+        """Distributed 'gmres' / 'pyamg': flexible GMRES over the owned cells with global inner
+        products, right-preconditioned for 'pyamg' by the rank's own PyAMG V-cycle plus a coarse
+        correction.
+
+        References:
+            Saad 1993, https://doi.org/10.1137/0914028
+            Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
+        """
         shape, k = b.shape, b.shape[0]
         _, lin = jax.linearize(A, jnp.zeros_like(b))
         mask = jnp.broadcast_to(own_cell, shape).reshape(-1).astype(b.dtype)
@@ -535,6 +634,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             out = jax.ShapeDtypeStruct((n_o,), b.dtype)
 
             def precond(transpose):
+                """Preconditioner of the (transposed) solve: the rank-local V-cycle."""
                 f = host_vcycle(rows, cols, n_o, k, transpose)
                 return lambda v: emb(jax.pure_callback(
                     f, out, vals, own(v.reshape(shape)))).reshape(-1)
@@ -548,11 +648,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             own_f = own_cell.astype(b.dtype)
 
             def restrict(v):                    # (k * nc,) -> (P, k)
+                """Restrict a vector to the coarse space: per-rank sums of each row."""
                 loc = jnp.sum(v.reshape(shape) * own_f, axis=1)        # (k,)
                 return gsum(jnp.zeros((P, k), b.dtype).at[rank].set(loc))
 
             def coarse(transpose):
+                """Coarse-correction solve on the space of one constant per rank and row."""
                 def column(c, _):
+                    """Column ``c`` of the coarse matrix: the operator applied to that coarse basis
+                    vector, restricted.
+                    """
                     q, i = c // k, c % k
                     e = jnp.zeros(shape, b.dtype).at[i].set(
                         jnp.where(rank == q, own_f, 0.0)).reshape(-1)
@@ -571,6 +676,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 block(transpose), coarse(transpose)))
 
         def solver(transpose):
+            """FGMRES solve for ``custom_linear_solve`` (``transpose``: the adjoint)."""
             M = precond(transpose)
             # Krylov vectors cost memory per rank: a short restart, as many
             # cycles as the serial budget (restart x maxiter iterations)
@@ -593,11 +699,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return x.reshape(shape)
 
     def linsolve(A, b):
-        """Matrix-free restarted GMRES on the linear map A (linearized once at
-        0, so an affine A is fine); differentiable (custom_linear_solve).
-        backend 'amgx': AmgX on the operator's traced sparsity (JAX-AMG,
-        differentiable itself).  Above the accept gate the run aborts.
-        Distributed: :func:`_dlinsolve`."""
+        """Solve ``A x = b`` for the linear map ``A`` (linearized once at 0) by GMRES, AmgX or
+        AMG-preconditioned GMRES, as configured; differentiable via ``custom_linear_solve``.  Aborts
+        above the accept gate; a partitioned run uses :func:`_dlinsolve` or :func:`_amgx_mpi`.
+
+        References:
+            Saad, Schultz 1986, https://doi.org/10.1137/0907058
+            Naumov et al. 2015, https://doi.org/10.1137/140980260
+        """
         if partition is not None:
             return _amgx_mpi(A, b) if amgx is not None else _dlinsolve(A, b)
         _, lin = jax.linearize(A, jnp.zeros_like(b))     # primal once per solve
@@ -629,6 +738,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             out = jax.ShapeDtypeStruct(b.shape, b.dtype)
 
             def amg(transpose):
+                """Host AMG solve (``transpose``: the adjoint)."""
                 f = host_amg(rows, cols, n, k, transpose)
                 return lambda _, rhs: to_row(jax.pure_callback(f, out, vals, to_cell(rhs)))
             x = lax.custom_linear_solve(
@@ -654,11 +764,10 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     outer_face = np.where(periodic, partner_face, bf_face)
 
     def _div(k, bc, X, Qaux, p, time, mesh):
-        """div(A(X) : grad X) per cell (the ``diffusion`` block): the
-        interior faces by the TPFA operator, then the boundary faces, each
-        n.A.n (X_out - X_in) / (d_in + d_out) with the mean tensor of the two
-        cells and the normal distances d to the face; X_out the ghost of the
-        BC kernel ``bc`` at ``time`` (d_out = d_in) or the periodic partner."""
+        """Per cell ``div(A(X) : grad X)`` for the ``diffusion`` block: the TPFA operator on
+        interior faces, then two-point fluxes to the BC ghost (``bc``) or the periodic partner on
+        boundary faces.
+        """
         if not tpfa:
             tpfa.append(DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension,
                                                   rt.n_state))
@@ -673,6 +782,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         fc, cc, nrm = mesh.face_centers, mesh.cell_centers, mesh.face_normals
 
         def dn(faces, cells):
+            """Normal distance from the cell centres ``cells`` to the faces ``faces``."""
             return jnp.sum((fc[faces, :] - cc[:, cells].T) * nrm[:, faces].T, axis=1)
         d = dn(f, c) + dn(j(outer_face[flux_bf]), o)
         n = nrm[:dim, f]
@@ -681,24 +791,27 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return D.at[:, c].add(jnp.einsum("ijb,jb->ib", T, Xout - X[:, c]) * w)
 
     def diffusion(k, bc, Q, Qaux, p, time, mesh):
+        """Explicit ``div(A : grad Q)`` per cell (RHS sign, A > 0 diffuses)."""
         return _div(k, bc, Q, Qaux, p, time, mesh)
 
     def _norm(r):
+        """Euclidean norm of ``r`` (distributed: over the owned cells of all ranks)."""
         if partition is None:
             return jnp.linalg.norm(r)
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
 
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
-        """Crank-Nicolson from ``time`` to ``time + dt``, A at the new state
-        (``Qaux`` frozen): R(X) = X - Q - dt/2 (D(X) + D(Q)) = 0, D(X) =
-        div(A(X) : grad X) with the ghosts of X at ``time + dt`` (of Q at
-        ``time``), by Newton (one update when A and the BCs are affine), each
-        update a ``linsolve`` (distributed: over the owned cells, the
-        operator exchanging its halo); differentiable through the root
-        (implicit function theorem)."""
+        """One Crank-Nicolson step of ``div(A(X) : grad X)`` from ``time`` to ``time + dt``, A at
+        the new state, solved by Newton with a ``linsolve`` per update; differentiable through the
+        root.
+
+        References:
+            Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+        """
         b = Q + 0.5 * dt * _div(k, bc, Q, Qaux, p, time, mesh)
 
         def R(X):
+            """Crank-Nicolson residual ``X - b - dt/2 D(X)`` at ``time + dt``."""
             X = halo(X, mesh)
             return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh)
         X = newton_root(R, Q, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
@@ -709,7 +822,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     warned = []
 
     def check_cfl(tok, dt_cfl, dt):
+        """Warn once (host callback) when ``dt`` exceeds the CFL step ``dt_cfl``; returns the next
+        order token.
+        """
         def host(a, b):
+            """Log the one-time warning."""
             if float(b) > float(a) * (1 + 1e-12) and not warned:
                 warned.append(True)
                 logger.warning(f"time step {float(b):.3e} exceeds the CFL step "
@@ -720,11 +837,15 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
+        """Forward mode: write a snapshot through ``on_write``; returns the next order token."""
         if on_write is not None and ad_mode == "forward":
             jax.debug.callback(on_write, time, Q, Qaux, ordered=True)
         return (tok + 1,)
 
     def with_closure(name, sub):
+        """The derivative-aux spec of system ``name``, each state entry tagged with its
+        boundary-closure class.
+        """
         # the spec, each state entry with its row's closure class
         classes = topo.lsq_closure_class.get((name, "state"), ())
         return [dict(e, closure=(classes[e["state_index"]]
@@ -763,11 +884,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
 
 def _fgmres(A, b, dots, M, tol, restart, maxiter):
-    """Restarted flexible GMRES, right preconditioner ``M`` (may vary per
-    iteration), classical Gram-Schmidt twice; ``dots(V, w)``: the inner
-    products of every row of ``V`` with ``w`` in one reduction.  Givens
-    rotations track the residual: a cycle stops as soon as ``|r| <= tol |b|``
-    (or after ``restart`` iterations); at most ``maxiter`` cycles."""
+    """Restarted flexible GMRES of ``A x = b`` with right preconditioner ``M`` (may vary per
+    iteration) and global inner products ``dots(V, w)``.
+
+    References:
+        Saad 1993, https://doi.org/10.1137/0914028
+    """
     from jax.scipy.linalg import solve_triangular
     m, n, dt = int(restart), b.size, b.dtype
     nrm = lambda v: jnp.sqrt(dots(v[None], v)[0])                  # noqa: E731
@@ -775,12 +897,16 @@ def _fgmres(A, b, dots, M, tol, restart, maxiter):
     target = tol * jnp.where(bn > 0, bn, 1.0)
 
     def cycle(c):
+        """One restart cycle: Arnoldi steps until ``|r| <= tol |b|`` or ``restart`` iterations, then
+        the least-squares update.
+        """
         x, r, it, _ = c
         beta = nrm(r)
         V = jnp.zeros((m + 1, n), dt).at[0].set(r / jnp.where(beta > 0, beta, 1.0))
         g = jnp.zeros(m + 1, dt).at[0].set(beta)
 
         def arnoldi(st):
+            """One flexible Arnoldi step (Gram-Schmidt twice) with a Givens rotation."""
             j, V, Z, H, cs, sn, g = st
             z = M(V[j])
             w = A(z)
@@ -793,6 +919,7 @@ def _fgmres(A, b, dots, M, tol, restart, maxiter):
             h = (h + h2).at[j + 1].set(hn)
 
             def rot(i, h):                       # the earlier rotations
+                """Apply the ``i``-th earlier Givens rotation to ``h``."""
                 a, b_ = h[i], h[i + 1]
                 return h.at[i].set(cs[i] * a + sn[i] * b_).at[i + 1].set(
                     -sn[i] * a + cs[i] * b_)
@@ -826,8 +953,12 @@ def _fgmres(A, b, dots, M, tol, restart, maxiter):
 
 
 def _jaxamg():
-    """The optional JAX-AMG package (Liu, Fan, Wang 2026, SoftwareX 35:102966;
-    https://github.com/jx-wang-s-group/JAX-AMG), imported only when asked."""
+    """Import the optional JAX-AMG package (AmgX on a CUDA GPU; Liu, Fan, Wang 2026), with a clear
+    error when missing or off the GPU.
+
+    References:
+        Naumov et al. 2015, https://doi.org/10.1137/140980260
+    """
     try:
         import jaxamg
     except ImportError as e:
@@ -844,13 +975,13 @@ def _jaxamg():
 
 
 def _cell_pattern(n, nc, nbrs, n_rows=None):
-    """Sparsity of a cell operator on ``k = n / nc`` unknowns per cell,
-    cell-major (index ``c k + r``), rows of the first ``n_rows`` cells (all):
-    every unknown of cell c may couple to every unknown of the cells in its
-    LSQ stencil (the derivative aux are LSQ fits of the unknowns; boundary
-    ghosts depend on the inner cell).  Returns ``rows, cols`` in CSR order
-    and the colour of each of the ``n`` columns (two columns sharing a row
-    differ), from the cells': column ``d k + q`` takes ``k colour(d) + q``."""
+    """Sparsity of a cell operator on ``k = n / nc`` cell-major unknowns: each couples to those of
+    the cells in its LSQ stencil.  Returns ``rows, cols`` in CSR order and a colour per column such
+    that columns sharing a row differ.
+
+    References:
+        Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
+    """
     k, n_rows = n // nc, nc if n_rows is None else n_rows
     nb = np.asarray(nbrs)[:n_rows]
     cells = np.concatenate([np.arange(n_rows)[:, None], nb], axis=1)  # self + stencil
@@ -874,12 +1005,12 @@ def _cell_pattern(n, nc, nbrs, n_rows=None):
 
 
 def _cell_colors(c, d, nc, seed=0):
-    """Colour the cells of the stencil pairs ``(c, d)`` so that two cells in
-    one stencil differ (distance-2 on the stencil graph): speculative
-    parallel greedy -- every uncoloured cell takes the smallest colour free
-    among its coloured neighbours, a clash with a heavier (random weight)
-    neighbour retries next round.  O(edges) per round, rounds ~ colours,
-    each round only over the uncoloured cells."""
+    """Distance-2 colouring of the stencil pairs ``(c, d)`` by speculative parallel greedy (a clash
+    with a heavier random-weight neighbour retries).
+
+    References:
+        Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
+    """
     import scipy.sparse as sps
     P = sps.csr_matrix((np.ones(len(c), np.int8), (c, d)), shape=(int(c.max()) + 1, nc))
     C = (P.T @ P).tocsr()
@@ -910,7 +1041,11 @@ def _cell_colors(c, d, nc, seed=0):
 
 
 def _pyamg():
-    """PyAMG (Bell, Olson, Schroder 2022, JOSS 7:4142), imported when asked."""
+    """Import the optional PyAMG package.
+
+    References:
+        Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
+    """
     try:
         import pyamg
     except ImportError as e:
@@ -920,9 +1055,9 @@ def _pyamg():
 
 
 def _face_kernel(rt, name):
-    """``rt.<name>`` for a Numerics face function JaxRuntime does not build,
-    lambdified the same way as its ``numerical_flux`` (one CSE silo, vmapped
-    over the faces)."""
+    """Set ``rt.<name>`` for a Numerics face function JaxRuntime does not build, lambdified like
+    ``numerical_flux`` and vmapped over the faces.
+    """
     num = getattr(rt, "_numerics", None)
     if getattr(rt, name, None) is not None or num is None:
         return
@@ -941,7 +1076,9 @@ def _face_kernel(rt, name):
 
     @jax.jit
     def kernel(qL, qR, qauxL, qauxR, parameters, normal):
+        """The face function vmapped over the faces."""
         def one(a, b, c, d, n):
+            """One face (the ``_speed`` variant returns the two sides and the speed)."""
             out = per_face(a, b, c, d, parameters, n)
             return (out[0], out[1], out[2, 0]) if speed else out
         return jax.vmap(one, in_axes=(1, 1, 1, 1, 1), out_axes=-1)(
@@ -951,14 +1088,18 @@ def _face_kernel(rt, name):
 
 # ── preCICE ─────────────────────────────────────────────────────────────────
 class PreciceAdapter:
-    """Host side of the ``couple_*`` effects: preCICE API calls only.
-    ``comm`` (mpi4py): a distributed participant, one preCICE process per
-    rank; the runtime registers each rank's own coupling vertices.  preCICE
-    runs it on MPI_COMM_WORLD (pyprecice 3.4 hands preCICE a wrong
-    communicator, of size 1, for an mpi4py one), so ``comm`` must span the
-    world -- one ``mpiexec`` per participant."""
+    """Host side of the ``couple_*`` effects: the preCICE API calls only.  ``comm`` (mpi4py) makes a
+    distributed participant, one preCICE process per rank, so it must span the world (one
+    ``mpiexec`` per participant).
+
+    References:
+        Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
+    """
 
     def __init__(self, name, config, mesh_name, write, read, comm=None):
+        """Open participant ``name`` from ``config`` on mesh ``mesh_name``, writing the data
+        ``write`` and reading ``read``.
+        """
         import petsc4py  # noqa: F401  (must precede precice)
         import precice
         self.mesh, self.wn, self.rn = mesh_name, list(write), list(read)
@@ -976,31 +1117,38 @@ class PreciceAdapter:
         self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(coords)[:, :dim])
 
     def _write(self, q):
+        """Write the rows of ``q`` as the write data."""
         for i, n in enumerate(self.wn):
             self.p.write_data(self.mesh, n, self.ids, np.asarray(q[i]))
 
     def init(self, q):
+        """Write the initial data if required, initialise; returns whether coupling is ongoing."""
         if self.p.requires_initial_data():
             self._write(q)
         self.p.initialize()
         return np.bool_(self.p.is_coupling_ongoing())
 
     def max_dt(self):
+        """Largest time step left in the window."""
         return np.float64(self.p.get_max_time_step_size())
 
     def read(self):
+        """The read data of the peer, one row per name."""
         return np.stack([self.p.read_data(self.mesh, n, self.ids, 0.0)
                          for n in self.rn])
 
     def write(self, q):
+        """Write ``q``; returns an empty tuple."""
         self._write(q)
         return ()
 
     def advance(self, dt):
+        """Advance by ``dt``; returns whether coupling is ongoing."""
         self.p.advance(float(dt))
         return np.bool_(self.p.is_coupling_ongoing())
 
     def finalize(self):
+        """Finalize the participant."""
         self.p.finalize()
 
 
@@ -1015,14 +1163,11 @@ def coupled_face_indices(mesh_np, tag):
 
 
 def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
-    """Coupling geometry blocks + the ``couple_*`` effects for one participant.
-    Each host call consumes the previous token and returns the next one, so
-    XLA cannot reorder the preCICE calls.  The coupling vertices are the
-    tagged faces of the owned cells (distributed: the rank's own), at the
-    face centres.  Distributed, a preCICE call is collective: the token
-    passes an MPI reduction before and after it, which puts the call in the
-    rank's ordered sequence of MPI collectives (halo exchanges, reductions)
-    -- every rank meets them in the same order, whatever data it couples."""
+    """Coupling blocks and ``couple_*`` effects of one preCICE participant, on the tagged faces of
+    the owned cells.  Each host call takes and returns an order token (distributed: bracketed by an
+    MPI reduction), so XLA cannot reorder the calls and all ranks meet their collectives in the same
+    order.
+    """
     from jax.experimental import io_callback
     a = cfg["adapter"]
     if partition is None:
@@ -1041,12 +1186,18 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     n_state = int(rt.n_state)
 
     def coupled_faces(mesh):
+        """Mask of the coupled faces."""
         return jnp.asarray(mask)
 
     def interface_states(Q, mesh):
+        """States of the cells next to the coupled faces."""
         return Q[:, jnp.asarray(cells_c)]
 
     def interface_flux(k, kaux, side, Q, Qaux, peer, p, mesh):
+        """This participant's row of one Riemann problem posed low -> high on the coupled faces,
+        zero elsewhere; the aux is rebuilt from each state alone so both sides pose the same
+        problem.
+        """
         # Both participants must pose the IDENTICAL Riemann problem: same
         # states, same aux, same normal.  The aux is therefore rebuilt from
         # each state alone (pointwise formula on a zero template), never taken
@@ -1065,10 +1216,11 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     Qe = S((len(a.rn), len(faces_c)), jnp.float64)
 
     def eff(host, *outs):
-        """Effect body: the host call takes the token and returns the next one
-        plus its outputs, so XLA cannot reorder the preCICE calls."""
+        """Effect body: the host call takes the token and returns the next one plus its outputs."""
         def body(tok, *args):
+            """The ordered ``io_callback`` of the host call."""
             def call(k, *x):
+                """Host call; returns the incremented token and the outputs."""
                 r = host(*x)
                 r = r if isinstance(r, tuple) else (r,)
                 return (np.int64(k + 1), *r)
@@ -1084,13 +1236,13 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
 
 
 def hoisted_jit(fn):
-    """``jax.jit(fn)`` with every constant ``fn`` captures (the mesh index
-    arrays of the runtime's closures) passed as an argument instead of baked
-    into the program: compile time and program size stay independent of the
-    mesh.  Traced once per argument shapes; differentiable like ``fn``."""
+    """``jax.jit(fn)`` with the constants ``fn`` captures (the mesh index arrays) passed as
+    arguments, so compile time and program size stay independent of the mesh.
+    """
     cache = {}
 
     def run(*args):
+        """Trace once per argument shapes, then call the jitted jaxpr with its constants."""
         flat, tree = jax.tree_util.tree_flatten(args)
         key = (tree, tuple((jnp.shape(x), jnp.result_type(x)) for x in flat))
         if key not in cache:
@@ -1104,7 +1256,9 @@ def hoisted_jit(fn):
 
 
 def build(src, name, module):
-    """Execute printed source against the name table; return the function."""
+    """Execute printed source against the name table and return the function ``name``; raises if the
+    source uses a block the table lacks.
+    """
     missing = [n for n in contract() if n not in module and n in src]
     if missing:
         raise NotImplementedError(f"JAX runtime lacks blocks {missing}")
