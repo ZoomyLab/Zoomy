@@ -713,7 +713,7 @@ GPU timing (L40S, PCIe, MPICH -> exchanges through host memory):
 - Stencils: `fvc::grad` (leastSquares), `cellLimited` limiters, compact
   second derivatives (Gauss integral of the face gradient).  Reductions:
   `returnReduce` with an explicit NaN check.  Host program: zoomy_core
-  `symsolver/program.py`, shared with AMReX.
+  `symsolver/backend_cxx.py`, shared with AMReX.
 - Pressure: FGMRES on the full system (global dots); right preconditioner =
   the probed compact operator, algebraic rows eliminated per cell, GAMG on
   the elliptic rows' Schur complement (block Jacobi across ranks).  Same
