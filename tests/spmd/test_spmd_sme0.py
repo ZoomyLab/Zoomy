@@ -36,7 +36,7 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel import SystemModel
 from zoomy_core.model.models import SME
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
-from zoomy_core.numerics import NumericalSystemModel
+from zoomy_core.numerics import Limiter, NumericalSystemModel
 from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.mesh.partition_jax import partition_1d_contiguous
@@ -95,7 +95,7 @@ def _setup(order):
     sm.aux_initial_conditions = IC.Constant(constants=lambda n: np.zeros(n))
     nsm = NumericalSystemModel.from_system_model(
         sm, reconstruction=ReconstructionSpec(order=order,
-                                              limiter="venkatakrishnan"))
+                                              limiter=Limiter.venkatakrishnan))
     mesh_np = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N_TOTAL)
     solver = HyperbolicSolver()
     Q_setup, Qaux_setup = solver.setup_simulation(mesh_np, nsm)

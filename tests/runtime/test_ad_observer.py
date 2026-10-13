@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 import models
@@ -44,7 +44,7 @@ def setup():
     sm.initial_conditions = IC.UserFunction(function=smooth_bump_ic)
     nsm = NumericalSystemModel.from_system_model(
         sm, reconstruction=ReconstructionSpec(order=2,
-                                              limiter="venkatakrishnan"))
+                                              limiter=Limiter.venkatakrishnan))
     mesh = LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=N_CELLS)
     solver = HyperbolicSolver(time_end=T_END, compute_dt=_adaptive(CFL, mesh),
                               march_log_interval=0, ad_checkpoints=CHECKPOINTS)

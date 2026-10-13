@@ -43,7 +43,7 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.misc.misc import ZArray
 from zoomy_core.model.derivative_workflow import StructuredDerivativeModel
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 
 # Avoid spamming logs during tests.
 from loguru import logger
@@ -166,7 +166,7 @@ def _run(N: int, order: int) -> tuple[np.ndarray, np.ndarray]:
     mesh = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N)
     model = _make_model()
     nsm = NumericalSystemModel.from_system_model(
-        model, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        model, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     solver = SWEHyperbolicSolver(
         time_end=T_END,
         compute_dt=timestepping.adaptive(CFL=0.9, dimension=1),
@@ -204,7 +204,7 @@ def _run_smooth(N: int, order: int, t_end: float = T_SMOOTH) -> tuple[np.ndarray
     mesh = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N)
     model = _make_smooth_model()
     nsm = NumericalSystemModel.from_system_model(
-        model, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        model, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     solver = SWEHyperbolicSolver(
         time_end=t_end,
         compute_dt=timestepping.adaptive(CFL=0.9, dimension=1),

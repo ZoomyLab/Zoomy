@@ -77,7 +77,7 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import (
     ManningFriction, Newtonian, StressFree)
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.operations import gate_eigenvalues_dry
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -177,7 +177,7 @@ def _run(bed_fn, exact_fn, t_period, nx):
     sm.initial_conditions = IC.UserFunction(function=ic)
     sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=ORDER, limiter="minmod"),
+        sm, reconstruction=ReconstructionSpec(order=ORDER, limiter=Limiter.minmod),
         extra_operations=[gate_eigenvalues_dry()])
     mesh = LSQMesh.create_2d(domain=(-L / 2, L / 2, -L / 2, L / 2), nx=nx, ny=nx)
     ni = mesh.n_inner_cells

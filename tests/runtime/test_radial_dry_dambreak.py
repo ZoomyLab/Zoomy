@@ -32,7 +32,7 @@ from zoomy_core.model.boundary_conditions import BoundaryConditions, FromModel
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import (
     ManningFriction, Newtonian, StressFree)
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 
@@ -65,7 +65,7 @@ def _march():
 
     sm.initial_conditions = IC.UserFunction(function=_ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
     mesh = LSQMesh.create_2d(domain=(0.0, 1.0, 0.0, 1.0), nx=NX, ny=NX)
     solver = HyperbolicSolver(time_end=np.inf, compute_dt=_adaptive(CFL, mesh),
                               **wet_dry_o2(nsm))

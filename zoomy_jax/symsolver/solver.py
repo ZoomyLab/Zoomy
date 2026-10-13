@@ -1,5 +1,5 @@
 """Driver of the JAX backend: prints the solver template (hyperbolic, Chorin) of a
-NumericalSystemModel and runs it against `zoomy_jax.symsolver.runtime`.  `ad_mode="reverse"`
+NumericalSystemModel and runs it against `zoomy_jax.symsolver.runtime`.  `ad_mode=AdMode.reverse`
 checkpoints the time loop for `jax.grad`, `couple=` makes the march a preCICE participant,
 `comm=` (mpi4py) runs it distributed, one rank per device.
 
@@ -22,7 +22,7 @@ from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
-from zoomy_core.misc.options import Option, OptionParam
+from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
@@ -30,15 +30,8 @@ from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax
 from zoomy_jax.symsolver import runtime as R
+from zoomy_jax.symsolver.runtime import AdMode  # noqa: F401
 from zoomy_jax.transformation.jax_runtime import JaxRuntime
-
-
-class AdMode(Option):
-    """How the JAX march is differentiated."""
-    #: jvp / jacfwd through the time loop (tangents carried, constant memory)
-    forward = "forward"
-    #: jax.grad through a binomially checkpointed time loop
-    reverse = "reverse"
 
 
 class SymbolicHyperbolicSolverJax(HyperbolicSettings):

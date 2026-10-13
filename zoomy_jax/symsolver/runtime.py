@@ -20,6 +20,7 @@ from jax import lax
 from jax.scipy.sparse.linalg import gmres as jax_gmres
 
 from zoomy_core.misc.logger_config import logger
+from zoomy_core.misc.options import Option
 from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
@@ -33,6 +34,14 @@ from zoomy_jax.fvm.reconstruction_jax import (
 from zoomy_core.mesh.distributed import HALO
 from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
+
+class AdMode(Option):
+    """How the JAX march is differentiated."""
+    #: jvp / jacfwd through the time loop (tangents carried, constant memory)
+    forward = "forward"
+    #: jax.grad through a binomially checkpointed time loop
+    reverse = "reverse"
+
 
 class Geometry(NamedTuple):
     """The `mesh` argument of a printed solver, computed from the vertex coordinates inside the
@@ -75,15 +84,17 @@ def _with_geometry(R, g, mesh_np, nc):
     return R
 
 
-def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None,
-            on_save=None, on_load=None, couple=None, implicit=None, systems=None, partition=None):
+def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoints=64,
+            on_write=None, on_save=None, on_load=None, couple=None, implicit=None, systems=None,
+            partition=None):
     """Build the name table (dict of callables) a printed solver runs against: the JAX
     implementation of every `zoomy_core.symsolver` block on this mesh.  Called by the JAX solver
     driver's `_setup`.
 
     Args:
         topo: static topology (`geometry_xp.build_topology`) with the boundary-closure classes
-        ad_mode: 'forward', or 'reverse' for a time loop with `checkpoints` checkpoints
+        ad_mode: `AdMode.forward`, or `AdMode.reverse` for a time loop with `checkpoints`
+            checkpoints
         on_write: `on_write(time, Q, Qaux)` snapshot callback (forward mode)
         on_save, on_load: the restart pair (host), `on_save(time, Q, Qaux)` (forward mode) and
             `on_load(time, Q, Qaux) -> (time, Q, Qaux)`; None: no restart file / not restarting
@@ -406,7 +417,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── control ────────────────────────────────────────────────────────────
     def while_loop(c, b, init):
-        """`lax.while_loop`; with `ad_mode='reverse'` a binomially checkpointed loop that
+        """`lax.while_loop`; with `AdMode.reverse` a binomially checkpointed loop that
         `jax.grad` can differentiate.
 
         References:

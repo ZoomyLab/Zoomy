@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 import models
@@ -23,7 +23,7 @@ def test_wb_drift_history(overwrite):
     sm = SystemModel.from_model(model)
     sm.initial_conditions = IC.UserFunction(function=lake_at_rest_ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"),
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod),
         riemann=PositiveNonconservativeRusanov)
     print(describe(nsm))
     set_state_width(nsm)

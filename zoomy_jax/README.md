@@ -21,7 +21,7 @@ from jax.experimental.shard_map import shard_map
 
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
+from zoomy_core.numerics.numerical_system_model import Limiter, ReconstructionSpec
 from zoomy_core.model.models.system_model import SystemModel
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 from zoomy_jax.mesh.partition_jax import (
@@ -34,7 +34,7 @@ from zoomy_jax.fvm.halo_exchange_jax import halo_exchange_inplace
 mesh_global = LSQMesh.create_2d(domain=(0., 1., 0., 1.), nx=NX, ny=NY)
 nsm = NumericalSystemModel.from_system_model(
     SystemModel.from_model(model),
-    reconstruction=ReconstructionSpec(order=2, limiter="venkatakrishnan"),
+    reconstruction=ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan),
 )
 solver = HyperbolicSolver()
 Q, Qaux = solver.setup_simulation(mesh_global, nsm)

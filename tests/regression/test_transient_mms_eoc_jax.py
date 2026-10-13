@@ -35,7 +35,7 @@ from zoomy_core.analysis.manufactured import (
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import NavierSlip, Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 from conftest import march
@@ -72,7 +72,7 @@ def _l1_h(order, n):
     sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
     mesh = LSQMesh.create_1d(domain=(0.0, L), n_inner_cells=n)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     idx = {s: i for i, s in enumerate(names)}
     Q, _ = march(nsm, mesh, cfl=CFL, t_end=TEND,
                  free_surface_h_index=idx["h"],

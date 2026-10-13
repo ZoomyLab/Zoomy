@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 import models
@@ -28,7 +28,7 @@ def test_swashes_order(overwrite, case, order):
         sm.initial_conditions = IC.UserFunction(function=ic_for(case))
         nsm = NumericalSystemModel.from_system_model(
             sm, reconstruction=ReconstructionSpec(order=order,
-                                                  limiter="minmod"))
+                                                  limiter=Limiter.minmod))
         if n == Ns[0]:
             print(describe(nsm))
         set_state_width(nsm)

@@ -25,7 +25,7 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import (
     ManningFriction, Newtonian, StressFree)
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 from conftest import CFL, march
@@ -64,7 +64,7 @@ def _run(n):
     sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
     mesh = LSQMesh.create_1d(domain=(0.0, L), n_inner_cells=n)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="venkatakrishnan"))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan))
     Q, _ = march(nsm, mesh, cfl=CFL, t_end=TEND,
                  free_surface_h_index=idx["h"], free_surface_b_index=idx["b"],
                  free_surface_momentum_indices=[idx["q_0"]],

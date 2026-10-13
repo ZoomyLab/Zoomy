@@ -1,5 +1,5 @@
 """hypre through ctypes: FlexGMRES with one BoomerAMG V-cycle on the cell-block-scaled owned rows of
-an operator; the JAX Chorin pressure solve on CPUs (`pressure_linear_solver="hypre"`,
+an operator; the JAX Chorin pressure solve on CPUs (`pressure_linear_solver=LinearSolver.hypre`,
 `zoomy_jax.symsolver.runtime`).  The library is the shared build of
 `containers/zoomy_amrex/build_hypre_cuda.sh cpu-env` (or `ZOOMY_HYPRE_LIB`); it must link the
 MPI that mpi4py uses.
@@ -136,7 +136,7 @@ class BlockRows:
     """The owned rows of an operator on `k` unknowns per cell (row `c k + p` of owned cell
     `c`), its columns by global unknown number, solved by hypre with matrix values given per call.
     Every `k x k` block of a (cell, stencil cell) pair must be present.  Used by
-    `zoomy_jax.symsolver.runtime` (`pressure_linear_solver="hypre"`).
+    `zoomy_jax.symsolver.runtime` (`pressure_linear_solver=LinearSolver.hypre`).
 
     Args:
         comm: mpi4py communicator of the ranks (used as is; collective calls in `solve`)

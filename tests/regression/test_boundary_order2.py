@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 import models
@@ -45,7 +45,7 @@ def test_second_order_at_boundaries(overwrite):
         sm.aux_initial_conditions = IC.Constant(
             constants=lambda k: np.zeros(k))
         nsm = NumericalSystemModel.from_system_model(
-            sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+            sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
         if n == Ns[0]:
             print(describe(nsm))
         set_state_width(nsm)

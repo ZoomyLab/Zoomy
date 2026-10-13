@@ -24,7 +24,7 @@ logger.remove()
 import zoomy_core.fvm.timestepping as timestepping
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
@@ -57,7 +57,7 @@ def _run(order: int) -> tuple[LSQMesh, np.ndarray, int]:
     sm = SystemModel.from_model(models.swe(dimension=3, bc="wall"))
     sm.initial_conditions = IC.UserFunction(function=_ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     solver = HyperbolicSolver(
         time_end=T_END,
         compute_dt=timestepping.adaptive(CFL=0.9, dimension=2),

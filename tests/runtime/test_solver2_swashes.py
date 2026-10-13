@@ -17,6 +17,7 @@ from zoomy_core.mesh import LSQMesh
 from conftest import CFL
 from cases import ritter_ic, stoker_ic
 from models import swe, state_index
+from zoomy_core.numerics import Limiter
 
 DOMAIN, N_CELLS, T_END = (0.0, 10.0), 100, 1.0
 
@@ -30,7 +31,7 @@ def _nsm(ic, order):
     sm.initial_conditions = IC.UserFunction(function=ic)
     sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     assert nsm.update_variables is None, (
         "the derived SWE must be CAP-FREE — a wet/dry momentum cap here "
         "silently zeroes the SWASHES depths (cid=54)")

@@ -27,7 +27,7 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
-from zoomy_core.numerics import NumericalSystemModel
+from zoomy_core.numerics import Limiter, NumericalSystemModel
 from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
@@ -84,7 +84,7 @@ def test_spmd_real_solver_1d_transparent(order):
                                          for i in range(len(names))]))
         sm.aux_initial_conditions = IC.Constant(constants=lambda n: np.zeros(n))
         nsm = NumericalSystemModel.from_system_model(
-            sm, reconstruction=ReconstructionSpec(order=order, limiter="venkatakrishnan"))
+            sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.venkatakrishnan))
         gmesh = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N_TOTAL)
         parts = partition_1d_contiguous(gmesh, n_parts=n_devs, halo=halo)
         solver = HyperbolicSolver()
@@ -127,7 +127,7 @@ def test_spmd_real_solver_2d_transparent(order):
         model = _swe2d_model(bcs, IC.UserFunction(
             function=lambda x: np.array([0.0, smooth(float(x[0])), 0.0, 0.0])))
         nsm = NumericalSystemModel.from_system_model(
-            model, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+            model, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
         gmesh = LSQMesh.create_2d(domain=DOMAIN, nx=NX, ny=NY)
         parts = partition_xaxis_structured(gmesh, n_parts=n_devs, halo=halo_x,
                                            domain=DOMAIN, shape=(NX, NY))
