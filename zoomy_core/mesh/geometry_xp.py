@@ -1460,7 +1460,7 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
     boundary-face virtual points, rows with a closure class taking the constrained fit.
 
     Args:
-        U_ghost: ``(n_v, n_bf)`` ghost values.
+        U_ghost: ``(n_v, n_bf)`` ghost values; `None`: the cell value (extrapolation).
         classes: closure class per row of ``U`` (-1: none).
     Returns:
         ``(n_v, n_cells, n_mon)`` derivatives scaled by ``lsq_scale_factors``.
@@ -1475,7 +1475,9 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
     U_self = U
     delta_c = U[:, nbr] - U_self[:, :, None]
     parts = [delta_c]
-    if bdy.shape[1]:
+    if bdy.shape[1] and U_ghost is None:     # no samples: the cell value, a zero difference
+        parts.append(xp.zeros(tuple(delta_c.shape[:2]) + (bdy.shape[1],), dtype=delta_c.dtype))
+    elif bdy.shape[1]:
         ub = U_ghost[:, np.maximum(bdy, 0)]
         mask = xp.asarray(bdy >= 0)
         parts.append(xp.where(mask[None], ub - U_self[:, :, None], 0.0))
