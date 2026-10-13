@@ -1,10 +1,11 @@
 """Gate 45: the in-plane viscous operator of SME(0) + NewtonianInPlane, measured on the symbolic
 solvers, against (a) the SystemModel's own operator (diffusion_matrix A[i, j, a, b] with its
-mixed-index entries a != b, plus the nu-part of the source) and (b) the exact div(h tau),
-tau = nu (grad u + grad u^T), u = q / h.
+mixed-index entries a != b, plus the nu-part of the source) and (b) the exact div(h tau'),
+tau' = nu (grad u + grad u^T) + 2 nu (div u) I (the in-plane stress minus the viscous normal
+stress tau_zz = -2 nu div u; Marche 2007 eq. (5.19)), u = q / h.
 
 Symbolic part: with generic smooth fields h, q_x, q_y, b of (x, y), the SystemModel operator minus
-div(h tau) and minus gate 46's hand-written operator, flat and varying bed.
+div(h tau') and minus gate 46's hand-written operator, flat and varying bed.
 
 Periodic smooth h, qx, qy on [0,1]^2; one implicit-Lie step of dt with nu = 1 and nu = 0;
 (Q_nu - Q_0) / dt on the momentum rows is the discrete viscous operator (O(dt) accurate).
@@ -12,8 +13,9 @@ Periodic smooth h, qx, qy on [0,1]^2; one implicit-Lie step of dt with nu = 1 an
 Findings (ANALYSIS 45, 45c, 45d): with two-point fluxes only, the discrete operator was the
 SystemModel operator WITHOUT its mixed-index entries (16 % / 38 % off the full one); the face
 gradient (mean of the cell LSQ gradients + normal correction) fixed that.  The derivation gave
-h div(tau) until the bed / surface traction carried the in-plane stress (45d); now the
-SystemModel operator is div(h tau) exactly and the discrete one converges to it at order 2.
+h div(tau) until the bed / surface traction carried the in-plane stress (45e) and div(h tau)
+until tau_zz entered the pressure (45f); now the SystemModel operator is div(h tau') exactly
+and the discrete one converges to it at order 2.
 
     python gate45_inplane_viscous_operator.py [jax|foam|amrex ...]
 """
@@ -46,10 +48,11 @@ u, v = QX / H, QY / H
 Hf, QXf, QYf = (sp.lambdify((x, y), e, "numpy") for e in (H, QX, QY))
 gu, gv = (sp.diff(u, x), sp.diff(u, y)), (sp.diff(v, x), sp.diff(v, y))
 txx, txy, tyy = 2 * gu[0], gu[1] + gv[0], 2 * gv[1]
-PHYS = {"div(h tau)": {"q_x_0": sp.diff(H * txx, x) + sp.diff(H * txy, y),
-                       "q_y_0": sp.diff(H * txy, x) + sp.diff(H * tyy, y)},
-        "h div(tau)": {"q_x_0": H * (sp.diff(txx, x) + sp.diff(txy, y)),
-                       "q_y_0": H * (sp.diff(txy, x) + sp.diff(tyy, y))}}
+dv = gu[0] + gv[1]                                    # tau' = tau - tau_zz I, tau_zz = -2 div u
+PHYS = {"div(h tau')": {"q_x_0": sp.diff(H * (txx + 2 * dv), x) + sp.diff(H * txy, y),
+                        "q_y_0": sp.diff(H * txy, x) + sp.diff(H * (tyy + 2 * dv), y)},
+        "div(h tau)": {"q_x_0": sp.diff(H * txx, x) + sp.diff(H * txy, y),
+                       "q_y_0": sp.diff(H * txy, x) + sp.diff(H * tyy, y)}}
 
 
 def model(bcs):
@@ -96,7 +99,7 @@ def sm_operator():
 
 def symbolic_check():
     """``{name: difference}`` of the SystemModel operator (generic smooth fields, aux = their
-    exact derivatives) against div(h tau) (varying bed) and gate 46 (flat and varying bed);
+    exact derivatives) against div(h tau') (varying bed) and gate 46 (flat and varying bed);
     every difference must be 0.
     """
     import gate46_viscous_swe_reference as G46
@@ -113,7 +116,9 @@ def symbolic_check():
     assert all(a in aux for a in sm.aux_state), "non-derivative aux"
     A, H = sm.diffusion_matrix, F["h"]
     U = [F["q_x_0"] / H, F["q_y_0"] / H]
-    tau = [[nu * (sp.diff(U[e], X[d]) + sp.diff(U[d], X[e])) for e in range(2)] for d in range(2)]
+    divU = sum(sp.diff(U[e], X[e]) for e in range(2))
+    tau = [[nu * (sp.diff(U[e], X[d]) + sp.diff(U[d], X[e])) + (2 * nu * divU if d == e else 0)
+            for e in range(2)] for d in range(2)]
     sm46 = G46.viscous_swe()
     sub46 = {G46.h: H, G46.qx: F["q_x_0"], G46.qy: F["q_y_0"], G46.nu: nu}
     Q46 = [H, F["q_x_0"], F["q_y_0"]]
@@ -128,7 +133,7 @@ def symbolic_check():
                            * sp.diff(Q46[j], X[b]), X[a])
                    for j in range(3) for a in range(2) for b in range(2))
         ref = sum(sp.diff(H * tau[d][e], X[e]) for e in range(2))
-        out[f"{k} SM - div(h tau), varying bed"] = sp.simplify(sp.expand(op - ref))
+        out[f"{k} SM - div(h tau'), varying bed"] = sp.simplify(sp.expand(op - ref))
         out[f"{k} SM - gate 46, varying bed"] = sp.simplify(sp.expand(op - op46))
         out[f"{k} SM - gate 46, flat bed"] = sp.simplify(sp.expand((op - op46).subs(F["b"], 0).doit()))
     return out
@@ -187,11 +192,11 @@ def operator(backend, nx, work=None):
     return {k: (Q1 - Q0)[names.index(k)] / DT for k in ROWS}, xc
 
 
-EXACT = {k: sp.lambdify((x, y), e, "numpy") for k, e in PHYS["div(h tau)"].items()}
+EXACT = {k: sp.lambdify((x, y), e, "numpy") for k, e in PHYS["div(h tau')"].items()}
 
 
 def errors(L, xc, SM):
-    """Max errors relative to max |operator| per row: vs the exact div(h tau) (``exact``), the
+    """Max errors relative to max |operator| per row: vs the exact div(h tau') (``exact``), the
     full SystemModel operator (``full``) and its diagonal-index part (``diag``).
     """
     out = {}
@@ -223,7 +228,7 @@ def main(backends):
         for k in ROWS:
             for ref in ("exact", "full"):
                 e = [res[b, nx][1][f"{k} {ref}"] for nx in NXS]
-                print(f"gate45 {b} {k} vs {'div(h tau)' if ref == 'exact' else 'SM(full)'}: "
+                print(f"gate45 {b} {k} vs {"div(h tau')" if ref == 'exact' else 'SM(full)'}: "
                       + " / ".join(f"{v:.2e}" for v in e) + "  orders "
                       + " / ".join(f"{np.log2(e[i] / e[i + 1]):.2f}" for i in range(len(e) - 1)),
                       flush=True)
