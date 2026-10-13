@@ -1,11 +1,11 @@
 """Time discretization of the solver templates: the SSP-RK stages, the IMEX Runge-Kutta
 tableaux and the CFL step size.
 """
-from enum import Enum
 from typing import NamedTuple
 
 import sympy as sp
 
+from zoomy_core.misc.options import Option
 from zoomy_core.symsolver.core import Cond
 from zoomy_core.symsolver.vocabulary import (
     check, face_inradius, face_wavespeed, minimum, reduce_min)
@@ -18,7 +18,7 @@ SSP_RK = {1: ((0, 0),),
           3: ((0, 0), (sp.Rational(3, 4), 1), (sp.Rational(1, 3), sp.S.Half))}
 
 
-class Imex(str, Enum):
+class Imex(Option):
     """How a step treats the SystemModel's implicit slots: ``lie`` splits them off after
     the SSP-RK step (first order), ``ssp2`` solves the implicit source in every stage
     of IMEX-SSP2(2,2,2).

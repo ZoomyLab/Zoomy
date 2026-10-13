@@ -15,50 +15,24 @@ from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
+from zoomy_core.misc.options import OptionParam
+from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver import PyPrinter, default_wave_speed
-from zoomy_core.symsolver.discretization.time import Imex
 from zoomy_core.symsolver.numpy_backend import runtime as R
 from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
+from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 
 
-class SymbolicHyperbolicSolverNumpy(param.Parameterized):
+class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
     """Finite-volume solver in NumPy: prints `HyperbolicTemplate` for a NumericalSystemModel and
     runs it serially.  Use `setup(mesh, model)`, then `run(Q, Qaux)`.
     """
-    time_end = param.Number(default=None, allow_None=True, doc="End time.")
-    cfl = param.Number(default=0.9, bounds=(0, None),
-                       doc="CFL number of the adaptive step (and of the check).")
-    dt = param.Number(default=None, allow_None=True,
-                      doc="Constant time step; None = adaptive CFL step.")
-    cfl_check_every = param.Integer(default=10, bounds=(0, None),
-                                    doc="Constant dt: test it against the CFL step every this "
-                                        "many steps (1: each step, 0: never).")
-    cfl_wave_speed = param.Selector(
-        default="faces", objects=["faces", "cells"],
-        doc="CFL wave speeds: 'faces' from the first RK stage's Riemann problem, 'cells' from "
-            "the cell states of each face.")
-    mood = param.Boolean(default=True,
-                         doc="A-posteriori MOOD at order >= 2 (cells failing the model's "
-                             "admissibility redo at order 1).")
-    time_order = param.Integer(default=None, allow_None=True, bounds=(1, 3),
-                               doc="Order of the SSP-RK step; None = the reconstruction order.")
-    dt_write = param.Number(default=None, allow_None=True,
-                            doc="Output interval; None = no output.")
     on_write = param.Callable(default=None, allow_None=True, doc="on_write(time, Q, Qaux).")
     output = param.String(default=None, allow_None=True,
                           doc="HDF5 file for the io.write snapshots.")
-    imex = param.Selector(default=False, objects=[False, *Imex],
-                          doc="IMEX: 'lie' = explicit flux step, then implicit diffusion and "
-                              "an implicit-Euler source; 'ssp2' = IMEX-SSP2(2,2,2).")
-    implicit_tol = param.Number(default=1e-8, bounds=(0, None),
-                                doc="Newton tolerance ||R||_2 (implicit solves).")
-    implicit_maxiter = param.Integer(default=6, bounds=(1, None))
-    gmres_tol = param.Number(default=1e-7, bounds=(0, None))
-    gmres_maxiter = param.Integer(default=30, bounds=(1, None))
     comm = param.Parameter(default=None, doc="Not supported (serial only).")
 
     # ── setup ──────────────────────────────────────────────────────────────
@@ -197,34 +171,18 @@ class SymbolicHyperbolicSolverNumpy(param.Parameterized):
         return float(out[0]), out[1], out[2]
 
 
-class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy):
+class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
     """The Chorin projection solver in NumPy (`ChorinTemplate`): `setup(mesh, pred, press,
     corr)` takes the predictor NSM on the full state and the pressure and corrector systems.
 
     References:
         Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
     """
-    time_order = param.Integer(default=1, bounds=(1, 3),
-                               doc="Outer SSP-RK stages, each a full projection stage.")
-    pressure_tol = param.Number(default=ELLIPTIC_RTOL, bounds=(0, None))
-    pressure_maxit = param.Integer(default=100, bounds=(1, None), doc="GMRES restarts.")
-    pressure_restart = param.Integer(default=None, allow_None=True, bounds=(1, None),
-                                     doc="None: from the block size.")
-    projection = param.Selector(
-        default="standard", objects=["standard", "increment"],
-        doc="'standard': each stage solves for the full pressure; 'increment': for its increment "
-            "over the lagged pressure (time order 2 on a fixed mesh; opt-in).")
-    pressure_solve = param.Selector(
-        default="linear", objects=["linear", "newton"],
-        doc="'linear': the constraint is affine in the pressure, one linear solve.  "
-            "'newton': a nonlinear constraint, Newton iterations.")
-    pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
-                                       doc="Newton: stop at max|R| <= tol.")
-    pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
-    pressure_linear_solver = param.Selector(
-        default="auto", objects=["auto", "gmres", "pyamg"],
-        doc="'pyamg' (optional PyAMG) or 'gmres' (matrix-free); 'auto': pyamg when "
-            "installed, else gmres.")
+    pressure_linear_solver = OptionParam(
+        LinearSolver, default=LinearSolver.auto,
+        members=[LinearSolver.auto, LinearSolver.gmres, LinearSolver.pyamg],
+        doc="pyamg (optional PyAMG) or gmres (matrix-free); auto: pyamg when installed, else "
+            "gmres.")
     pressure_amg_rebuild = param.Integer(
         default=10, bounds=(1, None),
         doc="'pyamg': rebuild the AMG hierarchy at least every this many pressure solves.")

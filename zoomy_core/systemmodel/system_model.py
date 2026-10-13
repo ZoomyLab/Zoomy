@@ -16,6 +16,7 @@ import numpy as np
 import sympy as sp
 
 from zoomy_core.misc.misc import Zstruct, ZArray
+from zoomy_core.misc.options import Option
 
 
 # ── SINGLE SOURCE OF TRUTH: operator argument signatures ─────────────────────
@@ -477,6 +478,16 @@ def _perron_radius_bound(M, iterations):
     if len(candidates) == 1:
         return candidates[0]
     return sp.Min(*candidates, evaluate=False)
+
+
+class SpectralRadius(Option):
+    """How a Riemann solver bounds the wave speed rho(A_n) when no closed-form eigenvalues exist."""
+    #: numerical eigenvalues of A_n
+    eig = "eig"
+    #: power iteration on A_n^2 (zoomy_core.symsolver.WAVE_SPEED)
+    power = "power"
+    #: the closed-form scalar upper bound (cheaper, more diffusive)
+    bound = "bound"
 
 
 @dataclass
@@ -1343,7 +1354,7 @@ class SystemModel:
     # device), "bound" (the strict upper bound, = use_spectral_radius_bound).
     # The symbolic solvers default to "power" on every backend
     # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
-    spectral_radius_method = "eig"
+    spectral_radius_method = SpectralRadius.eig
     spectral_power_steps = 10
     spectral_power_safety = 1.06
 

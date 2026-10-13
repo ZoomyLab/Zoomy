@@ -3,10 +3,10 @@ a pressure solve and a correction, from the three systems of the model's pressur
 split (``pred``, ``press``, ``corr``). ``time_order`` 2 / 3 wraps stages in SSP-RK2 /
 RK3 and ``imex="ssp2"`` uses IMEX-SSP2(2,2,2) with projected stages.
 """
-from enum import Enum
 
 import sympy as sp
 
+from zoomy_core.misc.options import Option
 from zoomy_core.symsolver.core import LinSolve, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step)
@@ -17,7 +17,7 @@ from zoomy_core.symsolver.vocabulary import (
     take, zeros)
 
 
-class Projection(str, Enum):
+class Projection(Option):
     """What a projection stage solves for: the pressure, or its increment over a lagged one.
     """
     #: the full pressure each stage (Almgren, Bell, Crutchfield 2000, version (2))

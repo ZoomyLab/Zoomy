@@ -7,7 +7,33 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, Type
 
+from zoomy_core.misc.options import Option
 from zoomy_core.systemmodel.system_model import SystemModel
+
+
+class Limiter(Option):
+    """Slope limiter of the order-2 reconstruction."""
+    #: unlimited LSQ gradients
+    none = "none"
+    minmod = "minmod"
+    venkatakrishnan = "venkatakrishnan"
+    barth_jespersen = "barth_jespersen"
+
+
+class ReconstructedVariables(Option):
+    """What the symbolic solvers reconstruct."""
+    #: the model's reconstruction variables W(Q) (e.g. SWE / SME: eta = b + h, u = hinv q)
+    model = "model"
+    #: Q itself
+    conservative = "conservative"
+
+
+class BedReconstruction(Option):
+    """The bed's face value with the model's free-surface map (bed b, eta = b + h)."""
+    #: reconstruct h and eta, b_f = eta_f - h_f (Audusse et al. 2004: keeps the lake at rest)
+    derived = "derived"
+    #: reconstruct b and eta
+    reconstructed = "reconstructed"
 
 # Operator arrays a code printer lowers — the complete set of symbolic-PDE
 # operators carried on a (Numerical)SystemModel.  ``quasilinear_matrix`` is a
@@ -429,7 +455,7 @@ class ReconstructionSpec:
         Xing, Zhang, Shu 2010, https://doi.org/10.1016/j.advwatres.2010.08.005
     """
     order: int = 1
-    limiter: str = "venkatakrishnan"
+    limiter: Limiter = Limiter.venkatakrishnan
     free_surface_aware: bool = False
     positivity: str = ""
     # ── the symbolic solvers (zoomy_core.symsolver) ──
@@ -442,14 +468,20 @@ class ReconstructionSpec:
     # ``ties``: {row: lead} -- the row's limiter factor never exceeds the
     # lead row's, phi_row <- min(phi_row, phi_lead).  Default: none, every
     # row limited on its own.
-    variables: str = "model"
+    variables: ReconstructedVariables = ReconstructedVariables.model
     # ``bed``: with the model's free-surface map (bed b, eta = b + h):
     # "derived" -- reconstruct h and eta, b_f = eta_f - h_f at the faces
     # (Audusse et al. 2004, Sec. 3 / Fig. 1: the only pair that keeps the lake
     # at rest and h_f >= 0 at a dry shore); "reconstructed" -- b and eta.
-    bed: str = "derived"
+    bed: BedReconstruction = BedReconstruction.derived
     limiters: dict = field(default_factory=dict)
     ties: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.limiter = Limiter(self.limiter)
+        self.variables = ReconstructedVariables(self.variables)
+        self.bed = BedReconstruction(self.bed)
+        self.limiters = {k: Limiter(v) for k, v in self.limiters.items()}
 
 
 @dataclass

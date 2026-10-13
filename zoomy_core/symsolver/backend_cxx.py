@@ -9,11 +9,12 @@ import param
 import sympy as sp
 
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.solver.constants import ELLIPTIC_RTOL, TPFA_COS_FLOOR, elliptic_constants
+from zoomy_core.solver.constants import TPFA_COS_FLOOR, elliptic_constants
 from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
-from zoomy_core.symsolver.discretization.time import SSP_RK, Imex
+from zoomy_core.symsolver.discretization.time import SSP_RK
+from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
@@ -21,43 +22,18 @@ from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, tak
 RUNTIME_HEADER = Path(__file__).with_name("rt_common.H")
 
 
-class CxxBackend(param.Parameterized):
+class CxxBackend(HyperbolicSettings):
     """The settings of a hyperbolic solver on a C++ runtime and the printing of its host
     program (:meth:`_print`); the driver subclasses implement :meth:`build` and
     :meth:`run`.
     """
-    time_end = param.Number(default=None, allow_None=True)
-    cfl = param.Number(default=0.9, bounds=(0, None))
-    time_order = param.Integer(default=None, allow_None=True, bounds=(1, 3),
-                               doc="SSP-RK order; None: the reconstruction order.")
-    dt = param.Number(default=None, allow_None=True,
-                      doc="Constant time step; None = adaptive CFL step.")
-    cfl_check_every = param.Integer(default=10, bounds=(0, None),
-                                    doc="Constant dt: CFL test every N steps "
-                                        "(1: each step, 0: never).")
-    cfl_wave_speed = param.Selector(
-        default="faces", objects=["faces", "cells"],
-        doc="CFL wave speeds: 'faces' from the first RK stage's Riemann "
-            "problem, 'cells' from the cell states of each face.")
-    mood = param.Boolean(default=True,
-                         doc="A-posteriori MOOD at order >= 2 (cells failing "
-                             "the model's admissibility redo at order 1).")
-    dt_write = param.Number(default=None, allow_None=True,
-                            doc="Output interval; None = final state only.")
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(participant=, config=, mesh=, "
                             "write=[..], read=[..], tag=, side=); side 0: this "
                             "domain is the low side of the interface.")
     subcycling = param.Boolean(default=False,
                                doc="preCICE: adaptive steps inside a window.")
-    imex = param.Selector(default=False, objects=[False, *Imex],
-                          doc="IMEX (Imex): 'lie' = implicit slots after the "
-                              "RK step; 'ssp2' = IMEX-SSP2(2,2,2).")
-    implicit_tol = param.Number(default=1e-8, bounds=(0, None))
-    implicit_maxiter = param.Integer(default=6, bounds=(1, None))
-    gmres_tol = param.Number(default=1e-7, bounds=(0, None))
     gmres_restart = param.Integer(default=20, bounds=(1, None))
-    gmres_maxiter = param.Integer(default=30, bounds=(1, None))
 
     # ── the driver ─────────────────────────────────────────────────────────
     def build(self, nsm, dimension):
@@ -158,7 +134,7 @@ class CxxBackend(param.Parameterized):
                 f"    implicit().ls_accept = {float(lin['accept'])!r};\n}}")
 
 
-class CxxChorinBackend(CxxBackend):
+class CxxChorinBackend(CxxBackend, ChorinSettings):
     """The Chorin projection template (:class:`ChorinTemplate`) on a C++ runtime;
     ``run`` takes ``(pred, press, corr)``, the predictor and the pressure and
     corrector systems of the model's split.
@@ -166,22 +142,6 @@ class CxxChorinBackend(CxxBackend):
     References:
         Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
     """
-    time_order = param.Integer(default=1, bounds=(1, 3))
-    pressure_tol = param.Number(default=ELLIPTIC_RTOL, bounds=(0, None))
-    pressure_maxit = param.Integer(default=100, bounds=(1, None))
-    pressure_restart = param.Integer(default=None, allow_None=True, bounds=(1, None))
-    pressure_solve = param.Selector(
-        default="linear", objects=["linear", "newton"],
-        doc="'linear': the constraint is affine in the pressure, one linear "
-            "solve.  'newton': a nonlinear constraint, Newton iterations.")
-    pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
-                                       doc="Newton: stop at max|R| <= tol.")
-    pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
-    projection = param.Selector(
-        default="standard", objects=["standard", "increment"],
-        doc="'standard': each projection stage solves for the full pressure; 'increment': it "
-            "corrects with the lagged pressure and solves for its increment (time order 2 on a "
-            "fixed mesh; opt-in: growing lagged modes on triangles, ANALYSIS 45e).")
 
     def _prepare(self, mesh, model):
         """Name the split's systems as the template prints them (``pred.``, ``press.``,

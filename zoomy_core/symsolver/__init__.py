@@ -5,12 +5,13 @@ NumericalSystemModel and before the backend runtime.
 from zoomy_core.symsolver.core import (  # noqa: F401
     Block, Cond, CxxPrinter, Effect, LinSolve, PyPrinter, Root, While,
     contract, unpack)
+from zoomy_core.systemmodel.system_model import SpectralRadius
 
 #: Wave speed of a model without closed-form eigenvalues, on every backend and
 #: device: power iteration on A^2 (``SystemModel.spectral_power_steps`` x
 #: ``spectral_power_safety``).  One method everywhere, so backends and devices
 #: run the same arithmetic (JAX's numerical eig is a host callback on a GPU).
-WAVE_SPEED = "power"
+WAVE_SPEED = SpectralRadius.power
 
 
 def default_wave_speed(nsm):

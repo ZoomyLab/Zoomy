@@ -14,7 +14,7 @@ from zoomy_core.model.kernel_functions import (
     conditional,
 )
 from zoomy_core.systemmodel.system_model import (
-    SystemModel, _perron_radius_bound)
+    SystemModel, _perron_radius_bound, SpectralRadius)
 from zoomy_core.transformation.to_numpy import (
     NumpyRuntimeModel, NumpyRuntimeSymbolic,
 )
@@ -437,8 +437,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # (see SystemModel.use_spectral_radius_bound for the measured cost
             # on the Ritter dry dam break).  The cheap bound is opt-in.  The
             # symbolic solvers set "power" (zoomy_core.symsolver.WAVE_SPEED).
-            method = getattr(self.model, "spectral_radius_method",
-                             SystemModel.spectral_radius_method)
+            method = SpectralRadius(getattr(self.model, "spectral_radius_method",
+                                            SystemModel.spectral_radius_method))
             if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
                                              SystemModel.use_spectral_radius_bound):
                 return self._spectral_radius_bound(Q, Qaux, p, n)
@@ -455,9 +455,6 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                                        SystemModel.spectral_power_steps)),
                     sp.Float(getattr(m, "spectral_power_safety",
                                      SystemModel.spectral_power_safety)), *flat)
-            if method != "eig":
-                raise ValueError(f"spectral_radius_method {method!r}: "
-                                 "'eig', 'power' or 'bound'")
             src = list(sp.flatten(
                 self._model_eval("numerical_eigenvalues", Q, Qaux, p, n)))
             return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)

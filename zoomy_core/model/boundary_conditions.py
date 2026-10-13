@@ -13,6 +13,7 @@ import param
 from typing import Callable, List
 
 from zoomy_core.misc.misc import Zstruct, ZArray
+from zoomy_core.misc.options import Option
 from zoomy_core.model.basefunction import Function
 
 
@@ -122,6 +123,14 @@ def _sympy_interpolate_data(time, timeline, data):
     return sympy.Piecewise(*conditions)
 
 
+class BoundaryValueKind(Option):
+    """What a boundary condition's value is: the ghost state, or the state on the face."""
+    #: the value IS the ghost state (extrapolation, reflection, periodic partner, data ghost)
+    ghost = "ghost"
+    #: the value is the state ON the face; the ghost is 2 face - Q_inner (Dirichlet, inflow)
+    face = "face"
+
+
 # --- Base Class ---
 class BoundaryCondition(param.Parameterized):
     """Base class of a boundary condition: a ``tag`` (patch) and an ``on`` selector naming the
@@ -148,14 +157,9 @@ class BoundaryCondition(param.Parameterized):
     # True while this BC derives a value from its own face value (`_own_value`).
     _own_face = False
 
-    #: How :meth:`compute_boundary_condition`'s value is to be read by the
-    #: GHOST convention (decision D5, :meth:`compute_ghost_state`):
-    #: ``"ghost"`` — the value IS the ghost state (extrapolation, reflection,
-    #: periodic partner, incoming-characteristic ghost, data ghost);
-    #: ``"face"`` — the value is the state ON the face, so the ghost is the
-    #: linear extrapolation through it, ``2·face − Q_inner`` (Dirichlet,
-    #: inflow/outflow, user lambdas).
-    boundary_value_kind = "ghost"
+    #: How :meth:`compute_boundary_condition`'s value is read by the ghost
+    #: convention (:meth:`compute_ghost_state`), a :class:`BoundaryValueKind`.
+    boundary_value_kind = BoundaryValueKind.ghost
 
     def __init_subclass__(cls, **kw):
         """Wrap every value/gradient producer of a subclass so it honours the ``on=`` mask."""
@@ -311,7 +315,7 @@ class Dirichlet(BoundaryCondition):
     """
 
     value = param.Number(default=0.0)
-    boundary_value_kind = "face"
+    boundary_value_kind = BoundaryValueKind.face
 
     def __init__(self, tag=None, on=None, value=None, **params):
         """Set the prescribed ``value`` besides ``tag`` and ``on``."""
@@ -448,7 +452,7 @@ class InflowOutflow(BoundaryCondition):
     """
 
     prescribe_fields = param.Dict(default={})
-    boundary_value_kind = "face"
+    boundary_value_kind = BoundaryValueKind.face
 
     @staticmethod
     def _coerce(v):
@@ -513,7 +517,7 @@ class Lambda(BoundaryCondition):
     ``f(time, X, dX, Q, Qaux, p, n)`` at the face centre.
     """
     prescribe_fields = param.Dict(default={})
-    boundary_value_kind = "face"
+    boundary_value_kind = BoundaryValueKind.face
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Symbolic boundary value with the prescribed slots from the user functions."""
