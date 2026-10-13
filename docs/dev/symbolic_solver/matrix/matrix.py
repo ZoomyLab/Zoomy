@@ -394,7 +394,10 @@ def gate_checks(add, b, g, J):
                 m = metrics(d)
                 bound = ("<=", 1e-12, "tolerance, gate 43: the same two-point fluxes and ghosts") \
                     if path == "expl" else ("<=", 1e-9, "tolerance, gate 43: Newton 1e-10, GMRES 1e-13")
-                if j is not None:
+                if "u" not in m or (j is not None and "u" not in metrics(j)):
+                    add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial", float("nan"), bound,
+                        f"stored before each backend ran alone: matrix.py run {b} C28 --force (and jax)")
+                elif j is not None:
                     u, uj = np.asarray(m["u"]), np.asarray(metrics(j)["u"])
                     add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial",
                         float(np.abs(u - uj).max() / np.abs(uj).max()), bound,
