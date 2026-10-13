@@ -1,8 +1,12 @@
-"""Gate 46: Hand-written viscous SWE SystemModel (no Model derivation): q_t + div F(q) = div(nu h (grad u + grad u^T)).
+"""Gate 46: Hand-written viscous SWE SystemModel (no Model derivation):
+q_t + div F(q) = div(nu h (grad u + grad u^T)) + 2 nu grad(h div u), Marche 2007 eq. (5.19)
+(https://doi.org/10.1016/j.euromechflu.2006.04.007); in 1-D Gerbeau, Perthame 2001 eq. (1),
+4 nu d_x(h d_x u).  The second term is the viscous normal stress tau_zz = -2 nu div u in the
+pressure, i.e. div(h tau') with tau' = nu (grad u + grad u^T) + 2 nu (div u) I.
 
 The viscous term goes in conservative form into diffusion_matrix A[i, j, a, b] (RHS d_a(A d_b Q_j)),
 with h d_b u = d_b q - (q / h) d_b h.  One implicit-Lie step with nu = 1 minus nu = 0, divided by dt,
-is the discrete viscous operator; it must converge (order 2) to the exact div(h tau).
+is the discrete viscous operator; it must converge (order 2) to the exact div(h tau').
 """
 import sys
 import numpy as np
@@ -31,14 +35,16 @@ def viscous_swe():
                    [qx**2 / h + g * h**2 / 2, qx * qy / h],
                    [qx * qy / h, qy**2 / h + g * h**2 / 2]])
     A = sp.MutableDenseNDimArray.zeros(3, 3, 2, 2)      # rows/cols: h, q_x, q_y; a: outer, b: inner
-    # x-momentum: d_x(2 nu h u_x) + d_y(nu h (u_y + v_x))
-    A[1, 1, 0, 0], A[1, 0, 0, 0] = 2 * nu, -2 * nu * qx / h
+    # x-momentum: d_x(2 nu h u_x) + d_y(nu h (u_y + v_x)) + d_x(2 nu h (u_x + v_y))
+    A[1, 1, 0, 0], A[1, 0, 0, 0] = 4 * nu, -4 * nu * qx / h
+    A[1, 2, 0, 1], A[1, 0, 0, 1] = 2 * nu, -2 * nu * qy / h
     A[1, 1, 1, 1], A[1, 0, 1, 1] = nu, -nu * qx / h
     A[1, 2, 1, 0], A[1, 0, 1, 0] = nu, -nu * qy / h
-    # y-momentum: d_x(nu h (u_y + v_x)) + d_y(2 nu h v_y)
+    # y-momentum: d_x(nu h (u_y + v_x)) + d_y(2 nu h v_y) + d_y(2 nu h (u_x + v_y))
     A[2, 1, 0, 1], A[2, 0, 0, 1] = nu, -nu * qx / h
     A[2, 2, 0, 0], A[2, 0, 0, 0] = nu, -nu * qy / h
-    A[2, 2, 1, 1], A[2, 0, 1, 1] = 2 * nu, -2 * nu * qy / h
+    A[2, 1, 1, 0], A[2, 0, 1, 0] = 2 * nu, -2 * nu * qx / h
+    A[2, 2, 1, 1], A[2, 0, 1, 1] = 4 * nu, -4 * nu * qy / h
     un = (qx * n[0] + qy * n[1]) / h
     c = sp.sqrt(g * h)
     sm = SystemModel(
@@ -64,8 +70,9 @@ QX = sp.Rational(1, 10) * sp.cos(tp * x) * sp.sin(tp * y) + sp.Rational(1, 20)
 QY = sp.Rational(1, 20) * sp.sin(tp * (x + y))
 u, v = QX / H, QY / H
 txy = sp.diff(u, y) + sp.diff(v, x)
-EXACT = {"q_x": sp.diff(2 * H * sp.diff(u, x), x) + sp.diff(H * txy, y),
-         "q_y": sp.diff(H * txy, x) + sp.diff(2 * H * sp.diff(v, y), y)}
+divu = sp.diff(u, x) + sp.diff(v, y)
+EXACT = {"q_x": sp.diff(2 * H * sp.diff(u, x) + 2 * H * divu, x) + sp.diff(H * txy, y),
+         "q_y": sp.diff(H * txy, x) + sp.diff(2 * H * sp.diff(v, y) + 2 * H * divu, y)}
 fH, fQX, fQY = (sp.lambdify((x, y), e, "numpy") for e in (H, QX, QY))
 fEX = {k: sp.lambdify((x, y), e, "numpy") for k, e in EXACT.items()}
 
@@ -94,4 +101,4 @@ if __name__ == "__main__":
     res = [(n, operator(n)) for n in (16, 32, 64)]
     for (n, e), nxt in zip(res, res[1:] + [None]):
         o = "" if nxt is None else "  order " + " / ".join(f"{np.log2(a / b):.2f}" for a, b in zip(e, nxt[1]))
-        print(f"viscous SWE (hand-written) nx {n}: discrete vs div(h tau): q_x {e[0]:.3e}  q_y {e[1]:.3e}{o}", flush=True)
+        print(f"viscous SWE (hand-written) nx {n}: discrete vs div(h tau'): q_x {e[0]:.3e}  q_y {e[1]:.3e}{o}", flush=True)
