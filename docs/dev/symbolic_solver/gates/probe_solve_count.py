@@ -10,6 +10,7 @@ from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 calls = [0]
 import pyamg
+from zoomy_core.symsolver.settings import LinearSolver
 orig = pyamg.smoothed_aggregation_solver
 def counted(A, **k):
     calls[0] += 1
@@ -18,7 +19,7 @@ class P: smoothed_aggregation_solver = staticmethod(counted)
 RT._pyamg = lambda: P()
 for n in (1, 2, 5):
     pred, press, corr = EB.split(_DT_SYMBOL)
-    s = SymbolicChorinSolverJax(time_end=n * EB.DT, dt=EB.DT, cfl=0.9, pressure_linear_solver="pyamg")
+    s = SymbolicChorinSolverJax(time_end=n * EB.DT, dt=EB.DT, cfl=0.9, pressure_linear_solver=LinearSolver.pyamg)
     Q, A = s.setup(LSQMesh.create_1d(domain=EB.DOMAIN, n_inner_cells=EB.NCELLS), g7.pred_nsm(pred, press, corr), press, corr)
     xc = np.asarray(s.mesh_np.cell_centers)[0, :Q.shape[1]]
     Q = jnp.asarray(EB.initial_state(xc, Q.shape[0])); A = s.initial_aux(Q, A)

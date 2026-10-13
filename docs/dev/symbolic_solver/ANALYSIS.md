@@ -268,7 +268,7 @@ at rest and h >= 0 at a dry shore; Thm 3.1.  Our SME map reconstructs
 
 ## 12. CFL wave speed: cells vs faces
 
-`wave_speed="cells"` (default): eigenvalues of the cell states of each face
+`wave_speed=CflWaveSpeed.cells` (default): eigenvalues of the cell states of each face
 (own eigensolve).  `"faces"`: `max(|s_L|, |s_R|)` of the Riemann solver's own
 `wave_speed_bounds` at the states its dissipation uses, from the first RK
 stage (`numerical_face_sides_speed`, rows F + D-, -F + D+, s).
@@ -336,7 +336,7 @@ See `AMG.md`.  `gates/gate14_amgx.py`, Chorin VAM(1) bump, L40S:
   solve; that eats the AMG gain.  Next: build the AMG hierarchy once and
   reuse it as a frozen preconditioner for the matrix-free JAX GMRES.
 - GMRES then AmgX in ONE process hangs (JAX/AmgX interplay, not chased).
-- Default `pressure_linear_solver="auto"`: amgx on a GPU with jaxamg.
+- Default `pressure_linear_solver=LinearSolver.auto`: amgx on a GPU with jaxamg.
 
 CPU: PyAMG (smoothed aggregation, block 2x2) preconditioning GMRES on the
 host, the matrix assembled in JAX by colouring (one vmapped evaluation per
@@ -352,13 +352,13 @@ t = 0.02, 16 cores:
 - GPU: AmgX 17.1 s, PyAMG-on-host 16.7 s, GMRES 16.8 s at 64^2 -- the GPU
   time is outside the linear solve (likely the VAM numerical eigensolve,
   CPU-only in JAX); not profiled yet.
-- `pressure_linear_solver="auto"`: amgx on a GPU, pyamg on the CPU, when
+- `pressure_linear_solver=LinearSolver.auto`: amgx on a GPU, pyamg on the CPU, when
   installed; else jax.scipy GMRES.  Chorin gates 7/8/12/13 pass on pyamg
   (vs old 8.7e-13, AD rev-jvp 4.8e-12, foam 1.0e-12).
 
 ## 15. Reconstruction pair (h, eta)
 
-`ReconstructionSpec.bed = "derived"` (default): with the model's
+`ReconstructionSpec.bed = BedReconstruction.derived` (default): with the model's
 free-surface map (roles bed, depth; W = (b, b + h, u)) the template
 reconstructs h in the bed's slot and sets b_f = eta_f - h_f (Audusse et al.
 2004, Sec. 3); "reconstructed" keeps (b, eta).  Rows limited independently
@@ -412,7 +412,7 @@ GMRES, all 96 cores:
 
 ## 19. Spectral radius by power iteration (GPU)
 
-`SystemModel.spectral_radius_method = "eig" | "power" | "bound"`; "power":
+`SystemModel.spectral_radius_method = SpectralRadius.eig | .power | .bound`; "power":
 opaque `spectral_radius(k, safety, *A)` = safety * sqrt(rho(A^2)), k power
 steps on A^2 from x = 1 (A^2: the +-c pairs of a hyperbolic spectrum).
 JAX (fori_loop, any device) and numpy; foam: not yet.
@@ -1100,7 +1100,7 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
   (`zoomy_core.symsolver.WAVE_SPEED`; foam / AMReX gained `spectral_radius`).  us/cell/step eig ->
   power -> closed form: AMReX 27.2 -> 6.7 -> 3.3, foam 28.9 -> 10.8 -> 7.9, JAX (8 cores) 10.0 ->
   6.0 -> 1.8.  Matrix rerun: 538 rows PASS, 0 FAIL.
-- **IMEX-SSP2(2,2,2)** (Pareschi & Russo 2005) as `imex="ssp2"`: SWE + Manning time order 2.01-2.08
+- **IMEX-SSP2(2,2,2)** (Pareschi & Russo 2005) as `imex=Imex.ssp2`: SWE + Manning time order 2.01-2.08
   (Lie 1.06-1.22), foam / AMReX = JAX to 2e-14 (C31).  VAM(1): every scheme caps near 1 because the
   discrete projection is not idempotent (P(P(U)) != P(U), 2.5 / 0.74 / 0.23 % of the correction at
   nx 30 / 60 / 120); the predictor alone is order 2.02.  Why: an approximate projection by
@@ -1324,9 +1324,9 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   internal interfaces tau_l(trace) += g_own), so the layer's in-plane part is
   d_e(h_l <s'_l>).  The assembly adds the shared part -/+ sum_e s*_de d_e z_a at the top / bottom
   of the two layers at internal interface a (`interface_inplane_traction`, projected
-  phi_k(side) / mu_k like the u* transfer), s* = `InterfaceFlux(quantity="stress")` of the two
-  traces: `MeanInterface` by default, `UpwindInterface(quantity="stress")` by the sign of G;
-  `quantity="velocity"` (default) keeps the transfer-velocity meaning.  The interface traction
+  phi_k(side) / mu_k like the u* transfer), s* = `InterfaceFlux(quantity=InterfaceQuantity.stress)` of the two
+  traces: `MeanInterface` by default, `UpwindInterface(quantity=InterfaceQuantity.stress)` by the sign of G;
+  `quantity=InterfaceQuantity.velocity` (default) keeps the transfer-velocity meaning.  The interface traction
   is then single-valued in its in-plane part and the layers telescope.  ML-VAM + NewtonianInPlane
   never derived before (mode 0: "cannot route bare second-derivative term"); mode 0 now goes
   through `package_viscous`.
@@ -1367,7 +1367,7 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   mu^2 - 2 (1 - lambda) mu + (1 - lambda) = 0: max |mu| 0.9986 on quads, 1.446 on triangles
   (368 modes >= 1; the standard projection: |1 - lambda| <= 1.105).  C8 `vam_tri` run to t 0.5
   (20 steps) stays bounded with either projection (the predictor's dissipation); no long-run test.
-- **Implementation** (`chorin.py`, `Projection.increment`, OPT-IN (default `standard`); `projection="standard"`
+- **Implementation** (`chorin.py`, `Projection.increment`, OPT-IN (default `standard`); `projection=Projection.standard`
   keeps the old scheme bit-identically).  `project(Q, ..., lag)`: correct with the lag P^n, solve
   the existing `press` system on that state for dP (Newton from dP = 0), correct Q with P^n + dP.
   - SSP-RK stages: the lag is the stage input's P rows, not the predicted ones (the predictor's
@@ -1475,7 +1475,7 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
 
 ## 46. JAX distributed pressure solve (pyamg): the iteration count does not scale (2026-10-13)
 
-L2P's VAM Chorin at nx 256 (65k cells), `pressure_linear_solver="pyamg"`, 3 constant steps
+L2P's VAM Chorin at nx 256 (65k cells), `pressure_linear_solver=LinearSolver.pyamg`, 3 constant steps
 (`scratchpad/l2p_prof.py`: pyamg wrapped to count and time V-cycles; `ZOOMY_KRYLOV_LOG=1`).
 Matched: one core per rank, XLA single-threaded (`--xla_cpu_multi_thread_eigen=false
 intra_op_parallelism_threads=1`), `mpiexec -bind-to core` (the env's MPI is MPICH / Hydra).
@@ -1499,7 +1499,7 @@ intra_op_parallelism_threads=1`), `mpiexec -bind-to core` (the env's MPI is MPIC
   per iteration.  Needs a hypre build against the env's MPICH (the existing CPU build links
   OpenMPI 4.1.6, the OF13 / AMReX toolchain).
 
-Result (dev/jax-hypre): `pressure_linear_solver="hypre"` (zoomy_jax `symsolver/hypre.py`: ctypes on
+Result (dev/jax-hypre): `pressure_linear_solver=LinearSolver.hypre` (zoomy_jax `symsolver/hypre.py`: ctypes on
 hypre 3.2.0, the shared `build_hypre_cuda.sh cpu-env` build against the env's MPICH; `auto` takes it
 on CPU MPI ranks).  The owned rows with global columns by colouring (as `_amgx_mpi`), left-scaled by
 the inverse 2x2 cell blocks, FlexGMRES + one BoomerAMG V-cycle with the foam / AMReX CPU settings

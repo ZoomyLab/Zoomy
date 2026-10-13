@@ -16,40 +16,45 @@ JAX ones in `zoomy_jax.symsolver.solver`, the foam ones in `zoomy_foam.symsolver
 `zoomy_amrex.symsolver`.  The settings shared by all of them are declared once, in
 `zoomy_core.symsolver.settings` (`HyperbolicSettings`, `ChorinSettings`).
 
-## Settings: typed options, one hierarchy
+## Settings: declared with `param`, typed options
 
-Every choice is a typed option (a str-`Enum`, `zoomy_core.misc.options.Option`): the IDE completes
-`Imex.`, `Projection.`, `LinearSolver.`, and a wrong value names the closest one.  Every solver
-takes its settings from three places, each overriding the one before:
-
-1. the defaults declared on the class (the tables below);
-2. the `solver` section of a settings file (`.yml` or `.json`), passed as `settings=`;
-3. keyword arguments.
-
-```yaml
-# run.yml
-solver:
-  imex: ssp2
-  projection: increment
-  cfl: 0.5
-```
+Every setting is a `param` parameter declared on the solver class: its default, documentation and
+bounds sit in one place (the tables below list them), and the constructor's keyword arguments are
+the only way in.  A choice is a member of a str-`Enum` (`zoomy_core.misc.options.Option`) held by
+that parameter, so the IDE completes `Imex.`, `Projection.`, `LinearSolver.`.  A plain string is
+refused with the member to use, a typo with the closest one, and a misspelt argument name with the
+closest setting:
 
 ```python
-from zoomy_core.symsolver.discretization.time import Imex
+from zoomy_core.symsolver.settings import Imex, Projection
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 
-s = SymbolicChorinSolverJax(settings="run.yml", cfl=0.3)    # cfl 0.3: the argument wins
-s.imex                     # Imex.ssp2 (a string from the file becomes the member)
-SymbolicChorinSolverJax(imex=Imex.lie)                    # typed, as in code
+s = SymbolicChorinSolverJax(imex=Imex.ssp2, projection=Projection.increment, cfl=0.5)
+SymbolicChorinSolverJax(projection="increment")
+# TypeError: projection='increment': use Projection.increment
 SymbolicChorinSolverJax(projection="incremnt")
-# ValueError: 'incremnt' is not a valid Projection; did you mean 'increment'? (one of: standard, increment)
+# TypeError: projection='incremnt': did you mean Projection.increment? (one of: Projection.standard, Projection.increment)
 SymbolicChorinSolverJax(pressur_tol=1e-8)
 # TypeError: SymbolicChorinSolverJax has no setting 'pressur_tol'; did you mean 'pressure_tol'?
 ```
 
-A backend that supports only some members says which (`linear_solver="pyamg"` on AMReX:
-`'pyamg' is not supported here (one of: hypre, gmres)`).  The numerics are typed the same way:
-`ReconstructionSpec(limiter=Limiter.minmod)`, `nsm.spectral_radius_method = SpectralRadius.power`.
+Assignment is checked the same way (`s.imex = "lie"`: `TypeError: imex='lie': use Imex.lie`).  A
+string from a command line or an environment variable is converted explicitly,
+`LinearSolver(os.environ["SOLVER"])`.  A backend that supports only some members says which:
+`SymbolicChorinSolverAmrex(linear_solver=LinearSolver.pyamg)` raises `ValueError:
+linear_solver=LinearSolver.pyamg is not supported here (one of: LinearSolver.hypre,
+LinearSolver.gmres)`.
+
+| options | module |
+|---|---|
+| `Imex`, `Projection`, `CflWaveSpeed`, `PressureSolve`, `LinearSolver` | `zoomy_core.symsolver.settings` |
+| `Limiter`, `ReconstructedVariables`, `BedReconstruction` | `zoomy_core.numerics` |
+| `AdMode` | `zoomy_jax.symsolver.solver` |
+| `Decomposition` | `zoomy_foam.symsolver` |
+
+The numerics are typed the same way: `ReconstructionSpec(limiter=Limiter.minmod)`,
+`nsm.spectral_radius_method = SpectralRadius.power`,
+`UpwindInterface(quantity=InterfaceQuantity.stress)`.
 
 ## Options (all backends)
 

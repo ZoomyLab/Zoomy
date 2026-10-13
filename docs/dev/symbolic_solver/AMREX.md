@@ -16,7 +16,7 @@ Block -> what implements it
   divergence/edge_source                     per cell over its 4 faces (owner/other as JAX)
   halo                                       MultiFab::FillBoundary; ghost validity tracked (ngv)
   reduce_min/max/any                         ParReduce + ParallelDescriptor (NaN propagates)
-  linsolve                                   linear_solver="hypre" (Chorin default): the operator's matrix
+  linsolve                                   linear_solver=LinearSolver.hypre (Chorin default): the operator's matrix
                                              on the (2R+1)^D cell stencil by colouring (one op application
                                              per colour and row), left-scaled by the inverse cell blocks,
                                              hypre FlexGMRES + one BoomerAMG V-cycle (CPU HMIS / hybrid
@@ -102,7 +102,7 @@ JAX) and on 1 GPU the dt reduction and three unfused cells() kernels.
 ## Capability round 4 (40b82ed, 3370001, ee56d68)
 
     1. Pressure solver (template-driven: wiring + gate)            gate27b_amrex.py
-       - pressure_solve="newton" wired through the driver (40b82ed, +9 lines); time_order 2 needed nothing.
+       - pressure_solve=PressureSolve.newton wired through the driver (40b82ed, +9 lines); time_order 2 needed nothing.
        | case | CPU 1 vs JAX | MPI 2 vs CPU 1 | GPU 1 vs JAX |
        | VAM(1) Chorin, time_order 2     | 5.5e-11 | 2.6e-15 | 5.5e-11 |
        | VAM(1) Chorin, Newton pressure  | 4.5e-12 | 2.1e-15 | 4.5e-12 |

@@ -11,6 +11,7 @@ from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
+from zoomy_core.numerics import Limiter, ReconstructedVariables
 
 
 def sme(level, dimension, tags, bc):
@@ -22,7 +23,7 @@ def sme(level, dimension, tags, bc):
                boundary_conditions=BoundaryConditions(bcs))
 
 
-def bump_2d(order, nx=40, flow=(0.0, 0.0), variables="conservative"):
+def bump_2d(order, nx=40, flow=(0.0, 0.0), variables=ReconstructedVariables.conservative):
     """SWE 2-D Gaussian bump, walls (tests/test_swe_2d_jax.py); ``flow`` adds
     a uniform background velocity.  Conservative reconstruction: the old
     solver's default path."""
@@ -33,7 +34,7 @@ def bump_2d(order, nx=40, flow=(0.0, 0.0), variables="conservative"):
     sm = SystemModel.from_model(sme(0, 3, ("left", "right", "bottom", "top"), "wall"))
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod",
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod,
                                               variables=variables))
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
@@ -54,13 +55,13 @@ def dry_dambreak_2d(nx=48, ties=None):
     if ties == "old":
         ties = {n: "h" for n in names if n == "b" or n.startswith("q_")}
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod",
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod,
                                               ties=ties or {}))
     return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
 
 
 def dambreak_1d(level, order, domain=(0.0, 1.0), nx=200, x_dam=0.5,
-                hl=1.0, hr=0.5, bc="extrapolation", variables="conservative"):
+                hl=1.0, hr=0.5, bc="extrapolation", variables=ReconstructedVariables.conservative):
     """SME(level) 1-D dam break with friction (source) and moments."""
     sm = SystemModel.from_model(sme(level, 2, ("left", "right"), bc))
     names = [str(s) for s in sm.state]
@@ -71,7 +72,7 @@ def dambreak_1d(level, order, domain=(0.0, 1.0), nx=200, x_dam=0.5,
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod",
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod,
                                               variables=variables))
     return LSQMesh.create_1d(domain=domain, n_inner_cells=nx), nsm
 

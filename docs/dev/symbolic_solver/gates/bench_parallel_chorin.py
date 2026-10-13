@@ -12,10 +12,11 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 from gate7_chorin import pred_nsm
 from gate21_parallel_chorin import B
+from zoomy_core.symsolver.settings import LinearSolver
 
 comm = MPI.COMM_WORLD
 NX, STEPS = int(sys.argv[1]), int(sys.argv[2])
-SOLVER = sys.argv[3] if len(sys.argv) > 3 else "amgx"
+SOLVER = LinearSolver(sys.argv[3] if len(sys.argv) > 3 else "amgx")
 dt = 0.15 * 3.0 / NX
 pred, press, corr = B.split()
 t0 = wall.perf_counter()

@@ -4,7 +4,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import common as C
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
 
 
 def objective(make, ad_mode, t_end, fixed_dt):
@@ -25,8 +25,8 @@ for label, make, t_end, fixed_dt in (
         ("SWE 2-D bump O2, walls, background flow",
          lambda: C.bump_2d(2, nx=20, flow=(0.1, 0.05)), 0.3, 2e-2),
         ("SME(1) 1-D dam break O2", lambda: C.dambreak_1d(1, 2, nx=100), 0.05, 1e-3)):
-    Jf, p0, names = objective(make, "forward", t_end, fixed_dt)
-    Jr, _, _ = objective(make, "reverse", t_end, fixed_dt)
+    Jf, p0, names = objective(make, AdMode.forward, t_end, fixed_dt)
+    Jr, _, _ = objective(make, AdMode.reverse, t_end, fixed_dt)
     p0 = p0.at[names.index("n")].set(0.03)          # Manning friction on
     grad = jax.grad(Jr)(p0)
     print(f"{label}: J = {float(Jf(p0)):.10e}, parameters {names}")

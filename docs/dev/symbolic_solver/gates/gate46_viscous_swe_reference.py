@@ -17,9 +17,10 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.misc.misc import Zstruct
 
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel, face_normal_symbols
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import Imex
 
 X, Y = sp.symbols("x y", real=True)
 h, qx, qy = sp.symbols("h q_x q_y", real=True)
@@ -82,9 +83,9 @@ def operator(nx, dt=1e-7):
     for nuv in (1.0, 0.0):
         sm = viscous_swe()
         sm.parameter_values.nu = nuv
-        nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(order=2, limiter="none"))
+        nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.none))
         mesh = LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx)
-        s = SymbolicHyperbolicSolverJax(time_end=dt, dt=dt, cfl_check_every=0, imex="lie", mood=False)
+        s = SymbolicHyperbolicSolverJax(time_end=dt, dt=dt, cfl_check_every=0, imex=Imex.lie, mood=False)
         Q, A = s.setup(mesh, nsm)
         names = [str(v_) for v_ in s.nsm.state]
         xc = np.asarray(s.mesh_np.cell_centers)[:, :Q.shape[1]]

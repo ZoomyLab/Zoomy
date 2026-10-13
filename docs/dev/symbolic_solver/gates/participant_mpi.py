@@ -8,7 +8,7 @@ from mpi4py import MPI
 import common as C
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -29,7 +29,7 @@ else:
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     mesh = LSQMesh.create_2d(domain=(0.0, 0.5, 0.0, 0.2) if left else (0.5, 1.0, 0.0, 0.2),
                              nx=50, ny=20)
 n_state = len(nsm.sm.state)

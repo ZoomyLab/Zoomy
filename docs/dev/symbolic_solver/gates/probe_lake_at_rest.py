@@ -7,13 +7,15 @@ import common as C
 from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import (BedReconstruction, Limiter, NumericalSystemModel,
+                                 ReconstructionSpec)
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
 import sys
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver
-for order, bed in ((1, "derived"), (2, "reconstructed"), (2, "derived"), (2, "old solver")):
+for order, bed in ((1, BedReconstruction.derived), (2, BedReconstruction.reconstructed),
+                   (2, BedReconstruction.derived), (2, "old solver")):
     sm = SystemModel.from_model(C.sme(0, 2, ("left", "right"), "wall"))
     names = [str(s) for s in sm.state]
 
@@ -24,8 +26,8 @@ for order, bed in ((1, "derived"), (2, "reconstructed"), (2, "derived"), (2, "ol
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, riemann=PositiveNonconservativeRusanov, reconstruction=ReconstructionSpec(order=order, limiter="minmod",
-                                              bed=bed if bed != "old solver" else "derived"))
+        sm, riemann=PositiveNonconservativeRusanov, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod,
+                                              bed=bed if bed != "old solver" else BedReconstruction.derived))
     mesh = LSQMesh.create_1d(domain=(-1, 1), n_inner_cells=200)
     if bed == "old solver":
         import gate1_vs_solver_jax as G

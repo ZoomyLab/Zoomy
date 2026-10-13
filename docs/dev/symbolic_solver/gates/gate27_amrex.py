@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 
 import common as C
+from zoomy_core.symsolver.settings import LinearSolver
 
 CASES = {   # name: (label, t_end, cfl)
     "o1": ("SWE bump O1", 0.5, 0.9),
@@ -40,7 +41,7 @@ def setup(case):
         from gate7_chorin import pred_nsm
         pred, press, corr = B.split()
         s = SymbolicChorinSolverJax(time_end=CASES[case][1], cfl=0.9,
-                                    pressure_linear_solver="gmres")
+                                    pressure_linear_solver=LinearSolver.gmres)
         mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=NX, ny=NX // 10)
         Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
         names = [str(v) for v in s.nsm.state]

@@ -73,7 +73,7 @@ min_dt     = param.Number(default=1e-6, bounds=(0, None))
 compute_dt = param.Parameter(default=None)   # default: timestepping.adaptive(CFL=0.9)
 
 # Numerical knobs — on the NumericalSystemModel specs, NOT the solver:
-ReconstructionSpec(order=2, limiter="venkatakrishnan")   # 1=PWC, 2=MUSCL
+ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan)   # 1=PWC, 2=MUSCL
 RegularizationSpec(eigenvalue_eps=1e-8)
 
 # IMEXSolver (plain class attrs, not yet param-typed)
@@ -157,7 +157,7 @@ from zoomy_core.fvm.solver_numpy import HyperbolicSolver
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
 
 # Shallow water is the level-0 member of the shallow-moment hierarchy.
@@ -179,7 +179,7 @@ sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
 
 # Numerical knobs go on the NumericalSystemModel, not the solver:
 nsm = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+    sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
 
 mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
 solver = HyperbolicSolver(time_end=0.5, compute_dt=timestepping.adaptive(CFL=0.9))
@@ -206,7 +206,7 @@ richer unstructured 2-D / 3-D meshes come from `zoomy_mesh` (sibling subrepo at
   boundary tags match BC tags. Periodic pairs are resolved on the mesh
   before `from_model` freezes the BC into the indexed kernel.
 - With `ReconstructionSpec(order=2, ...)` on the `NumericalSystemModel`, choose
-  the `limiter` to match smoothness (default `"venkatakrishnan"` for SWE-family).
+  the `limiter` to match smoothness (default `Limiter.venkatakrishnan` for SWE-family).
 - For `FreeSurfaceFlowSolver` / `FSFIMEXSolver` / `FSFSplittingSolver`:
   declare `h` and (when bathymetry is present) `b` in `variables` — these
   slots drive wet/dry detection and the positive Rusanov path.

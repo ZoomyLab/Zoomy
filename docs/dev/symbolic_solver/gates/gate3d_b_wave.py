@@ -16,10 +16,11 @@ from euler_common import (box, cell_centers, cell_volumes, nsm_of, primitive,
                           wave_exact, wave_system)
 from zoomy_core.mesh import LSQMesh
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.numerics import Limiter
 
 DIM = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 ORDER = int(sys.argv[2]) if len(sys.argv) > 2 else 2
-LIMITER = sys.argv[3] if len(sys.argv) > 3 else "none"
+LIMITER = Limiter(sys.argv[3] if len(sys.argv) > 3 else "none")
 NS = [int(a) for a in sys.argv[4:]] or ([8, 16, 24] if DIM == 3 else [16, 32, 64])
 VEL = {1: (1.0,), 2: (1.0, 0.5), 3: (1.0, 0.5, 0.25)}[DIM]
 T_END = 0.1

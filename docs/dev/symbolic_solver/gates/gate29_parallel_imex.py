@@ -6,13 +6,14 @@ import numpy as np
 from mpi4py import MPI
 from gate6_imex import CASES
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import Imex
 
 comm = MPI.COMM_WORLD
 for label, make, t_end, cfl in CASES:
     out = []
     for c in (None, comm):
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex="lie", comm=c)
+        s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=Imex.lie, comm=c)
         Q, A = s.setup(mesh, nsm)
         t0 = clock.perf_counter()
         t, Q, A = s.run(Q, A)

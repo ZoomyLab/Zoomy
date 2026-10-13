@@ -23,12 +23,14 @@ import jax.numpy as jnp
 import numpy as np
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
+from zoomy_core.symsolver.settings import CflWaveSpeed
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 
 TR = ("/tmp/claude-765404697/-mnt-userdrive-Users-home-adam-obbpb5az1dhsjzf-git-zotero-rag/"
       "b5667895-053e-413b-8d69-8137a92fc71c/scratchpad/trace_attr")
 N = 256
-CONFIGS = [("cells", 0), ("cells", 1), ("faces", 1), ("cells", 10)]
+CONFIGS = [(CflWaveSpeed.cells, 0), (CflWaveSpeed.cells, 1), (CflWaveSpeed.faces, 1),
+           (CflWaveSpeed.cells, 10)]
 
 
 def build(ws, every):

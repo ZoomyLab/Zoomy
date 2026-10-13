@@ -9,8 +9,9 @@ import jax.numpy as jnp
 import numpy as np
 from mpi4py import MPI
 import gate7_chorin as g7
-from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicChorinSolverJax
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
+from zoomy_core.symsolver.settings import LinearSolver
 
 comm = MPI.COMM_WORLD
 N = 16
@@ -20,7 +21,7 @@ def solver(ad_mode, comm):
     pred, press, corr = g7.split(_DT_SYMBOL)
     g7.cases.set_state_width(pred)
     s = SymbolicChorinSolverJax(time_end=g7.DT * N, dt=g7.DT, cfl=0.9, ad_mode=ad_mode,
-                                pressure_linear_solver="gmres", comm=comm)
+                                pressure_linear_solver=LinearSolver.gmres, comm=comm)
     Q, A = s.setup(g7.mesh(), g7.pred_nsm(pred, press, corr), press, corr)
     nc = Q.shape[1]
     Q = jnp.asarray(g7.ic(nc, np.asarray(s.mesh_np.cell_centers)[:, :nc]))
@@ -28,8 +29,8 @@ def solver(ad_mode, comm):
 
 
 def derivatives(comm):
-    sf, Q, A = solver("forward", comm)
-    sr, _, _ = solver("reverse", comm)
+    sf, Q, A = solver(AdMode.forward, comm)
+    sr, _, _ = solver(AdMode.reverse, comm)
     part = sf.partition
     n = part.n_own if part else Q.shape[1]
     total = (lambda x: x) if part is None else (lambda x: comm.allreduce(x))

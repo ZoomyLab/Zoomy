@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from zoomy_core.numerics import Limiter
+from zoomy_core.symsolver.settings import Imex, LinearSolver, Projection
+from zoomy_core.systemmodel.system_model import SpectralRadius
 
 GATES = Path(__file__).resolve().parent.parent / "gates"
 
@@ -26,16 +29,16 @@ def _ad_solver(kind, ad_mode, comm):
         # power iteration, not eig: the eig tangent at a defective dominant
         # eigenvalue is ~1e15 (the VAM wave here hits one); the CPU's exact tie
         # cancels it, the GPU's split tie does not (NaN; ANALYSIS 44)
-        pred.spectral_radius_method, pred._call = "power", None
-        s = SymbolicChorinSolverJax(time_end=0.05, pressure_linear_solver="gmres", **kw)
+        pred.spectral_radius_method, pred._call = SpectralRadius.power, None
+        s = SymbolicChorinSolverJax(time_end=0.05, pressure_linear_solver=LinearSolver.gmres, **kw)
         Q, A = s.setup(mesh, pred, press, corr)
         names = [str(v) for v in s.nsm.state]
         Q = jnp.asarray(wave_q0(names, np.asarray(s.mesh_np.cell_centers)[:, :Q.shape[1]]))
         return s, Q, s.initial_aux(Q, A)
     mesh, nsm = C.bump_2d(2, nx=12, flow=(0.1, 0.05))
     nsm.sm.parameter_values.n = 0.5 if kind == "imex" else 0.03
-    nsm.spectral_radius_method, nsm._call = "eig", None             # as cases.prepare
-    s = SymbolicHyperbolicSolverJax(time_end=0.2, imex="lie" if kind == "imex" else False, **kw)
+    nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None   # as cases.prepare
+    s = SymbolicHyperbolicSolverJax(time_end=0.2, imex=Imex.lie if kind == "imex" else False, **kw)
     Q, A = s.setup(mesh, nsm)
     return s, Q, A
 
@@ -46,7 +49,8 @@ def ad(kind, part, comm):
     shares summed (gate 17)."""
     import jax
     import jax.numpy as jnp
-    s, Q0, A0 = _ad_solver(kind, "forward" if part == "fwd" else "reverse", comm)
+    from zoomy_jax.symsolver.solver import AdMode
+    s, Q0, A0 = _ad_solver(kind, AdMode.forward if part == "fwd" else AdMode.reverse, comm)
     h = s.nsm.sm.roles.depth
     n = s.partition.n_own if s.partition else Q0.shape[1]
     total = (lambda x: x) if s.partition is None else (lambda x: comm.allreduce(x))
@@ -75,12 +79,12 @@ def ad3d(variant, part):
     import jax
     import jax.numpy as jnp
     from cases import pulse
-    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+    from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
     order, dt = {"o1_dt": (1, 5e-3), "o1_adaptive": (1, None), "o2_dt": (2, 5e-3)}[variant]
     mesh, nsm = pulse(order, 10, 0.4)
-    nsm.spectral_radius_method, nsm._call = "eig", None
+    nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None
     s = SymbolicHyperbolicSolverJax(time_end=0.1, cfl=0.45, dt=dt, ad_checkpoints=16,
-                                    ad_mode="forward" if part == "fwd" else "reverse")
+                                    ad_mode=AdMode.forward if part == "fwd" else AdMode.reverse)
     Q0, A0 = s.setup(mesh, nsm)
     V = s.mesh.cell_volumes[:Q0.shape[1]]
 
@@ -222,16 +226,16 @@ def time_order(backend, part, to, work):
     import gate40_time_order as G
     from zoomy_core.mesh import ensure_lsq_mesh
     if part == "ode":
-        mesh, nsm, ih = G.forced_swe(1, "minmod", 8, (0.0, 1.0), lambda x: 1.0)
+        mesh, nsm, ih = G.forced_swe(1, Limiter.minmod, 8, (0.0, 1.0), lambda x: 1.0)
         T, ks = 1.0, ODE_STEPS
         dts = [T / n for n in ks]
     else:
-        mesh, nsm, ih = G.forced_swe(1, "minmod", 100, (0.0, 1.0),
+        mesh, nsm, ih = G.forced_swe(1, Limiter.minmod, 100, (0.0, 1.0),
                                      lambda x: 1.0 + 0.1 * np.exp(-((x - 0.5) / 0.1) ** 2))
         T, ks = WAVE_T, (0, 1, 2, 4)
         dts = [WAVE_DT0 / 2 ** k for k in ks]
     if backend not in ("jax", "numpy"):
-        nsm.spectral_radius_method, nsm._call = "eig", None     # as cases.prepare
+        nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None   # as cases.prepare
         mesh = ensure_lsq_mesh(mesh, nsm)
         names = [str(s) for s in nsm.state]
         xc = np.asarray(mesh.cell_centers)[:, :int(mesh.n_inner_cells)]
@@ -260,7 +264,7 @@ def time_order_control():
     """Gate 40's negative control (JAX): RK3 with the last stage evaluated at
     the wrong time (c = 1, not 1/2) loses the order of the ODE."""
     import gate40_time_order as G
-    mesh, nsm, ih = G.forced_swe(1, "minmod", 8, (0.0, 1.0), lambda x: 1.0)
+    mesh, nsm, ih = G.forced_swe(1, Limiter.minmod, 8, (0.0, 1.0), lambda x: 1.0)
     exact = np.exp(G.A_F * (np.sin(G.W_F * 1.0 + G.PHASE) - np.sin(G.PHASE)) / G.W_F)
     good = G.rk_time.SSP_RK[3]
     G.rk_time.SSP_RK[3] = (good[0], good[1], (good[2][0], 1))
@@ -351,7 +355,7 @@ def lsq_polynomials(backend="jax"):
 
 # ── C35: restart (dt_checkpoint, restart_from) ──────────────────────────────
 #: scenario -> (case, run, extra settings); c8: the increment projection (its lagged pressure)
-RESTART = {"c1": ("C1", "o2_n40", {}), "c8": ("C8", "vam", {"projection": "increment"})}
+RESTART = {"c1": ("C1", "o2_n40", {}), "c8": ("C8", "vam", {"projection": Projection.increment})}
 #: where the half run leaves its state (a work-relative path), per backend
 RESTART_STATE = {"jax": "state.h5", "numpy": "state.h5", "foam": ".", "amrex": "out"}
 

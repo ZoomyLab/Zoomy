@@ -7,7 +7,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import common as C
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
 
 
 def objective(make, ad_mode, t_end, dt):
@@ -39,8 +39,8 @@ for label, make, t_end, dt in (
         ("SWE 2-D bump O2, walls, background flow",
          lambda: C.bump_2d(2, nx=16, flow=(0.1, 0.05)), 0.3, 2e-2),
         ("SME(1) 1-D dam break O2", lambda: C.dambreak_1d(1, 2, nx=60), 0.05, 1e-3)):
-    Jf, X0 = objective(make, "forward", t_end, dt)
-    Jr, _ = objective(make, "reverse", t_end, dt)
+    Jf, X0 = objective(make, AdMode.forward, t_end, dt)
+    Jr, _ = objective(make, AdMode.reverse, t_end, dt)
     v = bump_direction(X0)
     d = float(jax.jvp(Jf, (X0,), (v,))[1])
     fd = min(abs(float((Jf(X0 + r * v) - Jf(X0 - r * v)) / (2 * r)) - d)

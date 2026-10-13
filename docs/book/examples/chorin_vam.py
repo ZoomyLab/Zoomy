@@ -14,6 +14,7 @@ from zoomy_core.model.initial_conditions import Constant  # noqa: E402
 from zoomy_core.model.models.closures import Newtonian, StressFree  # noqa: E402
 from zoomy_core.model.models.vam import VAM  # noqa: E402
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL, SystemModel  # noqa: E402
+from zoomy_core.symsolver.settings import LinearSolver  # noqa: E402
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax  # noqa: E402
 
 bcs = ([Dirichlet("left", on=f, value=v)
@@ -38,7 +39,7 @@ pred = NumericalSystemModel.from_system_model(
 
 mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=60, ny=6)
 solver = SymbolicChorinSolverJax(time_end=8 * 2.0 ** -10, dt=2.0 ** -10, time_order=1,
-                                 pressure_linear_solver="gmres")
+                                 pressure_linear_solver=LinearSolver.gmres)
 Q, Qaux = solver.setup(mesh, pred, press, corr)
 
 x = np.asarray(solver.mesh_np.cell_centers)[0, :Q.shape[1]]

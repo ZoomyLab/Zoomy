@@ -14,7 +14,7 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
@@ -44,7 +44,7 @@ def wave(dimension, order, nx):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     mesh = (LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=nx) if dimension == 2
             else LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx))
     return mesh, nsm

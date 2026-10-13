@@ -19,6 +19,7 @@ from zoomy_core.model.models.vam import VAM
 from zoomy_core.systemmodel.system_model import SystemModel, _DT_SYMBOL
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 from gate7_chorin import pred_nsm
+from zoomy_core.symsolver.settings import LinearSolver
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 32
 T = float(sys.argv[2]) if len(sys.argv) > 2 else 0.05
@@ -37,7 +38,7 @@ def split():
 
 
 out = {}
-for ls in os.environ.get("SOLVERS", "gmres,amgx").split(","):
+for ls in map(LinearSolver, os.environ.get("SOLVERS", "gmres,amgx").split(",")):
     pred, press, corr = split()
     kw = {"pressure_amgx": eval(os.environ["AMGX_CFG"])} if os.environ.get("AMGX_CFG") else {}
     s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver=ls, **kw)

@@ -11,8 +11,9 @@ from zoomy_core.symsolver.discretization.residual import residual
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.numerics import BedReconstruction, ReconstructedVariables
 
-for spec in (dict(variables="conservative"), dict(bed="reconstructed"), dict(bed="derived")):
+for spec in (dict(variables=ReconstructedVariables.conservative), dict(bed=BedReconstruction.reconstructed), dict(bed=BedReconstruction.derived)):
     sm = SystemModel.from_model(C.sme(0, 2, ("left", "right"), "wall"))
     def ic(x):
         b = 0.8 * np.exp(-x[0] ** 2 / 0.02); return np.array([b, max(0.5 - b, 0.0), 0.0])

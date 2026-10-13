@@ -15,7 +15,7 @@ AMReX integration (`Src/Extern/HYPRE`: `HypreSolver<MSS>`, `HypreIJIface`), acti
 The 2x2 per-cell scaling is mandatory: scalar AMG stalls on the raw `A` (hypre 0.62, AmgX
 classical 0.61); after the scaling both libraries converge in 18-30 iterations.
 
-Implemented on AMReX (2026-10-13, `rt_amrex.H` `hypre_solve`, `linear_solver="hypre"`, the
+Implemented on AMReX (2026-10-13, `rt_amrex.H` `hypre_solve`, `linear_solver=LinearSolver.hypre`, the
 Chorin default): the matrix of the printed operator by colouring on the AMReX grid, the 2x2
 scaling, FlexGMRES + BoomerAMG (CPU HMIS + hybrid symmetric GS: 19 iterations at 1M cells; GPU
 PMIS + l1-Jacobi: 38), to the template's tolerance 1e-10 on the true residual.  hypre 3.2.0 is
@@ -23,7 +23,7 @@ built into `~/.cache/zoomy` by `containers/zoomy_amrex/build_hypre_cuda.sh` (CPU
 images have no hypre, and AMReX 25.02's `USE_HYPRE` does not compile against hypre 3.x CUDA).
 Results: `matrix/README.md`.
 
-Implemented on foam (2026-10-13, `rt.H` `hypre_solve`, `linear_solver="hypre"`, the Chorin
+Implemented on foam (2026-10-13, `rt.H` `hypre_solve`, `linear_solver=LinearSolver.hypre`, the Chorin
 default; `"schur-gamg"` keeps the old path): the same matrix, scaling and CPU settings, rows
 owned per rank in OpenFOAM's global cell numbering (`globalIndex`).  The colouring is the
 driver's: a greedy distance-2 colouring of the global LSQ pattern (`constant/zoomyColours`;
@@ -52,7 +52,7 @@ OpenMPI 4.1.6), and initializes MPI itself in serial runs.
 |---|---|---|
 | CPU | same library (CPU hypre 2.28 already in both containers) | GPU only |
 | AMReX | `HypreSolver<MSS>` (arbitrary stencil, device fill), `HypreIJIface` | no integration |
-| JAX | CPU, serial or MPI: `pressure_linear_solver="hypre"` (`auto` on CPU ranks; ctypes on the shared `build_hypre_cuda.sh cpu-env` build, MPICH), 18 / 19 / 20 iterations on 1 / 2 / 4 ranks at 65k cells (ANALYSIS 46) | GPU: `"amgx"` (jaxamg) |
+| JAX | CPU, serial or MPI: `pressure_linear_solver=LinearSolver.hypre` (`auto` on CPU ranks; ctypes on the shared `build_hypre_cuda.sh cpu-env` build, MPICH), 18 / 19 / 20 iterations on 1 / 2 / 4 ranks at 65k cells (ANALYSIS 46) | GPU: `"amgx"` (jaxamg) |
 | build | v3.2.0 in `zoomy_amrex_gpu.sif`, autotools, ~5 min | needs cmake (not in container) |
 | non-symmetric `A` | with the 2x2 scaling + FlexGMRES | block aggregation on raw `A`, iterations grow |
 | license / activity | Apache-2.0 or MIT; releases 2025-09, 2026-01, 2026-08 | BSD-3; releases 2023-10, 2025-12 |

@@ -26,6 +26,7 @@ from euler_common import (TAGS, box, conserved, nsm_of, sod_system, wave_exact,
                           wave_system)
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.euler import compressible_euler
+from zoomy_core.numerics import Limiter
 
 CASES = {f"sod{a}{o}": (f"Sod 3-D along {a}, O{o}", 0.2, 0.45)
          for o in (1, 2) for a in "xyz"}
@@ -46,7 +47,7 @@ def system(case):
     if case.startswith("wave"):
         n = 16 if case.endswith("n16") else 8
         return (LSQMesh.create_3d(domain=(0, 1, 0, 1, 0, 1), nx=n, ny=n, nz=n),
-                nsm_of(wave_system(3, (1.0, 0.5, 0.25)), int(case[4]), limiter="none"))
+                nsm_of(wave_system(3, (1.0, 0.5, 0.25)), int(case[4]), limiter=Limiter.none))
     if case == "wall2":
         def ic(x):
             bump = np.exp(-sum((x[d] - 0.4) ** 2 for d in range(3)) / 0.02)

@@ -25,7 +25,7 @@ def bump(nx=20):
     from zoomy_core.model.boundary_conditions import BoundaryConditions, FromModel
     from zoomy_core.model.models import SME
     from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-    from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+    from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
     from zoomy_core.systemmodel.system_model import SystemModel
 
     tags = ("left", "right", "bottom", "top")
@@ -36,7 +36,7 @@ def bump(nx=20):
     sm.initial_conditions = IC.UserFunction(function=lambda x: np.array(
         [0.0, 0.5 + 0.05 * np.exp(-((x[0] - 5.0) ** 2 + (x[1] - 5.0) ** 2) / 2.0), 0.0, 0.0]))
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
 

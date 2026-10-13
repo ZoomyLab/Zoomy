@@ -18,6 +18,7 @@ import numpy as np
 
 from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.numerics import ReconstructedVariables
 
 WORK = os.environ.get("ZOOMY_GATE_WORK", os.path.join(tempfile.gettempdir(), "zoomy_gates"))
 FAILED = []
@@ -83,7 +84,7 @@ def case(level, order):
         check("dry mass", abs(r[3][1].sum() - r[4][1].sum()), 1e-12)
         return r[0]
     if level == "eta":                      # SME(1) 1-D, the model's W
-        mesh, nsm = common.dambreak_1d(1, order, nx=200, variables="model")
+        mesh, nsm = common.dambreak_1d(1, order, nx=200, variables=ReconstructedVariables.model)
         label, level = "SME(1) 1-D dam break, model W", 1
     else:
         mesh, nsm = common.dambreak_1d(level, order, nx=200)

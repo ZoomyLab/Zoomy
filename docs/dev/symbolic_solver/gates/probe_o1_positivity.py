@@ -5,13 +5,13 @@ import numpy as np
 import jax.numpy as jnp
 import sympy as sp
 import common as C
-from zoomy_core.numerics import ReconstructionSpec
+from zoomy_core.numerics import ReconstructedVariables, ReconstructionSpec
 from zoomy_core.symsolver import PyPrinter
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_jax.symsolver import runtime as R
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
-for variables in ("model", "conservative"):
+for variables in (ReconstructedVariables.model, ReconstructedVariables.conservative):
     mesh, nsm = C.dry_dambreak_2d()
     nsm.reconstruction = ReconstructionSpec(order=1, variables=variables)
     s = SymbolicHyperbolicSolverJax(time_end=0.05, cfl=0.45, mood=False)

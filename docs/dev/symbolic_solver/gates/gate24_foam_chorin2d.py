@@ -18,13 +18,14 @@ from zoomy_foam.symsolver import SymbolicChorinSolverFoam
 from gate7_chorin import pred_nsm
 from gate9_foam import FAILED, WORK, check
 from gate21_parallel_chorin import B, NX, T
+from zoomy_core.symsolver.settings import LinearSolver
 
 BOUND_JAX = 1e-9     # same LSQ derivative fit as JAX: the pressure tolerance (4.6e-11)
 
 
 def setup():
     pred, press, corr = B.split()
-    s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver="gmres")
+    s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver=LinearSolver.gmres)
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=NX, ny=NX // 10)
     Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
     names = [str(v) for v in s.nsm.state]
@@ -50,7 +51,8 @@ if __name__ == "__main__":
     ref = np.load(f"{WORK}/c2d_ref.npy")
     for n in map(int, sys.argv[2:]):
         sf = SymbolicChorinSolverFoam(time_end=T, cfl=0.9, nprocs=n,
-                                      linear_solver=os.environ.get("LINSOLVE", "hypre"))
+                                      linear_solver=LinearSolver(
+                                          os.environ.get("LINSOLVE", "hypre")))
         t1 = wall.perf_counter()
         t, Qf = sf.run(s.mesh_np, (s.nsm, s.press, s.corr), np.asarray(Q), f"{WORK}/c2d_np{n}")
         w = wall.perf_counter() - t1

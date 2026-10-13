@@ -166,7 +166,8 @@ def pressure(backend, config, nx=3200):
             from mpi4py import MPI
             comm = MPI.COMM_WORLD
         # auto: hypre on CPU ranks, pyamg serial
-        solver = "amgx" if config.startswith("gpu") else "auto"
+        from zoomy_core.symsolver.settings import LinearSolver
+        solver = LinearSolver.amgx if config.startswith("gpu") else LinearSolver.auto
         res = time_jax(lambda: vam_large(nx), n, dt, chorin=solver, comm=comm, q0=wave_q0)
         if comm is None or comm.Get_rank() == 0:
             save("L2P", name, dict(res, maxrss_gb=maxrss_gb(), ranks=ranks(config)))

@@ -35,6 +35,7 @@ import zoomy_core.model.boundary_conditions as BC  # noqa: E402
 from zoomy_core.model.models import SME  # noqa: E402
 from zoomy_core.model.models.closures import (  # noqa: E402
     ManningFriction, Newtonian, StressFree)
+from zoomy_core.numerics import Limiter, ReconstructedVariables
 model = SME(level=0, dimension=2,
             closures=[Newtonian(), ManningFriction(), StressFree()],
             boundary_conditions=BC.BoundaryConditions(
@@ -49,8 +50,9 @@ sm = SystemModel.from_model(model)
 nsm = NumericalSystemModel.from_system_model(
     sm, riemann=PositiveNonconservativeRusanov,
     reconstruction=ReconstructionSpec(          # as zoomyFoam: cell values at O1,
-        order=ORDER, limiter="minmod",           # the model's W at O2
-        variables="conservative" if ORDER == 1 else "model"))
+        order=ORDER, limiter=Limiter.minmod,           # the model's W at O2
+        variables=ReconstructedVariables.conservative if ORDER == 1
+        else ReconstructedVariables.model))
 mesh = LSQMesh.create_1d(domain=DOMAIN, n_inner_cells=N)
 cc = np.asarray(mesh.cell_centers)[:, :N]
 Q0 = model.initial_conditions.apply(cc, np.zeros((len(sm.state), N)))

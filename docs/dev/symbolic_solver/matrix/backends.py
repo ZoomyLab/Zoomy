@@ -13,6 +13,7 @@ import os
 import sys
 
 import numpy as np
+from zoomy_core.symsolver.settings import LinearSolver
 
 
 def _ranks(config):
@@ -61,7 +62,8 @@ class Jax:
         if r.chorin:
             # MATRIX_JAX_PRESSURE: the pressure solver (gmres; pyamg, hypre, auto)
             s = SymbolicChorinSolverJax(
-                pressure_linear_solver=os.environ.get("MATRIX_JAX_PRESSURE", "gmres"), **kw)
+                pressure_linear_solver=LinearSolver(os.environ.get("MATRIX_JAX_PRESSURE", "gmres")),
+                **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = SymbolicHyperbolicSolverJax(**kw)
@@ -125,7 +127,7 @@ class Numpy:
         cls = SymbolicChorinSolverNumpy if r.chorin else SymbolicHyperbolicSolverNumpy
         kw = _solver_kw(r, cls)
         if r.chorin:
-            s = cls(pressure_linear_solver="gmres", **kw)
+            s = cls(pressure_linear_solver=LinearSolver.gmres, **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = cls(**kw)

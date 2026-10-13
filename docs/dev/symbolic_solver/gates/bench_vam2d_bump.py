@@ -20,15 +20,16 @@ from zoomy_core.model.boundary_conditions import Dirichlet, Extrapolation
 from zoomy_core.model.initial_conditions import Constant
 from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_core.model.models.vam import VAM
-from zoomy_core.systemmodel.system_model import SystemModel, _DT_SYMBOL
+from zoomy_core.systemmodel.system_model import SpectralRadius, SystemModel, _DT_SYMBOL
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 from gate7_chorin import pred_nsm
+from zoomy_core.symsolver.settings import LinearSolver
 
 H_RES, H_DRY, Q_IN = 0.34, 0.015, 0.11197
 BUMP = lambda x: 0.20 * np.exp(-(x ** 2) / (2 * 0.20 ** 2))      # noqa: E731
 T_RUN = float(sys.argv[1]) if len(sys.argv) > 1 else 0.25
 NXS = [int(a) for a in sys.argv[2:]] or [60, 120, 240]
-SOLVER = os.environ.get("SOLVER", "auto")
+SOLVER = LinearSolver(os.environ.get("SOLVER", "auto"))
 
 _steps = [0]
 _orig = RT.runtime
@@ -103,7 +104,7 @@ for nx in NXS:
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=nx, ny=ny)
     model = pred_nsm(pred, press, corr)
     if os.environ.get("SPECTRAL"):                     # else the solvers' default
-        model.spectral_radius_method = os.environ["SPECTRAL"]
+        model.spectral_radius_method = SpectralRadius(os.environ["SPECTRAL"])
     Q, A = s.setup(mesh, model, press, corr)
     names = [str(v) for v in s.nsm.state]
     xc = np.asarray(s.mesh_np.cell_centers)[0, :Q.shape[1]]

@@ -27,10 +27,11 @@ import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from euler_common import TAGS, conserved, nsm_of, wave_exact, wave_system
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.euler import compressible_euler
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_amrex.symsolver import cartesian
+from zoomy_core.symsolver.settings import CflWaveSpeed
 
 CONFIGS = {"cpu1": (1, False), "cpu2": (2, False), "gpu1": (1, True)}
 VEL = (1.0, 0.5)
@@ -49,7 +50,7 @@ def system(case, n):
         return mesh, nsm, 0.02 if case == "cover_dry" else 0.05, 0.45, amr
     if case.startswith("wave"):
         return (LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=n, ny=n),
-                nsm_of(wave_system(2, VEL), 2, limiter="none"), 0.2, 0.45,
+                nsm_of(wave_system(2, VEL), 2, limiter=Limiter.none), 0.2, 0.45,
                 dict(max_level=1, region=((0.25, 0.25), (0.75, 0.75)), n_error_buf=0))
     if case.startswith("box"):
         def ic(x):
@@ -71,7 +72,7 @@ def system(case, n):
             return q
         sm.initial_conditions = IC.UserFunction(function=ic)
         nsm = NumericalSystemModel.from_system_model(
-            sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+            sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
         return (LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=n, ny=n), nsm, 0.1, 0.45,
                 dict(max_level=1, region=((0.5, 0.5), (0.9, 0.9)), n_error_buf=0))
     raise KeyError(case)
@@ -99,10 +100,10 @@ def ref(out, case):
     from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
     n = base_n(case)
     mesh, nsm, t_end, cfl, _ = system(case, 2 * n)
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, cfl_wave_speed="cells")
+    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     Q0, A0 = s.setup(mesh, nsm)
     t, Qj, _ = s.run(Q0, A0)
-    a = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed="cells")
+    a = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     ta, Qa = a.run(s.mesh_np, s.nsm, np.asarray(Q0), out / f"work_ref_{case}")
     np.savez(out / f"ref_{case}.npz", t=float(t), Q=np.asarray(Qj), Qa=Qa, ta=ta)
     print(f"ref {case}: JAX t={float(t):.4g} AMReX t={ta:.4g} "
@@ -120,7 +121,7 @@ def run(out, case, config, build_only=False):
     mesh, nsm, t_end, cfl, amr = system(case, n)
     m0, Q0 = initial(mesh, nsm)
     m1, Q1 = initial(fine_mesh(case, n), nsm)
-    s = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed="cells",
+    s = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells,
                                       ranks=ranks, gpu=gpu, amr=amr, build_only=build_only,
                                       max_grid_size=16 if ranks > 1 else 32)
     res = s.run(m0, nsm, Q0, out / f"work_{case}_{config}", fine=[(m1, Q1)])

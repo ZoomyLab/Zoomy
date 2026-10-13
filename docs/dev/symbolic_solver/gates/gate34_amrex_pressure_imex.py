@@ -1,7 +1,7 @@
 """Gate 27b: the template options gate 27 does not exercise, AMReX vs JAX.
 
     vam2  VAM(1) Chorin bump channel, time_order 2 (outer SSP-RK2)
-    vamn  VAM(1) Chorin bump channel, pressure by Newton (pressure_solve="newton")
+    vamn  VAM(1) Chorin bump channel, pressure by Newton (pressure_solve=PressureSolve.newton)
     imex  SWE bump O1, Manning n = 0.05, IMEX: implicit source by per-cell Newton
 
     python gate34_amrex_pressure_imex.py ref  OUT [CASE..]
@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 import common as C
+from zoomy_core.symsolver.settings import Imex, LinearSolver, PressureSolve
 
 CASES = {"vam2": ("VAM(1) Chorin, time_order 2", 0.05),
          "vamn": ("VAM(1) Chorin, Newton pressure", 0.05),
@@ -24,8 +25,8 @@ CONFIGS = {"cpu1": (1, False), "cpu2": (2, False), "gpu1": (1, True)}
 
 
 def options(case):
-    return {"vam2": dict(time_order=2), "vamn": dict(pressure_solve="newton"),
-            "imex": dict(imex="lie")}[case]
+    return {"vam2": dict(time_order=2), "vamn": dict(pressure_solve=PressureSolve.newton),
+            "imex": dict(imex=Imex.lie)}[case]
 
 
 def setup(case):
@@ -38,7 +39,7 @@ def setup(case):
         from gate7_chorin import pred_nsm
         pred, press, corr = B.split()
         s = SymbolicChorinSolverJax(time_end=CASES[case][1], cfl=0.9,
-                                    pressure_linear_solver="gmres", **options(case))
+                                    pressure_linear_solver=LinearSolver.gmres, **options(case))
         mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=NX, ny=NX // 10)
         Q, A = s.setup(mesh, pred_nsm(pred, press, corr), press, corr)
         names = [str(v) for v in s.nsm.state]

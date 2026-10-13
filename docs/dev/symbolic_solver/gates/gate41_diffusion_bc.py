@@ -42,6 +42,7 @@ from zoomy_core.misc.misc import Zstruct
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel, face_normal_symbols
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import Imex
 
 NU, T_END = 1.0, 0.05
 NXS = (16, 32, 64)
@@ -152,7 +153,7 @@ def run(kind, case, path, nx, comm=None):
     rho = 4 * dim / h ** 2 if kind != "tri" else 24 / h ** 2
     dt = 0.4 / (rho * NU) if path == "expl" else h / 32
     s = SymbolicHyperbolicSolverJax(time_end=T_END, dt=dt, cfl_check_every=0,
-                                    imex="lie" if path == "impl" else False, comm=comm, **TIGHT)
+                                    imex=Imex.lie if path == "impl" else False, comm=comm, **TIGHT)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)

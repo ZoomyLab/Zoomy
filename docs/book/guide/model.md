@@ -52,9 +52,9 @@ stencils need something else), `compute_boundary_gradient` (Neumann data).  `Wal
 template: about 20 lines building the reflected state from `normal` and the momentum groups.
 The kernels are symbolic, so every backend gets them.
 
-Model parameters follow the same hierarchy as the solver settings ([Solvers](solvers.md)):
-class defaults < the `model` section of a settings file (`SME(settings="run.yml")`) <
-arguments.
+Model parameters are `param` parameters, like the solver settings ([Solvers](solvers.md)): the
+class declares them, the constructor's arguments set them, and a misspelt name gets the closest
+one (`SME(levl=1)`: `TypeError: SME has no setting 'levl'; did you mean 'level'?`).
 
 **Connects to:** `SystemModel.from_model(model)` ([SystemModel](system-model.md)).
 `model.describe()` shows what was built.  Models without a vertical ansatz

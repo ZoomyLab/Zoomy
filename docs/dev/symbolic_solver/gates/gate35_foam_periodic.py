@@ -30,9 +30,9 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Periodic
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
-from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
+from zoomy_foam.symsolver import Decomposition, SymbolicHyperbolicSolverFoam
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
 from gate9_foam import FAILED, WORK, check
@@ -60,7 +60,7 @@ def wave(dim, order, nx, shift=0.0):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     a, b = shift, 1.0 + shift
     mesh = (LSQMesh.create_1d(domain=(a, b), n_inner_cells=nx) if dim == 1 else
             LSQMesh.create_2d(domain=(a, b, a, b), nx=nx, ny=nx))
@@ -90,7 +90,7 @@ def tri_square(nsm, nx, shift=0.0):
     return ensure_lsq_mesh(base, nsm)
 
 
-def run(dim, order, nx, nprocs=(1,), shift=0.0, decomposition="scotch", tri=False):
+def run(dim, order, nx, nprocs=(1,), shift=0.0, decomposition=Decomposition.scotch, tri=False):
     mesh, nsm = wave(dim, order, nx, shift)
     if tri:
         mesh = tri_square(nsm, nx, shift)
@@ -114,14 +114,14 @@ def stats(Qa, Qb, mass=1):
             abs(Qa[mass].sum() - Qb[mass].sum()))
 
 
-def euler3d(order, n, nprocs=(1,), decomposition="scotch", shift=0.0):
+def euler3d(order, n, nprocs=(1,), decomposition=Decomposition.scotch, shift=0.0):
     """Gate 3d-b's wave: JAX and foam runs (Q[0] = rho)."""
     from euler_common import nsm_of, wave_system
     vel, t_end = (1.0, 0.5, 0.25), 0.1
     a, b = shift, 1.0 + shift
     mesh = LSQMesh.create_3d(domain=(a, b, a, b, a, b), nx=n, ny=n, nz=n)
     sj = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=0.45)
-    Q0, A0 = sj.setup(mesh, nsm_of(wave_system(3, vel), order, limiter="none"))
+    Q0, A0 = sj.setup(mesh, nsm_of(wave_system(3, vel), order, limiter=Limiter.none))
     _, Qj, _ = sj.run(Q0, A0)
     out = {}
     for k in nprocs:
@@ -139,7 +139,7 @@ def euler3d(order, n, nprocs=(1,), decomposition="scotch", shift=0.0):
 
 def case3d(w):
     if w == "par3d":
-        for method in ("scotch", "simple"):
+        for method in Decomposition:
             _, out = euler3d(2, 12, (1, 2, 4), method)
             for n in (2, 4):
                 mx, _, dm = stats(out[n][1], out[1][1], mass=0)
@@ -217,7 +217,7 @@ def case(w):
         return case3d(w)
     if w == "par":    # scotch keeps the seams on a rank; simple (x slabs) cuts
         for dim, order, nx in ((1, 2, 200), (2, 2, 40)):   # x: processorCyclic
-            for method in ("scotch", "simple"):
+            for method in Decomposition:
                 _, out, _ = run(dim, order, nx, (1, 2, 4), decomposition=method)
                 Qs = out[1][1]
                 for n in (2, 4):

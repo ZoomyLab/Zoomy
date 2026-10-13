@@ -10,6 +10,7 @@ from functools import partial
 from typing import Callable
 
 import timing_paths  # noqa: F401  (the matrix and gates on sys.path)
+from zoomy_core.symsolver.settings import Imex
 
 #: implicit solves (Newton / GMRES tolerances): matrix.py's C14 and C26 AMReX - JAX bound
 IMPLICIT = ("<=", 1e-8, "matrix C14 / C26: implicit Newton and GMRES tolerances")
@@ -47,7 +48,7 @@ class TimingCase:
     steps: int
     dt: float
     mood: bool = False
-    imex: object = False                          # False | "lie" | "ssp2"
+    imex: object = False                          # False | Imex.lie | Imex.ssp2
     chorin: bool = False
     solver: dict = None
     q0: Callable = None
@@ -113,7 +114,7 @@ CASES = {c.key: c for c in (
                agree={"foam:serial": Agree("l1rel", "TH:C8 foam"), "amrex:serial": Agree("relmax", "PRESS"),
                       "amrex:gpu1": Agree("relmax", "PRESS"), "jax:gpu1": Agree("relmax", "PRESS"),
                       "numpy:serial": Agree("relmax", "PRESS")}),
-    TimingCase("imex_swe", "IMEX SWE + Manning (C14), 100^2, O2", partial(_imex, 2, 100), 50, DT7, imex="lie",
+    TimingCase("imex_swe", "IMEX SWE + Manning (C14), 100^2, O2", partial(_imex, 2, 100), 50, DT7, imex=Imex.lie,
                agree={"amrex:serial": Agree("relmax", IMPLICIT), "amrex:gpu1": Agree("relmax", IMPLICIT),
                       **GPU, "numpy:serial": Agree("relmax", IMPLICIT)}),
     TimingCase("euler3d_o1", "Euler 3-D pulse box (C20), 40^3, O1", partial(_euler, 1, 40), 40, DT10,
@@ -121,7 +122,7 @@ CASES = {c.key: c for c in (
     TimingCase("euler3d_o2", "Euler 3-D pulse box (C20), 40^3, O2 + MOOD", partial(_euler, 2, 40), 40, DT10,
                mood=True, agree=dict(NUMPY)),
     TimingCase("diffusion_impl", "implicit diffusion (C26), 48^2, IMEX", partial(_diffusion, 48), 10, DT9,
-               imex="lie", solver=dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10,
+               imex=Imex.lie, solver=dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10,
                                       gmres_maxiter=60),
                agree={"amrex:serial": Agree("relmax", IMPLICIT), "amrex:gpu1": Agree("relmax", IMPLICIT),
                       **GPU, "numpy:serial": Agree("relmax", IMPLICIT)}),

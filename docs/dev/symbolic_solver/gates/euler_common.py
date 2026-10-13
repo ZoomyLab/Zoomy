@@ -14,6 +14,7 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.fvm.riemann_solvers import HLL, Rusanov
 from zoomy_core.systemmodel.euler import compressible_euler
+from zoomy_core.numerics import Limiter, ReconstructedVariables
 
 GAMMA = 1.4
 TAGS = {1: ("left", "right"), 2: ("left", "right", "bottom", "top"),
@@ -107,7 +108,7 @@ def primitive(Q, g=GAMMA):
     return rho, u, p
 
 
-def nsm_of(sm, order, riemann=HLL, variables="model", limiter="minmod"):
+def nsm_of(sm, order, riemann=HLL, variables=ReconstructedVariables.model, limiter=Limiter.minmod):
     return NumericalSystemModel.from_system_model(
         sm, riemann=riemann,
         reconstruction=ReconstructionSpec(order=order, limiter=limiter,
