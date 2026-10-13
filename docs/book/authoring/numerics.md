@@ -47,10 +47,14 @@ default:
 Two spec objects:
 
 ```python
-ReconstructionSpec(order=1, limiter=Limiter.venkatakrishnan,
-                   free_surface_aware=False, positivity="")
+ReconstructionSpec(order=1, limiter=Limiter.venkatakrishnan, free_surface_aware=False)
 DiffusionSpec(enabled=True, scheme="crank_nicolson", nu=None)
 ```
+
+Positivity on the symbolic solvers is the hydrostatic reconstruction and the CFL
+step at order 1, MOOD (the solver's `mood`) at order 2; there is no positivity
+option (`ReconstructionSpec.positivity` is the legacy `zoomy_core.fvm` solvers'
+and the symbolic solvers reject a non-empty value).
 
 `NumericalSystemModel.from_model(model, **kwargs)` is the shortcut for
 `from_system_model(SystemModel.from_model(model), **kwargs)`.
@@ -64,7 +68,7 @@ comparison in backend source is a defect, not a detail.
 
 ## Riemann solvers
 
-From `zoomy_core.fvm.riemann_solvers`:
+From `zoomy_core.numerics` (defined in `zoomy_core.fvm.riemann_solvers`):
 
 | Solver | Notes |
 | --- | --- |
@@ -124,24 +128,25 @@ through exactly this mechanism — a custom function is not a special case.
 
 ## Running it
 
-The NumPy solver is the reference implementation; every other backend is ported
-from it.
+The symbolic solvers print one solver template per backend (`zoomy_core.symsolver`); the
+NumPy backend runs it in-process, without JAX or a compiler.
 
 ```python
 from zoomy_core.mesh import BaseMesh
-from zoomy_core.fvm.solver_numpy import HyperbolicSolver
-from zoomy_core.fvm import timestepping
+from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
 
 mesh   = BaseMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=50)
-solver = HyperbolicSolver(time_end=0.5, compute_dt=timestepping.adaptive(CFL=0.9))
-Q, Qaux = solver.solve(mesh, nsm, write_output=False)
+solver = SymbolicHyperbolicSolverNumpy(time_end=0.5, cfl=0.9)
+Q, Qaux = solver.setup(mesh, nsm)
+time, Q, Qaux = solver.run(Q, Qaux)
 ```
 
-Solvers in `zoomy_core.fvm`: `HyperbolicSolver` (`solver_numpy`), `IMEXSolver`
-(`solver_imex_numpy`), `SplittingSolver` (`solver_splitting_numpy`),
-`ChorinSplitVAMSolver` (`solver_chorin_vam_numpy`), a DAE solver
-(`solver_dae_numpy`), and the σ-3D split solver (`sigma3d_split_solver`).
-Timestepping: `timestepping.adaptive(CFL=…)` or `timestepping.constant(dt=…)`.
+The same settings run on `zoomy_jax.symsolver.solver.SymbolicHyperbolicSolverJax`,
+`zoomy_foam.symsolver.SymbolicHyperbolicSolverFoam` and
+`zoomy_amrex.symsolver.SymbolicHyperbolicSolverAmrex`; the Chorin projection of a VAM split
+is `SymbolicChorinSolver*` with the predictor from
+`zoomy_core.symsolver.strategies.chorin.predictor_nsm`.  `imex` (`Imex.lie`, `Imex.ssp2`)
+makes the source and diffusion implicit; `dt` fixes the step, else the CFL step (`cfl`).
 
 Two lower-level entry points, if you want the runtime without the solver:
 

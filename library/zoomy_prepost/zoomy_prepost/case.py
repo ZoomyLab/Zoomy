@@ -239,16 +239,16 @@ print("figure -> simulation.png")'''
 
 def _run_code():
     """The generated in-process runner: resolves the effective settings (general keys +
-    the backend's branch) and solves with a symbolic solver (JAX for the jax backend,
-    NumPy otherwise; Chorin when the model card binds a VAM `split`).  Uses `model`, `mesh`,
-    `settings` from the sections above in notebook form; a bare ``python run.py`` in a
-    materialized case folder loads them from the sibling files (model.py, mesh.py,
-    settings.json) instead."""
+    the backend's branch) and solves with a symbolic solver: JAX for the jax backend, AMReX
+    for amrex, foam for OpenFOAM, NumPy otherwise; Chorin when the model card binds a VAM
+    `split`.  Uses `model`, `mesh`, `settings` from the sections above in notebook form; a
+    bare ``python run.py`` in a materialized case folder loads them from the sibling files
+    (model.py, mesh.py, settings.json) instead."""
     return '''\
 # Runs IN-PROCESS on a symbolic solver (zoomy_core.symsolver): JAX for the jax backend,
-# NumPy otherwise (no server needed: JupyterLite, the GUI's browser kernel, any env with
-# zoomy_core). Standalone as `python run.py` in a materialized case folder (the
-# zoomy-server generic runner executes exactly this file).
+# AMReX for amrex, foam for OpenFOAM, NumPy otherwise (no server needed: JupyterLite, the
+# GUI's browser kernel, any env with zoomy_core). Standalone as `python run.py` in a
+# materialized case folder (the zoomy-server generic runner executes exactly this file).
 import json
 import os
 
@@ -270,11 +270,9 @@ if "mesh" not in globals():
 if "settings" not in globals():
     settings = json.load(open("settings.json"))
 
-from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
-from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
-from zoomy_core.numerics.numerical_system_model import Limiter
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver.discretization.time import Imex
+from zoomy_core.symsolver.strategies.chorin import predictor_nsm
 
 # effective settings = general keys + this backend's branch
 _backend = settings.get("backend", "numpy")
@@ -284,33 +282,43 @@ _split = globals().get("split")         # a VAM model card binds the Chorin spli
 
 _reconstruction = ReconstructionSpec(
     order=int(_eff.get("reconstruction_order", _eff.get("order", 1))),
-    limiter=Limiter(_eff.get("limiter", "venkatakrishnan")))
+    limiter=Limiter(_eff["limiter"]) if "limiter" in _eff else Limiter.venkatakrishnan)
 if _split is None:
     nsm = NumericalSystemModel.from_system_model(model, reconstruction=_reconstruction)
     _systems = ()
-else:   # the predictor on the full (padded) state: positive Rusanov, rescaled momenta
-    _pred, _press, _corr = _pad_to_square(_split.SM_pred), _split.SM_press, _split.SM_corr
-    _names = [str(s) for s in _pred.state]
-    _fixed = {_names.index("h"), _names.index("b"), *map(int, _press.equation_to_state_index)}
-    nsm = NumericalSystemModel.from_system_model(
-        _pred, riemann=PositiveNonconservativeRusanov, reconstruction=_reconstruction,
-        additional_systems=[_press, _corr],
-        scaled_q_indices=[i for i in range(_pred.n_variables) if i not in _fixed])
-    _systems = (_press, _corr)
+else:   # the predictor on the full state: positive Rusanov, rescaled momenta
+    nsm = predictor_nsm(_split.SM_pred, _split.SM_press, _split.SM_corr, _reconstruction)
+    _systems = (_split.SM_press, _split.SM_corr)
 
 _time_end = float(_eff.get("time_end", 0.1))
 _options = dict(time_end=_time_end, cfl=float(_eff.get("cfl", 0.9)),
                 dt_write=_time_end / int(_eff.get("output_snapshots", 10)),
                 imex=Imex(_eff["imex"]) if _eff.get("imex") else False)
-if _backend == "jax":           # in the jax backend's container
-    from zoomy_jax.symsolver.solver import (SymbolicChorinSolverJax as Chorin,
-                                            SymbolicHyperbolicSolverJax as Hyperbolic)
+_h5 = os.path.abspath("simulation.h5")
+if _backend in ("amrex", "OpenFOAM", "foam"):   # C++: print, build, march, read back
+    from zoomy_core.mesh import ensure_lsq_mesh
+    from zoomy_core.symsolver.backend_cxx import initial_state, write_snapshots
+    if _backend == "amrex":
+        from zoomy_amrex.symsolver import (SymbolicChorinSolverAmrex as Chorin,
+                                           SymbolicHyperbolicSolverAmrex as Hyperbolic)
+    else:
+        from zoomy_foam.symsolver import (SymbolicChorinSolverFoam as Chorin,
+                                          SymbolicHyperbolicSolverFoam as Hyperbolic)
+    _mesh = ensure_lsq_mesh(mesh, nsm)
+    solver = (Chorin if _systems else Hyperbolic)(**_options)
+    _model = (nsm, *_systems) if _systems else nsm
+    solver.run(_mesh, _model, initial_state(_mesh, nsm), os.path.abspath("_" + _backend))
+    write_snapshots(_h5, _mesh, nsm, solver.snapshots)
 else:
-    from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy as Chorin,
-                                                    SymbolicHyperbolicSolverNumpy as Hyperbolic)
-solver = (Chorin if _systems else Hyperbolic)(**_options, output=os.path.abspath("simulation.h5"))
-Q, Qaux = solver.setup(mesh, nsm, *_systems)
-solver.run(Q, Qaux)
+    if _backend == "jax":       # in the jax backend's container
+        from zoomy_jax.symsolver.solver import (SymbolicChorinSolverJax as Chorin,
+                                                SymbolicHyperbolicSolverJax as Hyperbolic)
+    else:
+        from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy as Chorin,
+                                                        SymbolicHyperbolicSolverNumpy as Hyperbolic)
+    solver = (Chorin if _systems else Hyperbolic)(**_options, output=_h5)
+    Q, Qaux = solver.setup(mesh, nsm, *_systems)
+    solver.run(Q, Qaux)
 print("done -> simulation.h5")'''
 
 

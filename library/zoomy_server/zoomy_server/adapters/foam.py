@@ -1,10 +1,6 @@
-"""OpenFOAM solver adapter — runs a foam folder-case's own ``run.py``.
-
-Foam is NOT drivable in-process: it is codegen -> wmake -> OpenFOAM polyMesh +
-0/ fields -> zoomyFoam -> VTK (DOF count baked constexpr per model), and a
-coupled case additionally drives a second preCICE participant. That pipeline is
-carried by the case's ``run.py`` (the ``## Run`` section), so this adapter just
-executes it.
+"""OpenFOAM solver adapter — runs a foam folder-case's own ``run.py`` (or ``run.sh``);
+a case without one (model.py, mesh.py, settings.json) runs on the symbolic foam
+solver (``zoomy_foam.symsolver``: printed, wmake'd, run).
 
 Host-side the case scripts wrap ``apptainer exec <sif>``; when this adapter runs
 INSIDE the zoomy_openfoam container (``foamRun`` on PATH) the same scripts detect
@@ -47,22 +43,16 @@ class FoamAdapter(SolverAdapter):
             self._run_inplace(case_dir, output_dir, on_progress, entry=["bash", "run.sh"])
             return
 
-        # Legacy (no run.py): delegate to the foam backend's in-process entry.
-        try:
-            from zoomy_foam import run_case
-        except ImportError as e:
-            raise RuntimeError(
-                "zoomy_foam.run_case is not available yet — the foam backend must expose "
-                "the run entry (codegen -> wmake -> polyMesh + 0/ fields -> zoomyFoam -> VTK, "
-                "then zoomy_prepost.vtk_to_hdf5). See REQ-92. Once it lands this adapter runs "
-                f"the shared folder case unchanged. ({e})"
-            )
+        # Settings runner (no run.py): the case on the symbolic foam solver, printed to C++,
+        # wmake'd (cached) and run; inside the OpenFOAM image natively.
+        from zoomy_foam.symsolver import SymbolicChorinSolverFoam, SymbolicHyperbolicSolverFoam
+        from zoomy_server.symbolic import solve_cxx
         self.run_mesh_script(case_dir)
         settings = self.load_settings(case_dir)
-        model = self.resolve_model(case_dir)
-        logger.info("foam: delegating to zoomy_foam.run_case")
-        settings["_case_dir"] = os.path.abspath(case_dir)
-        return run_case(model, settings, output_dir, on_progress=on_progress)
+        logger.info("foam: running the case on the symbolic foam solver")
+        solve_cxx(self, case_dir, output_dir, on_progress,
+                  SymbolicHyperbolicSolverFoam, SymbolicChorinSolverFoam,
+                  **({"nprocs": int(settings["nprocs"])} if settings.get("nprocs") else {}))
 
     # ── in-place run.py runner ───────────────────────────────────────────
     def _run_inplace(self, case_dir, output_dir, on_progress, entry=None):

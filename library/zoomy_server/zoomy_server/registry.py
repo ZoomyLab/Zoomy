@@ -62,43 +62,17 @@ def discover_models(package_name="zoomy_core.model.models"):
 
 
 def discover_solvers():
-    """Scan solver modules for Solver subclasses. Returns list of card dicts."""
+    """The symbolic NumPy solvers (`zoomy_core.symsolver.numpy_backend`) as card dicts."""
+    mod_name = "zoomy_core.symsolver.numpy_backend"
     try:
-        from zoomy_core.fvm.solver_numpy import Solver
+        mod = importlib.import_module(mod_name)
+        from zoomy_core.symsolver.settings import HyperbolicSettings
     except ImportError:
         return []
-
-    modules = [
-        "zoomy_core.fvm.solver_numpy",
-        "zoomy_core.fvm.solver_imex_numpy",
-    ]
-    # Optional: splitting solver
-    try:
-        importlib.import_module("zoomy_core.fvm.solver_splitting_numpy")
-        modules.append("zoomy_core.fvm.solver_splitting_numpy")
-    except ImportError:
-        pass
-
-    cards = []
-    for mod_name in modules:
-        try:
-            mod = importlib.import_module(mod_name)
-            for name, obj in inspect.getmembers(mod, inspect.isclass):
-                if (issubclass(obj, Solver)
-                        and obj is not Solver
-                        and obj.__module__ == mod.__name__):
-                    class_path = f"{mod.__name__}.{name}"
-                    cards.append({
-                        "id": f"lib-{name.lower()}",
-                        "title": name,
-                        "class": class_path,
-                        "source": "library",
-                        "requires_tag": "numpy",
-                    })
-        except Exception:
-            pass
-
-    return cards
+    return [{"id": f"lib-{name.lower()}", "title": name, "class": f"{mod_name}.{name}",
+             "source": "library", "requires_tag": "numpy"}
+            for name, obj in inspect.getmembers(mod, inspect.isclass)
+            if issubclass(obj, HyperbolicSettings) and name.startswith("Symbolic")]
 
 
 def discover_user_models(session_dir):

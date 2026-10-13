@@ -26,7 +26,7 @@ class FiredrakeAdapter(SolverAdapter):
             return
 
         from zoomy_firedrake.firedrake_solver import FiredrakeHyperbolicSolver
-        from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
+        from zoomy_core.numerics import PositiveNonconservativeRusanov
         from zoomy_core.misc.misc import Settings
         from zoomy_prepost import vtk_to_hdf5
 

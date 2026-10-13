@@ -25,6 +25,8 @@ From: ubuntu:24.04
 %environment
     export AMREX_HOME=/opt/amrex
     export ZOOMY_AMREX_HOME=/opt/amrex
+    # zoomy_amrex.symsolver: build and run natively (no nested apptainer)
+    export ZOOMY_AMREX_IN_IMAGE=1
     export ZOOMY_ROOT=/workspace
     export ZOOMY_ADAPTER=amrex
     export ZOOMY_PORT=8080

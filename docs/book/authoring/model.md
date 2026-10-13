@@ -53,8 +53,7 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.systemmodel import SystemModel
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.mesh import BaseMesh
-from zoomy_core.fvm.solver_numpy import HyperbolicSolver
-from zoomy_core.fvm import timestepping
+from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
 
 model = SME(
     level=0,                                    # level 0 == shallow water
@@ -75,8 +74,9 @@ mesh = BaseMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=50)
 nsm = NumericalSystemModel.from_system_model(
     sm, reconstruction=ReconstructionSpec(order=1))
 
-solver = HyperbolicSolver(time_end=0.5, compute_dt=timestepping.adaptive(CFL=0.9))
-Q, _ = solver.solve(mesh, nsm, write_output=False)
+solver = SymbolicHyperbolicSolverNumpy(time_end=0.5, cfl=0.9)
+Q, Qaux = solver.setup(mesh, nsm)
+time, Q, _ = solver.run(Q, Qaux)
 ```
 
 `sm.state` is `[b, h, q_0]`, `sm.aux_state` is `[dq0dx, dhdx, dbdx]` — the
