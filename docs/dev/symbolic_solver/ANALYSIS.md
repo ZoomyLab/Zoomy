@@ -1222,3 +1222,15 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
 - **Fix for (B):** with an in-plane closure, build tau.n from the full stress (tau_de and tau_dz) and
   resolve the slopes of the in-plane part to the PHYSICAL interface slopes.  Acceptance: SME(0) +
   NewtonianInPlane equals gate 46's hand-written operator symbolically.
+
+### 45d. VAM second order: why Escalante et al. 2024 report it, what we need (2026-10-13)
+
+Their pressure step is the same approximate projection (corrector substituted into the constraint,
+compact (P_{i+1} - 2P_i + P_{i-1})/dx^2, eq. 16; 1-D collocated FD); their order tables refine space
+and time together at fixed CFL, where the projection defect O(dt s/(1-s)), s ~ (k dx)^2, is O(dx^3)
+and invisible -- our C10 is that test and gives 2.01 on all backends.  C31 refines dt on a fixed mesh
+and sees the O(dt) floor, largest at the closed wall.  Recommended: the pressure-increment (lagged)
+projection, Almgren, Bell, Crutchfield 2000 "version (1)": only `project()` changes (correct with
+P^n, solve press for dP, store P^n + dP); a Fourier model keeps 2.00 at every wavenumber.  First:
+the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Details:
+`research/vam_second_order.md`, `research/toy/`.
