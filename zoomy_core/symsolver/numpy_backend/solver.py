@@ -210,6 +210,10 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy):
     pressure_maxit = param.Integer(default=100, bounds=(1, None), doc="GMRES restarts.")
     pressure_restart = param.Integer(default=None, allow_None=True, bounds=(1, None),
                                      doc="None: from the block size.")
+    projection = param.Selector(
+        default="standard", objects=["standard", "increment"],
+        doc="'standard': each stage solves for the full pressure; 'increment': for its increment "
+            "over the lagged pressure (time order 2 on a fixed mesh; opt-in).")
     pressure_solve = param.Selector(
         default="linear", objects=["linear", "newton"],
         doc="'linear': the constraint is affine in the pressure, one linear solve.  "
@@ -287,6 +291,7 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy):
         """Print the Chorin template to Python source; returns `(name, source)`."""
         Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
         template = ChorinTemplate(self.nsm, self.press, self.corr,
-                                  pressure_newton=self._newton(), **self._config())
+                                  pressure_newton=self._newton(),
+                                  projection=self.projection, **self._config())
         return "chorin", PyPrinter().procedure(
             "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
