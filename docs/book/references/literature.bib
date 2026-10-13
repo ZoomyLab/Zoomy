@@ -52,7 +52,7 @@
   publisher = {American Institute of Aeronautics and Astronautics},
   year      = {1989},
   doi       = {10.2514/6.1989-366},
-  keywords  = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords  = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{bell2022pyamg_lit,
@@ -64,7 +64,7 @@
   pages    = {4142},
   year     = {2022},
   doi      = {10.21105/joss.04142},
-  keywords = {zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.symsolver.numpy_backend.assembly, zoomy_core.symsolver.numpy_backend.runtime, zoomy_jax.symsolver.runtime}
 }
 
 @article{berger1984adaptive,
@@ -132,7 +132,7 @@
   pages    = {745--762},
   year     = {1968},
   doi      = {10.1090/S0025-5718-1968-0242392-2},
-  keywords = {zoomy_amrex.symsolver, zoomy_amrex.transformation.to_amrex, zoomy_core.model.models.ml_vam, zoomy_core.model.models.vam, zoomy_core.symsolver.backend_cxx, zoomy_core.symsolver.strategies.chorin, zoomy_foam.symsolver, zoomy_jax.symsolver.solver}
+  keywords = {zoomy_amrex.symsolver, zoomy_amrex.transformation.to_amrex, zoomy_core.model.models.ml_vam, zoomy_core.model.models.vam, zoomy_core.symsolver.backend_cxx, zoomy_core.symsolver.numpy_backend.solver, zoomy_core.symsolver.strategies.chorin, zoomy_foam.symsolver, zoomy_jax.symsolver.solver}
 }
 
 @article{chourdakis2022precice_lit,
@@ -167,7 +167,7 @@
   pages    = {50--67},
   year     = {1947},
   doi      = {10.1017/s0305004100023197},
-  keywords = {zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
 }
 
 @article{davis1988simplified_lit,
@@ -238,7 +238,7 @@
   isbn      = {9780444503503},
   doi       = {10.1016/s1570-8659(00)07005-8},
   editor    = {Ciarlet, Philippe G. and Lions, Jacques-Louis},
-  keywords  = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.mesh.geometry_xp, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords  = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.mesh.geometry_xp, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @inbook{falgout2002hypre_lit,
@@ -263,6 +263,18 @@
   year     = {2009},
   doi      = {10.1002/fld.1880},
   keywords = {zoomy_core.model.models.closures, zoomy_core.model.models.qr_kesme}
+}
+
+@article{gerbeau2001derivation,
+  author   = {Gerbeau, Jean-Frédéric and Perthame, Benoit},
+  title    = {{Derivation of viscous Saint-Venant system for laminar shallow water; Numerical validation}},
+  journal  = {Discrete and Continuous Dynamical Systems - B},
+  volume   = {1},
+  number   = {1},
+  pages    = {89--102},
+  year     = {2001},
+  doi      = {10.3934/dcdsb.2001.1.89},
+  keywords = {zoomy_core.model.models.closures}
 }
 
 @article{golub1969calculation,
@@ -319,7 +331,7 @@
   year      = {2008},
   isbn      = {9780898717761},
   doi       = {10.1137/1.9780898717761},
-  keywords  = {zoomy_jax.symsolver.runtime}
+  keywords  = {zoomy_core.symsolver.numpy_backend.assembly, zoomy_jax.symsolver.runtime}
 }
 
 @article{harten1983upstream_lit,
@@ -367,7 +379,7 @@
   pages    = {357--397},
   year     = {2004},
   doi      = {10.1016/j.jcp.2003.08.010},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.strategies.chorin, zoomy_core/zoomy_core/symsolver/rt_common.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.strategies.chorin, zoomy_core/zoomy_core/symsolver/rt_common.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{koellermeier2020analysis_lit,
@@ -435,7 +447,7 @@
   year      = {2002},
   isbn      = {9780511791253},
   doi       = {10.1017/CBO9780511791253},
-  keywords  = {zoomy_core.symsolver.discretization.residual, zoomy_jax.symsolver.runtime}
+  keywords  = {zoomy_core.symsolver.discretization.residual, zoomy_core.symsolver.numpy_backend.runtime, zoomy_jax.symsolver.runtime}
 }
 
 @article{liu2026jax,
@@ -456,7 +468,7 @@
   publisher = {American Institute of Aeronautics and Astronautics},
   year      = {2003},
   doi       = {10.2514/6.2003-3986},
-  keywords  = {zoomy_amrex.symsolver, zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.mesh, zoomy_core.mesh.base_mesh, zoomy_core.mesh.geometry_xp, zoomy_core.mesh.lsq_mesh, zoomy_core.mesh.lsq_reconstruction, zoomy_core.numerics.boundary_closure, zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords  = {zoomy_amrex.symsolver, zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.mesh, zoomy_core.mesh.base_mesh, zoomy_core.mesh.geometry_xp, zoomy_core.mesh.lsq_mesh, zoomy_core.mesh.lsq_reconstruction, zoomy_core.numerics.boundary_closure, zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{naumov2015amgx_lit,
@@ -552,7 +564,7 @@
   pages    = {856--869},
   year     = {1986},
   doi      = {10.1137/0907058},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.solver.constants, zoomy_core.symsolver.core, zoomy_core.symsolver.strategies.chorin, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.solver.constants, zoomy_core.symsolver.core, zoomy_core.symsolver.numpy_backend.assembly, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.strategies.chorin, zoomy_jax.symsolver.runtime}
 }
 
 @article{saad1993flexible,
@@ -624,7 +636,7 @@
   pages    = {995--1011},
   year     = {1984},
   doi      = {10.1137/0721062},
-  keywords = {zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
 }
 
 @article{toro1994restoration_lit,
@@ -658,7 +670,7 @@
   pages    = {101--136},
   year     = {1979},
   doi      = {10.1016/0021-9991(79)90145-1},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{venkatakrishnan1995convergence_lit,
@@ -670,7 +682,7 @@
   pages    = {120--130},
   year     = {1995},
   doi      = {10.1006/jcph.1995.1084},
-  keywords = {zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
 }
 
 @article{weller1998tensorial_lit,

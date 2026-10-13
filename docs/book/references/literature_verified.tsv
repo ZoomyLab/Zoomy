@@ -58,3 +58,5 @@ launder-spalding	10.1016/0045-7825(74)90029-2	Launder, Spalding 1974, k-epsilon
 koellermeier-rominger	10.4208/cicp.oa-2019-0065	Koellermeier, Rominger 2020, hyperbolic SWME
 fe-2009	10.1002/fld.1880	Fe et al. 2009, depth-averaged turbulence models
 jax-amg	10.1016/j.softx.2026.102966	Liu, Fan, Wang 2026, JAX-AMG
+gerbeau-perthame	10.3934/dcdsb.2001.1.89	Gerbeau, Perthame 2001, viscous Saint-Venant for laminar shallow water
+hypre	10.1007/3-540-47789-6_66	Falgout, Yang 2002, hypre: a library of high performance preconditioners

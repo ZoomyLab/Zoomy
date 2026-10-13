@@ -1,9 +1,9 @@
 {
  "schema": 1,
- "generated": "2026-10-13T05:07:18Z",
+ "generated": "2026-10-13T05:44:45Z",
  "last_run": "2026-10-13",
  "store": "docs/dev/symbolic_solver/matrix/store",
- "superrepo": "7e5094c4",
+ "superrepo": "42851cd4",
  "libs": {
   "zoomy_amrex": [
    "0270878",
@@ -60,7 +60,7 @@
   "C29": "LSQ derivatives with the boundary closure (gate 44): quads, p 2 / 3, dir / neu",
   "C30": "LSQ polynomial reproduction (gate 39): 1-D, quads, jittered quads, triangles, hexahedra",
   "C31": "IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning",
-  "C32": "viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; no-slip and free-slip walls",
+  "C32": "viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; no-slip, free-slip and split (Wall face, Dirichlet ghost) walls",
   "C33": "vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
   "C34": "in-plane viscous operator vs the exact div(h tau), mixed derivatives (gate 45)"
  },
@@ -2558,6 +2558,66 @@
   },
   {
    "case": "C32",
+   "check": "noslip_split L_inf order 40->80",
+   "backend": "jax",
+   "config": "serial",
+   "value": 1.9390552830019496,
+   "op": ">=",
+   "threshold": 1.8,
+   "source": "theory 2",
+   "verdict": "PASS",
+   "note": "L_inf 3.34e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 L_inf vs exact",
+   "backend": "jax",
+   "config": "serial",
+   "value": 0.0003336425964520773,
+   "op": "<=",
+   "threshold": 0.0007,
+   "source": "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)",
+   "verdict": "PASS",
+   "note": ""
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|h - 1|",
+   "backend": "jax",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: h stays 1"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|q_y|",
+   "backend": "jax",
+   "config": "serial",
+   "value": 9.31002144359898e-18,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: v stays 0"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 x-variation of q_x (max rel)",
+   "backend": "jax",
+   "config": "serial",
+   "value": 1.4246985047711365e-16,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: u = u(y)"
+  },
+  {
+   "case": "C32",
    "check": "control: no-slip profile on free-slip walls, L_inf vs the no-slip exact",
    "backend": "jax",
    "config": "serial",
@@ -2579,6 +2639,42 @@
    "source": "observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)",
    "verdict": "PASS",
    "note": "Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol)",
+   "backend": "jax",
+   "config": "serial",
+   "value": 4.591454638859326e-05,
+   "op": null,
+   "threshold": null,
+   "source": null,
+   "verdict": "info",
+   "note": "the interior fluxes cancel: the walls' share"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on split walls: wall friction, rel. change of sum(q_x vol)",
+   "backend": "jax",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "Wall face: the reflected Riemann state carries no x-momentum flux"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on split walls: max|u - u0|",
+   "backend": "jax",
+   "config": "serial",
+   "value": 0.0004057346150742047,
+   "op": "<=",
+   "threshold": 0.0008,
+   "source": "observed 4.1e-4 (a regression bound: O2 Rusanov dissipation, no wall exit)",
+   "verdict": "PASS",
+   "note": "the interior Rusanov dissipation of the O2 face jumps, piled up in the wall cells"
   },
   {
    "case": "C33",
@@ -2962,7 +3058,7 @@
    "threshold": 1e-12,
    "source": "tolerance (round-off)",
    "verdict": "PASS",
-   "note": "max over 8 runs"
+   "note": "max over 12 runs"
   },
   {
    "case": "C6",
@@ -5257,6 +5353,66 @@
    "note": "foam's own stencils at second order"
   },
   {
+   "case": "C32",
+   "check": "noslip_split n20 L_inf vs exact",
+   "backend": "foam",
+   "config": "serial",
+   "value": 0.0003341361126374398,
+   "op": "<=",
+   "threshold": 0.0007,
+   "source": "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)",
+   "verdict": "PASS",
+   "note": ""
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|h - 1|",
+   "backend": "foam",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: h stays 1"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|q_y|",
+   "backend": "foam",
+   "config": "serial",
+   "value": 3.139927882246272e-17,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: v stays 0"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 x-variation of q_x (max rel)",
+   "backend": "foam",
+   "config": "serial",
+   "value": 1.0329057618128495e-15,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: u = u(y)"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 L_inf|foam - JAX| / L_inf(JAX - exact)",
+   "backend": "foam",
+   "config": "serial",
+   "value": 0.014857159406573634,
+   "op": "<=",
+   "threshold": 0.5,
+   "source": "observed 0.21 (foam's own stencils at second order)",
+   "verdict": "PASS",
+   "note": "foam's own stencils at second order"
+  },
+  {
    "case": "C33",
    "check": "imex q(T) vs expm, order dt/2 -> dt/4",
    "backend": "foam",
@@ -5602,7 +5758,7 @@
    "threshold": 1e-12,
    "source": "tolerance (round-off)",
    "verdict": "PASS",
-   "note": "max over 2 runs"
+   "note": "max over 3 runs"
   },
   {
    "case": "C6",
@@ -7609,6 +7765,66 @@
    "note": ""
   },
   {
+   "case": "C32",
+   "check": "noslip_split n20 L_inf vs exact",
+   "backend": "amrex",
+   "config": "serial",
+   "value": 0.0003336425964522993,
+   "op": "<=",
+   "threshold": 0.0007,
+   "source": "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)",
+   "verdict": "PASS",
+   "note": ""
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|h - 1|",
+   "backend": "amrex",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: h stays 1"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|q_y|",
+   "backend": "amrex",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: v stays 0"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 x-variation of q_x (max rel)",
+   "backend": "amrex",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: u = u(y)"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max rel vs JAX",
+   "backend": "amrex",
+   "config": "serial",
+   "value": 4.440892098500626e-16,
+   "op": "<=",
+   "threshold": 1e-08,
+   "source": "tolerance (Newton 1e-12, GMRES 1e-13)",
+   "verdict": "PASS",
+   "note": ""
+  },
+  {
    "case": "C33",
    "check": "imex q(T) vs expm, order dt/2 -> dt/4",
    "backend": "amrex",
@@ -8278,7 +8494,7 @@
    "threshold": 1e-12,
    "source": "tolerance (round-off)",
    "verdict": "PASS",
-   "note": "max over 2 runs"
+   "note": "max over 3 runs"
   },
   {
    "case": "C6",
@@ -11126,6 +11342,66 @@
   },
   {
    "case": "C32",
+   "check": "noslip_split L_inf order 40->80",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 1.939055353300514,
+   "op": ">=",
+   "threshold": 1.8,
+   "source": "theory 2",
+   "verdict": "PASS",
+   "note": "L_inf 3.34e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 L_inf vs exact",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 0.0003336425948856636,
+   "op": "<=",
+   "threshold": 0.0007,
+   "source": "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)",
+   "verdict": "PASS",
+   "note": ""
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|h - 1|",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: h stays 1"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 max|q_y|",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 2.1358222900096538e-17,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: v stays 0"
+  },
+  {
+   "case": "C32",
+   "check": "noslip_split n20 x-variation of q_x (max rel)",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 4.986444766709001e-16,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "theory: u = u(y)"
+  },
+  {
+   "case": "C32",
    "check": "control: no-slip profile on free-slip walls, L_inf vs the no-slip exact",
    "backend": "numpy",
    "config": "serial",
@@ -11147,6 +11423,42 @@
    "source": "observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)",
    "verdict": "PASS",
    "note": "Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol)",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 4.591454638859326e-05,
+   "op": null,
+   "threshold": null,
+   "source": null,
+   "verdict": "info",
+   "note": "the interior fluxes cancel: the walls' share"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on split walls: wall friction, rel. change of sum(q_x vol)",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 2.1776773642080675e-16,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "Wall face: the reflected Riemann state carries no x-momentum flux"
+  },
+  {
+   "case": "C32",
+   "check": "nu 0 on split walls: max|u - u0|",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 0.0004057346150742047,
+   "op": "<=",
+   "threshold": 0.0008,
+   "source": "observed 4.1e-4 (a regression bound: O2 Rusanov dissipation, no wall exit)",
+   "verdict": "PASS",
+   "note": "the interior Rusanov dissipation of the O2 face jumps, piled up in the wall cells"
   },
   {
    "case": "C33",
@@ -11374,7 +11686,7 @@
    "threshold": 1e-12,
    "source": "tolerance (round-off)",
    "verdict": "PASS",
-   "note": "max over 8 runs"
+   "note": "max over 12 runs"
   },
   {
    "case": "C6",
