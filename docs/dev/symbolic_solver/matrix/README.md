@@ -53,6 +53,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | BC channels: `face=` / `ghost=` set apart (`Wall` face, `Dirichlet` ghost: a viscous no-slip wall) | C32 | C32 | C32 |
 | vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
 | in-plane viscous operator vs the exact div(h tau'), tau' = tau - tau_zz I, mixed derivatives (gate 45) | C34 | C34 (= JAX) | C34 (= JAX) |
+| restart (`dt_checkpoint`, `restart_from`): restarted = continuous, bitwise, serial and distributed | C35 | C35 | C35 |
 | large tier (scaling, catchment, I/O; `--tier large`) | L1-L5 | L1, L2, L2P, L4 | L1, L2, L2P, L3, L4 |
 | multi-node / Slurm | untestable here | untestable here | untestable here |
 
@@ -64,15 +65,15 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex numpy`; CASE `C1`..`C34`; CONFIG `serial` (default)
+BACKEND `jax foam amrex numpy`; CASE `C1`..`C35`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
 other exception as a **FAIL**; a backend without the config or the case is
 **n/a**.  Stored per run: `t, Q, Q0, xc, vol, names, wall, lib` (the library
-commits it ran on); custom runs (C15-C17, C22, C27-C30, C34): their metrics.  Files:
+commits it ran on); custom runs (C15-C17, C22, C27-C30, C34, C35): their metrics.  Files:
 `cases.py` (every case, defined once), `backends.py` (adapters),
-`custom.py` (AD, preCICE, AMR, the wrapped gates 39-45), `matrix.py` (runner, checks, table), `large.py`
+`custom.py` (AD, preCICE, AMR, restart, the wrapped gates 39-45), `matrix.py` (runner, checks, table), `large.py`
 (large tier), `deliverable.py` (figure), `table.md` (the last table).
 
 ## Cases and pass criteria
@@ -121,6 +122,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C32 split wall | as C32, walls `Wall(tag, ghost=Dirichlet(on="momentum", value=0))`: the `face` channel (the Riemann state) reflects the normal momentum and keeps the tangential, the `ghost` channel (gradients, limiter, diffusion, LSQ closure) is -q.  `noslip_split`: u0 = sin(pi y), ny 20 / 40 / 80 (JAX, numpy), ny 20 (foam, AMReX); `inviscid_split` (JAX, numpy): nu 0 | `noslip_split` as `noslip`: order 40->80 >= 1.8 (observed 1.94, 1.87 for 20->40), ny 20 L_inf <= 7e-4 (observed 3.34e-4 on all four), h - 1, q_y, x-variation <= 1e-12, AMReX max rel vs JAX <= 1e-8 (observed 4.4e-16), foam ratio <= 0.5 (observed 0.015); `inviscid_split`: wall friction = rel. change of sum(q_x vol) <= 1e-12 (round-off; observed 0; the Dirichlet wall's `inviscid`: 4.6e-5, information), max abs(u - u0) <= 8e-4 (observed 4.1e-4, a regression bound: the interior O2 Rusanov dissipation has no exit through the reflective wall and piles up in the wall cells) |
 | C33 vertical viscosity | SME(2) + `Newtonian` + `NavierSlip` + `StressFree`, nu 0.05, lambda_s 0.5; 1-D, periodic (8 cells, dx 1), flat bed, uniform h = 1, q = (0.5, 0.2, -0.1): the flux divergence vanishes, only the source acts, and it is linear in q at fixed h, so q' = J q with J = d(source_q)/d(q_0..q_2) at h = 1 by sympy differentiation of the SystemModel's `source` (`cases.moment_jacobian`; linearity asserted, `hinv` = 1/h of the NSM substituted); exact q(T) = expm(T J) q0 (eigenvalues -6.68, -1.31, -0.10), T 1. Constant dt = 0.05 / 2^k, k = 0, 1, 2. `imex`: explicit flux step then an implicit-Euler source (the viscous / slip source is in the implicit slot `source`; order 1); `rk2`: explicit SSP-RK2, the source in the explicit step (order 2, the reconstruction order) | order dt/2 -> dt/4 vs expm: imex >= 0.8 (theory 1, observed 0.995), rk2 >= 1.8 (theory 2, observed 2.03); rel error at dt 0.0125 <= 1e-3 / 7e-6 (observed 5.1e-4 / 3.3e-6); q(T) = the integrator's own scheme (I - dt J)^-N resp. (1 + dt J + (dt J)^2 / 2)^N: rk2 <= 1e-12 (round-off), imex <= 1e-10 (Newton 1e-12; observed 3e-12 foam / AMReX, 4e-15 JAX); uniform state kept and h = 1 <= 1e-12; foam / AMReX = JAX: rk2 <= 1e-12, imex <= 1e-10 (observed 1e-16 / 1.3e-12) |
 | C34 in-plane viscous operator | gate 45: SME(0) + `NewtonianInPlane`, smooth periodic h, q_x, q_y on [0,1]^2 varying in x and y, O2 without limiter, one implicit-Lie step dt 1e-7 with nu 1 and nu 0, L = (Q_1 - Q_0) / dt on the momentum rows (the discrete viscous operator); nx 16 / 32 / 64 (JAX), nx 16 (foam, AMReX, against JAX's L) | max rel vs the exact div(h tau'), tau' = nu (grad u + grad u^T) + 2 nu (div u) I (the in-plane stress minus the viscous normal stress tau_zz = -2 nu div u, Marche 2007 eq. (5.19); = the SystemModel operator, `diffusion_matrix` with its mixed-index entries A[i, j, x, y] plus the nu-part of the source, symbolically, ANALYSIS 45e / 45f): order 32->64 >= 1.8 (theory 2; observed 1.99 / 1.98 for q_x / q_y), nx 64 <= 6e-3 (observed 2.3e-3 / 3.9e-3); foam / AMReX max rel vs JAX <= 2e-7 (observed 7e-8 foam: its own O2 stencils in the explicit stage, an O(dt) effect in L; 6e-10 AMReX: round-off / dt). The two-point fluxes alone (before 2026-10-13) converged to the diagonal-index part and stayed 16 % / 38 % off the full operator; before ANALYSIS 45e the SystemModel operator was h div(tau), before 45f div(h tau) |
+| C35 restart | C1 `o2_n40` (adaptive dt) and C8 `vam` with `projection="increment"` (the lagged pressure in Q's pressure rows): `full` 0 -> T with `dt_checkpoint` T/2 (the march lands there), `half` 0 -> T/2, `restart` from `half`'s restart state -> T; `typo`: `restart_from` misspelt; c1 serial and mpi2, c8 serial | max abs(restart - full) = 0 (spec: bitwise); `typo` raises FileNotFoundError naming `restart_from` before anything is built (spec) |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x
@@ -185,6 +187,27 @@ Not part of the matrix: 8 model goldens in zoomy_core (m01-m04, m06-m08,
 s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
+
+## Results (2026-10-13, dev/restart: restart files)
+
+`time_start`, `restart_from`, `dt_checkpoint`, `checkpoint` on every backend (solvers guide,
+"Restart").  The march state is the template's loop carry `(time, Q, Qaux)`: the lagged pressure
+of `Projection.increment` is Q's pressure rows, the `cfl_check_every` cadence is
+`floor(time / dt + 1/2)` and the write / checkpoint counters are now derived from the time at the
+loop start (equal to the carried ones; `time_start` != 0 lands on the right write instants).
+- C35 (this store, the committed code): max abs(restart - full) = 0 on NumPy, JAX, foam, AMReX for
+  c1 (C1 O2, adaptive dt) and c8 (C8 VAM, increment projection), serial; c1 mpi2 on JAX, foam,
+  AMReX: 0.  A misspelt `restart_from` raises FileNotFoundError naming it (with "did you mean"),
+  before anything is built.  Control: c8 restarted with the pressure rows of the NumPy state zeroed
+  ends 4.5e-2 off (the lagged pressure is carried and used).
+- Beyond C35: JAX serial restarted from the mpi2 state 5.7e-16 off the mpi2 run (one file, any rank
+  count); AMReX `max_grid_size` 8 from a 16-box state (redistributed) 0; foam / AMReX restarted
+  into the case the state was written in (staged) 0; `time_start` 1 -> 2.5 vs 0 -> 1.5 <= 2.2e-16
+  on all four.
+- Unchanged: C1 `o2_n40`, C8 `vam`, C31 `swe_ssp2_k0`, `vam_ssp2_k0` on all four backends equal the
+  base commits bit for bit; `matrix.py table` on this store (C1, C8, C31, C35 on every config but
+  GPU, the C1 mpi8 reference): C1 13, C6 10, C7 12, C8 12, C31 19, C35 22 rows PASS, none FAIL
+  (`table.md` not regenerated: the store holds these cases only).
 
 ## Results (2026-10-13, dev/bc-channels: the two BC channels)
 

@@ -524,6 +524,13 @@ def _c8():
             Run("vam_tri", tri, 0.05, chorin=True, q0=vam_q0, backends=JF)]
 
 
+def _c35():
+    from custom import restart
+    return [Run(f"{s}_{p}", None, 0.0, configs=("serial", "mpi2") if s == "c1" else ("serial",),
+                custom=partial(lambda b, c, w, s=s, p=p: restart(s, p, b, c, w)))
+            for s in ("c1", "c8") for p in ("full", "half", "restart", "typo")]
+
+
 def _c15():
     from custom import ad
     return [Run(f"{k}_{p}", None, 0.0, custom=partial(lambda b, c, w, k=k, p=p: ad(k, p, _comm(c))),
@@ -739,6 +746,8 @@ CASES = {
             _c33()),
     "C34": ("in-plane viscous operator vs the exact div(h tau'), mixed derivatives (gate 45)",
             _c34()),
+    "C35": ("restart: 0 -> T vs 0 -> T/2, restart -> T (C1 O2 adaptive; C8 increment projection)",
+            _c35()),
 }
 
 

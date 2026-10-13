@@ -71,6 +71,42 @@ A backend that supports only some members says which (`linear_solver="pyamg"` on
 Which terms are implicit is the SystemModel's classification (the `source` and
 `diffusion_matrix` slots), never the solver's.
 
+## Restart
+
+| option | default | meaning |
+|---|---|---|
+| `time_start` | `0.0` | start time when not restarting |
+| `restart_from` | `None` | a restart state written by the same backend; its time overrides `time_start` |
+| `dt_checkpoint` | `None` | interval of the restart states (the march lands on them, as on `dt_write`); `None`: one at the end |
+| `checkpoint` | `None` | where they go; `None`: next to the output |
+
+A restart state is the template's march state `(time, Q, Qaux)`, written by the effect
+`io.save_state` and read by `io.load_state` (the same pair on every backend).  It is the whole
+loop carry: the pressure rows of `Q` hold the lagged pressure of `Projection.increment`, and the
+CFL-check cadence and the write / checkpoint counters are functions of the time.  So a run
+0 -> T with `dt_checkpoint=T/2` and a run 0 -> T/2 restarted to T end in the same state, bit for
+bit, also with the adaptive step (matrix case C35).  The lagged solver caches (the `pyamg`
+hierarchy, NumPy's Jacobian LU) restart at every save, as in a restarted run.
+
+| backend | restart state | `restart_from` | MPI |
+|---|---|---|---|
+| NumPy, JAX | one HDF5 file: `time`, `Q`, `Qaux` in the mesh's cell order; default `<output stem>.restart.h5`, none without `output` or `checkpoint` | the file | JAX: gathered to and written by rank 0, every rank reads its cells (any rank count) |
+| foam | the time directory `<t>/`: `Q<i>`, `Qaux<i>`, `uniform/zoomyState` (the exact time), in the case or in `checkpoint`; the run starts from it (`startFrom startTime`) | a time directory, or a case / checkpoint directory (its latest) | `processor<k>/<t>`; the same decomposition |
+| AMReX | `chk<t>/`: `Header` and the MultiFabs `Q`, `Qaux` (VisMF), in `out/` or in `checkpoint` | a `chk<t>` directory, or one holding them (its latest) | distributed MultiFabs; another rank count is redistributed |
+
+```python
+s = SymbolicHyperbolicSolverJax(time_end=1.25, checkpoint="bump.restart.h5")
+Q, A = s.setup(mesh, nsm)
+s.run(Q, A)                         # writes bump.restart.h5 at t = 1.25
+s = SymbolicHyperbolicSolverJax(time_end=2.5, restart_from="bump.restart.h5")
+Q, A = s.setup(mesh, nsm)
+t, Q, A = s.run(Q, A)               # continues from t = 1.25
+SymbolicHyperbolicSolverJax(time_end=2.5, restart_from="bump.restart.h").setup(mesh, nsm)
+# FileNotFoundError: restart_from 'bump.restart.h': no such file; did you mean 'bump.restart.h5'?
+```
+
+Not with preCICE coupling or AMReX AMR (`NotImplementedError`).
+
 ## Chorin options
 
 | option | default | meaning |
