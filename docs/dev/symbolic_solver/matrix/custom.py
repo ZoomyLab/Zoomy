@@ -1,4 +1,4 @@
-"""Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16),
+"""Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16), restart (C35),
 AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
 returns {metric: value} (rank 0; None on the other ranks)."""
 import contextlib
@@ -347,3 +347,58 @@ def lsq_polynomials(backend="jax"):
         raise RuntimeError(f"gate 39 gave no summary (rc {rc}):\n{out[-2000:]}")
     return dict(passes=int(m.group(1)), fails=int(m.group(2)), tol=float(m.group(3)),
                 sample_inexact=int(m.group(4)))
+
+
+# ── C35: restart (dt_checkpoint, restart_from) ──────────────────────────────
+#: scenario -> (case, run, extra settings); c8: the increment projection (its lagged pressure)
+RESTART = {"c1": ("C1", "o2_n40", {}), "c8": ("C8", "vam", {"projection": "increment"})}
+#: where the half run leaves its state (a work-relative path), per backend
+RESTART_STATE = {"jax": "state.h5", "numpy": "state.h5", "foam": ".", "amrex": "out"}
+
+
+def restart(scenario, part, backend, config, work):
+    """C35, one run of the matched pair: `full` 0 -> T with a checkpoint at T/2 (landed on),
+    `half` 0 -> T/2, `restart` from the half run's state -> T (max abs(Q - Q_full)), `typo` a
+    misspelt `restart_from` (whether it fails at once, naming it)."""
+    import dataclasses
+    import time
+    from backends import BACKENDS
+    from cases import CASES, prepare
+    case, key, extra = RESTART[scenario]
+    r = next(x for x in CASES[case][1] if x.key == key)
+    work, T = Path(work), r.t_end
+    half = work.parent / f"{scenario}_half"
+    kw = dict(extra)
+    if backend in ("jax", "numpy"):           # no output file: the restart file named
+        kw["checkpoint"] = str(work / "state.h5")
+    if part == "full":
+        kw["dt_checkpoint"] = T / 2
+    elif part == "half":
+        T = T / 2
+    elif part == "restart":
+        kw["restart_from"] = str(half / RESTART_STATE[backend])
+    else:                                     # typo: a letter dropped
+        kw["restart_from"] = str(half / "stat.h5" if backend in ("jax", "numpy")
+                                 else half.with_name(f"{scenario}_hlf"))
+    r = dataclasses.replace(r, t_end=T, solver={**(r.solver or {}), **kw})
+    mesh, systems, Q0, _ = prepare(r)
+    work.mkdir(parents=True, exist_ok=True)
+    t0 = time.perf_counter()
+    try:
+        out = BACKENDS[backend]().run(r, mesh, systems, Q0, config, work)
+    except FileNotFoundError as e:
+        if part != "typo":
+            raise
+        return {"clear": int("restart_from" in str(e)), "seconds": time.perf_counter() - t0,
+                "message": str(e)[:300]}
+    if part == "typo":
+        return {"clear": 0, "seconds": time.perf_counter() - t0, "message": "no error"}
+    if out is None:                           # non-root MPI rank
+        return None
+    t, Q = out
+    np.save(work / "final.npy", Q)
+    m = {"t": float(t)}
+    if part == "restart":
+        m["max_abs"] = float(np.abs(Q - np.load(half.with_name(f"{scenario}_full") / "final.npy"))
+                             .max())
+    return m

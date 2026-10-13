@@ -435,6 +435,23 @@ def gate_checks(add, b, g):
             f"is inexact in {m['sample_inexact']} cases (sensitivity)")
 
 
+def restart_checks(add, b, g):
+    """C35: a run restarted at T/2 from the backend's own restart state = the run 0 -> T with a
+    checkpoint at T/2, bitwise; a misspelt restart_from fails at once, naming the path."""
+    for s in ("c1", "c8"):
+        for c in CONFIGS:
+            d = g("C35", f"{s}_restart", c)
+            if d is not None:
+                add("C35", f"{s}: restarted at T/2 vs 0 -> T (max abs)", b, c,
+                    metrics(d)["max_abs"], ("<=", 0.0, "spec: bitwise"), "")
+            d = g("C35", f"{s}_typo", c)
+            if d is not None:
+                m = metrics(d)
+                add("C35", f"{s}: misspelt restart_from fails at once", b, c, m["clear"],
+                    (">=", 1, "spec: FileNotFoundError naming restart_from"),
+                    f"after {m['seconds']:.1f} s: {m['message']}")
+
+
 def imex_checks(add, b, g, J):
     """C31: time order at a constant dt on a fixed mesh, L1(h) (SWE: vs dt/32
     of the same scheme; VAM: Richardson), and the C++ backends vs JAX."""
@@ -773,6 +790,7 @@ def measure():
         euler_checks(add, b, g, J)
         gate_checks(add, b, g)
         imex_checks(add, b, g, J)
+        restart_checks(add, b, g)
         visc_checks(add, b, g, J)
         for c in CONFIGS:                       # C17: AMR (gate 37)
             for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
