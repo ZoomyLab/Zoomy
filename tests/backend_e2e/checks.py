@@ -1,5 +1,6 @@
 """Checks on a result store: what the GUI reads (engine.open_hdf5 + the selected viewer), the
-numbers (finite, time reached, mass), and a run of the same case on the host to compare with."""
+numbers (finite, snapshots up to time_end, mass), and a run of the same case on the host to
+compare with."""
 from __future__ import annotations
 
 import json
@@ -13,6 +14,8 @@ import numpy as np
 from harness import ROOT
 
 SESSION_RUNNER = ROOT / "tests" / "qr_cases" / "session_runner.py"
+sys.path.insert(0, str(SESSION_RUNNER.parent))
+from session_runner import check_final_store  # noqa: E402,F401  the QR suite's finished-run check
 
 
 def _volumes(dim, verts, cells):

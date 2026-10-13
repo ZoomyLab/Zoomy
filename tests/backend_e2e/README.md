@@ -59,8 +59,10 @@ packages), `PYTHONNOUSERSITE=1`, a scratch HOME / TMPDIR under `$E2E_WORK`.
   reader would in the Parameters panel.
 - Protocol (`harness.GuiClient` = `HttpAdapter.submitCase`): `POST /api/v1/cases`, poll
   `GET /api/v1/jobs/<id>` every 2 s, `GET /api/v1/jobs/<id>/results/hdf5`.
-- Checks: every float finite; the last snapshot at `time_end` (not where the knob has other
-  units, `sessions.TIME_UNITS`: the Bingham roll wave's t'); the conserved row's relative
+- Checks: every float finite; at least 2 snapshots and the last at `time_end` (the QR suite's
+  `session_runner.check_final_store`; where the knob has other units or none, `sessions.END_TIME`:
+  the Bingham roll wave's t', Steffler's own 20 s; a replayed store: the snapshots only; the
+  Bingham analytics case writes a one-snapshot summary store, `sessions.SUMMARY_STORE`); the conserved row's relative
   change within `sessions.EXPECT` (walled / periodic domains, 1e-12); the store opened by the
   GUI's `engine.open_hdf5` and rendered by the selected viewer card (`renderVizCard`); in dev
   mode the case also runs on the host through `engine.py` (the QR suite's `session_runner.py`;

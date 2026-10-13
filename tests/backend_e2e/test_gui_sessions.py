@@ -3,7 +3,8 @@
 The case.py is composed by the GUI's own code (compose.mjs), submitted to the backend's
 zoomy-server over the GUI's HTTP protocol (harness.GuiClient), the returned store is opened by
 the GUI's reader and the selected viewer card (checks.gui_view), and its numbers are checked:
-every float finite, the time_end reached, the conserved quantity within EXPECT. In dev mode the
+every float finite, at least two snapshots, the time_end reached, the conserved quantity within
+EXPECT. In dev mode the
 case also runs on the host (HOST_RUN) and the two stores are compared. compose.mjs also says
 where the GUI's Run sends the case: numpy to the browser, every other tag to its backend.
 """
@@ -104,8 +105,6 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
     # the numbers
     s = C.read_store(h5)
     problems = []
-    if not s["times"]:
-        problems.append("no /fields snapshots")
     if s["nonfinite"]:
         problems.append(f"{s['nonfinite']} of {s['values']} floats non-finite")
     t_end = None if case.id in S.TIME_UNITS else settings.get("time_end")
@@ -115,6 +114,12 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
         problems.append(f"t_last {s['times'][-1]!r} != time_end {t_end!r}")
     row.update(snapshots=len(s["times"]), t_last=s["times"][-1] if s["times"] else None,
                names=s["names"])
+    # a finished run: the QR suite's check (>= 2 snapshots, the last at time_end); a case with no
+    # time_end (the replayed coupling, the Bingham analytics summary) is held to the snapshots
+    why = C.check_final_store(row["snapshots"], row["t_last"], S.END_TIME.get(case.id, t_end),
+                              min_snapshots=1 if case.id in S.SUMMARY_STORE else 2)
+    if why:
+        problems.append(f"the store {why}")
     exp = S.EXPECT.get(case.id)
     if exp and s["times"]:
         try:

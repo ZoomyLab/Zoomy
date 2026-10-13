@@ -6,8 +6,10 @@ jax blocked. Pyodide: the same cells in Pyodide 0.29.3 under node, booted as
 (`docs/scripts/build_gui_wheels.py`): `QR_WHEELS` names the directory (CI: built once and
 pip-installed, so CPython imports them too), else the wheels are built here for Pyodide and
 CPython reads the checkout. A JAX session adds `zoomy_jax` from the checkout. Pass = every
-cell succeeds and every float in every HDF5 store the run wrote is finite. The sessions
-carry no reference outputs to compare against.
+cell succeeds, every float in every HDF5 store the run wrote is finite, and a session that
+solves leaves a `simulation.h5` with its snapshots up to the session's `time_end`
+(`session_runner.final_store_problem`). The sessions carry no reference outputs to compare
+against.
 """
 import importlib.util
 import json
@@ -23,6 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qr_manifest as Q  # noqa: E402
+import session_runner as R  # noqa: E402
 
 HERE = Q.HERE
 ENGINE = Q.GUI / "engine.py"
@@ -36,6 +39,14 @@ NOT_IN_BROWSER = ["jax", "jaxlib", "zoomy_jax"]
 #: panel); model, mesh and numerics are unchanged.
 TIME_LIMITS = {("malpasset-session.zip", 0): 2.0,    # Malpasset JAX: 2000 s -> 2 s
                ("malpasset-session.zip", 1): 2.0}    # Malpasset AMReX: 100 s -> 2 s
+
+
+#: Where a solving session's `simulation.h5` must end (`session_runner.end_time`): the solver
+#: card's `time_end` parameter unless listed. A string is an expression over the cells' names
+#: (the settings, the model cell's constants); None: nothing is solved.
+END_TIME = {("bingham-session.zip", 0): "settings['time_end'] * tscale",    # time_end is t' = t / tscale
+            ("steffler-session.zip", 0): "_CASE_SETTINGS['run']['time_end']",   # no knob: the run card's own
+            ("coupling-session.zip", 0): None}                              # replays a recorded run
 
 
 def _amrex_sif():
@@ -80,7 +91,15 @@ def _case(zname, idx, session):
     cells = Q.compose(s)
     if tag in UNAVAILABLE:
         cells = cells[:[r for r, _ in cells].index("settings")]
-    return tag, {"cells": cells, "needs_store": tag is not None and tag not in UNAVAILABLE,
+    solves = tag is not None and tag not in UNAVAILABLE
+    time_end = None
+    if solves:
+        card = (s.get("cardOverrides") or {}).get(s["selections"]["solver"]) or {}
+        time_end = END_TIME.get((zname, idx), (card.get("params") or {}).get("time_end"))
+        assert time_end is not None or (zname, idx) in END_TIME, \
+            f"{zname}#{idx}: no time_end to check the run against: the solver card's `time_end` " \
+            "parameter, else an END_TIME entry"
+    return tag, {"cells": cells, "needs_store": solves, "time_end": time_end,
                  "blocked_modules": NOT_IN_BROWSER if tag in BROWSER_LOCAL else []}
 
 
@@ -134,6 +153,76 @@ def test_deploy_ships_projects_and_worker_version():
     worker = (Q.GUI / "pyodide-worker.js").read_text()
     pinned = json.loads((HERE / "pyodide/package.json").read_text())["dependencies"]["pyodide"]
     assert f"/pyodide/v{pinned}/" in worker, f"worker Pyodide != harness pyodide@{pinned}"
+
+
+@pytest.mark.qr
+def test_shipped_zips_name_existing_solver_cards():
+    """Every solver card a shipped zip (projects, demo, tutorials) selects is in the catalog: a
+    removed card (incompressibleVOF, `solver-foam-vof`) must not stay named by a demo."""
+    ids = {c["id"] for c in json.loads((Q.GUI / "cards/solvers/default.json").read_text())}
+    named = {}
+    for z in sorted(p for d in ("projects", "demo", "tutorials") for p in (Q.GUI / d).glob("*.zip")):
+        with zipfile.ZipFile(z) as zf:
+            for n in zf.namelist():
+                if n.endswith((".json", ".py")):
+                    text = zf.read(n).decode("utf-8", "replace")
+                    for m in re.finditer(r'"(?:solver_id|solver)":\s*"((?:card-)?solver-[\w-]+)"', text):
+                        named.setdefault(m.group(1).removeprefix("card-"), []).append(f"{z.name}:{n}")
+    missing = {k: v[:2] for k, v in named.items() if k not in ids}
+    assert named and not missing, f"solver cards not in the catalog: {missing}"
+
+
+def _write_store(path, times):
+    """A zoomy-shaped HDF5 store: `/mesh` and `/fields/iteration_k/time` for each of `times`."""
+    import h5py
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as f:
+        f.create_group("mesh")
+        g = f.create_group("fields")
+        for k, t in enumerate(times):
+            g.create_group(f"iteration_{k}").create_dataset("time", data=t)
+
+
+@pytest.mark.qr
+@pytest.mark.parametrize("artifact,own,time_end,expect", [
+    ([0.0, 1.0, 2.0], [0.0, 1.0, 2.0], 2.0, None),                       # a finished run
+    ([0.0, 1.0, 2.0], [0.0, 1.0, 2.0], None, None),                      # nothing to compare t with
+    ([], [0.0, 1.0, 2.0], 2.0, "holds 0 snapshots"),                      # the copy taken too early
+    ([0.0], [0.0, 1.0, 2.0], 2.0, "holds 1 snapshots"),
+    ([0.0, 1.0], [0.0, 1.0, 2.0], 2.0, "before time_end"),                # the march stopped
+    (None, [0.0, 1.0, 2.0], 2.0, "left no simulation.h5"),
+], ids=["finished", "no-time_end", "copy-without-snapshots", "one-snapshot", "stopped-early",
+        "no-simulation.h5"])
+def test_final_store_check(artifact, own, time_end, expect, tmp_path, monkeypatch):
+    """A solving session is judged by the `simulation.h5` it leaves, not by the solver's own
+    output next to it: the JAX run returned before its snapshots were written, the copy held none,
+    and the complete `output/<name>.h5` made the run look finished."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ZOOMY_DIR", str(tmp_path))
+    _write_store(tmp_path / "output" / "case.h5", own)
+    if artifact is not None:
+        _write_store(tmp_path / "simulation.h5", artifact)
+    rep = R.run_case({"cells": [], "needs_store": True, "time_end": time_end}, None, str(tmp_path))
+    if expect is None:
+        assert rep["ok"] and rep["error"] is None, rep["error"]
+    else:
+        assert not rep["ok"] and expect in rep["error"], rep["error"]
+
+
+@pytest.mark.qr
+def test_final_store_time_end_expression(tmp_path, monkeypatch):
+    """`time_end` may be an expression over the cells' names, evaluated in the engine's scope."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ZOOMY_DIR", str(tmp_path))
+    monkeypatch.setattr(sys, "_shallowflow_scope", {"settings": {"time_end": 2.0}, "tscale": 0.5},
+                        raising=False)
+    _write_store(tmp_path / "simulation.h5", [0.0, 0.5, 1.0])
+    case = {"cells": [], "needs_store": True, "time_end": "settings['time_end'] * tscale"}
+    assert R.run_case(case, None, str(tmp_path))["ok"]
+    case["time_end"] = "settings['time_end'] * tscale * 2"
+    assert "before time_end = 2.0" in R.run_case(case, None, str(tmp_path))["error"]
+    case["time_end"] = "no_such_name"
+    assert "NameError" in R.run_case(case, None, str(tmp_path))["error"]
 
 
 # --------------------------------------------------------------------------- CPython
