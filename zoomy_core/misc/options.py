@@ -93,3 +93,30 @@ class Configurable(param.Parameterized):
                 raise TypeError(f"{type(self).__name__} has no setting {key!r}"
                                 f"{did_you_mean(key, known)}")
         super().__init__(**kwargs)
+
+
+def typed_kwargs(cls, settings):
+    """The entries of `settings` that are parameters of the `param` class `cls`, as its constructor
+    takes them: a selector's string (a GUI dropdown, a settings file) becomes the selector's
+    object (the `Option` member, `False`, ...), matched by value or name.  Keys that are not
+    parameters of `cls` (`backend`, `solver_id`, ...) are dropped.
+    """
+    params = cls.param.objects("existing")
+    out = {}
+    for key, val in (settings or {}).items():
+        p = params.get(key)
+        if p is None or key == "name":
+            continue
+        if isinstance(p, param.Selector) and isinstance(val, str):
+            val = _selector_object(p, key, val)
+        out[key] = val
+    return out
+
+
+def _selector_object(p, key, val):
+    """The object of selector `p` whose string (an enum member: value or name) is `val`."""
+    for obj in p.objects:
+        names = (str(obj.value), obj.name) if isinstance(obj, Enum) else (str(obj),)
+        if val.lower() in (n.lower() for n in names):      # JS String(false) is "false"
+            return obj
+    raise ValueError(f"{key}: {val!r} is not one of {[str(o) for o in p.objects]}")

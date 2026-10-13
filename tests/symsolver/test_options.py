@@ -86,3 +86,13 @@ def test_model_names_are_checked():
         SME(levl=1)
     with pytest.raises(TypeError, match="no setting 'settings'"):
         SME(dimension=2, settings={"model": {"level": 1}})
+
+
+def test_typed_kwargs_from_settings():
+    from zoomy_core.misc.options import typed_kwargs
+    kw = typed_kwargs(SymbolicHyperbolicSolverNumpy,
+                      {"time_end": 0.5, "imex": "SSP2", "backend": "numpy", "solver_id": "x"})
+    assert kw == {"time_end": 0.5, "imex": Imex.ssp2}
+    assert typed_kwargs(SymbolicChorinSolverNumpy, {"imex": "false"})["imex"] is False
+    with pytest.raises(ValueError, match="not one of"):
+        typed_kwargs(SymbolicHyperbolicSolverNumpy, {"imex": "ssp3"})
