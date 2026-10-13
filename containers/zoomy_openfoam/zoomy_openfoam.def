@@ -119,31 +119,31 @@ From: ubuntu:24.04
     python3 -c "import precice"
 
     echo "##### STEP 6/7: python solver stack (zoomy_core/server/prepost/plotting/foam)"
-    # PEP 668 -> --break-system-packages (same as pyprecice above). Pin numpy<2 so
-    # pip KEEPS the apt-provided 1.26.4: Debian ships numpy without a RECORD file,
-    # so pip cannot uninstall it, and an unpinned resolve picks numpy 2.x and aborts
-    # ("Cannot uninstall numpy 1.26.4"). 1.26.4 is the last 1.x, so "<2" resolves to
-    # the installed version -> no uninstall, and pyprecice's source-build ABI stays
-    # intact. h5py/meshio/matplotlib are the IO+plot deps prepost/plotting use.
+    # PEP 668 -> --break-system-packages (same as pyprecice above). numpy >= 2 (zoomy_core
+    # requires it): Debian's python3-numpy 1.26 (a dependency of libprecice3 and
+    # python3-mpi4py) has no RECORD file, so pip cannot replace it; numpy 2 goes to
+    # /usr/local beside it (--ignore-installed), first on sys.path, as in the AMReX image.
+    # pyprecice above was built in pip's isolated build env against numpy 2 already.
+    pip3 install --no-cache-dir --break-system-packages --ignore-installed "numpy>=2,<3"
+    # h5py/meshio/matplotlib are the IO+plot deps prepost/plotting use.
     # pytest + the report plugins are REQUIRED, not optional: CI's foam job runs
     # tests/reporting/generate_test_report.py inside this image, exactly like the
     # core/jax/amrex images do. Without them the job dies at
     # "/usr/bin/python3: No module named pytest" before collecting anything —
     # which is what happened the first time the foam stack was given a CI job
     # (2026-07-22). Every other test image ships these; this one did not.
-    # ONE resolution pass (numpy<2 pinned FIRST so the debian numpy is not
-    # uninstalled — splitting this caused "Cannot uninstall numpy … RECORD not
-    # found") with EDITABLE zoomy installs, so a runtime bind-mount of the host
-    # source over /opt/src/<pkg> updates the container WITHOUT a rebuild:
+    # EDITABLE zoomy installs, so a runtime bind-mount of the host source over
+    # /opt/src/<pkg> updates the container WITHOUT a rebuild:
     #   apptainer run --bind ~/git/Zoomy-tut/library/zoomy_server:/opt/src/zoomy_server \
     #                 zoomy_openfoam.sif OpenFOAM
     # picks up a renamed adapter tag / a new route (like /couple) live.
     pip3 install --no-cache-dir --break-system-packages \
-        "numpy<2" \
+        "numpy>=2,<3" \
         h5py meshio matplotlib jupyterlab jupyter-server ipykernel \
         pytest pytest-html pytest-metadata \
         -e /opt/src/zoomy_core -e /opt/src/zoomy_prepost -e /opt/src/zoomy_plotting \
         -e /opt/src/zoomy_server -e /opt/src/zoomy_foam
+    python3 -c "import numpy; assert int(numpy.__version__.split('.')[0]) >= 2, numpy.__version__; print('numpy', numpy.__version__)"
     python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, zoomy_foam, precice; print('zoomy python layer OK')"
     python3 -c "import pytest, pytest_html; print('pytest', pytest.__version__, 'OK')"
     zoomy-server --help >/dev/null && echo "zoomy-server CLI OK"
@@ -193,8 +193,8 @@ From: ubuntu:24.04
     echo "3. preCICE library..."
     pkg-config --modversion libprecice && echo "   libprecice pkg-config: OK" || { echo "FAIL: libprecice not found"; exit 1; }
 
-    echo "4. pyprecice import..."
-    python3 -c "import precice; print('   pyprecice', precice.get_version_information() if hasattr(precice,'get_version_information') else 'imported')"
+    echo "4. pyprecice import (with numpy >= 2)..."
+    python3 -c "import numpy, precice; assert int(numpy.__version__.split('.')[0]) >= 2; print('   numpy', numpy.__version__, 'pyprecice', precice.get_version_information() if hasattr(precice,'get_version_information') else 'imported')"
 
     echo "5. Zoomy python backend stack..."
     python3 -c "import zoomy_core, zoomy_server, zoomy_prepost, zoomy_plotting, zoomy_foam; print('   zoomy imports OK')"
