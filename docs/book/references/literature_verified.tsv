@@ -1,0 +1,60 @@
+key	doi_or_url	short
+finite-volume	10.1017/CBO9780511791253	LeVeque 2002, Finite Volume Methods for Hyperbolic Problems
+toro	10.1007/b79761	Toro 2009, Riemann Solvers and Numerical Methods for Fluid Dynamics
+rusanov	10.1016/0041-5553(62)90062-9	Rusanov 1962, local Lax-Friedrichs flux
+hll	10.1137/1025002	Harten, Lax, van Leer 1983, HLL
+hlle-positivity	10.1016/0021-9991(91)90211-3	Einfeldt et al. 1991, positive HLLE near low densities
+path-conservative	10.1137/050628052	Pares 2006, path-conservative schemes
+hydrostatic-reconstruction	10.1137/S1064827503431090	Audusse et al. 2004, hydrostatic reconstruction
+muscl	10.1016/0021-9991(79)90145-1	van Leer 1979, MUSCL
+lsq-gradient	10.2514/6.2003-3986	Mavriplis 2003, least-squares gradient reconstruction
+barth-jespersen	10.2514/6.1989-366	Barth, Jespersen 1989, unstructured upwind schemes / limiter
+mood	10.1016/j.jcp.2011.02.026	Clain, Diot, Loubere 2011, MOOD
+ssp-rk	10.1137/S003614450036757X	Gottlieb, Shu, Tadmor 2001, SSP time discretization
+shu-osher	10.1016/0021-9991(88)90177-5	Shu, Osher 1988, SSP-RK (Shu-Osher form)
+imex-ssp	10.1007/s10915-004-4636-4	Pareschi, Russo 2005, IMEX-SSP Runge-Kutta
+strang	10.1137/0705041	Strang 1968, operator splitting
+chorin	10.1090/S0025-5718-1968-0242392-2	Chorin 1968, projection method
+sme	10.4208/cicp.OA-2017-0263	Kowalski, Torrilhon 2019, shallow moment equations
+vam	10.1016/j.jcp.2024.112882	Escalante et al. 2024, vertically averaged and moment equations (VAM)
+vam-weighted	10.1002/fld.4481	Cantero-Chinchilla et al. 2018, weighted-averaged non-hydrostatic equations
+kurganov-petrova	10.4310/CMS.2007.v5.n1.a6	Kurganov, Petrova 2007, desingularized velocity / central-upwind SWE
+gmres	10.1137/0907058	Saad, Schultz 1986, GMRES
+fgmres	10.1137/0914028	Saad 1993, flexible GMRES
+newton-krylov	10.1016/j.jcp.2003.08.010	Knoll, Keyes 2004, Jacobian-free Newton-Krylov
+boomeramg	10.1016/S0168-9274(01)00115-5	Henson, Yang 2002, BoomerAMG
+amgx	10.1137/140980260	Naumov et al. 2015, AmgX
+pyamg	10.21105/joss.04142	Bell, Olson, Schroder 2022, PyAMG
+amrex	10.21105/joss.01370	Zhang et al. 2019, AMReX
+openfoam	10.1063/1.168744	Weller et al. 1998, OpenFOAM
+precice	10.12688/openreseurope.14445.2	Chourdakis et al. 2022, preCICE v2
+berger-colella	10.1016/0021-9991(89)90035-1	Berger, Colella 1989, AMR with refluxing
+berger-oliger	10.1016/0021-9991(84)90073-1	Berger, Oliger 1984, AMR
+griewank-ad	10.1137/1.9780898717761	Griewank, Walther 2008, Evaluating Derivatives
+revolve	10.1080/10556789208805505	Griewank 1992, binomial checkpointing
+bermudez-vazquez	10.1016/0045-7930(94)90004-3	Bermudez, Vazquez 1994, well-balanced upwinding of sources
+golub-vanloan	10.56021/9781421407944	Golub, Van Loan 2013, Matrix Computations (power iteration)
+jax	https://github.com/jax-ml/jax	Bradbury et al. 2018, JAX
+dispersion-sme	10.1007/s42967-023-00325-2	Scholz, Kowalski, Torrilhon, dispersion in SME
+venkatakrishnan	10.1006/jcph.1995.1084	Venkatakrishnan 1995, limiter for unstructured grids
+roe-1981	10.1016/0021-9991(81)90128-5	Roe 1981, approximate Riemann solvers
+sweby	10.1137/0721062	Sweby 1984, flux limiters (minmod)
+crank-nicolson	10.1017/s0305004100023197	Crank, Nicolson 1947
+davis	10.1137/0909030	Davis 1988, wave-speed estimates
+hllc	10.1007/bf01414629	Toro, Spruce, Speares 1994, HLLC
+audusse-bristeau	10.1016/j.jcp.2004.12.016	Audusse, Bristeau 2005, well-balanced positive second-order SWE scheme
+xing-zhang-shu	10.1016/j.advwatres.2010.08.005	Xing, Zhang, Shu 2010, positivity-preserving well-balanced
+pimentel-garcia	10.1016/j.jcp.2022.111152	Pimentel-Garcia et al. 2022, in-cell discontinuous reconstruction
+escalante-2019	10.1016/j.jcp.2019.05.035	Escalante, Dumbser, Castro 2019, hyperbolic relaxation non-hydrostatic
+kennedy-carpenter	10.1016/s0168-9274(02)00138-1	Kennedy, Carpenter 2003, additive Runge-Kutta
+eymard-gallouet-herbin	10.1016/s1570-8659(00)07005-8	Eymard, Gallouet, Herbin 2000, finite volume methods (TPFA)
+ruge-stuben	10.1137/1.9781611971057.ch4	Ruge, Stuben 1987, algebraic multigrid
+golub-welsch	10.1090/s0025-5718-69-99647-1	Golub, Welsch 1969, Gauss quadrature rules
+shen-1994	10.1137/0915089	Shen 1994, Legendre spectral-Galerkin
+audusse-multilayer	10.1051/m2an/2010036	Audusse et al. 2011, multilayer Saint-Venant
+lawson-hanson	10.1137/1.9781611971217	Lawson, Hanson 1995, Solving Least Squares Problems
+elder	10.1017/s0022112059000374	Elder 1959, dispersion in turbulent shear flow
+launder-spalding	10.1016/0045-7825(74)90029-2	Launder, Spalding 1974, k-epsilon
+koellermeier-rominger	10.4208/cicp.oa-2019-0065	Koellermeier, Rominger 2020, hyperbolic SWME
+fe-2009	10.1002/fld.1880	Fe et al. 2009, depth-averaged turbulence models
+jax-amg	10.1016/j.softx.2026.102966	Liu, Fan, Wang 2026, JAX-AMG
