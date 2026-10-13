@@ -66,16 +66,20 @@ packages), `PYTHONNOUSERSITE=1`, a scratch HOME / TMPDIR under `$E2E_WORK`.
   the matrix's relmax).
 
 **Matrix in the container** (`test_matrix_in_container.py`): serial C1 (`o1_n20`, `o2_n20`),
-C8 (`vam`), C28 (`quad_expl_dir0`, `quad_impl_neu`; JAX: `orders_quad_expl`), and, built
-without jax, C32 (`noslip_n20`) and C33 (`imex_k0`), by `matrix.py`'s own `run`
-(`matrix_driver.py`) inside each image: its Python, and for foam / AMReX its OpenFOAM / AMReX
-toolchain (built natively, `ZOOMY_{FOAM,AMREX}_IN_IMAGE=1`; `shim/apptainer` for older drivers
-that always call `apptainer exec <image>`). The same runs on the host (the same library;
-foam / AMReX through apptainer with the same image) give the reference; every stored array
-must agree to 1e-9 (relmax; the timing and provenance keys are ignored). The case builders of
-C8 (gates 7, 21) and C28 (gates 41, 43) import jax, so in the numpy / foam / AMReX images,
-which ship none, those two cases cannot be set up (reported as such); gate 21's module-level
-`MPI.COMM_WORLD` gets a one-rank mpi4py stub in the jax image, which has no mpi4py.
+C4 (`sub_o2_n25`, `trans_o1_n25`), C8 (`vam`), C26 (`visc`), C28 (`quad_expl_dir0`,
+`quad_impl_neu`; JAX, numpy: `orders_quad_expl`), C31 (`swe_ssp2_k0`, `vam_ssp2_k0`), C32
+(`noslip_n20`) and C33 (`imex_k0`), each backend the runs its `cases.py` lists it for, by
+`matrix.py`'s own `run` (`matrix_driver.py`) inside each image: its Python, and for foam /
+AMReX its OpenFOAM / AMReX toolchain (built natively, `ZOOMY_{FOAM,AMREX}_IN_IMAGE=1`;
+`shim/apptainer` for older drivers that always call `apptainer exec <image>`). The case
+builders import no backend (`gates/common.py` takes JAX if present), so every image sets up
+every case. The same runs on the host (the same library; foam / AMReX through apptainer with
+the same image) give the reference; every stored array must agree to the matrix's tolerance
+for two runs of the case (`tol`: round-off 1e-12, or the implicit-solve tolerance: C8, C31
+VAM, C28 implicit 1e-9; C26, C31 SWE, C32 1e-8; C33 1e-10; the image's numpy / JAX may
+differ from the host's); the timing and provenance keys are ignored. JAX also runs C1
+`o2_n40` on 2 ranks with the image's `mpiexec` (OpenMPI, mpi4jax), checked as matrix C7:
+= the serial run in the same image, round-off.
 
 ## Run times
 
