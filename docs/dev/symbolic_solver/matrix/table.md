@@ -739,6 +739,11 @@
 | C32 | noslip n20 max|h - 1| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 max|q_y| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 L_inf vs exact | amrex | 3.34e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
+| C32 | noslip_split n20 max rel vs JAX | amrex | 4.44e-16 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
+| C32 | noslip_split n20 max|h - 1| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 max|q_y| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 x-variation of q_x (max rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | free n20 L_inf vs exact | foam | 3.33e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | free n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 2.07e-01 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | free n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -749,6 +754,11 @@
 | C32 | noslip n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 max|q_y| | foam | 3.53e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | foam | 9.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 L_inf vs exact | foam | 3.34e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
+| C32 | noslip_split n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 1.49e-02 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
+| C32 | noslip_split n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 max|q_y| | foam | 3.14e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 x-variation of q_x (max rel) | foam | 1.03e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | control: no-slip profile on free-slip walls, L_inf vs the no-slip exact | jax | 4.17e-01 PASS | - | - | - | - | >= 0.1 (observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)) |
 | C32 | free L_inf order 40->80 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C32 | free n20 L_inf vs exact | jax | 3.32e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
@@ -760,7 +770,15 @@
 | C32 | noslip n20 max|h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 max|q_y| | jax | 8.77e-18 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | jax | 2.85e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split L_inf order 40->80 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
+| C32 | noslip_split n20 L_inf vs exact | jax | 3.34e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
+| C32 | noslip_split n20 max|h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 max|q_y| | jax | 9.31e-18 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 x-variation of q_x (max rel) | jax | 1.42e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction) | jax | 1.69e-04 PASS | - | - | - | - | <= 0.0004 (observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)) |
+| C32 | nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol) | jax | 4.59e-05 | - | - | - | - | information |
+| C32 | nu 0 on split walls: max|u - u0| | jax | 4.06e-04 PASS | - | - | - | - | <= 0.0008 (observed 4.1e-4 (a regression bound: O2 Rusanov dissipation, no wall exit)) |
+| C32 | nu 0 on split walls: wall friction, rel. change of sum(q_x vol) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C32 | control: no-slip profile on free-slip walls, L_inf vs the no-slip exact | numpy | 4.17e-01 PASS | n/a | n/a | n/a | n/a | >= 0.1 (observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)) |
 | C32 | free L_inf order 40->80 | numpy | 1.94e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
 | C32 | free n20 L_inf vs exact | numpy | 3.32e-04 PASS | n/a | n/a | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
@@ -772,7 +790,15 @@
 | C32 | noslip n20 max|h - 1| | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 max|q_y| | numpy | 1.37e-17 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | numpy | 4.27e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split L_inf order 40->80 | numpy | 1.94e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
+| C32 | noslip_split n20 L_inf vs exact | numpy | 3.34e-04 PASS | n/a | n/a | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
+| C32 | noslip_split n20 max|h - 1| | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 max|q_y| | numpy | 2.14e-17 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 x-variation of q_x (max rel) | numpy | 4.99e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction) | numpy | 1.69e-04 PASS | n/a | n/a | n/a | n/a | <= 0.0004 (observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)) |
+| C32 | nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol) | numpy | 4.59e-05 | n/a | n/a | n/a | n/a | information |
+| C32 | nu 0 on split walls: max|u - u0| | numpy | 4.06e-04 PASS | n/a | n/a | n/a | n/a | <= 0.0008 (observed 4.1e-4 (a regression bound: O2 Rusanov dissipation, no wall exit)) |
+| C32 | nu 0 on split walls: wall friction, rel. change of sum(q_x vol) | numpy | 2.18e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | numpy = JAX (max rel, worst run) | numpy | 1.57e-12 PASS | n/a | n/a | n/a | n/a | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C33 | imex max rel vs JAX | amrex | 1.30e-12 PASS | - | - | - | - | <= 1e-10 (tolerance (Newton 1e-12; observed 1.3e-12)) |
 | C33 | imex q(T) vs expm at dt 0.0125 (rel) | amrex | 5.11e-04 PASS | - | - | - | - | <= 0.001 (observed 5.1e-4 (implicit Euler, theory O(dt))) |
@@ -1021,8 +1047,15 @@ Notes:
 - C32 free n20 max|h - 1|, jax serial: theory: h stays 1
 - C32 free n20 max|q_y|, jax serial: theory: v stays 0
 - C32 free n20 x-variation of q_x (max rel), jax serial: theory: u = u(y)
+- C32 noslip_split L_inf order 40->80, jax serial: L_inf 3.34e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87
+- C32 noslip_split n20 max|h - 1|, jax serial: theory: h stays 1
+- C32 noslip_split n20 max|q_y|, jax serial: theory: v stays 0
+- C32 noslip_split n20 x-variation of q_x (max rel), jax serial: theory: u = u(y)
 - C32 control: no-slip profile on free-slip walls, L_inf vs the no-slip exact, jax serial: the walls act
 - C32 nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction), jax serial: Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells
+- C32 nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol), jax serial: the interior fluxes cancel: the walls' share
+- C32 nu 0 on split walls: wall friction, rel. change of sum(q_x vol), jax serial: Wall face: the reflected Riemann state carries no x-momentum flux
+- C32 nu 0 on split walls: max|u - u0|, jax serial: the interior Rusanov dissipation of the O2 face jumps, piled up in the wall cells
 - C33 imex q(T) vs expm, order dt/2 -> dt/4, jax serial: rel err 2.02e-03 / 1.02e-03 / 5.11e-04 (dt 0.05 / 2^k); implicit Euler (I - dt J)^-N
 - C33 imex q(T) vs its own scheme, implicit Euler (I - dt J)^-N (max rel), jax serial: the integrator in use, to round-off / the implicit tolerance
 - C33 imex uniform state: max|Q - Q[:, 0]|, |h - 1|, jax serial: theory: no flux divergence, h stays
@@ -1052,7 +1085,7 @@ Notes:
 - C6 C14 mass change (rel), jax gpu2: max over 1 runs
 - C6 C20 mass change (rel), jax serial: max over 2 runs
 - C6 C23 mass change (rel), jax serial: max over 6 runs
-- C6 C32 mass change (rel), jax serial: max over 8 runs
+- C6 C32 mass change (rel), jax serial: max over 12 runs
 - C6 C33 mass change (rel), jax serial: max over 6 runs
 - C1 O1 order 40->80, foam serial: L1(h) 1.93e-03 / 1.29e-03 / 8.01e-04
 - C12 bump O1 order 20->40, foam serial: L1(h) 2.37e-03 / 1.63e-03 / 1.05e-03
@@ -1170,6 +1203,10 @@ Notes:
 - C32 free n20 max|q_y|, foam serial: theory: v stays 0
 - C32 free n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
 - C32 free n20 L_inf|foam - JAX| / L_inf(JAX - exact), foam serial: foam's own stencils at second order
+- C32 noslip_split n20 max|h - 1|, foam serial: theory: h stays 1
+- C32 noslip_split n20 max|q_y|, foam serial: theory: v stays 0
+- C32 noslip_split n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
+- C32 noslip_split n20 L_inf|foam - JAX| / L_inf(JAX - exact), foam serial: foam's own stencils at second order
 - C33 imex q(T) vs expm, order dt/2 -> dt/4, foam serial: rel err 2.02e-03 / 1.02e-03 / 5.11e-04 (dt 0.05 / 2^k); implicit Euler (I - dt J)^-N
 - C33 imex q(T) vs its own scheme, implicit Euler (I - dt J)^-N (max rel), foam serial: the integrator in use, to round-off / the implicit tolerance
 - C33 imex uniform state: max|Q - Q[:, 0]|, |h - 1|, foam serial: theory: no flux divergence, h stays
@@ -1194,7 +1231,7 @@ Notes:
 - C6 C14 mass change (rel), foam mpi4: max over 1 runs
 - C6 C20 mass change (rel), foam serial: max over 2 runs
 - C6 C23 mass change (rel), foam serial: max over 6 runs
-- C6 C32 mass change (rel), foam serial: max over 2 runs
+- C6 C32 mass change (rel), foam serial: max over 3 runs
 - C6 C33 mass change (rel), foam serial: max over 6 runs
 - C1 O1 order 40->80, amrex serial: L1(h) 1.93e-03 / 1.29e-03 / 8.01e-04
 - C11 smooth O1 order 80->160, amrex serial: L1(h) 1.41e-03 / 7.39e-04 / 3.81e-04
@@ -1274,6 +1311,9 @@ Notes:
 - C32 free n20 max|h - 1|, amrex serial: theory: h stays 1
 - C32 free n20 max|q_y|, amrex serial: theory: v stays 0
 - C32 free n20 x-variation of q_x (max rel), amrex serial: theory: u = u(y)
+- C32 noslip_split n20 max|h - 1|, amrex serial: theory: h stays 1
+- C32 noslip_split n20 max|q_y|, amrex serial: theory: v stays 0
+- C32 noslip_split n20 x-variation of q_x (max rel), amrex serial: theory: u = u(y)
 - C33 imex q(T) vs expm, order dt/2 -> dt/4, amrex serial: rel err 2.02e-03 / 1.02e-03 / 5.11e-04 (dt 0.05 / 2^k); implicit Euler (I - dt J)^-N
 - C33 imex q(T) vs its own scheme, implicit Euler (I - dt J)^-N (max rel), amrex serial: the integrator in use, to round-off / the implicit tolerance
 - C33 imex uniform state: max|Q - Q[:, 0]|, |h - 1|, amrex serial: theory: no flux divergence, h stays
@@ -1306,7 +1346,7 @@ Notes:
 - C6 C14 mass change (rel), amrex gpu2: max over 1 runs
 - C6 C20 mass change (rel), amrex serial: max over 2 runs
 - C6 C23 mass change (rel), amrex serial: max over 6 runs
-- C6 C32 mass change (rel), amrex serial: max over 2 runs
+- C6 C32 mass change (rel), amrex serial: max over 3 runs
 - C6 C33 mass change (rel), amrex serial: max over 6 runs
 - C1 O1 order 40->80, numpy serial: L1(h) 1.93e-03 / 1.29e-03 / 8.01e-04
 - C12 bump O1 order 20->40, numpy serial: L1(h) 2.37e-03 / 1.63e-03 / 1.05e-03
@@ -1486,8 +1526,15 @@ Notes:
 - C32 free n20 max|h - 1|, numpy serial: theory: h stays 1
 - C32 free n20 max|q_y|, numpy serial: theory: v stays 0
 - C32 free n20 x-variation of q_x (max rel), numpy serial: theory: u = u(y)
+- C32 noslip_split L_inf order 40->80, numpy serial: L_inf 3.34e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87
+- C32 noslip_split n20 max|h - 1|, numpy serial: theory: h stays 1
+- C32 noslip_split n20 max|q_y|, numpy serial: theory: v stays 0
+- C32 noslip_split n20 x-variation of q_x (max rel), numpy serial: theory: u = u(y)
 - C32 control: no-slip profile on free-slip walls, L_inf vs the no-slip exact, numpy serial: the walls act
 - C32 nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction), numpy serial: Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells
+- C32 nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol), numpy serial: the interior fluxes cancel: the walls' share
+- C32 nu 0 on split walls: wall friction, rel. change of sum(q_x vol), numpy serial: Wall face: the reflected Riemann state carries no x-momentum flux
+- C32 nu 0 on split walls: max|u - u0|, numpy serial: the interior Rusanov dissipation of the O2 face jumps, piled up in the wall cells
 - C33 imex q(T) vs expm, order dt/2 -> dt/4, numpy serial: rel err 2.02e-03 / 1.02e-03 / 5.11e-04 (dt 0.05 / 2^k); implicit Euler (I - dt J)^-N
 - C33 imex q(T) vs its own scheme, implicit Euler (I - dt J)^-N (max rel), numpy serial: the integrator in use, to round-off / the implicit tolerance
 - C33 imex uniform state: max|Q - Q[:, 0]|, |h - 1|, numpy serial: theory: no flux divergence, h stays
@@ -1504,7 +1551,7 @@ Notes:
 - C6 C14 mass change (rel), numpy serial: max over 6 runs
 - C6 C20 mass change (rel), numpy serial: max over 2 runs
 - C6 C23 mass change (rel), numpy serial: max over 6 runs
-- C6 C32 mass change (rel), numpy serial: max over 8 runs
+- C6 C32 mass change (rel), numpy serial: max over 12 runs
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4200, foam 4286, jax 7267, numpy 2420
+Summed run wall time (s, without process start-up): amrex 4243, foam 4376, jax 7427, numpy 2508
