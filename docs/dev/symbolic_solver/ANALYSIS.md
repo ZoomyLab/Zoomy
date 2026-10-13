@@ -1452,3 +1452,33 @@ the solution ready (colouring probes, host solve, accept gate):
   step, 21 iterations / solve; host per solve: assembly 972 ms, FlexGMRES 2930 ms, one AMG setup
   (2.3 s) in 6 solves; setup 73 s, compile 27 s, whole command 2:36 (pyamg: > 10 min; foam / AMReX
   mpi4 8661 / 8180 ms / step).  Single-threaded XLA per rank: 8948 ms / step.
+
+## 47. Large tier L2P on main: one AMG on every backend (2026-10-13)
+
+L2P (VAM(1) Chorin, 1M cells, 5 steps of dt 1e-4; `matrix.py run --tier large L2P`), main after
+the foam / JAX hypre and the foam kernel-I/O merges.  ms / step (Krylov iterations per solve):
+
+| backend | serial | mpi2 | mpi4 | gpu1 | gpu2 | gpu4 |
+|---|---|---|---|---|---|---|
+| AMReX (hypre) | 24993 (19) | 13209 (19) | 7722 (20) | 534 (38) | 459 (38) | 416 (38) |
+| foam (hypre) | 27998 (19) | 13948 (20) | 6900 (19) | - | - | - |
+| JAX (CPU hypre, GPU AmgX) | 23766 (19) | 14623 (20) | 8645 (21) | 1417 | 1383 | 1135 |
+
+- Every CPU backend now runs the same solver (hypre FlexGMRES + BoomerAMG on the colour-assembled,
+  cell-block-scaled operator) with flat iteration counts; all configs fit 10 min (before: none on
+  AMReX / foam, JAX only on GPUs).  JAX `auto` takes hypre on the CPU whenever built (serial:
+  pyamg 34725 ms / step).
+- foam kernel I/O on fixed-size stack storage (zoomy_foam `dev/foam-kernel-io`): L2P serial / mpi2 /
+  mpi4 33840 / 15251 / 8661 -> 27998 / 13948 / 6900 ms / step (assembly 12.2 -> 9.6 s per solve);
+  bitwise-equal results.
+- AMReX boxes: the default `max_grid_size` divided the longest side by (boxes wanted)^(1/dim), so
+  L2P's 3200 x 320 channel got 6 boxes on 4 CPU ranks (2 / 2 / 1 / 1) and one box per GPU; it now
+  follows the cell count (square domains unchanged): mpi4 9118 -> 7722 ms / step (36 boxes), and
+  the Chorin GPU default asks 4 boxes per GPU (box sweep: 2 / 4 GPUs 571 -> 445 / 392 at 8 / 32
+  boxes; with the rule 459 / 416 at 9 / 26).  One GPU: 513 -> 534 (7 boxes).  At 1M cells the
+  GPUs are underloaded, and hypre on the GPU needs 38 iterations against 19 on the CPU (its GPU
+  smoother / coarsening).  JAX GPU rows are the earlier AmgX runs.
+- **Open defect:** 1M cells on 2 GPUs as 3 boxes (`max_grid_size` 1067) completes no step in 7 min
+  with both GPUs busy (91 / 63 %), reproduced twice; 2, 8, 9 boxes are fine, and so are 3 boxes on
+  2 GPUs at 10k cells and on 2 CPU ranks.  Not diagnosed (hypre GPU on an uneven 2 / 1 split is
+  the suspect); the default no longer produces that layout.
