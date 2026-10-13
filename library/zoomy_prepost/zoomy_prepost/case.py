@@ -238,23 +238,23 @@ print("figure -> simulation.png")'''
 
 
 def _run_code():
-    """The generated in-process runner: resolves the effective settings
-    (general keys + the numpy branch) and solves with the numpy solver.
-    Uses `model`, `mesh`, `settings` from the sections above in notebook
-    form; a bare ``python run.py`` in a materialized case folder loads them
-    from the sibling files (model.py, mesh.py, settings.json) instead."""
+    """The generated in-process runner: resolves the effective settings (general keys +
+    the backend's branch) and solves with a symbolic solver (JAX for the jax backend,
+    NumPy otherwise; Chorin when the model card binds a VAM `split`).  Uses `model`, `mesh`,
+    `settings` from the sections above in notebook form; a bare ``python run.py`` in a
+    materialized case folder loads them from the sibling files (model.py, mesh.py,
+    settings.json) instead."""
     return '''\
-# Runs IN-PROCESS with the numpy solver (no server needed) — works in
-# JupyterLite, a backend container's JupyterLab, any env with zoomy_core,
-# or standalone as `python run.py` in a materialized case folder (the
+# Runs IN-PROCESS on a symbolic solver (zoomy_core.symsolver): JAX for the jax backend,
+# NumPy otherwise (no server needed: JupyterLite, the GUI's browser kernel, any env with
+# zoomy_core). Standalone as `python run.py` in a materialized case folder (the
 # zoomy-server generic runner executes exactly this file).
-# For other backends, submit this file via the Zoomy GUI / zoomy-server.
 import json
 import os
 
-# Headless shim: the model/mesh cards end in display(model.describe()), a
-# Jupyter builtin. Define a no-op so `python run.py` runs on any backend /
-# plain env (the GUI worker & Jupyter provide the real one).
+# Headless shim: the model/mesh cards end in display(model.describe()),
+# a Jupyter builtin. Define a no-op so `python run.py` runs on any
+# backend / plain env (the GUI worker & Jupyter provide the real one).
 try:
     display
 except NameError:
@@ -270,29 +270,47 @@ if "mesh" not in globals():
 if "settings" not in globals():
     settings = json.load(open("settings.json"))
 
+from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
+from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
-from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
-import zoomy_core.fvm.timestepping as ts
-from zoomy_core.misc.misc import Zstruct
+from zoomy_core.numerics.numerical_system_model import Limiter
+from zoomy_core.symsolver.discretization.time import Imex
 
 # effective settings = general keys + this backend's branch
+_backend = settings.get("backend", "numpy")
 _eff = {k: v for k, v in settings.items() if not isinstance(v, dict)}
-_eff.update(settings.get("numpy", {}))
+_eff.update(settings.get(_backend, {}))
+_split = globals().get("split")         # a VAM model card binds the Chorin split
 
-nsm = NumericalSystemModel.from_system_model(
-    model,
-    reconstruction=ReconstructionSpec(
-        order=_eff.get("reconstruction_order", 1),
-        limiter=_eff.get("limiter", "venkatakrishnan")))
-solver = FreeSurfaceFlowSolver(
-    time_end=_eff.get("time_end", 0.1),
-    compute_dt=ts.adaptive(CFL=_eff.get("cfl", 0.45)),
-    settings=Zstruct(output=Zstruct(
-        directory=os.getcwd(), filename="simulation",
-        snapshots=_eff.get("output_snapshots", 10), clean_directory=False)))
+_reconstruction = ReconstructionSpec(
+    order=int(_eff.get("reconstruction_order", _eff.get("order", 1))),
+    limiter=Limiter(_eff.get("limiter", "venkatakrishnan")))
+if _split is None:
+    nsm = NumericalSystemModel.from_system_model(model, reconstruction=_reconstruction)
+    _systems = ()
+else:   # the predictor on the full (padded) state: positive Rusanov, rescaled momenta
+    _pred, _press, _corr = _pad_to_square(_split.SM_pred), _split.SM_press, _split.SM_corr
+    _names = [str(s) for s in _pred.state]
+    _fixed = {_names.index("h"), _names.index("b"), *map(int, _press.equation_to_state_index)}
+    nsm = NumericalSystemModel.from_system_model(
+        _pred, riemann=PositiveNonconservativeRusanov, reconstruction=_reconstruction,
+        additional_systems=[_press, _corr],
+        scaled_q_indices=[i for i in range(_pred.n_variables) if i not in _fixed])
+    _systems = (_press, _corr)
 
-mesh.write_to_hdf5("simulation.h5")   # mesh first; the solver appends /fields
-Q, Qaux = solver.solve(mesh, nsm, write_output=True)
+_time_end = float(_eff.get("time_end", 0.1))
+_options = dict(time_end=_time_end, cfl=float(_eff.get("cfl", 0.9)),
+                dt_write=_time_end / int(_eff.get("output_snapshots", 10)),
+                imex=Imex(_eff["imex"]) if _eff.get("imex") else False)
+if _backend == "jax":           # in the jax backend's container
+    from zoomy_jax.symsolver.solver import (SymbolicChorinSolverJax as Chorin,
+                                            SymbolicHyperbolicSolverJax as Hyperbolic)
+else:
+    from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy as Chorin,
+                                                    SymbolicHyperbolicSolverNumpy as Hyperbolic)
+solver = (Chorin if _systems else Hyperbolic)(**_options, output=os.path.abspath("simulation.h5"))
+Q, Qaux = solver.setup(mesh, nsm, *_systems)
+solver.run(Q, Qaux)
 print("done -> simulation.h5")'''
 
 
