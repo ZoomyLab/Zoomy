@@ -454,20 +454,22 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     amgx = _jaxamg() if ls.get("backend") == "amgx" else None
     pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
+    hyp = _hypre() if ls.get("backend") == "hypre" else None
     patterns = {}
     lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
-                if amgx is not None or pyamg is not None else None)
+                if amgx is not None or pyamg is not None or hyp is not None else None)
 
-    def assembled(op, n, ncells=nc):
-        """Values of the linear operator ``op`` on the cell pattern of the first ``ncells`` cells,
-        by colouring: one traced evaluation per colour.
+    def assembled(op, n, ncells=nc, n_rows=None):
+        """Values of the linear operator ``op`` on the cell pattern of the first ``ncells`` cells
+        (rows: the first ``n_rows`` cells, default all), by colouring: one traced evaluation per
+        colour.
 
         References:
             Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
         """
-        if (n, ncells) not in patterns:
-            patterns[(n, ncells)] = cell_pattern(n, ncells, lsq_nbrs)
-        rows, cols, colors = patterns[(n, ncells)]
+        if (n, ncells, n_rows) not in patterns:
+            patterns[(n, ncells, n_rows)] = cell_pattern(n, ncells, lsq_nbrs, n_rows)
+        rows, cols, colors = patterns[(n, ncells, n_rows)]
         probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
         # one evaluation per colour, a few at a time: all at once holds every
         # probe's intermediates together (33 GiB at 2.95M cells)
@@ -526,6 +528,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         own_cell, gsum = krylov(partition, nc)
         n_own = int(partition.n_own)
         amgx_comm = partition.comm.Clone() if amgx is not None else None
+        hypre_comm = partition.comm.Clone() if hyp is not None else None
         par = blocks(partition, mesh_np)
     halo = par.get("halo", lambda X, mesh: X)
 
@@ -587,6 +590,72 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                      lambda: None)
         return x
 
+    def _hypre_solve(A, b):
+        """'hypre': one host call per solve (:class:`zoomy_jax.symsolver.hypre.BlockRows`,
+        collective on all ranks), FlexGMRES + BoomerAMG on the cell-block-scaled rows to the true
+        relative residual ``tol``; the owned rows with global columns by colouring (as
+        :func:`_amgx_mpi`); differentiable via ``custom_linear_solve``.
+
+        References:
+            Henson, Yang 2002, https://doi.org/10.1016/S0168-9274(01)00115-5
+            Saad 1993, https://doi.org/10.1137/0914028
+        """
+        shape, k = b.shape, b.shape[0]
+        dist = partition is not None
+        n_r = n_own if dist else nc
+        _, lin = jax.linearize(A, jnp.zeros_like(b))
+        lin_o = lin
+        if dist:
+            with no_halo():                     # the rank's rows, halo columns as probed
+                _, lin_o = jax.linearize(A, jnp.zeros_like(b))
+        to_cell = lambda X: X.T.reshape(-1)                         # noqa: E731
+        to_row = lambda x: x.reshape(-1, k).T                       # noqa: E731
+        vals = assembled(lambda x: to_cell(lin_o(to_row(x))), k * nc, nc, n_r if dist else None)
+        rows, cols, _ = patterns[(k * nc, nc, n_r if dist else None)]
+        if ("hypre", k) not in patterns:
+            from mpi4py import MPI
+            gids = np.asarray(partition.gids, np.int64) if dist else np.arange(nc)
+            lo = int(partition.offsets[partition.rank]) if dist else 0
+            patterns[("hypre", k)] = hyp.BlockRows(
+                hypre_comm if dist else MPI.COMM_SELF, k, n_r, lo, rows,
+                gids[cols // k] * k + cols % k, ls["tol"], ls["restart"], ls["maxiter"],
+                rebuild=ls.get("amg_rebuild", 1), growth=ls.get("amg_growth", 2.0))
+        system = patterns[("hypre", k)]
+        maskf = (jnp.broadcast_to(own_cell, shape).reshape(-1).astype(b.dtype) if dist
+                 else jnp.ones(b.size, b.dtype))
+        mv = lambda x: maskf * lin(x.reshape(shape)).reshape(-1)    # noqa: E731
+        out = jax.ShapeDtypeStruct((k * n_r,), b.dtype)
+
+        def solver(transpose):
+            """The host solve for ``custom_linear_solve`` (``transpose``: the adjoint)."""
+            def host(v, r, nb2):
+                """Solve with matrix values ``v``, owned right-hand side ``r``, ``|r|^2 = nb2``."""
+                return system.solve(v, r, transpose, nb=float(np.sqrt(nb2)))
+
+            def solve(_, rhs):
+                """Owned rows to the host and back; distributed: between two allreduces (data
+                dependencies), so the host collectives keep one place among mpi4jax's ordered
+                ones on every rank."""
+                r = to_cell(rhs.reshape(shape)[:, :n_r])
+                nb2 = gsum(jnp.sum(r ** 2)) if dist else jnp.sum(r ** 2)
+                xo = jax.pure_callback(host, out, vals, r, nb2)
+                if dist:
+                    gsum(jnp.sum(xo[:1]))
+                return jnp.zeros(shape, b.dtype).at[:, :n_r].set(to_row(xo)).reshape(-1)
+            return solve
+        bf = b.reshape(-1) * maskf
+        x = lax.custom_linear_solve(
+            mv, bf, solve=solver(False),
+            transpose_solve=solver(True) if ad_mode == "reverse" else None)
+        if ls["accept"] is not None:            # the global relative residual
+            xs, bs = lax.stop_gradient(x), lax.stop_gradient(bf)
+            res = mv(xs) - bs
+            sq = (lambda v: gsum(jnp.sum(v ** 2))) if dist else (lambda v: jnp.sum(v ** 2))
+            r = jnp.sqrt(sq(res) / jnp.maximum(sq(bs), jnp.finfo(b.dtype).tiny))
+            lax.cond(r > ls["accept"], lambda: jax.debug.callback(_ls_reject, r),
+                     lambda: None)
+        return x.reshape(shape)
+
     def _dlinsolve(A, b):
         """Distributed 'gmres' / 'pyamg': flexible GMRES over the owned cells with global inner
         products, right-preconditioned for 'pyamg' by the rank's own PyAMG V-cycle plus a coarse
@@ -610,7 +679,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 xo.reshape(n_own, k).T)
             own = lambda X: X[:, :n_own].T.reshape(-1)             # noqa: E731
             vals = assembled(lambda xo: own(lin_o(emb(xo))), n_o, n_own)
-            rows, cols, _ = patterns[(n_o, n_own)]
+            rows, cols, _ = patterns[(n_o, n_own, None)]
             out = jax.ShapeDtypeStruct((n_o,), b.dtype)
 
             def precond(transpose):
@@ -679,14 +748,17 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return x.reshape(shape)
 
     def linsolve(A, b):
-        """Solve ``A x = b`` for the linear map ``A`` (linearized once at 0) by GMRES, AmgX or
-        AMG-preconditioned GMRES, as configured; differentiable via ``custom_linear_solve``.  Aborts
-        above the accept gate; a partitioned run uses :func:`_dlinsolve` or :func:`_amgx_mpi`.
+        """Solve ``A x = b`` for the linear map ``A`` (linearized once at 0) by GMRES, AmgX, hypre
+        or AMG-preconditioned GMRES, as configured; differentiable via ``custom_linear_solve``.
+        Aborts above the accept gate; a partitioned run uses :func:`_hypre_solve`,
+        :func:`_dlinsolve` or :func:`_amgx_mpi`.
 
         References:
             Saad, Schultz 1986, https://doi.org/10.1137/0907058
             Naumov et al. 2015, https://doi.org/10.1137/140980260
         """
+        if hyp is not None:
+            return _hypre_solve(A, b)
         if partition is not None:
             return _amgx_mpi(A, b) if amgx is not None else _dlinsolve(A, b)
         _, lin = jax.linearize(A, jnp.zeros_like(b))     # primal once per solve
@@ -698,7 +770,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
             vals = assembled(lambda x: to_cell(mv(to_row(x))), n)
-            rows, cols, _ = patterns[(n, nc)]
+            rows, cols, _ = patterns[(n, nc, None)]
             from jax.experimental import sparse as jsparse
             A_sp = jsparse.BCOO((vals, jnp.asarray(np.stack([rows, cols], 1))),
                                 shape=(n, n))
@@ -714,7 +786,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
             op = lambda x: to_cell(mv(to_row(x)))                    # noqa: E731
             vals = assembled(op, n)
-            rows, cols, _ = patterns[(n, nc)]
+            rows, cols, _ = patterns[(n, nc, None)]
             out = jax.ShapeDtypeStruct(b.shape, b.dtype)
 
             def amg(transpose):
@@ -1029,6 +1101,18 @@ def _pyamg():
         raise ImportError("linear solver 'pyamg' needs the optional PyAMG "
                           "package: pip install pyamg.  Or use 'gmres'.") from e
     return pyamg
+
+
+def _hypre():
+    """Import the hypre binding (:mod:`zoomy_jax.symsolver.hypre`) and load its library, with a
+    clear error when it is missing.
+
+    References:
+        Falgout, Yang 2002, https://doi.org/10.1007/3-540-47789-6_66
+    """
+    from zoomy_jax.symsolver import hypre
+    hypre.load()
+    return hypre
 
 
 def _face_kernel(rt, name):
