@@ -40,7 +40,7 @@ class ChorinTemplate(HyperbolicTemplate):
     """
 
     def __init__(self, pred, press, corr, *, cfl, time_order=1,
-                 pressure_newton=None, projection=Projection.increment, **config):
+                 pressure_newton=None, projection=Projection.standard, **config):
         """Set the split and the configuration of :class:`HyperbolicTemplate`; ``cfl``
         is divided by ``2 order - 1``.
 
