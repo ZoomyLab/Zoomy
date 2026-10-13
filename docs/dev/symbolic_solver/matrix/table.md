@@ -712,23 +712,23 @@
 | C30 | gate 39 checks failing | jax | 0.00e+00 PASS | - | - | - | - | <= 0 (spec, gate 39: exact to 1e-09) |
 | C30 | gate 39 checks failing | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 0 (spec, gate 39: exact to 1e-09) |
 | C31 | swe_ssp2_k0 max rel vs JAX | amrex | 2.40e-14 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C31 | vam_ssp2_k0 max rel vs JAX | amrex | 7.23e-12 PASS | - | - | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
+| C31 | vam_ssp2_k0 max rel vs JAX | amrex | 2.98e-13 PASS | - | - | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C31 | swe_ssp2_k0 max rel vs JAX | foam | 2.11e-14 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C31 | SWE lie1 order dt/4->dt/8 | jax | 1.22e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
 | C31 | SWE lie2 order dt/4->dt/8 | jax | 1.22e+00 PASS | - | - | - | - | <= 1.4 (theory 1: Lie splitting caps SSP-RK2 (observed 1.22, the dt/32 reference lifts the last pair)) |
 | C31 | SWE ssp2 order dt/4->dt/8 | jax | 2.08e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C31 | VAM predictor alone ssp2 order (Richardson) | jax | 2.01e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C31 | VAM ssp2 order (Richardson) | jax | 9.09e-01 PASS | - | - | - | - | >= 0.7 (observed 0.91 (the approximate projection caps it, README; the predictor alone: 2)) |
-| C31 | VAM t1 order (Richardson) | jax | 9.80e-01 PASS | - | - | - | - | >= 0.8 (theory 1) |
-| C31 | VAM t2 order (Richardson) | jax | 6.69e-01 PASS | - | - | - | - | >= 0.5 (observed 0.67 (theory 1: Lie source; the approximate projection, README)) |
+| C31 | VAM ssp2 order (Richardson) | jax | 1.96e+00 PASS | - | - | - | - | >= 1.8 (theory 2 (increment projection, ANALYSIS 45e)) |
+| C31 | VAM t1 order (Richardson) | jax | 1.03e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
+| C31 | VAM t2 order (Richardson) | jax | 1.12e+00 PASS | - | - | - | - | >= 0.8 (theory 1 (the Lie source per stage; observed 1.12, increment projection, ANALYSIS 45e)) |
 | C31 | SWE lie1 order dt/4->dt/8 | numpy | 1.22e+00 PASS | n/a | n/a | n/a | n/a | >= 0.8 (theory 1) |
 | C31 | SWE lie2 order dt/4->dt/8 | numpy | 1.22e+00 PASS | n/a | n/a | n/a | n/a | <= 1.4 (theory 1: Lie splitting caps SSP-RK2 (observed 1.22, the dt/32 reference lifts the last pair)) |
 | C31 | SWE ssp2 order dt/4->dt/8 | numpy | 2.08e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
 | C31 | VAM predictor alone ssp2 order (Richardson) | numpy | 2.01e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
-| C31 | VAM ssp2 order (Richardson) | numpy | 9.09e-01 PASS | n/a | n/a | n/a | n/a | >= 0.7 (observed 0.91 (the approximate projection caps it, README; the predictor alone: 2)) |
-| C31 | VAM t1 order (Richardson) | numpy | 9.80e-01 PASS | n/a | n/a | n/a | n/a | >= 0.8 (theory 1) |
-| C31 | VAM t2 order (Richardson) | numpy | 6.69e-01 PASS | n/a | n/a | n/a | n/a | >= 0.5 (observed 0.67 (theory 1: Lie source; the approximate projection, README)) |
-| C31 | numpy = JAX (max rel, worst run) | numpy | 3.34e-12 PASS | n/a | n/a | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
+| C31 | VAM ssp2 order (Richardson) | numpy | 1.96e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2 (increment projection, ANALYSIS 45e)) |
+| C31 | VAM t1 order (Richardson) | numpy | 1.03e+00 PASS | n/a | n/a | n/a | n/a | >= 0.8 (theory 1) |
+| C31 | VAM t2 order (Richardson) | numpy | 1.12e+00 PASS | n/a | n/a | n/a | n/a | >= 0.8 (theory 1 (the Lie source per stage; observed 1.12, increment projection, ANALYSIS 45e)) |
+| C31 | numpy = JAX (max rel, worst run) | numpy | 1.19e-13 PASS | n/a | n/a | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C32 | free n20 L_inf vs exact | amrex | 3.32e-04 PASS | - | - | - | - | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | free n20 max rel vs JAX | amrex | 3.33e-16 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C32 | free n20 max|h - 1| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -1035,9 +1035,9 @@ Notes:
 - C31 SWE lie1 order dt/4->dt/8, jax serial: L1(h) vs dt/32 3.77e-05 / 1.81e-05 / 8.43e-06 / 3.61e-06
 - C31 SWE lie2 order dt/4->dt/8, jax serial: L1(h) vs dt/32 5.61e-06 / 2.70e-06 / 1.26e-06 / 5.38e-07
 - C31 SWE ssp2 order dt/4->dt/8, jax serial: L1(h) vs dt/32 3.20e-07 / 7.93e-08 / 1.95e-08 / 4.64e-09
-- C31 VAM t1 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 8.23e-06 / 4.09e-06 / 2.07e-06
-- C31 VAM t2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 8.58e-07 / 4.90e-07 / 3.08e-07
-- C31 VAM ssp2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 6.44e-07 / 2.90e-07 / 1.55e-07
+- C31 VAM t1 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 8.09e-06 / 3.92e-06 / 1.92e-06
+- C31 VAM t2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 4.34e-07 / 1.70e-07 / 7.81e-08
+- C31 VAM ssp2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 3.74e-07 / 9.56e-08 / 2.46e-08
 - C31 VAM predictor alone ssp2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 5.66e-07 / 1.40e-07 / 3.47e-08
 - C32 noslip L_inf order 40->80, jax serial: L_inf 3.33e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87
 - C32 noslip n20 max|h - 1|, jax serial: theory: h stays 1
@@ -1395,7 +1395,7 @@ Notes:
 - C24 numpy = JAX (max rel, worst run), numpy serial: worst run sod_o2_n100_ax1
 - C26 numpy = JAX (max rel, worst run), numpy serial: worst run visc
 - C27 numpy = JAX (max rel, worst run), numpy serial: worst run wave_t3
-- C31 numpy = JAX (max rel, worst run), numpy serial: worst run vam_ssp2_k0
+- C31 numpy = JAX (max rel, worst run), numpy serial: worst run vam_t1_k0
 - C32 numpy = JAX (max rel, worst run), numpy serial: worst run free_n20
 - C33 numpy = JAX (max rel, worst run), numpy serial: worst run imex_k1
 - C34 numpy = JAX (max rel, worst run), numpy serial: worst run n16
@@ -1514,9 +1514,9 @@ Notes:
 - C31 SWE lie1 order dt/4->dt/8, numpy serial: L1(h) vs dt/32 3.77e-05 / 1.81e-05 / 8.43e-06 / 3.61e-06
 - C31 SWE lie2 order dt/4->dt/8, numpy serial: L1(h) vs dt/32 5.61e-06 / 2.70e-06 / 1.26e-06 / 5.38e-07
 - C31 SWE ssp2 order dt/4->dt/8, numpy serial: L1(h) vs dt/32 3.20e-07 / 7.93e-08 / 1.95e-08 / 4.64e-09
-- C31 VAM t1 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 8.23e-06 / 4.09e-06 / 2.07e-06
-- C31 VAM t2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 8.58e-07 / 4.90e-07 / 3.08e-07
-- C31 VAM ssp2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 6.44e-07 / 2.90e-07 / 1.55e-07
+- C31 VAM t1 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 8.09e-06 / 3.92e-06 / 1.92e-06
+- C31 VAM t2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 4.34e-07 / 1.70e-07 / 7.81e-08
+- C31 VAM ssp2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 3.74e-07 / 9.56e-08 / 2.46e-08
 - C31 VAM predictor alone ssp2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 5.66e-07 / 1.40e-07 / 3.47e-08
 - C32 noslip L_inf order 40->80, numpy serial: L_inf 3.33e-04 / 9.12e-05 / 2.38e-05; order 20->40 1.87
 - C32 noslip n20 max|h - 1|, numpy serial: theory: h stays 1
@@ -1554,4 +1554,4 @@ Notes:
 - C6 C32 mass change (rel), numpy serial: max over 12 runs
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4243, foam 4376, jax 7427, numpy 2508
+Summed run wall time (s, without process start-up): amrex 4257, foam 4450, jax 7519, numpy 2481
