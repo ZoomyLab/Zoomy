@@ -117,11 +117,11 @@
 | C6 | C32 mass change (rel) | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C5 mass change (rel) | foam | 1.95e-16 PASS | 1.95e-16 PASS | 1.95e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C6 | C1 mass change (rel) | jax | 1.41e-16 PASS | 0.00e+00 PASS | 1.41e-16 PASS | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C6 | C1 mass change (rel) | jax | 1.41e-16 PASS | 0.00e+00 PASS | 1.41e-16 PASS | 1.41e-16 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | jax | 3.47e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C12 mass change (rel) | jax | 1.41e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C13 mass change (rel) | jax | 1.73e-16 PASS | 1.73e-16 PASS | 1.73e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
-| C6 | C14 mass change (rel) | jax | 1.41e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
+| C6 | C14 mass change (rel) | jax | 1.41e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 1.41e-16 PASS | 1.41e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C2 mass change (rel) | jax | 2.82e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C20 mass change (rel) | jax | 2.20e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C23 mass change (rel) | jax | 2.22e-16 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -129,7 +129,7 @@
 | C6 | C32 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C36 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C6 | C5 mass change (rel) | jax | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
+| C6 | C5 mass change (rel) | jax | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 1.95e-16 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | numpy | 3.47e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C12 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -187,11 +187,11 @@
 | C9 | C26 visc GPU vs serial CPU (max rel) | amrex | - | - | - | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C5 n48 GPU vs serial CPU (max rel) | amrex | - | - | - | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C8 vam GPU vs serial CPU (max rel) | amrex | - | - | - | 1.25e-11 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
-| C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 1.67e-13 PASS | - | <= 1e-12 (tolerance (round-off)) |
-| C9 | C14 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 5.84e-16 PASS | 5.32e-16 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 9.17e-16 PASS | 7.64e-16 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C5 n48 GPU vs serial CPU (max rel) | jax | - | - | - | 3.14e-15 PASS | 3.10e-15 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C8 vam GPU vs serial CPU (max rel) | jax | - | - | - | 2.79e-10 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
+| C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 3.82e-14 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C9 | C14 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 5.00e-16 PASS | 5.71e-16 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 8.15e-16 PASS | 1.02e-15 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C5 n48 GPU vs serial CPU (max rel) | jax | - | - | - | 5.08e-15 PASS | 2.24e-15 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C8 vam GPU vs serial CPU (max rel) | jax | - | - | - | 2.78e-10 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C10 | space O1 time O1 order (Richardson) | amrex | 1.91e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
 | C10 | space O2 time O1 order (Richardson) | amrex | 2.00e+00 PASS | - | - | - | - | >= 0.8 (theory 1 (time)) |
 | C10 | space O2 time O2 order (Richardson) | amrex | 2.01e+00 PASS | - | - | - | - | >= 1.5 (observed (theory 2, minmod)) |
@@ -294,15 +294,15 @@
 | C14 | numpy = JAX (max rel, worst run) | numpy | 5.28e-15 PASS | n/a | n/a | n/a | n/a | <= 1e-08 (tolerance (implicit Newton 1e-8)) |
 | C15 | runs | amrex | n/a | - | - | - | - | information |
 | C15 | runs | foam | n/a | - | - | n/a | n/a | information |
-| C15 | chorin jvp vs serial (rel) | jax | - | 5.36e-12 PASS | - | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
-| C15 | chorin |FD - jvp| (rel) | jax | 6.39e-09 PASS | 6.40e-09 PASS | - | - | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
-| C15 | chorin |rev - jvp| (rel) | jax | 8.87e-15 PASS | 4.07e-11 PASS | - | - | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
-| C15 | hyperbolic jvp vs serial (rel) | jax | - | 5.55e-16 PASS | - | 1.85e-15 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C15 | chorin jvp vs serial (rel) | jax | - | 5.36e-12 PASS | - | 4.43e-15 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
+| C15 | chorin |FD - jvp| (rel) | jax | 6.39e-09 PASS | 6.40e-09 PASS | - | 6.39e-09 PASS | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
+| C15 | chorin |rev - jvp| (rel) | jax | 8.87e-15 PASS | 4.07e-11 PASS | - | 1.20e-14 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
+| C15 | hyperbolic jvp vs serial (rel) | jax | - | 5.55e-16 PASS | - | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C15 | hyperbolic |FD - jvp| (rel) | jax | 7.88e-09 PASS | 1.39e-08 PASS | - | 7.88e-09 PASS | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
-| C15 | hyperbolic |rev - jvp| (rel) | jax | 7.77e-15 PASS | 1.65e-14 PASS | - | 1.85e-15 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
-| C15 | imex jvp vs serial (rel) | jax | - | 1.75e-15 PASS | - | 2.10e-15 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C15 | hyperbolic |rev - jvp| (rel) | jax | 7.77e-15 PASS | 1.65e-14 PASS | - | 9.24e-16 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
+| C15 | imex jvp vs serial (rel) | jax | - | 1.75e-15 PASS | - | 4.91e-15 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C15 | imex |FD - jvp| (rel) | jax | 3.66e-07 PASS | 1.93e-07 PASS | - | 1.36e-07 PASS | - | <= 1e-05 (tolerance (central FD, eps 1e-3..1e-5)) |
-| C15 | imex |rev - jvp| (rel) | jax | 5.79e-15 PASS | 1.49e-14 PASS | - | - | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
+| C15 | imex |rev - jvp| (rel) | jax | 5.79e-15 PASS | 1.49e-14 PASS | - | 4.91e-15 PASS | - | <= 1e-10 (tolerance (checkpointed reverse vs forward)) |
 | C15 | runs | numpy | n/a | n/a | n/a | n/a | n/a | information |
 | C16 | amrex_amrex coupled vs single (max) | amrex | 3.39e-15 PASS | 3.39e-15 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | amrex_amrex mass drift | amrex | 0.00e+00 PASS | 0.00e+00 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
@@ -1590,4 +1590,4 @@ Notes:
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 - C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 5203, foam 5434, jax 8066, numpy 2777
+Summed run wall time (s, without process start-up): amrex 4863, foam 5189, jax 8913, numpy 2855
