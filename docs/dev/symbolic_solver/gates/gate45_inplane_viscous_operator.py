@@ -1,15 +1,19 @@
 """Gate 45: the in-plane viscous operator of SME(0) + NewtonianInPlane, measured on the symbolic
 solvers, against (a) the SystemModel's own operator (diffusion_matrix A[i, j, a, b] with its
-mixed-index entries a != b, plus the nu-part of the source) and (b) the physics
-div(nu h (grad u + grad u^T)) and h div(tau).
+mixed-index entries a != b, plus the nu-part of the source) and (b) the exact div(h tau),
+tau = nu (grad u + grad u^T), u = q / h.
+
+Symbolic part: with generic smooth fields h, q_x, q_y, b of (x, y), the SystemModel operator minus
+div(h tau) and minus gate 46's hand-written operator, flat and varying bed.
 
 Periodic smooth h, qx, qy on [0,1]^2; one implicit-Lie step of dt with nu = 1 and nu = 0;
 (Q_nu - Q_0) / dt on the momentum rows is the discrete viscous operator (O(dt) accurate).
 
-Findings (ANALYSIS 45): with two-point fluxes only, the discrete operator was the SystemModel
-operator WITHOUT its mixed-index entries (16 % / 38 % off the full one).  With the face gradient
-(mean of the cell LSQ gradients + normal correction) it converges to the full operator at second
-order; the SystemModel operator itself matches neither physical form (3-11 %, open).
+Findings (ANALYSIS 45, 45c, 45d): with two-point fluxes only, the discrete operator was the
+SystemModel operator WITHOUT its mixed-index entries (16 % / 38 % off the full one); the face
+gradient (mean of the cell LSQ gradients + normal correction) fixed that.  The derivation gave
+h div(tau) until the bed / surface traction carried the in-plane stress (45d); now the
+SystemModel operator is div(h tau) exactly and the discrete one converges to it at order 2.
 
     python gate45_inplane_viscous_operator.py [jax|foam|amrex ...]
 """
@@ -90,6 +94,46 @@ def sm_operator():
     return out
 
 
+def symbolic_check():
+    """``{name: difference}`` of the SystemModel operator (generic smooth fields, aux = their
+    exact derivatives) against div(h tau) (varying bed) and gate 46 (flat and varying bed);
+    every difference must be 0.
+    """
+    import gate46_viscous_swe_reference as G46
+    sm = model([BC.Wall(tag=t) for t in ("left", "right", "bottom", "top")])
+    nu, St = sm.parameters.nu, [str(s_) for s_ in sm.state]
+    X = (x, y)
+    F = {n_: sp.Function("F_" + n_)(x, y) for n_ in St}
+
+    def tof(e):
+        return e.subs({a: F[str(a)] for a in e.free_symbols if str(a) in F})
+    aux = {e["aux_symbol"]: sp.diff(F[e["target_name"]], *[v for v, k in zip(X, e["multi_index"])
+                                                             for _ in range(k)])
+           for e in sm.aux_registry if e.get("kind") == "derivative"}
+    assert all(a in aux for a in sm.aux_state), "non-derivative aux"
+    A, H = sm.diffusion_matrix, F["h"]
+    U = [F["q_x_0"] / H, F["q_y_0"] / H]
+    tau = [[nu * (sp.diff(U[e], X[d]) + sp.diff(U[d], X[e])) for e in range(2)] for d in range(2)]
+    sm46 = G46.viscous_swe()
+    sub46 = {G46.h: H, G46.qx: F["q_x_0"], G46.qy: F["q_y_0"], G46.nu: nu}
+    Q46 = [H, F["q_x_0"], F["q_y_0"]]
+    out = {}
+    for d, k in enumerate(ROWS):
+        i = St.index(k)
+        src = sp.expand(sm.source[i, 0])
+        op = tof(sum((t_ for t_ in sp.Add.make_args(src) if t_.has(nu)), sp.S.Zero).subs(aux))
+        op += sum(sp.diff(tof(sp.sympify(A[i, j, a, b])) * sp.diff(F[St[j]], X[b]), X[a])
+                  for j in range(len(St)) for a in range(2) for b in range(2))
+        op46 = sum(sp.diff(sp.sympify(sm46.diffusion_matrix[d + 1, j, a, b]).subs(sub46)
+                           * sp.diff(Q46[j], X[b]), X[a])
+                   for j in range(3) for a in range(2) for b in range(2))
+        ref = sum(sp.diff(H * tau[d][e], X[e]) for e in range(2))
+        out[f"{k} SM - div(h tau), varying bed"] = sp.simplify(sp.expand(op - ref))
+        out[f"{k} SM - gate 46, varying bed"] = sp.simplify(sp.expand(op - op46))
+        out[f"{k} SM - gate 46, flat bed"] = sp.simplify(sp.expand((op - op46).subs(F["b"], 0).doit()))
+    return out
+
+
 def setup(nx, nu):
     """(mesh, nsm, Q0 in mesh order) of the periodic case at viscosity ``nu``."""
     sides = (("left", "right"), ("right", "left"), ("bottom", "top"), ("top", "bottom"))
@@ -139,22 +183,29 @@ def operator(backend, nx, work=None):
     return {k: (Q1 - Q0)[names.index(k)] / DT for k in ROWS}, xc
 
 
+EXACT = {k: sp.lambdify((x, y), e, "numpy") for k, e in PHYS["div(h tau)"].items()}
+
+
 def errors(L, xc, SM):
-    """Max errors relative to max |operator| per row: vs the full SystemModel operator
-    (``full``) and vs its diagonal-index part (``diag``).
+    """Max errors relative to max |operator| per row: vs the exact div(h tau) (``exact``), the
+    full SystemModel operator (``full``) and its diagonal-index part (``diag``).
     """
     out = {}
     for k in ROWS:
         full, diag = (f(xc[0], xc[1]) * np.ones(xc.shape[1]) for f in SM[k])
+        ex = EXACT[k](xc[0], xc[1]) * np.ones(xc.shape[1])
+        out[f"{k} exact"] = float(np.abs(L[k] - ex).max() / np.abs(ex).max())
         out[f"{k} full"] = float(np.abs(L[k] - full).max() / np.abs(full).max())
         out[f"{k} diag"] = float(np.abs(L[k] - diag).max() / np.abs(diag).max())
     return out
 
 
 def main(backends):
+    for name, dd in symbolic_check().items():  # the SystemModel vs the physics, symbolically
+        print(f"gate45 symbolic {name}: {dd}", flush=True)
     SM = sm_operator()
     xs = np.random.default_rng(0).random((2, 200))
-    for name, c in PHYS.items():               # the SystemModel vs the physics (open)
+    for name, c in PHYS.items():
         for k in ROWS:
             P, full = sp.lambdify((x, y), c[k], "numpy")(*xs), SM[k][0](*xs)
             print(f"gate45 SM(full) {k} vs {name}: {np.abs(full - P).max() / np.abs(P).max():.2e}")
@@ -166,9 +217,12 @@ def main(backends):
             print(f"gate45 {b} nx {nx}: " + "  ".join(f"{k} {e:.2e}" for k, e in res[b, nx][1].items()),
                   flush=True)
         for k in ROWS:
-            e = [res[b, nx][1][f"{k} full"] for nx in NXS]
-            print(f"gate45 {b} {k} vs SM(full): " + " / ".join(f"{v:.2e}" for v in e) + "  orders "
-                  + " / ".join(f"{np.log2(e[i] / e[i + 1]):.2f}" for i in range(len(e) - 1)), flush=True)
+            for ref in ("exact", "full"):
+                e = [res[b, nx][1][f"{k} {ref}"] for nx in NXS]
+                print(f"gate45 {b} {k} vs {'div(h tau)' if ref == 'exact' else 'SM(full)'}: "
+                      + " / ".join(f"{v:.2e}" for v in e) + "  orders "
+                      + " / ".join(f"{np.log2(e[i] / e[i + 1]):.2f}" for i in range(len(e) - 1)),
+                      flush=True)
         if b != "jax" and ("jax", NXS[-1]) in res:
             for nx in NXS:
                 d = max(float(np.abs(res[b, nx][0][k] - res["jax", nx][0][k]).max()

@@ -286,12 +286,13 @@ def lsq_closure(p, bc):
             for k in range(1, p + 1)}
 
 
-# ── C34: in-plane viscous operator vs the SystemModel operator (gate 45) ────
+# ── C34: in-plane viscous operator vs the exact div(h tau) (gate 45) ────────
 def inplane_operator(backend, nx, work):
     """Gate 45 at ``nx``: the discrete in-plane viscous operator of SME(0) +
-    NewtonianInPlane (one step nu = 1 minus nu = 0, over dt) against the full
-    SystemModel operator (mixed-index entries) and its diagonal-index part, max
-    rel per momentum row; foam / AMReX also max rel |L - L_JAX|."""
+    NewtonianInPlane (one step nu = 1 minus nu = 0, over dt) against the exact
+    div(h tau), the full SystemModel operator (mixed-index entries; = div(h tau)
+    symbolically) and its diagonal-index part, max rel per momentum row; foam /
+    AMReX also max rel |L - L_JAX|."""
     import gate45_inplane_viscous_operator as G
     L, xc = G.operator(backend, nx, str(work))
     out = G.errors(L, xc, G.sm_operator())

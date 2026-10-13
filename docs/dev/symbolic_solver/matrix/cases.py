@@ -729,6 +729,6 @@ CASES = {
             "no-slip and free-slip walls", _c32()),
     "C33": ("vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
             _c33()),
-    "C34": ("in-plane viscous operator vs the SystemModel operator, mixed derivatives (gate 45)",
+    "C34": ("in-plane viscous operator vs the exact div(h tau), mixed derivatives (gate 45)",
             _c34()),
 }

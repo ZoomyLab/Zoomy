@@ -1234,3 +1234,49 @@ projection, Almgren, Bell, Crutchfield 2000 "version (1)": only `project()` chan
 P^n, solve press for dP, store P^n + dP); a Fourier model keeps 2.00 at every wavenumber.  First:
 the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Details:
 `research/vam_second_order.md`, `research/toy/`.
+
+### 45e. In-plane viscosity: the in-plane stress in the bed / surface traction (2026-10-13, dev/inplane-traction)
+
+- **Change (derivation only).** `closures.py:apply_stress_closures` -> `_inplane_traction`: with an
+  in-plane closure the bed and surface traction is built from the full deviatoric stress,
+  (tau n)_d = (tau_dz - sum_e tau_de d_e I) n_z, with tau_de = `NewtonianInPlane.stress` (the
+  sigma-mapped rho nu (d_d u_e + d_e u_d) at the trace, `ClosureState.dx_phys`) and d_e I the
+  PHYSICAL interface slope (`ClosureState.interface_slopes`, d_e(b + zeta h) at zeta = 0, 1), the
+  slope of the sigma map's Leibniz terms.  `_solve_traction` carries sum_e tau_de d_e I through
+  the frame solve as an opaque g_d; the frame slopes of the shear part still go to 0 under
+  small_slope, so tau_dz(eta) = sum_e tau_de(eta) d_e eta and tau_dz(b) = P_d + sum_e tau_de(b) d_e b.
+  SME and VAM pass `base=b` to their ClosureState.  Without an in-plane closure the code path is
+  unchanged.
+- **pdb** (SME(0), 2 horizontal): before the closure the projected rows carry the Leibniz terms
+  (nu c(1) phi(1) d_y u~(1) (b_y + h_y), ...); after closure + Simplify (frame slopes 0) no nu term
+  outside an integral is left in either row.
+- **Symbolic** (diffusion + nu-part of the source, aux = exact derivatives, generic smooth h, q, b
+  of (x, y)).  SME(0): SM - div(h tau) = 0; SM - gate 46 = 0, flat and varying bed (gate 45 prints
+  it).  SME(1): every momentum row equals the independent projection
+  (2k+1)[d_e(h <phi_k tau~_de>) + <phi_k' (b_e + zeta h_e) tau~_de>] + the vertical shear.  The mean
+  rows are div(h taubar), taubar = nu (grad u0 + grad u0^T) - (2 nu / h)(u1 (x) grad z_m +
+  grad z_m (x) u1), z_m = b + h/2; periodic integral -6e-17 (max |op| 15): momentum-conservative.
+  The q_1 rows keep the non-divergence <phi_1' ...> part (a moment, not a conserved quantity).
+  One horizontal: SME(1) and VAM(1) the same (0; periodic integral 2e-16).
+- **Gate 45** (JAX, discrete vs the exact div(h tau), nx 16 / 32 / 64): q_x 2.71e-2 / 6.83e-3 /
+  1.71e-3 (orders 1.99 / 1.99), q_y 4.66e-2 / 1.21e-2 / 3.08e-3 (1.94 / 1.98).  The old operator
+  h div(tau) differs from div(h tau) by 2.8 % / 5.9 % of max |op| on this field.
+- **Goldens.** Only m07 / m14 change, only in `source`: q_0 loses its nu terms (the row is now the
+  pure diffusion divergence), q_1 gets the phi_1' terms with the physical slopes.  The 4 pre-existing
+  failures (m05, n02, n03, n02 canary) are unchanged.  The rederive test
+  `test_inplane_h_column_matches_G_matrix_first_principles` fails the same before and after
+  (A[q_k <- h] = +V, the test expects -V; A is unchanged here).
+- **Matrix** (serial, against the pre-change store): C32 and C33 bit-identical (JAX); C26 moves by
+  5.7e-5 (JAX, AMReX; foam 6.0e-5), 5e-5 of max |Q|; AMReX = JAX 1.2e-15, foam vs JAX L1 1.72e-3 as
+  before.  C34 now checks against the exact div(h tau); PASS.
+- **Open.** (1) ML-SME / ML-VAM (`apply_layer_stress_closures`) are unchanged and still give
+  h_l div(tau_l) per layer.  Their internal interfaces need a single-valued interface traction
+  tau_dz - tau_de d_e z_l (which layer's tau_de, or the mean) before the bed / surface can take
+  `_inplane_traction` (the layer derivation also uses its own `nu` symbol).  (2) Gate 46 is the
+  first literature term only.  Marche 2007 eq. (5.19) has 2 mu div(h D(u)) + 2 mu grad(h div u),
+  Gerbeau, Perthame 2001 (https://doi.org/10.3934/dcdsb.2001.1.89) eq. (1) 4 mu d_x(h d_x u) in
+  1-D (Zotero attachments CV8TMDFI, XMQXMC6E).  The grad(h div u) part is the viscous normal stress
+  tau_zz = -2 rho nu div u in the pressure, which the hydrostatic elimination drops.  Keeping it is
+  a model choice.  (3) small_slope=False with an in-plane closure derives (SME(0), one horizontal),
+  but it has not been run.  Its traces carry the 1/(1 - |grad I|^2) factor of the frame solve, whose
+  normal row has no tau_zz.
