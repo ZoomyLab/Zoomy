@@ -77,6 +77,10 @@ A runtime gives every printed name its meaning.
 | foam | `zoomy_foam/symsolver/rt.H` + `zoomy_core/symsolver/rt_common.H` | `zoomy_foam/zoomy_foam/symkernels.py` -> `Kernels.H` | `zoomy_foam/zoomy_foam/symsolver.py`; app `symsolver/symFoam.C` |
 | AMReX | `zoomy_amrex/Source/symsolver/rt_amrex.H` (+ `amr_amrex.H`) + `rt_common.H` | `zoomy_amrex/zoomy_amrex/symkernels.py` -> `Kernels.H` | `zoomy_amrex/zoomy_amrex/symsolver.py`; app `Source/symsolver/symAmrex.cpp` |
 
+The C++ kernels are functors on fixed-size stack storage, so a cell or face
+call allocates nothing: foam's take `zs::Col` views of a field column and
+return a row-major `std::array`, AMReX's take and return `amrex::SmallMatrix`.
+
 `rt_common.H` holds what both C++ runtimes share: elementwise functors, the
 `configure()` settings, effects, the Newton skeletons and the preCICE call
 sequence.  A solver class combines a driver with a strategy by inheritance,
