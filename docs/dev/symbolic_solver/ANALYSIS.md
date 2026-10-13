@@ -1103,7 +1103,8 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
 - **IMEX-SSP2(2,2,2)** (Pareschi & Russo 2005) as `imex="ssp2"`: SWE + Manning time order 2.01-2.08
   (Lie 1.06-1.22), foam / AMReX = JAX to 2e-14 (C31).  VAM(1): every scheme caps near 1 because the
   discrete projection is not idempotent (P(P(U)) != P(U), 2.5 / 0.74 / 0.23 % of the correction at
-  nx 30 / 60 / 120); the predictor alone is order 2.02.
+  nx 30 / 60 / 120); the predictor alone is order 2.02.  Why: an approximate projection by
+  construction (last bullet).
 - **Viscosity** (C32 shear decay between no-slip / free-slip walls, exact; C33 SME(2) vertical
   viscosity vs expm): pass.  But both see only the diagonal-index diffusion entries.  Gate 45
   (smooth periodic h, q_x, q_y varying in x and y; one step nu = 1 minus nu = 0) finds:
@@ -1141,3 +1142,40 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
   max |Q|; AMReX = JAX 1.1e-13, foam vs JAX unchanged (L1 1.72e-3).  Open: the cell gradients
   take the boundary ghosts as samples, not the LSQ boundary closure (ANALYSIS 40), on every
   backend; a distributed run's halo gradients are exchanged but no mpiN config was rerun.
+- **VAM projection: approximate by construction (2026-10-13, dev/vam-projection; numerics
+  unchanged).**  The splitter builds the pressure rows as the constraint with the corrector
+  substituted symbolically and product-rule expanded (`split_for_pressure_structural`); the
+  template discretizes that PDE term by term, with LSQ second derivatives (`P_xx`, `h_xx`, `b_xx`)
+  and products of first derivatives, while correction then constraint apply the first-derivative
+  LSQ twice, D(h D P).  Aux (recomputed after the correction), BC ghosts, the 1/h row scaling and
+  the frozen h, b are the same on both sides, and the constraint is affine in P (one linear solve;
+  Newton agrees): the one difference is the elliptic operator, a compact L_a instead of the
+  composition D∘G, i.e. an approximate projection (Almgren, Bell, Szymczak 1996,
+  https://doi.org/10.1137/S1064827593244213), not idempotent.  Measured on C31's wave (first
+  projection, max over the corrected rows, nx 30 / 60 / 120): constraint residual of P(U) / of U
+  7.4e-2 / 2.8e-2 / 1.4e-2, |P(P(U)) - P(U)| / |P(U) - U| 5.5e-2 / 1.9e-2 / 5.1e-3.  The time
+  error it leaves does not shrink with the mesh: IMEX-SSP2 L1(h) dt/4 -> dt/8 differences
+  1.53e-7 / 1.55e-7 / 1.19e-7 (orders 0.99 / 0.91 / 1.00), as D∘G and L_a differ by O(1) on
+  grid-scale modes.
+- **Exact projection, prototype** (`prototype/exact_projection.patch`, not merged): R(P) = the
+  constraint (`press` at dt = 0) of `correct(corr, Q(P))`, the corrected rows' derivative aux
+  recomputed.  Idempotent to 2e-15 / 2e-14 / 8e-14 (constraint residual 2e-15 / 1e-14 / 2e-13 of
+  U's).  C31 JAX: ssp2 1.98 / 1.95 (was 1.15 / 0.91); t2 1.38 / 0.82 with the Lie Manning source
+  (n 0: 1.95 / 1.88; was 0.81 / 0.67); t1 1.04 / 1.02.  C10 1.91 / 2.00 / 2.01 (JAX = foam); C8 on
+  quads: foam vs JAX L1 8e-10 (was 1.6e-2: first derivatives only, no second-derivative stencils),
+  AMReX 1.5e-9 (threshold 1e-9).  Not adopted: on C8's triangles the composed operator is
+  indefinite and ill-conditioned (200 of 1440 eigenvalues with Re < 0, cond 1.2e6 against 956 for
+  L_a; quads 887 against 514) and
+  unpreconditioned GMRES fails (C8 `vam_tri`: JAX relative residual 3.4e-3, foam 2.2e-5), the
+  spurious modes of a collocated D∘G that approximate projections avoid (Almgren, Bell,
+  Crutchfield 2000, https://doi.org/10.1137/S1064827599357024).
+- **What a second-order projection needs:** the exact composition with L_a (the current operator)
+  as its preconditioner, i.e. a preconditioned `LinSolve` block on every backend; and the runtime
+  items the prototype carries: a right-hand side at round-off (a stage already projected: IMEX-SSP2
+  with a source below the Newton tolerance) breaks JAX's GMRES, which takes |b| < eps for zero
+  (solve on b / |b|), and the C++ matvec R(x) - R(0) would keep no digits for a tiny x (evaluate
+  |x| op(x / |x|)); the AMG assembly pattern becomes the stencil's stencil (JAX: > 63 colours) and
+  AMReX's block probing needs cells 2R + 1 apart.  On the time accuracy of projection schemes and
+  the pressure-increment form: Brown, Cortez, Minion 2001, https://doi.org/10.1006/jcph.2001.6715;
+  Guermond, Minev, Shen 2006, https://doi.org/10.1016/j.cma.2005.10.010 (Zotero J4IJXP8A, no PDF;
+  the Almgren papers are not in the library).
