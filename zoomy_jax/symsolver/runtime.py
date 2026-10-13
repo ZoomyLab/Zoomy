@@ -75,8 +75,8 @@ def _with_geometry(R, g, mesh_np, nc):
     return R
 
 
-def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None, couple=None,
-            implicit=None, systems=None, partition=None):
+def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None,
+            on_save=None, on_load=None, couple=None, implicit=None, systems=None, partition=None):
     """Build the name table (dict of callables) a printed solver runs against: the JAX
     implementation of every ``zoomy_core.symsolver`` block on this mesh.  Called by the JAX solver
     driver's ``_setup``.
@@ -85,6 +85,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         topo: static topology (:func:`geometry_xp.build_topology`) with the boundary-closure classes
         ad_mode: 'forward', or 'reverse' for a time loop with ``checkpoints`` checkpoints
         on_write: ``on_write(time, Q, Qaux)`` snapshot callback (forward mode)
+        on_save, on_load: the restart pair (host), `on_save(time, Q, Qaux)` (forward mode) and
+            `on_load(time, Q, Qaux) -> (time, Q, Qaux)`; None: no restart file / not restarting
         couple: preCICE settings ``dict(adapter=, tag=, side=)``
         implicit: Newton and linear-solver settings of ``root`` and ``linsolve``
         systems: further ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``
@@ -956,6 +958,40 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             jax.debug.callback(on_write, time, Q, Qaux, ordered=True)
         return (tok + 1,)
 
+    def reset_lagged():
+        """Restart the lagged AMG hierarchies, as in a run restarted at this state."""
+        for key, c in amg_cache.items():
+            if key[0] == "vcycle":
+                c.update(vals=None, age=0, P=None, Dinv=None)
+            else:
+                c.clear()
+
+    def io_save_state(tok, time, Q, Qaux):
+        """Forward mode: save the march state through `on_save` (host); returns the next token."""
+        if on_save is not None and ad_mode == "forward":
+            def host(*a):
+                """Save, then restart the lagged solver caches."""
+                on_save(*a)
+                reset_lagged()
+            jax.debug.callback(host, *map(lax.stop_gradient, (time, Q, Qaux)), ordered=True)
+        return (tok + 1,)
+
+    def io_load_state(tok, time, Q, Qaux):
+        """The march state from `on_load` (a restart, ordered host call), else the arguments."""
+        if on_load is None:
+            return (tok + 1, time, Q, Qaux)
+        from jax.experimental import io_callback
+
+        args = tuple(map(lax.stop_gradient, (jnp.asarray(time, Q.dtype), Q, Qaux)))
+        shapes = tuple(jax.ShapeDtypeStruct(jnp.shape(x), x.dtype) for x in args)
+
+        def host(*a):
+            """Read the saved state, shaped as the arguments."""
+            out = on_load(*a)
+            reset_lagged()
+            return tuple(np.asarray(x, dtype=s.dtype) for x, s in zip(out, shapes))
+        return (tok + 1, *io_callback(host, shapes, *args, ordered=True))
+
     def with_closure(name, sub):
         """The derivative-aux spec of system ``name``, each state entry tagged with its
         boundary-closure class.
@@ -987,6 +1023,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         put=put, zeros=zeros, clean_round_off=clean_round_off, take=lambda Q, rows: Q[jnp.asarray(rows)],
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
+        io_save_state=io_save_state, io_load_state=io_load_state,
         root=root, linsolve=linsolve, implicit_diffusion=implicit_diffusion,
         diffusion=diffusion,
         check_cfl=check_cfl,

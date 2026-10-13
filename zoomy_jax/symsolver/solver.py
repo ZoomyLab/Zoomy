@@ -143,10 +143,12 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
+        on_save, on_load = self._restart()
         self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j, self.topo,
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
-                                on_write=self._writer(), couple=self.couple,
+                                on_write=self._writer(), on_save=on_save,
+                                on_load=on_load, couple=self.couple,
                                 systems=systems, partition=self.partition,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
@@ -179,7 +181,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                     mood=self.mood_active, dt_write=self.dt_write,
                     imex=self.imex, cfl_check_every=self.cfl_check_every,
                     wave_speed=self.cfl_wave_speed, dt_constant=self.dt,
-                    time_order=self.time_order)
+                    time_order=self.time_order, dt_checkpoint=self.dt_checkpoint)
 
     def _print(self):
         """Print the template to Python source; returns ``(name, source)``."""
@@ -233,6 +235,34 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                 user(time, Q, Qaux)
         return write
 
+    def _restart(self):
+        """The restart pair of `io.save_state` / `io.load_state`: one HDF5 file
+        (`zoomy_core.symsolver.restart`), written by rank 0, each rank reading its cells.
+        """
+        from zoomy_core.symsolver import restart as rs
+        if self.couple and (self.restart_from is not None or self.dt_checkpoint is not None):
+            raise NotImplementedError("restart / checkpoints with preCICE coupling")
+        part, names = self.partition, [str(v) for v in self.nsm.state]
+        path = rs.restart_path(self.checkpoint, self.output)
+        on_save = None
+        if path is not None:
+            def on_save(time, Q, Qaux):
+                """Gather the march state and write it on rank 0."""
+                if part is not None:
+                    Q, Qaux = part.gather(np.asarray(Q)), part.gather(np.asarray(Qaux))
+                if part is None or part.rank == 0:
+                    rs.write_state(path, time, Q, Qaux, names)
+        if self.restart_from is None:
+            return on_save, None
+        rs.check_state(self.restart_from, names,
+                       part.n_global if part else int(self.mesh_np.n_inner_cells))
+
+        def on_load(time, Q, Qaux):
+            """The saved state, this rank's cells."""
+            t, Q, Qaux = rs.read_state(self.restart_from)
+            return (t, Q, Qaux) if part is None else (t, part.scatter(Q), part.scatter(Qaux))
+        return on_save, on_load
+
     def initial_aux(self, Q, Qaux, parameters=None, X=None):
         """The aux of the initial state: the pointwise formula plus the derivative aux with the BC
         ghosts and the boundary closure.
@@ -263,11 +293,13 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         return self.rt.parameters
 
     # ── run ────────────────────────────────────────────────────────────────
-    def run(self, Q, Qaux, parameters=None, time0=0.0, X=None):
-        """March to ``time_end``; returns ``(time, Q, Qaux)``.  ``parameters`` and the vertex
-        coordinates ``X`` ``(dim, n_vertices)`` may be traced for AD.
+    def run(self, Q, Qaux, parameters=None, time0=None, X=None):
+        """March from `time0` (default `time_start`; a restart: the saved state) to `time_end`;
+        returns `(time, Q, Qaux)`.  `parameters` and the vertex coordinates `X`
+        `(dim, n_vertices)` may be traced for AD.
         """
         p = self.parameters if parameters is None else parameters
+        time0 = self.time_start if time0 is None else time0
         tok = jnp.int64(0)
         args = (Q, Qaux, p, time0) + (() if self.couple else (self.time_end,))
         out = (self._jit_fixed(*args, tok) if X is None
