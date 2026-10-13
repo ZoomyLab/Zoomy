@@ -231,7 +231,7 @@ Power-iteration wave speeds on every backend and device (`zoomy_core.symsolver.W
 foam / AMReX gained `spectral_radius`).  The whole store rerun from empty (the eig store is kept
 as `store_prev_eig_20261012`); C31 (IMEX-SSP2 time order), C32 (viscous shear decay, exact),
 C33 (SME(2) vertical viscosity, expm) added.  Libraries: core 09d1584, jax 5fd4252, foam
-e17026f, amrex ce3f72a.  **538 check rows PASS, 0 FAIL** (651 passing cells over the configs; the docs page counts cells).  After the diffusion face-gradient fix (C34, ANALYSIS 45; C26 changed by ~2e-4, C28 / C32 / C33 unchanged to round-off): **544 rows PASS, 0 FAIL**.  After the in-plane viscosity derivation fix (`package_viscous` evaluated d(C)/dx, ANALYSIS 45; C26 moved by 5e-5): still 544 PASS, 0 FAIL.  The table now judges every cell by its own
+e17026f, amrex ce3f72a.  **538 check rows PASS, 0 FAIL** (651 passing cells over the configs; the docs page counts cells).  After the diffusion face-gradient fix (C34, ANALYSIS 45; C26 changed by ~2e-4, C28 / C32 / C33 unchanged to round-off): **544 rows PASS, 0 FAIL**.  After the in-plane viscosity derivation fix (`package_viscous` evaluated d(C)/dx, ANALYSIS 45; C26 moved by 5e-5): still 544 PASS, 0 FAIL.  With the NumPy backend (serial; AD, preCICE, AMR, large tier excluded) and the in-plane traction fix (C26 / C34 rerun on every backend and config): **759 rows PASS, 0 FAIL**.  The table now judges every cell by its own
 threshold: the old table hid an errored C16 jax-foam run behind an "unsupported" sibling (459
 PASS, 1 FAIL there); it passes now (4.3e-15).  Open: the VAM projection is not idempotent
 (P(P(U)) != P(U), 0.2-2.5 % of the correction), which caps every Chorin time order near 1 (C31).
