@@ -10,6 +10,7 @@ exactly as the generic runner does for every other backend.
 """
 import logging
 import os
+import sys
 
 from zoomy_server.adapter import SolverAdapter
 
@@ -28,4 +29,4 @@ class DuneAdapter(SolverAdapter):
                 "solver translation for this backend."
             )
         self.run_mesh_script(case_dir)
-        self.run_case_script(case_dir, output_dir, on_progress)
+        self.run_case_script(case_dir, output_dir, on_progress, entry=[sys.executable, "run.py"])

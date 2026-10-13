@@ -19,7 +19,6 @@ class NumpyAdapter(SolverAdapter):
         # section) — execute THAT instead of translating settings into solver
         # calls.
         if os.path.exists(os.path.join(case_dir, "run.py")):
-            self.run_mesh_script(case_dir)
             self.run_case_script(case_dir, output_dir, on_progress)
             return
 
