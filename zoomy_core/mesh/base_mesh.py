@@ -629,8 +629,10 @@ class BaseMesh(param.Parameterized):
         """Load a gmsh ``.msh`` file via meshio and build the topology, keeping node and cell data
         for ``mesh_ic``.
         """
-        if not _HAVE_MESHIO:
-            raise RuntimeError("BaseMesh.from_msh() requires meshio")
+        try:   # at call time: the GUI's Pyodide installs meshio after zoomy_core is imported
+            import meshio
+        except ImportError as e:
+            raise RuntimeError("BaseMesh.from_msh() requires meshio") from e
 
         mio = meshio.read(filepath)
         boundary_dict = {name: data[0] for name, data in mio.field_data.items()}
