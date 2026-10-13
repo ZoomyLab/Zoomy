@@ -76,13 +76,25 @@ jobs:
 
       - name: Host env (GUI-side checks, in-process and host matrix runs)
         if: steps.on.outputs.run == '1'
-        run: python -m pip install -r tests/qr_cases/requirements.txt "jax[cpu]" attrs
+        run: python -m pip install -r tests/qr_cases/requirements.txt attrs
 
       - name: Pull the image
         if: steps.on.outputs.run == '1'
         run: |
           c=$(case "${{ matrix.backend }}" in numpy) echo zoomy_numpy;; jax) echo zoomy_jax;; amrex) echo zoomy_amrex;; openfoam) echo zoomy_openfoam;; esac)
           docker pull "ghcr.io/zoomylab/$c:latest"
+
+      - name: Host JAX (jax job - the image's, the host-vs-container comparison is exact only on one JAX build)
+        if: steps.on.outputs.run == '1'
+        run: |
+          if [ "${{ matrix.backend }}" = "jax" ]; then
+            v=$(docker run --rm --entrypoint /opt/conda/envs/zoomy/bin/python ghcr.io/zoomylab/zoomy_jax:latest \
+                  -c "import jax; print(jax.__version__)")
+            echo "image JAX $v"
+            python -m pip install "jax[cpu]==$v"
+          else
+            python -m pip install "jax[cpu]"
+          fi
 
       - name: Backend e2e
         if: steps.on.outputs.run == '1'
