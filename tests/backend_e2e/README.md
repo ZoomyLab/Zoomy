@@ -47,23 +47,28 @@ packages), `PYTHONNOUSERSITE=1`, a scratch HOME / TMPDIR under `$E2E_WORK`.
 **GUI sessions and cards** (`test_gui_sessions.py`), per backend, the QR-wired ones first:
 
 - Cases: every packed session of `library/zoomy_gui/projects/*.zip` (exact duplicates once;
-  `zoomy-cases.zip` repacks the others) and every catalog solver card in a fresh GUI. A case
+  `zoomy-cases.zip` repacks the others) and every catalog solver card in a fresh GUI (with the
+  model card it names: the Chorin split cards with VAM, `sessions.CARD_MODELS`). A case
   goes to the backend whose adapter tag is its solver card's `requires_tag` (numpy sessions:
   the GUI runs them in the browser, here they are submitted to the numpy backend as well).
 - Composition: `compose.mjs` builds the spec as `model-config-widget.ts` does
   (`materializeSessions`; `gatherSpec` for a card) and the case.py with
-  `ZoomyCLI.exportCase` of `library/zoomy_cli` (the copy the deployed GUI loads).
+  `ZoomyCLI.exportCase` of `library/zoomy_cli` (the copy the deployed GUI loads); a card's
+  code and the route of Run come from the card rules the GUI loads (`zoomy_cli/src/cards.mjs`).
   `time_end` is set where a quick look needs it (`sessions.TIME_LIMITS`: Malpasset 2 s), as a
   reader would in the Parameters panel.
 - Protocol (`harness.GuiClient` = `HttpAdapter.submitCase`): `POST /api/v1/cases`, poll
   `GET /api/v1/jobs/<id>` every 2 s, `GET /api/v1/jobs/<id>/results/hdf5`.
-- Checks: every float finite; the last snapshot at `time_end`; the conserved row's relative
+- Checks: every float finite; the last snapshot at `time_end` (not where the knob has other
+  units, `sessions.TIME_UNITS`: the Bingham roll wave's t'); the conserved row's relative
   change within `sessions.EXPECT` (walled / periodic domains, 1e-12); the store opened by the
   GUI's `engine.open_hdf5` and rendered by the selected viewer card (`renderVizCard`); in dev
   mode the case also runs on the host through `engine.py` (the QR suite's `session_runner.py`;
   NumPy / JAX in-process, AMReX / foam with the host Python driving the build and run through
-  apptainer in the same image) and the two last snapshots agree to 1e-9 (`max|a - b| / max|b|`,
-  the matrix's relmax).
+  apptainer in the same image) and the two last snapshots (the store the GUI keeps of a
+  browser run: the one the run opened, else its `simulation.h5`) agree to 1e-9
+  (`max|a - b| / max|b|`, the matrix's relmax); the GUI's Run sends numpy cases to the browser
+  and every other tag to its backend.
 
 **Matrix in the container** (`test_matrix_in_container.py`): serial C1 (`o1_n20`, `o2_n20`),
 C8 (`vam`), C28 (`quad_expl_dir0`, `quad_impl_neu`; JAX: `orders_quad_expl`), and, built
@@ -87,26 +92,37 @@ cores via `taskset -c 56-63`); "host" = the comparison run on the host.
 | numpy | Steffler 30 s (45 s with the host run); the four QR sessions 68 s; Bingham threshold (time_end 20 s) 254 s (492 s); all 11 cases ~12 min | C1 27 + 14 s, C32 41 + 27 s, C33 13 + 5 s; all five 3.5 min |
 | jax | Malpasset (time_end 2 s) 68 s (133 s with the host run); the cards 4 s | C1 45 + 32 s, C8 87 + 77 s, C28 45 + 30 s, C32 65 + 50 s, C33 33 + 24 s; 8 min |
 | amrex | Malpasset (time_end 2 s) 66 s with the build, 12 s cached (81 s with the host run) | C1 91 + 84 s, C32 67 + 54 s, C33 59 + 48 s; 7 min |
-| openfoam | the two cards 28 s (wmake) / 6 s (43 / 35 s with the host run) | C33 22 + 40 s; 3 min |
+| openfoam | the card 22 s (44 s with the host run) | C33 22 + 40 s; 3 min |
 
 One pytest command per backend (numpy: two) stays under 15 min.
 
-## Results (2026-10-13, main 7ce6f03b, dev mode)
+## Results (2026-10-14, dev/qr-backend-routing, dev mode)
 
-| backend | pass | fail (cause) |
+| backend | pass | not run |
 |---|---|---|
-| numpy | steffler-0, bingham-analytics-0, bingham-threshold-0 | bingham-0, zoomy-codeprinter-0, card-solver-{numpy,imex-numpy,split-numpy}: the code needs the notebook namespace (mesh.py uses the model cell's `wave_length`; the run cell uses a step's `nsm`, and `to_folder` drops steps; the card templates use `model` / `split`), which the folder form the server runs does not have; coupling-0: the Static plot viewer cannot draw its 3-D store (`add_collection3d`). The GUI runs all of these in the browser. |
-| jax | (backend run of malpasset-0: store, viewer, mass 0, host run identical) | malpasset-0: the GUI's Run does not submit it (below); card-solver-{jax,imex-jax}: the composed run cell is the card's `class` construct snippet (`model = SymbolicHyperbolicSolverJax()`, `display(model.describe())`) |
-| amrex | (backend run of malpasset-1: as JAX, mass 2.3e-16) | malpasset-1: as malpasset-0; card-solver-{amrex,split-amrex}: as the JAX cards |
-| openfoam | card-solver-foam, card-solver-foam-vof (both run the generated symbolic foam case, SWE: the VOF card runs no VoF) | known gaps, not run: coupling-live-0, coupling-triple-live-0 (SME-VOF live coupling and the server's `/couple` path are not ported) |
+| numpy | steffler-0, bingham-0, coupling-0, zoomy-codeprinter-0, bingham-analytics-0, bingham-threshold-0, card-solver-{numpy,imex-numpy,split-numpy} | |
+| jax | malpasset-0 (mass 0, host run identical), card-solver-{jax,imex-jax} | |
+| amrex | malpasset-1 (mass 2.3e-16), card-solver-{amrex,split-amrex} | |
+| openfoam | card-solver-foam | coupling-live-0, coupling-triple-live-0: the SME-VOF live coupling and the server's `/couple` path are not ported |
 
-The GUI's Run (`runAssembly`, `zoomy-theia-ext/src/browser/model-config-widget.ts`) runs a case
-in the browser when `cardCode(solver, ...)` of the picked catalog solver card is non-empty, and
-`cardCode` returns a construct snippet for every card with a `class`: the JAX and AMReX cards
-have one, so their cases (both Malpasset QR sessions) never reach a connected backend.
+Fixed against main 7ce6f03b, where the numpy sessions / cards failed on the server, the
+Malpasset sessions were not submitted and the JAX / AMReX cards ran a `class` construct:
 
-Matrix in the container: equal to the host run (relmax 0; JAX C8 2.9e-10, the pressure
-tolerance) for numpy C1 C32 C33, jax C1 C8 C28 C32 C33, amrex C1 C32 C33, foam C33. Fail:
+- Run routes by the solver card's backend (`zoomy_cli/src/cards.mjs` `solverRoute`): numpy in
+  the browser, every other tag to its backend; a backend card without a template contributes
+  no code, so its case runs the generated runner (`ZoomyCLI._runCode`) on that backend.
+- The server runs a composed case folder as the GUI runs the case (`zoomy_server.case_run`):
+  model.py (with the steps), mesh.py, settings.json, run.py in one namespace, with the GUI
+  runtime's `display`, `typed_kwargs` and `open_hdf5` (the run's store: the job's
+  `simulation.h5`); the Bingham roll-wave and code-printer runs leave `simulation.h5`.
+- The Static plot viewer draws a 3-D store (coupling-0's foam store); the incompressibleVOF
+  solver card is gone (the symbolic solvers have no VoF; it ran the symbolic foam SWE case).
+- `SymbolicHyperbolicSolverJax.run` returns once the march and its snapshot writes are done:
+  with asynchronous dispatch (seen with jax 0.4.38 on the CPU, the QR suite's CPython run)
+  Malpasset's run cell copied `simulation.h5` before the first snapshot was written.
+
+Matrix in the container (2026-10-13, main 7ce6f03b): equal to the host run (relmax 0; JAX C8
+2.9e-10, the pressure tolerance) for numpy C1 C32 C33, jax C1 C8 C28 C32 C33, amrex C1 C32 C33, foam C33. Fail:
 C8 and C28 in the numpy / foam / AMReX images (builders import jax); foam C1 and C32 (the
 OpenFOAM image pins `numpy<2`, `zoomy_core.mesh.geometry_xp` calls `np.linalg.pinv(..., rtol=)`,
 numpy >= 2.0). Published images of 2026-10-13 (built before the port): Malpasset JAX and

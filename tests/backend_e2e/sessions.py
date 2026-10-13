@@ -22,6 +22,11 @@ from harness import CHECKOUT, HERE, ROOT, sha
 TIME_LIMITS = {"malpasset-0": 2.0,     # JAX: 2000 s -> 2 s (as tests/qr_cases)
                "malpasset-1": 2.0,     # AMReX: 100 s -> 2 s
                "bingham-threshold-0": 20.0}   # 3 x 100 s (physical) -> 3 x 20 s
+#: the model card a reader picks with a solver card that names it (the Chorin split cards march
+#: the `split` the VAM card binds); other cards run with the first model card, as a fresh GUI
+CARD_MODELS = {"card-solver-split-numpy": "vam", "card-solver-split-amrex": "vam"}
+#: cases whose time_end knob is not the store's time unit (no t_last == time_end check)
+TIME_UNITS = {"bingham-0": "time_end is t' = t / tscale (the model cell's nu / (g s^2))"}
 #: not run, with the reason
 SKIP = {
     "coupling-live-0": "known gap: the SME-VOF live coupling is not ported to the symbolic "
@@ -122,7 +127,8 @@ def gui_cases(checkout: Path = CHECKOUT) -> list[GuiCase]:
     for c in _catalog(gui, "solvers"):
         cid = "card-" + c["id"]
         out.append(GuiCase(cid, c.get("title") or cid, c.get("requires_tag") or "numpy", (),
-                           {"solverCard": c["id"], "timeEnd": TIME_LIMITS.get(cid)},
+                           {"solverCard": c["id"], "timeEnd": TIME_LIMITS.get(cid),
+                            "model": CARD_MODELS.get(cid)},
                            TIME_LIMITS.get(cid)))
     return out
 

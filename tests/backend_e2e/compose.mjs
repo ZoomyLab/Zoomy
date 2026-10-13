@@ -1,11 +1,12 @@
 // The GUI's own case composition, for the harness.
 //   node compose.mjs CLI_MJS GUI_DIR < items.json  ->  [{spec, casePy}, ...]
-// items: [{session, timeEnd}] (a packed session) or [{solverCard, timeEnd}] (a catalog solver
-// card in a fresh GUI). The spec is built as zoomy-theia-ext/src/browser/model-config-widget.ts
-// builds it (`materializeSessions`, resp. `gatherSpec` with the default cards), `timeEnd` is
-// the Parameters panel's time_end; the case.py is `ZoomyCLI.exportCase(spec, "py")` of the
-// tested checkout's library/zoomy_cli, which the deployed GUI loads; `route` is where the GUI's
-// Run button sends it (browser | backend).
+// items: [{session, timeEnd}] (a packed session) or [{solverCard, timeEnd, model}] (a catalog
+// solver card in a fresh GUI, with the model card `model` picked, else the first). The spec is
+// built as zoomy-theia-ext/src/browser/model-config-widget.ts builds it (`materializeSessions`,
+// resp. `gatherSpec` with the default cards), `timeEnd` is the Parameters panel's time_end; the
+// case.py is `ZoomyCLI.exportCase(spec, "py")` of the tested checkout's library/zoomy_cli, which
+// the deployed GUI loads; `route` is where the GUI's Run button sends it (browser | backend), by
+// the same zoomy_cli card rules (src/cards.mjs) the GUI loads.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,21 +20,10 @@ for (const t of ["models", "meshes", "solvers", "visualizations"]) {
 }
 const snippet = (c) => readFileSync(join(guiDir, c.snippet), "utf8");
 
+// The card rules the GUI loads (zoomy_cli src/cards.mjs): a card's code, where Run sends a case.
+const { cardCode, solverRoute } = cli.cards;
+
 // --- model-config-widget.ts, verbatim in substance ---------------------------------------
-function fillTemplate(tpl, init) {
-    if (!tpl) { return ""; }
-    return tpl.replace(/\{(\w+)\}/g, (m, k) => (init && k in init ? String(init[k]) : m));
-}
-function cardCode(card, init) {
-    if (card.template) { return fillTemplate(card.template, init); }
-    if (card.class) {
-        const dot = card.class.lastIndexOf(".");
-        const mod = card.class.slice(0, dot), cls = card.class.slice(dot + 1);
-        const kw = Object.entries(init || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
-        return `from ${mod} import ${cls}\n\nmodel = ${cls}(${kw})\ndisplay(model.describe())`;
-    }
-    return undefined;
-}
 const slug = (t) => String(t || "session").trim().replace(/[^a-zA-Z0-9_-]+/g, "_") || "session";
 
 function materialize(sess) {                       // materializeSessions, one session
@@ -70,9 +60,9 @@ function materialize(sess) {                       // materializeSessions, one s
     return spec;
 }
 
-function fresh(solver, edits) {                    // gatherSpec, a fresh GUI with `solver` picked
+function fresh(solver, edits, modelId) {           // gatherSpec, a fresh GUI with `solver` (and `modelId`) picked
     const first = (dir) => cards[dir].find((c) => !!cardCode(c, c.init || {}));
-    const model = first("models"), mesh = first("meshes");
+    const model = (modelId && cards.models.find((c) => c.id === modelId)) || first("models"), mesh = first("meshes");
     const viz = cards.visualizations.find((c) => c.snippet);
     const mergedInit = (c) => ({ ...(c.init || {}), ...((c === solver && edits) || {}) });
     const spec = {
@@ -90,13 +80,12 @@ function fresh(solver, edits) {                    // gatherSpec, a fresh GUI wi
     return spec;
 }
 
-// runAssembly: where Run sends the case. `solverLocal = !!cardCode(solver, mergedInit(solver))`
-// on the PICKED catalog card (the selected one, else the first runnable): local means the
-// browser's Pyodide, else a connected backend of the card's requires_tag.
+// runAssembly: where Run sends the case, by the picked solver card (the selected one, else the
+// first with code): browser (Pyodide) or a connected backend of the card's tag.
 function route(solverId) {
     const picked = cards.solvers.find((c) => c.id === solverId)
         || cards.solvers.find((c) => !!cardCode(c, c.init || {}));
-    return picked && cardCode(picked, picked.init || {}) ? "browser" : "backend";
+    return solverRoute(picked);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -114,7 +103,7 @@ const out = items.map((it) => {
         spec = materialize(s);
     } else {
         const solver = cards.solvers.find((c) => c.id === it.solverCard);
-        spec = fresh(solver, it.timeEnd != null ? { time_end: it.timeEnd } : null);
+        spec = fresh(solver, it.timeEnd != null ? { time_end: it.timeEnd } : null, it.model);
     }
     return { spec, casePy: cli.exportCase(spec, "py"), route: route(spec.solver && spec.solver.id) };
 });

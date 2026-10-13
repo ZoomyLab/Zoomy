@@ -5,7 +5,7 @@ zoomy-server over the GUI's HTTP protocol (harness.GuiClient), the returned stor
 the GUI's reader and the selected viewer card (checks.gui_view), and its numbers are checked:
 every float finite, the time_end reached, the conserved quantity within EXPECT. In dev mode the
 case also runs on the host (HOST_RUN) and the two stores are compared. compose.mjs also says
-where the GUI's Run sends the case: a backend case the GUI would run in the browser fails.
+where the GUI's Run sends the case: numpy to the browser, every other tag to its backend.
 """
 import json
 import os
@@ -28,6 +28,11 @@ SAME = float(os.environ.get("E2E_SAME_TOL", "1e-9"))
 #: host Python driving the C++ build and run through apptainer, in the same image
 HOST_RUN = {"numpy": (), "jax": ("zoomy_jax",), "amrex": ("zoomy_amrex",),
             "openfoam": ("zoomy_foam",)}
+#: the store the GUI keeps of a browser run (writeRunOutputs): the one the run opened
+#: (a solver card's open_hdf5), else the simulation.h5 it left
+KEEP_STORE = ("import os, shutil\n_p = store_source_path()\n"
+              "if _p and not os.path.exists('simulation.h5'):\n"
+              "    shutil.copyfile(_p, 'simulation.h5')")
 
 
 def _host_env(backend, container, work):
@@ -103,7 +108,9 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
         problems.append("no /fields snapshots")
     if s["nonfinite"]:
         problems.append(f"{s['nonfinite']} of {s['values']} floats non-finite")
-    t_end = settings.get("time_end")
+    t_end = None if case.id in S.TIME_UNITS else settings.get("time_end")
+    if case.id in S.TIME_UNITS:
+        row["time_unit"] = S.TIME_UNITS[case.id]
     if t_end is not None and s["times"] and abs(s["times"][-1] - float(t_end)) > 1e-9 * max(1.0, float(t_end)):
         problems.append(f"t_last {s['times'][-1]!r} != time_end {t_end!r}")
     row.update(snapshots=len(s["times"]), t_last=s["times"][-1] if s["times"] else None,
@@ -132,6 +139,7 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
     container = servers.info[backend][4]
     if H.MODE == "dev" and backend in HOST_RUN and (backend in ("numpy", "jax") or container.rt == "apptainer"):
         cells = [(r, c) for r, c in S.cells(case_py) if r not in ("visualization", "postproc")]
+        cells.append(("outputs", KEEP_STORE))
         t1 = time.monotonic()
         rep = C.run_cells(cells, lib, tmp_path / "host", TIMEOUT, extra=HOST_RUN[backend],
                           env=_host_env(backend, container, tmp_path))
@@ -145,11 +153,10 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
             if d > SAME:
                 problems.append(f"host run vs container: max rel diff {d:.3e} > {SAME:.0e}")
 
-    if composed["route"] != "backend" and S.canon(case.tag) != "numpy":
-        problems.append("the backend run passes, but the GUI's Run does not submit it: "
-                        "runAssembly (model-config-widget.ts) runs any solver card whose "
-                        "cardCode() is non-empty in the browser, and the "
-                        f"{spec['solver']['id']} card's `class` makes it non-empty")
+    want = "browser" if S.canon(case.tag) == "numpy" else "backend"
+    if composed["route"] != want:
+        problems.append(f"the GUI's Run sends it to the {composed['route']}, not the {want} "
+                        "(runAssembly, zoomy_cli cards.mjs solverRoute)")
     if problems:
         _fail("; ".join(problems), row, report)
     row["result"] = "PASS"
