@@ -16,8 +16,10 @@ zoomy-server --adapter numpy --port 8000
 
 ## Backends
 
-A case folder with a `run.py` runs that script; without one, the settings run the case on the
-symbolic solvers (`zoomy_server.symbolic`):
+A case folder with a `run.py` runs as the GUI runs the case: model.py, mesh.py, settings.json and
+run.py in one namespace (`zoomy_server.case_run`; a folder with only a `run.py`, e.g. a coupling,
+runs that script); without one, the settings run the case on the symbolic solvers
+(`zoomy_server.symbolic`):
 
 - **NumPy** — `SymbolicHyperbolicSolverNumpy` / `SymbolicChorinSolverNumpy`, in-process
 - **JAX** — `SymbolicHyperbolicSolverJax` / `SymbolicChorinSolverJax` (CPU or GPU)

@@ -55,7 +55,6 @@ class DmplexAdapter(SolverAdapter):
         # calls. Legacy case folders (no run.py) fall through unchanged.
         # (Inert until the dmplex backend wrapper class lands in run.py form.)
         if os.path.exists(os.path.join(case_dir, "run.py")):
-            self.run_mesh_script(case_dir)
             self.run_case_script(case_dir, output_dir, on_progress)
             return
 

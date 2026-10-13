@@ -65,7 +65,9 @@ class FoamAdapter(SolverAdapter):
         in place and promote the produced foam HDF5 into ``output_dir`` (the SME
         participant's ``swe_case.h5`` becomes the served ``simulation.h5``).
         """
-        entry = entry or [sys.executable, "run.py"]
+        if entry is None:
+            from zoomy_server.case_run import entry as case_entry
+            entry = case_entry(case_dir)
         logger.info("foam runner: executing %s in place (%s)", entry, case_dir)
         env = dict(os.environ)
         # The case scripts pick up the container python (has zoomy_core/prepost);

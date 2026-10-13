@@ -9,7 +9,8 @@ A case folder contains:
 When the folder carries a ``run.py`` (the composed case's ``## Run`` section,
 materialized by ``zoomy_prepost.case.to_folder``) the adapters execute the
 case's OWN solver code via :meth:`run_case_script` instead of translating
-settings into solver calls (the generic runner).
+settings into solver calls (the generic runner): the case's sections in one
+namespace, as the GUI runs them (:mod:`zoomy_server.case_run`).
 """
 
 import json
@@ -111,14 +112,16 @@ class SolverAdapter:
 
     # ── Generic runner (run-py-first) ────────────────────────────────
 
-    def run_case_script(self, case_dir, output_dir, on_progress):
+    def run_case_script(self, case_dir, output_dir, on_progress, entry=None):
         """Execute the case's OWN ``run.py`` (the composed case's ``## Run``
         section) and collect its artifacts into ``output_dir``.
 
         The case folder is copied to ``output_dir/case`` first (isolation:
         the script runs with the copy as cwd, so a shared case folder is
-        never mutated by outputs), then ``[sys.executable, "run.py"]`` runs
-        there with stdout streamed for progress lines. Artifacts
+        never mutated by outputs), then ``entry`` (default
+        :func:`zoomy_server.case_run.entry`: a composed case runs its model,
+        mesh, settings and run sections in one namespace, as the GUI does)
+        runs there with stdout streamed for progress lines. Artifacts
         (simulation.h5, images, VTK) are copied into ``output_dir``; when the
         script produced VTK but no simulation.h5, the VTK output is converted
         via ``zoomy_prepost.vtk_to_hdf5``. The full captured output is written
@@ -129,8 +132,9 @@ class SolverAdapter:
         if os.path.abspath(case_dir) != os.path.abspath(run_dir):
             shutil.copytree(case_dir, run_dir, dirs_exist_ok=True)
 
+        from zoomy_server.case_run import entry as case_entry
         proc = subprocess.Popen(
-            [sys.executable, "run.py"], cwd=run_dir,
+            entry or case_entry(run_dir), cwd=run_dir,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
         out_lines = []

@@ -14,8 +14,9 @@ Roles (cell order): ``meta``, ``model``, ``mesh``, ``settings``, ``run``,
 
 The server runs a case by ``to_folder`` -> the adapter's case folder
 (``model.py``, ``mesh.py``, ``settings.json``, ``run.py``). Adapters execute
-the case's OWN ``run.py`` when present (the generic runner); folders without
-one fall back to the legacy per-backend settings translation.
+the case's OWN ``run.py`` when present, after its model, mesh and settings in
+one namespace as the GUI runs the cells (``zoomy_server.case_run``); folders
+without one fall back to the legacy per-backend settings translation.
 
     spec = {
       "meta":     {"title": str, "description": str},
@@ -248,7 +249,7 @@ def _run_code():
 # Runs IN-PROCESS on a symbolic solver (zoomy_core.symsolver): JAX for the jax backend,
 # AMReX for amrex, foam for OpenFOAM, NumPy otherwise (no server needed: JupyterLite, the
 # GUI's browser kernel, any env with zoomy_core). Standalone as `python run.py` in a
-# materialized case folder (the zoomy-server generic runner executes exactly this file).
+# materialized case folder; the zoomy-server runs it after the case's sections, as the GUI.
 import json
 import os
 
