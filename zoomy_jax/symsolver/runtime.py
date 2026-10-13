@@ -24,6 +24,7 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
@@ -465,7 +466,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
         """
         if (n, ncells) not in patterns:
-            patterns[(n, ncells)] = _cell_pattern(n, ncells, lsq_nbrs)
+            patterns[(n, ncells)] = cell_pattern(n, ncells, lsq_nbrs)
         rows, cols, colors = patterns[(n, ncells)]
         probes = np.arange(int(colors.max()) + 1)[:, None] == colors[None, :]
         # one evaluation per colour, a few at a time: all at once holds every
@@ -477,41 +478,17 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     amg_cache = {}                   # (n, transpose) -> hierarchy and its age
 
     def host_amg(rows, cols, n, k, transpose):
-        """Host solve: GMRES preconditioned by a smoothed-aggregation AMG hierarchy of the
-        block-scaled matrix.  The hierarchy is lagged: rebuilt every ``amg_rebuild`` solves, or once
-        the iterations exceed ``amg_growth`` times those after the last rebuild.
+        """Host solve: GMRES preconditioned by a lagged smoothed-aggregation AMG hierarchy of the
+        block-scaled matrix (`numpy_backend.assembly.host_amg_solve`, shared with numpy).
 
         References:
             Saad, Schultz 1986, https://doi.org/10.1137/0907058
             Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
         """
-        import scipy.sparse as sps
-        from scipy.sparse.linalg import gmres as sp_gmres
-        rebuild, growth = int(ls.get("amg_rebuild", 1)), float(ls.get("amg_growth", 2.0))
-
         def solve(vals, rhs):
-            """Solve with matrix values ``vals`` and right-hand side ``rhs``."""
-            A = sps.csr_matrix((np.asarray(vals), (rows, cols)), shape=(n, n))
-            A = (A.T if transpose else A).tobsr(blocksize=(k, k))
-            # left-scale by the inverse cell blocks: A ~ M (x) L with a k x k
-            # coupling M (indefinite for VAM) becomes ~ I (x) L, AMG-friendly
-            A.sort_indices()
-            row = np.repeat(np.arange(n // k), np.diff(A.indptr))
-            Dinv = sps.block_diag(np.linalg.inv(A.data[A.indices == row]), format="bsr")
-            As, bs = (Dinv @ A).tobsr(blocksize=(k, k)), Dinv @ np.asarray(rhs)
-            c = amg_cache.setdefault((n, transpose), {"ml": None, "age": 0, "it0": None, "it": 0})
-            if (c["ml"] is None or c["age"] >= rebuild
-                    or (c["it0"] is not None and c["it"] > growth * max(c["it0"], 1))):
-                c.update(ml=pyamg.smoothed_aggregation_solver(As), age=0, it0=None)
-            its = [0]
-            x, _ = sp_gmres(As, bs, M=c["ml"].aspreconditioner(), rtol=ls["tol"],
-                            atol=0.0, restart=ls["restart"], maxiter=ls["maxiter"],
-                            callback=lambda _: its.__setitem__(0, its[0] + 1),
-                            callback_type="pr_norm")
-            c["age"], c["it"] = c["age"] + 1, its[0]
-            if c["it0"] is None:
-                c["it0"] = its[0]
-            return np.asarray(x, dtype=np.asarray(rhs).dtype)
+            """Solve with matrix values `vals` and right-hand side `rhs`."""
+            return host_amg_solve(vals, rhs, rows, cols, n, k, ls, pyamg,
+                                  amg_cache.setdefault((n, transpose), {}), transpose)
         return solve
 
     def host_vcycle(rows, cols, n, k, transpose):
@@ -567,7 +544,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         to_row = lambda x: x.reshape(-1, k).T                       # noqa: E731
         n_l, key = k * nc, ("mpi", k)
         if key not in patterns:
-            rows, cols, colors = _cell_pattern(n_l, nc, lsq_nbrs, n_own)
+            rows, cols, colors = cell_pattern(n_l, nc, lsq_nbrs, n_own)
             gids = np.asarray(partition.gids, dtype=np.int64)
             gcol = gids[cols // k] * k + cols % k
             o = np.lexsort((gcol, rows))                # CSR order
@@ -1038,72 +1015,6 @@ def _jaxamg():
         raise RuntimeError("linear solver 'amgx' (AmgX) runs on a CUDA GPU "
                            f"only; JAX uses {_jax.default_backend()!r}")
     return jaxamg
-
-
-def _cell_pattern(n, nc, nbrs, n_rows=None):
-    """Sparsity of a cell operator on ``k = n / nc`` cell-major unknowns: each couples to those of
-    the cells in its LSQ stencil.  Returns ``rows, cols`` in CSR order and a colour per column such
-    that columns sharing a row differ.
-
-    References:
-        Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
-    """
-    k, n_rows = n // nc, nc if n_rows is None else n_rows
-    nb = np.asarray(nbrs)[:n_rows]
-    cells = np.concatenate([np.arange(n_rows)[:, None], nb], axis=1)  # self + stencil
-    c_of = np.repeat(np.arange(n_rows, dtype=np.int64), cells.shape[1])
-    d_of = cells.reshape(-1).astype(np.int64)
-    keep = (d_of >= 0) & (d_of < nc)
-    code = np.unique(c_of[keep] * nc + d_of[keep])          # sorted (c, d) pairs
-    c, d = code // nc, code % nc
-    # entry (c, r, d, q) of row c k + r: CSR order without a sort
-    ptr = np.searchsorted(c, np.arange(n_rows + 1))
-    m = np.diff(ptr)[c]
-    base = (ptr[c] * k * k + (np.arange(len(c)) - ptr[c]) * k)[:, None, None]
-    r, q = np.arange(k)[None, :, None], np.arange(k)[None, None, :]
-    pos = (base + r * (m * k)[:, None, None] + q).reshape(-1)
-    shape, rows, cols = (len(c), k, k), np.empty(len(pos), np.int32), np.empty(len(pos), np.int32)
-    rows[pos] = np.broadcast_to(c[:, None, None] * k + r, shape).reshape(-1)
-    cols[pos] = np.broadcast_to(d[:, None, None] * k + q, shape).reshape(-1)
-    unknown = np.arange(n)
-    return rows, cols, (_cell_colors(c, d, nc)[unknown // k] * k
-                        + unknown % k).astype(np.int32)
-
-
-def _cell_colors(c, d, nc, seed=0):
-    """Distance-2 colouring of the stencil pairs ``(c, d)`` by speculative parallel greedy (a clash
-    with a heavier random-weight neighbour retries).
-
-    References:
-        Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
-    """
-    import scipy.sparse as sps
-    P = sps.csr_matrix((np.ones(len(c), np.int8), (c, d)), shape=(int(c.max()) + 1, nc))
-    C = (P.T @ P).tocsr()
-    C.setdiag(0)
-    C.eliminate_zeros()
-    w = np.random.default_rng(seed).permutation(nc)
-    colors, A = np.full(nc, -1, np.int64), np.arange(nc)
-    while len(A):
-        S = C[A]                                       # rows of the uncoloured
-        deg = np.diff(S.indptr)
-        row, nb, has = np.repeat(np.arange(len(A)), deg), S.indices, deg > 0
-        used, nbc = np.zeros(len(A), np.uint64), colors[S.indices]
-        if has.any():
-            used[has] = np.bitwise_or.reduceat(np.where(nbc >= 0, np.left_shift(
-                np.uint64(1), np.maximum(nbc, 0).astype(np.uint64)), np.uint64(0)),
-                S.indptr[:-1][has])
-        free = ~used
-        low = free & (~free + np.uint64(1))           # lowest free bit
-        cand = np.full(nc, -1, np.int64)
-        cand[A] = np.log2(low.astype(np.float64)).round().astype(np.int64)
-        if (low == 0).any() or (cand[A] >= 63).any():
-            raise RuntimeError("colouring needs more than 63 colours")
-        lose = (cand[nb] == cand[A][row]) & (w[nb] > w[A][row])
-        lost = np.bincount(row[lose], minlength=len(A)) > 0
-        colors[A[~lost]] = cand[A[~lost]]
-        A = A[lost]
-    return colors
 
 
 def _pyamg():
