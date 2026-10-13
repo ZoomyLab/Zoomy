@@ -80,8 +80,9 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         self.rt = NumpyKernels(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2 and nsm.call.admissible is not None)
+        on_save, on_load = self._restart()
         self.module = R.runtime(nsm, self.rt, mesh, self.topo, geom, on_write=self._writer(),
-                                systems=systems,
+                                on_save=on_save, on_load=on_load, systems=systems,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
                                               gmres_tol=self.gmres_tol,
@@ -101,7 +102,8 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         return dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
                     mood=self.mood_active, dt_write=self.dt_write, imex=self.imex,
                     cfl_check_every=self.cfl_check_every, wave_speed=self.cfl_wave_speed,
-                    dt_constant=self.dt, time_order=self.time_order)
+                    dt_constant=self.dt, time_order=self.time_order,
+                    dt_checkpoint=self.dt_checkpoint)
 
     def _print(self):
         """Print the template to Python source; returns `(name, source)`."""
@@ -136,6 +138,20 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
                 user(time, Q, Qaux)
         return write
 
+    def _restart(self):
+        """The restart pair of `io.save_state` / `io.load_state`: one HDF5 file
+        (`zoomy_core.symsolver.restart`); checks `restart_from` first.
+        """
+        from zoomy_core.symsolver import restart as rs
+        names = [str(v) for v in self.nsm.state]
+        path = rs.restart_path(self.checkpoint, self.output)
+        on_save = None if path is None else (
+            lambda time, Q, Qaux: rs.write_state(path, time, Q, Qaux, names))
+        if self.restart_from is None:
+            return on_save, None
+        rs.check_state(self.restart_from, names, int(self.mesh_np.n_inner_cells))
+        return on_save, lambda time, Q, Qaux: rs.read_state(self.restart_from)
+
     def initial_aux(self, Q, Qaux, parameters=None):
         """The aux of the initial state: the pointwise formula plus the derivative aux with the
         BC ghosts and the boundary closure.
@@ -163,9 +179,11 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         return self.rt.parameters
 
     # ── run ────────────────────────────────────────────────────────────────
-    def run(self, Q, Qaux, parameters=None, time0=0.0):
-        """March to `time_end`; returns `(time, Q, Qaux)`."""
+    def run(self, Q, Qaux, parameters=None, time0=None):
+        """March from `time0` (default `time_start`; a restart: the saved state) to `time_end`;
+        returns `(time, Q, Qaux)`."""
         p = self.parameters if parameters is None else np.asarray(parameters, dtype=float)
+        time0 = self.time_start if time0 is None else time0
         out = self._fn(np.asarray(Q, dtype=float), np.asarray(Qaux, dtype=float), p,
                        float(time0), float(self.time_end), self.mesh, 0)
         return float(out[0]), out[1], out[2]

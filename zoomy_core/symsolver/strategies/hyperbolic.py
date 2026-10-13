@@ -20,7 +20,7 @@ class HyperbolicTemplate:
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
                  imex=False, cfl_check_every=10, wave_speed="faces",
-                 dt_constant=None, time_order=None):
+                 dt_constant=None, time_order=None, dt_checkpoint=None):
         """Set the configuration; ``nsm`` is the NumericalSystemModel.
 
         Args:
@@ -39,6 +39,7 @@ class HyperbolicTemplate:
             dt_constant: constant step, or ``None`` for the adaptive CFL step.
             time_order: SSP-RK order; ``None``: the reconstruction order (2 for
                 ``"ssp2"``).
+            dt_checkpoint: interval of `io.save_state` (landed on); `None`: at the end only.
         """
         if time_order is not None and time_order not in SSP_RK:
             raise ValueError(f"time_order {time_order}: SSP-RK of order "
@@ -51,6 +52,7 @@ class HyperbolicTemplate:
         self.dimension = dimension
         self.mood = mood
         self.dt_write = dt_write
+        self.dt_checkpoint = dt_checkpoint
         self.imex = imex
         self.cfl_check_every = cfl_check_every
         self.wave_speed = wave_speed
@@ -116,7 +118,8 @@ class HyperbolicTemplate:
                                   dt_constant, time, cfl_check_every), cap)
             return self.step(Q, Qaux, p, time, dt, mesh)
 
-        return _time_loop(Q, Qaux, time, time_end, self.dt_write, step)
+        return _time_loop(Q, Qaux, time, time_end, self.dt_write, step,
+                          self.dt_checkpoint)
 
     def precice_march(self, Q, Qaux, p, time, mesh, *, side, subcycling=False):
         """The march as one preCICE participant; preCICE ends the loop and the coupled
@@ -186,32 +189,57 @@ class HyperbolicTemplate:
         return time, Q, Qaux
 
 
-def _time_loop(Q, Qaux, time, time_end, dt_write, step):
-    """The time loop: ``step(Q, Qaux, time, cap) -> (Q, Qaux, dt)`` takes a step
-    ``dt <= cap``, ``cap`` the distance to ``time_end`` and to the next write
-    instant.
+def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):
+    """The time loop: `step(Q, Qaux, time, cap) -> (Q, Qaux, dt)` takes a step `dt <= cap`,
+    `cap` the distance to `time_end` and to the next write / checkpoint instant; the march state
+    `(time, Q, Qaux)` comes from `io.load_state` and goes to `io.save_state`.
     """
-    def body(time, Q, Qaux, n_write):
-        """One step landing on write instants, then the write."""
+    def body(time, Q, Qaux, n_write, n_checkpoint):
+        """One step landing on write / checkpoint instants, then the write / save."""
         cap = time_end - time
         if dt_write is not None:                    # land on write instants
             cap = sp.Min(cap, n_write * dt_write - time)
+        if dt_checkpoint is not None:               # and on checkpoint instants
+            cap = sp.Min(cap, n_checkpoint * dt_checkpoint - time)
         Q, Qaux, dt = step(Q, Qaux, time, cap)
         time = time + dt
         if dt_write is not None:
-            n_write = Cond(time >= (n_write - sp.Rational(1, 10**9)) * dt_write,
-                           lambda: _write(time, Q, Qaux, n_write),
-                           lambda: n_write)
-        return time, Q, Qaux, n_write
+            n_write = Cond(_due(time, n_write, dt_write),
+                           lambda: _write(time, Q, Qaux, n_write), lambda: n_write)
+        if dt_checkpoint is not None:
+            n_checkpoint = Cond(sp.And(_due(time, n_checkpoint, dt_checkpoint),
+                                       time < time_end),
+                                lambda: _save(time, Q, Qaux, n_checkpoint),
+                                lambda: n_checkpoint)
+        return time, Q, Qaux, n_write, n_checkpoint
 
+    time, Q, Qaux = io.load_state(time, Q, Qaux)
     if dt_write is not None:
         io.write(time, Q, Qaux)
-    time, Q, Qaux, _ = While(lambda time, Q, Qaux, n_write: time < time_end,
-                             body, (time, Q, Qaux, 1))
+    time, Q, Qaux, _, _ = While(
+        lambda time, Q, Qaux, n_write, n_checkpoint: time < time_end, body,
+        (time, Q, Qaux, _next(time, dt_write), _next(time, dt_checkpoint)))
+    io.save_state(time, Q, Qaux)
     return time, Q, Qaux
+
+
+def _next(time, every):
+    """The number of the first instant of the interval `every` after `time` (1: unused)."""
+    return 1 if every is None else sp.floor(time / every + sp.Rational(1, 10**9)) + 1
+
+
+def _due(time, n, every):
+    """Whether `time` reached instant `n` of the interval `every`."""
+    return time >= (n - sp.Rational(1, 10**9)) * every
 
 
 def _write(time, Q, Qaux, n_write):
     """Write the snapshot and advance the write counter."""
     io.write(time, Q, Qaux)
     return n_write + 1
+
+
+def _save(time, Q, Qaux, n_checkpoint):
+    """Save the march state and advance the checkpoint counter."""
+    io.save_state(time, Q, Qaux)
+    return n_checkpoint + 1

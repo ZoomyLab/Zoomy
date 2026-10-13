@@ -41,7 +41,8 @@ def geometry_of(topo, X):
     return Geometry(*(g[f] for f in Geometry._fields)), g
 
 
-def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, implicit=None, systems=None):
+def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_load=None,
+            implicit=None, systems=None):
     """The name table (dict of callables) a printed solver runs against: the numpy
     implementation of every `zoomy_core.symsolver` block on this mesh, serial.
 
@@ -50,6 +51,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, implicit=None, syste
         topo: static topology (`geometry_xp.build_topology`) with the boundary-closure classes
         geom: the `compute_geometry` dict of the mesh
         on_write: `on_write(time, Q, Qaux)` snapshot callback
+        on_save, on_load: the restart pair, `on_save(time, Q, Qaux)` and `on_load(time, Q, Qaux)
+            -> (time, Q, Qaux)`; None: no restart file / not restarting
         implicit: Newton and linear-solver settings of `root` and `linsolve`
         systems: further `{name: (nsm, NumpyKernels)}` a template uses besides `nsm`
     Returns:
@@ -622,6 +625,21 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, implicit=None, syste
             on_write(time, Q, Qaux)
         return (tok + 1,)
 
+    def io_save_state(tok, time, Q, Qaux):
+        """Save the march state through `on_save`; the lagged solver caches (AMG hierarchy,
+        Jacobian LU) restart here, as in a run restarted from this state."""
+        if on_save is not None:
+            on_save(time, Q, Qaux)
+            amg_cache.clear()
+            jacobians.clear()
+        return (tok + 1,)
+
+    def io_load_state(tok, time, Q, Qaux):
+        """The march state from `on_load` (a restart), else the arguments."""
+        if on_load is not None:
+            time, Q, Qaux = on_load(time, Q, Qaux)
+        return (tok + 1, time, Q, Qaux)
+
     def with_closure(name, sub):
         """The derivative-aux spec of system `name`, each state entry tagged with its
         boundary-closure class.
@@ -648,7 +666,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, implicit=None, syste
         halo=lambda X, mesh: X, put=put, zeros=zeros, clean_round_off=clean_round_off,
         take=lambda Q, rows: np.asarray(Q)[list(rows)], reduce_max=np.max,
         logical_and=np.logical_and, select=select, while_loop=while_loop, cond=cond,
-        io_write=io_write, root=root, linsolve=linsolve,
+        io_write=io_write, io_save_state=io_save_state, io_load_state=io_load_state,
+        root=root, linsolve=linsolve,
         implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl,
         minimum=np.minimum, maximum=np.maximum, abs=np.abs, floor=np.floor)
     return m

@@ -242,8 +242,10 @@ class interface_flux(Block):
 
 # ── effects ─────────────────────────────────────────────────────────────────
 class io:
-    """Output effects."""
+    """Output effects; `save_state` / `load_state`: the restart pair of the march state."""
     write = Effect()             # (time, Q, Qaux)
+    save_state = Effect()        # (time, Q, Qaux): write the march state
+    load_state = Effect(3)       # (time, Q, Qaux) -> the saved state when restarting, else these
 
 
 class couple:                    # one preCICE participant

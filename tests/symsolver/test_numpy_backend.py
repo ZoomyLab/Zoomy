@@ -47,3 +47,20 @@ def test_c1_bump_numpy_conserves_mass():
     assert np.abs(Q[h] - Q0[h]).max() > 1e-3
     assert abs(mass - mass0) / mass0 <= 1e-12
     assert "jax" not in sys.modules
+
+
+def test_restart_is_bitwise(tmp_path):
+    """C1 at 20 x 20: 0 -> 2.5 with a checkpoint at 1.25 = 0 -> 1.25, then a restart -> 2.5, bit
+    for bit; a misspelt restart file is named."""
+    def run(**kw):
+        mesh, nsm = bump()
+        s = SymbolicHyperbolicSolverNumpy(cfl=0.9, mood=False, **kw)
+        Q0, A = s.setup(mesh, nsm)
+        return s.run(Q0, A)
+    _, Q_full, _ = run(time_end=2.5, dt_checkpoint=1.25, checkpoint=tmp_path / "full.h5")
+    run(time_end=1.25, checkpoint=tmp_path / "half.h5")
+    t, Q, _ = run(time_end=2.5, restart_from=tmp_path / "half.h5")
+    assert t == 2.5
+    assert np.array_equal(Q, Q_full)
+    with pytest.raises(FileNotFoundError, match="did you mean 'half.h5'"):
+        run(time_end=2.5, restart_from=tmp_path / "hal.h5")

@@ -48,6 +48,16 @@ class HyperbolicSettings(Configurable):
     section = "solver"
 
     time_end = param.Number(default=None, allow_None=True, doc="End time.")
+    time_start = param.Number(default=0.0, doc="Start time when not restarting.")
+    restart_from = param.Path(default=None, allow_None=True, check_exists=False,
+                              doc="Restart file / directory written by the same backend; its time "
+                                  "overrides time_start.")
+    dt_checkpoint = param.Number(default=None, allow_None=True, bounds=(0, None),
+                                 inclusive_bounds=(False, True),
+                                 doc="Restart-file interval (the march lands on its instants); "
+                                     "None = a restart file at the end only.")
+    checkpoint = param.Path(default=None, allow_None=True, check_exists=False,
+                            doc="Where the restart files go; None = next to the output.")
     cfl = param.Number(default=0.9, bounds=(0, None),
                        doc="CFL number of the adaptive step (and of the check).")
     dt = param.Number(default=None, allow_None=True,

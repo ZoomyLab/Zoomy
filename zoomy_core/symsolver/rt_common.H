@@ -111,6 +111,34 @@ inline std::tuple<long> io_write(long tok, double time, const Field& Q, const Fi
     return {tok + 1};
 }
 
+/// The restart writer set by the driver: save the march state (time, Q, Qaux).
+inline std::function<void(double, const Field&, const Field&)>& saver()
+{
+    static std::function<void(double, const Field&, const Field&)> s;
+    return s;
+}
+/// The restart reader set by the driver: overwrite (time, Q, Qaux) with the saved state.
+inline std::function<void(double&, Field&, Field&)>& loader()
+{
+    static std::function<void(double&, Field&, Field&)> l;
+    return l;
+}
+
+/// Effect `io.save_state`: call the restart writer; returns the order token.
+inline std::tuple<long> io_save_state(long tok, double time, const Field& Q, const Field& Qaux)
+{
+    if (saver()) saver()(time, Q, Qaux);
+    return {tok + 1};
+}
+
+/// Effect `io.load_state`: the saved march state when restarting, else the arguments.
+template<class F>
+std::tuple<long, double, F, F> io_load_state(long tok, double time, F Q, F Qaux)
+{
+    if (loader()) loader()(time, Q, Qaux);
+    return {tok + 1, time, Q, Qaux};
+}
+
 /// Effect `check.cfl`: warn once if `dt` exceeds the CFL step `dt_cfl`.
 inline std::tuple<long> check_cfl(long tok, double dt_cfl, double dt)
 {

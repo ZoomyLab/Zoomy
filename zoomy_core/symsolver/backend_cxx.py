@@ -88,7 +88,7 @@ class CxxBackend(HyperbolicSettings):
                     dt_write=self.dt_write, imex=self.imex,
                     cfl_check_every=self.cfl_check_every,
                     wave_speed=self.cfl_wave_speed, dt_constant=self.dt,
-                    time_order=self.time_order)
+                    time_order=self.time_order, dt_checkpoint=self.dt_checkpoint)
 
     def _template(self, nsm, dimension):
         """The :class:`HyperbolicTemplate` of ``nsm``."""
@@ -112,8 +112,8 @@ class CxxBackend(HyperbolicSettings):
                                          template.march)
             if self._amr_loop():
                 run += "\n\n" + _amr_procedures(template)
-        run += ("\n\ninline auto march = [](auto Q, auto Qaux, auto p, auto time_end, "
-                "auto mesh) {\n    return run(Q, Qaux, p, 0.0, time_end, mesh, 0L);\n};")
+        run += ("\n\ninline auto march = [](auto Q, auto Qaux, auto p, double time, auto time_end, "
+                "auto mesh) {\n    return run(Q, Qaux, p, time, time_end, mesh, 0L);\n};")
         aux = CxxPrinter().procedure("initial_aux", (Q, Qaux, p, mesh),
                                      template.initial_aux)
         return run + "\n\n" + aux + "\n\n" + self._configure(nsm) + "\n"
