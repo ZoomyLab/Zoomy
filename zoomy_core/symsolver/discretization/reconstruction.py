@@ -25,6 +25,12 @@ def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
+    if getattr(nsm.reconstruction, "positivity", ""):
+        raise ValueError(
+            f"ReconstructionSpec(positivity={nsm.reconstruction.positivity!r}): the symbolic "
+            "solvers have no positivity option; positivity is the hydrostatic reconstruction "
+            "and the CFL step at order 1, MOOD (the solver's `mood`) at order 2.  Leave "
+            "`positivity` empty.")
     demote = sp.S(demote)
     to_w, to_q = maps(nsm)
     rows = bed_rows(nsm) if to_w is not None else None

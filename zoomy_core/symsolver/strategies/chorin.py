@@ -222,3 +222,22 @@ def correct(corr, Q, p, time, dt, mesh):
     return halo(put(Q, tuple(corr.equation_to_state_index),
                     cells(corr.call.update_variables, Q, Qaux, p, time, dt,
                           mesh)), mesh)
+
+
+def predictor_nsm(pred, press, corr, reconstruction=None):
+    """The predictor NSM of a pressure split on the full state (`pad_to_square`): positive
+    Rusanov, the hydrostatic rescaling on every row but `h`, `b` and the pressure rows, `press`
+    and `corr` sizing the LSQ stencil; `reconstruction` a `ReconstructionSpec` (default order 1).
+    Pass it with `press`, `corr` to a symbolic Chorin solver's `setup`.
+    """
+    from zoomy_core.numerics import (NumericalSystemModel, PositiveNonconservativeRusanov,
+                                     ReconstructionSpec)
+    from zoomy_core.systemmodel.padding import pad_to_square
+    square = pad_to_square(pred)
+    names = [str(s) for s in square.state]
+    fixed = {names.index("h"), names.index("b"), *map(int, press.equation_to_state_index)}
+    return NumericalSystemModel.from_system_model(
+        square, riemann=PositiveNonconservativeRusanov,
+        reconstruction=reconstruction or ReconstructionSpec(),
+        additional_systems=[press, corr],
+        scaled_q_indices=[i for i in range(square.n_variables) if i not in fixed])

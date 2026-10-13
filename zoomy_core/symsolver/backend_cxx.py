@@ -5,6 +5,7 @@ inheritance, driver first.
 """
 from pathlib import Path
 
+import numpy as np
 import param
 import sympy as sp
 
@@ -247,3 +248,35 @@ def _amr_procedures(template):
         "inline std::vector<int> reflux_rows() { return {"
         + ", ".join(str(i) for i in _conservative_rows(nsm)) + "}; }"]
     return "\n\n".join(procs)
+
+
+def initial_state(mesh, model):
+    """The initial state `Q0` (n_state, n_inner_cells) of `model` on `mesh` for a C++ backend's
+    `run`: the model's initial conditions at the cell centres (zero without).
+
+    Args:
+        model: a SystemModel or NSM, or the Chorin triple `(pred, press, corr)`.
+    """
+    sm = model[0] if isinstance(model, (tuple, list)) else model
+    sm = getattr(sm, "sm", sm)
+    nc = int(mesh.n_inner_cells)
+    Q = np.zeros((len(sm.state), nc))
+    if sm.initial_conditions is not None:
+        Q = sm.initial_conditions.apply(np.asarray(mesh.cell_centers)[:, :nc], Q)
+    return np.asarray(Q, dtype=float)
+
+
+def write_snapshots(path, mesh, model, snapshots):
+    """Write the `snapshots` `[(time, Q)]` of a C++ backend run (`solver.snapshots`) as a zoomy
+    HDF5 store at `path` (mesh, state names, one `iteration_k` per snapshot); returns `path`.
+    """
+    import os
+    from zoomy_core.misc.io import _save_fields_to_hdf5, write_mesh_to_hdf5
+    sm = model[0] if isinstance(model, (tuple, list)) else model
+    path = os.path.abspath(path)
+    if os.path.exists(path):
+        os.remove(path)
+    write_mesh_to_hdf5(path, mesh, names=[str(v) for v in sm.state])
+    for k, (time, Q) in enumerate(snapshots):
+        _save_fields_to_hdf5(path, k, float(time), np.asarray(Q))
+    return path

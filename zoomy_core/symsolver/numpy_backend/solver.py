@@ -11,7 +11,6 @@ import numpy as np
 import param
 import sympy as sp
 
-from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
 from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
@@ -23,6 +22,7 @@ from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
+from zoomy_core.systemmodel.padding import pad_to_square
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 
 
@@ -215,7 +215,7 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
         """
         if not isinstance(pred, NumericalSystemModel):
             pred = NumericalSystemModel.from_system_model(
-                _pad_to_square(pred), additional_systems=[press, corr])
+                pad_to_square(pred), additional_systems=[press, corr])
         if pred.n_equations != pred.n_state:
             raise ValueError("pred must act on the full state (pad it)")
         systems = {}

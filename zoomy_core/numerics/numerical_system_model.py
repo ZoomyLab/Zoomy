@@ -444,15 +444,18 @@ def _resolve_boundary_traces(nsm) -> None:
 @dataclass
 class ReconstructionSpec:
     """Face-state reconstruction configuration: `order` 1 (piecewise constant) or 2 (LSQ-MUSCL
-    with `limiter`), `free_surface_aware` wet/dry handling, and `positivity` (`""`,
-    `"zhang_shu"` a-priori cap, `"mood"` a-posteriori order-1 re-step).
+    with `limiter`) and `free_surface_aware` wet/dry handling.
+
+    Positivity on the symbolic solvers (`zoomy_core.symsolver`) is the hydrostatic
+    reconstruction and the CFL step at order 1, MOOD (the solver's `mood`) at order 2;
+    `positivity` is read by the legacy `zoomy_core.fvm` solvers only and the symbolic
+    solvers reject a non-empty value.
 
     References:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         Clain, Diot, Loubere 2011, https://doi.org/10.1016/j.jcp.2011.02.026
         Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
-        Xing, Zhang, Shu 2010, https://doi.org/10.1016/j.advwatres.2010.08.005
     """
     order: int = 1
     limiter: Limiter = Limiter.venkatakrishnan
