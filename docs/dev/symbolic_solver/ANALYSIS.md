@@ -1196,3 +1196,29 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
   form div(nu h (grad u + grad u^T)) (Gerbeau-Perthame RR-4084 Lemma 2.1 eq. (9); Marche 2007
   eq. (5.19)) needs the in-plane stress in the surface / bed traction (`apply_stress_closures`,
   `_solve_traction` build sigma.n from tau_iz only) -- affects SME, VAM, ML-SME, ML-VAM.
+
+### 45c. In-plane viscosity: the sigma-coordinate question settled (debugger, 2026-10-13)
+
+- **Reference** (gate 46): a hand-written viscous SWE SystemModel (state h, q_x, q_y) with the
+  literature term div(nu h (grad u + grad u^T)) in conservative form, straight into diffusion_matrix.
+  JAX: discrete -> exact at order 1.99 / 1.98 (nx 16 / 32 / 64: 1.7e-3 / 3.1e-3 at 64).  The
+  numerics are right independently of any derivation.
+- **Derivation walked with pdb** (SME(0) + NewtonianInPlane, small_slope):
+  1. `closures._solve_traction` at the surface: tau.n = [tau_xz, tau_yz, -tau_xz eta_x - tau_yz eta_y]
+     (frame slopes) -- only the vertical shears; tau_xx, tau_xy, tau_yy never enter the traction;
+     StressFree gives tau_xz(eta) = 0.
+  2. After `small_slope_scaling` the frame slopes are 0; the sigma-mapped x-momentum carries the
+     metric terms nu (d u~/d y) (d h/d y), nu (d u~/d x)(d b/d x), ... (in-plane stress x slopes).
+  3. Input of `package_viscous` (projected, SME(0)): exactly
+     -nu h d_yy(q_x/h) - nu h d_xy(q_y/h) - 2 nu h d_xx(q_x/h), i.e. RHS = h div(tau): the metric
+     terms of the sigma map cancel in the projection.
+- **Conclusion.** The derivation is exact for what it encodes: h div(tau) = div(h tau) - tau(eta).grad(eta)
+  + tau(b).grad(b).  The literature form div(h tau) (Gerbeau-Perthame, Marche; momentum-conserving)
+  needs the stress-free surface and the bed traction WITH the in-plane stress: tau_xz(eta) =
+  tau_xe(eta) d_e eta (and the bed analogue), whose d_z tau_xz integral adds back exactly
+  +tau(eta).grad(eta) - tau(b).grad(b).  The model keeps tau_de in the bulk but drops it from the
+  traction (and small_slope zeroes the frame slope there while the sigma map keeps the physical
+  slope): an inconsistent combination, not a sigma-coordinate bug.
+- **Fix for (B):** with an in-plane closure, build tau.n from the full stress (tau_de and tau_dz) and
+  resolve the slopes of the in-plane part to the PHYSICAL interface slopes.  Acceptance: SME(0) +
+  NewtonianInPlane equals gate 46's hand-written operator symbolically.
