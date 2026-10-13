@@ -88,12 +88,16 @@ cores via `taskset -c 56-63`); "host" = the comparison run on the host.
 
 | backend | GUI cases | matrix subset (container + host) |
 |---|---|---|
-| numpy | Steffler 30 s (45 s with the host run); the four QR sessions 68 s; Bingham threshold (time_end 20 s) 254 s (492 s); all 11 cases ~12 min | C1 27 + 14 s, C32 41 + 27 s, C33 13 + 5 s; all five 3.5 min |
-| jax | Malpasset (time_end 2 s) 68 s (133 s with the host run); the cards 4 s | C1 45 + 32 s, C8 87 + 77 s, C28 45 + 30 s, C32 65 + 50 s, C33 33 + 24 s; 8 min |
-| amrex | Malpasset (time_end 2 s) 66 s with the build, 12 s cached (81 s with the host run) | C1 91 + 84 s, C32 67 + 54 s, C33 59 + 48 s; 7 min |
-| openfoam | the two cards 28 s (wmake) / 6 s (43 / 35 s with the host run) | C33 22 + 40 s; 3 min |
+| numpy | Steffler 30 s (45 s with the host run); the four QR sessions 68 s; Bingham threshold (time_end 20 s) 254 s (492 s); all 11 cases ~12 min | C1 24 + 16 s, C4 24 + 14, C8 32 + 19, C26 28 + 24, C28 56 + 45, C31 45 + 31, C32 40 + 27, C33 12 + 8; 7 min |
+| jax | Malpasset (time_end 2 s) 68 s (133 s with the host run); the cards 4 s | C1 45 + 31 s, C4 46 + 32, C8 88 + 71, C26 66 + 54, C28 45 + 27, C31 138 + 129, C32 66 + 51, C33 34 + 25; C1 mpi2 + serial in the image 70 s; 15 min |
+| amrex | Malpasset (time_end 2 s) 66 s with the build, 12 s cached (81 s with the host run) | C1 114 + 114 s, C4 56 + 50, C8 134 + 117, C26 64 + 54, C28 82 + 85, C31 134 + 128, C32 63 + 50, C33 72 + 58; 20 min |
+| openfoam | the two cards 28 s (wmake) / 6 s (43 / 35 s with the host run) | C1 59 + 63 s, C4 60 + 63, C8 77 + 64, C26 67 + 57, C28 41 + 46, C31 96 + 107, C32 74 + 67, C33 38 + 36; 18 min |
 
-One pytest command per backend (numpy: two) stays under 15 min.
+Matrix columns: 2026-10-13, branch dev/containers-matrix (dev mode, apptainer; numpy / AMReX
+the GHCR images 0.1.1.163 / 0.1.163, JAX / OpenFOAM local builds of this branch's recipes;
+4-8 cores each, several backends at once). A pytest command per backend and half of the
+subset (`-k "matrix and (C1 or C4 or C8 or C26)"`, the rest) stays under 15 min.
+For the GUI cases, one pytest command per backend (numpy: two) stays under 15 min.
 
 ## Results (2026-10-13, main 7ce6f03b, dev mode)
 
@@ -109,12 +113,16 @@ in the browser when `cardCode(solver, ...)` of the picked catalog solver card is
 `cardCode` returns a construct snippet for every card with a `class`: the JAX and AMReX cards
 have one, so their cases (both Malpasset QR sessions) never reach a connected backend.
 
-Matrix in the container: equal to the host run (relmax 0; JAX C8 2.9e-10, the pressure
-tolerance) for numpy C1 C32 C33, jax C1 C8 C28 C32 C33, amrex C1 C32 C33, foam C33. Fail:
-C8 and C28 in the numpy / foam / AMReX images (builders import jax); foam C1 and C32 (the
-OpenFOAM image pins `numpy<2`, `zoomy_core.mesh.geometry_xp` calls `np.linalg.pinv(..., rtol=)`,
-numpy >= 2.0). Published images of 2026-10-13 (built before the port): Malpasset JAX and
-AMReX fail (the images' libraries predate the sessions), Steffler passes.
+Matrix in the container (2026-10-13, branch dev/containers-matrix, dev mode; images as in Run
+times): all 33 pass, each against the host run of the same library. Bit-identical (relmax 0)
+but for the iterative solves: JAX C8 2.9e-10 (pressure, tolerance 1e-9), C26 5.4e-16, C31
+`vam_ssp2_k0` 4.3e-15; foam C8 1.9e-14, C31 3.5e-15; AMReX C8 7.9e-15, C31 4.7e-15; numpy
+bit-identical throughout (image numpy 2.4.6, host 2.3.2). JAX C1 `o2_n40` on 2 ranks in the
+image = its serial run to 1.22e-13 (the host matrix's C7: 1.22e-13). Before (main 7ce6f03b,
+the GHCR images of 2026-10-13): C8 / C28 could not be set up in the numpy / foam / AMReX
+images (their builders imported JAX), foam C1 / C32 failed (the OpenFOAM image pinned
+`numpy<2`; `zoomy_core.mesh.geometry_xp` calls `np.linalg.pinv(..., rtol=)`, numpy >= 2,
+now declared in zoomy_core's pyproject), and the JAX image had no MPI.
 
 ## CI
 
