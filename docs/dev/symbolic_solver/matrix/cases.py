@@ -650,7 +650,7 @@ def full_stress_level1(nx=FULL1["nx"]):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
     return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
 
 
@@ -786,7 +786,7 @@ CASES = {
     "C35": ("restart: 0 -> T vs 0 -> T/2, restart -> T (C1 O2 adaptive; C8 increment projection)",
             _c35()),
     "C36": ("full Newtonian stress at level 1 (SME(1), Stress.full): periodic smooth state, IMEX",
-            [Run("sme1", full_stress_level1, FULL1["t_end"], dt=FULL1["dt"], imex="lie",
+            [Run("sme1", full_stress_level1, FULL1["t_end"], dt=FULL1["dt"], imex=Imex.lie,
                  solver=IMPLICIT, backends=("jax",))]),
 }
 
