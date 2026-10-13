@@ -247,6 +247,7 @@ TH.update({
     "C32 err": ("<=", 7e-4, "observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)"),
     "C32 control": (">=", 0.1, "observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)"),
     "C32 inviscid": ("<=", 4e-4, "observed 1.7e-4 (a regression bound; 2.5e-3 at g = 9.81)"),
+    "C32 inviscid split": ("<=", 8e-4, "observed 4.1e-4 (a regression bound: O2 Rusanov dissipation, no wall exit)"),
     "C32 foam": ("<=", 0.5, "observed 0.21 (foam's own stencils at second order)"),
     "C33 err": {"imex": ("<=", 1e-3, "observed 5.1e-4 (implicit Euler, theory O(dt))"),
                 "rk2": ("<=", 7e-6, "observed 3.3e-6 (SSP-RK2, theory O(dt^2))")},
@@ -473,7 +474,7 @@ def visc_checks(add, b, g, J):
     def shear_err(d, v):
         return float(np.abs(d["Q"][names(d).index("q_x_0")]
                             - K.shear_exact(v, d["xc"][1], float(d["t"]))).max())
-    for v in ("noslip", "free"):                               # C32
+    for v in ("noslip", "free", "noslip_split"):              # C32
         runs = [g("C32", f"{v}_n{n}") for n in ny]
         if ok(*runs):                                          # JAX: the order
             es = [shear_err(x, v) for x in runs]
@@ -513,6 +514,16 @@ def visc_checks(add, b, g, J):
         add("C32", "nu 0 on no-slip walls: max|u - u0| (the Riemann state's wall friction)", b,
             "serial", shear_err(c, "inviscid"), TH["C32 inviscid"],
             "Dirichlet(momentum) also sets the Riemann outer state: Rusanov damps the wall cells")
+        add("C32", "nu 0 on no-slip walls: wall friction, rel. change of sum(q_x vol)", b, "serial",
+            mass(c, names(c).index("q_x_0")), None, "the interior fluxes cancel: the walls' share")
+    c = g("C32", f"inviscid_split_n{ny[0]}")                   # C32: the split wall, nu 0 (JAX)
+    if c is not None:
+        add("C32", "nu 0 on split walls: wall friction, rel. change of sum(q_x vol)", b, "serial",
+            mass(c, names(c).index("q_x_0")), RO,
+            "Wall face: the reflected Riemann state carries no x-momentum flux")
+        add("C32", "nu 0 on split walls: max|u - u0|", b, "serial", shear_err(c, "inviscid_split"),
+            TH["C32 inviscid split"],
+            "the interior Rusanov dissipation of the O2 face jumps, piled up in the wall cells")
     M = K.MOMENT                                               # C33
     for integ, scheme in (("imex", "implicit Euler (I - dt J)^-N"),
                           ("rk2", "SSP-RK2 (1 + dt J + (dt J)^2 / 2)^N")):

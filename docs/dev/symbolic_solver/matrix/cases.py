@@ -379,9 +379,11 @@ SHEAR = dict(nu=0.05, g=0.01, t_end=0.5, nx=8, ny=(20, 40, 80), steps=16)   # dt
 def shear_exact(variant, y, t):
     """u(y, t): no-slip sin(pi y) e^(-nu pi^2 t), free-slip cos(pi y) e^(-nu pi^2 t).
     ``ctrl`` (negative control): the no-slip profile on free-slip walls.
-    ``inviscid``: nu = 0 on no-slip walls, u stays sin(pi y)."""
-    f = np.sin if variant in ("noslip", "ctrl", "inviscid") else np.cos
-    return f(np.pi * y) * np.exp(-(0.0 if variant == "inviscid" else SHEAR["nu"]) * np.pi ** 2 * t)
+    ``inviscid``: nu = 0 on no-slip walls, u stays sin(pi y).  ``*_split``: the same on the
+    split wall."""
+    f = np.cos if variant == "free" else np.sin
+    nu = 0.0 if variant.startswith("inviscid") else SHEAR["nu"]
+    return f(np.pi * y) * np.exp(-nu * np.pi ** 2 * t)
 
 
 def shear_decay(variant, ny, order=2, limiter="none"):
@@ -393,16 +395,21 @@ def shear_decay(variant, ny, order=2, limiter="none"):
     ``Dirichlet`` on the momentum (face value 0, ghost -q), free = ``Wall``
     (tangential momentum kept: ghost = q, a zero normal gradient); ``ctrl`` =
     the no-slip profile on ``Wall``s (the walls must act: the error is O(1)); ``inviscid``
-    = nu 0 on the no-slip walls (what the Dirichlet wall's Riemann state alone does).  Second
+    = nu 0 on the no-slip walls (what the Dirichlet wall's Riemann state alone does);
+    ``noslip_split`` / ``inviscid_split`` = the split wall, ``Wall`` face (the reflective
+    Riemann state) with a ``Dirichlet`` momentum ghost (ghost -q for the stencils).  Second
     order, no limiter: a smooth profile (minmod clips at its extremum).  g is
     small (0.01): the exact solution does not depend on it, but the Rusanov
     dissipation (wave speed sqrt(g h), a third-order error) would otherwise
     cancel part of the O(dy^2) error of the viscous flux, and the measured
     order jumps (3.4, 4.6, 1.4 at g = 9.81, nx 20 / 40 / 80 / 160)."""
-    nu = 0.0 if variant == "inviscid" else SHEAR["nu"]
-    wall = ((lambda t: BC.Dirichlet(tag=t, on="momentum", value=0.0))
-            if variant in ("noslip", "inviscid")
-            else (lambda t: BC.Wall(tag=t)))
+    nu = 0.0 if variant.startswith("inviscid") else SHEAR["nu"]
+    if variant.endswith("_split"):
+        wall = lambda t: BC.Wall(tag=t, ghost=BC.Dirichlet(on="momentum", value=0.0))  # noqa: E731
+    elif variant in ("noslip", "inviscid"):
+        wall = lambda t: BC.Dirichlet(tag=t, on="momentum", value=0.0)  # noqa: E731
+    else:
+        wall = lambda t: BC.Wall(tag=t)  # noqa: E731
     bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
            wall("bottom"), wall("top")]
@@ -604,15 +611,16 @@ IMPLICIT = dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_
 
 
 def _c32():
-    """Both viscous walls on ny 20 / 40 / 80 (JAX); foam and AMReX on ny 20;
-    the controls ``ctrl`` (walls act) and ``inviscid`` (JAX)."""
+    """The viscous walls (no-slip, free-slip, split) on ny 20 / 40 / 80 (JAX); foam and
+    AMReX on ny 20; the controls ``ctrl`` (walls act), ``inviscid`` and ``inviscid_split``
+    (JAX)."""
     return [Run(f"{v}_n{ny}", partial(shear_decay, v, ny), SHEAR["t_end"],
                 dt=1.0 / (ny * SHEAR["steps"]), imex="lie", solver=IMPLICIT,
                 backends=JFA if ny == SHEAR["ny"][0] else ("jax",))
-            for v in ("noslip", "free") for ny in SHEAR["ny"]] + [
+            for v in ("noslip", "free", "noslip_split") for ny in SHEAR["ny"]] + [
         Run(f"{v}_n20", partial(shear_decay, v, SHEAR["ny"][0]), SHEAR["t_end"],
             dt=1.0 / (SHEAR["ny"][0] * SHEAR["steps"]), imex="lie", solver=IMPLICIT,
-            backends=("jax",)) for v in ("ctrl", "inviscid")]
+            backends=("jax",)) for v in ("ctrl", "inviscid", "inviscid_split")]
 
 
 def _c33():
@@ -726,7 +734,7 @@ CASES = {
     "C31": ("IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning",
             _c31()),
     "C32": ("viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; "
-            "no-slip and free-slip walls", _c32()),
+            "no-slip, free-slip and split (Wall face, Dirichlet ghost) walls", _c32()),
     "C33": ("vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
             _c33()),
     "C34": ("in-plane viscous operator vs the exact div(h tau), mixed derivatives (gate 45)",

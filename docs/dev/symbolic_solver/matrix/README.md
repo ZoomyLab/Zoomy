@@ -50,6 +50,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | LSQ derivatives with the boundary closure (gate 44) | C29 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | in-plane viscosity with viscous walls vs an exact solution (no-slip / free-slip shear decay) | C32 | C32 | C32 |
+| BC channels: `face=` / `ghost=` set apart (`Wall` face, `Dirichlet` ghost: a viscous no-slip wall) | C32 | C32 | C32 |
 | vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
 | in-plane viscous operator vs the exact div(h tau), mixed derivatives (gate 45) | C34 | C34 (= JAX) | C34 (= JAX) |
 | large tier (scaling, catchment, I/O; `--tier large`) | L1-L5 | L1, L2, L2P, L4 | L1, L2, L2P, L3, L4 |
@@ -117,6 +118,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C30 LSQ polynomials | gate 39 (subprocess): seeded random polynomials of degree p = 1..3 on 1-D, quads, jittered quads, triangles, hexahedra; interior, boundary with exact mirror ghost, Dirichlet / Neumann / zero-gradient ghosts through the closure | number of failing checks (PASS + FAIL = 72) = 0, each exact to 1e-9 |
 | C31 IMEX time order | constant dt (`cfl_check_every=0`), fixed mesh; schemes `lie1` / `lie2` (Lie: SSP-RK1 / RK2, then the implicit source), `ssp2` (IMEX-SSP2(2,2,2), Pareschi & Russo 2005: the implicit source in every stage). `swe_*`: C14 (bump in flow, Manning n 0.5) at space O1, nx 40, t 0.3, dt 4e-3 / 2^k, k = 0..3, L1(h) vs dt / 32 of the same scheme. `vam_*`: C10's wave + Manning n 0.5 (VAM(1) Chorin, space O1, nx 60, t 0.2), dt 8e-3 / 2^k, Richardson; `t1` / `t2` = time_order 1 / 2 with the Lie source per projection stage, `ssp2` = projected IMEX stages (ChorinTemplate.step); `pred_ssp2_*`: the VAM predictor alone (no projection). foam / AMReX: `swe_ssp2_k0`; AMReX: `vam_ssp2_k0` | SWE order dt/4->dt/8: lie1 >= 0.8, ssp2 >= 1.8 (theory), lie2 <= 1.4 (theory 1: the Lie splitting caps SSP-RK2); VAM: t1 >= 0.8, predictor ssp2 >= 1.8 (theory), t2 >= 0.5, ssp2 >= 0.7 (observed: the approximate projection, below); vs JAX: SWE round-off, VAM 1e-9 (pressure). The VAM projection is approximate by construction (ANALYSIS 45): the pressure rows are the constraint with the corrector substituted before the discretization, a compact operator, not the discrete composition constraint∘correction. Constraint residual of P(U) / of U 7.4e-2 / 2.8e-2 / 1.4e-2 and P(P(U)) - P(U) 5.5e-2 / 1.9e-2 / 5.1e-3 of P(U) - U (nx 30 / 60 / 120, max); the exact composition (prototype) is idempotent to 1e-13 and gives ssp2 1.98 / 1.95, but is indefinite on triangles (C8 `vam_tri` fails) |
 | C32 viscous shear decay | SME(0) + `NewtonianInPlane` (`diffusion_matrix` A[q_x, q_x, y, y] = nu, A[q_x, h, y, y] = -nu q_x / h, asserted in `cases.shear_decay`), nu 0.05, g 0.01, h = 1, v = 0, u = u(y); 8 x ny cells (dx = dy), periodic in x, walls at y = 0, 1; O2 without limiter, IMEX (Crank-Nicolson diffusion, Newton 1e-12), dt = dy/16, t 0.5. Then every x-derivative vanishes and the model is exactly u_t = nu u_yy. `noslip`: `Dirichlet(on="momentum", value=0)` (ghost -q), u0 = sin(pi y), exact sin(pi y) e^(-nu pi^2 t); `free`: `Wall` (tangential momentum kept: zero normal gradient), u0 = cos(pi y), exact cos(pi y) e^(-nu pi^2 t); ny 20 / 40 / 80 (JAX), ny 20 (foam, AMReX). Controls (JAX, ny 20): `ctrl` = the sin profile on `Wall`s, `inviscid` = nu 0 on the no-slip walls | L_inf(q_x) vs exact: order 40->80 >= 1.8 (theory 2; observed 1.87 / 1.94 for 20->40 / 40->80, both variants); ny 20 <= 7e-4 (observed 3.3e-4, JAX, foam, AMReX); h - 1, q_y, x-variation <= 1e-12 (theory: h stays 1, v stays 0, u = u(y)); AMReX max rel vs JAX <= 1e-8 (tolerance as C26; observed 3e-16); foam L_inf abs(foam - JAX) <= 0.5 x L_inf(JAX - exact) (observed 0.02 / 0.21); `ctrl` L_inf >= 0.1 (observed 0.42: the walls act); `inviscid` max abs(u - u0) <= 4e-4 (observed 1.7e-4, a regression bound: the numerical wall friction of the Dirichlet wall's Riemann state) |
+| C32 split wall | as C32, walls `Wall(tag, ghost=Dirichlet(on="momentum", value=0))`: the `face` channel (the Riemann state) reflects the normal momentum and keeps the tangential, the `ghost` channel (gradients, limiter, diffusion, LSQ closure) is -q.  `noslip_split`: u0 = sin(pi y), ny 20 / 40 / 80 (JAX, numpy), ny 20 (foam, AMReX); `inviscid_split` (JAX, numpy): nu 0 | `noslip_split` as `noslip`: order 40->80 >= 1.8 (observed 1.94, 1.87 for 20->40), ny 20 L_inf <= 7e-4 (observed 3.34e-4 on all four), h - 1, q_y, x-variation <= 1e-12, AMReX max rel vs JAX <= 1e-8 (observed 4.4e-16), foam ratio <= 0.5 (observed 0.015); `inviscid_split`: wall friction = rel. change of sum(q_x vol) <= 1e-12 (round-off; observed 0; the Dirichlet wall's `inviscid`: 4.6e-5, information), max abs(u - u0) <= 8e-4 (observed 4.1e-4, a regression bound: the interior O2 Rusanov dissipation has no exit through the reflective wall and piles up in the wall cells) |
 | C33 vertical viscosity | SME(2) + `Newtonian` + `NavierSlip` + `StressFree`, nu 0.05, lambda_s 0.5; 1-D, periodic (8 cells, dx 1), flat bed, uniform h = 1, q = (0.5, 0.2, -0.1): the flux divergence vanishes, only the source acts, and it is linear in q at fixed h, so q' = J q with J = d(source_q)/d(q_0..q_2) at h = 1 by sympy differentiation of the SystemModel's `source` (`cases.moment_jacobian`; linearity asserted, `hinv` = 1/h of the NSM substituted); exact q(T) = expm(T J) q0 (eigenvalues -6.68, -1.31, -0.10), T 1. Constant dt = 0.05 / 2^k, k = 0, 1, 2. `imex`: explicit flux step then an implicit-Euler source (the viscous / slip source is in the implicit slot `source`; order 1); `rk2`: explicit SSP-RK2, the source in the explicit step (order 2, the reconstruction order) | order dt/2 -> dt/4 vs expm: imex >= 0.8 (theory 1, observed 0.995), rk2 >= 1.8 (theory 2, observed 2.03); rel error at dt 0.0125 <= 1e-3 / 7e-6 (observed 5.1e-4 / 3.3e-6); q(T) = the integrator's own scheme (I - dt J)^-N resp. (1 + dt J + (dt J)^2 / 2)^N: rk2 <= 1e-12 (round-off), imex <= 1e-10 (Newton 1e-12; observed 3e-12 foam / AMReX, 4e-15 JAX); uniform state kept and h = 1 <= 1e-12; foam / AMReX = JAX: rk2 <= 1e-12, imex <= 1e-10 (observed 1e-16 / 1.3e-12) |
 | C34 in-plane viscous operator | gate 45: SME(0) + `NewtonianInPlane`, smooth periodic h, q_x, q_y on [0,1]^2 varying in x and y, O2 without limiter, one implicit-Lie step dt 1e-7 with nu 1 and nu 0, L = (Q_1 - Q_0) / dt on the momentum rows (the discrete viscous operator); nx 16 / 32 / 64 (JAX), nx 16 (foam, AMReX, against JAX's L) | max rel vs the exact div(h tau), tau = nu (grad u + grad u^T) (= the SystemModel operator, `diffusion_matrix` with its mixed-index entries A[i, j, x, y] plus the nu-part of the source, symbolically since the bed / surface traction carries the in-plane stress, ANALYSIS 45d): order 32->64 >= 1.8 (theory 2; observed 1.99 / 1.98 for q_x / q_y), nx 64 <= 6e-3 (observed 1.7e-3 / 3.1e-3); foam / AMReX max rel vs JAX <= 2e-7 (observed 7e-8 foam: its own O2 stencils in the explicit stage, an O(dt) effect in L; 6e-10 AMReX: round-off / dt). The two-point fluxes alone (before 2026-10-13) converged to the diagonal-index part and stayed 16 % / 38 % off the full operator; before ANALYSIS 45d the SystemModel operator was h div(tau) |
 
@@ -183,6 +185,26 @@ Not part of the matrix: 8 model goldens in zoomy_core (m01-m04, m06-m08,
 s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
+
+## Results (2026-10-13, dev/bc-channels: the two BC channels)
+
+Every `BoundaryCondition` takes `face=` / `ghost=`: another BC that supplies the Riemann state
+(`boundary_conditions`) or the stencil ghost (`boundary_ghost_state`) on the slots of its `on`;
+the rest keep the BC's own value, and the own ghost is derived from the own face value.  The LSQ
+closure classifies a row from the ghost kernel, so an overridden ghost takes the override's kind
+(C32 mesh at degree 2: `Wall` q_x Neumann, split wall q_x Dirichlet, as `Dirichlet`).
+- Defaults unchanged: every kernel of C1, C4, C28 (gate 43 setups) and C32 (57 systems; sympy
+  `srepr`, foam and AMReX C++ text) and the closure classes are identical before and after.
+- C32 `noslip_split` (scratch store, serial): L_inf 3.34e-4 / 9.12e-5 / 2.38e-5 at ny 20 / 40 / 80
+  (orders 1.87, 1.94; `noslip` 3.33e-4 / 9.12e-5 / 2.38e-5) on JAX and numpy (numpy = JAX
+  1.6e-12); ny 20: AMReX = JAX 4.4e-16, foam 3.34e-4 (ratio 0.015).
+- nu 0: the split wall carries no momentum through the walls (rel. change of sum(q_x vol): JAX 0,
+  numpy 2.2e-16; ny 40: 1e-15); the Dirichlet wall 4.6e-5 (ny 40: 6.2e-6).  max abs(u - u0) is
+  not round-off on either: 4.1e-4 / 8.8e-5 (split) and 1.7e-4 / 3.3e-5 (Dirichlet) at ny 20 / 40,
+  second order.  Its source is the interior O2 Rusanov dissipation (the face jumps of the
+  reconstruction, ~ s dy^3 d4u/dy4): -8.0e-5 at the centre in both runs; it moves momentum
+  towards the walls, where the reflective wall lets none out, so the wall cells gain (+4.1e-4
+  split, +1.7e-4 Dirichlet, whose wall flux takes part of it away).
 
 ## Results (2026-10-13, dev/hypre: AMG pressure solve on AMReX)
 
@@ -305,8 +327,8 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
   needed: free-slip = `Wall`, no-slip = `Dirichlet(on="momentum", value=0)` (ghost -q).  But
   that BC also sets the Riemann outer state to zero momentum, so Rusanov damps the wall
   cells: the nu = 0 control (`inviscid`) changes u by 1.7e-4 (g 0.01; 2.5e-3 at g 9.81).
-  Missing for a clean viscous wall: one BC with the reflecting wall as the Riemann state and
-  an odd ghost for the diffusion block.  (iii) g = 0.01: the exact solution does not depend on
+  The split wall `Wall(ghost=Dirichlet(on="momentum", value=0))` (BC channels, `noslip_split`)
+  keeps the reflecting wall as the Riemann state and the odd ghost for the diffusion block.  (iii) g = 0.01: the exact solution does not depend on
   it, but at g 9.81 the Rusanov error (~ sqrt(g h) dy^3) partly cancels the O(dy^2) error of
   the viscous flux and the measured order is erratic (L_inf 1.56e-3 / 1.47e-4 / 6.1e-6 /
   2.3e-6 at ny 20 / 40 / 80 / 160: 3.4, 4.6, 1.4); first order in space at g 9.81 gives 0.26
