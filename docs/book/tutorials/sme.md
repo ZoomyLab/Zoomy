@@ -8,4 +8,4 @@ are essentially our 3-D model. The dimensionality is set by the mesh.
 | [Moments in 2-D](ipynb/sme/moments_2d.ipynb) | Write your **own closure**, inject it into `SME`, run in **2-D**, and read the vertical velocity profile back out. |
 
 Runs on the reference **NumPy** backend — `zoomy_core` and `zoomy_plotting`
-([pip from a clone](../installation.md#pip-from-a-clone-numpy)), no container.
+([pip](../installation.md#pip-numpy)), no container.

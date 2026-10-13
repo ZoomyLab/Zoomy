@@ -1,7 +1,7 @@
 # Shallow water
 
 Runs on the reference **NumPy** backend and needs nothing but `zoomy_core` and
-`zoomy_plotting` ([pip from a clone](../installation.md#pip-from-a-clone-numpy))
+`zoomy_plotting` ([pip](../installation.md#pip-numpy))
 — no container, no compiler.
 
 | | What it covers |
