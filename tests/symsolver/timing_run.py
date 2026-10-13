@@ -88,7 +88,7 @@ def _jax(run, reps):
 
 # ── NumPy ───────────────────────────────────────────────────────────────────
 def _numpy(run, reps):
-    """setup = model + mesh + printing; no compile; march = ``reps`` marches."""
+    """setup = model + mesh + printing; no compile; march = `reps` marches."""
     import cases
     from backends import _solver_kw
     from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy,

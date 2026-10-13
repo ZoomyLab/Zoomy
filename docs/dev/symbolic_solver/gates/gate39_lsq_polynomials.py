@@ -153,7 +153,7 @@ def run_derivs(mj, mis, U, UB):
 
 
 def run_derivs_numpy(mesh, d, p, mis, U, UB):
-    """The fit with the ghost samples ``UB`` as the NumPy runtime takes it (no closure)."""
+    """The fit with the ghost samples `UB` as the NumPy runtime takes it (no closure)."""
     topo = build_topology(mesh, lsq_degree=p)
     g = compute_geometry(topo, np.asarray(mesh.vertex_coordinates, float)[:d])
     nc = int(mesh.n_inner_cells)
