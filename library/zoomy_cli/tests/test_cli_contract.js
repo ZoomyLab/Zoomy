@@ -62,9 +62,14 @@ describe("zoomy_cli public surface", () => {
         const pyodide = { runCode: async (c) => { seen = c; return '{"status":"success","output":"ok"}'; } };
         const storage = { readJson: async () => ({}), readText: async () => "", tryReadJson: async () => null, tryReadText: async () => null };
         const cli = new mod.ZoomyCLI({ pyodide, storage });
+        /* engine.process_code answers a JSON string; runCode parses it so callers read
+           res.status / res.output (1b5ff9ac). A non-JSON answer passes through unchanged. */
         const out = await cli.runCode("print('x')");
         if (seen !== "print('x')") throw new Error("runCode did not forward code");
-        if (out !== '{"status":"success","output":"ok"}') throw new Error("runCode did not forward result");
+        if (typeof out !== "object" || out.status !== "success" || out.output !== "ok")
+            throw new Error("runCode did not forward the parsed result: " + JSON.stringify(out));
+        const raw = new mod.ZoomyCLI({ pyodide: { runCode: async () => "not json" }, storage });
+        if (await raw.runCode("x") !== "not json") throw new Error("runCode must pass a non-JSON answer through");
     });
 
     test("ZoomyCLI.listCards loads the authored default.json only", async () => {

@@ -33,8 +33,10 @@ function assertCardSchema(dir, card) {
     assert.ok(typeof card.id === "string" && card.id, `${dir}: card missing string id`);
     assert.ok(typeof card.title === "string" && card.title, `${dir}: card ${card.id} missing title`);
     if (dir === "models") {
-        assert.ok(card.template || card.snippet || card.class,
-            `model card ${card.id} needs one of template/snippet/class`);
+        /* A backend participant card (the VOF model card: no zoomy_core class) carries
+           only requires_tag, as a solver card does. */
+        assert.ok(card.template || card.snippet || card.class || card.requires_tag,
+            `model card ${card.id} needs one of template/snippet/class or requires_tag`);
     } else if (dir === "meshes") {
         assert.ok(card.template || card.mesh_file,
             `mesh card ${card.id} needs a template or a mesh_file`);
