@@ -33,6 +33,29 @@ tag, collected in `BoundaryConditions([...])` or passed as a list:
 | `Lambda(tag, prescribe_fields={...})` | face values from a user function |
 | `Coupled(tag)` | preCICE interface (see [Backends](backends.md)) |
 
+Every BC feeds three channels, the data structures its value goes to:
+
+| channel | what | consumed by |
+|---|---|---|
+| `face` | the state on the boundary face | the numerical flux (Riemann problem) |
+| `ghost` | the value at the mirror image of the inner cell centre; by default from the face value (`2 face - Q` for a face value) | gradients, limiters, derivative aux, diffusion |
+| `normal_gradient` | a prescribed dQ/dn on the face (Neumann data; 0 unless set) | diffusion, the LSQ boundary closure |
+
+Any BC can take any channel from another BC, on the fields of that BC's `on`:
+`Wall(tag="w", ghost=Dirichlet(on="momentum", value=0))` (reflecting Riemann state, no-slip
+stencils), `Wall(tag="w", normal_gradient=Flux(on="h", gradient=2.0))`.
+
+A new BC subclasses `BoundaryCondition` and implements only what differs:
+`compute_boundary_condition` (the face value; set `boundary_value_kind =
+BoundaryValueKind.face` when it is a true face value), `compute_ghost_state` (only if the
+stencils need something else), `compute_boundary_gradient` (Neumann data).  `Wall` is the
+template: about 20 lines building the reflected state from `normal` and the momentum groups.
+The kernels are symbolic, so every backend gets them.
+
+Model parameters follow the same hierarchy as the solver settings ([Solvers](solvers.md)):
+class defaults < the `model` section of a settings file (`SME(settings="run.yml")`) <
+arguments.
+
 **Connects to:** `SystemModel.from_model(model)` ([SystemModel](system-model.md)).
 `model.describe()` shows what was built.  Models without a vertical ansatz
 (the compressible Euler equations, `zoomy_core.systemmodel.euler.compressible_euler`)
