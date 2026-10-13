@@ -74,6 +74,37 @@ launcher sets `CUDA_VISIBLE_DEVICES` per rank).  On the CPU (no `--nv`):
 See `docs/dev/symbolic_solver/PARALLEL.md` and `AMG.md` (credits: JAX-AMG,
 AmgX, PyAMG in `docs/book/references/third_party.bib`).
 
+## hypre for the AMReX pressure solve
+
+The AMReX symbolic solvers (`zoomy_amrex.symsolver`, `linear_solver="hypre"`, the default of
+the Chorin template) link a static hypre: BoomerAMG-preconditioned FlexGMRES on the assembled,
+cell-block-scaled pressure operator (`Source/symsolver/rt_amrex.H`, `hypre_solve`).  The
+images do not ship hypre yet; `zoomy_amrex/build_hypre_cuda.sh` builds hypre 3.2.0 inside them:
+
+```bash
+containers/zoomy_amrex/build_hypre_cuda.sh        # zoomy_amrex_gpu.sif -> ~/.cache/zoomy/hypre-cuda-3.2.0
+containers/zoomy_amrex/build_hypre_cuda.sh cpu    # zoomy_amrex.sif     -> ~/.cache/zoomy/hypre-cpu-3.2.0
+```
+
+(~2 min CPU, ~6 min CUDA; `CUDA_ARCH`, default 89 = the AMReX build's; the driver runs the
+script itself the first time it needs a variant).  The prefix is bound into the container at
+build time only: the library is static.  `ZOOMY_HYPRE_DIR` overrides the prefix, also with a
+path inside the image.
+
+To make it permanent, add to the `%post` of `zoomy_amrex_gpu.def` (CPU image: drop the
+CUDA flags) and rebuild the image; then run with `ZOOMY_HYPRE_DIR=/opt/hypre`:
+
+```bash
+    HYPRE_VER=3.2.0     # hypre 3.x enables Umpire for GPU builds by default: off
+    wget -q "https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VER}.tar.gz" -O /root/hypre.tgz
+    tar -xzf /root/hypre.tgz -C /root && cd /root/hypre-${HYPRE_VER}/src
+    ./configure --prefix=/opt/hypre --disable-fortran --with-cuda --with-cuda-home=/usr/local/cuda \
+        --with-gpu-arch=89 --without-umpire --enable-device-malloc-async CC=mpicc CXX=mpicxx
+    make -j"$(nproc)" install && cd / && rm -rf /root/hypre-${HYPRE_VER} /root/hypre.tgz
+```
+
+Credits: hypre and BoomerAMG in `docs/book/references/third_party.bib`.
+
 ## Pulling prebuilt images (no local build)
 
 The Containers pipeline publishes every backend to ghcr (public, anonymous
