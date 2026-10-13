@@ -116,8 +116,10 @@ class VAM(BaseModel):
         retain_inplane = any(getattr(c, "closes", None) == "in_plane"
                              for c in (self.closures or []))
         if retain_inplane:
+            # normal_stress: the modal pressure is p - tau_zz = -sigma_zz, so the surface BC
+            # p(1) = 0 is the normal stress-free condition and the vertical row is unchanged
             add_inplane_viscous(m, [getattr(m, mn) for mn in MOM],
-                                momblue.uvel, list(horiz), m.parameters.nu)
+                                momblue.uvel, list(horiz), m.parameters.nu, normal_stress=True)
 
         # 2 — σ-map:  z = b + h ζ
         m.apply(PDETransformation({z: (zeta, sp.Eq(z, b + h * zeta))}))

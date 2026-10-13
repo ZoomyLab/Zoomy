@@ -41,17 +41,17 @@ flux[3,0] = Mul(Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('q_0'), Symbol
 hydrostatic_pressure: shape=(4, 1)
 hydrostatic_pressure[2,0] = Mul(Rational(1, 2), Symbol('g'), Pow(Symbol('h'), Integer(2)))
 diffusion_matrix: shape=(4, 4, 1, 1)
-diffusion_matrix[2,0,0,0] = Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1'))
-diffusion_matrix[2,1,0,0] = Add(Mul(Integer(-1), Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1')))
-diffusion_matrix[2,2,0,0] = Mul(Integer(2), Symbol('nu'))
-diffusion_matrix[3,1,0,0] = Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1'))
-diffusion_matrix[3,3,0,0] = Mul(Integer(2), Symbol('nu'))
+diffusion_matrix[2,0,0,0] = Mul(Integer(-1), Integer(8), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1'))
+diffusion_matrix[2,1,0,0] = Add(Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1')))
+diffusion_matrix[2,2,0,0] = Mul(Integer(4), Symbol('nu'))
+diffusion_matrix[3,1,0,0] = Mul(Integer(-1), Integer(8), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1'))
+diffusion_matrix[3,3,0,0] = Mul(Integer(4), Symbol('nu'))
 nonconservative_matrix: shape=(4, 4, 1)
 nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'))
 nonconservative_matrix[3,3,0] = Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Symbol('q_0'))
 source: shape=(4, 1)
 source[2,0] = Add(Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))))
-source[3,0] = Add(Mul(Integer(-1), Integer(24), Pow(Symbol('b_x'), Integer(2)), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(12), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(-1), Integer(12), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(24), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_1')), Mul(Integer(6), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(6), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(10), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')))
+source[3,0] = Add(Mul(Integer(-1), Integer(48), Pow(Symbol('b_x'), Integer(2)), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(24), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(-1), Integer(24), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(48), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_1')), Mul(Integer(12), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_0')), Mul(Integer(-1), Integer(20), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')))
 source_explicit: None
 eigenvalues: None
 eigenvalues_cfl: None

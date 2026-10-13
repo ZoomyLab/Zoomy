@@ -207,6 +207,20 @@ class ClosureState:
         return fam.expr if self._at is None else fam.at(self._at)
 
 
+class ProfileField:
+    """A field given by its vertical profile ``expr`` in ``var`` (e.g. a modal sum in zeta), with
+    the ``FunctionFamily`` interface ``expr`` / ``at(value)`` a ``ClosureState`` reads.
+    """
+
+    def __init__(self, expr, var):
+        """Store the profile and its vertical variable."""
+        self.expr, self.var = expr, var
+
+    def at(self, value):
+        """The profile at ``var = value``."""
+        return self.expr.subs(self.var, value)
+
+
 # MaterialModel and its factories (newtonian_navier_slip, bingham_navier_slip,
 # rough_wall, kepsilon_eddy_viscosity) were REMOVED in the clean cut to the
 # composable closure list — there is no legacy stress-closure path.  Their

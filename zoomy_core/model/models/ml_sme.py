@@ -164,8 +164,10 @@ class MLSME(BaseModel):
                     d.t(uvel[i]) + adv + d.z(uvel[i] * w)
                     + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl - g_h[xd])
             if retain_inplane:                       # add in-plane divergence pre-σ-map
+                # the hydrostatic g d(b + H) is then -sigma_zz = p - tau_zz (continuous
+                # across the interfaces)
                 add_inplane_viscous(ml, [getattr(ml, mn) for mn in MOM],
-                                    uvel, list(horiz), nu_s)
+                                    uvel, list(horiz), nu_s, normal_stress=True)
 
             def _kbc(iface, G):
                 """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
@@ -211,7 +213,7 @@ class MLSME(BaseModel):
                     fields["v"] = getattr(ml.functions, f"v_{ell}")
                 return ClosureState(fields, params=ml.parameters, h=h_l, x=C.x,
                                     zeta=zeta, at=at, alias=alias,
-                                    boundary_tag=btag, horiz=list(horiz))
+                                    boundary_tag=btag, horiz=list(horiz), base=z_bot)
             axes = [{"mx": getattr(ml, f"momentum_{CN[xd]}"),
                      "tau": getattr(ml.functions, sname(xd, ell)),
                      "velname": HNAME[xd]} for xd in horiz]
@@ -350,6 +352,26 @@ class MLSME(BaseModel):
         par = {lam_s: m.parameters.lambda_s, nu_s: m.parameters.nu}
         par.update({l_par[j - 1]: getattr(m.parameters, f"l_{j}")
                     for j in range(1, N)})
+        # shared in-plane interface traction sum_e sigma*_de d_e z_a (None without an in-plane
+        # closure): sigma* from the two layers' modal traces by the stress InterfaceFlux
+        # closure (default: mean); each layer's own part is already in its traction
+        from zoomy_core.model.models.closures import interface_inplane_traction
+        from zoomy_core.model.models.material import ClosureState, ProfileField
+
+        def _layer_state(ell, side):
+            """Closure state of layer ``ell`` over its modal profile, at local height ``side``."""
+            h_ell = l_all[ell - 1] * ht
+            prof = {HNAME[xd]: ProfileField(
+                sum(q_mod[ell][xd][k] / h_ell * inner_basis.eval(k, zeta)
+                    for k in range(levels[ell - 1] + 1)), zeta) for xd in horiz}
+            return ClosureState(prof, params=m.parameters, h=h_ell, x=x, zeta=zeta, at=side,
+                                horiz=list(horiz), base=b + sum(l_all[:ell - 1]) * ht)
+        iface_tr = {}
+        for a in range(1, N):
+            tr = interface_inplane_traction(self.closures, _layer_state(a, 1),
+                                            _layer_state(a + 1, 0), G_sol[Gf[a]])
+            if tr is not None:
+                iface_tr[a] = [sp.expand(e.doit()) for e in tr]
         m.add_equation("bottom", d.t(b))
         m.add_equation("continuity", sp.expand(glob_c.subs(par)))
         for ell in range(1, N + 1):
@@ -376,6 +398,9 @@ class MLSME(BaseModel):
                             mom = mom + (sgn * phik
                                          * (_ustar(a, xd) - _trace(ell, side, xd))
                                          * Gf[a] / rho_s / inner_basis.gram(k, k))
+                            if a in iface_tr:          # shared in-plane traction
+                                mom = mom + (sgn * phik * iface_tr[a][horiz.index(xd)]
+                                             / rho_s / inner_basis.gram(k, k))
                     mom = sp.expand(mom).subs(G_sol)
                     enm = (f"momentum_{ell}_{k}" if dim == 2
                            else f"momentum_{CN[xd]}_{ell}_{k}")

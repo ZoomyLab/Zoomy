@@ -142,6 +142,10 @@ class Momentum(Equation):
 def moment_scaling(model, momentum):
     """Shallow thin-layer scaling step: drop the in-plane stress components (both indices
     horizontal) from the full-tensor ``Momentum`` and record it in the model history.
+
+    The vertical row of ``Momentum`` carries no stress, so the viscous normal stress
+    ``tau_zz`` of the same order never enters; with an in-plane closure the SME adds it to the
+    vertical row (``inplane_normal_stress``).
     """
     drop = {s: sp.S.Zero for k, s in momentum.tau.items() if "z" not in k}
     if drop:
@@ -152,22 +156,42 @@ def moment_scaling(model, momentum):
     return model
 
 
-def add_inplane_viscous(model, momentum_eqs, uvel, horiz, nu):
+def inplane_normal_stress(model, uvel, horiz, nu):
+    """Viscous normal stress ``tau_zz = 2 rho nu d_z w = -2 rho nu div_h u`` of the
+    incompressible Newtonian fluid (bulk, before the sigma-map).
+
+    Same order as the in-plane stress ``add_inplane_viscous`` keeps; the hydrostatic SME takes
+    it through the vertical momentum into the pressure, ``p = rho g (eta - z) + tau_zz``.
+    """
+    rho = model.parameters.rho
+    return -2 * rho * nu * sum(_DERIV[xd](uvel[i]) for i, xd in enumerate(horiz))
+
+
+def add_inplane_viscous(model, momentum_eqs, uvel, horiz, nu, normal_stress=False):
     """Keep-all complement of ``moment_scaling``: add the incompressible Newtonian in-plane
     deviatoric stress divergence ``-(1/rho) sum_e d_e[rho nu (d_d u_e + d_e u_d)]`` to each
     horizontal momentum residual, before the sigma-map.
+
+    Args:
+        normal_stress: also add ``(1/rho) d_d tau_zz`` (``inplane_normal_stress``): the model's
+            pressure unknown is then ``p - tau_zz = -sigma_zz``, zero at the free surface (VAM,
+            ML-SME, ML-VAM), and the in-plane stress ``tau_de - delta_de tau_zz``.
     """
     rho = model.parameters.rho
     dop = {C.x: d.x, C.y: d.y}
+    tzz = inplane_normal_stress(model, uvel, horiz, nu) if normal_stress else None
     for i, xd in enumerate(horiz):
         # τ_de = ρ ν (∂_d u_e + ∂_e u_d);  sdiv_d = Σ_e ∂_e τ_de
         sdiv = sum(dop[xe](rho * nu * (dop[xd](uvel[horiz.index(xe)]) + dop[xe](uvel[i])))
                    for xe in horiz)
+        if tzz is not None:
+            sdiv = sdiv - dop[xd](tzz)
         eq = momentum_eqs[i]
         eq.expr = eq.expr - sdiv / rho
     model._history("add_inplane_viscous", "momentum",
                    description="keep in-plane deviatoric stress (incompressible "
-                               "Newtonian τ_de = ρν(∂_d u_e + ∂_e u_d))")
+                               "Newtonian τ_de = ρν(∂_d u_e + ∂_e u_d))"
+                               + (" minus δ_de τ_zz" if normal_stress else ""))
     return model
 
 
@@ -374,4 +398,5 @@ class Transport(Equation):
 
 __all__ = ["Equation", "Mass", "Momentum", "MomentumNonHydrostatic", "Transport",
            "moment_scaling", "small_slope_scaling", "frame_slope",
-           "add_inplane_viscous", "package_viscous", "gravity_components"]
+           "add_inplane_viscous", "inplane_normal_stress", "package_viscous",
+           "gravity_components"]
