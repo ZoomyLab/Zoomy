@@ -10,3 +10,4 @@ export { HttpAdapter } from "./src/adapters/http_adapter.mjs";
 export { FsStorage, FetchStorage } from "./src/storage.mjs";
 export { IdbStorage } from "./src/adapters/idb_storage.mjs";
 export * as userCards from "./src/user_cards.mjs";
+export * as cards from "./src/cards.mjs";

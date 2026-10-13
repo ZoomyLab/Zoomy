@@ -18,6 +18,7 @@
  */
 
 import { NotSupportedError } from "./adapters/pyodide_adapter.mjs";
+import * as cards from "./cards.mjs";
 
 export class ZoomyCLI {
     /**
@@ -42,6 +43,8 @@ export class ZoomyCLI {
         this.http = options.httpAdapters instanceof Map
             ? options.httpAdapters
             : new Map();
+        /* The card rules (a card's code, where a solver card runs): ./cards.mjs. */
+        this.cards = cards;
     }
 
     // ------------------------------------------------------------------
@@ -786,7 +789,7 @@ export class ZoomyCLI {
             "# Runs IN-PROCESS on a symbolic solver (zoomy_core.symsolver): JAX for the jax backend,",
             "# AMReX for amrex, foam for OpenFOAM, NumPy otherwise (no server needed: JupyterLite, the",
             "# GUI's browser kernel, any env with zoomy_core). Standalone as `python run.py` in a",
-            "# materialized case folder (the zoomy-server generic runner executes exactly this file).",
+            "# materialized case folder; the zoomy-server runs it after the case's sections, as the GUI.",
             "import json",
             "import os",
             "",

@@ -21,11 +21,13 @@ on:
   pull_request:
     paths:
       - "library/zoomy_gui/**"
+      - "library/zoomy_cli/**"
       - ".github/workflows/gui-grep-gate.yml"
   push:
     branches: [ main, develop ]
     paths:
       - "library/zoomy_gui/**"
+      - "library/zoomy_cli/**"
       - ".github/workflows/gui-grep-gate.yml"
 
 jobs:
@@ -115,3 +117,7 @@ jobs:
             fi
           done
           echo "OK: the retired GUI stays retired."
+
+      - name: Run routing (zoomy_cli card rules the GUI loads)
+        # The browser runs only numpy cards; a jax / amrex / foam card always goes to its backend.
+        run: node --test library/zoomy_cli/tests/test_card_routing.js
