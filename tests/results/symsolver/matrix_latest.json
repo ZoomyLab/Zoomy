@@ -1,14 +1,15 @@
 {
  "schema": 1,
- "generated": "2026-10-13T10:30:21Z",
+ "generated": "2026-10-13T16:45:09Z",
  "last_run": "2026-10-13",
  "store": "/Users/adam-obbpb5az1dhsjzf/git/Zoomy/docs/dev/symbolic_solver/matrix/store",
- "superrepo": "919bf867",
+ "superrepo": "ebeae2b0",
  "libs": {
   "zoomy_amrex": [
    "0270878",
    "592090e",
    "9e39d8d",
+   "b8c70c4",
    "c180739",
    "ce3f72a",
    "f73b26e"
@@ -23,7 +24,8 @@
    "6cbf885",
    "83f7831",
    "af05384",
-   "fb67c3d"
+   "fb67c3d",
+   "fec2c4e"
   ],
   "zoomy_foam": [
    "250b152",
@@ -32,6 +34,7 @@
    "5ea8154",
    "9c449b8",
    "e17026f",
+   "e295ffc",
    "ee8650f",
    "f0c403f"
   ],
@@ -42,6 +45,7 @@
    "394a996",
    "426eeab",
    "4b2ce3f",
+   "91e13c0",
    "f39b67f"
   ]
  },
@@ -67,16 +71,17 @@
   "C22": "Euler 3-D AD (JAX): pulse 10^3, dJ/dgamma, t = 0.1",
   "C23": "Euler 3-D cross-backend: acoustic pulse (amp 0.01, width 0.04), t = 0.3",
   "C24": "Euler 2-D: Sod along x, y (n x 2); periodic wave in [0,1]^2",
-  "C26": "implicit diffusion (IMEX, NewtonianInPlane, nu 1e-3; gate 31), 20^2, t 0.05",
+  "C26": "implicit diffusion (IMEX, Newtonian, Stress.full, nu 1e-3; gate 31), 20^2, t 0.05",
   "C27": "SSP-RK time order 1 / 2 / 3 (gate 40): forced SWE, exact ODE and a smooth wave",
   "C28": "diffusion blocks at the boundaries (gates 41, 43): heat equation, dir0 / neu / dirL / per",
   "C29": "LSQ derivatives with the boundary closure (gate 44): quads, p 2 / 3, dir / neu",
   "C30": "LSQ polynomial reproduction (gate 39): 1-D, quads, jittered quads, triangles, hexahedra",
   "C31": "IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning",
-  "C32": "viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; no-slip, free-slip and split (Wall face, Dirichlet ghost) walls",
+  "C32": "viscous shear decay between walls (SWE + Newtonian, Stress.full): u_t = nu u_yy, exact; no-slip, free-slip and split (Wall face, Dirichlet ghost) walls",
   "C33": "vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
   "C34": "in-plane viscous operator vs the exact div(h tau'), mixed derivatives (gate 45)",
-  "C35": "restart: 0 -> T vs 0 -> T/2, restart -> T (C1 O2 adaptive; C8 increment projection)"
+  "C35": "restart: 0 -> T vs 0 -> T/2, restart -> T (C1 O2 adaptive; C8 increment projection)",
+  "C36": "full Newtonian stress at level 1 (SME(1), Stress.full): periodic smooth state, IMEX"
  },
  "configs": [
   "serial",
@@ -269,6 +274,30 @@
   {
    "case": "C30",
    "check": "runs (n/a: gate 39 calls the JAX runtime (lsq_gradient_per_field))",
+   "backend": "amrex",
+   "config": "serial",
+   "value": "n/a",
+   "op": null,
+   "threshold": null,
+   "source": null,
+   "verdict": "n/a",
+   "note": ""
+  },
+  {
+   "case": "C36",
+   "check": "runs",
+   "backend": "foam",
+   "config": "serial",
+   "value": "n/a",
+   "op": null,
+   "threshold": null,
+   "source": null,
+   "verdict": "n/a",
+   "note": ""
+  },
+  {
+   "case": "C36",
+   "check": "runs",
    "backend": "amrex",
    "config": "serial",
    "value": "n/a",
@@ -3157,6 +3186,18 @@
    "source": "tolerance (round-off)",
    "verdict": "PASS",
    "note": "max over 6 runs"
+  },
+  {
+   "case": "C6",
+   "check": "C36 mass change (rel)",
+   "backend": "jax",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "max over 1 runs"
   },
   {
    "case": "C7",
@@ -9819,6 +9860,18 @@
    "note": "worst run n16"
   },
   {
+   "case": "C36",
+   "check": "numpy = JAX (max rel, worst run)",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 1.395614784487143e-13,
+   "op": "<=",
+   "threshold": 1e-08,
+   "source": "tolerance (Newton 1e-12, GMRES 1e-13)",
+   "verdict": "PASS",
+   "note": "worst run sme1"
+  },
+  {
    "case": "C18",
    "check": "Sod O1 order 50->100",
    "backend": "numpy",
@@ -11989,6 +12042,18 @@
    "source": "tolerance (round-off)",
    "verdict": "PASS",
    "note": "max over 6 runs"
+  },
+  {
+   "case": "C6",
+   "check": "C36 mass change (rel)",
+   "backend": "numpy",
+   "config": "serial",
+   "value": 0.0,
+   "op": "<=",
+   "threshold": 1e-12,
+   "source": "tolerance (round-off)",
+   "verdict": "PASS",
+   "note": "max over 1 runs"
   }
  ]
 }

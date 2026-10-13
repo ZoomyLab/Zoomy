@@ -128,6 +128,7 @@
 | C6 | C3 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C32 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
+| C6 | C36 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C5 mass change (rel) | jax | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | numpy | 3.47e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -140,6 +141,7 @@
 | C6 | C3 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C32 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C6 | C36 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C5 mass change (rel) | numpy | 1.95e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C13 o2_x2.5 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -866,6 +868,9 @@
 | C35 | c1: restarted at T/2 vs 0 -> T (max abs) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 0 (spec: bitwise) |
 | C35 | c8: misspelt restart_from fails at once | numpy | 1.00e+00 PASS | n/a | n/a | n/a | n/a | >= 1 (spec: FileNotFoundError naming restart_from) |
 | C35 | c8: restarted at T/2 vs 0 -> T (max abs) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 0 (spec: bitwise) |
+| C36 | runs | amrex | n/a | - | - | - | - | information |
+| C36 | runs | foam | n/a | - | - | n/a | n/a | information |
+| C36 | numpy = JAX (max rel, worst run) | numpy | 1.40e-13 PASS | n/a | n/a | n/a | n/a | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 
 ## Large tier
 
@@ -1107,6 +1112,7 @@ Notes:
 - C6 C23 mass change (rel), jax serial: max over 6 runs
 - C6 C32 mass change (rel), jax serial: max over 12 runs
 - C6 C33 mass change (rel), jax serial: max over 6 runs
+- C6 C36 mass change (rel), jax serial: max over 1 runs
 - C1 O1 order 40->80, foam serial: L1(h) 1.93e-03 / 1.29e-03 / 8.01e-04
 - C12 bump O1 order 20->40, foam serial: L1(h) 2.37e-03 / 1.63e-03 / 1.05e-03
 - C11 smooth O1 order 80->160, foam serial: L1(h) 1.41e-03 / 7.39e-04 / 3.81e-04
@@ -1425,6 +1431,7 @@ Notes:
 - C32 numpy = JAX (max rel, worst run), numpy serial: worst run free_n20
 - C33 numpy = JAX (max rel, worst run), numpy serial: worst run imex_k1
 - C34 numpy = JAX (max rel, worst run), numpy serial: worst run n16
+- C36 numpy = JAX (max rel, worst run), numpy serial: worst run sme1
 - C18 Sod O1 order 50->100, numpy serial: L1(rho) 3.03e-02 / 2.09e-02
 - C18 Sod O2 order 50->100, numpy serial: L1(rho) 9.59e-03 / 5.13e-03
 - C19 wave o1 order 16->24, numpy serial: L1(rho) 6.99e-02 / 4.38e-02 / 3.10e-02
@@ -1581,5 +1588,6 @@ Notes:
 - C6 C23 mass change (rel), numpy serial: max over 6 runs
 - C6 C32 mass change (rel), numpy serial: max over 12 runs
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
+- C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 5203, foam 5434, jax 7991, numpy 2739
+Summed run wall time (s, without process start-up): amrex 5203, foam 5434, jax 8066, numpy 2777
