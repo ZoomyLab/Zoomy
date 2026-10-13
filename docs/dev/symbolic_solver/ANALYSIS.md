@@ -1248,7 +1248,7 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   mu^2 - 2 (1 - lambda) mu + (1 - lambda) = 0: max |mu| 0.9986 on quads, 1.446 on triangles
   (368 modes >= 1; the standard projection: |1 - lambda| <= 1.105).  C8 `vam_tri` run to t 0.5
   (20 steps) stays bounded with either projection (the predictor's dissipation); no long-run test.
-- **Implementation** (`chorin.py`, `Projection.increment`, the default; `projection="standard"`
+- **Implementation** (`chorin.py`, `Projection.increment`, OPT-IN (default `standard`); `projection="standard"`
   keeps the old scheme bit-identically).  `project(Q, ..., lag)`: correct with the lag P^n, solve
   the existing `press` system on that state for dP (Newton from dP = 0), correct Q with P^n + dP.
   - SSP-RK stages: the lag is the stage input's P rows, not the predicted ones (the predictor's
@@ -1271,3 +1271,7 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
 - **Open:** triangles (rho(S) > 1: a long run on triangles may grow under either projection, faster
   with the increment); a time-dependent Dirichlet pressure needs P_b^{n+1} - P^n as the increment's
   boundary value (all cases here: P = 0); mpiN / GPU configs not rerun.
+- **Default (2026-10-13): `standard`.**  On C8's triangles the lagged iteration has growing modes
+  (|mu| up to 1.45 on 368 modes); a run to t = 0.4 took > 590 s with `increment` vs 254 s with
+  `standard`.  `increment` is therefore opt-in (C31 uses it: VAM ssp2 1.96); triangle meshes need
+  a stabilized variant (e.g. Almgren et al.'s version (5)) before it can be the default.

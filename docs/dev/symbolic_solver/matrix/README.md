@@ -174,7 +174,7 @@ here has nu = 0.
 
 ## Results (2026-10-13, dev/incremental-projection: pressure-increment projection)
 
-`ChorinTemplate` projects with `projection="increment"` (the default; ANALYSIS 45e): correct with
+`ChorinTemplate` projects with `projection="increment"` when asked (opt-in; the default is `standard`, ANALYSIS 45e): correct with
 the lagged pressure, solve `press` for the increment, store the sum (Almgren, Bell, Crutchfield
 2000, version (1)); IMEX-SSP2 lags each stage by its tableau coefficient.  foam `linsolve`
 evaluates op(x) as |x| op(x / |x|) (a small right-hand side).  Scratch store, serial: C31 VAM ssp2
