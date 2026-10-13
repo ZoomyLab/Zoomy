@@ -133,7 +133,7 @@ are raw log(e_coarse / e_fine) / log(refinement).
 Never in the default run; each command <= 5 min.  L1 weak scaling (C1 bump
 O2, 200^2 cells per rank, 1/2/4 ranks, 20 constant steps: ms/step); L2
 strong scaling (1600^2 = 2.56M cells, 5 steps); L2P pressure strong scaling
-(VAM(1) channel 3200 x 320 = 1M cells; JAX pyamg on CPU ranks, AmgX on GPUs;
+(VAM(1) channel 3200 x 320 = 1M cells; JAX `auto`: pyamg serial, hypre on CPU ranks, AmgX on GPUs;
 foam and AMReX hypre BoomerAMG + FlexGMRES); L3 catchment (JAX: the
 14.8M-cell 1 m mesh on 4 GPUs, a 5 s window, reads the mesh L5 writes: run
 L5 first; AMReX: `gates/catchment_amrex.py`, the 10 m raster with nodata

@@ -52,6 +52,7 @@ OpenMPI 4.1.6), and initializes MPI itself in serial runs.
 |---|---|---|
 | CPU | same library (CPU hypre 2.28 already in both containers) | GPU only |
 | AMReX | `HypreSolver<MSS>` (arbitrary stencil, device fill), `HypreIJIface` | no integration |
+| JAX | CPU, serial or MPI: `pressure_linear_solver="hypre"` (`auto` on CPU ranks; ctypes on the shared `build_hypre_cuda.sh cpu-env` build, MPICH), 18 / 19 / 20 iterations on 1 / 2 / 4 ranks at 65k cells (ANALYSIS 46) | GPU: `"amgx"` (jaxamg) |
 | build | v3.2.0 in `zoomy_amrex_gpu.sif`, autotools, ~5 min | needs cmake (not in container) |
 | non-symmetric `A` | with the 2x2 scaling + FlexGMRES | block aggregation on raw `A`, iterations grow |
 | license / activity | Apache-2.0 or MIT; releases 2025-09, 2026-01, 2026-08 | BSD-3; releases 2023-10, 2025-12 |
