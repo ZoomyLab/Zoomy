@@ -1280,3 +1280,44 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   a model choice.  (3) small_slope=False with an in-plane closure derives (SME(0), one horizontal),
   but it has not been run.  Its traces carry the 1/(1 - |grad I|^2) factor of the frame solve, whose
   normal row has no tau_zz.
+
+### 45g. VAM second order on a fixed mesh: the pressure-increment projection (2026-10-13)
+
+- **Diagnostics.**  (a) C31 with the walls 3 m from the wave (domain [-4.5, 4.5], nx 180, same dx;
+  Manning off: on that domain the state stays exactly at rest far out and the JAX Manning Newton
+  returns NaN there, a separate defect), standard projection: t2 1.45 / 1.27, ssp2 1.68 / 1.51
+  (0.81 / 0.67 and 1.15 / 0.91 with the wall).  The wall closure is most of the defect, the interior
+  approximate projection the rest.  (b) Spectrum of S = I - (D.G) L_a^-1 (dense, the derived
+  operator L_a and the prototype's composition D.G): C8 quads rho(S) 0.983 (every eigenvalue lambda
+  of L_a^-1 D.G in [0.017, 1.11], Re > 0), C31's mesh 0.986; C8 triangles 1.105, 158 of 1440
+  eigenvalues with |1 - lambda| >= 1 (156 with Re lambda < 0).  The lagged iteration has per mode
+  mu^2 - 2 (1 - lambda) mu + (1 - lambda) = 0: max |mu| 0.9986 on quads, 1.446 on triangles
+  (368 modes >= 1; the standard projection: |1 - lambda| <= 1.105).  C8 `vam_tri` run to t 0.5
+  (20 steps) stays bounded with either projection (the predictor's dissipation); no long-run test.
+- **Implementation** (`chorin.py`, `Projection.increment`, OPT-IN (default `standard`); `projection="standard"`
+  keeps the old scheme bit-identically).  `project(Q, ..., lag)`: correct with the lag P^n, solve
+  the existing `press` system on that state for dP (Newton from dP = 0), correct Q with P^n + dP.
+  - SSP-RK stages: the lag is the stage input's P rows, not the predicted ones (the predictor's
+    Rusanov flux diffuses the P rows: 15 % in one step at the Dirichlet-P cell).
+  - IMEX-SSP2: the pressure is the tableau's implicit term, so the stages do not take the same
+    pressure.  For DG P^n = D f, stage i removes sum_{j<i} (At_ij - A_ij c_j / A_jj) D f, hence lag
+    c_i P^n with c = (0, 1) and 1 - 1/(2 g) = -0.707 for the final projection; the stored pressure is
+    the step's total sum_i w_i P_i / A_ii + P_final.  The first try (lag A_ii P^n, final unlagged)
+    left an O(dt) floor: orders 1.83 / 1.68 / 1.48 / 1.28 down to dt / 32.  A source-driven
+    pressure part is not lagged (first order in that part; Manning on / off give the same orders).
+  - foam `linsolve` evaluates op(x) as |x| op(x / |x|) (the prototype's item): the increment's small
+    right-hand side made C8 `vam_newton` stop at relative residual 1.2e-5 > 1e-6.  `linsolve` is
+    only the Chorin pressure solve (affine there).
+- **Results** (serial, scratch store; JAX, foam, AMReX).  C31 VAM ssp2 1.97 / 1.96 (was 1.15 / 0.91;
+  dt / 32: 1.90), t2 1.35 / 1.12 (the Lie source per stage caps it at 1, as with the exact
+  projection; Manning off: 1.75 / 1.83), t1 1.03; AMReX `vam_ssp2_k0` vs JAX 3.0e-13.  C10 1.91 /
+  2.00 / 2.01 on all three (unchanged: spatial error).  C8 vs JAX: AMReX 7.8e-11 / 7.8e-11 / 3.0e-11,
+  foam L1 2.3e-10 / 2.2e-10 / 4.4e-11 / 1.9e-10 (`vam_tri`); Newton vs linear 0 (JAX, AMReX), 9.7e-11
+  (foam).  C8 / C10 / C31: 29 rows PASS, 0 FAIL.  C31 thresholds: ssp2 >= 1.8 (theory 2), t2 >= 0.8.
+- **Open:** triangles (rho(S) > 1: a long run on triangles may grow under either projection, faster
+  with the increment); a time-dependent Dirichlet pressure needs P_b^{n+1} - P^n as the increment's
+  boundary value (all cases here: P = 0); mpiN / GPU configs not rerun.
+- **Default (2026-10-13): `standard`.**  On C8's triangles the lagged iteration has growing modes
+  (|mu| up to 1.45 on 368 modes); a run to t = 0.4 took > 590 s with `increment` vs 254 s with
+  `standard`.  `increment` is therefore opt-in (C31 uses it: VAM ssp2 1.96); triangle meshes need
+  a stabilized variant (e.g. Almgren et al.'s version (5)) before it can be the default.

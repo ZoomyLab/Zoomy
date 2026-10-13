@@ -234,10 +234,9 @@ TH.update({
                                     "dt/32 reference lifts the last pair)"),
                 "ssp2": (">=", 1.8, "theory 2")},
     "C31 vam": {"t1": (">=", 0.8, "theory 1"),
-                "t2": (">=", 0.5, "observed 0.67 (theory 1: Lie source; the approximate "
-                                  "projection, README)"),
-                "ssp2": (">=", 0.7, "observed 0.91 (the approximate projection caps it, README; "
-                                    "the predictor alone: 2)"),
+                "t2": (">=", 0.8, "theory 1 (the Lie source per stage; observed 1.12, increment "
+                                  "projection, ANALYSIS 45e)"),
+                "ssp2": (">=", 1.8, "theory 2 (increment projection, ANALYSIS 45e)"),
                 "pred": (">=", 1.8, "theory 2")},
     "C34 order": (">=", 1.8, "theory 2"),
     "C34 err": ("<=", 6e-3, "observed 3.1e-3 (q_y), 1.7e-3 (q_x) on JAX vs the exact div(h tau)"),
