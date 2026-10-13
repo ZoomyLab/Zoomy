@@ -49,7 +49,7 @@ machine shows as spread between the 3 march times: look at `min_s` vs `median_s`
 | `vam1_chorin` | C8 / L2P channel | 200 x 20 cells, 8 steps | VAM(1); JAX pressure solver `auto` (pyamg on CPU, AmgX on GPU; matrix-free GMRES is ~200x slower per step) |
 | `imex_swe` | C14 | 100^2 cells, 50 steps | O2, Manning n 0.5 implicit |
 | `euler3d_o1`, `euler3d_o2` | C20 box | 40^3 cells, 40 steps | O2 with MOOD; the pulse of C20 |
-| `diffusion_impl` | C26 | 48^2 cells, 10 steps | IMEX, NewtonianInPlane; foam differentiates the implicit residual by finite differences (~80x JAX per step) |
+| `diffusion_impl` | C26 | 48^2 cells, 10 steps | IMEX, Newtonian with `stress=Stress.full`; foam differentiates the implicit residual by finite differences (~80x JAX per step) |
 
 Configs: `serial` on every backend (NumPy: serial only, the pressure solver `auto` = pyamg; agreement with JAX serial as the matrix); `gpu1` on JAX (child process in the `zoomy-cuda` env, `JAX_PLATFORMS=cuda`)
 and AMReX (the CUDA container); foam has no GPU.  Choose the GPU with `CUDA_VISIBLE_DEVICES`.  Sizes target a

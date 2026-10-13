@@ -218,7 +218,7 @@ TH = {
     "rev": ("<=", 1e-10, "tolerance (checkpointed reverse vs forward)"),
     "couple": ("<=", 1e-14, "tolerance (gate 26: coupled = single domain at O1)"),
 }
-CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23", "C32", "C33")
+CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23", "C32", "C33", "C36")
 TH.update({
     "C18 L1": {1: ("<=", 4.2e-2, "observed 2.09e-2 (3-D worker)"), 2: ("<=", 1.0e-2, "observed 5.13e-3")},
     "C18 order": {1: (">=", 0.45, "observed 0.54 (discontinuous: theory <= 1)"),
@@ -580,7 +580,8 @@ def visc_checks(add, b, g, J):
 NUMPY_TOL = {"C8": PRESS, "C10": PRESS,
              "C14": ("<=", 1e-8, "tolerance (implicit Newton 1e-8)"),
              "C26": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
-             "C32": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
+             "C32": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
+             "C36": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
 
 
 def numpy_checks(add, g, J):

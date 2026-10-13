@@ -4,7 +4,7 @@ DenseDiffusionOperatorJAX, and distributed vs serial.
     python gate31_parallel_implicit_diffusion.py            # block vs legacy
     mpiexec -n R python gate31_parallel_implicit_diffusion.py par   # march
     mpiexec -n R python gate31_parallel_implicit_diffusion.py ad    # AD
-Model: SME(0) with the in-plane Newtonian stress kept (NewtonianInPlane):
+Model: SME(0) with the full Newtonian stress (stress=Stress.full):
 its diffusion_matrix is state-dependent (A[q, h] = 2 nu q / h) and dense.
 The extractor's sign was fixed (A[q, q] = +2 nu now; it took the residual
 coefficient, -2 nu, which the +div(A : grad Q) blocks applied
@@ -19,8 +19,8 @@ import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
-from zoomy_core.model.models.closures import (ManningFriction, Newtonian,
-                                              NewtonianInPlane, StressFree)
+from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
+from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -35,8 +35,8 @@ def viscous(dimension, order=2, nx=100):
     tags = (("left", "right") if dimension == 2
             else ("left", "right", "bottom", "top"))
     sm = SystemModel.from_model(SME(
-        level=0, dimension=dimension,
-        closures=[Newtonian(), ManningFriction(), StressFree(), NewtonianInPlane()],
+        level=0, dimension=dimension, stress=Stress.full,
+        closures=[Newtonian(), ManningFriction(), StressFree()],
         boundary_conditions=BC.BoundaryConditions(
             [BC.Extrapolation(tag=t) for t in tags])))
     sm.parameter_values.nu = NU

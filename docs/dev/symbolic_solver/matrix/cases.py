@@ -10,8 +10,8 @@ import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
-from zoomy_core.model.models.closures import (ManningFriction, NavierSlip, Newtonian,
-                                              NewtonianInPlane, StressFree)
+from zoomy_core.model.models.closures import ManningFriction, NavierSlip, Newtonian, StressFree
+from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -387,7 +387,7 @@ def shear_exact(variant, y, t):
 
 
 def shear_decay(variant, ny, order=2, limiter="none"):
-    """SWE (SME(0)) + NewtonianInPlane: h = 1, v = 0, u = u(y), periodic in x,
+    """SWE (SME(0)) + Newtonian, stress=Stress.full: h = 1, v = 0, u = u(y), periodic in x,
     walls at y = 0, 1.  Every x-derivative vanishes, so h stays 1, v stays 0 and
     the x-momentum equation is exactly u_t = nu u_yy (diffusion_matrix
     A[q_x, q_x, y, y] = nu, A[q_x, h, y, y] = -nu q_x / h; no factor 2: that
@@ -414,7 +414,7 @@ def shear_decay(variant, ny, order=2, limiter="none"):
            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
            wall("bottom"), wall("top")]
     model = SME(level=0, dimension=3, boundary_conditions=BC.BoundaryConditions(bcs),
-                closures=[Newtonian(), ManningFriction(), StressFree(), NewtonianInPlane()])
+                stress=Stress.full, closures=[Newtonian(), ManningFriction(), StressFree()])
     sm = SystemModel.from_model(model)
     sm.parameter_values.nu, sm.parameter_values.g = nu, SHEAR["g"]
     names = [str(s) for s in sm.state]
@@ -617,6 +617,39 @@ def _c34():
 IMPLICIT = dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60)
 
 
+# ── C36: the full Newtonian stress at level 1 (ANALYSIS 45h) ─────────────────
+FULL1 = dict(nu=1e-2, nx=16, t_end=0.02, dt=1e-3)
+
+
+def full_stress_level1(nx=FULL1["nx"]):
+    """SME(1) + Newtonian with stress=Stress.full (in-plane tau_de, tau_zz, the complete
+    tau_ez, the vertical balance of Marche 2007 eq. (3.5) with the pressure (3.11)) on the
+    periodic [0,1]^2: smooth h, q_x_0, q_x_1, q_y_0, q_y_1, flat bed, slip-free bed
+    (lambda_s 0); O2 minmod, the viscous terms implicit (IMEX)."""
+    sides = (("left", "right"), ("right", "left"), ("bottom", "top"), ("top", "bottom"))
+    bcs = [BC.Periodic(tag=a, periodic_to_physical_tag=b_) for a, b_ in sides]
+    sm = SystemModel.from_model(SME(level=1, dimension=3, stress=Stress.full,
+                                    closures=[Newtonian(), NavierSlip(), StressFree()],
+                                    boundary_conditions=BC.BoundaryConditions(bcs)))
+    sm.parameter_values.nu = FULL1["nu"]
+    names = [str(s_) for s_ in sm.state]
+    tp = 2 * np.pi
+
+    def ic(x):
+        q = np.zeros(len(names))
+        h = 1.0 + 0.1 * np.sin(tp * x[0]) * np.cos(tp * x[1])
+        q[names.index("h")] = h
+        q[names.index("q_x_0")] = 0.1 * np.cos(tp * x[0]) * np.sin(tp * x[1]) + 0.05
+        q[names.index("q_y_0")] = 0.05 * np.sin(tp * (x[0] + x[1]))
+        q[names.index("q_x_1")] = 0.02 * h * np.sin(tp * x[1])
+        q[names.index("q_y_1")] = -0.02 * h * np.cos(tp * x[0])
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+    return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
+
+
 def _c32():
     """The viscous walls (no-slip, free-slip, split) on ny 20 / 40 / 80 (JAX); foam and
     AMReX on ny 20; the controls ``ctrl`` (walls act), ``inviscid`` and ``inviscid_split``
@@ -728,7 +761,7 @@ CASES = {
                  backends=EU) for o in (1, 2) for n in (50, 100) for a in (0, 1)]
             + [Run(f"{v}_n{n}", partial(wave, 2, v, n), 0.1, cfl=0.45, backends=EU)
                for v in ("o1", "o2none", "o2minmod") for n in (16, 32, 64)]),
-    "C26": ("implicit diffusion (IMEX, NewtonianInPlane, nu 1e-3; gate 31), 20^2, t 0.05",
+    "C26": ("implicit diffusion (IMEX, Newtonian, Stress.full, nu 1e-3; gate 31), 20^2, t 0.05",
             [Run("visc", _viscous, 0.05, imex="lie", solver=dict(
                 implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60),
                 configs=ALL5)]),
@@ -740,7 +773,7 @@ CASES = {
             _c30()),
     "C31": ("IMEX time order (Lie vs IMEX-SSP2(2,2,2)): SWE + Manning (C14), VAM(1) wave + Manning",
             _c31()),
-    "C32": ("viscous shear decay between walls (SWE + NewtonianInPlane): u_t = nu u_yy, exact; "
+    "C32": ("viscous shear decay between walls (SWE + Newtonian, Stress.full): u_t = nu u_yy, exact; "
             "no-slip, free-slip and split (Wall face, Dirichlet ghost) walls", _c32()),
     "C33": ("vertical viscosity of SME(2) (Newtonian + NavierSlip): uniform state, q(t) = expm(t J) q0",
             _c33()),
@@ -748,6 +781,9 @@ CASES = {
             _c34()),
     "C35": ("restart: 0 -> T vs 0 -> T/2, restart -> T (C1 O2 adaptive; C8 increment projection)",
             _c35()),
+    "C36": ("full Newtonian stress at level 1 (SME(1), Stress.full): periodic smooth state, IMEX",
+            [Run("sme1", full_stress_level1, FULL1["t_end"], dt=FULL1["dt"], imex="lie",
+                 solver=IMPLICIT, backends=("jax",))]),
 }
 
 
