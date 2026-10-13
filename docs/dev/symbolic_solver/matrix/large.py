@@ -85,8 +85,17 @@ def time_jax(make, n_steps, dt, chorin=None, comm=None, q0=None):
     bar()
     t3 = clock.perf_counter()
     n = int(s.partition.n_global) if s.partition else int(Q.shape[1])
-    return dict(cells=n, setup=t1 - t0, compile=t2 - t1 - (t3 - t2) / n_steps,
-                ms_step=1e3 * (t3 - t2) / n_steps)
+    res = dict(cells=n, setup=t1 - t0, compile=t2 - t1 - (t3 - t2) / n_steps,
+               ms_step=1e3 * (t3 - t2) / n_steps)
+    if chorin:
+        res["solver"] = s._pressure_backend()
+    if chorin and res["solver"] == "hypre":    # the pressure solves (both runs), host ms/solve
+        from zoomy_jax.symsolver.hypre import STATS as st
+        k = max(st["solves"], 1)
+        res.update(solves=st["solves"], its_solve=st["iterations"] / k, amg_setups=st["setups"],
+                   **{f"ms_{p}": 1e3 * st[f"t_{q}"] / k for p, q in
+                      (("asm", "assemble"), ("setup", "setup"), ("solve", "solve"))})
+    return res
 
 
 def time_cxx(backend, make, n_steps, dt, config, work, chorin=False, q0=None):
@@ -156,10 +165,11 @@ def pressure(backend, config, nx=3200):
         if ranks(config) > 1:
             from mpi4py import MPI
             comm = MPI.COMM_WORLD
-        solver = "amgx" if config.startswith("gpu") else "pyamg"
+        # auto: hypre on CPU ranks, pyamg serial
+        solver = "amgx" if config.startswith("gpu") else "auto"
         res = time_jax(lambda: vam_large(nx), n, dt, chorin=solver, comm=comm, q0=wave_q0)
         if comm is None or comm.Get_rank() == 0:
-            save("L2P", name, dict(res, maxrss_gb=maxrss_gb(), ranks=ranks(config), solver=solver))
+            save("L2P", name, dict(res, maxrss_gb=maxrss_gb(), ranks=ranks(config)))
     else:
         res = time_cxx(backend, lambda: vam_large(nx), n, dt, config, WORK / "L2P" / name,
                        chorin=True, q0=wave_q0)

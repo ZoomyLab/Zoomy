@@ -9,6 +9,7 @@
                                  order (None on non-root MPI ranks)
 
 ``systems`` is the case's NSM, or (pred, press, corr) when ``r.chorin``."""
+import os
 import sys
 
 import numpy as np
@@ -58,7 +59,9 @@ class Jax:
         cls = SymbolicChorinSolverJax if r.chorin else SymbolicHyperbolicSolverJax
         kw = dict(_solver_kw(r, cls), comm=comm)
         if r.chorin:
-            s = SymbolicChorinSolverJax(pressure_linear_solver="gmres", **kw)
+            # MATRIX_JAX_PRESSURE: the pressure solver (gmres; pyamg, hypre, auto)
+            s = SymbolicChorinSolverJax(
+                pressure_linear_solver=os.environ.get("MATRIX_JAX_PRESSURE", "gmres"), **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = SymbolicHyperbolicSolverJax(**kw)

@@ -1347,3 +1347,35 @@ intra_op_parallelism_threads=1`), `mpiexec -bind-to core` (the env's MPI is MPIC
   colour-assembled rows (as foam and AMReX), called once per solve on the host instead of once
   per iteration.  Needs a hypre build against the env's MPICH (the existing CPU build links
   OpenMPI 4.1.6, the OF13 / AMReX toolchain).
+
+Result (dev/jax-hypre): `pressure_linear_solver="hypre"` (zoomy_jax `symsolver/hypre.py`: ctypes on
+hypre 3.2.0, the shared `build_hypre_cuda.sh cpu-env` build against the env's MPICH; `auto` takes it
+on CPU MPI ranks).  The owned rows with global columns by colouring (as `_amgx_mpi`), left-scaled by
+the inverse 2x2 cell blocks, FlexGMRES + one BoomerAMG V-cycle with the foam / AMReX CPU settings
+(HMIS, ext+i, hybrid symmetric GS) to the true relative residual 1e-10, the hierarchy lagged as
+pyamg's (`pressure_amg_rebuild` 10).  One host callback per solve, between two mpi4jax allreduces
+(data dependencies), so its collectives keep one place among mpi4jax's ordered ones on every rank;
+reverse mode solves `S^T z = c`, `x = D^-T z` (hypre assembles `S^T` across the ranks).  Same matched
+runs (nx 256, one core per rank, XLA single-threaded); ms / solve from the right-hand side ready to
+the solution ready (colouring probes, host solve, accept gate):
+
+| ranks | pyamg ms / step | its / solve | ms / solve | hypre ms / step | its / solve | ms / solve |
+|---|---|---|---|---|---|---|
+| 1 | 137 | 10 | 84 | 100 | 18 | 47 |
+| 2 | 164 | 28 | 130 | 57 | 19 | 26 |
+| 4 | 207 | 76 | 185 | 37 | 20 | 16 |
+
+- A fresh hierarchy every solve (as foam / AMReX): 117 / 72 / 46 ms / step (setup 15 / 16 / 11 ms).
+- Hydra's `-bind-to core` ignores `taskset` (it bound to cores 0, 2, 4, 6); these runs use
+  `-bind-to user:40,42,44,46` (one socket).  pyamg reproduces the table above.
+- Correctness (this worktree's store; foam / AMReX / numpy runs copied from main's): C8 / C10 / C31
+  49 rows PASS, 0 FAIL (as main); C8 `vam` mpi2 / mpi4 vs serial 1.5e-11 / 2.4e-11 (gmres:
+  8.7e-10); hypre vs pyamg serial: C8 4.3e-11, C10 2.5e-12, C31 VAM 1.2e-14.  C10 / C31 (serial
+  only in the matrix) on 2 / 4 ranks vs serial: C10 `s1_t1_n60`, `s2_t2_n120` <= 3.6e-13, C31
+  `vam_ssp2_k0`, `vam_t1_k0/k1` <= 3.6e-15, but `vam_t1_k3`, `vam_t2_k3` 1.35e-9 (gmres the same,
+  mpi2 = mpi4 to 4e-16: a distributed defect at dt / 8 that predates hypre, open).  AD (C15's
+  Chorin setup, dJ/dg): jvp / grad vs gmres 1.4e-13 / 3.6e-12 serial, <= 1.1e-12 on 2 ranks.
+- L2P (1M cells, `matrix.py run --tier large L2P jax mpi4`, the harness's unbound ranks): 8562 ms /
+  step, 21 iterations / solve; host per solve: assembly 972 ms, FlexGMRES 2930 ms, one AMG setup
+  (2.3 s) in 6 solves; setup 73 s, compile 27 s, whole command 2:36 (pyamg: > 10 min; foam / AMReX
+  mpi4 8661 / 8180 ms / step).  Single-threaded XLA per rank: 8948 ms / step.
