@@ -66,6 +66,7 @@ class AmrexCore:
         code = code.replace("amrex::Math::sin(", "std::sin(")
         code = code.replace("amrex::Math::tan(", "std::tan(")
         code = code.replace("amrex::Math::exp(", "std::exp(")
+        code = code.replace("amrex::Math::log(", "std::log(")
         # sqrt / cbrt likewise live in std::, not amrex::Math:: -- and they MUST
         # reach the compiler as sqrt/cbrt rather than pow(x, 1/2): nvcc lowers
         # `std::pow(x, 1.0/2.0)` to a CALL to __internal_accurate_pow (144
