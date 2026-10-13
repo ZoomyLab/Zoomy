@@ -1,11 +1,8 @@
 # Shallow water
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
-```
-
-Runs on the reference **NumPy** backend and needs nothing but
-`pip install zoomy_core` — no container, no compiler.
+Runs on the reference **NumPy** backend and needs nothing but `zoomy_core` and
+`zoomy_plotting` ([pip from a clone](../installation.md#pip-from-a-clone-numpy))
+— no container, no compiler.
 
 | | What it covers |
 |---|---|

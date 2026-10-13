@@ -4,16 +4,12 @@
 
 Notebooks under `tutorials/`.  Click tags to filter: tags of one category widen the selection, tags of different categories narrow it.
 
-```{note}
-Every notebook here is **legacy**: it runs the previous NumPy / AMReX drivers, not the symbolic solvers.  For the current path start with the [quick start](../guide/quickstart.md).
-```
-
 <div class="zt-filter">
 <div class="zt-group"><span class="zt-cat">component</span>
 <button type="button" class="zt-chip" data-tag="component:model">model <span class="zt-n">3</span></button>
 <button type="button" class="zt-chip" data-tag="component:system-model">system-model <span class="zt-n">3</span></button>
 <button type="button" class="zt-chip" data-tag="component:numerical-system-model">numerical-system-model <span class="zt-n">3</span></button>
-<button type="button" class="zt-chip" data-tag="component:solver">solver <span class="zt-n">1</span></button>
+<button type="button" class="zt-chip" data-tag="component:solver">solver <span class="zt-n">3</span></button>
 </div>
 <div class="zt-group"><span class="zt-cat">model</span>
 <button type="button" class="zt-chip" data-tag="model:swe">swe <span class="zt-n">2</span></button>
@@ -36,49 +32,49 @@ Every notebook here is **legacy**: it runs the previous NumPy / AMReX drivers, n
 :gutter: 3
 
 :::{grid-item-card} AMReX: from symbolic model to generated C++
-:class-card: zt-card zt-legacy
+:class-card: zt-card
 :link: ipynb/amrex/minimal
 :link-type: doc
 
-<span class="zt-data" data-tags="component:system-model component:numerical-system-model model:swe task:simulation backend:amrex method:fv"></span>A 1-D dam break printed as C++ headers for AMReX, built, run and read back.
+<span class="zt-data" data-tags="component:system-model component:numerical-system-model component:solver model:swe task:simulation backend:amrex method:fv"></span>A 1-D dam break printed as C++ headers for AMReX, built, run and read back.
 
-`tutorials/amrex/minimal.ipynb` · **legacy**
+`tutorials/amrex/minimal.ipynb`
 +++
-<span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">model:swe</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:amrex</span> <span class="zt-tag">method:fv</span>
+<span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">model:swe</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:amrex</span> <span class="zt-tag">method:fv</span>
 :::
 
 :::{grid-item-card} Zoomy in your browser
-:class-card: zt-card zt-legacy
+:class-card: zt-card
 :link: ../jupyter-lite/_output/lab/index.html?path=pyodide.ipynb
 :link-type: url
 
-<span class="zt-data" data-tags="component:model component:system-model component:numerical-system-model model:sme task:simulation backend:numpy method:fv"></span>SME(2) dam break in Pyodide: Model, SystemModel, NSM, generated C++, a NumPy solve and the velocity profile.
+<span class="zt-data" data-tags="component:model component:system-model component:numerical-system-model component:solver model:sme task:simulation backend:numpy method:fv"></span>SME(2) dam break in Pyodide: Model, SystemModel, NSM, generated C++, a NumPy solve and the velocity profile.
 
-`tutorials/pyodide/pyodide.ipynb` · **legacy**
+`tutorials/pyodide/pyodide.ipynb`
 +++
-<span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">model:sme</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:numpy</span> <span class="zt-tag">method:fv</span>
+<span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">model:sme</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:numpy</span> <span class="zt-tag">method:fv</span>
 :::
 
 :::{grid-item-card} Shallow moments in 2-D
-:class-card: zt-card zt-legacy
+:class-card: zt-card
 :link: ipynb/sme/moments_2d
 :link-type: doc
 
 <span class="zt-data" data-tags="component:model model:sme task:simulation backend:numpy method:fv"></span>Write a bed-drag closure, inject it into SME, run in 2-D and read the vertical velocity profile back.
 
-`tutorials/sme/moments_2d.ipynb` · **legacy**
+`tutorials/sme/moments_2d.ipynb`
 +++
 <span class="zt-tag">component:model</span> <span class="zt-tag">model:sme</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:numpy</span> <span class="zt-tag">method:fv</span>
 :::
 
 :::{grid-item-card} Shallow water in 1-D
-:class-card: zt-card zt-legacy
+:class-card: zt-card
 :link: ipynb/swe/simple_numpy
 :link-type: doc
 
 <span class="zt-data" data-tags="component:model component:system-model component:numerical-system-model component:solver model:swe task:simulation backend:numpy method:fv"></span>The whole pipeline once: model, operators, scheme, solve and plot, in 1-D on the NumPy reference solver.
 
-`tutorials/swe/simple_numpy.ipynb` · **legacy**
+`tutorials/swe/simple_numpy.ipynb`
 +++
 <span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">model:swe</span> <span class="zt-tag">task:simulation</span> <span class="zt-tag">backend:numpy</span> <span class="zt-tag">method:fv</span>
 :::

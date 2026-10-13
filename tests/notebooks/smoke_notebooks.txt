@@ -10,10 +10,10 @@
 # NOT listed, and why:
 #   tutorials/amrex/minimal.ipynb — it is PUBLISHED (see PUBLISHED_TUTORIALS in
 #   docs/scripts/generate_ci_test_report.py) but it is no longer runnable here:
-#   it imports zoomy_amrex, compiles the generated headers with mpicxx against
-#   AMReX and runs the binary. Executing it needs the zoomy_amrex image, not a
-#   bare runner. It ships with its stored outputs instead; re-run it in the
-#   container when the model, the printer or run_case changes.
+#   it imports zoomy_amrex, which builds the printed C++ solver in the
+#   zoomy_amrex Apptainer image and runs it there. Executing it needs apptainer
+#   and that image, not a bare runner. It ships with its stored outputs instead;
+#   re-run it when the model, the solver template or the AMReX driver changes.
 
 tutorials/swe/simple_numpy.ipynb
 tutorials/sme/moments_2d.ipynb

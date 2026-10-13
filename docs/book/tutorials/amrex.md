@@ -1,25 +1,21 @@
 # AMReX
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
-```
-
 [Minimal walkthrough](ipynb/amrex/minimal.ipynb) — the same shallow-water model
-as the [NumPy tutorial](swe.md), taken to generated C++ instead of a NumPy
-solve.
+as the [NumPy tutorial](swe.md), with the solver template printed as C++,
+built and run on AMReX instead of a NumPy solve.
 
 **You need the AMReX container.** The page does not stop at the generated code:
-it compiles the headers, runs the case and plots the result, and the AMReX
-printer ships with `zoomy_amrex` rather than `zoomy_core`:
+it builds it, runs the case and plots the result. The notebook runs on your
+machine with `zoomy_amrex` installed from a clone; the driver builds and runs
+the C++ inside the AMReX Apptainer image:
 
 ```bash
-apptainer pull zoomy_amrex.sif oras://ghcr.io/zoomylab/zoomy_amrex_sif:latest
-apptainer run --bind $PWD:/workspace zoomy_amrex.sif jupyter
+git submodule update --init library/zoomy_core library/zoomy_amrex
+pip install -e library/zoomy_core -e library/zoomy_amrex -e library/zoomy_plotting
+apptainer pull containers/zoomy_amrex/zoomy_amrex.sif oras://ghcr.io/zoomylab/zoomy_amrex_sif:latest
 ```
 
 See [Installation](../installation.md#prebuilt-containers) for every container
-and the three run modes (solver API, Jupyter, shell).
-
-The maintained end-to-end cases are the AMReX test suite,
-`library/zoomy_amrex/tests/` — wet and dry dam breaks, 2-D, a lake-at-rest
-well-balancing check, NumPy parity, and a two-rank parallel run.
+and [Backends](../guide/backends.md) for the AMReX settings (MPI ranks, GPU,
+AMR). The maintained end-to-end runs are the cross-backend
+[test matrix](../testing/symsolver.md).

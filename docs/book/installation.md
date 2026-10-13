@@ -4,21 +4,34 @@ Pick the lightest path that covers what you need:
 
 | You want to… | Use |
 | --- | --- |
-| try the symbolic layer + NumPy solver | `pip install zoomy_core` |
+| try the symbolic layer + NumPy solver, run the tutorials | [pip from a clone](#pip-from-a-clone-numpy) |
 | run in a browser, install nothing | the [GUI](#gui-setup) or the <a href="jupyter-lite/_output/lab/index.html?path=pyodide.ipynb">Pyodide notebook</a> |
 | run one backend (JAX, AMReX, OpenFOAM…) | a [prebuilt container](#prebuilt-containers) |
 | develop Zoomy itself | [clone with submodules](#git-clone-with-submodules) + [conda](#conda--mamba--micromamba) |
 | follow a QR code in the thesis | a browser — see [Reproducing the thesis](#reproducing-the-thesis) |
 
-## Pip — core only
+## Pip from a clone (NumPy)
+
+Symbolic layer, model families and the reference NumPy solver in a virtual
+environment (Python 3.11 or later): what the NumPy [tutorials](tutorials/index.md)
+run on.
 
 ```bash
-pip install zoomy_core
+git clone https://github.com/ZoomyLab/Zoomy.git
+cd Zoomy
+git submodule update --init library/zoomy_core
+python3 -m venv .venv                  # Debian / Ubuntu: needs the python3-venv package
+source .venv/bin/activate
+pip install -e library/zoomy_core -e library/zoomy_plotting
+pip install jupyterlab
+jupyter lab tutorials/swe/simple_numpy.ipynb
 ```
 
-Symbolic layer, model families, and the reference NumPy solver. `zoomy_core`
-is the only Zoomy package on PyPI. The JAX backend is installed from the
-repository (`pip install -e library/zoomy_jax`, see
+`zoomy_plotting` (the figures) lives in the superrepo, not in a submodule.
+`pip install zoomy_core` installs the latest release from PyPI instead, which
+can lag behind the repository: release 0.2.12 predates the symbolic solvers
+(`zoomy_core.symsolver`) that the tutorials and the guide use. The JAX backend
+is installed from the repository (`pip install -e library/zoomy_jax`, see
 [Conda](#conda--mamba--micromamba)) or used through the `zoomy_jax` container;
 the compiled backends (AMReX, OpenFOAM, PETSc/DMPlex, Firedrake) are far easier
 via containers.

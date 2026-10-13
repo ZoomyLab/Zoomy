@@ -137,3 +137,6 @@ thesis
 # Committed test fixtures (small, versioned with the tests that read them) are
 # NOT simulation output — exempt them from the output-oriented ignores above.
 !library/zoomy_prepost/tests/fixtures/**
+
+# written by tutorials/amrex/minimal.ipynb
+tutorials/amrex/dambreak_amrex/
