@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sympy as sp
 
+from zoomy_core.misc.options import Option
 from zoomy_core.model.operations import Operation
 from zoomy_core.model.models.material import ClosureState   # the full-access state
 
@@ -571,23 +572,27 @@ class StressFree(Closure):
 # modal interface traces + the interface mass flux G), not the stress ``(s)``.
 
 
+class InterfaceQuantity(Option):
+    """The interface value an `InterfaceFlux` scheme supplies."""
+    #: the transfer velocity u*
+    velocity = "velocity"
+    #: the in-plane stress of the interface traction (interface_inplane_traction)
+    stress = "stress"
+
+
 class InterfaceFlux(Closure):
     """Base of the multilayer interface schemes; ``expression(below, above, G)`` takes the two
     one-sided interface traces and the interface mass flux ``G``.
 
     Args:
-        quantity: the interface value it supplies, ``"velocity"`` (the transfer velocity
-            ``u*``) or ``"stress"`` (the in-plane stress of the interface traction,
-            ``interface_inplane_traction``).
+        quantity: the `InterfaceQuantity` it supplies.
     """
     closes = "interface"; requires = ()
 
-    def __init__(self, name=None, quantity="velocity"):
-        """Store the ``quantity`` this scheme supplies."""
+    def __init__(self, name=None, quantity=None):
+        """Store the ``quantity`` this scheme supplies (default: the transfer velocity)."""
         super().__init__(name=name)
-        if quantity not in ("velocity", "stress"):
-            raise ValueError(f"InterfaceFlux quantity: 'velocity' or 'stress', not {quantity!r}")
-        self.quantity = quantity
+        self.quantity = InterfaceQuantity(quantity or InterfaceQuantity.velocity)
 
     def expression(self, below, above, G):    # noqa: D401 - distinct signature
         """Return the shared interface velocity ``u*`` (override)."""
@@ -662,10 +667,10 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     return bool(bulk)
 
 
-def interface_closure(closures, quantity="velocity"):
+def interface_closure(closures, quantity=InterfaceQuantity.velocity):
     """Return the ``InterfaceFlux`` closure for ``quantity`` in ``closures``, or ``None``."""
     return next((c for c in (closures or []) if c.closes == "interface"
-                 and getattr(c, "quantity", "velocity") == quantity), None)
+                 and getattr(c, "quantity", InterfaceQuantity.velocity) == quantity), None)
 
 
 def interface_inplane_traction(closures, below, above, G):
@@ -674,7 +679,7 @@ def interface_inplane_traction(closures, below, above, G):
 
     ``sigma*`` is the interface value of ``tau_de - delta_de tau_zz`` from the two one-sided
     traces (``below``: top trace of the lower layer, ``above``: bottom trace of the upper
-    layer, both ``ClosureState``) by the ``InterfaceFlux`` closure with ``quantity="stress"``,
+    layer, both ``ClosureState``) by the ``InterfaceFlux`` closure with ``quantity=InterfaceQuantity.stress``,
     by default their mean.  Each layer's own in-plane part is in its traction
     (``apply_layer_stress_closures``); with this shared part the interface traction is
     single-valued and the layer terms telescope (momentum-conservative).
@@ -682,7 +687,8 @@ def interface_inplane_traction(closures, below, above, G):
     inplane = [c for c in (closures or []) if c.closes == "in_plane"]
     if not inplane:
         return None
-    scheme = interface_closure(closures, quantity="stress") or MeanInterface(quantity="stress")
+    scheme = (interface_closure(closures, quantity=InterfaceQuantity.stress)
+              or MeanInterface(quantity=InterfaceQuantity.stress))
     nh = len(below.horizontal)
     Sb, Sa = inplane_stress(inplane, below, nh), inplane_stress(inplane, above, nh)
     slope = below.interface_slopes
