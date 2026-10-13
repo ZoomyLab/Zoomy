@@ -191,8 +191,10 @@ def test_generic_runner_executes_case_run_py(numpy_client, jobs_dir, caplog):
     caplog.set_level(logging.INFO, logger="zoomy.adapter")
 
     case_py = compose(SPEC)
-    # the composed case DOES carry a run section (to_folder materializes it)
-    assert "solver.solve(" in parse(case_py)["run"]["code"]
+    # the composed case DOES carry a run section (to_folder materializes it):
+    # the generated run cell, a symbolic solver's setup + run
+    run_code = parse(case_py)["run"]["code"]
+    assert "solver.setup(" in run_code and "solver.run(" in run_code
 
     # submit the composed .py via /cases — the GUI's endpoint; the server
     # materializes the folder itself (to_folder -> run.py present)

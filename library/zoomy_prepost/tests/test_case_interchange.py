@@ -53,7 +53,7 @@ def test_to_folder_materializes_runner(tmp_path):
     # the run section IS materialized: run.py is the case's own runner (the
     # server's generic runner executes exactly this file)
     run_src = open(os.path.join(d, "run.py")).read()
-    assert "solver.solve(" in run_src and "simulation.h5" in run_src
+    assert "solver.run(" in run_src and "simulation.h5" in run_src   # a symbolic solver
     assert 'exec(open("model.py").read())' in run_src  # standalone form
 
 

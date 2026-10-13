@@ -63,6 +63,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     && rm -rf /tmp/src
 
 ENV ZOOMY_ROOT=/workspace \
+    ZOOMY_AMREX_IN_IMAGE=1 \
     ZOOMY_ADAPTER=amrex \
     ZOOMY_PORT=8080
 

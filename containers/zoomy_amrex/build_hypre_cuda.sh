@@ -6,6 +6,7 @@
 #   build_hypre_cuda.sh cpu      # CPU build in zoomy_amrex.sif      -> ~/.cache/zoomy/hypre-cpu-3.2.0
 #   build_hypre_cuda.sh cpu-env  # CPU shared library against the micromamba env's MPI (no
 #                                # container)                         -> ~/.cache/zoomy/hypre-cpu-env-3.2.0
+# Run inside the image (APPTAINER_CONTAINER set, or no apptainer on PATH) it builds natively.
 #
 # The CPU build also links into foam's symFoam (zoomy_foam.symsolver, linear_solver='hypre'): the
 # OF13 image has the same Ubuntu 24.04, gcc 13.3 and OpenMPI 4.1.6 as zoomy_amrex.sif.  The
@@ -62,6 +63,8 @@ BUILD="
     taskset -c $CPUS make -j$JOBS install > $WORK/make.log 2>&1 || { tail -30 $WORK/make.log; exit 1; }"
 if [ "$VARIANT" = cpu-env ]; then
     micromamba run -n "${ZOOMY_ENV:-zoomy}" bash -c "$BUILD"
+elif [ -n "${APPTAINER_CONTAINER:-}" ] || ! command -v apptainer > /dev/null; then
+    bash -c "$BUILD"            # already inside the image: build natively
 else
     apptainer exec --cleanenv $NV --bind "$CACHE" "$SIF" bash -c "$BUILD"
 fi

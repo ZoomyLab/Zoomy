@@ -1,10 +1,10 @@
 """Base solver adapter for the Zoomy server.
 
-Each backend (NumPy, JAX, DMPlex, AMReX, Firedrake) implements a subclass
+Each backend (NumPy, JAX, AMReX, foam, DMPlex, Firedrake) implements a subclass
 that knows how to run a case folder.
 
 A case folder contains:
-  model.py, numerics.py, mesh.py, settings.json [, run.py]
+  model.py, mesh.py, settings.json [, numerics.py (DMPlex)] [, run.py]
 
 When the folder carries a ``run.py`` (the composed case's ``## Run`` section,
 materialized by ``zoomy_prepost.case.to_folder``) the adapters execute the
@@ -229,6 +229,7 @@ class SolverAdapter:
         filepath = os.path.join(case_dir, f"{module_name}.py")
         spec = importlib.util.spec_from_file_location(module_name, filepath)
         mod = importlib.util.module_from_spec(spec)
+        mod.display = lambda *_a, **_k: None    # the cards' display(...), a Jupyter builtin
         spec.loader.exec_module(mod)
         return mod
 
@@ -254,27 +255,3 @@ class SolverAdapter:
         if hasattr(mod, "model"):
             return mod.model
         raise RuntimeError(f"No Model subclass found in {case_dir}/model.py")
-
-    @staticmethod
-    def resolve_numerics(case_dir, model):
-        """Import numerics.py and return the Numerics instance; if the case has
-        no numerics.py, fall back to the default Riemann solver so ONE shared
-        case runs on every backend (numpy/jax don't ship a numerics.py)."""
-        import os
-        from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
-        if not os.path.exists(os.path.join(case_dir, "numerics.py")):
-            return NonconservativeRusanov(model)
-        mod = SolverAdapter.import_from_case(case_dir, "numerics")
-        # Find a Numerics subclass or a factory function
-        from zoomy_core.model.basefunction import SymbolicRegistrar
-        for attr_name in dir(mod):
-            obj = getattr(mod, attr_name)
-            if isinstance(obj, type) and issubclass(obj, SymbolicRegistrar) and obj is not SymbolicRegistrar:
-                return obj(model)
-        # Look for module-level 'numerics' variable or function
-        if hasattr(mod, 'numerics'):
-            n = mod.numerics
-            return n(model) if callable(n) else n
-        # Default: NonconservativeRusanov
-        from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
-        return NonconservativeRusanov(model)

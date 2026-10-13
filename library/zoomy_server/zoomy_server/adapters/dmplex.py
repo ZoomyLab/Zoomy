@@ -28,6 +28,27 @@ PETSC_ARCH = os.environ.get("PETSC_ARCH", "arch-container-opt")
 class DmplexAdapter(SolverAdapter):
     tag = "dmplex"
 
+    @staticmethod
+    def resolve_numerics(case_dir, model):
+        """Import numerics.py and return the Numerics instance; without numerics.py the
+        default Riemann solver (`NonconservativeRusanov`)."""
+        from zoomy_core.model.basefunction import SymbolicRegistrar
+        from zoomy_core.numerics import NonconservativeRusanov
+        if not os.path.exists(os.path.join(case_dir, "numerics.py")):
+            return NonconservativeRusanov(model)
+        mod = SolverAdapter.import_from_case(case_dir, "numerics")
+        # Find a Numerics subclass or a factory function
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name)
+            if (isinstance(obj, type) and issubclass(obj, SymbolicRegistrar)
+                    and obj is not SymbolicRegistrar):
+                return obj(model)
+        # Look for module-level 'numerics' variable or function
+        if hasattr(mod, "numerics"):
+            n = mod.numerics
+            return n(model) if callable(n) else n
+        return NonconservativeRusanov(model)
+
     def solve(self, case_dir, output_dir, on_progress):
         # Generic runner: a composed case carries its own run.py (the ## Run
         # section) — execute THAT instead of translating settings into solver

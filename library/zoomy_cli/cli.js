@@ -583,13 +583,15 @@ async function cmdRunLocal(proj) {
 
     /* Solver */
     var ss = zcase.solver || {};
-    var solverCode = "from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver, HyperbolicSolver\n" +
-        "import zoomy_core.fvm.timestepping as ts\n" +
-        "keys = list(model.variables.keys()) if hasattr(model.variables, 'keys') else []\n" +
-        "Solver = FreeSurfaceFlowSolver if ('h' in keys and 'b' in keys) else HyperbolicSolver\n" +
-        "solver = Solver(time_end=" + (ss.time_end || 0.1) + ", compute_dt=ts.adaptive(CFL=" + (ss.cfl || 0.3) + "))\n" +
-        "Q, Qaux = solver.solve(mesh, model, write_output=False)\n" +
-        "print(f'Done: {Q.shape[0]} variables, {mesh.n_inner_cells} cells')\n";
+    /* the symbolic NumPy solver (zoomy_core.symsolver) */
+    var solverCode = "from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec\n" +
+        "from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy\n" +
+        "nsm = NumericalSystemModel.from_system_model(model, reconstruction=ReconstructionSpec(order=" +
+        (ss.reconstruction_order || 1) + "))\n" +
+        "solver = SymbolicHyperbolicSolverNumpy(time_end=" + (ss.time_end || 0.1) + ", cfl=" + (ss.cfl || 0.9) + ")\n" +
+        "Q, Qaux = solver.setup(mesh, nsm)\n" +
+        "time, Q, Qaux = solver.run(Q, Qaux)\n" +
+        "print(f'Done: t = {time}, {Q.shape[0]} variables, {mesh.n_inner_cells} cells')\n";
 
     var script = modelCode + "\n" + meshCode + "\n" + solverCode;
 

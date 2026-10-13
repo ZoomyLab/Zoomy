@@ -34,9 +34,23 @@ BROWSER_LOCAL = (None, "numpy")
 NOT_IN_BROWSER = ["jax", "jaxlib", "zoomy_jax"]
 #: Time-limited variants, set through the session's own `time_end` knob (GUI Parameters
 #: panel); model, mesh and numerics are unchanged.
-TIME_LIMITS = {("malpasset-session.zip", 0): 2.0}   # Malpasset JAX: 2000 s -> 2 s
-#: Backends CI cannot provide: the cells before Solver settings run, the solve is skipped.
-UNAVAILABLE = {"amrex": "the solve needs the AMReX backend container (AMREX_HOME, C++ build)"}
+TIME_LIMITS = {("malpasset-session.zip", 0): 2.0,    # Malpasset JAX: 2000 s -> 2 s
+               ("malpasset-session.zip", 1): 2.0}    # Malpasset AMReX: 100 s -> 2 s
+
+
+def _amrex_sif():
+    """The AMReX image `zoomy_amrex.symsolver` builds in (its own lookup)."""
+    own = Q.ROOT / "containers" / "zoomy_amrex"
+    d = Path(os.environ.get("ZOOMY_AMREX_CONTAINERS") or (
+        own if (own / "zoomy_amrex.sif").exists() else Path.home() / "git/Zoomy/containers/zoomy_amrex"))
+    return d / "zoomy_amrex.sif"
+
+
+#: Backends this machine cannot provide: the cells before Solver settings run, the solve is
+#: skipped.  AMReX runs inside its image (AMREX_HOME) or through apptainer and the image.
+UNAVAILABLE = ({} if os.environ.get("AMREX_HOME") or (shutil.which("apptainer") and _amrex_sif().exists())
+               else {"amrex": "the solve needs AMReX: its backend image (AMREX_HOME) or apptainer "
+                              "+ zoomy_amrex.sif"})
 
 
 def _skip_or_fail(reason):
@@ -152,6 +166,8 @@ def test_session_cpython(zname, idx, session, tmp_path):
         if importlib.util.find_spec("jax") is None:
             _skip_or_fail("jax not installed (the JAX session needs it)")
         path.append(str(Q.ROOT / "library/zoomy_jax"))
+    if tag == "amrex":
+        path.append(str(Q.ROOT / "library/zoomy_amrex"))
     spec = tmp_path / "case.json"
     spec.write_text(json.dumps(case))
     path += [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p]
