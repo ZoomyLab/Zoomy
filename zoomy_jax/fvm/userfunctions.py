@@ -175,26 +175,34 @@ def pick(packed, idx):
     return packed[..., int(idx)]
 
 
-# ── the table ────────────────────────────────────────────────────────────────
-def spectral_radius(k, safety, *a_flat):
-    """`safety * sqrt(rho(A^2))`, `rho(A^2)` by `k` power steps on
-    `A^2` from `x = 1` (see `kernel_functions.spectral_radius`).
-    Matvecs only: runs on any device; batched over the leading axes."""
+# ── gelfand_bound (the wave speed of models without a closed-form spectrum) ──
+def gelfand_bound(j, *a_flat):
+    """`kernel_functions.gelfand_bound` (the NumPy kernel's arithmetic): matrix products
+    only, so any device; batched over the leading axes; AD-safe at a zero matrix."""
     n = int(round(len(a_flat) ** 0.5))
     cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
-    A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
-    mv = lambda x: jnp.einsum("...ij,...j->...i", A, x)       # noqa: E731
+    C = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
+    finite = jnp.isfinite(C).all(axis=(-2, -1))
+    C = jnp.where(finite[..., None, None], C, 0.0)
+    scales = []
+    for _ in range(int(j)):
+        s = jnp.abs(C).sum(-1).max(-1)
+        s = jnp.where(s > 0, s, 1.0)
+        C = C / s[..., None, None]
+        scales.append(s)
+        C = C @ C
+    M = jnp.abs(C)
+    x = M.sum(-1)
+    y = jnp.einsum("...ik,...k->...i", M, x)
+    w = jnp.where(x > 0, y / jnp.where(x > 0, x, 1.0), 0.0).max(-1)
+    pos = w > 0
+    t = jnp.where(pos, w, 1.0)
+    for s in reversed(scales):
+        t = s * jnp.sqrt(t)
+    return jnp.where(finite, jnp.where(pos, t, 0.0), jnp.inf)
 
-    def step(_, carry):
-        x, _lam = carry
-        y = mv(mv(x))
-        ny = jnp.linalg.norm(y, axis=-1)
-        return y / jnp.where(ny > 0, ny, 1.0)[..., None], ny   # |x| = 1
-    x0 = jnp.ones(A.shape[:-1], dtype=A.dtype) / jnp.sqrt(n)
-    _, lam = jax.lax.fori_loop(0, int(k), step, (x0, jnp.zeros(A.shape[:-2], A.dtype)))
-    return safety * jnp.sqrt(lam)
 
-
+# ── the table ────────────────────────────────────────────────────────────────
 def jax_userfunctions() -> dict:
     """The complete jax UserFunctions table (a fresh dict per runtime, since
     runtimes inject per-instance entries such as `compute_derivative`)."""
@@ -210,7 +218,7 @@ def jax_userfunctions() -> dict:
         # opaque numerical kernels
         "eigensystem": eigensystem,
         "eigenvalues": eigenvalues,
-        "spectral_radius": spectral_radius,
+        "gelfand_bound": gelfand_bound,
         "solve": solve,
         # component read of a packed kernel result (canonical pick(K(*a), idx))
         "pick": pick,
