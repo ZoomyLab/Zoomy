@@ -1280,3 +1280,76 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   a model choice.  (3) small_slope=False with an in-plane closure derives (SME(0), one horizontal),
   but it has not been run.  Its traces carry the 1/(1 - |grad I|^2) factor of the frame solve, whose
   normal row has no tau_zz.
+
+### 45f. In-plane viscosity: the viscous normal stress tau_zz; multilayer interface traction (2026-10-13, dev/inplane-tauzz)
+
+- **Where tau_zz was dropped.** `Momentum`'s vertical row carries no stress at all (so
+  `moment_scaling`, which keeps every tau key containing 'z', never sees a `tau_zz`); the SME
+  hydrostatic step integrates d_z p = -rho g and sets p(eta) = 0.  With an in-plane closure
+  tau_zz = 2 rho nu d_z w = -2 rho nu div_h u is of the same order as tau_de and was missing.
+- **Literature.** Marche 2007 (https://doi.org/10.1016/j.euromechflu.2006.04.007, Zotero
+  CV8TMDFI), eq. (5.19): "2 mu div(h D(u)) + 2 mu grad(h div u)"; its pressure (5.17)
+  "p = p_o + (xi - z)/F_r - (2/R_e) d_x ubar - (2/R_e) d_y vbar - eps beta Delta xi + O(eps^2)",
+  surface condition (3.10) "(p - p_o - (2/R_e) d_z w + beta kappa)|_{z=xi} = O(eps^2)", bed (5.18)
+  with "-grad d (p + (2/R_e) div U)|_{z=d}".  Gerbeau, Perthame 2001 (Zotero XMQXMC6E), eq. (1):
+  "4 mu d_x(h d_x u)".
+- **Change (derivation).** `equations.inplane_normal_stress` gives tau_zz; `NewtonianInPlane`
+  gained `normal_stress(s)` (its trace).  SME: the vertical row gets -d_z tau_zz / rho and the
+  surface p(eta) = tau_zz(eta) (normal stress-free), so p = rho g (eta - z) + tau_zz(z).  pdb
+  (SME(0), 2 horizontal): after `IntegrateZ` the surface Subs terms cancel against the BC, psol =
+  rho (g (b + h - z) - 2 nu (u_x + v_y)), and the x-row nu terms are -4 d_x(nu u_x) - 2 d_x(nu v_y)
+  - d_y(nu u_y) - d_y(nu v_x), i.e. tau_xx - tau_zz = 2 nu u_x + 2 nu div u.  VAM / ML-SME / ML-VAM:
+  the pressure unknown is p - tau_zz = -sigma_zz (zero at the surface, continuous across layer
+  interfaces), the vertical row is unchanged and the horizontal rows get +d_d tau_zz / rho
+  (`add_inplane_viscous(normal_stress=True)`).  Traction: `_inplane_traction` uses
+  tau_de - delta_de tau_zz (`inplane_stress`): at the surface the term is p(eta) d_d eta, at the bed
+  the normal stress the tangential projection removes (Marche (5.18)).
+- **Symbolic** (diffusion + nu-parts of source / NCP / flux, aux = exact derivatives, generic
+  h, q, b).  SME(0): SM - div(h tau') = 0, SM - gate 46 = 0 on flat and varying bed,
+  tau' = nu (grad u + grad u^T) + 2 nu (div u) I.  SME(1), SME(2) (1 horizontal), SME(1), VAM(1)
+  (1 and 2 horizontals): every momentum row equals the independent projection
+  (2k+1)[d_e(h <phi_k s'_de>) + <phi_k' (b_e + zeta h_e) s'_de> - <phi_k' nu d_zeta u_d / h>],
+  s' = tau - tau_zz I with the physical derivatives; no unclassified terms.  Gate 46 now carries
+  the 2 nu grad(h div u) term (A[q_x <- q_x, x, x] = 4 nu, A[q_x <- q_y, x, y] = 2 nu, ...).
+- **Open, the user's call (level >= 1 only).** Marche eq. (3.5) keeps the shear in the vertical
+  balance, "d_z p = -1/F_r^2 + (1/R_e)(d_z(div_xy U) + 2 d_z^2 w)", hence (3.11)
+  "p - p_o + beta kappa = (xi - z)/F_r^2 - (1/R_e)(d_x u(z) + d_x u(xi) + d_y v(z) + d_y v(xi))";
+  Gerbeau-Perthame Lemma 3.1 the same, "p = G(h - z) - nu d_x u(z) - nu d_x u(h)", and the shear
+  "nu/eps^2 d_z u + nu d_x w".  For a z-independent velocity (level 0, the acceptance) both
+  reduce to -2 nu div u; for level >= 1 the d_e tau_ez term and the nu d_d w part of the shear are
+  of the same order as tau_zz but not implemented (here: tau_zz only), and in the multilayer
+  models d_e tau_ez couples the layers non-locally (div u(eta) of the top layer in every layer).
+- **Multilayer interface traction.** Each layer's own trace now carries the in-plane traction at
+  every interface (`apply_layer_stress_closures`: bed / surface through `_solve_traction`,
+  internal interfaces tau_l(trace) += g_own), so the layer's in-plane part is
+  d_e(h_l <s'_l>).  The assembly adds the shared part -/+ sum_e s*_de d_e z_a at the top / bottom
+  of the two layers at internal interface a (`interface_inplane_traction`, projected
+  phi_k(side) / mu_k like the u* transfer), s* = `InterfaceFlux(quantity="stress")` of the two
+  traces: `MeanInterface` by default, `UpwindInterface(quantity="stress")` by the sign of G;
+  `quantity="velocity"` (default) keeps the transfer-velocity meaning.  The interface traction
+  is then single-valued in its in-plane part and the layers telescope.  ML-VAM + NewtonianInPlane
+  never derived before (mode 0: "cannot route bare second-derivative term"); mode 0 now goes
+  through `package_viscous`.
+- **ML checks** (2 layers, level 0, l_1 symbolic): identical states q_l = l_l q: sum_l op_l -
+  div(h tau') = 0 (ML-SME and ML-VAM, 1 and 2 horizontals, mean and upwind); per layer (mean)
+  op_1 = d_e(h_1 s'_1) - s*.grad z_1, op_2 = d_e(h_2 s'_2) + s*.grad z_1 exactly; different layer
+  states, smooth periodic fields, l_1 = 0.4: periodic integral of sum_l op_l 3e-15 (max |op|
+  92-120); 1 and 3 layers (1-D): sum = 4 nu d_x(h u_x) (Gerbeau-Perthame).  Level 1 (ML-SME 1 / 2
+  horizontals, mean / upwind, ML-VAM 1 horizontal) derives with 0 unclassified terms.
+- **Goldens.** Only m07 / m14 change (1 horizontal: every in-plane coefficient doubles, 2 nu ->
+  4 nu; the vertical shear terms are unchanged); the 4 pre-existing failures (m05, n02, n03, n02
+  canary) are unchanged (identical diffs).  The rederive test
+  `test_inplane_h_column_matches_G_matrix_first_principles` now expects A[q_k <- h] = V with
+  4 nu (it asserted A = -V with 2 nu, a sign error noted in 45e) and passes; reference tier 13 / 13.
+- **Discrete** (JAX, nx 16 / 32 / 64, max rel): gate 46 (hand-written) and C34 (gate 45, SME(0) +
+  NewtonianInPlane) vs the exact div(h tau') give the same numbers, q_x 3.55e-2 / 8.99e-3 / 2.26e-3
+  (orders 1.98 / 1.99), q_y 5.83e-2 / 1.52e-2 / 3.85e-3 (1.94 / 1.98).
+- **Matrix** (serial, scratch stores before / after, the same JAX / foam / AMReX checkouts): C26
+  moves by 1.4e-3 (1.3e-3 of max |Q|; JAX, NumPy, AMReX; foam 1.5e-3), AMReX = JAX 7e-16, NumPy =
+  JAX 2e-14, foam vs JAX max rel 3.8e-3 (before 3.9e-3); C32 within 1-2 ulp (h = 1, div u = 0; the
+  new / doubled A entries act on q_y = 0 or on round-off x-derivatives), `inviscid` bit-identical; C33
+  bit-identical; C34 PASS against the new exact operator.  C26 / C32 / C33 / C34: 28 PASS, 0 FAIL.
+- **Open.** (1) The level >= 1 / multilayer d_e tau_ez term above.  (2) `interpolate_rows` slot 5
+  is still rho g h (1 - zeta) (+ the VAM modes), i.e. -sigma_zz, not p = -sigma_zz + tau_zz.  (3)
+  small_slope=False with an in-plane closure is not run.  (4) The ML interface shear (the bulk
+  closure's one-sided trace nu d_z u_l) is not single-valued; at level 0 it is 0.
