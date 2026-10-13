@@ -1,9 +1,9 @@
 {
  "schema": 1,
- "generated": "2026-10-13T21:04:26Z",
+ "generated": "2026-10-13T22:12:35Z",
  "last_run": "2026-10-13",
  "store": "/Users/adam-obbpb5az1dhsjzf/git/Zoomy/docs/dev/symbolic_solver/matrix/store",
- "superrepo": "7ce6f03b",
+ "superrepo": "1bb8f7e8",
  "libs": {
   "zoomy_amrex": [
    "b61ed26",
@@ -11,6 +11,7 @@
   ],
   "zoomy_core": [
    "72004d4",
+   "e749f7d",
    "fec2c4e"
   ],
   "zoomy_foam": [

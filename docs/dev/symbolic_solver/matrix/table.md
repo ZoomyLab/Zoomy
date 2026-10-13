@@ -1590,4 +1590,4 @@ Notes:
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 - C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 4863, foam 5189, jax 8913, numpy 2855
+Summed run wall time (s, without process start-up): amrex 4649, foam 4867, jax 8956, numpy 2797
